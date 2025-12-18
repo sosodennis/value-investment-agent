@@ -8,7 +8,7 @@ from langgraph.graph import StateGraph, START, END
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage
 
-from .extraction import extract_intent
+from .extraction import extract_intent, extract_candidates_from_search, deduplicate_candidates
 from .tools import search_ticker, web_search, get_company_profile
 from .logic import select_valuation_model, should_request_clarification
 from .structures import PlannerOutput, ValuationModel
@@ -39,11 +39,15 @@ def searching_node(state: AgentState) -> Dict[str, Any]:
     # 2. If no candidates, try web search
     if not candidates:
         search_results = web_search(f"What is the stock ticker for {query}?")
-        print(search_results)
-        # Re-try search with web results? Or just let LLM decide?
-        # For simplicity, we'll try to refine the query and search again once
-        refined_candidates = search_ticker(query) # Placeholder for more complex logic
-        candidates = refined_candidates
+        print(f"Web search results for '{query}': {search_results}")
+        
+        # EXTRACT CANDIDATES FROM WEB SEARCH
+        candidates = extract_candidates_from_search(query, search_results)
+        print(f"Extracted candidates from web search: {candidates}")
+
+    # DE-DUPLICATE (e.g., BRK.B vs BRK-B)
+    candidates = deduplicate_candidates(candidates)
+    print(f"Final candidates after de-duplication: {candidates}")
 
     return {
         "ticker_candidates": [c.model_dump() for c in candidates],
