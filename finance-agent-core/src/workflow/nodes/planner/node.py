@@ -9,153 +9,70 @@ This node:
 """
 
 import logging
-from typing import TYPE_CHECKING, Optional
-
-from .tools import search_ticker, get_company_profile
-from .logic import select_valuation_model, should_request_clarification
-from .structures import ValuationModel, PlannerOutput
-
-if TYPE_CHECKING:
-    from ...graph import AgentState
+from .structures import ValuationModel
+from .graph import planner_subgraph
 
 logger = logging.getLogger(__name__)
 
-
-def extract_query_from_state(state: "AgentState") -> str:
-    """
-    Extract the user query from state.
-    
-    For now, we assume ticker is provided directly.
-    In future, this would parse natural language like "Value Tesla".
-    """
-    # If ticker is already in state, use it as query
-    if "ticker" in state and state["ticker"]:
-        return state["ticker"]
-    
-    # Otherwise, look for a user_query field
-    if "user_query" in state:
-        return state["user_query"]
-    
-    raise ValueError("No ticker or user_query found in state")
-
-
 def planner_node(state: "AgentState") -> dict:
     """
-    Main Planner Node - Orchestrates entity resolution and model selection.
-    
-    Workflow:
-    1. Extract query from state
-    2. Search for ticker using OpenBB
-    3. Get company profile
-    4. Select valuation model based on GICS sector
-    5. Return updated state
-    
-    Args:
-        state: Current agent state
-        
-    Returns:
-        Updated state with model_type, company info, and reasoning
-        
-    Raises:
-        ValueError: If ticker cannot be resolved
+    Wrapper for the Planner Sub-graph.
     """
-    logger.info("=== Planner Node Started ===")
-    
     try:
-        # Step 1: Extract query
-        query = extract_query_from_state(state)
-        logger.info(f"Processing query: {query}")
+        logger.info("=== Planner Node (Sub-agent) Started ===")
         
-        # Step 2: Resolve ticker
-        # For MVP, if query looks like a ticker (all caps, short), use directly
-        # Otherwise, search for it
-        ticker = query.upper()
-        
-        if len(ticker) > 5 or not ticker.isalpha():
-            # Likely a company name, search for it
-            logger.info(f"Searching for ticker: {query}")
-            candidates = search_ticker(query)
+        # 1. Prepare sub-graph input
+        user_query = state.get("user_query")
+        if not user_query and state.get("ticker"):
+            user_query = f"Valuate {state['ticker']}"
             
-            if not candidates:
-                raise ValueError(f"No ticker found for query: {query}")
-            
-            # Check if clarification needed
-            if should_request_clarification(candidates):
-                # TODO: Implement HITL interruption here
-                # For now, take the top candidate
-                logger.warning(f"Ambiguous query, using top candidate: {candidates[0].symbol}")
-            
-            ticker = candidates[0].symbol
-            company_name = candidates[0].name
-        else:
-            # Assume it's already a ticker
-            company_name = ticker  # Will be updated from profile
+        if not user_query:
+            return {"planner_output": {"status": "clarification_needed", "error": "No query provided"}}
+
+        sub_graph_input = {
+            "user_query": user_query,
+            "messages": state.get("messages") or [],
+            "status": "extraction"
+        }
         
-        logger.info(f"Resolved ticker: {ticker}")
+        # 2. Invoke Sub-graph
+        result = planner_subgraph.invoke(sub_graph_input)
         
-        # Step 3: Get company profile
-        profile = get_company_profile(ticker)
-        
-        if not profile:
-            raise ValueError(f"Could not retrieve profile for ticker: {ticker}")
-        
-        company_name = profile.name
-        logger.info(f"Retrieved profile for {company_name} ({ticker})")
-        logger.info(f"Sector: {profile.sector}, Industry: {profile.industry}")
-        
-        # Step 4: Select valuation model
-        model, reasoning = select_valuation_model(profile)
-        logger.info(f"Selected model: {model.value}")
-        logger.info(f"Reasoning: {reasoning}")
-        
-        # Step 5: Update state
-        # Map our ValuationModel enum to the existing state's model_type format
+        # 3. Handle result
+        if result.get("status") == "waiting_for_human":
+            logger.warning("Planner needs clarification")
+            return {
+                "planner_output": {
+                    "status": "clarification_needed", 
+                    "candidates": result.get("ticker_candidates"),
+                    "intent": result.get("extracted_intent")
+                }
+            }
+
+        output = result.get("planner_output")
+        if not output:
+             return {"planner_output": {"status": "clarification_needed", "error": "Planner failed to produce output"}}
+
+        # Map model_type for calculation node compatibility
         model_type_map = {
-            ValuationModel.DCF_GROWTH: "saas",  # Map to existing 'saas' type
-            ValuationModel.DCF_STANDARD: "saas",  # Also use saas for standard DCF
-            ValuationModel.DDM: "bank",  # Map to existing 'bank' type
-            ValuationModel.FFO: "saas",  # Use saas model structure for now
+            ValuationModel.DCF_GROWTH: "saas",
+            ValuationModel.DCF_STANDARD: "saas",
+            ValuationModel.DDM: "bank",
+            ValuationModel.FFO: "saas",
             ValuationModel.EV_REVENUE: "saas",
             ValuationModel.EV_EBITDA: "saas",
         }
         
-        model_type = model_type_map.get(model, "saas")
-        
-        print(f"\n{'='*60}")
-        print(f"PLANNER DECISION")
-        print(f"{'='*60}")
-        print(f"Company: {company_name} ({ticker})")
-        print(f"Sector: {profile.sector or 'Unknown'}")
-        print(f"Industry: {profile.industry or 'Unknown'}")
-        print(f"Selected Model: {model.value}")
-        print(f"Reasoning: {reasoning}")
-        print(f"{'='*60}\n")
-        
+        selected_model_val = output.get("model_type")
+        # Finding the Enum member by value
+        model_enum = next((m for m in ValuationModel if m.value == selected_model_val), ValuationModel.DCF_STANDARD)
+        model_type = model_type_map.get(model_enum, "saas")
+
         return {
-            "ticker": ticker,
+            "ticker": output["ticker"],
             "model_type": model_type,
-            # Store additional metadata for downstream nodes
-            "planner_output": {
-                "company_name": company_name,
-                "sector": profile.sector,
-                "industry": profile.industry,
-                "selected_model": model.value,
-                "reasoning": reasoning
-            }
+            "planner_output": output
         }
-        
     except Exception as e:
-        logger.error(f"Planner node failed: {e}")
-        # For now, fallback to basic behavior
-        ticker = state.get("ticker", "UNKNOWN")
-        print(f"\n⚠️  Planner Error: {e}")
-        print(f"Falling back to default model for {ticker}\n")
-        
-        return {
-            "ticker": ticker,
-            "model_type": state.get("model_type", "saas"),
-            "planner_output": {
-                "error": str(e),
-                "fallback": True
-            }
-        }
+        logger.error(f"Planner failed: {e}")
+        return {"planner_output": {"status": "clarification_needed", "error": str(e)}}

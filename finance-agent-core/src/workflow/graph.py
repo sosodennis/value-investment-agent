@@ -1,50 +1,60 @@
-from typing import Any, Dict, Optional, TypedDict, Literal
+from typing import Any, Dict, Optional, Literal
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
 
-from .nodes import planner_node, executor_node, auditor_node, calculation_node
+from .state import AgentState
+from .nodes import executor_node, auditor_node, calculation_node
+from .nodes.planner.graph import planner_subgraph
 
-# Define State
-class AgentState(TypedDict):
-    ticker: str
-    model_type: str # 'saas' or 'bank'
-    params: Optional[Dict[str, Any]] # Serialized JSON of params
-    audit_report: Optional[Dict[str, Any]] # {passed: bool, messages: []}
-    valuation_result: Optional[Dict[str, Any]]
-    planner_output: Optional[Dict[str, Any]] # Metadata from planner (sector, industry, reasoning)
 
-# --- Router ---
+# --- Routers ---
+def planner_router(state: AgentState) -> Literal["executor", "planner_human_review"]:
+    # Check if planner needs clarification
+    if state.get("status") == "waiting_for_human":
+        return "planner_human_review"
+    planner_out = state.get("planner_output", {})
+    if planner_out.get("status") == "clarification_needed":
+        return "planner_human_review"
+    if not state.get("ticker") or not state.get("model_type"):
+        return "planner_human_review"
+    return "executor"
+
 def audit_condition(state: AgentState) -> Literal["human_review", "executor"]:
     if state["audit_report"]["passed"]:
         return "human_review"
     else:
         print(f"Audit Failed: {state['audit_report']['messages']}")
-        # In a real agent, we loop back to executor with feedback.
-        # For this prototype, we just stop or go to human anyway so they see error.
-        # Let's go to human_review but Human sees error.
         return "human_review" 
 
 # --- Build Graph ---
 builder = StateGraph(AgentState)
 
-builder.add_node("planner", planner_node)
+builder.add_node("planner", planner_subgraph)
 builder.add_node("executor", executor_node)
 builder.add_node("auditor", auditor_node)
-# Human review is implicit via interrupt_before
+# Human review for planner (placeholder node for interruption)
+builder.add_node("planner_human_review", lambda x: x) 
 builder.add_node("calculator", calculation_node)
 
 builder.add_edge(START, "planner")
-builder.add_edge("planner", "executor")
+
+builder.add_conditional_edges("planner", planner_router, {
+    "executor": "executor",
+    "planner_human_review": "planner_human_review"
+})
+
+builder.add_edge("planner_human_review", END) # Stop and wait for user to fix input
+
 builder.add_edge("executor", "auditor")
 
 builder.add_conditional_edges("auditor", audit_condition, {
-    "human_review": "calculator", # Actually we interrupt before calculator
-    "executor": "executor" # Loop back if needed (disabled for now)
+    "human_review": "calculator", 
+    "executor": "executor" 
 })
 
 builder.add_edge("calculator", END)
 
 # Compile with checkpointer for HITL
 memory = MemorySaver()
-graph = builder.compile(checkpointer=memory, interrupt_before=["calculator"])
+graph = builder.compile(checkpointer=memory, interrupt_before=["calculator", "planner_human_review"])
 

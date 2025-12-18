@@ -1,7 +1,7 @@
 """
-OpenBB integration tools for the Planner Node.
+OpenBB and Web Search integration tools for the Planner Node.
 
-Provides wrapper functions for entity resolution and company profile retrieval.
+Provides wrapper functions for entity resolution, company profile retrieval, and web search.
 """
 
 from typing import List, Optional
@@ -9,59 +9,56 @@ import logging
 
 from .structures import TickerCandidate, CompanyProfile
 
+import logging
 logger = logging.getLogger(__name__)
 
 import yfinance as yf
-import requests
-
-# Set a user-agent to avoid being blocked by Yahoo
-HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-}
+from langchain_community.tools import DuckDuckGoSearchRun
 
 
 def search_ticker(query: str, limit: int = 5) -> List[TickerCandidate]:
     """
-    Search for ticker symbols using Yahoo Finance's autocomplete API.
-    
-    Args:
-        query: Company name or ticker to search for
-        limit: Maximum number of results to return
-        
-    Returns:
-        List of ticker candidates with metadata
+    Search for ticker symbols using yfinance.Search.
     """
+    # Try yfinance.Search
     try:
-        url = f"https://query2.finance.yahoo.com/v1/finance/search?q={query}"
-        response = requests.get(url, headers=HEADERS, timeout=10)
-        response.raise_for_status()
-        data = response.json()
+        search = yf.Search(query)
+        quotes = getattr(search, "quotes", [])
         
         candidates = []
-        for quote in data.get("quotes", [])[:limit]:
-            # Filter for stocks mainly, though Yahoo returns many types
-            quote_type = quote.get("quoteType", "").lower()
-            if quote_type not in ["equity", "equity_deprecated"]:
+        for quote in quotes[:limit]:
+            # Filter for stocks
+            quote_type = quote.get("quoteType", "").upper()
+            if quote_type not in ["EQUITY", "EQUITY_DEPRECATED"]:
                 continue
                 
             candidates.append(TickerCandidate(
                 symbol=quote.get("symbol"),
-                name=quote.get("longname") or quote.get("shortname"),
+                name=quote.get("longname") or quote.get("shortname") or quote.get("symbol"),
                 exchange=quote.get("exchDisp"),
                 type="stock",
-                confidence=0.9  # Default confidence for API matches
+                confidence=0.9
             ))
             
-        if not candidates:
-            # Fallback for common tickers if API fails or returns nothing relevant
-            if "tesla" in query.lower():
-                return [TickerCandidate(symbol="TSLA", name="Tesla Inc", exchange="NASDAQ", type="stock", confidence=0.95)]
-                
-        return candidates
-        
+        if candidates:
+            return candidates
+            
     except Exception as e:
-        logger.error(f"Error searching ticker: {e}")
-        return []
+        logger.error(f"yfinance.Search failed: {e}")
+
+    return []
+
+
+def web_search(query: str) -> str:
+    """
+    Perform a web search using DuckDuckGo via LangChain.
+    """
+    try:
+        search = DuckDuckGoSearchRun()
+        return search.run(query)
+    except Exception as e:
+        logger.error(f"Web search failed: {e}")
+        return f"Web search currently unavailable. Error: {str(e)}"
 
 
 def get_company_profile(ticker: str) -> Optional[CompanyProfile]:
@@ -92,11 +89,11 @@ def get_company_profile(ticker: str) -> Optional[CompanyProfile]:
             is_profitable=None  # Placeholder, logic for profitability check remains outside
         )
         
-        logger.info(f"✓ Retrieved profile for {ticker} using yfinance")
+        # logger.info(f"✓ Retrieved profile for {ticker} using yfinance")
         return profile
         
     except Exception as e:
-        logger.error(f"Error getting company profile for {ticker}: {e}")
+        # logger.error(f"Error getting company profile for {ticker}: {e}")
         return None
 
 

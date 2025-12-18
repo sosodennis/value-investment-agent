@@ -9,12 +9,13 @@ def main():
     config = {"configurable": {"thread_id": thread_id}}
     
     # 2. Start Workflow
+    user_query = input("\nWhat stock would you like to valuate? (e.g., 'Value Tesla')\n> ")
+    
     initial_input = {
-        "ticker": "CRM",
-        "model_type": "saas"
+        "user_query": user_query
     }
     
-    print(f"User Request: Value {initial_input['ticker']} using {initial_input['model_type']} model.")
+    print(f"\nProcessing request: {user_query}")
     
     # Run until interrupt
     # stream returns events. We iterate.
