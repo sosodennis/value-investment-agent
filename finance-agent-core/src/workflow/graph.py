@@ -11,6 +11,7 @@ class AgentState(TypedDict):
     params: Optional[Dict[str, Any]] # Serialized JSON of params
     audit_report: Optional[Dict[str, Any]] # {passed: bool, messages: []}
     valuation_result: Optional[Dict[str, Any]]
+    planner_output: Optional[Dict[str, Any]] # Metadata from planner (sector, industry, reasoning)
 
 # --- Router ---
 def audit_condition(state: AgentState) -> Literal["human_review", "executor"]:

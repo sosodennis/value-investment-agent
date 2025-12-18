@@ -13,6 +13,8 @@ dependencies = [
     "pandas>=2.2.0",
     "numpy>=2.1.0",
     "python-dotenv>=1.0.0",
+    "yfinance>=0.2.40",
+    "requests>=2.31.0",
 ]
 
 [tool.setuptools]
