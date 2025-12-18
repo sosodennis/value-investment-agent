@@ -37,7 +37,7 @@ def search_ticker(query: str, limit: int = 5) -> List[TickerCandidate]:
                 name=quote.get("longname") or quote.get("shortname") or quote.get("symbol"),
                 exchange=quote.get("exchDisp"),
                 type="stock",
-                confidence=0.9
+                confidence=1.0 if quote.get("symbol") == query.upper() else 0.9
             ))
             
         if candidates:

@@ -3,11 +3,16 @@ Extraction logic for the Planner Node.
 Uses LLM to extract intent (Company, Model Preference) from user query.
 """
 
+import os
 from typing import Optional, List
 from pydantic import BaseModel, Field
+from dotenv import load_dotenv, find_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from .structures import ValuationModel
+
+# Load environment variables
+load_dotenv(find_dotenv())
 
 class IntentExtraction(BaseModel):
     """Extracted intent from user query."""
@@ -61,7 +66,12 @@ def extract_intent(query: str) -> IntentExtraction:
     Extract intent from user query using LLM with heuristic fallback.
     """
     try:
-        llm = ChatOpenAI(model="gpt-4o", temperature=0)
+        llm = ChatOpenAI(
+            model="openai/gpt-oss-20b:free",
+            temperature=0,
+            base_url="https://openrouter.ai/api/v1",
+            api_key=os.getenv("OPENROUTER_API_KEY")
+        )
         
         prompt = ChatPromptTemplate.from_messages([
             ("system", "You are a financial analyst assistant. Extract the company name, ticker, and any specific valuation model preference from the user's request. "
@@ -71,8 +81,9 @@ def extract_intent(query: str) -> IntentExtraction:
         
         model_list = [m.value for m in ValuationModel]
         chain = prompt | llm.with_structured_output(IntentExtraction)
-        
-        return chain.invoke({"query": query, "models": model_list})
+        response = chain.invoke({"query": query, "models": model_list})
+        print(response)
+        return response
     except Exception as e:
         import logging
         logger = logging.getLogger(__name__)
