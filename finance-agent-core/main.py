@@ -31,24 +31,46 @@ def main():
     snapshot = graph.get_state(config)
     if snapshot.next:
         print("\n>>> HITL INTERRUPT: Workflow paused before:", snapshot.next)
-        print("Current State Params (Excerpt):")
-        params = snapshot.values.get("params", {})
-        print(f"Growth Rates: {params.get('growth_rates')}")
-        print(f"WACC: {params.get('wacc')}")
         
-        # Simulate Human Approval / Modification
-        print("\n>>> User Action: Approving parameters...")
+        # Check if this is a planner_human_review interrupt (ticker selection)
+        if "planner_human_review" in snapshot.next:
+            print("\n=== Ticker Selection Required ===")
+            candidates = snapshot.values.get("ticker_candidates", [])
+            
+            if candidates:
+                print("\nMultiple ticker candidates found:")
+                for idx, candidate in enumerate(candidates):
+                    symbol = candidate.get("symbol", "N/A")
+                    name = candidate.get("name", "N/A")
+                    exchange = candidate.get("exchange", "N/A")
+                    confidence = candidate.get("confidence", 0.0)
+                    print(f"  [{idx}] {symbol} - {name} ({exchange}) - Confidence: {confidence:.2f}")
+                
+                # Ask user to select
+                selection = input("\nEnter the number of your choice (or press Enter to use default): ").strip()
+                
+                if selection.isdigit() and 0 <= int(selection) < len(candidates):
+                    selected_idx = int(selection)
+                    selected_symbol = candidates[selected_idx].get("symbol")
+                    print(f"\n>>> User selected: {selected_symbol}")
+                    
+                    # Update state before resuming
+                    graph.update_state(config, {"selected_symbol": selected_symbol})
+                else:
+                    print("\n>>> No valid selection. Using default (top candidate).")
+            else:
+                print("\n>>> No candidates available. Proceeding with default behavior.")
+        
+        # Check if this is a calculator interrupt (parameter approval)
+        elif "calculator" in snapshot.next:
+            print("\n=== Parameter Review ===")
+            params = snapshot.values.get("params", {})
+            print(f"Growth Rates: {params.get('growth_rates')}")
+            print(f"WACC: {params.get('wacc')}")
+            print("\n>>> User Action: Approving parameters...")
         
         # Resume execution
-        # We can pass None to just resume, or update state.
-        # graph.invoke(None, config=config) -> This might restart?
-        # Use Command or just stream from current config?
-        # In idiomatic LangGraph, we just call stream/invoke again with Command or None?
-        # Actually, stream(None, config) should resume.
-        
         print("\n>>> Resuming Workflow...")
-        # Note: If we need to update state, we would pass Command(update=...)
-        # Here we just assume approval.
         
         for event in graph.stream(None, config=config):
              for key, value in event.items():

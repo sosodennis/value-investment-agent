@@ -20,3 +20,4 @@ class AgentState(TypedDict):
     resolved_ticker: Optional[str]
     company_profile: Optional[Dict[str, Any]]
     status: Optional[str]  # Planner status: 'extracting', 'searching', 'clarifying', 'done'
+    selected_symbol: Optional[str] # For HITL selection

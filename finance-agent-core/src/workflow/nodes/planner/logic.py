@@ -138,7 +138,12 @@ def should_request_clarification(candidates: list, confidence_threshold: float =
         if len(candidates) >= 2:
             top_conf = candidates[0].confidence
             second_conf = candidates[1].confidence
-            if abs(top_conf - second_conf) < 0.1:  # Ambiguous
+            # Relaxed threshold to catch cases like GOOG (0.9) vs GOOGL (1.0)
+            # where the difference is exactly 0.1
+            if abs(top_conf - second_conf) <= 0.15:  # Ambiguous
                 return True
+        # If we have multiple candidates but they're not close in confidence,
+        # still ask for clarification to be safe
+        return True
     
     return False
