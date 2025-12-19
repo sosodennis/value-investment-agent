@@ -1,15 +1,16 @@
 # AGENTS.md
 
 ## Overview
-The **Neuro-Symbolic Valuation Engine** employs a multi-agent system to decouple semantic parameter extraction (Probalistic) from financial calculations (Deterministic). This document defines the personas, responsibilities, and interaction patterns of the agents.
+The **Neuro-Symbolic Valuation Engine** employs a multi-agent system to decouple semantic parameter extraction (Probabilistic) from financial calculations (Deterministic). This document defines the personas, responsibilities, and interaction patterns of the agents.
 
 ## 1. The Planner (Orchestrator)
 **Role**: System Architect & Router
 - **Responsibility**:
-    - Analyzes the user request (e.g., "Value Tesla").
-    - Determines the industry sector and selects the appropriate valuation model (e.g., SaaS FCFF vs. Manufacturing DCF vs. Bank DDM).
-    - Dispatch tasks to the Executor.
-- **Tools**: None (Internal Logic).
+    - **Intent Extraction**: Parses user queries (e.g., "Value Tesla") to identify the company and potential model preference.
+    - **Ticker Search**: Uses Yahoo Finance and Web Search to resolve the correct ticker symbol, handling ambiguity (e.g., "Google" -> GOOG/GOOGL).
+    - **Model Selection**: Determines the industry sector and selects the appropriate valuation model (e.g., SaaS FCFF vs. Manufacturing DCF vs. Bank DDM).
+    - **Clarification**: Detects ambiguity (e.g., multiple valid tickers) and requests human intervention before proceeding.
+- **Tools**: `RAGSearch` (Internal), `WebSearch`, `YFinance`.
 
 ## 2. The Executor (Parameter Hunter)
 **Role**: Research Analyst
@@ -28,7 +29,14 @@ The **Neuro-Symbolic Valuation Engine** employs a multi-agent system to decouple
 - **Input**: Structured JSON from Executor.
 - **Output**: Validated JSON or Error Report.
 
-## 4. The Human-in-the-Loop (Senior PM / Analyst)
+## 4. Human-in-the-Loop (HITL) Checkpoints
+
+### A. Planner Clarification (Ambiguity Resolution)
+**Role**: Disambiguation
+- **Trigger**: Planner finds multiple valid tickers or is unsure about the model.
+- **Action**: User selects the correct ticker/model or provides a new query.
+
+### B. Final Review (Senior PM / Analyst)
 **Role**: Final Decision Maker
 - **Responsibility**:
     - Reviews the parameters prepared by the agents before calculation.
@@ -43,10 +51,20 @@ The **Neuro-Symbolic Valuation Engine** employs a multi-agent system to decouple
 ```mermaid
 graph TD
     User[User Request] --> Planner
-    Planner -->|Select Model & Schema| Executor
+    
+    subgraph Planner_Workflow
+        Planner --> Extraction
+        Extraction --> Search
+        Search --> Decision
+    end
+    
+    Decision -->|Ambiguous?| Clarification[HitL: Clarification]
+    Clarification -->|User Input| Planner
+    
+    Decision -->|Resolved| Executor
     Executor -->|Extract Params| Auditor
-    Auditor -->|Pass Validation| HITL[Human Review]
+    Auditor -->|Pass Validation| FinalReview[HitL: Final Review]
     Auditor -->|Fail Validation| Executor
-    HITL -->|Approve/Modify| Calculator[Deterministic Engine]
+    FinalReview -->|Approve/Modify| Calculator[Deterministic Engine]
     Calculator -->|Result| User
 ```
