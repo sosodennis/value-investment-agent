@@ -141,7 +141,6 @@ def extract_intent(query: str) -> IntentExtraction:
         model_list = [m.value for m in ValuationModel]
         chain = prompt | llm.with_structured_output(IntentExtraction)
         response = chain.invoke({"query": query, "models": model_list})
-        print(response)
         return response
     except Exception as e:
         import logging

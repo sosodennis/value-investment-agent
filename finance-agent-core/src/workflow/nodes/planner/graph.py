@@ -33,24 +33,41 @@ def searching_node(state: AgentState) -> Dict[str, Any]:
     if not query:
         return {"status": "clarifying"}
 
-    # 1. Try Yahoo Finance Search
-    candidates = search_ticker(query)
-    
-    # 2. If no candidates, try web search
-    if not candidates:
-        search_results = web_search(f"What is the stock ticker for {query}?")
-        print(f"Web search results for '{query}': {search_results}")
-        
-        # EXTRACT CANDIDATES FROM WEB SEARCH
-        candidates = extract_candidates_from_search(query, search_results)
-        print(f"Extracted candidates from web search: {candidates}")
+    candidate_map = {}
 
-    # DE-DUPLICATE (e.g., BRK.B vs BRK-B)
-    candidates = deduplicate_candidates(candidates)
-    print(f"Final candidates after de-duplication: {candidates}")
+    # 1. Try Yahoo Finance Search (often faster/structured)
+    yf_candidates = search_ticker(query)
+    for c in yf_candidates:
+        candidate_map[c.symbol] = c
+
+    # 2. Always try Web Search for robustness (catch cases like 'brk' -> Berkshire)
+    # or if we have low confidence in YF options.
+    # For now, let's run it to augment results if the query is short/ambiguous or results are few.
+    # To be safe and address the user's issue: Run it.
+    print(f"Running web search fallback for: {query}")
+    search_results = web_search(f"stock ticker symbol for {query} and company name")
+    print(f"Web search results: {search_results[:200]}...")  # Log snippet
+
+    web_candidates = extract_candidates_from_search(query, search_results)
+    print(f"Extracted candidates from web search: {web_candidates}")
+    
+    for c in web_candidates:
+        # If symbol already exists, keep the one with higher confidence, or default to existing
+        if c.symbol in candidate_map:
+             if c.confidence > candidate_map[c.symbol].confidence:
+                 candidate_map[c.symbol] = c
+        else:
+            candidate_map[c.symbol] = c
+
+    # Convert back to list
+    combined_candidates = list(candidate_map.values())
+
+    # DE-DUPLICATE
+    final_candidates = deduplicate_candidates(combined_candidates)
+    print(f"Final candidates after de-duplication: {final_candidates}")
 
     return {
-        "ticker_candidates": [c.model_dump() for c in candidates],
+        "ticker_candidates": [c.model_dump() for c in final_candidates],
         "status": "deciding"
     }
 
