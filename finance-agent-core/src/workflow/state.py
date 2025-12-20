@@ -2,22 +2,28 @@
 Shared state definitions for the workflow graph.
 """
 
-from typing import Any, Dict, Optional, TypedDict
+from typing import Any, Dict, Optional
+from typing_extensions import TypedDict
+from langgraph.graph import add_messages
+from langchain_core.messages import AnyMessage
 
 
-class AgentState(TypedDict):
-    user_query: Optional[str]
-    messages: Optional[list]  # For conversation history
-    ticker: Optional[str]
-    model_type: Optional[str]  # 'saas' or 'bank'
-    params: Optional[Dict[str, Any]]  # Serialized JSON of params
-    audit_report: Optional[Dict[str, Any]]  # {passed: bool, messages: []}
-    valuation_result: Optional[Dict[str, Any]]
-    planner_output: Optional[Dict[str, Any]]  # Metadata from planner (sector, industry, reasoning)
+class AgentState(TypedDict, total=False):
+    """Agent state with all fields optional for LangServe compatibility."""
+    user_query: str
+    messages: list[AnyMessage]  # For conversation history
+    ticker: str
+    model_type: str  # 'saas' or 'bank'
+    params: Dict[str, Any]  # Serialized JSON of params
+    audit_report: Dict[str, Any]  # {passed: bool, messages: []}
+    valuation_result: Dict[str, Any]
+    planner_output: Dict[str, Any]  # Metadata from planner (sector, industry, reasoning)
     # Planner subgraph fields
-    extracted_intent: Optional[Dict[str, Any]]
-    ticker_candidates: Optional[list]
-    resolved_ticker: Optional[str]
-    company_profile: Optional[Dict[str, Any]]
-    status: Optional[str]  # Planner status: 'extracting', 'searching', 'clarifying', 'done'
-    selected_symbol: Optional[str] # For HITL selection
+    extracted_intent: Dict[str, Any]
+    ticker_candidates: list
+    resolved_ticker: str
+    company_profile: Dict[str, Any]
+    status: str  # Planner status: 'extracting', 'searching', 'clarifying', 'done'
+    selected_symbol: str  # For HITL selection
+    approved: bool  # For human approval before calculation
+

@@ -6,20 +6,18 @@ This is a simple wrapper around the SkillRegistry calculator functions.
 
 from typing import TYPE_CHECKING
 from ...manager import SkillRegistry
+from langchain_core.messages import AIMessage
 
 if TYPE_CHECKING:
     from ...graph import AgentState
 
 
-def calculation_node(state: "AgentState"):
+from langgraph.types import Command
+from langgraph.graph import END
+
+def calculation_node(state: "AgentState") -> Command:
     """
     Executes the deterministic valuation calculation.
-    
-    Args:
-        state: Current agent state with params and model_type
-        
-    Returns:
-        Updated state with valuation_result
     """
     print("--- Calculator: Running Deterministic Engine ---")
     
@@ -33,4 +31,16 @@ def calculation_node(state: "AgentState"):
     params_obj = schema(**params_dict)
     
     result = calc_func(params_obj)
-    return {"valuation_result": result}
+    
+    # Format the result nicely
+    msg_content = f"### Valuation Complete\n\n**Model**: {model_type}\n**Result**: {result}"
+    
+    print("✅ Valuation Logic Complete. Returning result to Conversation.")
+    
+    return Command(
+        update={
+            "valuation_result": result,
+            "messages": [AIMessage(content=msg_content)]
+        },
+        goto=END
+    )

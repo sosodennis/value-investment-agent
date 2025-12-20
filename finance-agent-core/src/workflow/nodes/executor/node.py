@@ -13,19 +13,11 @@ if TYPE_CHECKING:
     from ...graph import AgentState
 
 
-def executor_node(state: "AgentState"):
+from langgraph.types import Command
+
+def executor_node(state: "AgentState") -> Command:
     """
     Extracts valuation parameters for the selected model type.
-    
-    Args:
-        state: Current agent state with ticker and model_type
-        
-    Returns:
-        Updated state with extracted params (validated against schema)
-        
-    Note:
-        Currently generates mock data. In production, this would use
-        LLM extraction with prompts from prompts.py and tools from tools.py
     """
     print(f"--- Executor: Extracting parameters for {state['model_type']} ---")
     
@@ -43,10 +35,13 @@ def executor_node(state: "AgentState"):
     else:
         raise ValueError(f"Unsupported model type: {state['model_type']}")
     
-    # Validate structure via Pydantic (ensure it matches schema)
+    # Validate structure via Pydantic
     try:
         validated = schema(**mock_data)
-        return {"params": validated.model_dump()}
+        return Command(
+            update={"params": validated.model_dump()},
+            goto="auditor"
+        )
     except Exception as e:
         print(f"Extraction Failed: {e}")
-        return {}
+        return Command(goto=END) # Fallback if extraction fails completely

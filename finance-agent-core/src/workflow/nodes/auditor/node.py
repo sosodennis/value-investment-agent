@@ -11,15 +11,11 @@ if TYPE_CHECKING:
     from ...graph import AgentState
 
 
-def auditor_node(state: "AgentState"):
+from langgraph.types import Command
+
+def auditor_node(state: "AgentState") -> Command:
     """
     Validates extracted parameters using skill-specific audit rules.
-    
-    Args:
-        state: Current agent state with params and model_type
-        
-    Returns:
-        Updated state with audit_report containing passed status and messages
     """
     print("--- Auditor: Checking parameters ---")
     
@@ -35,4 +31,7 @@ def auditor_node(state: "AgentState"):
     
     result = audit_func(params_obj)
     
-    return {"audit_report": {"passed": result.passed, "messages": result.messages}}
+    return Command(
+        update={"audit_report": {"passed": result.passed, "messages": result.messages}},
+        goto="approval"
+    )
