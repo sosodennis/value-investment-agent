@@ -1,23 +1,25 @@
 import sys
 import os
+import json
+import uvicorn
+from typing import Optional, Dict, Any, List
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+
 # Add the project root to sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from typing import Any, Dict
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from langserve import add_routes
-from langgraph.graph import StateGraph
-from langgraph.types import Command
 from src.workflow.graph import graph
-import uvicorn
-import json
-from fastapi.responses import StreamingResponse
+from langgraph.types import Command
+from langchain_core.messages import HumanMessage
+from src.workflow.interrupts import InterruptValue
 
 app = FastAPI(
     title="Neuro-Symbolic Valuation Engine API",
-    version="1.0",
-    description="API for the FinGraph Valuation Agent",
+    version="2.0",
+    description="Pure FastAPI implementation for FinGraph Valuation Agent (Path B)",
 )
 
 # Set all CORS enabled origins
@@ -30,89 +32,109 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
-# --- 🛠️ THE FIX: Configuration Modifier ---
-def per_req_config_modifier(config: Dict[str, Any], request: Request) -> Dict[str, Any]:
-    """
-    Extracts the thread_id from HTTP headers and injects it into the LangGraph config.
-    This guarantees the Checkpointer always has a thread_id, regardless of the JSON body.
-    """
-    # 1. Look for 'X-Thread-ID' in the request headers
-    thread_id = request.headers.get("X-Thread-ID")
-    
-    if thread_id:
-        # 2. If found, inject it into the configurable dictionary
-        config = config.copy()
-        if "configurable" not in config:
-            config["configurable"] = {}
-        config["configurable"]["thread_id"] = thread_id
-        print(f"✅ Injected Thread ID from Header: {thread_id}")
-    else:
-        # Optional: Log a warning if no ID is found
-        print("⚠️ Warning: No X-Thread-ID header found.")
-        
-    return config
+class RequestSchema(BaseModel):
+    message: Optional[str] = None
+    thread_id: str
+    resume_payload: Optional[Dict[str, Any]] = None
 
 @app.get("/")
-async def redirect():
-    return {"message": "FinGraph API is running. Go to /agent/playground for interactive testing."}
+async def health_check():
+    return {"status": "ok", "mode": "Pure FastAPI (Path B)"}
 
-# Add LangServe routes with the modifier
-add_routes(
-    app,
-    graph,
-    path="/agent",
-    per_req_config_modifier=per_req_config_modifier
-)
-
-# --- 🚀 NEW: Specialized Resume Endpoint for HITL ---
-@app.post("/agent/resume")
-async def resume_agent(request: Request):
+@app.post("/stream")
+async def stream_agent(body: RequestSchema):
     """
-    Enterprise Best Practice: Specialized endpoint for resuming with Command.
-    This handles the complexity of mapping a simple JSON payload to a LangGraph Command.
+    Unified endpoint for sending messages OR resuming execution.
+    Eliminates the need for separate /resume and /chat endpoints.
     """
-    data = await request.json()
-    thread_id = request.headers.get("X-Thread-ID") or data.get("thread_id")
-    payload = data.get("payload") # The resume payload (e.g. { "approved": true })
-
-    if not thread_id:
-        return {"error": "X-Thread-ID header or thread_id in body is required"}
-
-    config = {"configurable": {"thread_id": thread_id}}
+    print(f"📥 Received Request: ThreadID={body.thread_id}, Message={body.message}, Resume={body.resume_payload}")
+    
+    config = {"configurable": {"thread_id": body.thread_id}}
+    
+    # Decision Logic: Are we starting or resuming?
+    input_data = None
+    if body.resume_payload:
+        # We are resuming: Wrap payload in Command
+        # The payload from frontend usually comes as { "approved": true } etc.
+        print("🔄 Resuming with Command...")
+        input_data = Command(resume=body.resume_payload)
+    elif body.message:
+        # We are starting: Wrap message in state dict.
+        # Also populate 'user_query' as the planner relies on it.
+        print("▶️ Starting new run with Message...")
+        input_data = {
+            "messages": [HumanMessage(content=body.message)],
+            "user_query": body.message
+        }
+    else:
+        # It's possible to call with just thread_id to resume without payload if the graph allows, 
+        # but for our use case we expect either message or resume payload.
+        raise HTTPException(status_code=400, detail="Must provide message or resume_payload")
 
     async def event_generator():
-        # Use astream_events or astream for consistency with LangServe
-        # Here we use astream_events v2 to match what the SDK expects
-        
-        def json_serializable(obj):
-            try:
-                if hasattr(obj, "model_dump"):
-                    return obj.model_dump()
-                if hasattr(obj, "dict"):
-                    return obj.dict()
-                return str(obj)
-            except Exception:
-                return str(obj)
+        try:
+            # 1. Stream events using the v2 API
+            print("🌊 Starting Event Stream...")
+            async for event in graph.astream_events(input_data, config=config, version="v2"):
+                # Filtering logic: Don't stream internal LLM generation (e.g. JSON extraction)
+                # metadata.get("langgraph_node") gives the node name.
+                node_name = event.get("metadata", {}).get("langgraph_node", "")
+                event_type = event["event"]
 
-        async for event in graph.astream_events(Command(resume=payload), config=config, version="v2"):
-            yield f"event: {event['event']}\ndata: {json.dumps(event, default=json_serializable)}\n\n"
+                # List of nodes whose generation we want to HIDE from the chat UI
+                HIDDEN_NODES = {"extraction", "searching", "deciding", "clarifying", "auditor"}
+                
+                # If we are streaming tokens from a hidden node, skip yielding
+                if event_type == "on_chat_model_stream" and node_name in HIDDEN_NODES:
+                     continue
+                
+                # Standardize event serialization
+                def json_serializable(obj):
+                    try:
+                        if hasattr(obj, "model_dump"):
+                            return obj.model_dump()
+                        if hasattr(obj, "dict"):
+                            return obj.dict()
+                        return str(obj)
+                    except Exception:
+                        return str(obj)
 
-        # --- 🛠️ FIX: Manually check for interrupts and inject event ---
-        snapshot = await graph.aget_state(config)
-        if snapshot.next:
-            for task in snapshot.tasks:
-                if task.interrupts:
-                    formatted_interrupts = [{"value": i.value} for i in task.interrupts]
-                    chunk = {"__interrupt__": formatted_interrupts}
-                    event = {
-                        "event": "on_chain_stream",
-                        "data": {"chunk": chunk},
-                        "run_id": "manual_interrupt_injection",
-                        "name": "interrupt_injector",
-                        "tags": [],
-                        "metadata": {}
-                    }
-                    yield f"event: {event['event']}\ndata: {json.dumps(event, default=json_serializable)}\n\n"
+                # Send standard events
+                yield f"event: {event['event']}\ndata: {json.dumps(event, default=json_serializable)}\n\n"
+            
+            print("✅ Event Stream Completed. Checking for interrupts...")
+
+            # 2. Explicit Interrupt Detection
+            # After the run completes (or pauses), check the state explicitly
+            snapshot = await graph.aget_state(config)
+            
+            if snapshot.next:
+                print(f"⏸️ Graph Paused. Next nodes: {snapshot.next}")
+                # Check for interrupts in the tasks
+                current_interrupts = []
+                for task in snapshot.tasks:
+                    if task.interrupts:
+                        # task.interrupts is a tuple of Interrupt objects
+                        for i in task.interrupts:
+                            try:
+                                # Validate and serialize using our strong types
+                                val = InterruptValue.model_validate(i.value)
+                                current_interrupts.append(val.model_dump())
+                            except Exception:
+                                # Fallback if unknown interrupt type
+                                current_interrupts.append(i.value)
+                
+                if current_interrupts:
+                    print(f"⚠️ Interrupts Detected: {current_interrupts}")
+                    # Emit a custom 'interrupt' event to the client
+                    yield f"event: interrupt\ndata: {json.dumps(current_interrupts)}\n\n"
+            else:
+                print("🏁 Graph Execution Finished (No pending steps).")
+
+        except Exception as e:
+            print(f"❌ Error during streaming: {str(e)}")
+            error_event = {"error": str(e)}
+            yield f"event: error\ndata: {json.dumps(error_event)}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 

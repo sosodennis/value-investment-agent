@@ -117,9 +117,9 @@ export default function Home() {
                     <List size={18} />
                     <h3 className="font-bold text-sm">Select Ticker</h3>
                   </div>
-                  <p className="text-xs text-slate-400">I found multiple tickers for "{interrupt.data.intent?.ticker || interrupt.data.intent?.company_name}". Please choose the correct one:</p>
+                  <p className="text-xs text-slate-400">I found multiple tickers for "{interrupt.intent?.ticker || interrupt.intent?.company_name}". Please choose the correct one:</p>
                   <div className="grid grid-cols-1 gap-2">
-                    {interrupt.data.candidates?.map((c: any) => (
+                    {interrupt.candidates?.map((c) => (
                       <button
                         key={c.symbol}
                         onClick={() => handleSelectTicker(c.symbol)}
@@ -127,7 +127,7 @@ export default function Home() {
                       >
                         <div className="text-left">
                           <span className="font-bold text-sm block">{c.symbol}</span>
-                          <span className="text-[10px] text-slate-500 block line-clamp-1">{c.name} ({c.exch_disp})</span>
+                          <span className="text-[10px] text-slate-500 block line-clamp-1">{c.name} ({c.exchange})</span>
                         </div>
                         <TrendingUp size={14} className="text-slate-600 group-hover:text-indigo-400 transition-colors" />
                       </button>
@@ -145,11 +145,11 @@ export default function Home() {
                   <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-2">
                     <div className="flex justify-between text-xs">
                       <span className="text-slate-500 uppercase tracking-tighter font-bold">Ticker</span>
-                      <span className="text-slate-200 font-bold">{interrupt.data.details?.ticker}</span>
+                      <span className="text-slate-200 font-bold">{interrupt.details?.ticker}</span>
                     </div>
                     <div className="flex justify-between text-xs">
                       <span className="text-slate-500 uppercase tracking-tighter font-bold">Model</span>
-                      <span className="text-slate-200">{interrupt.data.details?.model}</span>
+                      <span className="text-slate-200">{interrupt.details?.model}</span>
                     </div>
                     <div className="pt-2 mt-2 border-t border-slate-800">
                       <p className="text-[10px] text-slate-500 italic">

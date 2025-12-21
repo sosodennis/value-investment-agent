@@ -2,15 +2,12 @@
 
 import { useState, useCallback, useRef } from 'react';
 
+import { Interrupt } from '../types/interrupts';
+
 export interface Message {
     id: string;
     role: 'user' | 'assistant' | 'system';
     content: string;
-}
-
-export interface Interrupt {
-    type: string;
-    data: any;
 }
 
 const API_URL = process.env.NEXT_PUBLIC_LANGGRAPH_URL || 'http://localhost:8000';
@@ -49,7 +46,7 @@ export function useAgent(assistantId: string = "agent") {
                     try {
                         const eventData = JSON.parse(line.slice(6));
 
-                        // Handle Token Streaming (on_chat_model_stream)
+                        // 1. Handle Token Streaming (on_chat_model_stream)
                         if (eventData.event === 'on_chat_model_stream') {
                             const chunk = eventData.data?.chunk;
                             if (chunk?.content) {
@@ -73,29 +70,19 @@ export function useAgent(assistantId: string = "agent") {
                             }
                         }
 
-                        // Handle State Updates & Interrupts (on_chain_stream)
+                        // 2. Handle Messages from non-streaming nodes (on_chain_stream)
                         if (eventData.event === 'on_chain_stream' || eventData.event === 'on_chain_end') {
                             const chunk = eventData.data?.chunk || eventData.data?.output;
                             if (chunk && typeof chunk === 'object') {
-                                // 1. Check for Messages (for non-streaming nodes like Calculator)
                                 if (chunk.messages && Array.isArray(chunk.messages) && chunk.messages.length > 0) {
                                     const lastMsg = chunk.messages[chunk.messages.length - 1];
-                                    // Only add if it's an AIMessage and content is a string
                                     if (lastMsg.type === 'ai' && typeof lastMsg.content === 'string') {
                                         const msgContent = lastMsg.content;
                                         setMessages((prev) => {
-                                            // Dedup: if the last message in state is identical/streaming, maybe merge?
-                                            // But for calculator, it's a new message.
-                                            // Simple check: avoid adding if ID exists or consistent content
-                                            // Since we generate IDs in frontend, checking content might be enough for now 
-                                            // or let's just append it as a new "Answer"
-
-                                            // Avoid duplicates if on_chain_stream fires multiple times
                                             const lastStateMsg = prev[prev.length - 1];
                                             if (lastStateMsg && lastStateMsg.content === msgContent) {
                                                 return prev;
                                             }
-
                                             return [...prev, {
                                                 id: `ai_final_${Date.now()}`,
                                                 role: 'assistant',
@@ -104,18 +91,22 @@ export function useAgent(assistantId: string = "agent") {
                                         });
                                     }
                                 }
-
-                                // 2. Check for interrupt markers
-                                // The new backend might send it in a specific field or as __interrupt__
-                                if ('__interrupt__' in chunk) {
-                                    const interruptVal = (chunk as any).__interrupt__[0]?.value;
-                                    setInterrupt({
-                                        type: interruptVal?.type || 'unknown',
-                                        data: interruptVal
-                                    });
-                                }
                             }
                         }
+
+                        // 3. Handle Explicit Interrupt Event
+                        // This handles both the custom 'interrupt' event and standard LangGraph interrupts
+                        // if they are serialized as an array of objects with a 'type' field.
+
+                        if (Array.isArray(eventData)) {
+                            // This is likely the interrupt payload
+                            const interruptVal = eventData[0] as Interrupt;
+                            if (interruptVal && interruptVal.type) {
+                                console.log("⏸️ Interrupt Detected:", interruptVal);
+                                setInterrupt(interruptVal);
+                            }
+                        }
+
                     } catch (e) {
                         // console.error("Error parsing SSE line:", line, e);
                     }
@@ -141,15 +132,15 @@ export function useAgent(assistantId: string = "agent") {
         setMessages(prev => [...prev, userMsg]);
 
         try {
-            const response = await fetch(`${API_URL}/agent/stream_events`, {
+            console.log(`🌐 Sending Message to /stream: ${content}`);
+            const response = await fetch(`${API_URL}/stream`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-Thread-ID': currentThreadId
                 },
                 body: JSON.stringify({
-                    input: { user_query: content },
-                    version: 'v2'
+                    thread_id: currentThreadId,
+                    message: content
                 })
             });
 
@@ -163,23 +154,42 @@ export function useAgent(assistantId: string = "agent") {
     }, [threadId]);
 
     const submitCommand = useCallback(async (payload: any) => {
-        console.log("🚀 submitCommand called with payload:", payload, "ThreadID:", threadId);
+        console.log("🚀 submitCommand called (Resuming)", payload);
         if (!threadId) {
             console.error("❌ ThreadID is missing in submitCommand");
             return;
         }
+
+        // --- NEW: Optimistically add user interaction to history ---
+        let interactionText = "Resumed execution";
+        if (payload.selected_symbol) {
+            interactionText = `Selected Ticker: ${payload.selected_symbol}`;
+        } else if (typeof payload.approved === 'boolean') {
+            interactionText = payload.approved ? "✅ Approved Audit Plan" : "❌ Rejected Audit Plan";
+        }
+
+        const interactionMsg: Message = {
+            id: `user_action_${Date.now()}`,
+            role: 'user',
+            content: interactionText
+        };
+        setMessages(prev => [...prev, interactionMsg]);
+        // -----------------------------------------------------------
+
         setIsLoading(true);
         setInterrupt(null);
 
         try {
-            console.log("🌐 Fetching /agent/resume...");
-            const response = await fetch(`${API_URL}/agent/resume`, {
+            console.log("🌐 Sending Resume to /stream...");
+            const response = await fetch(`${API_URL}/stream`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-Thread-ID': threadId
                 },
-                body: JSON.stringify({ payload })
+                body: JSON.stringify({
+                    thread_id: threadId,
+                    resume_payload: payload
+                })
             });
 
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
@@ -187,7 +197,6 @@ export function useAgent(assistantId: string = "agent") {
         } catch (error) {
             console.error("Resume error:", error);
         } finally {
-            console.log("🔒 submitCommand finally - Setting isLoading to false");
             setIsLoading(false);
         }
     }, [threadId]);

@@ -86,7 +86,8 @@ This section dictates how AI Assistants and Developers should write code, struct
 
 * **Language**: Python 3.10+ (Primary), TypeScript (Frontend/Dashboard if applicable).  
 * **Frameworks**:  
-  * Orchestration: LangGraph / LangChain.  
+  * Orchestration: LangGraph (Functional API v0.2+).
+  * Serving: Pure FastAPI (LangServe removed).
   * Data Validation: Pydantic (Strict typing is mandatory).  
 * **Style Guide**:  
   * Follow **PEP 8** for Python.  
@@ -140,3 +141,19 @@ class FinancialReport(BaseModel):
 
 * Never hardcode API keys (OpenAI, Tavily, etc.). Use os.getenv() and .env files.  
 * Ensure no PII (Personally Identifiable Information) is processed unless explicitly authorized.
+
+### **7. API Protocol (Custom Control Path)**
+
+* **Architecture**: Pure FastAPI (Path B).
+* **Endpoint**: Single unified endpoint `POST /stream`.
+* **Request Schema**:
+  ```json
+  {
+    "thread_id": "string",
+    "message": "string (optional)",
+    "resume_payload": "object (optional)"
+  }
+  ```
+* **Streaming**: Server-Sent Events (SSE).
+* **Interrupts**: Explicit `event: interrupt` emitted at the end of the stream if the graph pauses.
+* **State Persistence**: MemorySaver (Currently) -> PostgresSaver (Future).

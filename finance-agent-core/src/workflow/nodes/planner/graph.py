@@ -169,13 +169,16 @@ def clarification_node(state: AgentState) -> Command:
     """
     print("--- Planner: Ticker Ambiguity Detected. Waiting for user input... ---")
     
+    from ...interrupts import HumanTickerSelection
+    from .extraction import IntentExtraction
+    
     # Trigger interrupt with candidates
-    user_input = interrupt({
-        "type": "ticker_selection",
-        "candidates": state.ticker_candidates,
-        "intent": state.extracted_intent,
-        "reason": "Multiple tickers found or ambiguity detected."
-    })
+    interrupt_payload = HumanTickerSelection(
+        candidates=state.ticker_candidates or [],
+        intent=IntentExtraction(**state.extracted_intent) if state.extracted_intent else None,
+        reason="Multiple tickers found or ambiguity detected."
+    )
+    user_input = interrupt(interrupt_payload.model_dump())
 
     # user_input is what the frontend sends back, e.g. { "selected_symbol": "GOOGL" }
     selected_symbol = user_input.get("selected_symbol") or user_input.get("ticker")

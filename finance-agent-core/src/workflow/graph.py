@@ -28,19 +28,19 @@ def approval_node(state: AgentState) -> Command:
         audit_passed = state.audit_output.passed
         audit_messages = state.audit_output.messages
 
-    # Trigger interrupt. This pauses the graph and returns the user input when resumed.
-    interrupt_payload = {
-        "type": "approval_request",
-        "action": "calculate_valuation",
-        "details": {
-            "ticker": state.ticker,
-            "model": state.model_type,
-            "audit_passed": audit_passed,
-            "audit_messages": audit_messages
-        }
-    }
+    from .interrupts import HumanApprovalRequest, ApprovalDetails
     
-    ans = interrupt(interrupt_payload)
+    # Trigger interrupt. This pauses the graph and returns the user input when resumed.
+    interrupt_payload = HumanApprovalRequest(
+        details=ApprovalDetails(
+            ticker=state.ticker,
+            model=state.model_type,
+            audit_passed=audit_passed,
+            audit_messages=audit_messages
+        )
+    )
+    
+    ans = interrupt(interrupt_payload.model_dump())
 
     # When resumed, ans will contain the payload sent from frontend (e.g. { "approved": true })
     if ans.get("approved"):
