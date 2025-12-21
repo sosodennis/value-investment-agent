@@ -11,6 +11,7 @@ from pydantic import BaseModel
 # Add the project root to sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from src.workflow.state import AgentState
 from src.workflow.graph import graph
 from langgraph.types import Command
 from langchain_core.messages import HumanMessage
@@ -62,10 +63,11 @@ async def stream_agent(body: RequestSchema):
         # We are starting: Wrap message in state dict.
         # Also populate 'user_query' as the planner relies on it.
         print("▶️ Starting new run with Message...")
-        input_data = {
-            "messages": [HumanMessage(content=body.message)],
-            "user_query": body.message
-        }
+        # Use strong typing with AgentState
+        input_data = AgentState(
+            messages=[HumanMessage(content=body.message)],
+            user_query=body.message
+        ).model_dump()
     else:
         # It's possible to call with just thread_id to resume without payload if the graph allows, 
         # but for our use case we expect either message or resume payload.

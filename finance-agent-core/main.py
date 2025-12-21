@@ -19,7 +19,6 @@ def main():
     
     # Run until interrupt
     # stream returns events. We iterate.
-    current_values = None
     for event in graph.stream(initial_input, config=config):
         for key, value in event.items():
             print(f"\n[Node: {key}]")
