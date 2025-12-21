@@ -27,6 +27,7 @@ export function useAgent(assistantId: string = "agent") {
 
         const decoder = new TextDecoder();
         let buffer = '';
+        let currentEventType = 'message'; // Default SSE event type
 
         try {
             while (true) {
@@ -41,74 +42,104 @@ export function useAgent(assistantId: string = "agent") {
                 buffer = lines.pop() || '';
 
                 for (const line of lines) {
-                    console.log("📩 SSE Line:", line);
-                    if (!line.trim() || !line.startsWith('data: ')) continue;
-                    try {
-                        const eventData = JSON.parse(line.slice(6));
+                    const trimmedLine = line.trim();
+                    if (!trimmedLine) {
+                        // Empty line indicates end of event dispatch
+                        currentEventType = 'message';
+                        continue;
+                    }
 
-                        // 1. Handle Token Streaming (on_chat_model_stream)
-                        if (eventData.event === 'on_chat_model_stream') {
-                            const chunk = eventData.data?.chunk;
-                            if (chunk?.content) {
-                                const text = typeof chunk.content === 'string'
-                                    ? chunk.content
-                                    : chunk.content[0]?.text || '';
+                    if (line.startsWith('event: ')) {
+                        currentEventType = line.slice(7).trim();
+                        console.log(`🎫 Event Type: ${currentEventType}`);
+                        continue;
+                    }
 
-                                if (text) {
-                                    setMessages((prev) => {
-                                        const lastIdx = prev.length - 1;
-                                        const lastMsg = prev[lastIdx];
-                                        if (lastMsg && lastMsg.role === 'assistant' && lastMsg.id === currentAiMsgId) {
-                                            const newMsgs = [...prev];
-                                            newMsgs[lastIdx] = { ...lastMsg, content: lastMsg.content + text };
-                                            return newMsgs;
-                                        } else {
-                                            return [...prev, { id: currentAiMsgId, role: 'assistant', content: text }];
-                                        }
-                                    });
+                    if (line.startsWith('data: ')) {
+                        console.log(`📩 SSE Data (${currentEventType}):`, line.slice(0, 100) + (line.length > 100 ? '...' : ''));
+
+                        try {
+                            const eventData = JSON.parse(line.slice(6));
+
+                            // === HANDLE INTERRUPTS ===
+                            if (currentEventType === 'interrupt') {
+                                // The backend sends an array of interrupt values [val.model_dump(), ...]
+                                if (Array.isArray(eventData) && eventData.length > 0) {
+                                    const interruptVal = eventData[0] as Interrupt;
+                                    console.log("⏸️ Interrupt Detected:", interruptVal);
+                                    setInterrupt(interruptVal);
                                 }
+                                continue;
                             }
-                        }
 
-                        // 2. Handle Messages from non-streaming nodes (on_chain_stream)
-                        if (eventData.event === 'on_chain_stream' || eventData.event === 'on_chain_end') {
-                            const chunk = eventData.data?.chunk || eventData.data?.output;
-                            if (chunk && typeof chunk === 'object') {
-                                if (chunk.messages && Array.isArray(chunk.messages) && chunk.messages.length > 0) {
-                                    const lastMsg = chunk.messages[chunk.messages.length - 1];
-                                    if (lastMsg.type === 'ai' && typeof lastMsg.content === 'string') {
-                                        const msgContent = lastMsg.content;
+                            // === HANDLE ERRORS ===
+                            if (currentEventType === 'error') {
+                                console.error("❌ Stream Error:", eventData);
+                                continue;
+                            }
+
+                            // === HANDLE LANGGRAPH EVENTS ===
+
+                            // 1. Handle Token Streaming
+                            if (currentEventType === 'on_chat_model_stream') {
+                                const chunk = eventData.data?.chunk;
+                                if (chunk?.content) {
+                                    const text = typeof chunk.content === 'string'
+                                        ? chunk.content
+                                        : chunk.content[0]?.text || '';
+
+                                    if (text) {
                                         setMessages((prev) => {
-                                            const lastStateMsg = prev[prev.length - 1];
-                                            if (lastStateMsg && lastStateMsg.content === msgContent) {
-                                                return prev;
+                                            const lastIdx = prev.length - 1;
+                                            const lastMsg = prev[lastIdx];
+                                            if (lastMsg && lastMsg.role === 'assistant' && lastMsg.id === currentAiMsgId) {
+                                                const newMsgs = [...prev];
+                                                newMsgs[lastIdx] = { ...lastMsg, content: lastMsg.content + text };
+                                                return newMsgs;
+                                            } else {
+                                                return [...prev, { id: currentAiMsgId, role: 'assistant', content: text }];
                                             }
-                                            return [...prev, {
-                                                id: `ai_final_${Date.now()}`,
-                                                role: 'assistant',
-                                                content: msgContent
-                                            }];
                                         });
                                     }
                                 }
                             }
-                        }
 
-                        // 3. Handle Explicit Interrupt Event
-                        // This handles both the custom 'interrupt' event and standard LangGraph interrupts
-                        // if they are serialized as an array of objects with a 'type' field.
+                            // 2. Handle Messages from non-streaming nodes
+                            // 'on_chain_stream' usually contains intermediate updates.
+                            // 'on_chain_end' might contain final outputs.
+                            if (currentEventType === 'on_chain_stream' || currentEventType === 'on_chain_end') {
+                                const chunk = eventData.data?.chunk || eventData.data?.output;
+                                if (chunk && typeof chunk === 'object') {
+                                    if (chunk.messages && Array.isArray(chunk.messages) && chunk.messages.length > 0) {
+                                        // We only care about AI messages that act as "final" or "intermediate" outputs 
+                                        // that are NOT the one being streamed right now.
+                                        // However, usually we just append if it's a new message.
+                                        const lastMsg = chunk.messages[chunk.messages.length - 1];
+                                        if (lastMsg.type === 'ai' && typeof lastMsg.content === 'string') {
+                                            const msgContent = lastMsg.content;
+                                            setMessages((prev) => {
+                                                // Prevent duplication if the last message is identical
+                                                const lastStateMsg = prev[prev.length - 1];
+                                                if (lastStateMsg && lastStateMsg.content === msgContent) {
+                                                    return prev;
+                                                }
+                                                // Prevent duplication if we just streamed this exact content
+                                                // (Though streaming usually updates the SAME message ID)
 
-                        if (Array.isArray(eventData)) {
-                            // This is likely the interrupt payload
-                            const interruptVal = eventData[0] as Interrupt;
-                            if (interruptVal && interruptVal.type) {
-                                console.log("⏸️ Interrupt Detected:", interruptVal);
-                                setInterrupt(interruptVal);
+                                                return [...prev, {
+                                                    id: `ai_node_${Date.now()}`,
+                                                    role: 'assistant',
+                                                    content: msgContent
+                                                }];
+                                            });
+                                        }
+                                    }
+                                }
                             }
-                        }
 
-                    } catch (e) {
-                        // console.error("Error parsing SSE line:", line, e);
+                        } catch (e) {
+                            console.error("Error parsing SSE data:", line, e);
+                        }
                     }
                 }
             }
