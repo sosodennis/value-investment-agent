@@ -53,10 +53,17 @@ def _heuristic_extract(query: str) -> IntentExtraction:
     # 3. Guess company name if no ticker
     company_name = ticker
     if not company_name:
-        # Very crude: take the last word if it's not a model
+        # Filter out common valuation stop words
+        stop_words = {"valuation", "valuate", "value", "price", "stock", "analysis", "report", "for", "of", "the", "a", "an"}
         words = query.split()
-        if words:
-            company_name = words[-1]
+        
+        # Filter words that are not stop words (case-insensitive)
+        potential_names = [w for w in words if w.lower() not in stop_words and len(w) > 1]
+        
+        if potential_names:
+            company_name = potential_names[-1] # Take the last meaningful word
+        elif words:
+            company_name = words[-1] # Fallback to last word if everything else fails
 
     return IntentExtraction(
         company_name=company_name,

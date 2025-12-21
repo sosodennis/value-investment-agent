@@ -18,19 +18,25 @@ def approval_node(state: AgentState) -> Command:
     """
     print("--- Approval: Requesting human approval ---")
     
-    # If already approved in a previous step/resume, we can skip
-    if state.get("approved"):
+    # Access Pydantic fields
+    if state.approved:
         return Command(goto="calculator")
+        
+    audit_passed = False
+    audit_messages = []
+    if state.audit_output:
+        audit_passed = state.audit_output.passed
+        audit_messages = state.audit_output.messages
 
     # Trigger interrupt. This pauses the graph and returns the user input when resumed.
     ans = interrupt({
         "type": "approval_request",
         "action": "calculate_valuation",
         "details": {
-            "ticker": state.get("ticker"),
-            "model": state.get("model_type"),
-            "audit_passed": state.get("audit_report", {}).get("passed", False),
-            "audit_messages": state.get("audit_report", {}).get("messages", [])
+            "ticker": state.ticker,
+            "model": state.model_type,
+            "audit_passed": audit_passed,
+            "audit_messages": audit_messages
         }
     })
 

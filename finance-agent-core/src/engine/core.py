@@ -1,5 +1,5 @@
 import networkx as nx
-from typing import Callable, Any, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Union
 import inspect
 
 class CalculationGraph:
@@ -11,9 +11,9 @@ class CalculationGraph:
     def __init__(self, name: str):
         self.name = name
         self.graph = nx.DiGraph()
-        self.functions: Dict[str, Callable] = {}
+        self.functions: Dict[str, Callable[..., Union[float, int]]] = {}
 
-    def add_node(self, name: str, func: Optional[Callable] = None):
+    def add_node(self, name: str, func: Optional[Callable[..., Union[float, int]]] = None):
         """
         Add a node to the graph.
         If func is provided, it's a calculated node.
@@ -32,13 +32,13 @@ class CalculationGraph:
         if not nx.is_directed_acyclic_graph(self.graph):
             raise ValueError(f"Graph {self.name} contains cycles.")
         
-    def calculate(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+    def calculate(self, inputs: Dict[str, Union[float, int]]) -> Dict[str, Union[float, int]]:
         """
         Execute the calculation graph.
         :param inputs: Dictionary of input values for leaf nodes.
         :return: Dictionary containing all calculated values.
         """
-        results = inputs.copy()
+        results: Dict[str, Union[float, int]] = inputs.copy()
         
         # Get topological sort of the graph
         try:

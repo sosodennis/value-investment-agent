@@ -24,3 +24,8 @@ dependencies = [
 
 [tool.setuptools]
 packages = ["src"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]

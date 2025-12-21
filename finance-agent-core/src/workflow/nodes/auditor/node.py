@@ -4,23 +4,24 @@ Auditor Node - Validates extracted parameters against business rules.
 This is a simple wrapper around the SkillRegistry auditor functions.
 """
 
-from typing import TYPE_CHECKING
+from ...state import AgentState
+from ...schemas import AuditOutput
 from ...manager import SkillRegistry
-
-if TYPE_CHECKING:
-    from ...graph import AgentState
-
 
 from langgraph.types import Command
 
-def auditor_node(state: "AgentState") -> Command:
+def auditor_node(state: AgentState) -> Command:
     """
     Validates extracted parameters using skill-specific audit rules.
     """
     print("--- Auditor: Checking parameters ---")
     
-    params_dict = state["params"]
-    model_type = state["model_type"]
+    # Access Pydantic fields
+    if not state.extraction_output:
+        raise ValueError("No extraction output found in state")
+        
+    params_dict = state.extraction_output.params
+    model_type = state.model_type
     skill = SkillRegistry.get_skill(model_type)
     
     schema = skill["schema"]
@@ -32,6 +33,6 @@ def auditor_node(state: "AgentState") -> Command:
     result = audit_func(params_obj)
     
     return Command(
-        update={"audit_report": {"passed": result.passed, "messages": result.messages}},
+        update={"audit_output": AuditOutput(passed=result.passed, messages=result.messages)},
         goto="approval"
     )

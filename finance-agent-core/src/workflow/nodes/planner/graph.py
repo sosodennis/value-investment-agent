@@ -21,7 +21,7 @@ from ...state import AgentState
 
 def extraction_node(state: AgentState) -> Command:
     """Extract company and model from user query."""
-    user_query = state.get("user_query")
+    user_query = state.user_query
     if not user_query:
         print("--- Planner: No query provided, requesting clarification ---")
         return Command(
@@ -44,7 +44,7 @@ def extraction_node(state: AgentState) -> Command:
 
 def searching_node(state: AgentState) -> Command:
     """Search for the ticker based on extracted intent."""
-    intent = state.get("extracted_intent", {})
+    intent = state.extracted_intent or {}
     query = intent.get("ticker") or intent.get("company_name")
     
     if not query:
@@ -88,7 +88,7 @@ def searching_node(state: AgentState) -> Command:
 
 def decision_node(state: AgentState) -> Command:
     """Decide if ticker is resolved or needs clarification."""
-    candidates = state.get("ticker_candidates", [])
+    candidates = state.ticker_candidates or []
     
     if not candidates:
         print("--- Planner: No candidates found, requesting clarification ---")
@@ -124,7 +124,8 @@ def decision_node(state: AgentState) -> Command:
     model, reasoning = select_valuation_model(profile)
     
     # Override with user preference
-    user_pref = state.get("extracted_intent", {}).get("model_preference")
+    intent = state.extracted_intent or {}
+    user_pref = intent.get("model_preference")
     if user_pref:
         try:
             model = ValuationModel(user_pref)
@@ -171,8 +172,8 @@ def clarification_node(state: AgentState) -> Command:
     # Trigger interrupt with candidates
     user_input = interrupt({
         "type": "ticker_selection",
-        "candidates": state.get("ticker_candidates"),
-        "intent": state.get("extracted_intent"),
+        "candidates": state.ticker_candidates,
+        "intent": state.extracted_intent,
         "reason": "Multiple tickers found or ambiguity detected."
     })
 
@@ -181,7 +182,7 @@ def clarification_node(state: AgentState) -> Command:
     
     if not selected_symbol:
         # Fallback to top candidate if resumed without choice
-        candidates = state.get("ticker_candidates", [])
+        candidates = state.ticker_candidates or []
         if candidates:
             top = candidates[0]
             selected_symbol = top.get("symbol") if isinstance(top, dict) else top.symbol
