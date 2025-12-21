@@ -24,4 +24,4 @@ class AuditOutput(BaseModel):
 
 class CalculationOutput(BaseModel):
     """Output from the Calculator Node."""
-    metrics: Dict[str, Union[float, int]] = Field(..., description="Calculated valuation metrics")
+    metrics: Dict[str, Union[str, float, int, Dict[str, Union[float, List[float]]]]] = Field(..., description="Calculated valuation metrics")

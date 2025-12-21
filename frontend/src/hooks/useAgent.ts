@@ -44,7 +44,7 @@ export function useAgent(assistantId: string = "agent") {
                 buffer = lines.pop() || '';
 
                 for (const line of lines) {
-                    // console.log("📩 SSE Line:", line);
+                    console.log("📩 SSE Line:", line);
                     if (!line.trim() || !line.startsWith('data: ')) continue;
                     try {
                         const eventData = JSON.parse(line.slice(6));
@@ -113,10 +113,6 @@ export function useAgent(assistantId: string = "agent") {
                                         type: interruptVal?.type || 'unknown',
                                         data: interruptVal
                                     });
-                                }
-                                // Also handle wait status if sent manually
-                                if ((chunk as any).status === 'waiting_for_approval') {
-                                    // Fallback for older patterns if needed
                                 }
                             }
                         }

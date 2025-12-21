@@ -2,7 +2,7 @@ from typing import Any, Dict, Optional, Literal
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import interrupt, Command
-from langchain_core.callbacks.manager import adispatch_custom_event
+
 
 from .state import AgentState
 from .nodes import executor_node, auditor_node, calculation_node
@@ -29,7 +29,7 @@ def approval_node(state: AgentState) -> Command:
         audit_messages = state.audit_output.messages
 
     # Trigger interrupt. This pauses the graph and returns the user input when resumed.
-    ans = interrupt({
+    interrupt_payload = {
         "type": "approval_request",
         "action": "calculate_valuation",
         "details": {
@@ -38,7 +38,9 @@ def approval_node(state: AgentState) -> Command:
             "audit_passed": audit_passed,
             "audit_messages": audit_messages
         }
-    })
+    }
+    
+    ans = interrupt(interrupt_payload)
 
     # When resumed, ans will contain the payload sent from frontend (e.g. { "approved": true })
     if ans.get("approved"):

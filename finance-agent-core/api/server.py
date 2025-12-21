@@ -97,6 +97,23 @@ async def resume_agent(request: Request):
         async for event in graph.astream_events(Command(resume=payload), config=config, version="v2"):
             yield f"event: {event['event']}\ndata: {json.dumps(event, default=json_serializable)}\n\n"
 
+        # --- 🛠️ FIX: Manually check for interrupts and inject event ---
+        snapshot = await graph.aget_state(config)
+        if snapshot.next:
+            for task in snapshot.tasks:
+                if task.interrupts:
+                    formatted_interrupts = [{"value": i.value} for i in task.interrupts]
+                    chunk = {"__interrupt__": formatted_interrupts}
+                    event = {
+                        "event": "on_chain_stream",
+                        "data": {"chunk": chunk},
+                        "run_id": "manual_interrupt_injection",
+                        "name": "interrupt_injector",
+                        "tags": [],
+                        "metadata": {}
+                    }
+                    yield f"event: {event['event']}\ndata: {json.dumps(event, default=json_serializable)}\n\n"
+
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 if __name__ == "__main__":
