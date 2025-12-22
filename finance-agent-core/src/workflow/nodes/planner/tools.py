@@ -13,7 +13,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 import yfinance as yf
-from langchain_community.tools import DuckDuckGoSearchRun
+from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
 
 
 def search_ticker(query: str, limit: int = 5) -> List[TickerCandidate]:
@@ -51,11 +51,35 @@ def search_ticker(query: str, limit: int = 5) -> List[TickerCandidate]:
 
 def web_search(query: str) -> str:
     """
-    Perform a web search using DuckDuckGo via LangChain.
+    Optimized web search for financial entity resolution.
+    Fetches more results to capture dual-class stocks (e.g., GOOG vs GOOGL).
     """
     try:
-        search = DuckDuckGoSearchRun()
-        return search.run(query)
+        # 1. Inject "share classes tickers" if query looks like a ticker search
+        if "ticker" in query.lower() or "stock" in query.lower():
+            if "share class" not in query.lower():
+                query += " share classes tickers"
+        
+        logger.info(f"Executing optimized search query: {query}")
+
+        # 2. Init Wrapper with more results
+        search = DuckDuckGoSearchAPIWrapper(max_results=7, time="y")
+
+        # 3. Execute search
+        results = search.results(query, max_results=7)
+        
+        if not results:
+            return "No search results found."
+
+        # 4. Format output
+        formatted_output = []
+        for i, res in enumerate(results, 1):
+            title = res.get('title', 'No Title')
+            snippet = res.get('snippet', 'No Snippet')
+            formatted_output.append(f"[{i}] Source: {title}\nContent: {snippet}\n")
+            
+        return "\n---\n".join(formatted_output)
+
     except Exception as e:
         logger.error(f"Web search failed: {e}")
         return f"Web search currently unavailable. Error: {str(e)}"
