@@ -1,15 +1,25 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useAgent } from '../hooks/useAgent';
 import { Bot, User, Send, TrendingUp, CheckCircle2, AlertCircle, List } from 'lucide-react';
 
 export default function Home() {
   const { messages, sendMessage, submitCommand, isLoading, threadId, interrupt } = useAgent("agent");
   const [input, setInput] = useState('');
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Debug render state
   console.log("🎨 Render - isLoading:", isLoading, "Input:", input, "Interrupt:", !!interrupt);
+
+  // Auto-scroll to bottom
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, isLoading, interrupt]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInput(e.target.value);
@@ -191,6 +201,7 @@ export default function Home() {
             </div>
           </div>
         )}
+        <div ref={messagesEndRef} />
       </section>
 
       {/* Input Area */}
