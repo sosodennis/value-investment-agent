@@ -110,10 +110,16 @@ def extract_candidates_from_search(query: str, search_results: str) -> List[Tick
         )
         
         prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are a financial data extractor. Analyze the search results for a user query about a stock and extract ALL potential ticker symbols and their corresponding company names. "
-                       "Assign a confidence score (0-1) based on how likely the ticker matches the user's intent. "
-                       "Note: Use the standard ticker format (e.g., BRK-B or BRK.B). If multiple formats are found, return the most common one. "
-                       "Return a list of TickerCandidate objects."),
+            ("system", """You are a strict financial entity extractor. 
+            Your goal is to identify the ticker symbol for the SPECIFIC company mentioned by the user.
+
+            RULES:
+            1. ONLY extract the ticker that belongs to the company '{query}'.
+            2. IGNORE tickers of competitors, partners, or other companies mentioned in the text (e.g., if searching for 'Tesla', ignore 'AAPL', 'GOOGL', 'AMZN' even if they appear in the text).
+            3. If the text mentions "competitors include...", do NOT extract those tickers.
+            4. Assign a confidence score (0-1). If the ticker explicitly matches the company name in the text (e.g., "Tesla (TSLA)"), assign 1.0.
+            5. If no ticker matches the specific company '{query}', return an empty list.
+            """),
             ("user", "User Query: {query}\n\nSearch Results: {search_results}")
         ])
         
@@ -140,8 +146,18 @@ def extract_intent(query: str) -> IntentExtraction:
         )
         
         prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are a financial analyst assistant. Extract the company name, ticker, and any specific valuation model preference from the user's request. "
-                       "Recognized models: {models}."),
+            ("system", """You are a precise financial entity extractor. 
+Your goal is to extract exactly what the user said, NOT to guess what they meant.
+
+RULES:
+1. **Company Name**: Extract the entity name mentioned (e.g., "Google", "Tesla").
+2. **Ticker**: ONLY extract a ticker if the user EXPLICITLY typed a ticker symbol (e.g., "GOOG", "$TSLA", "stock symbol for Apple").
+3. **CRITICAL**: If the user says "Google", do NOT infer "GOOGL". Leave the ticker field empty.
+4. **CRITICAL**: If the user says "Alphabet", do NOT infer "GOOG". Leave the ticker field empty.
+5. Recognized models: {models}.
+
+Return the IntentExtraction object.
+"""),
             ("user", "{query}")
         ])
         

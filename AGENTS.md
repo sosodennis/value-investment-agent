@@ -12,10 +12,12 @@ The **Neuro-Symbolic Valuation Engine** employs a multi-agent system to decouple
 
 * **Responsibility**:  
   * **Intent Extraction**: Parses user queries (e.g., "Value Tesla") to identify the company and potential model preference.  
-  * **Ticker Search**: Uses Yahoo Finance and Web Search to resolve the correct ticker symbol, handling ambiguity (e.g., "Google" -> GOOG/GOOGL).  
-  * **Model Selection**: Determines the industry sector and selects the appropriate valuation model (e.g., SaaS FCFF vs. Manufacturing DCF vs. Bank DDM).  
-  * **Clarification**: Detects ambiguity (e.g., multiple valid tickers) and requests human intervention before proceeding.  
-* **Tools**: RAGSearch (Internal), WebSearch, YFinance.
+  * **Comprehensive Ticker Search (Scout)**: 
+      * **Dual-Channel Search**: Queries both reliable financial databases (Yahoo Finance) and Web Search simultaneously to ensure maximum coverage.
+      * **Candidate Aggregation**: Merges results from both sources, filtering competitors via strict semantic rules.
+  * **Ambiguity Resolution**: Detects multiple valid candidates (e.g., "Google" -> GOOG/GOOGL) and triggers human intervention.
+  * **Model Selection (Strategist)**: Determines the industry sector and selects the appropriate valuation model (e.g., SaaS FCFF vs. Manufacturing DCF vs. Bank DDM).  
+* **Tools**: YFinance (Primary), WebSearch (Fallback), RAGSearch (Internal).
 
 ### **2. The Executor (Parameter Hunter)**
 

@@ -45,28 +45,64 @@ def extraction_node(state: AgentState) -> Command:
 def searching_node(state: AgentState) -> Command:
     """Search for the ticker based on extracted intent."""
     intent = state.extracted_intent or {}
-    query = intent.get("ticker") or intent.get("company_name")
     
-    if not query:
-        print("--- Planner: Search query missing, requesting clarification ---")
-        return Command(
-            update={"status": "clarifying"},
-            goto="clarifying"
-        )
+    # Extract explicit fields
+    extracted_ticker = intent.get("ticker")
+    extracted_name = intent.get("company_name")
+    
+    # === Multi-Query Strategy ===
+    search_queries = []
+    
+    # 1. Company Name (Broad Match) - Priorities catching multiple share classes (GOOG vs GOOGL)
+    if extracted_name:
+        search_queries.append(extracted_name)
+        
+    # 2. Ticker (Exact Match) - Add if distinct from name
+    if extracted_ticker and extracted_ticker != extracted_name:
+        search_queries.append(extracted_ticker)
+    
+    # If explicit extraction failed, fallback to the raw query (heuristic)
+    if not search_queries:
+        if state.user_query:
+             # Basic heuristic cleanup
+             clean_query = state.user_query.replace("Valuate", "").replace("Value", "").strip()
+             search_queries.append(clean_query)
+        else:
+            print("--- Planner: Search query missing, requesting clarification ---")
+            return Command(
+                update={"status": "clarifying"},
+                goto="clarifying"
+            )
 
-    print(f"--- Planner: Searching for: {query} ---")
+    print(f"--- Planner: Searching for queries: {search_queries} ---")
     candidate_map = {}
 
-    # 1. Try Yahoo Finance Search
-    yf_candidates = search_ticker(query)
-    for c in yf_candidates:
-        candidate_map[c.symbol] = c
-
-    # 2. Web Search fallback
-    print(f"Running web search fallback for: {query}")
-    search_results = web_search(f"stock ticker symbol for {query} and company name")
+    # === Execute Search on All Queries ===
+    for query in search_queries:
+        # 1. Try Yahoo Finance Search
+        yf_candidates = search_ticker(query)
+        
+        # Check for high confidence matches (Short-circuit removed per user request to always do dual-search)
+        high_confidence_candidates = [c for c in yf_candidates if c.confidence >= 0.9]
+        if high_confidence_candidates:
+             print(f"--- Planner: High confidence match found via Yahoo for '{query}': {[c.symbol for c in high_confidence_candidates]} ---")
     
-    web_candidates = extract_candidates_from_search(query, search_results)
+        for c in yf_candidates:
+            # Deduplicate by symbol
+            if c.symbol not in candidate_map:
+                candidate_map[c.symbol] = c
+            else:
+                # Merge: Keep the one with higher confidence
+                if c.confidence > candidate_map[c.symbol].confidence:
+                    candidate_map[c.symbol] = c
+
+    # 2. Web Search fallback (Always run to ensure coverage)
+    # Use the primary query (Name or Ticker) for web search
+    primary_query = search_queries[0]
+    # Use quotes to force exact match and reduce noise
+    search_results = web_search(f'"{primary_query}" stock ticker symbol official')
+    
+    web_candidates = extract_candidates_from_search(primary_query, search_results)
     
     for c in web_candidates:
         if c.symbol in candidate_map:
