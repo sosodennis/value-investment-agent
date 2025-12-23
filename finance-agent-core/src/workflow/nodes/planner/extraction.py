@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from dotenv import load_dotenv, find_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
-from .structures import ValuationModel, TickerCandidate
+from .structures import TickerCandidate
 
 # Load environment variables
 load_dotenv(find_dotenv())
@@ -19,7 +19,6 @@ class IntentExtraction(BaseModel):
     """Extracted intent from user query."""
     company_name: Optional[str] = Field(None, description="The name of the company or ticker mentioned by the user.")
     ticker: Optional[str] = Field(None, description="The stock ticker if explicitly mentioned.")
-    model_preference: Optional[ValuationModel] = Field(None, description="Specific valuation model requested by the user, if any.")
     is_valuation_request: bool = Field(..., description="Whether the user is asking for a financial valuation.")
     reasoning: str = Field(..., description="Brief reasoning for the extraction.")
 
@@ -31,7 +30,7 @@ class SearchExtraction(BaseModel):
 def _heuristic_extract(query: str) -> IntentExtraction:
     """
     Fallback parser for when LLM is unavailable.
-    Simple keyword matching for major stocks and models.
+    Simple keyword matching for major stocks.
     """
     query_lower = query.lower()
     
@@ -39,18 +38,7 @@ def _heuristic_extract(query: str) -> IntentExtraction:
     tickers = re.findall(r'\b[A-Z]{1,5}\b', query)
     ticker = tickers[0] if tickers else None
     
-    # 2. Look for model keywords
-    model_pref = None
-    if "ddm" in query_lower:
-        model_pref = ValuationModel.DDM
-    elif "reit" in query_lower or "ffo" in query_lower:
-        model_pref = ValuationModel.FFO
-    elif "growth" in query_lower:
-        model_pref = ValuationModel.DCF_GROWTH
-    elif "dcf" in query_lower:
-        model_pref = ValuationModel.DCF_STANDARD
-        
-    # 3. Guess company name if no ticker
+    # 2. Extract company name if no ticker
     company_name = ticker
     if not company_name:
         # Filter out common valuation stop words
@@ -68,7 +56,6 @@ def _heuristic_extract(query: str) -> IntentExtraction:
     return IntentExtraction(
         company_name=company_name,
         ticker=ticker,
-        model_preference=model_pref,
         is_valuation_request="val" in query_lower or "price" in query_lower or ticker is not None,
         reasoning="Fallback heuristic used due to API error."
     )
@@ -154,16 +141,14 @@ RULES:
 2. **Ticker**: ONLY extract a ticker if the user EXPLICITLY typed a ticker symbol (e.g., "GOOG", "$TSLA", "stock symbol for Apple").
 3. **CRITICAL**: If the user says "Google", do NOT infer "GOOGL". Leave the ticker field empty.
 4. **CRITICAL**: If the user says "Alphabet", do NOT infer "GOOG". Leave the ticker field empty.
-5. Recognized models: {models}.
 
 Return the IntentExtraction object.
 """),
             ("user", "{query}")
         ])
         
-        model_list = [m.value for m in ValuationModel]
         chain = prompt | llm.with_structured_output(IntentExtraction)
-        response = chain.invoke({"query": query, "models": model_list})
+        response = chain.invoke({"query": query})
         return response
     except Exception as e:
         import logging

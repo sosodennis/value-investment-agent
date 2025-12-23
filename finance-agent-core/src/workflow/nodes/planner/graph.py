@@ -158,16 +158,6 @@ def decision_node(state: AgentState) -> Command:
 
     # Select model
     model, reasoning = select_valuation_model(profile)
-    
-    # Override with user preference
-    intent = state.extracted_intent or {}
-    user_pref = intent.get("model_preference")
-    if user_pref:
-        try:
-            model = ValuationModel(user_pref)
-            reasoning = f"User explicitly requested {model.value}. " + reasoning
-        except ValueError:
-            pass
 
     # Map model_type for calculation node compatibility
     model_type_map = {
