@@ -27,6 +27,7 @@ class AgentState(BaseModel):
     ticker_candidates: Optional[List[Any]] = None
     resolved_ticker: Optional[str] = None
     company_profile: Optional[Dict[str, Any]] = None
+    financial_report: Optional[Dict[str, Any]] = Field(None, description="Financial Health Report from edgartools")
     status: Optional[str] = None
     selected_symbol: Optional[str] = None
     approved: Optional[bool] = None

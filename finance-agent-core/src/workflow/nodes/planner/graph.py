@@ -14,6 +14,7 @@ from .extraction import extract_intent, extract_candidates_from_search, deduplic
 from .tools import search_ticker, web_search, get_company_profile
 from .logic import select_valuation_model, should_request_clarification
 from .structures import PlannerOutput, ValuationModel
+from .financial_utils import fetch_financial_data
 from ...state import AgentState
 
 
@@ -144,7 +145,7 @@ def decision_node(state: AgentState) -> Command:
             goto="clarifying"
         )
     
-    # Resolved
+    # Resolved - proceed to financial health check
     resolved_ticker = candidate_objs[0].symbol
     print(f"--- Planner: Ticker resolved to {resolved_ticker} ---")
     profile = get_company_profile(resolved_ticker)
@@ -156,9 +157,106 @@ def decision_node(state: AgentState) -> Command:
             goto="clarifying"
         )
 
-    # Select model
-    model, reasoning = select_valuation_model(profile)
+    return Command(
+        update={
+            "resolved_ticker": resolved_ticker,
+            "company_profile": profile.model_dump(),
+            "status": "financial_health"
+        },
+        goto="financial_health"
+    )
 
+def financial_health_node(state: AgentState) -> Command:
+    """
+    Fetch financial data from SEC EDGAR and generate Financial Health Report.
+    """
+    resolved_ticker = state.resolved_ticker
+    print(f"--- Planner: Fetching financial health data for {resolved_ticker} ---")
+    
+    # Fetch financial data using edgartools
+    financial_report = fetch_financial_data(resolved_ticker)
+    
+    if financial_report:
+        # Helper logging functions
+        fmt = lambda v: f"${v:,.0f}" if v is not None else "N/A"
+        pct = lambda v: f"{v:.2%}" if v is not None else "N/A"
+        ratio = lambda v: f"{v:.2f}" if v is not None else "N/A"
+
+        print(f"✅ Financial Health Report generated for {resolved_ticker}")
+        print(f"   • Current Ratio: {ratio(financial_report.current_ratio)}")
+        print(f"   • Debt/Equity: {ratio(financial_report.debt_to_equity)}")
+        print(f"   • ROE: {pct(financial_report.return_on_equity)}")
+        print(f"   • FCF: {fmt(financial_report.free_cash_flow)}")
+        
+        # Detailed Statement Logging
+        print("\n   📊 Balance Sheet Summary:")
+        print(f"     - Cash: {fmt(financial_report.bs.cash_and_equivalents)}")
+        print(f"     - Total Assets: {fmt(financial_report.bs.total_assets)}")
+        print(f"     - Total Debt: {fmt(financial_report.bs.total_debt)}")
+        print(f"     - Total Equity: {fmt(financial_report.bs.total_equity)}")
+
+        print("\n   📉 Income Statement Summary:")
+        print(f"     - Revenue: {fmt(financial_report.is_.revenue)}")
+        print(f"     - Gross Profit: {fmt(financial_report.is_.gross_profit)}")
+        print(f"     - Operating Income: {fmt(financial_report.is_.operating_income)}")
+        print(f"     - Net Income: {fmt(financial_report.is_.net_income)}")
+
+        print("\n   💸 Cash Flow Summary:")
+        print(f"     - OCF: {fmt(financial_report.cf.ocf)}")
+        print(f"     - Capex: {fmt(financial_report.cf.capex)}")
+        print(f"     - Dividends: {fmt(financial_report.cf.dividends_paid)}")
+        
+        # Convert to dict for state persistence
+        report_dict = financial_report.model_dump()
+    else:
+        print(f"⚠️  Could not fetch financial data for {resolved_ticker}, proceeding without it")
+        report_dict = None
+    
+    return Command(
+        update={
+            "financial_report": report_dict,
+            "status": "model_selection"
+        },
+        goto="model_selection"
+    )
+
+
+def model_selection_node(state: AgentState) -> Command:
+    """
+    Select appropriate valuation model based on company profile and financial health.
+    """
+    from .structures import CompanyProfile
+    
+    profile = CompanyProfile(**state.company_profile) if state.company_profile else None
+    resolved_ticker = state.resolved_ticker
+    
+    if not profile:
+        print("--- Planner: Missing company profile, cannot select model ---")
+        return Command(
+            update={"status": "clarifying"},
+            goto="clarifying"
+        )
+    
+    # Select model based on profile
+    model, reasoning = select_valuation_model(profile)
+    
+    # Enhance reasoning with financial health insights if available
+    if state.financial_report:
+        try:
+            from .financial_models import FinancialHealthReport
+            report = FinancialHealthReport(**state.financial_report)
+            
+            # Add financial health context to reasoning
+            health_context = f"\n\nFinancial Health Insights:\n"
+            health_context += f"- Current Ratio: {report.current_ratio:.2f}" if report.current_ratio else ""
+            health_context += f"\n- Debt-to-Equity: {report.debt_to_equity:.2f}" if report.debt_to_equity else ""
+            health_context += f"\n- ROE: {report.return_on_equity:.2%}" if report.return_on_equity else ""
+            health_context += f"\n- Free Cash Flow: ${report.free_cash_flow:,.0f}"
+            
+            reasoning += health_context
+        except Exception as e:
+            print(f"⚠️  Could not parse financial report for insights: {e}")
+    
     # Map model_type for calculation node compatibility
     model_type_map = {
         ValuationModel.DCF_GROWTH: "saas",
@@ -174,20 +272,20 @@ def decision_node(state: AgentState) -> Command:
         update={
             "ticker": resolved_ticker,
             "model_type": model_type,
-            "resolved_ticker": resolved_ticker,
-            "company_profile": profile.model_dump(),
             "planner_output": {
                 "ticker": resolved_ticker,
                 "model_type": model.value,
                 "company_name": profile.name,
                 "sector": profile.sector,
                 "industry": profile.industry,
-                "reasoning": reasoning
+                "reasoning": reasoning,
+                "financial_report": state.financial_report
             },
             "status": "done"
         },
         goto=END
     )
+
 
 def clarification_node(state: AgentState) -> Command:
     """
@@ -220,31 +318,13 @@ def clarification_node(state: AgentState) -> Command:
         print(f"✅ User selected or fallback symbol: {selected_symbol}. Resolving...")
         profile = get_company_profile(selected_symbol)
         if profile:
-            model, reasoning = select_valuation_model(profile)
-            model_type_map = {
-                ValuationModel.DCF_GROWTH: "saas",
-                ValuationModel.DCF_STANDARD: "saas",
-                ValuationModel.DDM: "bank",
-                ValuationModel.FFO: "saas",
-                ValuationModel.EV_REVENUE: "saas",
-                ValuationModel.EV_EBITDA: "saas",
-            }
-            model_type = model_type_map.get(model, "saas")
-
             return Command(
                 update={
-                    "ticker": selected_symbol,
-                    "model_type": model_type,
                     "resolved_ticker": selected_symbol,
                     "company_profile": profile.model_dump(),
-                    "planner_output": {
-                        "ticker": selected_symbol,
-                        "model_type": model.value,
-                        "reasoning": "Resolved via human-in-the-loop. " + reasoning
-                    },
-                    "status": "done"
+                    "status": "financial_health"
                 },
-                goto=END
+                goto="financial_health"
             )
 
     # If even fallback fails, retry extraction
@@ -264,6 +344,8 @@ def create_planner_subgraph():
     builder.add_node("extraction", extraction_node)
     builder.add_node("searching", searching_node)
     builder.add_node("deciding", decision_node)
+    builder.add_node("financial_health", financial_health_node)
+    builder.add_node("model_selection", model_selection_node)
     builder.add_node("clarifying", clarification_node)
     
     builder.add_edge(START, "extraction")

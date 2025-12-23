@@ -16,8 +16,9 @@ The **Neuro-Symbolic Valuation Engine** employs a multi-agent system to decouple
       * **Dual-Channel Search**: Queries both reliable financial databases (Yahoo Finance) and Web Search simultaneously to ensure maximum coverage.
       * **Candidate Aggregation**: Merges results from both sources, filtering competitors via strict semantic rules.
   * **Ambiguity Resolution**: Detects multiple valid candidates (e.g., "Google" -> GOOG/GOOGL) and triggers human intervention.
-  * **Model Selection (Strategist)**: Determines the industry sector and selects the appropriate valuation model (e.g., SaaS FCFF vs. Manufacturing DCF vs. Bank DDM).  
-* **Tools**: YFinance (Primary), WebSearch (Fallback), RAGSearch (Internal).
+  * **Financial Health Check**: After ticker resolution, fetches financial data from SEC EDGAR using `edgartools` and generates a comprehensive Financial Health Report covering 5 pillars: Liquidity, Solvency, Operational Efficiency, Profitability, and Cash Flow Quality.
+  * **Model Selection (Strategist)**: Determines the industry sector and selects the appropriate valuation model (e.g., SaaS FCFF vs. Manufacturing DCF vs. Bank DDM), enhanced with financial health insights.  
+* **Tools**: YFinance (Primary), WebSearch (Fallback), RAGSearch (Internal), edgartools (SEC EDGAR XBRL).
 
 ### **2. The Executor (Parameter Hunter)**
 
@@ -68,12 +69,14 @@ graph TD
         Planner --> Extraction  
         Extraction --> Search  
         Search --> Decision  
+        Decision --> FinancialHealth[Financial Health Check]  
+        FinancialHealth --> ModelSelection[Model Selection]  
     end  
       
     Decision -->|Ambiguous?| Clarification[HitL: Clarification]  
     Clarification -->|User Input| Planner  
       
-    Decision -->|Resolved| Executor  
+    ModelSelection -->|Resolved| Executor  
     Executor -->|Extract Params| Auditor  
     Auditor -->|Pass Validation| FinalReview[HitL: Final Review]  
     Auditor -->|Fail Validation| Executor  
@@ -87,10 +90,12 @@ This section dictates how AI Assistants and Developers should write code, struct
 ### **1. Technology Stack & Style**
 
 * **Language**: Python 3.10+ (Primary), TypeScript (Frontend/Dashboard if applicable).  
+* **Package Manager**: `uv` for Python dependency management and virtual environments.  
 * **Frameworks**:  
   * Orchestration: LangGraph (Functional API v0.2+).
   * Serving: Pure FastAPI (LangServe removed).
   * Data Validation: Pydantic (Strict typing is mandatory).  
+  * Financial Data: edgartools (SEC EDGAR XBRL extraction).  
 * **Style Guide**:  
   * Follow **PEP 8** for Python.  
   * Use **Snake_case** for variables/functions, **PascalCase** for classes.  

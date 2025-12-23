@@ -63,3 +63,4 @@ class PlannerOutput(BaseModel):
     sector: Optional[str] = Field(None, description="GICS sector")
     industry: Optional[str] = Field(None, description="GICS industry")
     reasoning: str = Field(..., description="Why this model was selected")
+    financial_report: Optional[dict] = Field(None, description="Financial Health Report (5 pillars)")
