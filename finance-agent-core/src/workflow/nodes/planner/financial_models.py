@@ -54,21 +54,31 @@ class TraceableField(BaseModel, Generic[T]):
         return {"source_tags": new_tags, "is_calculated": True, "formula_logic": new_formula}
 
     def __add__(self, other: Union['TraceableField', float, int]) -> 'TraceableField':
-        if self.value is None or (isinstance(other, TraceableField) and other.value is None):
-            return TraceableField(value=None)
+        self_val = self.value
         other_val = other.value if isinstance(other, TraceableField) else other
+        
+        if self_val is None and other_val is None:
+            return TraceableField(value=None)
+            
+        # Treat None as 0.0 for addition resilience
+        val = (self_val or 0.0) + (other_val or 0.0)
         meta = self._merge_metadata(other, "+")
-        return TraceableField(value=self.value + other_val, **meta)
+        return TraceableField(value=val, **meta)
 
     def __radd__(self, other: Union[float, int]) -> 'TraceableField':
         return self.__add__(other)
 
     def __sub__(self, other: Union['TraceableField', float, int]) -> 'TraceableField':
-        if self.value is None or (isinstance(other, TraceableField) and other.value is None):
-            return TraceableField(value=None)
+        self_val = self.value
         other_val = other.value if isinstance(other, TraceableField) else other
+        
+        if self_val is None and other_val is None:
+            return TraceableField(value=None)
+            
+        # Treat None as 0.0 for subtraction resilience
+        val = (self_val or 0.0) - (other_val or 0.0)
         meta = self._merge_metadata(other, "-")
-        return TraceableField(value=self.value - other_val, **meta)
+        return TraceableField(value=val, **meta)
 
     def __rsub__(self, other: Union[float, int]) -> 'TraceableField':
         if self.value is None:
@@ -374,7 +384,10 @@ class CorporateBalanceSheet(BalanceSheetBase):
         json_schema_extra={
             'xbrl_tags': [
                 'us-gaap:LongTermDebtNoncurrent',
-                'us-gaap:LongTermDebt'
+                'us-gaap:LongTermDebtExcludingCurrentPortion',
+                'us-gaap:LongTermDebtAndFinanceLeaseObligations',
+                'us-gaap:LongTermDebt',
+                'us-gaap:LongTermDebtAndCapitalLeaseObligations'
             ]
         }
     )
@@ -456,7 +469,11 @@ class BankBalanceSheet(BalanceSheetBase):
         json_schema_extra={
             'xbrl_tags': [
                 'us-gaap:LongTermDebt',
-                'us-gaap:LongTermDebtAndCapitalLeaseObligations'
+                'us-gaap:LongTermDebtExcludingCurrentPortion',
+                'us-gaap:LongTermDebtNoncurrent',
+                'us-gaap:LongTermDebtAndFinanceLeaseObligations',
+                'us-gaap:LongTermDebtAndCapitalLeaseObligations',
+                'us-gaap:Debt'
             ]
         }
     )
@@ -480,7 +497,14 @@ class REITBalanceSheet(BalanceSheetBase):
     unsecured_debt: TraceableField = Field(
         default_factory=TraceableField,
         json_schema_extra={
-            'xbrl_tags': ['us-gaap:UnsecuredDebt', 'us-gaap:SeniorNotes'],
+            'xbrl_tags': [
+                'us-gaap:UnsecuredDebt', 
+                'us-gaap:SeniorNotes',
+                'us-gaap:LongTermDebtExcludingCurrentPortion',
+                'us-gaap:LongTermDebtNoncurrent',
+                'us-gaap:LongTermDebtAndFinanceLeaseObligations',
+                'us-gaap:LongTermDebt'
+            ],
             'fuzzy_keywords': ['SeniorNotes', 'Unsecured', 'NotesPayable'],
             'exclude_keywords': ['Interest', 'Expense', 'Amortization', 'Receivable', 'Issuance']
         }
