@@ -103,6 +103,53 @@ This section dictates how AI Assistants and Developers should write code, struct
     * **NO Any allowed**: The use of Any (Python) or any (TypeScript) is **STRICTLY FORBIDDEN**. Explicitly define types, use specific generics, or union types if necessary.  
     * **Type Hints**: All function signatures MUST have type hints (e.g., def calculate_wacc(beta: float, rm: float) -> float:).
 
+### **2. Metadata-Rich Financial Objects (Traceability Architecture)**
+
+**All financial data models use `TraceableField` to enable full auditability:**
+
+* **TraceableField**: A Pydantic model that wraps numeric values with metadata:
+  * `value`: The actual numeric value (float)
+  * `source_tags`: List of XBRL tags that contributed to this value
+  * `is_calculated`: Boolean indicating if this is a computed field
+  * `formula_logic`: Human-readable formula description for calculated values
+  
+* **AutoExtractModel**: Base class for financial statement models that:
+  * Automatically extracts XBRL data using waterfall logic (tries multiple tags in priority order)
+  * Supports fuzzy matching for extension tags using regex patterns
+  * Populates TraceableField objects with source metadata
+  * Configured via `json_schema_extra` in Field definitions:
+    * `xbrl_tags`: List of standard XBRL tags to try (in priority order)
+    * `fuzzy_keywords`: Keywords for fuzzy matching extension tags
+    * `exclude_keywords`: Keywords to exclude from fuzzy matches
+
+* **Operator Overloading**: TraceableField supports arithmetic operations (+, -, *, /) that automatically:
+  * Merge source tags from operands
+  * Mark result as calculated
+  * Build formula logic descriptions
+
+**Example:**
+```python
+# Field definition with metadata
+debt_current: TraceableField = Field(
+    default_factory=TraceableField,
+    json_schema_extra={
+        'xbrl_tags': ['us-gaap:DebtCurrent', 'us-gaap:ShortTermBorrowings'],
+        'fuzzy_keywords': ['Debt', 'Current'],
+        'exclude_keywords': ['Noncurrent']
+    }
+)
+
+# Computed field automatically tracks sources
+@computed_field
+def total_debt(self) -> TraceableField:
+    result = self.debt_current + self.debt_noncurrent
+    result.formula_logic = "ShortTerm + LongTerm Debt"
+    return result
+```
+
+This architecture enables the system to answer: "Where did this number come from?" and "How was it calculated?"
+
+
 ### **2. Code Generation Principles**
 
 **The AI Assistant must adhere to these principles when generating code:**

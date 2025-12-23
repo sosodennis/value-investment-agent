@@ -179,10 +179,30 @@ def financial_health_node(state: AgentState) -> Command:
     reports_data = []
     
     if financial_reports:
-        # Helper logging functions
-        fmt = lambda v: f"${v:,.0f}" if v is not None else "N/A"
-        pct = lambda v: f"{v:.2%}" if v is not None else "N/A"
-        ratio = lambda v: f"{v:.2f}" if v is not None else "N/A"
+        # Helper logging functions - handle TraceableField objects
+        def fmt(v):
+            """Format currency values, handling TraceableField"""
+            if v is None:
+                return "N/A"
+            # Extract value from TraceableField if needed
+            val = v.value if hasattr(v, 'value') else v
+            return f"${val:,.0f}" if val is not None else "N/A"
+        
+        def pct(v):
+            """Format percentage values, handling TraceableField"""
+            if v is None:
+                return "N/A"
+            # Extract value from TraceableField if needed
+            val = v.value if hasattr(v, 'value') else v
+            return f"{val:.2%}" if val is not None else "N/A"
+        
+        def ratio(v):
+            """Format ratio values, handling TraceableField"""
+            if v is None:
+                return "N/A"
+            # Extract value from TraceableField if needed
+            val = v.value if hasattr(v, 'value') else v
+            return f"{val:.2f}" if val is not None else "N/A"
 
         print(f"✅ Generated {len(financial_reports)} Financial Health Reports for {resolved_ticker}")
         
@@ -298,10 +318,20 @@ def model_selection_node(state: AgentState) -> Command:
             
             # Add financial health context to reasoning
             health_context = f"\n\nFinancial Health Insights ({report.fiscal_period}):\n"
-            health_context += f"- Current Ratio: {report.current_ratio:.2f}" if report.current_ratio else ""
-            health_context += f"\n- Debt-to-Equity: {report.debt_to_equity:.2f}" if report.debt_to_equity else ""
-            health_context += f"\n- ROE: {report.return_on_equity:.2%}" if report.return_on_equity is not None else ""
-            health_context += f"\n- Free Cash Flow: ${report.free_cash_flow:,.0f}" if report.free_cash_flow is not None else ""
+            
+            # Helper to extract value from TraceableField
+            def get_val(field):
+                return field.value if hasattr(field, 'value') else field
+            
+            current_ratio_val = get_val(report.current_ratio)
+            debt_to_equity_val = get_val(report.debt_to_equity)
+            roe_val = get_val(report.return_on_equity)
+            fcf_val = get_val(report.free_cash_flow)
+            
+            health_context += f"- Current Ratio: {current_ratio_val:.2f}" if current_ratio_val is not None else ""
+            health_context += f"\n- Debt-to-Equity: {debt_to_equity_val:.2f}" if debt_to_equity_val is not None else ""
+            health_context += f"\n- ROE: {roe_val:.2%}" if roe_val is not None else ""
+            health_context += f"\n- Free Cash Flow: ${fcf_val:,.0f}" if fcf_val is not None else ""
             
             reasoning += health_context
         except Exception as e:

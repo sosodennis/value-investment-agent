@@ -10,9 +10,234 @@ Based on research-planner-0.md, implements the five pillars:
 """
 
 from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
-from typing import Optional, Literal, Union
+from typing import Optional, Literal, Union, Any, Generic, TypeVar, List, Dict
 from datetime import date
 from enum import Enum
+import pandas as pd
+import re
+import logging
+
+logger = logging.getLogger(__name__)
+
+T = TypeVar('T')
+
+
+# ==========================================
+# 0. Core Traceability Infrastructure
+# ==========================================
+
+class TraceableField(BaseModel, Generic[T]):
+    """
+    Wraps a numeric value with metadata about its source and calculation.
+    Enables full traceability from final metrics back to XBRL tags.
+    """
+    value: Optional[float] = None
+    source_tags: List[str] = Field(default_factory=list, description="XBRL tags or field names used")
+    is_calculated: bool = False
+    formula_logic: Optional[str] = Field(None, description="Calculation formula if computed")
+
+    def __repr__(self) -> str:
+        return f"TraceableField(value={self.value}, sources={self.source_tags})"
+
+    def _merge_metadata(self, other: 'TraceableField', op_symbol: str) -> Dict[str, Any]:
+        """Merge metadata from two fields during arithmetic operations"""
+        if isinstance(other, TraceableField):
+            new_tags = list(set(self.source_tags + other.source_tags))
+            self_formula = self.formula_logic or 'Raw'
+            other_formula = other.formula_logic or 'Raw'
+        else:
+            new_tags = self.source_tags.copy()
+            self_formula = self.formula_logic or 'Raw'
+            other_formula = 'Const'
+        
+        new_formula = f"({self_formula} {op_symbol} {other_formula})"
+        return {"source_tags": new_tags, "is_calculated": True, "formula_logic": new_formula}
+
+    def __add__(self, other: Union['TraceableField', float, int]) -> 'TraceableField':
+        if self.value is None or (isinstance(other, TraceableField) and other.value is None):
+            return TraceableField(value=None)
+        other_val = other.value if isinstance(other, TraceableField) else other
+        meta = self._merge_metadata(other, "+")
+        return TraceableField(value=self.value + other_val, **meta)
+
+    def __radd__(self, other: Union[float, int]) -> 'TraceableField':
+        return self.__add__(other)
+
+    def __sub__(self, other: Union['TraceableField', float, int]) -> 'TraceableField':
+        if self.value is None or (isinstance(other, TraceableField) and other.value is None):
+            return TraceableField(value=None)
+        other_val = other.value if isinstance(other, TraceableField) else other
+        meta = self._merge_metadata(other, "-")
+        return TraceableField(value=self.value - other_val, **meta)
+
+    def __rsub__(self, other: Union[float, int]) -> 'TraceableField':
+        if self.value is None:
+            return TraceableField(value=None)
+        meta = {"source_tags": self.source_tags.copy(), "is_calculated": True, "formula_logic": f"(Const - {self.formula_logic or 'Raw'})"}
+        return TraceableField(value=other - self.value, **meta)
+
+    def __mul__(self, other: Union['TraceableField', float, int]) -> 'TraceableField':
+        if self.value is None or (isinstance(other, TraceableField) and other.value is None):
+            return TraceableField(value=None)
+        other_val = other.value if isinstance(other, TraceableField) else other
+        meta = self._merge_metadata(other, "*")
+        return TraceableField(value=self.value * other_val, **meta)
+
+    def __rmul__(self, other: Union[float, int]) -> 'TraceableField':
+        return self.__mul__(other)
+
+    def __truediv__(self, other: Union['TraceableField', float, int]) -> 'TraceableField':
+        other_val = other.value if isinstance(other, TraceableField) else other
+        if self.value is None or other_val is None or other_val == 0:
+            return TraceableField(value=None)
+        meta = self._merge_metadata(other, "/")
+        return TraceableField(value=self.value / other_val, **meta)
+
+    def __rtruediv__(self, other: Union[float, int]) -> 'TraceableField':
+        if self.value is None or self.value == 0:
+            return TraceableField(value=None)
+        meta = {"source_tags": self.source_tags.copy(), "is_calculated": True, "formula_logic": f"(Const / {self.formula_logic or 'Raw'})"}
+        return TraceableField(value=other / self.value, **meta)
+
+
+class AutoExtractModel(BaseModel):
+    """
+    Base model that automatically extracts XBRL data using waterfall logic.
+    Reads field metadata (xbrl_tags, fuzzy_keywords) and populates TraceableField objects.
+    """
+
+    @model_validator(mode='before')
+    @classmethod
+    def extract_from_raw_xbrl(cls, data: Any) -> Any:
+        """
+        Pre-validation hook: Extract values from raw XBRL data using field metadata.
+        """
+        if not isinstance(data, dict):
+            return data
+
+        # Convert DataFrame to dict if needed
+        if isinstance(data.get('_raw_df'), pd.DataFrame):
+            raw_df = data.pop('_raw_df')
+            raw_dict = cls._df_to_dict(raw_df)
+            data.update(raw_dict)
+        
+        model_fields = cls.model_fields
+        processed_data = {}
+        
+        for field_name, field_info in model_fields.items():
+            # If already provided, skip extraction
+            if field_name in data and data[field_name] is not None:
+                processed_data[field_name] = data[field_name]
+                continue
+
+            # Get extraction metadata
+            extra = field_info.json_schema_extra or {}
+            xbrl_tags = extra.get('xbrl_tags', [])
+            fuzzy_keywords = extra.get('fuzzy_keywords', [])
+            exclude_keywords = extra.get('exclude_keywords', [])
+
+            # Skip non-XBRL fields
+            if not xbrl_tags and not fuzzy_keywords:
+                processed_data[field_name] = data.get(field_name)
+                continue
+
+            # Extract using smart logic
+            result_obj = cls._internal_get_fact_smart(
+                raw_data=data,
+                standard_tags=xbrl_tags,
+                fuzzy_keywords=fuzzy_keywords,
+                exclude_keywords=exclude_keywords
+            )
+            
+            processed_data[field_name] = result_obj
+
+        return processed_data
+
+    @staticmethod
+    def _df_to_dict(df: pd.DataFrame) -> Dict[str, float]:
+        """Convert XBRL DataFrame to tag:value dictionary"""
+        # Filter for consolidated data (no dimensions)
+        dim_cols = [c for c in df.columns if c.startswith('dim_')]
+        if dim_cols:
+            consolidated_mask = df[dim_cols].isna().all(axis=1)
+            clean_df = df[consolidated_mask]
+        else:
+            clean_df = df
+
+        # Create dict from most recent values
+        result = {}
+        if 'concept' in clean_df.columns and 'value' in clean_df.columns:
+            for concept in clean_df['concept'].unique():
+                concept_rows = clean_df[clean_df['concept'] == concept]
+                # Sort by date to get most recent
+                sort_col = 'period_instant' if 'period_instant' in concept_rows.columns else 'period_end'
+                if sort_col in concept_rows.columns:
+                    concept_rows = concept_rows.sort_values(by=sort_col, ascending=False)
+                if not concept_rows.empty:
+                    try:
+                        result[concept] = float(concept_rows.iloc[0]['value'])
+                    except (ValueError, TypeError):
+                        pass
+        return result
+
+    @staticmethod
+    def _internal_get_fact_smart(
+        raw_data: Dict[str, float],
+        standard_tags: List[str],
+        fuzzy_keywords: List[str],
+        exclude_keywords: List[str]
+    ) -> Dict[str, Any]:
+        """
+        Smart extraction: Try standard tags first, then fuzzy matching.
+        Returns dict suitable for TraceableField construction.
+        """
+        # Phase 1: Standard tags (exact match)
+        for tag in standard_tags:
+            val = raw_data.get(tag)
+            if val is not None and val != 0:
+                return {
+                    "value": float(val),
+                    "source_tags": [tag],
+                    "is_calculated": False,
+                    "formula_logic": "Exact Match"
+                }
+
+        # Phase 2: Fuzzy matching
+        if fuzzy_keywords:
+            # Build regex pattern (must contain all keywords)
+            pattern = "".join([f"(?=.*{k})" for k in fuzzy_keywords])
+            
+            matches = []
+            for raw_tag in raw_data.keys():
+                raw_tag_str = str(raw_tag)
+                
+                # Check exclusions
+                if exclude_keywords and any(exc.lower() in raw_tag_str.lower() for exc in exclude_keywords):
+                    continue
+                
+                # Check if matches all keywords
+                if re.search(pattern, raw_tag_str, re.IGNORECASE):
+                    matches.append(raw_tag_str)
+            
+            if matches:
+                # Prefer shorter tags (usually parent concepts)
+                matches.sort(key=len)
+                best_tag = matches[0]
+                val = raw_data.get(best_tag)
+                if val is not None and val != 0:
+                    return {
+                        "value": float(val),
+                        "source_tags": [best_tag],
+                        "is_calculated": False,
+                        "formula_logic": f"Fuzzy Match: {fuzzy_keywords}"
+                    }
+
+        # Phase 3: Not found
+        return {
+            "value": None,
+            "source_tags": [],
+            "is_calculated": False
+        }
 
 
 # ==========================================
@@ -30,35 +255,75 @@ class IndustryType(str, Enum):
 # 2. Financial Statement Models (Data Layer)
 # ==========================================
 
-class BalanceSheetBase(BaseModel):
-    """Base class for all balance sheets"""
+class BalanceSheetBase(AutoExtractModel):
+    """Base class for all balance sheets with automatic XBRL extraction"""
     industry: IndustryType
     period_date: date
     
-    # Common Solvency Strings
-    total_assets: Optional[float] = Field(None, description="us-gaap:Assets")
-    total_liabilities: Optional[float] = Field(None, description="us-gaap:Liabilities")
-    total_equity: Optional[float] = Field(None, description="us-gaap:StockholdersEquity")
+    # Common Solvency Fields
+    total_assets: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={'xbrl_tags': ['us-gaap:Assets']}
+    )
+    total_liabilities: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={'xbrl_tags': ['us-gaap:Liabilities']}
+    )
+    total_equity: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={
+            'xbrl_tags': [
+                'us-gaap:StockholdersEquity',
+                'us-gaap:StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest'
+            ]
+        }
+    )
     
-    # Common Liquidity Strings
-    cash_and_equivalents: Optional[float] = Field(None, description="us-gaap:CashAndCashEquivalentsAtCarryingValue")
-    marketable_securities: Optional[float] = Field(None, description="us-gaap:MarketableSecuritiesCurrent")
-    marketable_securities_noncurrent: Optional[float] = Field(None, description="us-gaap:MarketableSecuritiesNoncurrent")
+    # Common Liquidity Fields
+    cash_and_equivalents: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={
+            'xbrl_tags': [
+                'us-gaap:CashAndCashEquivalentsAtCarryingValue',
+                'us-gaap:Cash'
+            ]
+        }
+    )
+    marketable_securities: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={
+            'xbrl_tags': [
+                'us-gaap:MarketableSecuritiesCurrent',
+                'us-gaap:ShortTermInvestments'
+            ]
+        }
+    )
+    marketable_securities_noncurrent: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={
+            'xbrl_tags': [
+                'us-gaap:MarketableSecuritiesNoncurrent',
+                'us-gaap:AvailableForSaleSecuritiesNoncurrent',
+                'us-gaap:HeldToMaturitySecuritiesNoncurrent',
+                'us-gaap:LongTermInvestments'
+            ]
+        }
+    )
 
     @computed_field
-    def total_liquidity(self) -> Optional[float]:
+    def total_liquidity(self) -> TraceableField:
         """Calculate total liquidity: Cash + Marketable Securities (Current + Non-Current)"""
-        if self.cash_and_equivalents is None and self.marketable_securities is None and self.marketable_securities_noncurrent is None:
-            return None
-        return (self.cash_and_equivalents or 0.0) + (self.marketable_securities or 0.0) + (self.marketable_securities_noncurrent or 0.0)
+        result = self.cash_and_equivalents + self.marketable_securities + self.marketable_securities_noncurrent
+        result.formula_logic = "Cash + Liquid Securities"
+        return result
 
     @model_validator(mode='after')
     def validate_accounting_identity(self) -> "BalanceSheetBase":
         """Validate accounting equation: Assets = Liabilities + Equity (allow 1% tolerance)"""
-        if self.total_assets and self.total_liabilities and self.total_equity:
-            calc_assets = self.total_liabilities + self.total_equity
-            if abs(self.total_assets - calc_assets) / (self.total_assets + 1e-6) > 0.01:
-                pass # Suppress warning for now to avoid noise in logs
+        if self.total_assets.value and self.total_liabilities.value and self.total_equity.value:
+            calc_assets = self.total_liabilities.value + self.total_equity.value
+            if abs(self.total_assets.value - calc_assets) / (self.total_assets.value + 1e-6) > 0.01:
+                pass  # Suppress warning for now to avoid noise in logs
         return self
 
 
@@ -67,85 +332,182 @@ class CorporateBalanceSheet(BalanceSheetBase):
     industry: Literal[IndustryType.CORPORATE] = IndustryType.CORPORATE
     
     # Liquidity
-    assets_current: Optional[float] = Field(None, description="us-gaap:AssetsCurrent")
-    liabilities_current: Optional[float] = Field(None, description="us-gaap:LiabilitiesCurrent")
-    receivables_net: Optional[float] = Field(None, description="us-gaap:ReceivablesNetCurrent")
-    inventory: Optional[float] = Field(None, description="us-gaap:InventoryNet")
-    accounts_payable: Optional[float] = Field(None, description="us-gaap:AccountsPayableCurrent")
+    assets_current: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={'xbrl_tags': ['us-gaap:AssetsCurrent']}
+    )
+    liabilities_current: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={'xbrl_tags': ['us-gaap:LiabilitiesCurrent']}
+    )
+    receivables_net: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={
+            'xbrl_tags': [
+                'us-gaap:ReceivablesNetCurrent',
+                'us-gaap:AccountsReceivableNetCurrent'
+            ]
+        }
+    )
+    inventory: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={'xbrl_tags': ['us-gaap:InventoryNet']}
+    )
+    accounts_payable: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={'xbrl_tags': ['us-gaap:AccountsPayableCurrent']}
+    )
     
     # Debt
-    debt_current: Optional[float] = Field(None, description="us-gaap:DebtCurrent")
-    debt_noncurrent: Optional[float] = Field(None, description="us-gaap:LongTermDebtNoncurrent")
+    debt_current: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={
+            'xbrl_tags': [
+                'us-gaap:DebtCurrent',
+                'us-gaap:ShortTermBorrowings',
+                'us-gaap:LongTermDebtCurrent'
+            ]
+        }
+    )
+    debt_noncurrent: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={
+            'xbrl_tags': [
+                'us-gaap:LongTermDebtNoncurrent',
+                'us-gaap:LongTermDebt'
+            ]
+        }
+    )
 
     @computed_field
-    def total_debt(self) -> Optional[float]:
+    def total_debt(self) -> TraceableField:
         """Total Debt = Current + Non-Current"""
-        if self.debt_current is None and self.debt_noncurrent is None:
-            return None
-        return (self.debt_current or 0.0) + (self.debt_noncurrent or 0.0)
+        result = self.debt_current + self.debt_noncurrent
+        result.formula_logic = "ShortTerm + LongTerm Debt"
+        return result
 
     # --- Adjusted Debt Logic for Asset-Light/OpCo Entities (e.g., MGM, SBUX) ---
-    lease_liabilities_current: Optional[float] = Field(None, description="us-gaap:OperatingLeaseLiabilityCurrent")
-    lease_liabilities_noncurrent: Optional[float] = Field(None, description="us-gaap:OperatingLeaseLiabilityNoncurrent")
+    lease_liabilities_current: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={
+            'xbrl_tags': ['us-gaap:OperatingLeaseLiabilityCurrent'],
+            'fuzzy_keywords': ['OperatingLeaseLiability', 'Current'],
+            'exclude_keywords': []
+        }
+    )
+    lease_liabilities_noncurrent: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={
+            'xbrl_tags': ['us-gaap:OperatingLeaseLiabilityNoncurrent'],
+            'fuzzy_keywords': ['OperatingLeaseLiability', 'Noncurrent'],
+            'exclude_keywords': []
+        }
+    )
 
     @computed_field
-    def total_lease_liabilities(self) -> float:
+    def total_lease_liabilities(self) -> TraceableField:
         """Calculate total operating lease liabilities"""
-        current = self.lease_liabilities_current or 0.0
-        noncurrent = self.lease_liabilities_noncurrent or 0.0
-        return current + noncurrent
+        result = self.lease_liabilities_current + self.lease_liabilities_noncurrent
+        result.formula_logic = "Lease Current + Noncurrent"
+        return result
 
     @computed_field
-    def adjusted_total_debt(self) -> float:
+    def adjusted_total_debt(self) -> TraceableField:
         """
         Adjusted Debt = Financial Debt + Operating Lease Liabilities.
         Critical for assessing leverage of tenants in triple-net ecosystems (e.g. MGM vs VICI).
         """
-        fin_debt = self.total_debt or 0.0
-        return fin_debt + self.total_lease_liabilities
+        result = self.total_debt + self.total_lease_liabilities
+        result.formula_logic = "Total Debt + Leases"
+        return result
 
     @computed_field
-    def net_debt(self) -> Optional[float]:
+    def net_debt(self) -> TraceableField:
         """Net Debt = Total Debt (Financial) - Total Liquidity"""
-        # Using financial debt (total_debt) rather than adjusted for Net Debt conventions usually, 
-        # but logic can vary. Usually Net Debt = Short Term Debt + Long Term Debt - Cash & Equiv.
-        # User defined Net Debt = Total Debt - Cash (Liquidity).
-        debt = self.total_debt
-        liquidity = self.total_liquidity
-        if debt is None or liquidity is None:
-            return None
-        return debt - liquidity
+        result = self.total_debt - self.total_liquidity
+        result.formula_logic = "Total Debt - Total Liquidity"
+        return result
 
 
 class BankBalanceSheet(BalanceSheetBase):
     """Balance sheet for banking institutions"""
     industry: Literal[IndustryType.BANK] = IndustryType.BANK
     
-    total_deposits: Optional[float] = Field(None, description="us-gaap:Deposits")
-    net_loans: Optional[float] = Field(None, description="us-gaap:LoansAndLeasesReceivableNetReportedAmount")
-    total_debt: Optional[float] = Field(None, description="us-gaap:LongTermDebt") # Often less relevant for banks
+    total_deposits: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={
+            'xbrl_tags': [
+                'us-gaap:Deposits',
+                'us-gaap:DepositsForeignAndDomestic'
+            ]
+        }
+    )
+    net_loans: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={
+            'xbrl_tags': [
+                'us-gaap:LoansAndLeasesReceivableNetReportedAmount',
+                'us-gaap:FinancingReceivableExcludingAccruedInterestAfterAllowanceForCreditLoss'
+            ]
+        }
+    )
+    total_debt: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={
+            'xbrl_tags': [
+                'us-gaap:LongTermDebt',
+                'us-gaap:LongTermDebtAndCapitalLeaseObligations'
+            ]
+        }
+    )
 
 
 class REITBalanceSheet(BalanceSheetBase):
     """Balance sheet for REITs"""
     industry: Literal[IndustryType.REIT] = IndustryType.REIT
     
-    real_estate_assets: Optional[float] = Field(None, description="us-gaap:RealEstateInvestmentPropertyNet")
+    real_estate_assets: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={
+            'xbrl_tags': [
+                'us-gaap:RealEstateInvestmentPropertyNet',
+                'us-gaap:RealEstateRealEstateAssetsNet'
+            ]
+        }
+    )
     
     # REIT Debt Components
-    unsecured_debt: Optional[float] = Field(None, description="us-gaap:UnsecuredDebt")
-    mortgages: Optional[float] = Field(None, description="us-gaap:MortgageLoansOnRealEstate")
-    notes_payable: Optional[float] = Field(None, description="us-gaap:NotesPayable")
+    unsecured_debt: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={
+            'xbrl_tags': ['us-gaap:UnsecuredDebt', 'us-gaap:SeniorNotes'],
+            'fuzzy_keywords': ['SeniorNotes', 'Unsecured', 'NotesPayable'],
+            'exclude_keywords': ['Interest', 'Expense', 'Amortization', 'Receivable', 'Issuance']
+        }
+    )
+    mortgages: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={
+            'xbrl_tags': ['us-gaap:MortgageLoansOnRealEstate'],
+            'fuzzy_keywords': ['Mortgage'],
+            'exclude_keywords': ['Interest', 'Receivable', 'Asset']
+        }
+    )
+    notes_payable: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={
+            'xbrl_tags': ['us-gaap:TermLoan'],
+            'fuzzy_keywords': ['TermLoan', 'CreditFacility', 'LineOfCredit', 'Revolving'],
+            'exclude_keywords': ['Interest', 'Fee']
+        }
+    )
     
     @computed_field
-    def total_debt(self) -> Optional[float]:
+    def total_debt(self) -> TraceableField:
         """Total Debt = Unsecured + Mortgages + Notes"""
-        val = 0.0
-        has_data = False
-        if self.unsecured_debt is not None: val += self.unsecured_debt; has_data = True
-        if self.mortgages is not None: val += self.mortgages; has_data = True
-        if self.notes_payable is not None: val += self.notes_payable; has_data = True
-        return val if has_data else None
+        result = self.unsecured_debt + self.mortgages + self.notes_payable
+        result.formula_logic = "Unsecured + Mortgages + BankLoans"
+        return result
 
 
 BalanceSheetVariant = Union[CorporateBalanceSheet, BankBalanceSheet, REITBalanceSheet]
@@ -153,134 +515,266 @@ BalanceSheetVariant = Union[CorporateBalanceSheet, BankBalanceSheet, REITBalance
 
 # --- Income Statement Base & Polymorphic Variants ---
 
-class IncomeStatementBase(BaseModel):
-    """Base class for all income statements"""
+class IncomeStatementBase(AutoExtractModel):
+    """Base class for all income statements with automatic XBRL extraction"""
     industry: IndustryType
     period_start: date
     period_end: date
-    net_income: Optional[float] = Field(None, description="us-gaap:NetIncomeLoss")
-    operating_expenses: Optional[float] = Field(None, description="us-gaap:OperatingExpenses")
-    tax_expense: Optional[float] = Field(None, description="us-gaap:IncomeTaxExpenseBenefit")
+    
+    net_income: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={
+            'xbrl_tags': ['us-gaap:NetIncomeLoss', 'us-gaap:ProfitLoss']
+        }
+    )
+    operating_expenses: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={'xbrl_tags': ['us-gaap:OperatingExpenses']}
+    )
+    tax_expense: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={'xbrl_tags': ['us-gaap:IncomeTaxExpenseBenefit']}
+    )
 
 
 class CorporateIncomeStatement(IncomeStatementBase):
     """Standard income statement for corporate/tech/manufacturing"""
     industry: Literal[IndustryType.CORPORATE] = IndustryType.CORPORATE
     
-    revenue: Optional[float] = Field(None, description="us-gaap:Revenues")
-    cogs: Optional[float] = Field(None, description="us-gaap:CostOfGoodsAndServicesSold")
-    gross_profit: Optional[float] = Field(None, description="us-gaap:GrossProfit")
-    operating_income: Optional[float] = Field(None, description="us-gaap:OperatingIncomeLoss")
-    interest_expense: Optional[float] = Field(None, description="us-gaap:InterestExpense")
-    depreciation_amortization: Optional[float] = Field(None, description="us-gaap:DepreciationDepletionAndAmortization")
+    revenue: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={
+            'xbrl_tags': [
+                'us-gaap:Revenues',
+                'us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax'
+            ]
+        }
+    )
+    cogs: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={
+            'xbrl_tags': [
+                'us-gaap:CostOfGoodsAndServicesSold',
+                'us-gaap:CostOfRevenue'
+            ]
+        }
+    )
+    gross_profit: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={'xbrl_tags': ['us-gaap:GrossProfit']}
+    )
+    operating_income: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={'xbrl_tags': ['us-gaap:OperatingIncomeLoss']}
+    )
+    interest_expense: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={'xbrl_tags': ['us-gaap:InterestExpense']}
+    )
+    depreciation_amortization: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={
+            'xbrl_tags': [
+                'us-gaap:DepreciationDepletionAndAmortization',
+                'us-gaap:DepreciationAndAmortization'
+            ]
+        }
+    )
 
-    @field_validator('gross_profit', mode='before')
-    @classmethod
-    def calculate_gross_profit(cls, v: Optional[float], info) -> Optional[float]:
+    @model_validator(mode='after')
+    def calculate_gross_profit_if_missing(self) -> 'CorporateIncomeStatement':
         """Auto-calculate gross profit if not reported in XBRL"""
-        if v is None:
-            vals = info.data
-            revenue = vals.get('revenue')
-            cogs = vals.get('cogs')
-            if revenue is not None and cogs is not None:
-                return revenue - cogs
-        return v
+        if self.gross_profit.value is None:
+            if self.revenue.value is not None and self.cogs.value is not None:
+                self.gross_profit = self.revenue - self.cogs
+                self.gross_profit.formula_logic = "Revenue - COGS"
+        return self
 
     @computed_field
-    def ebit(self) -> Optional[float]:
+    def ebit(self) -> TraceableField:
         """Calculate EBIT (Earnings Before Interest & Tax)"""
-        if self.net_income is None: 
-            return None
-        return self.net_income + (self.interest_expense or 0.0) + (self.tax_expense or 0.0)
+        result = self.net_income + self.interest_expense + self.tax_expense
+        result.formula_logic = "Net Income + Interest + Tax"
+        return result
 
     @computed_field
-    def ebitda(self) -> Optional[float]:
+    def ebitda(self) -> TraceableField:
         """Calculate EBITDA (Earnings Before Interest, Tax, Depreciation & Amortization)"""
-        if self.ebit is None:
-            return None
-        return self.ebit + (self.depreciation_amortization or 0.0)
+        result = self.ebit + self.depreciation_amortization
+        result.formula_logic = "EBIT + D&A"
+        return result
 
 
 class BankIncomeStatement(IncomeStatementBase):
     """Income statement for banking institutions"""
     industry: Literal[IndustryType.BANK] = IndustryType.BANK
     
-    net_interest_income: Optional[float] = Field(None, description="us-gaap:NetInterestIncome")
-    non_interest_income: Optional[float] = Field(None, description="us-gaap:NoninterestIncome")
-    provision_for_losses: Optional[float] = Field(None, description="us-gaap:ProvisionForLoanLeaseAndOtherLosses")
-    avg_earning_assets: Optional[float] = Field(None, description="Calculated from balance sheet")
+    net_interest_income: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={'xbrl_tags': ['us-gaap:NetInterestIncome']}
+    )
+    non_interest_income: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={'xbrl_tags': ['us-gaap:NoninterestIncome']}
+    )
+    provision_for_losses: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={'xbrl_tags': ['us-gaap:ProvisionForLoanLeaseAndOtherLosses']}
+    )
+    avg_earning_assets: TraceableField = Field(
+        default_factory=TraceableField,
+        description="Calculated from balance sheet"
+    )
 
     @computed_field
-    def total_revenue(self) -> Optional[float]:
+    def total_revenue(self) -> TraceableField:
         """Bank total revenue = Net Interest Income + Non-Interest Income"""
-        if self.net_interest_income is None:
-            return None
-        return self.net_interest_income + (self.non_interest_income or 0.0)
+        result = self.net_interest_income + self.non_interest_income
+        result.formula_logic = "NII + Non-Interest Income"
+        return result
 
     @computed_field
-    def net_interest_margin(self) -> Optional[float]:
+    def net_interest_margin(self) -> TraceableField:
         """NIM: Net Interest Margin"""
-        if self.avg_earning_assets is None or self.avg_earning_assets == 0:
-            return None
-        if self.net_interest_income is None:
-            return None
-        return self.net_interest_income / self.avg_earning_assets
+        result = self.net_interest_income / self.avg_earning_assets
+        result.formula_logic = "NII / Avg Earning Assets"
+        return result
 
     @computed_field
-    def efficiency_ratio(self) -> Optional[float]:
+    def efficiency_ratio(self) -> TraceableField:
         """Efficiency Ratio: Operating Expenses / Total Revenue (lower is better)"""
-        if self.total_revenue is None or self.total_revenue == 0:
-            return None
-        if self.operating_expenses is None:
-            return None
-        return self.operating_expenses / self.total_revenue
+        result = self.operating_expenses / self.total_revenue
+        result.formula_logic = "OpEx / Total Revenue"
+        return result
 
 
 class REITIncomeStatement(IncomeStatementBase):
     """Income statement for Real Estate Investment Trusts"""
     industry: Literal[IndustryType.REIT] = IndustryType.REIT
     
-    rental_income: Optional[float] = Field(None, description="us-gaap:OperatingLeaseRevenue")
-    property_operating_expenses: Optional[float] = Field(None, description="Property-related expenses")
-    depreciation: Optional[float] = Field(None, description="us-gaap:DepreciationDepletionAndAmortization")
-    gains_on_sale: Optional[float] = Field(None, description="Gains on sale of property")
+    rental_income: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={
+            'xbrl_tags': [
+                'us-gaap:OperatingLeaseRevenue',
+                'us-gaap:RentalIncome',
+                'us-gaap:Revenues',
+                'us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax'
+            ]
+        }
+    )
+    property_operating_expenses: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={'xbrl_tags': ['us-gaap:OperatingExpenses']}
+    )
+    depreciation: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={
+            'xbrl_tags': [
+                'us-gaap:DepreciationDepletionAndAmortization',
+                'us-gaap:DepreciationAndAmortization',
+                'us-gaap:Depreciation'
+            ],
+            'fuzzy_keywords': ['Depreciation', 'RealEstate'],
+            'exclude_keywords': ['Accumulated', 'Reserve']
+        }
+    )
+    gains_on_sale: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={'xbrl_tags': ['us-gaap:GainLossOnSaleOfProperties']}
+    )
 
     @computed_field
-    def funds_from_operations(self) -> Optional[float]:
+    def funds_from_operations(self) -> TraceableField:
         """FFO: Net Income + Depreciation - Gains on Sale"""
-        if self.net_income is None:
-            return None
-        return self.net_income + (self.depreciation or 0.0) - (self.gains_on_sale or 0.0)
+        result = self.net_income + self.depreciation - self.gains_on_sale
+        result.formula_logic = "Net Income + Depreciation - Gains on Sale"
+        return result
 
 
 # Union type for polymorphism
 IncomeStatementVariant = Union[CorporateIncomeStatement, BankIncomeStatement, REITIncomeStatement]
 
 
-class CashFlowStatementBase(BaseModel):
-    """Base class for cash flow statements"""
+class CashFlowStatementBase(AutoExtractModel):
+    """Base class for cash flow statements with automatic XBRL extraction"""
     industry: IndustryType
     period_start: date
     period_end: date
-    ocf: Optional[float] = Field(None, description="us-gaap:NetCashProvidedByUsedInOperatingActivities")
-    dividends_paid: Optional[float] = Field(None, description="us-gaap:PaymentsOfDividends")
+    
+    ocf: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={'xbrl_tags': ['us-gaap:NetCashProvidedByUsedInOperatingActivities']}
+    )
+    dividends_paid: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={
+            'xbrl_tags': [
+                'us-gaap:PaymentsOfDividendsCommonStock',
+                'us-gaap:PaymentsOfDividends',
+                'us-gaap:PaymentsOfOrdinaryDividends',
+                'us-gaap:DividendsPaid',
+                'us-gaap:Dividends'
+            ]
+        }
+    )
 
 
 class CorporateCashFlow(CashFlowStatementBase):
     """Standard CF for corporate"""
     industry: Literal[IndustryType.CORPORATE] = IndustryType.CORPORATE
-    capex: Optional[float] = Field(None, description="us-gaap:PaymentsToAcquirePropertyPlantAndEquipment")
+    
+    capex: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={
+            'xbrl_tags': [
+                'us-gaap:PaymentsToAcquirePropertyPlantAndEquipment',
+                'us-gaap:CapitalExpendituresIncurredButNotYetPaid'
+            ]
+        }
+    )
+
+    @computed_field
+    def free_cash_flow(self) -> TraceableField:
+        """FCF = OCF - Capex"""
+        result = self.ocf - self.capex
+        result.formula_logic = "OCF - Capex"
+        return result
 
 
 class REITCashFlow(CashFlowStatementBase):
     """CF for REITs with specific investment tags"""
     industry: Literal[IndustryType.REIT] = IndustryType.REIT
-    real_estate_investment: Optional[float] = Field(None, description="us-gaap:PaymentsToAcquireRealEstate")
+    
+    real_estate_investment: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={
+            'xbrl_tags': [
+                'us-gaap:PaymentsToAcquireRealEstate',
+                'us-gaap:PaymentsToAcquireRealEstateHeldForInvestment',
+                'us-gaap:PaymentsToAcquireProperties',
+                'us-gaap:PaymentsToAcquireProductiveAssets'
+            ]
+        }
+    )
 
     @computed_field
-    def capex(self) -> Optional[float]:
+    def capex(self) -> TraceableField:
         """Proxy Capex for REITs = Real Estate Investment"""
-        return self.real_estate_investment
+        result = TraceableField(
+            value=self.real_estate_investment.value,
+            source_tags=self.real_estate_investment.source_tags.copy(),
+            is_calculated=True,
+            formula_logic="Real Estate Investment (Proxy for Capex)"
+        )
+        return result
+
+    @computed_field
+    def free_cash_flow(self) -> TraceableField:
+        """FCF = OCF - Real Estate Investment"""
+        result = self.ocf - self.real_estate_investment
+        result.formula_logic = "OCF - RE Investment"
+        return result
 
 
 CashFlowStatementVariant = Union[CorporateCashFlow, REITCashFlow]
@@ -295,6 +789,8 @@ class FinancialHealthReport(BaseModel):
     Aggregates the Five Pillars of Financial Health Analysis.
     All ratios are computed fields based on the three financial statements.
     Supports polymorphic income statements for different industries.
+    
+    Note: All ratios return TraceableField for full end-to-end traceability.
     """
     company_ticker: str
     fiscal_period: str
@@ -306,196 +802,179 @@ class FinancialHealthReport(BaseModel):
     # 1. Liquidity Pillar
     # --------------------------------------------------------
     @computed_field
-    def current_ratio(self) -> Optional[float]:
+    def current_ratio(self) -> TraceableField:
         """Current Ratio = Current Assets / Current Liabilities (Corporate only)"""
         if not isinstance(self.bs, CorporateBalanceSheet):
-            return None
-        if self.bs.assets_current is None or self.bs.liabilities_current is None or self.bs.liabilities_current == 0:
-            return None
-        return self.bs.assets_current / self.bs.liabilities_current
+            return TraceableField(value=None)
+        
+        result = self.bs.assets_current / self.bs.liabilities_current
+        result.formula_logic = "Current Assets / Current Liabilities"
+        return result
 
     @computed_field
-    def quick_ratio(self) -> Optional[float]:
+    def quick_ratio(self) -> TraceableField:
         """Quick Ratio = (Cash + Marketable Securities + Receivables) / Current Liabilities (Corporate only)"""
         if not isinstance(self.bs, CorporateBalanceSheet):
-            return None
-        if self.bs.liabilities_current is None or self.bs.liabilities_current == 0:
-            return None
+            return TraceableField(value=None)
         
-        numerator = (self.bs.cash_and_equivalents or 0.0) + (self.bs.marketable_securities or 0.0) + (self.bs.receivables_net or 0.0)
-        return numerator / self.bs.liabilities_current
+        numerator = self.bs.cash_and_equivalents + self.bs.marketable_securities + self.bs.receivables_net
+        result = numerator / self.bs.liabilities_current
+        result.formula_logic = "(Cash + Securities + Receivables) / Current Liabilities"
+        return result
 
     @computed_field
-    def cash_ratio(self) -> Optional[float]:
+    def cash_ratio(self) -> TraceableField:
         """Cash Ratio = (Cash + Marketable Securities) / Current Liabilities (Corporate only)"""
         if not isinstance(self.bs, CorporateBalanceSheet):
-            return None
-        if self.bs.liabilities_current is None or self.bs.liabilities_current == 0:
-            return None
-        if self.bs.cash_and_equivalents is None:
-            return None
-        numerator = (self.bs.cash_and_equivalents or 0.0) + (self.bs.marketable_securities or 0.0)
-        return numerator / self.bs.liabilities_current
+            return TraceableField(value=None)
+        
+        numerator = self.bs.cash_and_equivalents + self.bs.marketable_securities
+        result = numerator / self.bs.liabilities_current
+        result.formula_logic = "(Cash + Securities) / Current Liabilities"
+        return result
 
     # --------------------------------------------------------
     # 2. Solvency Pillar
     # --------------------------------------------------------
     @computed_field
-    def debt_to_equity(self) -> Optional[float]:
+    def debt_to_equity(self) -> TraceableField:
         """Debt-to-Equity Ratio = Total Debt / Total Equity"""
-        if self.bs.total_equity is None or self.bs.total_equity == 0:
-            return None
-        if self.bs.total_debt is None:
-            return None
-        return self.bs.total_debt / self.bs.total_equity
+        result = self.bs.total_debt / self.bs.total_equity
+        result.formula_logic = "Total Debt / Total Equity"
+        return result
 
     @computed_field
-    def interest_coverage(self) -> Optional[float]:
+    def interest_coverage(self) -> TraceableField:
         """Interest Coverage = EBIT / Interest Expense (Corporate only)"""
-        # Safe-guard: Only Corporate has 'ebit' and 'interest_expense' currently
         if not isinstance(self.is_, CorporateIncomeStatement):
-            return None
-            
-        if self.is_.interest_expense is None or self.is_.interest_expense == 0:
-            return None
-        if self.is_.ebit is None:
-            return None
-        return self.is_.ebit / self.is_.interest_expense
+            return TraceableField(value=None)
+        
+        result = self.is_.ebit / self.is_.interest_expense
+        result.formula_logic = "EBIT / Interest Expense"
+        return result
 
     @computed_field
-    def equity_multiplier(self) -> Optional[float]:
+    def equity_multiplier(self) -> TraceableField:
         """Equity Multiplier = Total Assets / Total Equity (DuPont component)"""
-        if self.bs.total_equity is None or self.bs.total_equity == 0:
-            return None
-        if self.bs.total_assets is None:
-            return None
-        return self.bs.total_assets / self.bs.total_equity
+        result = self.bs.total_assets / self.bs.total_equity
+        result.formula_logic = "Total Assets / Total Equity"
+        return result
 
     # --------------------------------------------------------
     # 3. Operational Efficiency Pillar
     # --------------------------------------------------------
     @computed_field
-    def inventory_turnover(self) -> Optional[float]:
+    def inventory_turnover(self) -> TraceableField:
         """Inventory Turnover = COGS / Average Inventory (Corporate only)"""
         if not isinstance(self.is_, CorporateIncomeStatement):
-            return None
+            return TraceableField(value=None)
         if not isinstance(self.bs, CorporateBalanceSheet):
-            return None
-        if self.bs.inventory is None or self.bs.inventory == 0:
-            return None
-        if self.is_.cogs is None:
-            return None
-        return self.is_.cogs / self.bs.inventory
+            return TraceableField(value=None)
+        
+        result = self.is_.cogs / self.bs.inventory
+        result.formula_logic = "COGS / Inventory"
+        return result
 
     @computed_field
-    def days_sales_outstanding(self) -> Optional[float]:
+    def days_sales_outstanding(self) -> TraceableField:
         """DSO = (Average Receivables / Revenue) * 365 (Corporate only)"""
         if not isinstance(self.is_, CorporateIncomeStatement):
-            return None
+            return TraceableField(value=None)
         if not isinstance(self.bs, CorporateBalanceSheet):
-            return None
-        if self.is_.revenue is None or self.is_.revenue == 0:
-            return None
-        if self.bs.receivables_net is None:
-            return None
-        return (self.bs.receivables_net / self.is_.revenue) * 365.0
+            return TraceableField(value=None)
+        
+        result = (self.bs.receivables_net / self.is_.revenue) * 365.0
+        result.formula_logic = "(Receivables / Revenue) * 365"
+        return result
 
     @computed_field
-    def days_payable_outstanding(self) -> Optional[float]:
+    def days_payable_outstanding(self) -> TraceableField:
         """DPO = (Average AP / COGS) * 365 (Corporate only)"""
         if not isinstance(self.is_, CorporateIncomeStatement):
-            return None
+            return TraceableField(value=None)
         if not isinstance(self.bs, CorporateBalanceSheet):
-            return None
-        if self.is_.cogs is None or self.is_.cogs == 0:
-            return None
-        if self.bs.accounts_payable is None:
-            return None
-        return (self.bs.accounts_payable / self.is_.cogs) * 365.0
+            return TraceableField(value=None)
+        
+        result = (self.bs.accounts_payable / self.is_.cogs) * 365.0
+        result.formula_logic = "(Accounts Payable / COGS) * 365"
+        return result
 
     # --------------------------------------------------------
     # 4. Profitability Pillar
     # --------------------------------------------------------
     @computed_field
-    def gross_margin(self) -> Optional[float]:
+    def gross_margin(self) -> TraceableField:
         """Gross Margin = Gross Profit / Revenue (Corporate only)"""
         if not isinstance(self.is_, CorporateIncomeStatement):
-            return None
-        if self.is_.revenue is None or self.is_.revenue == 0 or self.is_.gross_profit is None:
-            return None
-        return self.is_.gross_profit / self.is_.revenue
+            return TraceableField(value=None)
+        
+        result = self.is_.gross_profit / self.is_.revenue
+        result.formula_logic = "Gross Profit / Revenue"
+        return result
 
     @computed_field
-    def operating_margin(self) -> Optional[float]:
+    def operating_margin(self) -> TraceableField:
         """Operating Margin = Operating Income / Revenue (Corporate only)"""
         if not isinstance(self.is_, CorporateIncomeStatement):
-            return None
-        if self.is_.revenue is None or self.is_.revenue == 0:
-            return None
-        if self.is_.operating_income is None:
-            return None
-        return self.is_.operating_income / self.is_.revenue
+            return TraceableField(value=None)
+        
+        result = self.is_.operating_income / self.is_.revenue
+        result.formula_logic = "Operating Income / Revenue"
+        return result
 
     @computed_field
-    def net_margin(self) -> Optional[float]:
+    def net_margin(self) -> TraceableField:
         """Net Margin = Net Income / Revenue (Corporate/REIT) or Total Revenue (Bank)"""
         # Get appropriate revenue based on industry type
-        revenue = None
         if isinstance(self.is_, CorporateIncomeStatement):
-            revenue = self.is_.revenue
+            result = self.is_.net_income / self.is_.revenue
+            result.formula_logic = "Net Income / Revenue"
         elif isinstance(self.is_, BankIncomeStatement):
-            revenue = self.is_.total_revenue
+            result = self.is_.net_income / self.is_.total_revenue
+            result.formula_logic = "Net Income / Total Revenue"
         elif isinstance(self.is_, REITIncomeStatement):
-            revenue = self.is_.rental_income
+            result = self.is_.net_income / self.is_.rental_income
+            result.formula_logic = "Net Income / Rental Income"
+        else:
+            result = TraceableField(value=None)
         
-        if revenue is None or revenue == 0:
-            return None
-        if self.is_.net_income is None:
-            return None
-        return self.is_.net_income / revenue
+        return result
 
     @computed_field
-    def return_on_equity(self) -> Optional[float]:
+    def return_on_equity(self) -> TraceableField:
         """ROE = Net Income / Average Equity (simplified: period-end equity)"""
-        if self.bs.total_equity is None or self.bs.total_equity == 0:
-            return None
-        if self.is_.net_income is None:
-            return None
-        return self.is_.net_income / self.bs.total_equity
+        result = self.is_.net_income / self.bs.total_equity
+        result.formula_logic = "Net Income / Total Equity"
+        return result
 
     @computed_field
-    def return_on_assets(self) -> Optional[float]:
+    def return_on_assets(self) -> TraceableField:
         """ROA = Net Income / Total Assets"""
-        if self.bs.total_assets is None or self.bs.total_assets == 0:
-            return None
-        if self.is_.net_income is None:
-            return None
-        return self.is_.net_income / self.bs.total_assets
+        result = self.is_.net_income / self.bs.total_assets
+        result.formula_logic = "Net Income / Total Assets"
+        return result
 
     # --------------------------------------------------------
     # 5. Cash Flow Quality Pillar
     # --------------------------------------------------------
     @computed_field
-    def free_cash_flow(self) -> Optional[float]:
+    def free_cash_flow(self) -> TraceableField:
         """FCF = Operating Cash Flow - Capex"""
-        if self.cf.ocf is None or self.cf.capex is None:
-            return None
-        return self.cf.ocf - self.cf.capex
+        result = self.cf.ocf - self.cf.capex
+        result.formula_logic = "OCF - Capex"
+        return result
 
     @computed_field
-    def ocf_to_net_income(self) -> Optional[float]:
+    def ocf_to_net_income(self) -> TraceableField:
         """Quality of Earnings = OCF / Net Income (should be > 1.0)"""
-        if self.is_.net_income is None or self.is_.net_income == 0:
-            return None
-        if self.cf.ocf is None:
-            return None
-        return self.cf.ocf / self.is_.net_income
+        result = self.cf.ocf / self.is_.net_income
+        result.formula_logic = "OCF / Net Income"
+        return result
 
     @computed_field
-    def accruals_ratio(self) -> Optional[float]:
+    def accruals_ratio(self) -> TraceableField:
         """Sloan Ratio = (Net Income - OCF) / Total Assets"""
-        if self.bs.total_assets is None or self.bs.total_assets == 0:
-            return None
-        if self.is_.net_income is None or self.cf.ocf is None:
-            return None
-        return (self.is_.net_income - self.cf.ocf) / self.bs.total_assets
+        numerator = self.is_.net_income - self.cf.ocf
+        result = numerator / self.bs.total_assets
+        result.formula_logic = "(Net Income - OCF) / Total Assets"
+        return result
