@@ -61,6 +61,13 @@ class BalanceSheet(BaseModel):
             return None
         return (self.debt_current or 0.0) + (self.debt_noncurrent or 0.0)
 
+    @computed_field
+    def total_liquidity(self) -> Optional[float]:
+        """Calculate total liquidity: Cash + Marketable Securities"""
+        if self.cash_and_equivalents is None and self.marketable_securities is None:
+            return None
+        return (self.cash_and_equivalents or 0.0) + (self.marketable_securities or 0.0)
+
     @model_validator(mode='after')
     def validate_accounting_identity(self) -> "BalanceSheet":
         """Validate accounting equation: Assets = Liabilities + Equity (allow 1% tolerance)"""

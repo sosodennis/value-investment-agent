@@ -173,48 +173,55 @@ def financial_health_node(state: AgentState) -> Command:
     resolved_ticker = state.resolved_ticker
     print(f"--- Planner: Fetching financial health data for {resolved_ticker} ---")
     
-    # Fetch financial data using edgartools
-    financial_report = fetch_financial_data(resolved_ticker)
+    # Fetch financial data (mult-year)
+    financial_reports = fetch_financial_data(resolved_ticker, years=3)
     
-    if financial_report:
+    reports_data = []
+    
+    if financial_reports:
         # Helper logging functions
         fmt = lambda v: f"${v:,.0f}" if v is not None else "N/A"
         pct = lambda v: f"{v:.2%}" if v is not None else "N/A"
         ratio = lambda v: f"{v:.2f}" if v is not None else "N/A"
 
-        print(f"✅ Financial Health Report generated for {resolved_ticker}")
-        print(f"   • Current Ratio: {ratio(financial_report.current_ratio)}")
-        print(f"   • Debt/Equity: {ratio(financial_report.debt_to_equity)}")
-        print(f"   • ROE: {pct(financial_report.return_on_equity)}")
-        print(f"   • FCF: {fmt(financial_report.free_cash_flow)}")
+        print(f"✅ Generated {len(financial_reports)} Financial Health Reports for {resolved_ticker}")
         
-        # Detailed Statement Logging
-        print("\n   📊 Balance Sheet Summary:")
-        print(f"     - Cash: {fmt(financial_report.bs.cash_and_equivalents)}")
-        print(f"     - Total Assets: {fmt(financial_report.bs.total_assets)}")
-        print(f"     - Total Debt: {fmt(financial_report.bs.total_debt)}")
-        print(f"     - Total Equity: {fmt(financial_report.bs.total_equity)}")
+        for i, report in enumerate(financial_reports):
+            print(f"\n📅 --- Fiscal Year: {report.fiscal_period} ---")
+            print(f"   • Current Ratio: {ratio(report.current_ratio)}")
+            print(f"   • Debt/Equity: {ratio(report.debt_to_equity)}")
+            print(f"   • ROE: {pct(report.return_on_equity)}")
+            print(f"   • FCF: {fmt(report.free_cash_flow)}")
+            
+            # Detailed Statement Logging (Only for most recent year to save space, or all? User asked to print out reports. Let's print all but maybe less specific detail if too long. But user wants data.)
+            # Let's print full detail for all years as requested.
+            print(f"   📊 Balance Sheet ({report.fiscal_period}):")
+            print(f"     - Cash & Eq: {fmt(report.bs.cash_and_equivalents)}")
+            print(f"     - Total Liquidity: {fmt(report.bs.total_liquidity)} (inc. Mkt Securities)")
+            print(f"     - Total Assets: {fmt(report.bs.total_assets)}")
+            print(f"     - Total Debt: {fmt(report.bs.total_debt)}")
+            print(f"     - Total Equity: {fmt(report.bs.total_equity)}")
 
-        print("\n   📉 Income Statement Summary:")
-        print(f"     - Revenue: {fmt(financial_report.is_.revenue)}")
-        print(f"     - Gross Profit: {fmt(financial_report.is_.gross_profit)}")
-        print(f"     - Operating Income: {fmt(financial_report.is_.operating_income)}")
-        print(f"     - Net Income: {fmt(financial_report.is_.net_income)}")
+            print(f"   📉 Income Statement ({report.fiscal_period}):")
+            print(f"     - Revenue: {fmt(report.is_.revenue)}")
+            print(f"     - Gross Profit: {fmt(report.is_.gross_profit)}")
+            print(f"     - Operating Income: {fmt(report.is_.operating_income)}")
+            print(f"     - Net Income: {fmt(report.is_.net_income)}")
 
-        print("\n   💸 Cash Flow Summary:")
-        print(f"     - OCF: {fmt(financial_report.cf.ocf)}")
-        print(f"     - Capex: {fmt(financial_report.cf.capex)}")
-        print(f"     - Dividends: {fmt(financial_report.cf.dividends_paid)}")
-        
-        # Convert to dict for state persistence
-        report_dict = financial_report.model_dump()
+            print(f"   💸 Cash Flow ({report.fiscal_period}):")
+            print(f"     - OCF: {fmt(report.cf.ocf)}")
+            print(f"     - Capex: {fmt(report.cf.capex)}")
+            print(f"     - Dividends: {fmt(report.cf.dividends_paid)}")
+            
+            reports_data.append(report.model_dump())
+
     else:
         print(f"⚠️  Could not fetch financial data for {resolved_ticker}, proceeding without it")
-        report_dict = None
+        reports_data = []
     
     return Command(
         update={
-            "financial_report": report_dict,
+            "financial_reports": reports_data,
             "status": "model_selection"
         },
         goto="model_selection"
@@ -240,18 +247,20 @@ def model_selection_node(state: AgentState) -> Command:
     # Select model based on profile
     model, reasoning = select_valuation_model(profile)
     
-    # Enhance reasoning with financial health insights if available
-    if state.financial_report:
+    # Enhance reasoning with financial health insights (using latest report)
+    if state.financial_reports:
         try:
             from .financial_models import FinancialHealthReport
-            report = FinancialHealthReport(**state.financial_report)
+            # Use most recent year (index 0)
+            latest_report_data = state.financial_reports[0]
+            report = FinancialHealthReport(**latest_report_data)
             
             # Add financial health context to reasoning
-            health_context = f"\n\nFinancial Health Insights:\n"
+            health_context = f"\n\nFinancial Health Insights ({report.fiscal_period}):\n"
             health_context += f"- Current Ratio: {report.current_ratio:.2f}" if report.current_ratio else ""
             health_context += f"\n- Debt-to-Equity: {report.debt_to_equity:.2f}" if report.debt_to_equity else ""
-            health_context += f"\n- ROE: {report.return_on_equity:.2%}" if report.return_on_equity else ""
-            health_context += f"\n- Free Cash Flow: ${report.free_cash_flow:,.0f}"
+            health_context += f"\n- ROE: {report.return_on_equity:.2%}" if report.return_on_equity is not None else ""
+            health_context += f"\n- Free Cash Flow: ${report.free_cash_flow:,.0f}" if report.free_cash_flow is not None else ""
             
             reasoning += health_context
         except Exception as e:
@@ -279,7 +288,7 @@ def model_selection_node(state: AgentState) -> Command:
                 "sector": profile.sector,
                 "industry": profile.industry,
                 "reasoning": reasoning,
-                "financial_report": state.financial_report
+                "financial_reports": state.financial_reports
             },
             "status": "done"
         },

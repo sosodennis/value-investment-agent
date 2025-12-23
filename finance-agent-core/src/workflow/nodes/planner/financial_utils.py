@@ -17,69 +17,99 @@ logger = logging.getLogger(__name__)
 set_identity("ValueInvestmentAgent research@example.com")
 
 
-def fetch_financial_data(ticker: str, fiscal_year: Optional[int] = None) -> Optional[FinancialHealthReport]:
+def fetch_financial_data(ticker: str, years: int = 3) -> List[FinancialHealthReport]:
     """
     Fetch financial data from SEC EDGAR using edgartools.
+    Returns a list of reports for the last N years (or matching filings found).
     """
+    reports = []
     try:
-        logger.info(f"Fetching financial data for {ticker} from SEC EDGAR...")
+        logger.info(f"Fetching financial data for {ticker} (Last {years} years)...")
         
-        # 1. Get company and latest 10-K filing
+        # 1. Get company and latest 10-K filings (excluding amendments)
+        logger.debug(f"Getting filings for {ticker}...")
         company = Company(ticker)
-        filings = company.get_filings(form="10-K")
+        filings = company.get_filings(form="10-K", amendments=False)
         
         if not filings:
             logger.warning(f"No 10-K filings found for {ticker}")
-            return None
+            return []
             
-        # Get most recent filing
-        filing = filings[0]
-        logger.info(f"Using 10-K filing: {filing.filing_date}")
-        
-        # 2. Extract XBRL data as Dataframe
-        xbrl = filing.xbrl()
-        if not xbrl:
-            logger.warning(f"No XBRL data available for {ticker}")
-            return None
-            
-        try:
-            facts_df = xbrl.facts.to_dataframe()
-        except Exception as e:
-            logger.error(f"Failed to convert facts to dataframe: {e}")
-            return None
-        
-        # 3. Extract Balance Sheet (Instant Context)
-        bs_data = _extract_balance_sheet(facts_df)
-        if not bs_data:
-            logger.warning(f"Failed to extract balance sheet for {ticker}")
-            return None
-        
-        # 4. Extract Income Statement (Duration Context)
-        is_data = _extract_income_statement(facts_df)
-        if not is_data:
-            logger.warning(f"Failed to extract income statement for {ticker}")
-            return None
-        
-        # 5. Extract Cash Flow Statement (Duration Context)
-        cf_data = _extract_cash_flow_statement(facts_df)
-        if not cf_data:
-            logger.warning(f"Failed to extract cash flow statement for {ticker}")
-            return None
-        
-        # 6. Create Financial Health Report
-        report = FinancialHealthReport(
-            company_ticker=ticker,
-            fiscal_period=str(filing.filing_date.year),
-            bs=bs_data,
-            is_=is_data,
-            cf=cf_data
-        )
-        
-        return report
+        # Refactor: Iterate safely instead of slicing/len() on potentially fragile Filings object
+        count = 0
+        for i, filing in enumerate(filings):
+            if count >= years:
+                break
+                
+            try:
+                # Try to get date safely
+                f_date = "Unknown Date"
+                try:
+                    f_date = str(filing.filing_date)
+                except Exception as e:
+                    logger.warning(f"Could not read filing date via filing.filing_date: {e}")
+                    
+                logger.info(f"Processing 10-K filing {i+1}: {f_date}")
+                
+                # 2. Extract XBRL data as Dataframe
+                xbrl = filing.xbrl()
+                if not xbrl:
+                    logger.warning(f"No XBRL data available for filing {filing.filing_date}")
+                    continue
+                    
+                try:
+                    facts_df = xbrl.facts.to_dataframe()
+                except Exception as e:
+                    logger.error(f"Failed to convert facts to dataframe for filing {filing.filing_date}: {e}")
+                    continue
+                
+                # 3. Extract Balance Sheet
+                bs_data = _extract_balance_sheet(facts_df)
+                if not bs_data:
+                    logger.warning(f"Failed to extract balance sheet for {filing.filing_date}")
+                    continue
+                
+                # 4. Extract Income Statement
+                is_data = _extract_income_statement(facts_df)
+                if not is_data:
+                    logger.warning(f"Failed to extract income statement for {filing.filing_date}")
+                    continue
+                
+                # 5. Extract Cash Flow Statement
+                cf_data = _extract_cash_flow_statement(facts_df)
+                if not cf_data:
+                    logger.warning(f"Failed to extract cash flow statement for {filing.filing_date}")
+                    continue
+                
+                # Extract Fiscal Year
+                fiscal_year = str(filing.filing_date.year - 1) # Default heuristic (Filing Year - 1)
+                try:
+                    # Try to get explicit fiscal year from XBRL
+                    fy_rows = facts_df[facts_df['concept'] == 'dei:DocumentFiscalYearFocus']
+                    if not fy_rows.empty:
+                        fiscal_year = str(fy_rows.iloc[0]['value'])
+                except Exception as e:
+                    logger.warning(f"Could not extract DocumentFiscalYearFocus: {e}")
+
+                # 6. Create Financial Health Report
+                report = FinancialHealthReport(
+                    company_ticker=ticker,
+                    fiscal_period=fiscal_year,
+                    bs=bs_data,
+                    is_=is_data,
+                    cf=cf_data
+                )
+                reports.append(report)
+                count += 1
+                
+            except Exception as e:
+                logger.error(f"Error processing filing {filing.filing_date}: {e}")
+                continue
         
     except Exception as e:
         logger.error(f"Error fetching financial data for {ticker}: {e}")
-        return None
+        
+    return reports
 
 
 def _get_fact_value_from_df(df: pd.DataFrame, tags: Union[str, List[str]], context_type: str = 'instant', default: Optional[float] = None) -> Optional[float]:
@@ -160,14 +190,14 @@ def _extract_balance_sheet(df: pd.DataFrame) -> Optional[BalanceSheet]:
             ),
             inventory=get_val(["us-gaap:InventoryNet", "us-gaap:InventoryGross"]),
             marketable_securities=get_val(
-                ["us-gaap:MarketableSecuritiesCurrent", "us-gaap:AvailableForSaleSecuritiesCurrent"]
+                ["us-gaap:MarketableSecuritiesCurrent", "us-gaap:AvailableForSaleSecuritiesCurrent", "us-gaap:ShortTermInvestments"]
             ),
             total_assets=get_val("us-gaap:Assets"),
             total_liabilities=get_val("us-gaap:Liabilities"),
             total_equity=get_val(
                 ["us-gaap:StockholdersEquity", "us-gaap:StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"]
             ),
-            debt_current=get_val(["us-gaap:DebtCurrent", "us-gaap:ShortTermBorrowings"]),
+            debt_current=get_val(["us-gaap:DebtCurrent", "us-gaap:ShortTermBorrowings", "us-gaap:LongTermDebtCurrent"]),
             debt_noncurrent=get_val(["us-gaap:LongTermDebtNoncurrent", "us-gaap:LongTermDebt"]),
             accounts_payable=get_val(["us-gaap:AccountsPayableCurrent", "us-gaap:AccountsPayableAndAccruedLiabilitiesCurrent"])
         )
