@@ -304,7 +304,8 @@ class BalanceSheetBase(AutoExtractModel):
         json_schema_extra={
             'xbrl_tags': [
                 'us-gaap:MarketableSecuritiesCurrent',
-                'us-gaap:ShortTermInvestments'
+                'us-gaap:ShortTermInvestments',
+                'us-gaap:AvailableForSaleSecuritiesCurrent'
             ]
         }
     )
@@ -396,7 +397,10 @@ class CorporateBalanceSheet(BalanceSheetBase):
                 'us-gaap:LongTermDebtExcludingCurrentPortion',
                 'us-gaap:LongTermDebtAndFinanceLeaseObligations',
                 'us-gaap:LongTermDebt',
-                'us-gaap:LongTermDebtAndCapitalLeaseObligations'
+                'us-gaap:LongTermDebtAndCapitalLeaseObligations',
+                'us-gaap:LongTermLineOfCredit',
+                'us-gaap:SeniorNotes',
+                'us-gaap:DebtInstrumentCarryingAmount'
             ]
         }
     )
