@@ -180,29 +180,41 @@ def financial_health_node(state: AgentState) -> Command:
     
     if financial_reports:
         # Helper logging functions - handle TraceableField objects
+        def src(v):
+            """Extract source metadata from TraceableField"""
+            if v is None or not hasattr(v, 'source_tags'):
+                return ""
+            if getattr(v, 'is_calculated', False):
+                logic = getattr(v, 'formula_logic', 'N/A')
+                return f" | [Calc: {logic}]"
+            tags = getattr(v, 'source_tags', [])
+            if tags:
+                return f" | [Tags: {', '.join(tags)}]"
+            return ""
+
         def fmt(v):
             """Format currency values, handling TraceableField"""
             if v is None:
                 return "N/A"
-            # Extract value from TraceableField if needed
             val = v.value if hasattr(v, 'value') else v
-            return f"${val:,.0f}" if val is not None else "N/A"
+            if val is None: return "N/A"
+            return f"${val:,.0f}{src(v)}"
         
         def pct(v):
             """Format percentage values, handling TraceableField"""
             if v is None:
                 return "N/A"
-            # Extract value from TraceableField if needed
             val = v.value if hasattr(v, 'value') else v
-            return f"{val:.2%}" if val is not None else "N/A"
+            if val is None: return "N/A"
+            return f"{val:.2%}{src(v)}"
         
         def ratio(v):
             """Format ratio values, handling TraceableField"""
             if v is None:
                 return "N/A"
-            # Extract value from TraceableField if needed
             val = v.value if hasattr(v, 'value') else v
-            return f"{val:.2f}" if val is not None else "N/A"
+            if val is None: return "N/A"
+            return f"{val:.2f}{src(v)}"
 
         print(f"✅ Generated {len(financial_reports)} Financial Health Reports for {resolved_ticker}")
         

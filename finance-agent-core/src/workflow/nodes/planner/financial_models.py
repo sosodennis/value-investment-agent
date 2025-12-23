@@ -450,6 +450,124 @@ class CorporateBalanceSheet(BalanceSheetBase):
         result.formula_logic = "Total Debt - Total Liquidity"
         return result
 
+    @model_validator(mode='after')
+    def inference_pipeline(self) -> "CorporateBalanceSheet":
+        """
+        补完流水線：執行 Materiality 推論 (V13)。
+        Scientifically estimate missing values using "Negative Space Estimation".
+        """
+        # 1. 執行存貨與應收帳款推論
+        self._infer_missing_asset_item()
+        
+        # 2. 執行負債推論
+        self._infer_missing_debt_item()
+        
+        return self
+
+    def _infer_missing_asset_item(self):
+        """
+        Advanced Residual Analysis for Assets:
+        If Current Assets known but Inventory/Receivables missing, check if residual is negligible (<5%).
+        If so, infer missing item to match the residual.
+        """
+        # Prerequisite: Must have total current assets
+        if self.assets_current.value is None:
+            return
+
+        # Identify missing components
+        missing_items = []
+        if self.inventory.value is None: missing_items.append('inventory')
+        if self.receivables_net.value is None: missing_items.append('receivables_net')
+        
+        # Risk Control: Only infer if exactly one major component is missing.
+        # If multiple are missing, the risk of misallocation is too high.
+        if len(missing_items) != 1: 
+            return
+
+        # Calculate known sum
+        known_sum = (self.cash_and_equivalents.value or 0.0) + \
+                    (self.marketable_securities.value or 0.0) + \
+                    (self.receivables_net.value or 0.0 if 'receivables_net' not in missing_items else 0.0) + \
+                    (self.inventory.value or 0.0 if 'inventory' not in missing_items else 0.0)
+
+        # Calculate residual
+        residual = self.assets_current.value - known_sum
+        if self.assets_current.value == 0: return # Avoid div by zero
+        
+        residual_ratio = residual / self.assets_current.value
+
+        # Materiality Threshold: 5%
+        # If the missing piece accounts for <5% of current assets, we infer it.
+        # This handles cases like Apple (Inventory ~2%) or pure SaaS (Inventory ~0%).
+        if 0 <= residual_ratio < 0.05:
+            target_attr = missing_items[0]
+            
+            # Create inferred field
+            inferred_field = TraceableField(
+                value=max(0.0, residual), # Fill the gap
+                is_calculated=True,
+                source_tags=["Materiality_Inference"],
+                formula_logic=f"Residual of Current Assets ({residual_ratio:.1%} left)"
+            )
+            
+            # Apply inference
+            setattr(self, target_attr, inferred_field)
+
+    def _infer_missing_debt_item(self):
+        """
+        Advanced Residual Analysis for Debt:
+        If Total Liabilities known but Total Debt missing, check if residual is negligible (<2%).
+        """
+        # Prerequisite: Liabilities known, debt missing
+        if self.total_liabilities.value is None:
+            return
+            
+        # If we already found debt tags, no need to infer
+        if self.total_debt.value is not None:
+            return
+
+        # Calculate other known liabilities
+        other_liab = (self.accounts_payable.value or 0.0) + \
+                     (self.lease_liabilities_current.value or 0.0) + \
+                     (self.lease_liabilities_noncurrent.value or 0.0)
+        
+        residual = self.total_liabilities.value - other_liab
+        if self.total_liabilities.value == 0: return
+        
+        residual_ratio = residual / self.total_liabilities.value
+
+        # Materiality Threshold: 2% (Stricter for Debt)
+        # If almost all liabilities are accounted for by Payables/Leases, 
+        # it is highly probable there is no significant financial debt.
+        if residual_ratio < 0.02:
+            # Create inferred debt of 0.0
+            inferred_debt = TraceableField(
+                value=0.0,
+                is_calculated=True,
+                source_tags=["Materiality_Inference"],
+                formula_logic=f"Liabilities residual too small ({residual_ratio:.1%}) for significant debt"
+            )
+            
+            # Since total_debt is computed, we can't set it directly? 
+            # Actually, total_debt is a computed_field based on debt_current + debt_noncurrent.
+            # So we should set the components to 0.0 if they are missing.
+            
+            if self.debt_current.value is None:
+                self.debt_current = TraceableField(
+                    value=0.0, 
+                    is_calculated=True, 
+                    source_tags=["Materiality_Inference"],
+                    formula_logic="Inferred Zero from Liabilities Residual"
+                )
+            
+            if self.debt_noncurrent.value is None:
+                self.debt_noncurrent = TraceableField(
+                    value=0.0, 
+                    is_calculated=True, 
+                    source_tags=["Materiality_Inference"],
+                    formula_logic="Inferred Zero from Liabilities Residual"
+                )
+
 
 class BankBalanceSheet(BalanceSheetBase):
     """Balance sheet for banking institutions"""
