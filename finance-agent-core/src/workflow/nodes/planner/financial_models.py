@@ -354,14 +354,23 @@ class CorporateBalanceSheet(BalanceSheetBase):
         default_factory=TraceableField,
         json_schema_extra={
             'xbrl_tags': [
+                'us-gaap:AccountsReceivableNetCurrent',
                 'us-gaap:ReceivablesNetCurrent',
-                'us-gaap:AccountsReceivableNetCurrent'
+                'us-gaap:CustomerReceivablesNetCurrent',
+                'us-gaap:OtherReceivablesNetCurrent',
+                'us-gaap:NotesAndAccountsReceivableNetCurrent'
             ]
         }
     )
     inventory: TraceableField = Field(
         default_factory=TraceableField,
-        json_schema_extra={'xbrl_tags': ['us-gaap:InventoryNet']}
+        json_schema_extra={
+            'xbrl_tags': [
+                'us-gaap:InventoryNet',
+                'us-gaap:InventoryGross',
+                'us-gaap:InventoryFinishedGoods'
+            ]
+        }
     )
     accounts_payable: TraceableField = Field(
         default_factory=TraceableField,
