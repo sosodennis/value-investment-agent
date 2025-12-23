@@ -315,6 +315,35 @@ def _extract_corporate_balance_sheet(df: pd.DataFrame) -> Optional[CorporateBala
         get_val = lambda t, d=None: _get_fact_value_from_df(df, t, 'instant', d)
         period_date = _get_period_date(df)
         
+        # 1. Extract Operating Lease Liabilities (MGM / OpCo Logic)
+        lease_current = _get_fact_smart(
+            df, 
+            standard_tags=["us-gaap:OperatingLeaseLiabilityCurrent"],
+            fuzzy_keywords=["OperatingLeaseLiability", "Current"],
+            exclude_keywords=[]
+        )
+        
+        lease_noncurrent = _get_fact_smart(
+            df, 
+            standard_tags=["us-gaap:OperatingLeaseLiabilityNoncurrent"],
+            fuzzy_keywords=["OperatingLeaseLiability", "Noncurrent"],
+            exclude_keywords=[]
+        )
+
+        # Fallback Logic: If partials failed, try fetching the Total
+        if (lease_current or 0) + (lease_noncurrent or 0) == 0:
+            logger.warning("⚠️ MGM Lease Extraction failed! Trying fallback tag 'us-gaap:OperatingLeaseLiability'...")
+            lease_total_guess = _get_fact_smart(
+                df,
+                standard_tags=["us-gaap:OperatingLeaseLiability"],
+                fuzzy_keywords=["OperatingLeaseLiability"],
+                exclude_keywords=["Current", "Noncurrent"]
+            )
+            if lease_total_guess and lease_total_guess > 0:
+                logger.info(f"✅ Fallback Success: Found Total Lease Liability = {lease_total_guess}")
+                # Assign to noncurrent for display purposes
+                lease_noncurrent = lease_total_guess
+        
         return CorporateBalanceSheet(
             period_date=period_date,
             total_assets=get_val("us-gaap:Assets"),
@@ -329,7 +358,18 @@ def _extract_corporate_balance_sheet(df: pd.DataFrame) -> Optional[CorporateBala
             inventory=get_val("us-gaap:InventoryNet"),
             accounts_payable=get_val("us-gaap:AccountsPayableCurrent"),
             debt_current=get_val(["us-gaap:DebtCurrent", "us-gaap:ShortTermBorrowings", "us-gaap:LongTermDebtCurrent"]),
-            debt_noncurrent=get_val(["us-gaap:LongTermDebtNoncurrent", "us-gaap:LongTermDebt"])
+            debt_noncurrent=get_val(["us-gaap:LongTermDebtNoncurrent", "us-gaap:LongTermDebt"]),
+            # Adjusted Debt (OpCo Fix)
+            lease_liabilities_current=lease_current,
+            lease_liabilities_noncurrent=lease_noncurrent,
+            
+            # Liquidity Fix: Non-Current Marketable Securities (Shadow Cash)
+            marketable_securities_noncurrent=get_val([
+                "us-gaap:MarketableSecuritiesNoncurrent", 
+                "us-gaap:AvailableForSaleSecuritiesNoncurrent",
+                "us-gaap:HeldToMaturitySecuritiesNoncurrent",
+                "us-gaap:LongTermInvestments"
+            ])
         )
     except Exception as e:
         logger.error(f"Error extracting Corporate BS: {e}")
@@ -511,8 +551,30 @@ def _extract_reit_balance_sheet(df: pd.DataFrame) -> Optional[REITBalanceSheet]:
         # 3. Grand Total
         net_investment_leases = sales_type_total + financing_total
 
+        # --- SAFETY NET (安全網) ---
+        # If granular extraction failed (result < 10% of Total Assets), trigger broad search.
+        # This handles older years (2022/2023) where tags might be less specific.
+        total_assets_val = get_val("us-gaap:Assets") or 0.0
+        
+        if total_assets_val > 0 and net_investment_leases < (total_assets_val * 0.1):
+             logger.warning(f"⚠️ VICI Assets too small ({net_investment_leases:,.0f}). Triggering Safety Net search...")
+             
+             # Broad Search: "Investment" + "Lease", ignoring SalesType vs Financing distinction
+             broad_guess = _get_fact_smart(
+                 df, 
+                 standard_tags=["us-gaap:NetInvestmentInLeaseSalesTypeLease", "us-gaap:NetInvestmentInLease"],
+                 fuzzy_keywords=["Investment", "Lease"], # Broad fuzzy match
+                 exclude_keywords=["Current"] # Only exclude explicit current portion
+             ) or 0.0
+             
+             # Use if broad guess provides a better result
+             if broad_guess > net_investment_leases:
+                 net_investment_leases = broad_guess
+                 logger.info(f"✅ Safety Net Applied: Updated Assets to {net_investment_leases:,.0f}")
+        # ---------------------------
+
         if net_investment_leases > 0:
-             logger.info(f"🧩 VICI Assets: SalesType({sales_type_total:,.0f}) + Financing({financing_total:,.0f}) = {net_investment_leases:,.0f}")
+             logger.info(f"🧩 VICI Assets Final: {net_investment_leases:,.0f}")
         
         total_re_assets = re_properties + net_investment_leases
 

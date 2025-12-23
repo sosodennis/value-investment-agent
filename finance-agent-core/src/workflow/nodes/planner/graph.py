@@ -221,6 +221,10 @@ def financial_health_node(state: AgentState) -> Command:
             # Detailed Statement Logging
             print(f"   📊 Balance Sheet ({report.fiscal_period}):")
             print(f"     - Cash & Eq: {fmt(report.bs.cash_and_equivalents)}")
+            if report.bs.total_liquidity and (report.bs.marketable_securities or report.bs.marketable_securities_noncurrent):
+                 print(f"     - Marketable Securities (Current): {fmt(report.bs.marketable_securities)}")
+                 print(f"     - Marketable Securities (Non-Current): {fmt(report.bs.marketable_securities_noncurrent)}")
+                 print(f"     - Total Liquidity: {fmt(report.bs.total_liquidity)}")
             print(f"     - Total Assets: {fmt(report.bs.total_assets)}")
             print(f"     - Total Debt: {fmt(report.bs.total_debt)}")
             print(f"     - Total Equity: {fmt(report.bs.total_equity)}")
@@ -230,6 +234,9 @@ def financial_health_node(state: AgentState) -> Command:
                 print(f"     - Current Liabilities: {fmt(report.bs.liabilities_current)}")
                 print(f"     - Inventory: {fmt(report.bs.inventory)}")
                 print(f"     - Receivables: {fmt(report.bs.receivables_net)}")
+                print(f"     - Lease Liabilities: {fmt(report.bs.total_lease_liabilities)}")
+                print(f"     - Adjusted Debt: {fmt(report.bs.adjusted_total_debt)}")
+                print(f"     - Net Debt: {fmt(report.bs.net_debt)}")
             elif isinstance(report.bs, BankBalanceSheet):
                 print(f"     - Total Deposits: {fmt(report.bs.total_deposits)}")
                 print(f"     - Net Loans: {fmt(report.bs.net_loans)}")

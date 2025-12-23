@@ -43,13 +43,14 @@ class BalanceSheetBase(BaseModel):
     # Common Liquidity Strings
     cash_and_equivalents: Optional[float] = Field(None, description="us-gaap:CashAndCashEquivalentsAtCarryingValue")
     marketable_securities: Optional[float] = Field(None, description="us-gaap:MarketableSecuritiesCurrent")
+    marketable_securities_noncurrent: Optional[float] = Field(None, description="us-gaap:MarketableSecuritiesNoncurrent")
 
     @computed_field
     def total_liquidity(self) -> Optional[float]:
-        """Calculate total liquidity: Cash + Marketable Securities"""
-        if self.cash_and_equivalents is None and self.marketable_securities is None:
+        """Calculate total liquidity: Cash + Marketable Securities (Current + Non-Current)"""
+        if self.cash_and_equivalents is None and self.marketable_securities is None and self.marketable_securities_noncurrent is None:
             return None
-        return (self.cash_and_equivalents or 0.0) + (self.marketable_securities or 0.0)
+        return (self.cash_and_equivalents or 0.0) + (self.marketable_securities or 0.0) + (self.marketable_securities_noncurrent or 0.0)
 
     @model_validator(mode='after')
     def validate_accounting_identity(self) -> "BalanceSheetBase":
@@ -82,6 +83,38 @@ class CorporateBalanceSheet(BalanceSheetBase):
         if self.debt_current is None and self.debt_noncurrent is None:
             return None
         return (self.debt_current or 0.0) + (self.debt_noncurrent or 0.0)
+
+    # --- Adjusted Debt Logic for Asset-Light/OpCo Entities (e.g., MGM, SBUX) ---
+    lease_liabilities_current: Optional[float] = Field(None, description="us-gaap:OperatingLeaseLiabilityCurrent")
+    lease_liabilities_noncurrent: Optional[float] = Field(None, description="us-gaap:OperatingLeaseLiabilityNoncurrent")
+
+    @computed_field
+    def total_lease_liabilities(self) -> float:
+        """Calculate total operating lease liabilities"""
+        current = self.lease_liabilities_current or 0.0
+        noncurrent = self.lease_liabilities_noncurrent or 0.0
+        return current + noncurrent
+
+    @computed_field
+    def adjusted_total_debt(self) -> float:
+        """
+        Adjusted Debt = Financial Debt + Operating Lease Liabilities.
+        Critical for assessing leverage of tenants in triple-net ecosystems (e.g. MGM vs VICI).
+        """
+        fin_debt = self.total_debt or 0.0
+        return fin_debt + self.total_lease_liabilities
+
+    @computed_field
+    def net_debt(self) -> Optional[float]:
+        """Net Debt = Total Debt (Financial) - Total Liquidity"""
+        # Using financial debt (total_debt) rather than adjusted for Net Debt conventions usually, 
+        # but logic can vary. Usually Net Debt = Short Term Debt + Long Term Debt - Cash & Equiv.
+        # User defined Net Debt = Total Debt - Cash (Liquidity).
+        debt = self.total_debt
+        liquidity = self.total_liquidity
+        if debt is None or liquidity is None:
+            return None
+        return debt - liquidity
 
 
 class BankBalanceSheet(BalanceSheetBase):
