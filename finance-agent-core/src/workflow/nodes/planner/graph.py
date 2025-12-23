@@ -187,31 +187,65 @@ def financial_health_node(state: AgentState) -> Command:
         print(f"✅ Generated {len(financial_reports)} Financial Health Reports for {resolved_ticker}")
         
         for i, report in enumerate(financial_reports):
-            print(f"\n📅 --- Fiscal Year: {report.fiscal_period} ---")
+            print(f"\n📅 --- Fiscal Year: {report.fiscal_period} ({report.is_.industry.value}) ---")
             print(f"   • Current Ratio: {ratio(report.current_ratio)}")
             print(f"   • Debt/Equity: {ratio(report.debt_to_equity)}")
             print(f"   • ROE: {pct(report.return_on_equity)}")
             print(f"   • FCF: {fmt(report.free_cash_flow)}")
             
-            # Detailed Statement Logging (Only for most recent year to save space, or all? User asked to print out reports. Let's print all but maybe less specific detail if too long. But user wants data.)
-            # Let's print full detail for all years as requested.
+            # Industry-specific logging
+            from .financial_models import (
+                CorporateIncomeStatement, BankIncomeStatement, REITIncomeStatement,
+                CorporateBalanceSheet, BankBalanceSheet, REITBalanceSheet,
+                CorporateCashFlow, REITCashFlow
+            )
+            
+            print(f"   📉 Income Statement ({report.fiscal_period}):")
+            if isinstance(report.is_, CorporateIncomeStatement):
+                print(f"     - Revenue: {fmt(report.is_.revenue)}")
+                print(f"     - Gross Profit: {fmt(report.is_.gross_profit)}")
+                print(f"     - Operating Income: {fmt(report.is_.operating_income)}")
+                print(f"     - Net Income: {fmt(report.is_.net_income)}")
+            elif isinstance(report.is_, BankIncomeStatement):
+                print(f"     - Net Interest Income: {fmt(report.is_.net_interest_income)}")
+                print(f"     - Non-Interest Income: {fmt(report.is_.non_interest_income)}")
+                print(f"     - Total Revenue: {fmt(report.is_.total_revenue)}")
+                print(f"     - Net Interest Margin: {pct(report.is_.net_interest_margin)}")
+                print(f"     - Efficiency Ratio: {pct(report.is_.efficiency_ratio)}")
+                print(f"     - Net Income: {fmt(report.is_.net_income)}")
+            elif isinstance(report.is_, REITIncomeStatement):
+                print(f"     - Rental Income: {fmt(report.is_.rental_income)}")
+                print(f"     - FFO (Funds From Operations): {fmt(report.is_.funds_from_operations)}")
+                print(f"     - Net Income: {fmt(report.is_.net_income)}")
+            
+            # Detailed Statement Logging
             print(f"   📊 Balance Sheet ({report.fiscal_period}):")
             print(f"     - Cash & Eq: {fmt(report.bs.cash_and_equivalents)}")
-            print(f"     - Total Liquidity: {fmt(report.bs.total_liquidity)} (inc. Mkt Securities)")
             print(f"     - Total Assets: {fmt(report.bs.total_assets)}")
             print(f"     - Total Debt: {fmt(report.bs.total_debt)}")
             print(f"     - Total Equity: {fmt(report.bs.total_equity)}")
-
-            print(f"   📉 Income Statement ({report.fiscal_period}):")
-            print(f"     - Revenue: {fmt(report.is_.revenue)}")
-            print(f"     - Gross Profit: {fmt(report.is_.gross_profit)}")
-            print(f"     - Operating Income: {fmt(report.is_.operating_income)}")
-            print(f"     - Net Income: {fmt(report.is_.net_income)}")
+            
+            if isinstance(report.bs, CorporateBalanceSheet):
+                print(f"     - Current Assets: {fmt(report.bs.assets_current)}")
+                print(f"     - Current Liabilities: {fmt(report.bs.liabilities_current)}")
+                print(f"     - Inventory: {fmt(report.bs.inventory)}")
+                print(f"     - Receivables: {fmt(report.bs.receivables_net)}")
+            elif isinstance(report.bs, BankBalanceSheet):
+                print(f"     - Total Deposits: {fmt(report.bs.total_deposits)}")
+                print(f"     - Net Loans: {fmt(report.bs.net_loans)}")
+            elif isinstance(report.bs, REITBalanceSheet):
+                print(f"     - Real Estate Assets: {fmt(report.bs.real_estate_assets)}")
+                print(f"     - Unsecured Debt: {fmt(report.bs.unsecured_debt)}")
+                print(f"     - Mortgages: {fmt(report.bs.mortgages)}")
 
             print(f"   💸 Cash Flow ({report.fiscal_period}):")
             print(f"     - OCF: {fmt(report.cf.ocf)}")
-            print(f"     - Capex: {fmt(report.cf.capex)}")
-            print(f"     - Dividends: {fmt(report.cf.dividends_paid)}")
+            print(f"     - Dividends Paid: {fmt(report.cf.dividends_paid)}")
+            if isinstance(report.cf, CorporateCashFlow):
+                print(f"     - Capex: {fmt(report.cf.capex)}")
+            elif isinstance(report.cf, REITCashFlow):
+                print(f"     - RE Investment: {fmt(report.cf.real_estate_investment)}")
+
             
             reports_data.append(report.model_dump())
 

@@ -20,12 +20,12 @@ class IntentExtraction(BaseModel):
     company_name: Optional[str] = Field(None, description="The name of the company or ticker mentioned by the user.")
     ticker: Optional[str] = Field(None, description="The stock ticker if explicitly mentioned.")
     is_valuation_request: bool = Field(..., description="Whether the user is asking for a financial valuation.")
-    reasoning: str = Field(..., description="Brief reasoning for the extraction.")
+    reasoning: Optional[str] = Field(None, description="Brief reasoning for the extraction.")
 
 class SearchExtraction(BaseModel):
     """Extracted ticker candidates from web search."""
     candidates: List[TickerCandidate] = Field(default_factory=list, description="List of potential stock tickers found in search results.")
-    reasoning: str = Field(..., description="Brief reasoning for why these candidates were chosen.")
+    reasoning: Optional[str] = Field(None, description="Brief reasoning for why these candidates were chosen.")
 
 def _heuristic_extract(query: str) -> IntentExtraction:
     """
@@ -90,10 +90,12 @@ def extract_candidates_from_search(query: str, search_results: str) -> List[Tick
     """
     try:
         llm = ChatOpenAI(
-            model="openai/gpt-oss-20b:free",
+            model="xiaomi/mimo-v2-flash:free",
             temperature=0,
             base_url="https://openrouter.ai/api/v1",
-            api_key=os.getenv("OPENROUTER_API_KEY")
+            api_key=os.getenv("OPENROUTER_API_KEY"),
+            timeout=30,
+            max_retries=2
         )
         
         prompt = ChatPromptTemplate.from_messages([
@@ -126,10 +128,12 @@ def extract_intent(query: str) -> IntentExtraction:
     """
     try:
         llm = ChatOpenAI(
-            model="openai/gpt-oss-20b:free",
+            model="xiaomi/mimo-v2-flash:free",
             temperature=0,
             base_url="https://openrouter.ai/api/v1",
-            api_key=os.getenv("OPENROUTER_API_KEY")
+            api_key=os.getenv("OPENROUTER_API_KEY"),
+            timeout=30,
+            max_retries=2
         )
         
         prompt = ChatPromptTemplate.from_messages([
@@ -153,5 +157,5 @@ Return the IntentExtraction object.
     except Exception as e:
         import logging
         logger = logging.getLogger(__name__)
-        logger.warning(f"LLM Extraction failed (likely quota/rate limit): {e}. Using fallback.")
+        logger.warning(f"LLM Extraction failed: {e}. Using fallback.")
         return _heuristic_extract(query)
