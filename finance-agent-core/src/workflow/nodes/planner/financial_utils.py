@@ -12,6 +12,7 @@ from .financial_models import (
     BankBalanceSheet,
     REITBalanceSheet,
     BalanceSheetVariant,
+    TraceableField,
     
     # Income Statement Models
     IncomeStatementBase,

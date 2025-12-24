@@ -318,6 +318,78 @@ class AutoExtractModel(BaseModel):
             "is_calculated": False
         }
 
+    # @staticmethod
+    # def _internal_get_fact_smart(
+    #     raw_data: Dict[str, Any],
+    #     standard_tags: List[str],
+    #     fuzzy_keywords: List[str],
+    #     exclude_keywords: List[str]
+    # ) -> Dict[str, Any]:
+    #     """
+    #     [DEBUG VERSION] 帶有暴力掃描打印功能的提取邏輯
+    #     """
+    #     # Phase 1: Standard tags (Exact Match)
+    #     for tag in standard_tags:
+    #         val = raw_data.get(tag)
+    #         if val is not None:
+    #             return {
+    #                 "value": float(val),
+    #                 "source_tags": [tag],
+    #                 "is_calculated": False,
+    #                 "formula_logic": "Exact Match"
+    #             }
+
+    #     # --- 🕵️ 暴力掃描啟動 (僅針對證券/投資類) ---
+    #     is_searching_securities = any(k in str(standard_tags) for k in ['Securities', 'Investment'])
+        
+    #     if is_searching_securities:
+    #         print(f"\n--- 🕵️ 暴力掃描啟動: 正在尋找證券相關數據 ---")
+    #         found_anything = False
+    #         for k, v in raw_data.items():
+    #             if k == '_raw_df': continue
+    #             # 尋找包含核心關鍵字的標籤，且數值 > 1億 (1e8) 避免雜訊
+    #             k_lower = k.lower()
+    #             if ('securities' in k_lower or 'investment' in k_lower) and isinstance(v, (int, float)) and abs(v) > 1e8:
+    #                 print(f"  [FOUND POTENTIAL] 標籤: {k} | 數值: {v/1e9:.3f} B")
+    #                 found_anything = True
+    #         if not found_anything:
+    #             print("  ❌ 暴力掃描結果：raw_data 中完全沒有包含 Securities/Investment 且大於 0.1B 的數據")
+    #         print(f"----------------------------------------\n")
+
+    #     # Phase 2: Fuzzy matching
+    #     if fuzzy_keywords:
+    #         pattern = "".join([f"(?=.*{k})" for k in fuzzy_keywords])
+    #         matches = []
+    #         for raw_tag_str in raw_data.keys():
+    #             if raw_tag_str == '_raw_df': continue
+    #             if exclude_keywords and any(exc.lower() in raw_tag_str.lower() for exc in exclude_keywords):
+    #                 continue
+    #             if re.search(pattern, raw_tag_str, re.IGNORECASE):
+    #                 matches.append(raw_tag_str)
+            
+    #         if matches:
+    #             def scoring_key(tag):
+    #                 score = len(tag)
+    #                 lower_tag = tag.lower()
+    #                 if 'total' in lower_tag: score -= 100
+    #                 if 'net' in lower_tag: score -= 50
+    #                 if 'current' in lower_tag: score -= 20
+    #                 return score
+
+    #             matches.sort(key=scoring_key)
+    #             best_tag = matches[0]
+    #             val = raw_data.get(best_tag)
+                
+    #             if val is not None:
+    #                 return {
+    #                     "value": float(val),
+    #                     "source_tags": [best_tag],
+    #                     "is_calculated": False,
+    #                     "formula_logic": f"Fuzzy Match: {best_tag}"
+    #                 }
+
+    #     return {"value": None, "source_tags": [], "is_calculated": False}
+
 
 # ==========================================
 # 1. Base Configuration
@@ -372,9 +444,19 @@ class BalanceSheetBase(AutoExtractModel):
         default_factory=TraceableField,
         json_schema_extra={
             'xbrl_tags': [
+                # 1. 廣義總項 (優先)
                 'us-gaap:MarketableSecuritiesCurrent',
                 'us-gaap:ShortTermInvestments',
+                'us-gaap:InvestmentSecuritiesCurrent',
+                
+                # 2. 類型總項 (次優先：所有備供出售債券)
+                'us-gaap:AvailableForSaleSecuritiesDebtSecuritiesCurrent',
                 'us-gaap:AvailableForSaleSecuritiesCurrent',
+                
+                # 3. 時間細項 (保底：Visa 常用，若上方總項都沒抓到才用這個)
+                'us-gaap:AvailableForSaleSecuritiesDebtMaturitiesWithinOneYearFairValue',
+                
+                # 4. 複合標籤 (最後的掙扎)
                 'us-gaap:CashCashEquivalentsRestrictedCashAndCashEquivalentsAndShortTermInvestments'
             ]
         }
@@ -383,10 +465,19 @@ class BalanceSheetBase(AutoExtractModel):
         default_factory=TraceableField,
         json_schema_extra={
             'xbrl_tags': [
+                # 1. 廣義總項 (最完整)
                 'us-gaap:MarketableSecuritiesNoncurrent',
-                'us-gaap:AvailableForSaleSecuritiesNoncurrent',
-                'us-gaap:HeldToMaturitySecuritiesNoncurrent',
-                'us-gaap:LongTermInvestments'
+                'us-gaap:LongTermInvestments',
+                
+                # 2. 類型總項
+                'us-gaap:AvailableForSaleSecuritiesDebtSecuritiesNoncurrent',
+                'us-gaap:HeldToMaturitySecuritiesDebt',
+                
+                # 3. 時間細項 (Visa 常用，僅作為保底)
+                # 注意：這可能只是非流動資產的一部分，所以必須放在總項之後
+                'us-gaap:AvailableForSaleSecuritiesDebtMaturitiesAfterOneThroughFiveYearsFairValue',
+                'us-gaap:AvailableForSaleSecuritiesDebtMaturitiesAfterFiveThroughTenYearsFairValue',
+                'us-gaap:AvailableForSaleSecuritiesDebtMaturitiesAfterTenYearsFairValue'
             ]
         }
     )
@@ -674,6 +765,39 @@ class BankBalanceSheet(BalanceSheetBase):
             ]
         }
     )
+    
+    # --- Bank Liquidity Fields (JPM Fix) ---
+    cash_and_due_from_banks: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={'xbrl_tags': [
+            'us-gaap:CashAndDueFromBanks',
+            'us-gaap:CashCashEquivalentsRestrictedCashAndCashEquivalents'
+        ]}
+    )
+    interest_bearing_deposits: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={'xbrl_tags': [
+            'us-gaap:InterestBearingDepositsInBanks',
+            'us-gaap:DepositsWithBanks'
+        ]}
+    )
+    securities: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={'xbrl_tags': [
+            'us-gaap:AvailableForSaleSecuritiesDebtSecurities',
+            'us-gaap:HeldToMaturitySecuritiesDebt'
+        ]}
+    )
+
+    @computed_field
+    def total_liquidity(self) -> TraceableField:
+        """
+        Bank Liquidity = Cash & Due + Interest Bearing + Securities (AFS/HTM).
+        Overrides standard corporate liquidity logic.
+        """
+        result = self.cash_and_due_from_banks + self.interest_bearing_deposits + self.securities
+        result.formula_logic = "Cash & Due + Interest Bearing + Securities"
+        return result
 
 
 class REITBalanceSheet(BalanceSheetBase):
@@ -695,15 +819,21 @@ class REITBalanceSheet(BalanceSheetBase):
         default_factory=TraceableField,
         json_schema_extra={
             'xbrl_tags': [
-                'us-gaap:UnsecuredDebt', 
-                'us-gaap:SeniorNotes',
-                'us-gaap:LongTermDebtExcludingCurrentPortion',
-                'us-gaap:LongTermDebtNoncurrent',
+               # 1. 對 REIT 最精確的總債務標籤 (按優先級排列)
+                'us-gaap:LongTermDebtNoncurrent', 
                 'us-gaap:LongTermDebtAndFinanceLeaseObligations',
-                'us-gaap:LongTermDebt'
+                'us-gaap:LongTermDebt',
+                
+                # 2. 次級細項標籤
+                'us-gaap:SeniorNotes',
+                'us-gaap:UnsecuredDebt',
+                'us-gaap:NotesPayable'
             ],
-            'fuzzy_keywords': ['SeniorNotes', 'Unsecured', 'NotesPayable'],
-            'exclude_keywords': ['Interest', 'Expense', 'Amortization', 'Receivable', 'Issuance']
+            'fuzzy_keywords': ['SeniorNotes', 'Unsecured', 'NotesPayable', 'NotesAndBonds'],
+            'exclude_keywords': [
+                'Interest', 'Expense', 'Amortization', 'Receivable', 'Issuance', 
+                'Encumbrances', 'Premiums', 'Discount', 'Adjustments' # 👈 新增排除關鍵字
+            ]
         }
     )
     mortgages: TraceableField = Field(
@@ -841,7 +971,11 @@ class BankIncomeStatement(IncomeStatementBase):
     
     net_interest_income: TraceableField = Field(
         default_factory=TraceableField,
-        json_schema_extra={'xbrl_tags': ['us-gaap:NetInterestIncome']}
+        json_schema_extra={'xbrl_tags': [
+            'us-gaap:InterestIncomeExpenseNet', 
+            'jpm:NetInterestIncome',
+            'us-gaap:NetInterestIncome'
+        ]}
     )
     non_interest_income: TraceableField = Field(
         default_factory=TraceableField,
@@ -851,6 +985,17 @@ class BankIncomeStatement(IncomeStatementBase):
         default_factory=TraceableField,
         json_schema_extra={'xbrl_tags': ['us-gaap:ProvisionForLoanLeaseAndOtherLosses']}
     )
+    operating_expenses: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={'xbrl_tags': [
+            'us-gaap:NoninterestExpense', 
+            'jpm:TotalNoninterestExpense'
+        ]}
+    )
+    interest_expense: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={'xbrl_tags': ['us-gaap:InterestExpense']}
+    )
     avg_earning_assets: TraceableField = Field(
         default_factory=TraceableField,
         description="Calculated from balance sheet"
@@ -859,6 +1004,7 @@ class BankIncomeStatement(IncomeStatementBase):
     @computed_field
     def total_revenue(self) -> TraceableField:
         """Bank total revenue = Net Interest Income + Non-Interest Income"""
+        # Note: Some banks report Total Revenue directly, but calculating ensures components exist
         result = self.net_interest_income + self.non_interest_income
         result.formula_logic = "NII + Non-Interest Income"
         return result
@@ -1249,7 +1395,22 @@ class FinancialHealthReport(BaseModel):
     # --------------------------------------------------------
     @computed_field
     def free_cash_flow(self) -> TraceableField:
-        """FCF = Operating Cash Flow - Capex"""
+        """
+        FCF Strategy:
+        - Corporate: OCF - Capex
+        - Bank: Net Income - Dividends (Retained Earnings)
+        - REIT: AFFO (Approximated as FFO - Capex)
+        """
+        # Bank Override: Banks don't use OCF/Capex structurally
+        if isinstance(self.is_, BankIncomeStatement):
+             result = self.is_.net_income - self.cf.dividends_paid
+             result.formula_logic = "Net Income - Dividends (Bank FCF)"
+             return result
+
+        if isinstance(self.cf, REITCashFlow):
+             return self.cf.free_cash_flow
+
+        # Corporate / Default
         result = self.cf.ocf - self.cf.capex
         result.formula_logic = "OCF - Capex"
         return result
