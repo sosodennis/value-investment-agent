@@ -990,7 +990,12 @@ class IncomeStatementBase(AutoExtractModel):
     net_income: TraceableField = Field(
         default_factory=TraceableField,
         json_schema_extra={
-            'xbrl_tags': ['us-gaap:NetIncomeLoss', 'us-gaap:ProfitLoss']
+            'xbrl_tags': [
+                # 最精準：歸屬於普通股東的淨利
+                'us-gaap:NetIncomeLossAvailableToCommonStockholdersBasic',
+                # 次精準：歸屬於母公司的淨利
+                'us-gaap:NetIncomeLoss',
+            ]
         }
     )
     operating_expenses: TraceableField = Field(
