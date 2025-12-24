@@ -273,47 +273,66 @@ class AutoExtractModel(BaseModel):
         regex_patterns: List[str] = None
     ) -> Dict[str, Any]:
         """
-        Smart extraction pipeline:
-        1. Standard Tags (Exact)
-        2. Regex Patterns (Structured)
-        3. Fuzzy Keywords (Broad)
+        Smart extraction pipeline with MAX STRATEGY:
+        1. Standard Tags: Scan ALL tags, return the one with the LARGEST absolute value.
+        2. Regex Patterns: Support deep scan in dictionary and raw_df.
+        3. Fuzzy Keywords: Fallback.
         """
         
-        # --- Phase 1: Standard tags (Exact Match) ---
-        # 優先級最高，因為這是人工確認過的正確標籤
-        for tag in standard_tags:
-            val = raw_data.get(tag)
-            # [FIX] Allow 0.0 to be a valid value!
-            if val is not None:
-                return {
-                    "value": float(val),
-                    "source_tags": [tag],
-                    "is_calculated": False,
-                    "formula_logic": "Exact Match"
-                }
-
-        # 預處理排除關鍵字，提升效能
+        # 預處理排除關鍵字
         is_excluded = lambda k: False
         if exclude_keywords:
-            # 轉換為小寫以進行不區分大小寫的比對
             exc_lower = [exc.lower() for exc in exclude_keywords]
             is_excluded = lambda k: any(exc in k.lower() for exc in exc_lower)
 
-        # 獲取所有 keys 一次 (如果 raw_data 很大，這步避免重複調用 keys())
-        available_keys = list(raw_data.keys())
+        # --- Phase 1: Standard Tags (Max Value Strategy) ---
+        # 核心修復：不再是找到第一個就返回，而是找出候選名單中「數值最大」的那個。
+        # 這解決了 EQIX (PP&E為主) 與 VICI (RealEstate為主) 的衝突。
+        valid_candidates = []
+        
+        for tag in standard_tags:
+            val = raw_data.get(tag)
+            if val is not None:
+                try:
+                    val_float = float(val)
+                    valid_candidates.append({
+                        "value": val_float,
+                        "tag": tag
+                    })
+                except (ValueError, TypeError):
+                    continue
+        
+        if valid_candidates:
+            # 按絕對值大小降序排列 (ABS)，取最大者
+            # 理由：資本支出無論是正數還是負數，我們都想要捕捉那個「主要活動」
+            valid_candidates.sort(key=lambda x: abs(x['value']), reverse=True)
+            best_match = valid_candidates[0]
+            
+            return {
+                "value": best_match['value'],
+                "source_tags": [best_match['tag']],
+                "is_calculated": False,
+                "formula_logic": "Standard Tag (Max Value Strategy)"
+            }
 
-        # --- Phase 2: Regex Matching (Structured Pattern) ---
-        # [NEW] 解決 REIT "PaymentsToAcquire" vs "ProceedsFromSale" 的方向性問題
+        # --- Phase 2: Regex Matching (Structured Pattern & Deep Scan) ---
         if regex_patterns:
+            # 準備搜尋目標：包含 Dict Keys 和 Raw DataFrame (針對 VICI 隱形資產)
+            search_targets = list(raw_data.keys())
+            raw_df = raw_data.get('_raw_df')
+            
+            # 如果有 raw_df，把裡面的概念名稱也加進來搜尋 (去重)
+            if isinstance(raw_df, pd.DataFrame):
+                # 只取 concept 欄位
+                raw_concepts = raw_df['concept'].dropna().unique().tolist()
+                # 簡單合併，這裡不做嚴格去重以節省效能，Regex search 沒影響
+                search_targets.extend(raw_concepts)
+
             for pattern in regex_patterns:
                 matches = []
-                for key in available_keys:
+                # 使用 set 去重避免重複搜尋
+                for key in set(search_targets):
                     # 1. 排除檢查
-                    # if key == '_raw_df' or is_excluded(key):
-                    #    continue
-                    # Note: raw_data passed here is a dict of tag:val, so '_raw_df' shouldn't be here if handled by extract_from_raw_xbrl
-                    # But safety check doesn't hurt. 
-                    
                     if key == '_raw_df' or is_excluded(key):
                         continue
                     
@@ -321,12 +340,22 @@ class AutoExtractModel(BaseModel):
                     if re.search(pattern, key, re.IGNORECASE):
                         matches.append(key)
                 
-                # 如果這個 pattern 有匹配到結果
                 if matches:
-                    # 使用統一的評分邏輯選出最好的 (例如選最短的，或含 Net 的)
+                    # 評分邏輯 (優先選 Total, Net, 其次選長度短的)
                     matches.sort(key=AutoExtractModel._score_candidate_tag)
                     best_tag = matches[0]
+                    
+                    # 取值邏輯：先看 Dict，沒有再看 Raw DF
                     val = raw_data.get(best_tag)
+                    
+                    if val is None and isinstance(raw_df, pd.DataFrame):
+                        # 從 DataFrame 撈取最大值 (針對 VICI 維度數據)
+                        mask = (raw_df['concept'] == best_tag) & (raw_df['value'].notna())
+                        if mask.any():
+                            # 取絕對值最大的那一行
+                            best_rows = raw_df[mask].copy()
+                            best_rows['abs_val'] = best_rows['value'].abs()
+                            val = best_rows.sort_values('abs_val', ascending=False).iloc[0]['value']
                     
                     if val is not None:
                         return {
@@ -337,9 +366,8 @@ class AutoExtractModel(BaseModel):
                         }
 
         # --- Phase 3: Fuzzy Matching (Broad Keywords) ---
-        # 保底手段，只要包含所有關鍵字即可 (無順序/結構限制)
         if fuzzy_keywords:
-            # 構建 Lookahead Regex: (?=.*KeyA)(?=.*KeyB)
+            available_keys = list(raw_data.keys()) # Fuzzy 只搜 Dict，避免過慢
             fuzzy_regex = "".join([f"(?=.*{k})" for k in fuzzy_keywords])
             matches = []
             
@@ -1245,64 +1273,60 @@ class REITCashFlow(CashFlowStatementBase):
     real_estate_investment: TraceableField = Field(
         default_factory=TraceableField,
         json_schema_extra={
-            # 1. 標準標籤 (Standard Tags)
-            # 包含：收購 (Acquisition) + 開發 (Development) + 在建工程 (CIP)
+            # 🚨 優先級排序：基礎設施 (大) -> 開發 (中) -> 傳統收購 (基底)
             'xbrl_tags': [
-                # 👇 新增：這是所有基礎設施 REIT (EQIX, AMT) 的核心支出
+                # --- Priority 1: 基礎設施與設備 (EQIX, AMT, CCI 核心) ---
+                # 這是修復 EQIX $30億 支出的關鍵
+                'us-gaap:PaymentsToAcquireOtherPropertyPlantAndEquipment',
+                'us-gaap:PaymentsToAcquireProductiveAssets',
                 'us-gaap:PaymentsToAcquirePropertyPlantAndEquipment',
-                'us-gaap:PaymentsForCapitalImprovements',
+                
+                # --- Priority 2: 開發與建設 (PLD, ARE 核心) ---
+                # 這是 PLD 幾十億開發支出的關鍵
                 'us-gaap:PaymentsForConstructionInProcess',
-                # 傳統標籤
+                'us-gaap:PaymentsForRealEstateDevelopment',
+                'us-gaap:PaymentsForCapitalImprovements',
+                'us-gaap:RealEstateDevelopmentCosts',
+                
+                # --- Priority 3: 傳統房地產收購 (O, VICI, SPG 核心) ---
+                # 這是最通用的標籤，放在最後作為保底
                 'us-gaap:PaymentsToAcquireRealEstate',
                 'us-gaap:PaymentsToAcquireProperties',
-                'us-gaap:PaymentsToAcquireProductiveAssets',
-                # 👇 新增：針對 PLD, ARE 等開發商的標籤
-                'us-gaap:PaymentsForRealEstateDevelopment',
-                'us-gaap:RealEstateDevelopmentCosts',
+                'o:RealEstateAcquisitions' # 包含特定公司前綴
             ],
             
-            # 2. 結構化 Regex (Structured Regex - 核心引擎)
+            # 2. 結構化 Regex (邏輯必須與上方 Tag 優先級一致)
             'regex_patterns': [
-                # --- 策略 A: 收購類 (Acquisitions) ---
-                # 適用對象: Realty Income (O), VICI, Simon Property (SPG)
-                # 邏輯: 鎖定 "收購" 行為
-                r'(?i).*:RealEstateAcquisitions',          # 捕捉 o:RealEstateAcquisitions
-                r'(?i).*:PaymentsToAcquire.*RealEstate',   # 最標準的寫法
-                r'(?i).*:AcquisitionOf.*RealEstate',       # 變體寫法
-                r'(?i).*:PaymentsToAcquire.*Properties',   # 擴展：有些公司只寫 Properties
+                # [Group 1] 抓取 "Other PP&E" 和 "Productive Assets" (EQIX 補丁)
+                r'(?i).*:PaymentsToAcquire.*Other.*PropertyPlantAndEquipment',
+                r'(?i).*:PaymentsToAcquire.*ProductiveAssets',
                 
-                # --- 策略 B: 開發與建設類 (Development & Construction) ---
-                # 適用對象: Prologis (PLD), Equinix (EQIX), Alexandria (ARE)
-                # 邏輯: 鎖定 "蓋房" 與 "改良" 行為
-                r'(?i).*:Payments.*Construction.*',        # 捕捉 "Payments for Construction"
-                r'(?i).*:Development.*Expenditures.*',     # 捕捉 "Development Expenditures"
-                r'(?i).*:AdditionsTo.*Properties',         # 捕捉 "Additions to Real Estate" (常見 GAAP 用語)
-                r'(?i).*:ImprovementsTo.*RealEstate',      # 捕捉 "Improvements" (資本改良支出)
-
-                # --- 策略 C: 資本支出兜底 (CapEx) ---
-                # 邏輯: 只要是與房地產相關的資本支出
-                r'(?i).*:CapitalExpenditure.*RealEstate',
-                r'(?i).*:CapitalExpenditure.*Properties'
-
-                # 👇 新增：抓取 PP&E 支出
+                # [Group 2] 抓取通用 PP&E 和資本支出
                 r'(?i).*:PaymentsToAcquire.*PropertyPlantAndEquipment',
-                r'(?i).*:PaymentsFor.*CapitalImprovements'
+                r'(?i).*:CapitalExpenditure.*', 
+                
+                # [Group 3] 抓取建設與開發 (Construction/Development)
+                r'(?i).*:Payments.*Construction.*',
+                r'(?i).*:Development.*Expenditures.*',
+                r'(?i).*:AdditionsTo.*Properties',
+                r'(?i).*:ImprovementsTo.*RealEstate',
+
+                # [Group 4] 抓取傳統收購 (RealEstate Acquisitions)
+                r'(?i).*:RealEstateAcquisitions',
+                r'(?i).*:PaymentsToAcquire.*RealEstate',
+                r'(?i).*:AcquisitionOf.*RealEstate',
+                r'(?i).*:PaymentsToAcquire.*Properties'
             ],
             
-            # 3. 模糊匹配 (Fuzzy Matching)
-            # 🚫 保持留空！現金流量表對方向性要求極高，模糊匹配容易把 "Proceeds" (賣出) 當成投資。
+            # 3. 保持留空 (嚴格模式)
             'fuzzy_keywords': [], 
             
-            # 4. 全局排除 (Global Excludes - 防火牆)
+            # 4. 全局排除 (安全網)
             'exclude_keywords': [
-                # 🛑 排除現金流入 (賣出資產 = 錢進來，不是投資)
-                'Proceeds', 'Sale', 'Disposal', 'Divestiture', 
-                
-                # 🛑 排除非現金項目 (折舊不是現金流出)
-                'AccumulatedDepreciation', 'Amortization', 'Depreciation',
-                
-                # 🛑 排除金融操作 (防止抓到抵押貸款發放或償還)
-                'Origination', 'Principal', 'Borrowing', 'Repayment'
+                'Proceeds', 'Sale', 'Disposal', 'Divestiture', # 排除現金流入
+                'AccumulatedDepreciation', 'Amortization', 'Depreciation', # 排除非現金
+                'Origination', 'Principal', 'Borrowing', 'Repayment', # 排除借貸
+                'Maintenance' # 可選：如果只想看擴張性支出，可排除維護費 (但通常這很難分)
             ]
         }
     )
