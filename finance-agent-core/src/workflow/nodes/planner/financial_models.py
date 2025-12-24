@@ -165,30 +165,83 @@ class AutoExtractModel(BaseModel):
 
     @staticmethod
     def _df_to_dict(df: pd.DataFrame) -> Dict[str, float]:
-        """Convert XBRL DataFrame to tag:value dictionary"""
-        # Filter for consolidated data (no dimensions)
+        """
+        Convert XBRL DataFrame to tag:value dictionary with Dimension Penetration.
+        Prioritizes consolidated data but allows dimensioned data if no consolidated value exists.
+        """
+        # --- Stage 1: Separate Datasets ---
         dim_cols = [c for c in df.columns if c.startswith('dim_')]
+        
+        # A. Pure Consolidated (All dimensions are NaN)
         if dim_cols:
             consolidated_mask = df[dim_cols].isna().all(axis=1)
-            clean_df = df[consolidated_mask]
+            consolidated_df = df[consolidated_mask]
         else:
-            clean_df = df
-
-        # Create dict from most recent values
+            consolidated_df = df
+        
+        # B. Dimensioned Data (For fallback)
+        # Relevant axes for Balance Sheet details (Investments, Debt)
+        special_axes = [
+            'dim_us-gaap_InvestmentTypeAxis', 
+            'dim_us-gaap_DebtInstrumentAxis',
+        ]
+        relevant_dims = [d for d in dim_cols if d in special_axes]
+        
+        # --- Stage 2: Extraction Logic ---
         result = {}
-        if 'concept' in clean_df.columns and 'value' in clean_df.columns:
-            for concept in clean_df['concept'].unique():
-                concept_rows = clean_df[clean_df['concept'] == concept]
-                # Sort by date to get most recent
-                sort_col = 'period_instant' if 'period_instant' in concept_rows.columns else 'period_end'
-                if sort_col in concept_rows.columns:
-                    concept_rows = concept_rows.sort_values(by=sort_col, ascending=False)
-                if not concept_rows.empty:
-                    try:
-                        result[concept] = float(concept_rows.iloc[0]['value'])
-                    except (ValueError, TypeError):
-                        pass
+        
+        if 'concept' not in df.columns or 'value' not in df.columns:
+            return result
+
+        # Iterate through all available concepts
+        all_concepts = df['concept'].unique()
+        
+        for concept in all_concepts:
+            # Priority 1: Consolidated Data
+            c_rows = consolidated_df[consolidated_df['concept'] == concept]
+            
+            if not c_rows.empty:
+                val = AutoExtractModel._get_latest_value(c_rows)
+                if val is not None:
+                    result[concept] = val
+                    continue # Found consolidated, skip to next concept
+            
+            # Priority 2: Dimension Penetration
+            # Only for "risky" fields like investments and debt where companies often hide data in axes
+            # We strictly check if the concept contains relevant keywords to avoid pollution
+            if any(k in str(concept).lower() for k in ['investment', 'debt', 'securities', 'note']):
+                for axis in relevant_dims:
+                    # Find rows where THIS axis is set, but ALL OTHER axes are NaN
+                    # This prevents picking up complex multi-dimensional segments
+                    other_dims = [d for d in dim_cols if d != axis]
+                    
+                    if other_dims:
+                        pierce_mask = (df['concept'] == concept) & \
+                                      (df[axis].notna()) & \
+                                      (df[other_dims].isna().all(axis=1))
+                    else:
+                        pierce_mask = (df['concept'] == concept) & (df[axis].notna())
+                    
+                    p_rows = df[pierce_mask]
+                    if not p_rows.empty:
+                        val = AutoExtractModel._get_latest_value(p_rows)
+                        if val is not None:
+                            result[concept] = val
+                            # logger.debug(f"💎 Pierced dimension {axis} for {concept}")
+                            break # Found a valid dimension value, stop looking
+                            
         return result
+
+    @staticmethod
+    def _get_latest_value(rows: pd.DataFrame) -> Optional[float]:
+        """Helper to extract the most recent value from a set of rows"""
+        sort_col = 'period_instant' if 'period_instant' in rows.columns else 'period_end'
+        if sort_col in rows.columns:
+            rows = rows.sort_values(by=sort_col, ascending=False)
+        try:
+            return float(rows.iloc[0]['value'])
+        except (ValueError, TypeError, IndexError):
+            return None
 
     @staticmethod
     def _internal_get_fact_smart(
@@ -204,7 +257,8 @@ class AutoExtractModel(BaseModel):
         # Phase 1: Standard tags (exact match)
         for tag in standard_tags:
             val = raw_data.get(tag)
-            if val is not None and val != 0:
+            # [FIX] Allow 0.0 to be a valid value!
+            if val is not None:
                 return {
                     "value": float(val),
                     "source_tags": [tag],
@@ -214,13 +268,11 @@ class AutoExtractModel(BaseModel):
 
         # Phase 2: Fuzzy matching
         if fuzzy_keywords:
-            # Build regex pattern (must contain all keywords)
+            # Build regex pattern (must contain ALL keywords)
             pattern = "".join([f"(?=.*{k})" for k in fuzzy_keywords])
             
             matches = []
-            for raw_tag in raw_data.keys():
-                raw_tag_str = str(raw_tag)
-                
+            for raw_tag_str in raw_data.keys():
                 # Check exclusions
                 if exclude_keywords and any(exc.lower() in raw_tag_str.lower() for exc in exclude_keywords):
                     continue
@@ -230,19 +282,36 @@ class AutoExtractModel(BaseModel):
                     matches.append(raw_tag_str)
             
             if matches:
-                # Prefer shorter tags (usually parent concepts)
-                matches.sort(key=len)
+                # [FIX] Weighted Scoring Strategy
+                # Prefer tags that look like "summary" tags (contain 'Total', 'Net')
+                # Penalize tags that might be details
+                def scoring_key(tag):
+                    score = len(tag)
+                    lower_tag = tag.lower()
+                    if 'total' in lower_tag: score -= 100  # Bonus for Totals
+                    if 'net' in lower_tag: score -= 50     # Bonus for Net
+                    if 'current' in lower_tag: score -= 20 # Slight bonus for Current (usually what we want here)
+                    return score
+
+                matches.sort(key=scoring_key)
                 best_tag = matches[0]
                 val = raw_data.get(best_tag)
-                if val is not None and val != 0:
+                
+                if val is not None:
                     return {
                         "value": float(val),
                         "source_tags": [best_tag],
                         "is_calculated": False,
-                        "formula_logic": f"Fuzzy Match: {fuzzy_keywords}"
+                        "formula_logic": f"Fuzzy Match: {fuzzy_keywords} (Matched: {best_tag})"
                     }
 
         # Phase 3: Not found
+        # Diagnostic: Log available keys if this is a critical missing field
+        if raw_data:
+             if any(k in str(standard_tags) for k in ['Debt', 'Investment', 'Securities']):
+                # logger.debug(f"Available tags for missing field: {list(raw_data.keys())[:20]}...")
+                pass
+
         return {
             "value": None,
             "source_tags": [],
@@ -305,7 +374,8 @@ class BalanceSheetBase(AutoExtractModel):
             'xbrl_tags': [
                 'us-gaap:MarketableSecuritiesCurrent',
                 'us-gaap:ShortTermInvestments',
-                'us-gaap:AvailableForSaleSecuritiesCurrent'
+                'us-gaap:AvailableForSaleSecuritiesCurrent',
+                'us-gaap:CashCashEquivalentsRestrictedCashAndCashEquivalentsAndShortTermInvestments'
             ]
         }
     )
@@ -411,6 +481,18 @@ class CorporateBalanceSheet(BalanceSheetBase):
         result = self.debt_current + self.debt_noncurrent
         result.formula_logic = "ShortTerm + LongTerm Debt"
         return result
+
+    # --- Capital Commitments (Off-Balance Sheet / Notes) ---
+    purchase_obligations: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={
+            'xbrl_tags': [
+                'us-gaap:PurchaseCommitmentObligations',
+                'us-gaap:InventoryPurchaseObligations'
+            ],
+            'fuzzy_keywords': ['PurchaseObligations', 'SupplyCommitments', 'InventoryPurchase']
+        }
+    )
 
     # --- Adjusted Debt Logic for Asset-Light/OpCo Entities (e.g., MGM, SBUX) ---
     lease_liabilities_current: TraceableField = Field(
@@ -552,25 +634,9 @@ class CorporateBalanceSheet(BalanceSheetBase):
                 formula_logic=f"Liabilities residual too small ({residual_ratio:.1%}) for significant debt"
             )
             
-            # Since total_debt is computed, we can't set it directly? 
-            # Actually, total_debt is a computed_field based on debt_current + debt_noncurrent.
-            # So we should set the components to 0.0 if they are missing.
-            
+            # Use the inferred debt object which contains the residual ratio details
             if self.debt_current.value is None:
-                self.debt_current = TraceableField(
-                    value=0.0, 
-                    is_calculated=True, 
-                    source_tags=["Materiality_Inference"],
-                    formula_logic="Inferred Zero from Liabilities Residual"
-                )
-            
-            if self.debt_noncurrent.value is None:
-                self.debt_noncurrent = TraceableField(
-                    value=0.0, 
-                    is_calculated=True, 
-                    source_tags=["Materiality_Inference"],
-                    formula_logic="Inferred Zero from Liabilities Residual"
-                )
+                self.debt_current = inferred_debt.model_copy()
 
 
 class BankBalanceSheet(BalanceSheetBase):
@@ -721,6 +787,15 @@ class CorporateIncomeStatement(IncomeStatementBase):
     operating_income: TraceableField = Field(
         default_factory=TraceableField,
         json_schema_extra={'xbrl_tags': ['us-gaap:OperatingIncomeLoss']}
+    )
+    research_and_development: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={
+            'xbrl_tags': [
+                'us-gaap:ResearchAndDevelopmentExpense',
+                'us-gaap:ResearchAndDevelopmentExpenseExcludingAcquiredInProcessCost'
+            ]
+        }
     )
     interest_expense: TraceableField = Field(
         default_factory=TraceableField,
@@ -883,9 +958,19 @@ class CorporateCashFlow(CashFlowStatementBase):
         default_factory=TraceableField,
         json_schema_extra={
             'xbrl_tags': [
+                # 1. 這次發現的關鍵標籤 (針對 NVDA 等大型科技股)
+                'us-gaap:PaymentsToAcquireProductiveAssets',
+                
+                # 2. 標準現金流標籤
                 'us-gaap:PaymentsToAcquirePropertyPlantAndEquipment',
+                'us-gaap:PaymentsToAcquirePropertyPlantAndEquipmentAndIntangibleAssets',
+                
+                # 3. 其他備選
+                'us-gaap:CapitalExpenditures',
                 'us-gaap:CapitalExpendituresIncurredButNotYetPaid'
-            ]
+            ],
+            'fuzzy_keywords': ['PaymentsToAcquire', 'ProductiveAssets', 'PropertyPlant'],
+            'exclude_keywords': ['NetCashProvidedByUsedInInvestingActivities', 'Proceeds']
         }
     )
 
@@ -953,6 +1038,56 @@ class FinancialHealthReport(BaseModel):
     is_: IncomeStatementVariant
     cf: CashFlowStatementVariant
     
+    # --------------------------------------------------------
+    # 0. Capital Allocation (Hidden Capital)
+    # --------------------------------------------------------
+    @computed_field
+    def adjusted_capex(self) -> TraceableField:
+        """
+        Adjusted Capex = Capex + R&D + Purchase Obligations.
+        Reflects true capital intensity for fabless/tech companies by including
+        Research & Development and Off-Balance Sheet Purchase Commitments.
+        """
+        # 1. Base Capex (Available in Corporate and REIT CF)
+        base_capex_val = 0.0
+        capex_tags = []
+        
+        if hasattr(self.cf, 'capex'):
+            base_capex_val = self.cf.capex.value or 0.0
+            capex_tags = self.cf.capex.source_tags or []
+        
+        # 2. R&D (Corporate Income only)
+        rnd_val = 0.0
+        rnd_tags = []
+        if isinstance(self.is_, CorporateIncomeStatement):
+             rnd_val = self.is_.research_and_development.value or 0.0
+             rnd_tags = self.is_.research_and_development.source_tags or []
+             
+        # 3. Purchase Obligations (Corporate Balance Sheet only)
+        po_val = 0.0
+        po_tags = []
+        if isinstance(self.bs, CorporateBalanceSheet):
+             po_val = self.bs.purchase_obligations.value or 0.0
+             po_tags = self.bs.purchase_obligations.source_tags or []
+             
+        # Calculate Total
+        total_val = base_capex_val + rnd_val + po_val
+        
+        # Format formula string for traceability
+        # Show components in Billions for readability in the formula string
+        formula_desc = (
+            f"Capex ({base_capex_val/1e9:.1f}B) + "
+            f"R&D ({rnd_val/1e9:.1f}B) + "
+            f"Purchase Obligations ({po_val/1e9:.1f}B)"
+        )
+
+        return TraceableField(
+            value=total_val,
+            source_tags=capex_tags + rnd_tags + po_tags,
+            is_calculated=True,
+            formula_logic=formula_desc
+        )
+
     # --------------------------------------------------------
     # 1. Liquidity Pillar
     # --------------------------------------------------------

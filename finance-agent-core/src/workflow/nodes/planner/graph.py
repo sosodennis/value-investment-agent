@@ -284,6 +284,10 @@ def financial_health_node(state: AgentState) -> Command:
                 print(f"     - Capex: {fmt(report.cf.capex)}")
             elif isinstance(report.cf, REITCashFlow):
                 print(f"     - RE Investment: {fmt(report.cf.real_estate_investment)}")
+                
+            # Adjusted Capex (Hidden Capital)
+            if report.adjusted_capex and report.adjusted_capex.value:
+                print(f"     - Adjusted Capex: {fmt(report.adjusted_capex)}")
 
             
             reports_data.append(report.model_dump())
