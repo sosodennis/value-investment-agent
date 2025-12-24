@@ -387,59 +387,56 @@ class AutoExtractModel(BaseModel):
     #     regex_patterns: List[str] = None
     # ) -> Dict[str, Any]:
     #     """
-    #     [DEBUG VERSION] 暴力掃描版：找出 VICI 的資產到底藏在哪
+    #     [DEBUG SCAN] SPG 專用偵探版：尋找消失的股息與抵押貸款
     #     """
-    #     # Phase 1: Standard tags (Exact Match)
+    #     # Phase 1: 先讓標準流程跑一下 (為了不報錯)
     #     for tag in standard_tags:
     #         val = raw_data.get(tag)
-    #         if val is not None:
-    #             return {
-    #                 "value": float(val),
-    #                 "source_tags": [tag],
-    #                 "is_calculated": False,
-    #                 "formula_logic": "Exact Match"
-    #             }
+    #         pass
 
-    #     # --- 🕵️ 暴力掃描啟動 (針對資產/投資/租賃) ---
-    #     # 只要是找這些東西，就啟動掃描
-    #     monitor_keywords = ['RealEstate', 'Property', 'Lease', 'Investment', 'Asset']
-    #     is_searching_target = any(k in str(standard_tags) for k in monitor_keywords)
+    #     # --- 🕵️ 暴力掃描啟動 ---
+    #     # 我們只找這兩個關鍵字：分配/股息 (Distribution/Dividend) 和 擔保/抵押 (Secured/Mortgage)
+    #     monitor_keywords = ['Distribution', 'Dividend', 'Secured', 'Mortgage']
         
-    #     if is_searching_target:
+    #     # 檢查是否正在尋找相關欄位
+    #     target_check = str(standard_tags)
+    #     if any(k in target_check for k in ['Dividends', 'Mortgage', 'Secured']):
     #         print(f"\n--- 🕵️ [DEBUG SCAN] 正在尋找: {standard_tags[:1]}... ---")
             
-    #         # 1. 掃描字典 (raw_data keys)
+    #         # 1. 掃描字典 (Dict Keys)
     #         print("  [Scanning Dictionary Keys...]")
-    #         found_in_dict = False
+    #         found_data = []
     #         for k, v in raw_data.items():
     #             if k == '_raw_df': continue
     #             k_lower = k.lower()
-    #             # 關鍵字掃描 + 數值過濾 (> 10億，避免雜訊)
-    #             if any(w.lower() in k_lower for w in monitor_keywords) and isinstance(v, (int, float)) and abs(v) > 1e9:
-    #                 print(f"    👉 Dict found: {k} | Val: {v/1e9:.2f} B")
-    #                 found_in_dict = True
+                
+    #             # 過濾條件：包含關鍵字 且 數值絕對值 > 5億 (過濾雜訊)
+    #             if any(w.lower() in k_lower for w in monitor_keywords):
+    #                 try:
+    #                     val = float(v)
+    #                     if abs(val) > 5e8: # 只看 5億以上的大數
+    #                         found_data.append((k, val))
+    #                 except:
+    #                     continue
             
-    #         # 2. 掃描原始 DataFrame (raw_df) - 這是 VICI 最可能藏身之處
+    #         # 排序並打印
+    #         found_data.sort(key=lambda x: abs(x[1]), reverse=True)
+    #         for k, v in found_data[:10]:
+    #             print(f"    👉 Dict found: {k} | Val: {v/1e9:.3f} B")
+            
+    #         # 2. 掃描原始 DataFrame (Raw DF)
     #         raw_df = raw_data.get('_raw_df')
     #         if isinstance(raw_df, pd.DataFrame):
-    #             print("  [Scanning Raw DataFrame (Dimensions)...]")
-    #             # 篩選概念名稱包含關鍵字的行
+    #             print("  [Scanning Raw DataFrame...]")
     #             mask = raw_df['concept'].str.contains('|'.join(monitor_keywords), case=False, na=False)
     #             candidates = raw_df[mask]
+    #             candidates = candidates[candidates['value'].abs() > 5e8].sort_values(by='value', key=abs, ascending=False).head(10)
                 
-    #             # 只顯示大額數值 (> 10億)
-    #             candidates = candidates[candidates['value'].abs() > 1e9].sort_values(by='value', ascending=False).head(10)
-                
-    #             if not candidates.empty:
-    #                 for _, row in candidates.iterrows():
-    #                     print(f"    👉 RawDF found: {row['concept']} | Val: {row['value']/1e9:.2f} B")
-    #             else:
-    #                 print("    ❌ RawDF 中沒有發現大額相關數據")
+    #             for _, row in candidates.iterrows():
+    #                 print(f"    👉 RawDF found: {row['concept']} | Val: {row['value']/1e9:.3f} B")
             
     #         print(f"----------------------------------------\n")
 
-    #     # Phase 2: Regex & Fuzzy (保持原邏輯，以便程式能跑完)
-    #     # 這裡簡單帶過，目的是讓你看到上面的 Print
     #     return {"value": None, "source_tags": [], "is_calculated": False}
 
 
@@ -927,38 +924,38 @@ class REITBalanceSheet(BalanceSheetBase):
     mortgages: TraceableField = Field(
         default_factory=TraceableField,
         json_schema_extra={
-           # 1. 標準標籤 (注意：這裡必須是負債類標籤！)
+            # 1. 標準標籤
             'xbrl_tags': [
-                'us-gaap:MortgageLoansPayable',
-                'us-gaap:SecuredDebt',            # REIT 常把抵押貸款稱為「有擔保債務」
+                'us-gaap:SecuredDebt',            # SPG 最可能用這個
                 'us-gaap:SecuredLongTermDebt',
-                'us-gaap:MortgageLoansOnRealEstate'
+                'us-gaap:MortgageLoansPayable',
+                'us-gaap:MortgageLoansOnRealEstate',
+                'us-gaap:MortgageNotesPayable'    # 新增
             ],
             
-            # 2. 結構化 Regex (核心防護網)
+            # 2. 結構化 Regex
             'regex_patterns': [
-                # 策略 A: 鎖定 "應付抵押貸款" (最標準)
-                # 解讀：標籤中必須包含 Mortgage 且後面跟著 Payable
+                # 策略 A: 抵押貸款 (包含 Notes)
                 r'(?i).*:Mortgage.*Payable',
+                r'(?i).*:Mortgage.*Notes',
                 
-                # 策略 B: 鎖定 "有擔保債務" (Secured Debt 通常等於 Mortgage)
-                r'(?i).*:Secured.*Debt'
+                # 策略 B: 有擔保債務 (SPG 核心)
+                r'(?i).*:Secured.*Debt',
+                r'(?i).*:Secured.*Liabilities'
             ],
             
-            # 3. 模糊匹配 (留空，因為 Mortgage 這個詞太危險)
+            # 3. 模糊匹配
             'fuzzy_keywords': [],
             
-            # 4. 全局排除 (殺死那個 -$500,000 的元兇)
+            # 4. 全局排除 (微調)
             'exclude_keywords': [
                 'Interest',      # 利息
                 'Receivable',    # 應收 (資產)
                 'Asset',         # 資產
                 'Investment',    # 投資
-                'Premiums',      # 溢價 (造成負數的主因)
-                'Discount',      # 折價
-                'Encumbrances',  # 留置權 (O 的那個噪音標籤包含此字)
-                'Adjustments',   # 調整
-                'Amortization'   # 攤銷
+                'Unamortized',   # 👈 改成排除 "未攤銷" 部分，而不是殺死整個 Premium/Discount
+                'Adjustment',    # 調整
+                'Origination'    # 發放 (現金流)
             ]
         }
     )
@@ -1204,11 +1201,38 @@ class CashFlowStatementBase(AutoExtractModel):
         default_factory=TraceableField,
         json_schema_extra={
             'xbrl_tags': [
-                'us-gaap:PaymentsOfDividendsCommonStock',
+                # 1. 標準 GAAP 標籤 (最安全，O/VICI/EQIX 用這些)
                 'us-gaap:PaymentsOfDividends',
+                'us-gaap:PaymentsOfDividendsCommonStock',
                 'us-gaap:PaymentsOfOrdinaryDividends',
                 'us-gaap:DividendsPaid',
-                'us-gaap:Dividends'
+                'us-gaap:PaymentsOfDistributions'
+            ],
+            
+            'regex_patterns': [
+                # --- Group A: 標準股息 (絕大多數公司) ---
+                r'(?i).*:PaymentsOfDividends.*',
+                r'(?i).*:Dividends.*Paid.*',
+                
+                # --- Group B: 針對 SPG/UP-REIT 的補丁 (關鍵修改) ---
+                # 這能完美匹配: spg:DistributionsMadeToCommonStockholders...
+                r'(?i).*:Distributions.*Stockholders.*',
+                r'(?i).*:Distributions.*Partners.*',
+                
+                # --- Group C: 廣義分配 (兜底) ---
+                r'(?i).*:Payments.*Distributions.*'
+            ],
+            
+            'fuzzy_keywords': [],
+            
+            # 🛡️ 安全網：確保不影響其他公司
+            'exclude_keywords': [
+                'Received',      # 排除收到股息
+                'Income',        # 排除股息收入
+                'Receivable',    # 排除應收
+                'Liability',     # 排除應付帳款 (資產負債表項目)
+                'Payable',       # 排除應付 (資產負債表項目)
+                'Noncontrolling' # (可選) 雖然通常我們想要總股息，但在 Max Strategy 下，大的會勝出，所以這裡排不排除影響不大
             ]
         }
     )
