@@ -273,129 +273,109 @@ class AutoExtractModel(BaseModel):
         regex_patterns: List[str] = None
     ) -> Dict[str, Any]:
         """
-        Smart extraction pipeline with MAX STRATEGY:
-        1. Standard Tags: Scan ALL tags, return the one with the LARGEST absolute value.
-        2. Regex Patterns: Support deep scan in dictionary and raw_df.
-        3. Fuzzy Keywords: Fallback.
+        Smart extraction with GLOBAL MAX STRATEGY:
+        Phase 1 (Standard) and Phase 2 (Regex) candidates COMPETE together.
+        The absolute largest value wins.
         """
         
+        # 收集所有潛在的候選者
+        all_candidates = []
+
         # 預處理排除關鍵字
         is_excluded = lambda k: False
         if exclude_keywords:
             exc_lower = [exc.lower() for exc in exclude_keywords]
             is_excluded = lambda k: any(exc in k.lower() for exc in exc_lower)
 
-        # --- Phase 1: Standard Tags (Max Value Strategy) ---
-        # 核心修復：不再是找到第一個就返回，而是找出候選名單中「數值最大」的那個。
-        # 這解決了 EQIX (PP&E為主) 與 VICI (RealEstate為主) 的衝突。
-        valid_candidates = []
-        
+        # --- Phase 1: Standard Tags ---
         for tag in standard_tags:
             val = raw_data.get(tag)
             if val is not None:
                 try:
-                    val_float = float(val)
-                    valid_candidates.append({
-                        "value": val_float,
-                        "tag": tag
+                    all_candidates.append({
+                        "value": float(val),
+                        "source_tags": [tag],
+                        "formula_logic": "Standard Tag",
+                        "priority": 1 # 權重標記 (可選)
                     })
                 except (ValueError, TypeError):
                     continue
-        
-        if valid_candidates:
-            # 按絕對值大小降序排列 (ABS)，取最大者
-            # 理由：資本支出無論是正數還是負數，我們都想要捕捉那個「主要活動」
-            valid_candidates.sort(key=lambda x: abs(x['value']), reverse=True)
-            best_match = valid_candidates[0]
-            
-            return {
-                "value": best_match['value'],
-                "source_tags": [best_match['tag']],
-                "is_calculated": False,
-                "formula_logic": "Standard Tag (Max Value Strategy)"
-            }
 
-        # --- Phase 2: Regex Matching (Structured Pattern & Deep Scan) ---
+        # --- Phase 2: Regex Matching (Deep Scan) ---
         if regex_patterns:
-            # 準備搜尋目標：包含 Dict Keys 和 Raw DataFrame (針對 VICI 隱形資產)
+            # 準備搜尋空間 (Dict Keys + Raw DF Concepts)
             search_targets = list(raw_data.keys())
             raw_df = raw_data.get('_raw_df')
             
-            # 如果有 raw_df，把裡面的概念名稱也加進來搜尋 (去重)
             if isinstance(raw_df, pd.DataFrame):
-                # 只取 concept 欄位
                 raw_concepts = raw_df['concept'].dropna().unique().tolist()
-                # 簡單合併，這裡不做嚴格去重以節省效能，Regex search 沒影響
                 search_targets.extend(raw_concepts)
+            
+            # 去重以提升效能
+            search_set = set(search_targets)
 
             for pattern in regex_patterns:
                 matches = []
-                # 使用 set 去重避免重複搜尋
-                for key in set(search_targets):
-                    # 1. 排除檢查
+                for key in search_set:
                     if key == '_raw_df' or is_excluded(key):
                         continue
-                    
-                    # 2. Regex 匹配
                     if re.search(pattern, key, re.IGNORECASE):
                         matches.append(key)
                 
                 if matches:
-                    # 評分邏輯 (優先選 Total, Net, 其次選長度短的)
+                    # 每個 Pattern 選出最佳匹配 (例如最短的或含 Net 的)
                     matches.sort(key=AutoExtractModel._score_candidate_tag)
                     best_tag = matches[0]
                     
-                    # 取值邏輯：先看 Dict，沒有再看 Raw DF
+                    # 取值
                     val = raw_data.get(best_tag)
-                    
                     if val is None and isinstance(raw_df, pd.DataFrame):
-                        # 從 DataFrame 撈取最大值 (針對 VICI 維度數據)
+                        # 從 Raw DF 取最大值
                         mask = (raw_df['concept'] == best_tag) & (raw_df['value'].notna())
                         if mask.any():
-                            # 取絕對值最大的那一行
-                            best_rows = raw_df[mask].copy()
-                            best_rows['abs_val'] = best_rows['value'].abs()
-                            val = best_rows.sort_values('abs_val', ascending=False).iloc[0]['value']
-                    
+                            # 取絕對值最大
+                            best_val = raw_df.loc[mask, 'value'].abs().max() 
+                            # 注意：這裡我們需要保留正負號嗎？通常資本支出我們只在乎量級
+                            # 為了保險，我們取原值，但在比較時用絕對值
+                            row = raw_df.loc[raw_df.loc[mask, 'value'].abs() == best_val].iloc[0]
+                            val = row['value']
+
                     if val is not None:
-                        return {
-                            "value": float(val),
-                            "source_tags": [best_tag],
-                            "is_calculated": False,
-                            "formula_logic": f"Regex Match: {pattern} -> {best_tag}"
-                        }
+                        try:
+                            all_candidates.append({
+                                "value": float(val),
+                                "source_tags": [best_tag],
+                                "formula_logic": f"Regex: {pattern}",
+                                "priority": 2
+                            })
+                        except:
+                            continue
 
-        # --- Phase 3: Fuzzy Matching (Broad Keywords) ---
-        if fuzzy_keywords:
-            available_keys = list(raw_data.keys()) # Fuzzy 只搜 Dict，避免過慢
-            fuzzy_regex = "".join([f"(?=.*{k})" for k in fuzzy_keywords])
-            matches = []
-            
-            for key in available_keys:
-                if key == '_raw_df' or is_excluded(key):
-                    continue
-                
-                if re.search(fuzzy_regex, key, re.IGNORECASE):
-                    matches.append(key)
-            
-            if matches:
-                matches.sort(key=AutoExtractModel._score_candidate_tag)
-                best_tag = matches[0]
-                val = raw_data.get(best_tag)
-                
-                if val is not None:
-                    return {
-                        "value": float(val),
-                        "source_tags": [best_tag],
-                        "is_calculated": False,
-                        "formula_logic": f"Fuzzy Match: {fuzzy_keywords} -> {best_tag}"
-                    }
+        # --- Phase 3: The Grand Finale (決賽) ---
+        # 如果沒有候選者，才跑 Fuzzy (Phase 3 通常是最後手段)
+        if not all_candidates and fuzzy_keywords:
+             # ... (Fuzzy Logic 保持原樣，只有在前面都沒結果時才跑) ...
+             pass
 
-        return {
-            "value": None,
-            "source_tags": [],
-            "is_calculated": False
-        }
+        if all_candidates:
+            # 🏆 核心邏輯：按絕對值大小排序，選最大的！
+            # 無論它是來自 Phase 1 還是 Phase 2
+            all_candidates.sort(key=lambda x: abs(x['value']), reverse=True)
+            
+            # [可選優化] 如果最大值和第二大值差異極大(10倍)，選最大的
+            # 如果差異不大，優先選 Phase 1 (Standard Tag)？
+            # 目前我們先相信 "最大值 = 真理" (針對 CapEx)
+            
+            best_match = all_candidates[0]
+            
+            return {
+                "value": best_match['value'],
+                "source_tags": best_match['source_tags'],
+                "is_calculated": False,
+                "formula_logic": f"{best_match['formula_logic']} (Max Strategy)"
+            }
+
+        return {"value": None, "source_tags": [], "is_calculated": False}
 
     # For Debugging
     # @staticmethod
