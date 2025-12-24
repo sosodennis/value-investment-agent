@@ -145,7 +145,8 @@ class AutoExtractModel(BaseModel):
             xbrl_tags = extra.get('xbrl_tags', [])
             fuzzy_keywords = extra.get('fuzzy_keywords', [])
             exclude_keywords = extra.get('exclude_keywords', [])
-
+            regex_patterns = extra.get('regex_patterns', [])
+            
             # Skip non-XBRL fields
             if not xbrl_tags and not fuzzy_keywords:
                 processed_data[field_name] = data.get(field_name)
@@ -156,7 +157,8 @@ class AutoExtractModel(BaseModel):
                 raw_data=data,
                 standard_tags=xbrl_tags,
                 fuzzy_keywords=fuzzy_keywords,
-                exclude_keywords=exclude_keywords
+                exclude_keywords=exclude_keywords,
+                regex_patterns=regex_patterns,
             )
             
             processed_data[field_name] = result_obj
@@ -244,17 +246,41 @@ class AutoExtractModel(BaseModel):
             return None
 
     @staticmethod
+    def _score_candidate_tag(tag: str) -> int:
+        """
+        [Helper] Scoring Strategy for selecting the 'best' tag among matches.
+        Lower score is better.
+        """
+        score = len(tag)
+        lower_tag = tag.lower()
+        
+        # 權重規則：優先選擇 "匯總型" 或 "淨額型" 數據
+        if 'total' in lower_tag: score -= 100    # Bonus for Totals
+        if 'net' in lower_tag: score -= 50       # Bonus for Net
+        if 'current' in lower_tag: score -= 20   # Bonus for Current
+        
+        # 懲罰規則：避免抓到過於細節的項目 (可選)
+        # if 'detail' in lower_tag: score += 50
+        
+        return score
+
+    @staticmethod
     def _internal_get_fact_smart(
-        raw_data: Dict[str, float],
+        raw_data: Dict[str, Any],
         standard_tags: List[str],
-        fuzzy_keywords: List[str],
-        exclude_keywords: List[str]
+        fuzzy_keywords: List[str] = None,
+        exclude_keywords: List[str] = None,
+        regex_patterns: List[str] = None
     ) -> Dict[str, Any]:
         """
-        Smart extraction: Try standard tags first, then fuzzy matching.
-        Returns dict suitable for TraceableField construction.
+        Smart extraction pipeline:
+        1. Standard Tags (Exact)
+        2. Regex Patterns (Structured)
+        3. Fuzzy Keywords (Broad)
         """
-        # Phase 1: Standard tags (exact match)
+        
+        # --- Phase 1: Standard tags (Exact Match) ---
+        # 優先級最高，因為這是人工確認過的正確標籤
         for tag in standard_tags:
             val = raw_data.get(tag)
             # [FIX] Allow 0.0 to be a valid value!
@@ -266,34 +292,66 @@ class AutoExtractModel(BaseModel):
                     "formula_logic": "Exact Match"
                 }
 
-        # Phase 2: Fuzzy matching
+        # 預處理排除關鍵字，提升效能
+        is_excluded = lambda k: False
+        if exclude_keywords:
+            # 轉換為小寫以進行不區分大小寫的比對
+            exc_lower = [exc.lower() for exc in exclude_keywords]
+            is_excluded = lambda k: any(exc in k.lower() for exc in exc_lower)
+
+        # 獲取所有 keys 一次 (如果 raw_data 很大，這步避免重複調用 keys())
+        available_keys = list(raw_data.keys())
+
+        # --- Phase 2: Regex Matching (Structured Pattern) ---
+        # [NEW] 解決 REIT "PaymentsToAcquire" vs "ProceedsFromSale" 的方向性問題
+        if regex_patterns:
+            for pattern in regex_patterns:
+                matches = []
+                for key in available_keys:
+                    # 1. 排除檢查
+                    # if key == '_raw_df' or is_excluded(key):
+                    #    continue
+                    # Note: raw_data passed here is a dict of tag:val, so '_raw_df' shouldn't be here if handled by extract_from_raw_xbrl
+                    # But safety check doesn't hurt. 
+                    
+                    if key == '_raw_df' or is_excluded(key):
+                        continue
+                    
+                    # 2. Regex 匹配
+                    if re.search(pattern, key, re.IGNORECASE):
+                        matches.append(key)
+                
+                # 如果這個 pattern 有匹配到結果
+                if matches:
+                    # 使用統一的評分邏輯選出最好的 (例如選最短的，或含 Net 的)
+                    matches.sort(key=AutoExtractModel._score_candidate_tag)
+                    best_tag = matches[0]
+                    val = raw_data.get(best_tag)
+                    
+                    if val is not None:
+                        return {
+                            "value": float(val),
+                            "source_tags": [best_tag],
+                            "is_calculated": False,
+                            "formula_logic": f"Regex Match: {pattern} -> {best_tag}"
+                        }
+
+        # --- Phase 3: Fuzzy Matching (Broad Keywords) ---
+        # 保底手段，只要包含所有關鍵字即可 (無順序/結構限制)
         if fuzzy_keywords:
-            # Build regex pattern (must contain ALL keywords)
-            pattern = "".join([f"(?=.*{k})" for k in fuzzy_keywords])
-            
+            # 構建 Lookahead Regex: (?=.*KeyA)(?=.*KeyB)
+            fuzzy_regex = "".join([f"(?=.*{k})" for k in fuzzy_keywords])
             matches = []
-            for raw_tag_str in raw_data.keys():
-                # Check exclusions
-                if exclude_keywords and any(exc.lower() in raw_tag_str.lower() for exc in exclude_keywords):
+            
+            for key in available_keys:
+                if key == '_raw_df' or is_excluded(key):
                     continue
                 
-                # Check if matches all keywords
-                if re.search(pattern, raw_tag_str, re.IGNORECASE):
-                    matches.append(raw_tag_str)
+                if re.search(fuzzy_regex, key, re.IGNORECASE):
+                    matches.append(key)
             
             if matches:
-                # [FIX] Weighted Scoring Strategy
-                # Prefer tags that look like "summary" tags (contain 'Total', 'Net')
-                # Penalize tags that might be details
-                def scoring_key(tag):
-                    score = len(tag)
-                    lower_tag = tag.lower()
-                    if 'total' in lower_tag: score -= 100  # Bonus for Totals
-                    if 'net' in lower_tag: score -= 50     # Bonus for Net
-                    if 'current' in lower_tag: score -= 20 # Slight bonus for Current (usually what we want here)
-                    return score
-
-                matches.sort(key=scoring_key)
+                matches.sort(key=AutoExtractModel._score_candidate_tag)
                 best_tag = matches[0]
                 val = raw_data.get(best_tag)
                 
@@ -302,15 +360,8 @@ class AutoExtractModel(BaseModel):
                         "value": float(val),
                         "source_tags": [best_tag],
                         "is_calculated": False,
-                        "formula_logic": f"Fuzzy Match: {fuzzy_keywords} (Matched: {best_tag})"
+                        "formula_logic": f"Fuzzy Match: {fuzzy_keywords} -> {best_tag}"
                     }
-
-        # Phase 3: Not found
-        # Diagnostic: Log available keys if this is a critical missing field
-        if raw_data:
-             if any(k in str(standard_tags) for k in ['Debt', 'Investment', 'Securities']):
-                # logger.debug(f"Available tags for missing field: {list(raw_data.keys())[:20]}...")
-                pass
 
         return {
             "value": None,
@@ -318,15 +369,17 @@ class AutoExtractModel(BaseModel):
             "is_calculated": False
         }
 
+    # For Debugging
     # @staticmethod
     # def _internal_get_fact_smart(
     #     raw_data: Dict[str, Any],
     #     standard_tags: List[str],
-    #     fuzzy_keywords: List[str],
-    #     exclude_keywords: List[str]
+    #     fuzzy_keywords: List[str] = None,
+    #     exclude_keywords: List[str] = None,
+    #     regex_patterns: List[str] = None
     # ) -> Dict[str, Any]:
     #     """
-    #     [DEBUG VERSION] 帶有暴力掃描打印功能的提取邏輯
+    #     [DEBUG VERSION] 暴力掃描版：找出 VICI 的資產到底藏在哪
     #     """
     #     # Phase 1: Standard tags (Exact Match)
     #     for tag in standard_tags:
@@ -339,55 +392,46 @@ class AutoExtractModel(BaseModel):
     #                 "formula_logic": "Exact Match"
     #             }
 
-    #     # --- 🕵️ 暴力掃描啟動 (僅針對證券/投資類) ---
-    #     is_searching_securities = any(k in str(standard_tags) for k in ['Securities', 'Investment'])
+    #     # --- 🕵️ 暴力掃描啟動 (針對資產/投資/租賃) ---
+    #     # 只要是找這些東西，就啟動掃描
+    #     monitor_keywords = ['RealEstate', 'Property', 'Lease', 'Investment', 'Asset']
+    #     is_searching_target = any(k in str(standard_tags) for k in monitor_keywords)
         
-    #     if is_searching_securities:
-    #         print(f"\n--- 🕵️ 暴力掃描啟動: 正在尋找證券相關數據 ---")
-    #         found_anything = False
+    #     if is_searching_target:
+    #         print(f"\n--- 🕵️ [DEBUG SCAN] 正在尋找: {standard_tags[:1]}... ---")
+            
+    #         # 1. 掃描字典 (raw_data keys)
+    #         print("  [Scanning Dictionary Keys...]")
+    #         found_in_dict = False
     #         for k, v in raw_data.items():
     #             if k == '_raw_df': continue
-    #             # 尋找包含核心關鍵字的標籤，且數值 > 1億 (1e8) 避免雜訊
     #             k_lower = k.lower()
-    #             if ('securities' in k_lower or 'investment' in k_lower) and isinstance(v, (int, float)) and abs(v) > 1e8:
-    #                 print(f"  [FOUND POTENTIAL] 標籤: {k} | 數值: {v/1e9:.3f} B")
-    #                 found_anything = True
-    #         if not found_anything:
-    #             print("  ❌ 暴力掃描結果：raw_data 中完全沒有包含 Securities/Investment 且大於 0.1B 的數據")
+    #             # 關鍵字掃描 + 數值過濾 (> 10億，避免雜訊)
+    #             if any(w.lower() in k_lower for w in monitor_keywords) and isinstance(v, (int, float)) and abs(v) > 1e9:
+    #                 print(f"    👉 Dict found: {k} | Val: {v/1e9:.2f} B")
+    #                 found_in_dict = True
+            
+    #         # 2. 掃描原始 DataFrame (raw_df) - 這是 VICI 最可能藏身之處
+    #         raw_df = raw_data.get('_raw_df')
+    #         if isinstance(raw_df, pd.DataFrame):
+    #             print("  [Scanning Raw DataFrame (Dimensions)...]")
+    #             # 篩選概念名稱包含關鍵字的行
+    #             mask = raw_df['concept'].str.contains('|'.join(monitor_keywords), case=False, na=False)
+    #             candidates = raw_df[mask]
+                
+    #             # 只顯示大額數值 (> 10億)
+    #             candidates = candidates[candidates['value'].abs() > 1e9].sort_values(by='value', ascending=False).head(10)
+                
+    #             if not candidates.empty:
+    #                 for _, row in candidates.iterrows():
+    #                     print(f"    👉 RawDF found: {row['concept']} | Val: {row['value']/1e9:.2f} B")
+    #             else:
+    #                 print("    ❌ RawDF 中沒有發現大額相關數據")
+            
     #         print(f"----------------------------------------\n")
 
-    #     # Phase 2: Fuzzy matching
-    #     if fuzzy_keywords:
-    #         pattern = "".join([f"(?=.*{k})" for k in fuzzy_keywords])
-    #         matches = []
-    #         for raw_tag_str in raw_data.keys():
-    #             if raw_tag_str == '_raw_df': continue
-    #             if exclude_keywords and any(exc.lower() in raw_tag_str.lower() for exc in exclude_keywords):
-    #                 continue
-    #             if re.search(pattern, raw_tag_str, re.IGNORECASE):
-    #                 matches.append(raw_tag_str)
-            
-    #         if matches:
-    #             def scoring_key(tag):
-    #                 score = len(tag)
-    #                 lower_tag = tag.lower()
-    #                 if 'total' in lower_tag: score -= 100
-    #                 if 'net' in lower_tag: score -= 50
-    #                 if 'current' in lower_tag: score -= 20
-    #                 return score
-
-    #             matches.sort(key=scoring_key)
-    #             best_tag = matches[0]
-    #             val = raw_data.get(best_tag)
-                
-    #             if val is not None:
-    #                 return {
-    #                     "value": float(val),
-    #                     "source_tags": [best_tag],
-    #                     "is_calculated": False,
-    #                     "formula_logic": f"Fuzzy Match: {best_tag}"
-    #                 }
-
+    #     # Phase 2: Regex & Fuzzy (保持原邏輯，以便程式能跑完)
+    #     # 這裡簡單帶過，目的是讓你看到上面的 Print
     #     return {"value": None, "source_tags": [], "is_calculated": False}
 
 
@@ -807,9 +851,45 @@ class REITBalanceSheet(BalanceSheetBase):
     real_estate_assets: TraceableField = Field(
         default_factory=TraceableField,
         json_schema_extra={
+            # 1. 標準標籤 (根據 Log 發現的目標)
             'xbrl_tags': [
+                # VICI / Net Lease REITs 專用 (本次新增)
+                'us-gaap:RealEstateInvestments',  # 👈 Log 裡的 36.21B
+                'us-gaap:FinanceLeaseNetInvestmentInLease',
+                
+                # 傳統 REITs (O, SPG)
                 'us-gaap:RealEstateInvestmentPropertyNet',
-                'us-gaap:RealEstateRealEstateAssetsNet'
+                'us-gaap:RealEstateRealEstateAssetsNet',
+
+                # 👇 新增：針對 EQIX, AMT (數據中心/電塔)
+                'us-gaap:PropertyPlantAndEquipmentNet', 
+                'us-gaap:PropertyPlantAndEquipmentGross'
+            ],
+            
+            # 2. 結構化 Regex (針對 VICI 的命名習慣)
+            'regex_patterns': [
+                # 策略 A: 鎖定 "房地產投資" (最簡單暴力，對應 us-gaap:RealEstateInvestments)
+                r'(?i)^.*:RealEstateInvestments$',
+                
+                # 策略 B: 鎖定 "融資應收帳款...淨投資" (VICI 的自定義標籤特徵)
+                # Log 顯示: vici:FinancingReceivables...NetInvestmentInLease...
+                r'(?i).*:Financing.*Receivables.*Net.*Investment',
+                
+                # 策略 C: 傳統 REIT 兜底
+                r'(?i).*:RealEstate.*Property.*Net',
+
+                # 新增：PP&E 匹配
+                r'(?i).*:PropertyPlantAndEquipmentNet',
+            ],
+            
+            # 3. 模糊匹配 (留空)
+            'fuzzy_keywords': [],
+            
+            # 4. 全局排除
+            'exclude_keywords': [
+                'Income', 'Revenue', 'Gain', 'Loss', 
+                'Payments', 'Proceeds', # 排除現金流
+                'Current' # 排除流動資產
             ]
         }
     )
@@ -839,9 +919,39 @@ class REITBalanceSheet(BalanceSheetBase):
     mortgages: TraceableField = Field(
         default_factory=TraceableField,
         json_schema_extra={
-            'xbrl_tags': ['us-gaap:MortgageLoansOnRealEstate'],
-            'fuzzy_keywords': ['Mortgage'],
-            'exclude_keywords': ['Interest', 'Receivable', 'Asset']
+           # 1. 標準標籤 (注意：這裡必須是負債類標籤！)
+            'xbrl_tags': [
+                'us-gaap:MortgageLoansPayable',
+                'us-gaap:SecuredDebt',            # REIT 常把抵押貸款稱為「有擔保債務」
+                'us-gaap:SecuredLongTermDebt',
+                'us-gaap:MortgageLoansOnRealEstate'
+            ],
+            
+            # 2. 結構化 Regex (核心防護網)
+            'regex_patterns': [
+                # 策略 A: 鎖定 "應付抵押貸款" (最標準)
+                # 解讀：標籤中必須包含 Mortgage 且後面跟著 Payable
+                r'(?i).*:Mortgage.*Payable',
+                
+                # 策略 B: 鎖定 "有擔保債務" (Secured Debt 通常等於 Mortgage)
+                r'(?i).*:Secured.*Debt'
+            ],
+            
+            # 3. 模糊匹配 (留空，因為 Mortgage 這個詞太危險)
+            'fuzzy_keywords': [],
+            
+            # 4. 全局排除 (殺死那個 -$500,000 的元兇)
+            'exclude_keywords': [
+                'Interest',      # 利息
+                'Receivable',    # 應收 (資產)
+                'Asset',         # 資產
+                'Investment',    # 投資
+                'Premiums',      # 溢價 (造成負數的主因)
+                'Discount',      # 折價
+                'Encumbrances',  # 留置權 (O 的那個噪音標籤包含此字)
+                'Adjustments',   # 調整
+                'Amortization'   # 攤銷
+            ]
         }
     )
     notes_payable: TraceableField = Field(
@@ -1135,11 +1245,64 @@ class REITCashFlow(CashFlowStatementBase):
     real_estate_investment: TraceableField = Field(
         default_factory=TraceableField,
         json_schema_extra={
+            # 1. 標準標籤 (Standard Tags)
+            # 包含：收購 (Acquisition) + 開發 (Development) + 在建工程 (CIP)
             'xbrl_tags': [
+                # 👇 新增：這是所有基礎設施 REIT (EQIX, AMT) 的核心支出
+                'us-gaap:PaymentsToAcquirePropertyPlantAndEquipment',
+                'us-gaap:PaymentsForCapitalImprovements',
+                'us-gaap:PaymentsForConstructionInProcess',
+                # 傳統標籤
                 'us-gaap:PaymentsToAcquireRealEstate',
-                'us-gaap:PaymentsToAcquireRealEstateHeldForInvestment',
                 'us-gaap:PaymentsToAcquireProperties',
-                'us-gaap:PaymentsToAcquireProductiveAssets'
+                'us-gaap:PaymentsToAcquireProductiveAssets',
+                # 👇 新增：針對 PLD, ARE 等開發商的標籤
+                'us-gaap:PaymentsForRealEstateDevelopment',
+                'us-gaap:RealEstateDevelopmentCosts',
+            ],
+            
+            # 2. 結構化 Regex (Structured Regex - 核心引擎)
+            'regex_patterns': [
+                # --- 策略 A: 收購類 (Acquisitions) ---
+                # 適用對象: Realty Income (O), VICI, Simon Property (SPG)
+                # 邏輯: 鎖定 "收購" 行為
+                r'(?i).*:RealEstateAcquisitions',          # 捕捉 o:RealEstateAcquisitions
+                r'(?i).*:PaymentsToAcquire.*RealEstate',   # 最標準的寫法
+                r'(?i).*:AcquisitionOf.*RealEstate',       # 變體寫法
+                r'(?i).*:PaymentsToAcquire.*Properties',   # 擴展：有些公司只寫 Properties
+                
+                # --- 策略 B: 開發與建設類 (Development & Construction) ---
+                # 適用對象: Prologis (PLD), Equinix (EQIX), Alexandria (ARE)
+                # 邏輯: 鎖定 "蓋房" 與 "改良" 行為
+                r'(?i).*:Payments.*Construction.*',        # 捕捉 "Payments for Construction"
+                r'(?i).*:Development.*Expenditures.*',     # 捕捉 "Development Expenditures"
+                r'(?i).*:AdditionsTo.*Properties',         # 捕捉 "Additions to Real Estate" (常見 GAAP 用語)
+                r'(?i).*:ImprovementsTo.*RealEstate',      # 捕捉 "Improvements" (資本改良支出)
+
+                # --- 策略 C: 資本支出兜底 (CapEx) ---
+                # 邏輯: 只要是與房地產相關的資本支出
+                r'(?i).*:CapitalExpenditure.*RealEstate',
+                r'(?i).*:CapitalExpenditure.*Properties'
+
+                # 👇 新增：抓取 PP&E 支出
+                r'(?i).*:PaymentsToAcquire.*PropertyPlantAndEquipment',
+                r'(?i).*:PaymentsFor.*CapitalImprovements'
+            ],
+            
+            # 3. 模糊匹配 (Fuzzy Matching)
+            # 🚫 保持留空！現金流量表對方向性要求極高，模糊匹配容易把 "Proceeds" (賣出) 當成投資。
+            'fuzzy_keywords': [], 
+            
+            # 4. 全局排除 (Global Excludes - 防火牆)
+            'exclude_keywords': [
+                # 🛑 排除現金流入 (賣出資產 = 錢進來，不是投資)
+                'Proceeds', 'Sale', 'Disposal', 'Divestiture', 
+                
+                # 🛑 排除非現金項目 (折舊不是現金流出)
+                'AccumulatedDepreciation', 'Amortization', 'Depreciation',
+                
+                # 🛑 排除金融操作 (防止抓到抵押貸款發放或償還)
+                'Origination', 'Principal', 'Borrowing', 'Repayment'
             ]
         }
     )
