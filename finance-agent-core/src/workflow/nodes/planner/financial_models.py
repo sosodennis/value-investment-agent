@@ -9,7 +9,7 @@ Based on research-planner-0.md, implements the five pillars:
 5. Cash Flow Quality
 """
 
-from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
+from pydantic import BaseModel, Field, computed_field, field_validator, model_validator, PrivateAttr
 from typing import Optional, Literal, Union, Any, Generic, TypeVar, List, Dict
 from datetime import date
 from enum import Enum
@@ -113,23 +113,23 @@ class TraceableField(BaseModel, Generic[T]):
 class AutoExtractModel(BaseModel):
     """
     Base model that automatically extracts XBRL data using waterfall logic.
-    Reads field metadata (xbrl_tags, fuzzy_keywords) and populates TraceableField objects.
+    Supports Dual-Stream Architecture: standardized_dict (Main) + deep_stream_df (Deep).
     """
+    # 🚨 Private attribute to hold the Deep Stream DataFrame for complex extractions
+    _deep_stream_df: Optional[pd.DataFrame] = PrivateAttr(default=None)
 
     @model_validator(mode='before')
     @classmethod
     def extract_from_raw_xbrl(cls, data: Any) -> Any:
         """
-        Pre-validation hook: Extract values from raw XBRL data using field metadata.
+        Pre-validation hook: Extract values from XBRL data using field metadata.
+        Standardized data is passed via 'data' (dict), Deep data via 'deep_stream_df'.
         """
         if not isinstance(data, dict):
             return data
 
-        # Convert DataFrame to dict if needed
-        if isinstance(data.get('_raw_df'), pd.DataFrame):
-            raw_df = data.pop('_raw_df')
-            raw_dict = cls._df_to_dict(raw_df)
-            data.update(raw_dict)
+        # Capture the Deep Stream DF if present (injected by Factory)
+        deep_stream_df = data.get('deep_stream_df')
         
         model_fields = cls.model_fields
         processed_data = {}
@@ -140,30 +140,43 @@ class AutoExtractModel(BaseModel):
                 processed_data[field_name] = data[field_name]
                 continue
 
-            # Get extraction metadata
+            # Get extraction metadata from json_schema_extra
             extra = field_info.json_schema_extra or {}
             xbrl_tags = extra.get('xbrl_tags', [])
             fuzzy_keywords = extra.get('fuzzy_keywords', [])
             exclude_keywords = extra.get('exclude_keywords', [])
             regex_patterns = extra.get('regex_patterns', [])
+            dimensions = extra.get('dimensions') # 👈 Dimensional Config
             
-            # Skip non-XBRL fields
-            if not xbrl_tags and not fuzzy_keywords:
+            # Skip non-extraction fields
+            if not xbrl_tags and not fuzzy_keywords and not regex_patterns:
                 processed_data[field_name] = data.get(field_name)
                 continue
 
-            # Extract using smart logic
+            # Execute Smart Extraction (Dual-Stream Aware)
             result_obj = cls._internal_get_fact_smart(
-                raw_data=data,
+                standardized_dict=data,
+                deep_stream_df=deep_stream_df,
                 standard_tags=xbrl_tags,
                 fuzzy_keywords=fuzzy_keywords,
                 exclude_keywords=exclude_keywords,
                 regex_patterns=regex_patterns,
+                dimensions=dimensions
             )
             
             processed_data[field_name] = result_obj
 
+        # Preserve deep_stream_df for instance use
+        if deep_stream_df is not None:
+            processed_data['_deep_stream_df'] = deep_stream_df
+
         return processed_data
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        # Transfer private attr from parsed data
+        if '_deep_stream_df' in data:
+            self._deep_stream_df = data['_deep_stream_df']
 
     @staticmethod
     def _df_to_dict(df: pd.DataFrame) -> Dict[str, float]:
@@ -266,113 +279,125 @@ class AutoExtractModel(BaseModel):
 
     @staticmethod
     def _internal_get_fact_smart(
-        raw_data: Dict[str, Any],
+        standardized_dict: Dict[str, Any],
+        deep_stream_df: Optional[pd.DataFrame],
         standard_tags: List[str],
         fuzzy_keywords: List[str] = None,
         exclude_keywords: List[str] = None,
-        regex_patterns: List[str] = None
+        regex_patterns: List[str] = None,
+        dimensions: Dict[str, List[str]] = None
     ) -> Dict[str, Any]:
         """
-        Smart extraction with GLOBAL MAX STRATEGY:
-        Phase 1 (Standard) and Phase 2 (Regex) candidates COMPETE together.
-        The absolute largest value wins.
+        Smart Extraction Engine v4.0: Dual-Stream & Dimensions Aware.
         """
-        
-        # 收集所有潛在的候選者
+        has_deep = deep_stream_df is not None and not deep_stream_df.empty
         all_candidates = []
 
-        # 預處理排除關鍵字
-        is_excluded = lambda k: False
-        if exclude_keywords:
-            exc_lower = [exc.lower() for exc in exclude_keywords]
-            is_excluded = lambda k: any(exc in k.lower() for exc in exc_lower)
-
-        # --- Phase 1: Standard Tags ---
+        # 1. Standard Tag Iteration (Stream 1 & 2)
         for tag in standard_tags:
-            val = raw_data.get(tag)
-            if val is not None:
-                try:
+            # OPTION A: Targeted Dimensional Extraction (Deep Stream Only)
+            if dimensions and has_deep:
+                matches = deep_stream_df[deep_stream_df['concept'] == tag]
+                if matches.empty: continue
+                
+                # Identify dimension columns
+                dim_cols = [c for c in matches.columns if c.startswith('dim') or 'Axis' in c or 'Member' in c]
+                required = dimensions.get('include', [])
+                excluded = dimensions.get('exclude', [])
+                
+                for _, row in matches.iterrows():
+                    # Combine dimension values for keyword matching
+                    row_dims_str = " ".join([str(row[c]) for c in dim_cols if pd.notna(row[c])])
+                    
+                    # Match logic: Must have all 'include', None of 'exclude'
+                    if required and not all(k.lower() in row_dims_str.lower() for k in required):
+                        continue
+                    if excluded and any(ex.lower() in row_dims_str.lower() for ex in excluded):
+                        continue
+                    
+                    # Found a match in Deep Stream!
+                    logger.debug(f"🌊 [DEEP STREAM] DimMatch: {tag} | Dim: {row_dims_str} | Val: {row['value']:,.0f}")
+                    
+                    all_candidates.append({
+                        "value": float(row['value']),
+                        "source_tags": [tag],
+                        "formula_logic": f"Dim: {row_dims_str}",
+                        "priority": 1 # Higher priority for specific dimension matches
+                    })
+
+            # OPTION B: Standard Extraction (Main Stream / Dict Lookup)
+            elif not dimensions:
+                val = standardized_dict.get(tag)
+                if val is not None:
+                    logger.debug(f"🏠 [MAIN STREAM] Standard Tag match: {tag} | Val: {val:,.0f}")
                     all_candidates.append({
                         "value": float(val),
                         "source_tags": [tag],
-                        "formula_logic": "Standard Tag",
-                        "priority": 1 # 權重標記 (可選)
+                        "formula_logic": "Standard",
+                        "priority": 2 # Standard consolidated
                     })
-                except (ValueError, TypeError):
-                    continue
+                elif has_deep:
+                    # Fallback to absolute max in Deep Stream if not in dict
+                    matches = deep_stream_df[deep_stream_df['concept'] == tag]
+                    if not matches.empty:
+                        best_idx = matches['value'].abs().idxmax()
+                        val = matches.loc[best_idx, 'value']
+                        logger.debug(f"🌊 [DEEP STREAM] Fallback match: {tag} | Val: {val:,.0f}")
+                        all_candidates.append({
+                            "value": float(val),
+                            "source_tags": [tag],
+                            "formula_logic": "Deep Max Fallback",
+                            "priority": 3
+                        })
 
-        # --- Phase 2: Regex Matching (Deep Scan) ---
-        if regex_patterns:
-            # 準備搜尋空間 (Dict Keys + Raw DF Concepts)
-            search_targets = list(raw_data.keys())
-            raw_df = raw_data.get('_raw_df')
+        # 2. Regex Pattern Matching (Deep Scan - Stream 1)
+        if not all_candidates and regex_patterns:
+            search_targets = set(standardized_dict.keys())
+            if has_deep:
+                search_targets.update(deep_stream_df['concept'].dropna().unique())
             
-            if isinstance(raw_df, pd.DataFrame):
-                raw_concepts = raw_df['concept'].dropna().unique().tolist()
-                search_targets.extend(raw_concepts)
-            
-            # 去重以提升效能
-            search_set = set(search_targets)
-
             for pattern in regex_patterns:
-                matches = []
-                for key in search_set:
-                    if key == '_raw_df' or is_excluded(key):
-                        continue
-                    if re.search(pattern, key, re.IGNORECASE):
-                        matches.append(key)
-                
+                # Compile regex once
+                try:
+                    prog = re.compile(pattern, re.IGNORECASE)
+                except:
+                    continue
+                    
+                matches = [t for t in search_targets if prog.search(str(t))]
                 if matches:
-                    # 每個 Pattern 選出最佳匹配 (例如最短的或含 Net 的)
+                    # Score and pick best tag (shortest/most total-like)
                     matches.sort(key=AutoExtractModel._score_candidate_tag)
                     best_tag = matches[0]
                     
-                    # 取值
-                    val = raw_data.get(best_tag)
-                    if val is None and isinstance(raw_df, pd.DataFrame):
-                        # 從 Raw DF 取最大值
-                        mask = (raw_df['concept'] == best_tag) & (raw_df['value'].notna())
-                        if mask.any():
-                            # 取絕對值最大
-                            best_val = raw_df.loc[mask, 'value'].abs().max() 
-                            # 注意：這裡我們需要保留正負號嗎？通常資本支出我們只在乎量級
-                            # 為了保險，我們取原值，但在比較時用絕對值
-                            row = raw_df.loc[raw_df.loc[mask, 'value'].abs() == best_val].iloc[0]
-                            val = row['value']
-
+                    source_stream = "MAIN"
+                    val = standardized_dict.get(best_tag)
+                    if val is None and has_deep:
+                        # Direct lookup from Deep DF if dict failed
+                        df_matches = deep_stream_df[deep_stream_df['concept'] == best_tag]
+                        if not df_matches.empty:
+                            val = df_matches.iloc[df_matches['value'].abs().idxmax()]['value']
+                            source_stream = "DEEP"
+                    
                     if val is not None:
-                        try:
-                            all_candidates.append({
-                                "value": float(val),
-                                "source_tags": [best_tag],
-                                "formula_logic": f"Regex: {pattern}",
-                                "priority": 2
-                            })
-                        except:
-                            continue
+                        logger.debug(f"{'🏠' if source_stream == 'MAIN' else '🌊'} [{source_stream} STREAM] Regex match: {best_tag} (Pattern: {pattern}) | Val: {val:,.0f}")
+                        all_candidates.append({
+                            "value": float(val),
+                            "source_tags": [best_tag],
+                            "formula_logic": f"Regex: {pattern}",
+                            "priority": 4
+                        })
 
-        # --- Phase 3: The Grand Finale (決賽) ---
-        # 如果沒有候選者，才跑 Fuzzy (Phase 3 通常是最後手段)
-        if not all_candidates and fuzzy_keywords:
-             # ... (Fuzzy Logic 保持原樣，只有在前面都沒結果時才跑) ...
-             pass
-
+        # 3. Decision Logic: Max Strategy
         if all_candidates:
-            # 🏆 核心邏輯：按絕對值大小排序，選最大的！
-            # 無論它是來自 Phase 1 還是 Phase 2
+            # Sort by absolute value descending (assume largest is most relevant/consolidated)
             all_candidates.sort(key=lambda x: abs(x['value']), reverse=True)
-            
-            # [可選優化] 如果最大值和第二大值差異極大(10倍)，選最大的
-            # 如果差異不大，優先選 Phase 1 (Standard Tag)？
-            # 目前我們先相信 "最大值 = 真理" (針對 CapEx)
-            
-            best_match = all_candidates[0]
+            winner = all_candidates[0]
             
             return {
-                "value": best_match['value'],
-                "source_tags": best_match['source_tags'],
+                "value": winner['value'],
+                "source_tags": winner['source_tags'],
                 "is_calculated": False,
-                "formula_logic": f"{best_match['formula_logic']} (Max Strategy)"
+                "formula_logic": f"{winner['formula_logic']} (Max Strategy)"
             }
 
         return {"value": None, "source_tags": [], "is_calculated": False}
@@ -878,29 +903,35 @@ class BankBalanceSheet(BalanceSheetBase):
     # ==========================================
     # 2. AXP 專用組件 (AXP Components)
     # ==========================================
-    # 即使我們不需要打印這些，抓取它們也能讓我們進行 "兜底計算"
     
-    # 組件 A: 信用卡貸款 (Card Member Loans) - $138B
-    card_member_loans: TraceableField = Field(
+    # 組件 A: 信用卡貸款 (Card Member Loans)
+    # 使用 dimensions 鎖定 AXP 的具體披露
+    card_loans: TraceableField = Field(
         default_factory=TraceableField,
         json_schema_extra={
-            'xbrl_tags': [
-                'us-gaap:FinancingReceivablesNet', # 需配合 Context，Max Strategy 會抓到最大的那個 Context
-                'us-gaap:CreditCardLoansNet'
-            ],
+            'xbrl_tags': ['us-gaap:NotesReceivableNet', 'us-gaap:FinancingReceivablesNet'],
+            'dimensions': {'include': ['Loan', 'Member']},
             'regex_patterns': [r'(?i).*CardMemberLoans.*']
         }
     )
 
-    # 組件 B: 應收帳款 (Card Member Receivables) - $69B
-    card_member_receivables: TraceableField = Field(
+    # 組件 B: 應收帳款 (Card Member Receivables)
+    card_receivables: TraceableField = Field(
         default_factory=TraceableField,
         json_schema_extra={
-            'xbrl_tags': [
-                'us-gaap:AccountsReceivableNet', 
-                'us-gaap:ReceivablesNet'
-            ],
+            'xbrl_tags': ['us-gaap:NotesReceivableNet', 'us-gaap:AccountsReceivableNet'],
+            'dimensions': {'include': ['Receivable', 'Member']},
             'regex_patterns': [r'(?i).*CardMemberReceivables.*']
+        }
+    )
+
+    # 組件 C: 其他帳款 (Card Member Other Loans)
+    card_other_loans: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={
+            'xbrl_tags': ['us-gaap:NotesReceivableNet', 'us-gaap:FinancingReceivablesNet'],
+            'dimensions': {'include': ['Other']},
+            'regex_patterns': [r'(?i).*CardMemberOtherLoans.*']
         }
     )
 
@@ -910,34 +941,31 @@ class BankBalanceSheet(BalanceSheetBase):
     @computed_field
     def net_loans(self) -> TraceableField:
         """
-        Smart Logic:
-        1. Check if 'net_loans_reported' is huge (Trust JPM).
-        2. If not, sum(CardLoans + Receivables) (Trust AXP).
-        3. Return the larger of the two approaches.
+        Pure Logic Summation: Prefer Reported Total, fallback to Components.
+        No Magic Numbers.
         """
-        # 1. 獲取單一申報值
-        val_reported = self.net_loans_reported.value if self.net_loans_reported.value else 0.0
+        val_reported = self.net_loans_reported.value or 0.0
+        val_loans = self.card_loans.value or 0.0
+        val_other_loans = self.card_other_loans.value or 0.0
+        val_recv = self.card_receivables.value or 0.0
         
-        # 2. 獲取組件加總值 (AXP Logic)
-        val_loans = self.card_member_loans.value if self.card_member_loans.value else 0.0
-        val_receivables = self.card_member_receivables.value if self.card_member_receivables.value else 0.0
-        
-        # 這裡做一個簡單的防呆：如果是 JPM，它的 Receivables 可能很小，加起來不如 NetLoans 大
-        # 如果是 AXP，它的 Reported 可能是 0，加起來會很大
-        val_sum = val_loans + val_receivables
-        
-        # 3. 決策：誰大聽誰的
-        if val_reported >= val_sum:
+        val_sum = val_loans + val_recv + val_other_loans
+
+        # 如果 Reported 值存在 (非零)，優先使用
+        if abs(val_reported) > 0:
             return self.net_loans_reported
-        else:
-            # 構造一個合成的 TraceableField
+
+        # 如果 組件加總 值存在，使用加總 (適用於 AXP)
+        if abs(val_sum) > 0:
+            src_tags = list(set(self.card_loans.source_tags + self.card_receivables.source_tags + self.card_other_loans.source_tags))
             return TraceableField(
                 value=val_sum,
-                # 合併來源標籤，方便追溯
-                source_tags=self.card_member_loans.source_tags + self.card_member_receivables.source_tags,
+                source_tags=src_tags,
                 is_calculated=True,
-                formula_logic=f"Sum(Loans {val_loans/1e9:.1f}B + Receivables {val_receivables/1e9:.1f}B) > Reported"
+                formula_logic=f"Component Sum: Loans({val_loans:,.0f}) + Recv({val_recv:,.0f}) + Other Loans({val_other_loans:,.0f})"
             )
+            
+        return TraceableField(value=None)
     total_debt: TraceableField = Field(
         default_factory=TraceableField,
         json_schema_extra={
