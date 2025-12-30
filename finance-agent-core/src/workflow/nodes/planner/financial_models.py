@@ -340,8 +340,13 @@ class AutoExtractModel(BaseModel):
                     # Fallback to absolute max in Deep Stream if not in dict
                     matches = deep_stream_df[deep_stream_df['concept'] == tag]
                     if not matches.empty:
-                        best_idx = matches['value'].abs().idxmax()
-                        val = matches.loc[best_idx, 'value']
+                        # Ensure we have valid values before finding max
+                        valid_matches = matches['value'].dropna()
+                        if not valid_matches.empty:
+                            best_idx = valid_matches.abs().idxmax()
+                            val = matches.loc[best_idx, 'value']
+                        else:
+                             val = None # All values are NaN
                         logger.debug(f"🌊 [DEEP STREAM] Fallback match: {tag} | Val: {val:,.0f}")
                         all_candidates.append({
                             "value": float(val),
@@ -374,9 +379,13 @@ class AutoExtractModel(BaseModel):
                     if val is None and has_deep:
                         # Direct lookup from Deep DF if dict failed
                         df_matches = deep_stream_df[deep_stream_df['concept'] == best_tag]
+                        
+                        # Fix: Check for valid values before idxmax
                         if not df_matches.empty:
-                            val = df_matches.loc[df_matches['value'].abs().idxmax()]['value']
-                            source_stream = "DEEP"
+                            valid_vals = df_matches['value'].dropna()
+                            if not valid_vals.empty:
+                                val = df_matches.loc[valid_vals.abs().idxmax()]['value']
+                                source_stream = "DEEP"
                     
                     if val is not None:
                         logger.debug(f"{'🏠' if source_stream == 'MAIN' else '🌊'} [{source_stream} STREAM] Regex match: {best_tag} (Pattern: {pattern}) | Val: {val:,.0f}")
