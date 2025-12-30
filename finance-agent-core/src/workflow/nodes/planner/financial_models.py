@@ -387,55 +387,121 @@ class AutoExtractModel(BaseModel):
     #     regex_patterns: List[str] = None
     # ) -> Dict[str, Any]:
     #     """
-    #     [DEBUG SCAN] SPG 專用偵探版：尋找消失的股息與抵押貸款
+    #     [DEBUG MODE] 診斷版：為什麼抓不到 Net Loans？
     #     """
-    #     # Phase 1: 先讓標準流程跑一下 (為了不報錯)
+    #     all_candidates = []
+        
+    #     # --- 🕵️ 偵測是否正在抓 Net Loans ---
+    #     # 如果標籤列表包含 'NetLoans' 或 'ReceivablesNet'，我們就啟動詳細日誌
+    #     debug_target = False
+    #     target_check = str(standard_tags)
+    #     if 'NetLoans' in target_check or 'ReceivablesNet' in target_check:
+    #         debug_target = True
+    #         print(f"\n--- 🕵️ [DEBUG] Extracting Net Loans/Receivables ---")
+    #         print(f"  > Looking for tags: {standard_tags[:3]}... (Total {len(standard_tags)})")
+
+    #     # 預處理排除關鍵字
+    #     is_excluded = lambda k: False
+    #     if exclude_keywords:
+    #         exc_lower = [exc.lower() for exc in exclude_keywords]
+    #         is_excluded = lambda k: any(exc in k.lower() for exc in exc_lower)
+
+    #     # --- Phase 1: Standard Tags ---
     #     for tag in standard_tags:
     #         val = raw_data.get(tag)
-    #         pass
-
-    #     # --- 🕵️ 暴力掃描啟動 ---
-    #     # 我們只找這兩個關鍵字：分配/股息 (Distribution/Dividend) 和 擔保/抵押 (Secured/Mortgage)
-    #     monitor_keywords = ['Distribution', 'Dividend', 'Secured', 'Mortgage']
-        
-    #     # 檢查是否正在尋找相關欄位
-    #     target_check = str(standard_tags)
-    #     if any(k in target_check for k in ['Dividends', 'Mortgage', 'Secured']):
-    #         print(f"\n--- 🕵️ [DEBUG SCAN] 正在尋找: {standard_tags[:1]}... ---")
             
-    #         # 1. 掃描字典 (Dict Keys)
-    #         print("  [Scanning Dictionary Keys...]")
-    #         found_data = []
+    #         # [DEBUG] 如果是目標欄位，打印每個標籤的查找結果
+    #         if debug_target:
+    #             status = f"✅ Found: {val}" if val is not None else "❌ Missing"
+    #             # 只打印找到的，或者前5個缺失的，避免洗版
+    #             if val is not None or standard_tags.index(tag) < 5:
+    #                 print(f"  > Check Tag: {tag.ljust(50)} -> {status}")
+
+    #         if val is not None:
+    #             try:
+    #                 all_candidates.append({
+    #                     "value": float(val),
+    #                     "source_tags": [tag],
+    #                     "formula_logic": "Standard Tag",
+    #                 })
+    #             except (ValueError, TypeError):
+    #                 continue
+
+    #     # --- Phase 2: Regex Matching ---
+    #     if regex_patterns:
+    #         search_targets = list(raw_data.keys())
+    #         raw_df = raw_data.get('_raw_df')
+            
+    #         if isinstance(raw_df, pd.DataFrame):
+    #             raw_concepts = raw_df['concept'].dropna().unique().tolist()
+    #             search_targets.extend(raw_concepts)
+            
+    #         search_set = set(search_targets)
+
+    #         for pattern in regex_patterns:
+    #             matches = []
+    #             for key in search_set:
+    #                 if key == '_raw_df' or is_excluded(key): continue
+    #                 if re.search(pattern, key, re.IGNORECASE):
+    #                     matches.append(key)
+                
+    #             if matches:
+    #                 # [DEBUG] 打印 Regex 匹配結果
+    #                 if debug_target:
+    #                     print(f"  > Regex Match '{pattern}': Found {len(matches)} candidates: {matches[:3]}")
+
+    #                 matches.sort(key=AutoExtractModel._score_candidate_tag)
+    #                 best_tag = matches[0]
+                    
+    #                 val = raw_data.get(best_tag)
+    #                 # (DataFrame lookup logic omitted for brevity, same as before)
+    #                 if val is None and isinstance(raw_df, pd.DataFrame):
+    #                     mask = (raw_df['concept'] == best_tag) & (raw_df['value'].notna())
+    #                     if mask.any():
+    #                         # 取絕對值最大的
+    #                         best_val = raw_df.loc[mask, 'value'].abs().max()
+    #                         val = best_val
+
+    #                 if val is not None:
+    #                     all_candidates.append({
+    #                         "value": float(val),
+    #                         "source_tags": [best_tag],
+    #                         "formula_logic": f"Regex: {pattern}",
+    #                     })
+
+    #     # --- Phase 3: Total Failure Scan (如果完全沒找到) ---
+    #     if debug_target and not all_candidates:
+    #         print(f"  ⚠️ [CRITICAL] No candidates found for Net Loans!")
+    #         print(f"  > Scanning raw_data for ANY keys containing 'Loans' or 'Receivables'...")
+            
+    #         hits = []
     #         for k, v in raw_data.items():
     #             if k == '_raw_df': continue
     #             k_lower = k.lower()
-                
-    #             # 過濾條件：包含關鍵字 且 數值絕對值 > 5億 (過濾雜訊)
-    #             if any(w.lower() in k_lower for w in monitor_keywords):
-    #                 try:
-    #                     val = float(v)
-    #                     if abs(val) > 5e8: # 只看 5億以上的大數
-    #                         found_data.append((k, val))
-    #                 except:
-    #                     continue
+    #             if ('loans' in k_lower or 'receiv' in k_lower) and isinstance(v, (int, float)):
+    #                 hits.append((k, v))
             
-    #         # 排序並打印
-    #         found_data.sort(key=lambda x: abs(x[1]), reverse=True)
-    #         for k, v in found_data[:10]:
-    #             print(f"    👉 Dict found: {k} | Val: {v/1e9:.3f} B")
+    #         # 按數值大小排序
+    #         hits.sort(key=lambda x: abs(x[1]), reverse=True)
+    #         for k, v in hits[:10]:
+    #             print(f"    👉 Potential Candidate in Raw Data: {k} = {v:,.0f}")
+    #         print("------------------------------------------------")
+
+    #     # --- The Grand Finale (Max Strategy) ---
+    #     if all_candidates:
+    #         all_candidates.sort(key=lambda x: abs(x['value']), reverse=True)
+    #         best_match = all_candidates[0]
             
-    #         # 2. 掃描原始 DataFrame (Raw DF)
-    #         raw_df = raw_data.get('_raw_df')
-    #         if isinstance(raw_df, pd.DataFrame):
-    #             print("  [Scanning Raw DataFrame...]")
-    #             mask = raw_df['concept'].str.contains('|'.join(monitor_keywords), case=False, na=False)
-    #             candidates = raw_df[mask]
-    #             candidates = candidates[candidates['value'].abs() > 5e8].sort_values(by='value', key=abs, ascending=False).head(10)
-                
-    #             for _, row in candidates.iterrows():
-    #                 print(f"    👉 RawDF found: {row['concept']} | Val: {row['value']/1e9:.3f} B")
-            
-    #         print(f"----------------------------------------\n")
+    #         if debug_target:
+    #             print(f"  🏆 Winner: {best_match['source_tags']} = {best_match['value']:,.0f}")
+    #             print("------------------------------------------------")
+
+    #         return {
+    #             "value": best_match['value'],
+    #             "source_tags": best_match['source_tags'],
+    #             "is_calculated": False,
+    #             "formula_logic": f"{best_match['formula_logic']} (Max Strategy)"
+    #         }
 
     #     return {"value": None, "source_tags": [], "is_calculated": False}
 
@@ -792,15 +858,86 @@ class BankBalanceSheet(BalanceSheetBase):
             ]
         }
     )
-    net_loans: TraceableField = Field(
+    # ==========================================
+    # 1. 核心總數嘗試 (Core Total Attempt)
+    # ==========================================
+    # 這是 JPM 的完美方案，也是 AXP 的首選（如果它有報的話）
+    net_loans_reported: TraceableField = Field(
         default_factory=TraceableField,
         json_schema_extra={
             'xbrl_tags': [
+                'us-gaap:FinancingReceivablesLoansAndLeasesNet', # AXP 潛在總數
+                'us-gaap:NetLoans',                              # JPM 核心
                 'us-gaap:LoansAndLeasesReceivableNetReportedAmount',
+                'us-gaap:LoansNet',
                 'us-gaap:FinancingReceivableExcludingAccruedInterestAfterAllowanceForCreditLoss'
             ]
         }
     )
+
+    # ==========================================
+    # 2. AXP 專用組件 (AXP Components)
+    # ==========================================
+    # 即使我們不需要打印這些，抓取它們也能讓我們進行 "兜底計算"
+    
+    # 組件 A: 信用卡貸款 (Card Member Loans) - $138B
+    card_member_loans: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={
+            'xbrl_tags': [
+                'us-gaap:FinancingReceivablesNet', # 需配合 Context，Max Strategy 會抓到最大的那個 Context
+                'us-gaap:CreditCardLoansNet'
+            ],
+            'regex_patterns': [r'(?i).*CardMemberLoans.*']
+        }
+    )
+
+    # 組件 B: 應收帳款 (Card Member Receivables) - $69B
+    card_member_receivables: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={
+            'xbrl_tags': [
+                'us-gaap:AccountsReceivableNet', 
+                'us-gaap:ReceivablesNet'
+            ],
+            'regex_patterns': [r'(?i).*CardMemberReceivables.*']
+        }
+    )
+
+    # ==========================================
+    # 3. 智能計算邏輯 (The Brain)
+    # ==========================================
+    @computed_field
+    def net_loans(self) -> TraceableField:
+        """
+        Smart Logic:
+        1. Check if 'net_loans_reported' is huge (Trust JPM).
+        2. If not, sum(CardLoans + Receivables) (Trust AXP).
+        3. Return the larger of the two approaches.
+        """
+        # 1. 獲取單一申報值
+        val_reported = self.net_loans_reported.value if self.net_loans_reported.value else 0.0
+        
+        # 2. 獲取組件加總值 (AXP Logic)
+        val_loans = self.card_member_loans.value if self.card_member_loans.value else 0.0
+        val_receivables = self.card_member_receivables.value if self.card_member_receivables.value else 0.0
+        
+        # 這裡做一個簡單的防呆：如果是 JPM，它的 Receivables 可能很小，加起來不如 NetLoans 大
+        # 如果是 AXP，它的 Reported 可能是 0，加起來會很大
+        val_sum = val_loans + val_receivables
+        
+        # 3. 決策：誰大聽誰的
+        if val_reported >= val_sum:
+            return self.net_loans_reported
+        else:
+            # 構造一個合成的 TraceableField
+            return TraceableField(
+                value=val_sum,
+                # 合併來源標籤，方便追溯
+                source_tags=self.card_member_loans.source_tags + self.card_member_receivables.source_tags,
+                is_calculated=True,
+                formula_logic=f"Sum(Loans {val_loans/1e9:.1f}B + Receivables {val_receivables/1e9:.1f}B) > Reported"
+            )
     total_debt: TraceableField = Field(
         default_factory=TraceableField,
         json_schema_extra={
@@ -818,17 +955,27 @@ class BankBalanceSheet(BalanceSheetBase):
     # --- Bank Liquidity Fields (JPM Fix) ---
     cash_and_due_from_banks: TraceableField = Field(
         default_factory=TraceableField,
-        json_schema_extra={'xbrl_tags': [
-            'us-gaap:CashAndDueFromBanks',
-            'us-gaap:CashCashEquivalentsRestrictedCashAndCashEquivalents'
-        ]}
+        json_schema_extra={
+            'xbrl_tags': [
+                # AXP / 現代銀行控股 (總項)
+                'us-gaap:CashAndCashEquivalentsAtCarryingValue', # 這是 AXP 的核心標籤
+                'us-gaap:CashAndCashEquivalents',
+                
+                # JPM / 傳統銀行 (分項A)
+                'us-gaap:CashAndDueFromBanks',
+                'us-gaap:CashCashEquivalentsRestrictedCashAndCashEquivalents',
+            ]
+        }
     )
     interest_bearing_deposits: TraceableField = Field(
         default_factory=TraceableField,
-        json_schema_extra={'xbrl_tags': [
-            'us-gaap:InterestBearingDepositsInBanks',
-            'us-gaap:DepositsWithBanks'
-        ]}
+        json_schema_extra={
+            'xbrl_tags': [
+                'us-gaap:InterestBearingDepositsInBanks',
+                'us-gaap:DepositsWithBanks',
+                'us-gaap:FederalFundsSoldAndSecuritiesPurchasedUnderAgreementsToResell' # 有時放在這裡
+            ]
+        }
     )
     securities: TraceableField = Field(
         default_factory=TraceableField,
@@ -995,6 +1142,9 @@ class IncomeStatementBase(AutoExtractModel):
                 'us-gaap:NetIncomeLossAvailableToCommonStockholdersBasic',
                 # 次精準：歸屬於母公司的淨利
                 'us-gaap:NetIncomeLoss',
+                # 3. 兜底：合併損益
+                # 由於當同時搜到以上的TAG，會取最大值可能導致誤差，但目前需先接受
+                'us-gaap:ProfitLoss'
             ]
         }
     )
