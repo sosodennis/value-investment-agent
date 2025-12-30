@@ -375,7 +375,7 @@ class AutoExtractModel(BaseModel):
                         # Direct lookup from Deep DF if dict failed
                         df_matches = deep_stream_df[deep_stream_df['concept'] == best_tag]
                         if not df_matches.empty:
-                            val = df_matches.iloc[df_matches['value'].abs().idxmax()]['value']
+                            val = df_matches.loc[df_matches['value'].abs().idxmax()]['value']
                             source_stream = "DEEP"
                     
                     if val is not None:
@@ -1089,10 +1089,31 @@ class REITBalanceSheet(BalanceSheetBase):
                 'us-gaap:UnsecuredDebt',
                 'us-gaap:NotesPayable'
             ],
-            'fuzzy_keywords': ['SeniorNotes', 'Unsecured', 'NotesPayable', 'NotesAndBonds'],
-            'exclude_keywords': [
-                'Interest', 'Expense', 'Amortization', 'Receivable', 'Issuance', 
-                'Encumbrances', 'Premiums', 'Discount', 'Adjustments' # 👈 新增排除關鍵字
+            'regex_patterns': [
+                # Pattern A: 高級票據 (Senior Notes) - EQIX 最主要的債務形式
+                r'(?i).*Senior.*Notes.*',
+                
+                # Pattern B: 無擔保債務/票據
+                r'(?i).*Unsecured.*Debt.*',
+                r'(?i).*Unsecured.*Notes.*',
+                
+                # Pattern C: 應付票據 (通用)
+                r'(?i)^.*Notes.*Payable.*$'
+            ],
+        }
+    )
+    finance_leases: TraceableField = Field(
+        default_factory=TraceableField,
+        json_schema_extra={
+            'xbrl_tags': [
+                'us-gaap:FinanceLeaseLiability',
+                'us-gaap:FinanceLeaseLiabilityNoncurrent',
+                'us-gaap:CapitalLeaseObligations', # 舊會計準則術語
+                'us-gaap:CapitalLeaseObligationsNoncurrent'
+            ],
+            'regex_patterns': [
+                r'(?i).*Finance.*Lease.*Liability.*',
+                r'(?i).*Capital.*Lease.*Obligation.*'
             ]
         }
     )
@@ -1118,36 +1139,24 @@ class REITBalanceSheet(BalanceSheetBase):
                 r'(?i).*:Secured.*Debt',
                 r'(?i).*:Secured.*Liabilities'
             ],
-            
-            # 3. 模糊匹配
-            'fuzzy_keywords': [],
-            
-            # 4. 全局排除 (微調)
-            'exclude_keywords': [
-                'Interest',      # 利息
-                'Receivable',    # 應收 (資產)
-                'Asset',         # 資產
-                'Investment',    # 投資
-                'Unamortized',   # 👈 改成排除 "未攤銷" 部分，而不是殺死整個 Premium/Discount
-                'Adjustment',    # 調整
-                'Origination'    # 發放 (現金流)
-            ]
         }
     )
     notes_payable: TraceableField = Field(
         default_factory=TraceableField,
         json_schema_extra={
             'xbrl_tags': ['us-gaap:TermLoan'],
-            'fuzzy_keywords': ['TermLoan', 'CreditFacility', 'LineOfCredit', 'Revolving'],
-            'exclude_keywords': ['Interest', 'Fee']
+            'regex_patterns': [
+                r'(?i).*Term.*Loan.*',
+                r'(?i).*Credit.*Facility.*'
+            ]
         }
     )
     
     @computed_field
     def total_debt(self) -> TraceableField:
         """Total Debt = Unsecured + Mortgages + Notes"""
-        result = self.unsecured_debt + self.mortgages + self.notes_payable
-        result.formula_logic = "Unsecured + Mortgages + BankLoans"
+        result = self.unsecured_debt + self.mortgages + self.notes_payable + self.finance_leases
+        result.formula_logic = f"Unsecured({self.unsecured_debt}) + Mortgages({self.mortgages}) + BankLoan({self.notes_payable}) + FinanceLeases({self.finance_leases})"
         return result
 
 
@@ -1345,24 +1354,28 @@ class REITIncomeStatement(IncomeStatementBase):
         default_factory=TraceableField,
         json_schema_extra={
             'xbrl_tags': [
-                'us-gaap:DepreciationDepletionAndAmortization',
+                'us-gaap:DepreciationDepletionAndAmortizationExpense',
                 'us-gaap:DepreciationAndAmortization',
-                'us-gaap:Depreciation'
+                'us-gaap:Depreciation',
+                'us-gaap:DepreciationDepletionAndAmortization',
             ],
-            'fuzzy_keywords': ['Depreciation', 'RealEstate'],
-            'exclude_keywords': ['Accumulated', 'Reserve']
         }
     )
     gains_on_sale: TraceableField = Field(
         default_factory=TraceableField,
-        json_schema_extra={'xbrl_tags': ['us-gaap:GainLossOnSaleOfProperties']}
+        json_schema_extra={
+            'xbrl_tags': [
+                'us-gaap:GainLossOnSaleOfProperties',
+                'us-gaap:GainLossOnDisposalOfAssets'
+            ]
+        }
     )
 
     @computed_field
     def funds_from_operations(self) -> TraceableField:
         """FFO: Net Income + Depreciation - Gains on Sale"""
         result = self.net_income + self.depreciation - self.gains_on_sale
-        result.formula_logic = "Net Income + Depreciation - Gains on Sale"
+        result.formula_logic = f"Net Income({self.net_income}) + Depreciation({self.depreciation}) - Gains on Sale({self.gains_on_sale})"
         return result
 
 
