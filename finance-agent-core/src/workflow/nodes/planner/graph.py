@@ -252,7 +252,12 @@ def financial_health_node(state: AgentState) -> Command:
             
             # Detailed Statement Logging
             print(f"   📊 Balance Sheet ({report.fiscal_period}):")
-            print(f"     - Cash & Eq: {fmt(report.bs.cash_and_equivalents)}")
+            if isinstance(report.bs, BankBalanceSheet):
+                # 銀行用 cash_and_due_from_banks
+                print(f"     - Cash & Due: {fmt(report.bs.cash_and_due_from_banks)}")
+            else:
+                # 企業/REIT 用 cash_and_equivalents
+                print(f"     - Cash & Eq: {fmt(report.bs.cash_and_equivalents)}")
             if report.bs.total_liquidity and (report.bs.marketable_securities or report.bs.marketable_securities_noncurrent):
                  print(f"     - Marketable Securities (Current): {fmt(report.bs.marketable_securities)}")
                  print(f"     - Marketable Securities (Non-Current): {fmt(report.bs.marketable_securities_noncurrent)}")
