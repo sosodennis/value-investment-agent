@@ -179,17 +179,23 @@ def financial_health_node(state: AgentState) -> Command:
     reports_data = []
     
     if financial_reports:
-        # Helper logging functions - handle TraceableField objects
+        from .financial_models import (
+            XBRLProvenance, ComputedProvenance, ManualProvenance,
+            IndustrialExtension, FinancialServicesExtension, RealEstateExtension
+        )
+
+        # Helper logging functions - handle TraceableField objects with new Provenance
         def src(v):
             """Extract source metadata from TraceableField"""
-            if v is None or not hasattr(v, 'source_tags'):
+            if v is None or not hasattr(v, 'provenance'):
                 return ""
-            if getattr(v, 'is_calculated', False):
-                logic = getattr(v, 'formula_logic', 'N/A')
-                return f" | [Calc: {logic}]"
-            tags = getattr(v, 'source_tags', [])
-            if tags:
-                return f" | [Tags: {', '.join(tags)}]"
+            p = v.provenance
+            if isinstance(p, XBRLProvenance):
+                return f" | [XBRL: {p.concept}]"
+            elif isinstance(p, ComputedProvenance):
+                return f" | [Calc: {p.expression}]"
+            elif isinstance(p, ManualProvenance):
+                return f" | [Manual: {p.description}]"
             return ""
 
         def fmt(v):
@@ -198,7 +204,11 @@ def financial_health_node(state: AgentState) -> Command:
                 return "N/A"
             val = v.value if hasattr(v, 'value') else v
             if val is None: return "N/A"
-            return f"${val:,.0f}{src(v)}"
+            try:
+                fval = float(val)
+                return f"${fval:,.0f}{src(v)}"
+            except (ValueError, TypeError):
+                return f"{val}{src(v)}"
         
         def pct(v):
             """Format percentage values, handling TraceableField"""
@@ -206,97 +216,81 @@ def financial_health_node(state: AgentState) -> Command:
                 return "N/A"
             val = v.value if hasattr(v, 'value') else v
             if val is None: return "N/A"
-            return f"{val:.2%}{src(v)}"
+            try:
+                fval = float(val)
+                return f"{fval:.2%}{src(v)}"
+            except (ValueError, TypeError):
+                 return f"{val}{src(v)}"
         
-        def ratio(v):
-            """Format ratio values, handling TraceableField"""
-            if v is None:
+        def ratio(num, den):
+            """Safe ratio calculation"""
+            n_val = num.value if hasattr(num, 'value') else num
+            d_val = den.value if hasattr(den, 'value') else den
+            
+            if n_val is None or d_val is None: return "N/A"
+            try:
+                n = float(n_val)
+                d = float(d_val)
+                if d == 0: return "N/A (Div0)"
+                return f"{n/d:.2f}"
+            except:
                 return "N/A"
-            val = v.value if hasattr(v, 'value') else v
-            if val is None: return "N/A"
-            return f"{val:.2f}{src(v)}"
 
         print(f"✅ Generated {len(financial_reports)} Financial Health Reports for {resolved_ticker}")
         
         for i, report in enumerate(financial_reports):
-            print(f"\n📅 --- Fiscal Year: {report.fiscal_period} ({report.is_.industry.value}) ---")
-            print(f"   • Current Ratio: {ratio(report.current_ratio)}")
-            print(f"   • Debt/Equity: {ratio(report.debt_to_equity)}")
-            print(f"   • ROE: {pct(report.return_on_equity)}")
-            print(f"   • FCF: {fmt(report.free_cash_flow)}")
+            # Access Base Model
+            base = report.base
+            ext = report.extension
             
-            # Industry-specific logging
-            from .financial_models import (
-                CorporateIncomeStatement, BankIncomeStatement, REITIncomeStatement,
-                CorporateBalanceSheet, BankBalanceSheet, REITBalanceSheet,
-                CorporateCashFlow, REITCashFlow
-            )
+            fy_str = base.fiscal_year.value if base.fiscal_year else "N/A"
+            fp_str = base.fiscal_period.value if base.fiscal_period else "N/A"
             
-            print(f"   📉 Income Statement ({report.fiscal_period}):")
-            if isinstance(report.is_, CorporateIncomeStatement):
-                print(f"     - Revenue: {fmt(report.is_.revenue)}")
-                print(f"     - Gross Profit: {fmt(report.is_.gross_profit)}")
-                print(f"     - Operating Income: {fmt(report.is_.operating_income)}")
-                print(f"     - Net Income: {fmt(report.is_.net_income)}")
-            elif isinstance(report.is_, BankIncomeStatement):
-                print(f"     - Net Interest Income: {fmt(report.is_.net_interest_income)}")
-                print(f"     - Non-Interest Income: {fmt(report.is_.non_interest_income)}")
-                print(f"     - Total Revenue: {fmt(report.is_.total_revenue)}")
-                print(f"     - Net Interest Margin: {pct(report.is_.net_interest_margin)}")
-                print(f"     - Efficiency Ratio: {pct(report.is_.efficiency_ratio)}")
-                print(f"     - Net Income: {fmt(report.is_.net_income)}")
-            elif isinstance(report.is_, REITIncomeStatement):
-                print(f"     - Rental Income: {fmt(report.is_.rental_income)}")
-                print(f"     - FFO (Funds From Operations): {fmt(report.is_.funds_from_operations)}")
-                print(f"     - Net Income: {fmt(report.is_.net_income)}")
+            print(f"\n📅 --- Fiscal Year: {fy_str} ({fp_str}) [{report.industry_type}] ---")
             
-            # Detailed Statement Logging
-            print(f"   📊 Balance Sheet ({report.fiscal_period}):")
-            if isinstance(report.bs, BankBalanceSheet):
-                # 銀行用 cash_and_due_from_banks
-                print(f"     - Cash & Due: {fmt(report.bs.cash_and_due_from_banks)}")
-            else:
-                # 企業/REIT 用 cash_and_equivalents
-                print(f"     - Cash & Eq: {fmt(report.bs.cash_and_equivalents)}")
-            if report.bs.total_liquidity and (report.bs.marketable_securities or report.bs.marketable_securities_noncurrent):
-                 print(f"     - Marketable Securities (Current): {fmt(report.bs.marketable_securities)}")
-                 print(f"     - Marketable Securities (Non-Current): {fmt(report.bs.marketable_securities_noncurrent)}")
-                 print(f"     - Total Liquidity: {fmt(report.bs.total_liquidity)}")
-            print(f"     - Total Assets: {fmt(report.bs.total_assets)}")
-            print(f"     - Total Debt: {fmt(report.bs.total_debt)}")
-            print(f"     - Total Equity: {fmt(report.bs.total_equity)}")
+            # Key Ratios (Computed on the fly as they are not in base model)
+            # ROE = Net Income / Total Equity
+            roe = ratio(base.net_income, base.total_equity)
+            # Debt/Equity = Total Liabilities / Total Equity
+            de = ratio(base.total_liabilities, base.total_equity)
             
-            if isinstance(report.bs, CorporateBalanceSheet):
-                print(f"     - Current Assets: {fmt(report.bs.assets_current)}")
-                print(f"     - Current Liabilities: {fmt(report.bs.liabilities_current)}")
-                print(f"     - Inventory: {fmt(report.bs.inventory)}")
-                print(f"     - Receivables: {fmt(report.bs.receivables_net)}")
-                print(f"     - Lease Liabilities: {fmt(report.bs.total_lease_liabilities)}")
-                print(f"     - Adjusted Debt: {fmt(report.bs.adjusted_total_debt)}")
-                print(f"     - Net Debt: {fmt(report.bs.net_debt)}")
-            elif isinstance(report.bs, BankBalanceSheet):
-                print(f"     - Total Deposits: {fmt(report.bs.total_deposits)}")
-                print(f"     - Net Loans: {fmt(report.bs.net_loans)}")
-            elif isinstance(report.bs, REITBalanceSheet):
-                print(f"     - Real Estate Assets: {fmt(report.bs.real_estate_assets)}")
-                print(f"     - Unsecured Debt: {fmt(report.bs.unsecured_debt)}")
-                print(f"     - Mortgages: {fmt(report.bs.mortgages)}")
+            print(f"   • Debt/Equity: {de}")
+            print(f"   • ROE: {roe}")
+            
+            # Base Financials
+            print(f"   📉 Income Statement:")
+            print(f"     - Revenue: {fmt(base.total_revenue)}")
+            print(f"     - Net Income: {fmt(base.net_income)}")
+            
+            print(f"   📊 Balance Sheet:")
+            print(f"     - Cash & Eq: {fmt(base.cash_and_equivalents)}")
+            print(f"     - Total Assets: {fmt(base.total_assets)}")
+            print(f"     - Total Liabilities: {fmt(base.total_liabilities)}")
+            print(f"     - Total Equity: {fmt(base.total_equity)}")
+            
+            print(f"   💸 Cash Flow:")
+            print(f"     - OCF: {fmt(base.operating_cash_flow)}")
 
-            print(f"   💸 Cash Flow ({report.fiscal_period}):")
-            print(f"     - OCF: {fmt(report.cf.ocf)}")
-            print(f"     - Dividends Paid: {fmt(report.cf.dividends_paid)}")
-            if isinstance(report.cf, CorporateCashFlow):
-                print(f"     - Capex: {fmt(report.cf.capex)}")
-            elif isinstance(report.cf, REITCashFlow):
-                print(f"     - RE Investment: {fmt(report.cf.real_estate_investment)}")
-                
-            # Adjusted Capex (Hidden Capital)
-            if report.adjusted_capex and report.adjusted_capex.value:
-                print(f"     - Adjusted Capex: {fmt(report.adjusted_capex)}")
-
+            # Extension Specifics
+            if ext:
+                if isinstance(ext, IndustrialExtension):
+                    print(f"   🏭 Industrial Metrics:")
+                    print(f"     - Inventory: {fmt(ext.inventory)}")
+                    print(f"     - Capex: {fmt(ext.capex)}")
+                    print(f"     - R&D: {fmt(ext.rd_expense)}")
+                    
+                elif isinstance(ext, FinancialServicesExtension):
+                    print(f"   🏦 Banking Metrics:")
+                    print(f"     - Deposits: {fmt(ext.deposits)}")
+                    print(f"     - Loans: {fmt(ext.loans_and_leases)}")
+                    print(f"     - Interest Income: {fmt(ext.interest_income)}")
+                    
+                elif isinstance(ext, RealEstateExtension):
+                    print(f"   🏠 Real Estate Metrics:")
+                    print(f"     - Real Estate Assets: {fmt(ext.real_estate_assets)}")
+                    print(f"     - FFO: {fmt(ext.ffo)}")
             
             reports_data.append(report.model_dump())
-
     else:
         print(f"⚠️  Could not fetch financial data for {resolved_ticker}, proceeding without it")
         reports_data = []
@@ -332,27 +326,34 @@ def model_selection_node(state: AgentState) -> Command:
     # Enhance reasoning with financial health insights (using latest report)
     if state.financial_reports:
         try:
-            from .financial_models import FinancialHealthReport
+            from .financial_models import FinancialReport
             # Use most recent year (index 0)
             latest_report_data = state.financial_reports[0]
-            report = FinancialHealthReport(**latest_report_data)
+            # FinancialReport is a Pydantic model, so we can parse it
+            report = FinancialReport(**latest_report_data)
+            base = report.base
             
             # Add financial health context to reasoning
-            health_context = f"\n\nFinancial Health Insights ({report.fiscal_period}):\n"
+            fy = base.fiscal_year.value if base.fiscal_year else "Unknown"
+            health_context = f"\n\nFinancial Health Insights (FY{fy}):\n"
             
             # Helper to extract value from TraceableField
             def get_val(field):
+                if field is None: return None
                 return field.value if hasattr(field, 'value') else field
             
-            current_ratio_val = get_val(report.current_ratio)
-            debt_to_equity_val = get_val(report.debt_to_equity)
-            roe_val = get_val(report.return_on_equity)
-            fcf_val = get_val(report.free_cash_flow)
+            # Extract basic metrics
+            net_income_val = get_val(base.net_income)
+            equity_val = get_val(base.total_equity)
+            ocf_val = get_val(base.operating_cash_flow)
             
-            health_context += f"- Current Ratio: {current_ratio_val:.2f}" if current_ratio_val is not None else ""
-            health_context += f"\n- Debt-to-Equity: {debt_to_equity_val:.2f}" if debt_to_equity_val is not None else ""
+            # Derived ratios for reasoning context
+            roe_val = (net_income_val / equity_val) if (net_income_val and equity_val) else None
+            
+            health_context += f"- Net Income: ${net_income_val:,.0f}" if net_income_val is not None else ""
+            health_context += f"\n- Total Equity: ${equity_val:,.0f}" if equity_val is not None else ""
             health_context += f"\n- ROE: {roe_val:.2%}" if roe_val is not None else ""
-            health_context += f"\n- Free Cash Flow: ${fcf_val:,.0f}" if fcf_val is not None else ""
+            health_context += f"\n- OCF: ${ocf_val:,.0f}" if ocf_val is not None else ""
             
             reasoning += health_context
         except Exception as e:
