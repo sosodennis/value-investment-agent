@@ -4,19 +4,17 @@ OpenBB and Web Search integration tools for the Planner Node.
 Provides wrapper functions for entity resolution, company profile retrieval, and web search.
 """
 
-from typing import List, Optional
 import logging
-
-from .structures import TickerCandidate, CompanyProfile
-
-import logging
-logger = logging.getLogger(__name__)
 
 import yfinance as yf
 from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
 
+from .structures import CompanyProfile, TickerCandidate
 
-def search_ticker(query: str, limit: int = 5) -> List[TickerCandidate]:
+logger = logging.getLogger(__name__)
+
+
+def search_ticker(query: str, limit: int = 5) -> list[TickerCandidate]:
     """
     Search for ticker symbols using yfinance.Search.
     """
@@ -24,25 +22,29 @@ def search_ticker(query: str, limit: int = 5) -> List[TickerCandidate]:
     try:
         search = yf.Search(query)
         quotes = getattr(search, "quotes", [])
-        
+
         candidates = []
         for quote in quotes[:limit]:
             # Filter for stocks
             quote_type = quote.get("quoteType", "").upper()
             if quote_type not in ["EQUITY", "EQUITY_DEPRECATED"]:
                 continue
-                
-            candidates.append(TickerCandidate(
-                symbol=quote.get("symbol"),
-                name=quote.get("longname") or quote.get("shortname") or quote.get("symbol"),
-                exchange=quote.get("exchDisp"),
-                type="stock",
-                confidence=1.0 if quote.get("symbol") == query.upper() else 0.9
-            ))
-            
+
+            candidates.append(
+                TickerCandidate(
+                    symbol=quote.get("symbol"),
+                    name=quote.get("longname")
+                    or quote.get("shortname")
+                    or quote.get("symbol"),
+                    exchange=quote.get("exchDisp"),
+                    type="stock",
+                    confidence=1.0 if quote.get("symbol") == query.upper() else 0.9,
+                )
+            )
+
         if candidates:
             return candidates
-            
+
     except Exception as e:
         logger.error(f"yfinance.Search failed: {e}")
 
@@ -59,7 +61,7 @@ def web_search(query: str) -> str:
         if "ticker" in query.lower() or "stock" in query.lower():
             if "share class" not in query.lower():
                 query += " share classes tickers"
-        
+
         logger.info(f"Executing optimized search query: {query}")
 
         # 2. Init Wrapper with more results
@@ -67,17 +69,17 @@ def web_search(query: str) -> str:
 
         # 3. Execute search
         results = search.results(query, max_results=7)
-        
+
         if not results:
             return "No search results found."
 
         # 4. Format output
         formatted_output = []
         for i, res in enumerate(results, 1):
-            title = res.get('title', 'No Title')
-            snippet = res.get('snippet', 'No Snippet')
+            title = res.get("title", "No Title")
+            snippet = res.get("snippet", "No Snippet")
             formatted_output.append(f"[{i}] Source: {title}\nContent: {snippet}\n")
-            
+
         return "\n---\n".join(formatted_output)
 
     except Exception as e:
@@ -85,38 +87,38 @@ def web_search(query: str) -> str:
         return f"Web search currently unavailable. Error: {str(e)}"
 
 
-def get_company_profile(ticker: str) -> Optional[CompanyProfile]:
+def get_company_profile(ticker: str) -> CompanyProfile | None:
     """
     Retrieve company profile using yfinance.
-    
+
     Args:
         ticker: Stock ticker symbol
-        
+
     Returns:
         CompanyProfile with sector, industry, and other metadata
     """
     try:
         stock = yf.Ticker(ticker)
         info = stock.info
-        
-        if not info or 'symbol' not in info:
+
+        if not info or "symbol" not in info:
             logger.warning(f"No profile found for ticker: {ticker}")
             return None
-            
+
         profile = CompanyProfile(
             ticker=ticker,
-            name=info.get('longName') or info.get('shortName') or ticker,
-            sector=info.get('sector'),
-            industry=info.get('industry'),
-            description=info.get('longBusinessSummary'),
-            market_cap=info.get('marketCap'),
-            is_profitable=None  # Placeholder, logic for profitability check remains outside
+            name=info.get("longName") or info.get("shortName") or ticker,
+            sector=info.get("sector"),
+            industry=info.get("industry"),
+            description=info.get("longBusinessSummary"),
+            market_cap=info.get("marketCap"),
+            is_profitable=None,  # Placeholder, logic for profitability check remains outside
         )
-        
+
         # logger.info(f"✓ Retrieved profile for {ticker} using yfinance")
         return profile
-        
-    except Exception as e:
+
+    except Exception:
         # logger.error(f"Error getting company profile for {ticker}: {e}")
         return None
 
@@ -124,10 +126,10 @@ def get_company_profile(ticker: str) -> Optional[CompanyProfile]:
 def validate_ticker(ticker: str) -> bool:
     """
     Validate that a ticker exists and is tradeable.
-    
+
     Args:
         ticker: Stock ticker symbol
-        
+
     Returns:
         True if ticker is valid
     """

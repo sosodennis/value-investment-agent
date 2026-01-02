@@ -2,33 +2,42 @@
 Shared state definitions for the workflow graph.
 """
 
-from typing import List, Dict, Optional, Any, Annotated
-from pydantic import BaseModel, Field
-from langgraph.graph import add_messages
-from langchain_core.messages import AnyMessage
+from typing import Annotated, Any
 
-from .schemas import ExtractionOutput, AuditOutput, CalculationOutput
+from langchain_core.messages import AnyMessage
+from langgraph.graph import add_messages
+from pydantic import BaseModel, Field
+
+from .schemas import AuditOutput, CalculationOutput, ExtractionOutput
+
 
 class AgentState(BaseModel):
     """Agent state defined as a Pydantic model."""
-    user_query: Optional[str] = None
-    messages: Annotated[List[AnyMessage], add_messages] = Field(default_factory=list)
-    ticker: Optional[str] = None
-    model_type: Optional[str] = None
-    
-    # Refactored fields with strict schemas
-    extraction_output: Optional[ExtractionOutput] = Field(None, description="Output from Executor")
-    audit_output: Optional[AuditOutput] = Field(None, description="Output from Auditor")
-    calculation_output: Optional[CalculationOutput] = Field(None, description="Output from Calculator")
-    
-    # Planner metadata (kept as Dict/List for now, could be refactored later)
-    planner_output: Optional[Dict[str, Any]] = None
-    extracted_intent: Optional[Dict[str, Any]] = None
-    ticker_candidates: Optional[List[Any]] = None
-    resolved_ticker: Optional[str] = None
-    company_profile: Optional[Dict[str, Any]] = None
-    financial_reports: List[Dict[str, Any]] = Field(default_factory=list, description="Financial Health Reports from edgartools (Multi-year)")
-    status: Optional[str] = None
-    selected_symbol: Optional[str] = None
-    approved: Optional[bool] = None
 
+    user_query: str | None = None
+    messages: Annotated[list[AnyMessage], add_messages] = Field(default_factory=list)
+    ticker: str | None = None
+    model_type: str | None = None
+
+    # Refactored fields with strict schemas
+    extraction_output: ExtractionOutput | None = Field(
+        None, description="Output from Executor"
+    )
+    audit_output: AuditOutput | None = Field(None, description="Output from Auditor")
+    calculation_output: CalculationOutput | None = Field(
+        None, description="Output from Calculator"
+    )
+
+    # Planner metadata (kept as Dict/List for now, could be refactored later)
+    planner_output: dict[str, Any] | None = None
+    extracted_intent: dict[str, Any] | None = None
+    ticker_candidates: list[Any] | None = None
+    resolved_ticker: str | None = None
+    company_profile: dict[str, Any] | None = None
+    financial_reports: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Financial Health Reports from edgartools (Multi-year)",
+    )
+    status: str | None = None
+    selected_symbol: str | None = None
+    approved: bool | None = None
