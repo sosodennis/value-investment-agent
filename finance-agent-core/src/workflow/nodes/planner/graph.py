@@ -179,6 +179,10 @@ def financial_health_node(state: AgentState) -> Command:
     reports_data = []
 
     if financial_reports:
+        import textwrap
+
+        from tabulate import tabulate
+
         from .financial_models import (
             ComputedProvenance,
             FinancialServicesExtension,
@@ -189,6 +193,10 @@ def financial_health_node(state: AgentState) -> Command:
         )
 
         # Helper logging functions - handle TraceableField objects with new Provenance
+        def wrap_text(text: str, width: int = 40) -> str:
+            """Wrap text to a specified width."""
+            return "\n".join(textwrap.wrap(text, width=width))
+
         def src(v):
             """Extract source metadata from TraceableField"""
             if v is None or not hasattr(v, "provenance"):
@@ -211,9 +219,11 @@ def financial_health_node(state: AgentState) -> Command:
                 return "N/A"
             try:
                 fval = float(val)
-                return f"${fval:,.0f}{src(v)}"
+                # If value is very large, maybe format differently, but keep simple for now
+                res = f"${fval:,.0f}{src(v)}"
             except (ValueError, TypeError):
-                return f"{val}{src(v)}"
+                res = f"{val}{src(v)}"
+            return wrap_text(res)
 
         def pct(v):
             """Format percentage values, handling TraceableField"""
@@ -224,9 +234,10 @@ def financial_health_node(state: AgentState) -> Command:
                 return "N/A"
             try:
                 fval = float(val)
-                return f"{fval:.2%}{src(v)}"
+                res = f"{fval:.2%}{src(v)}"
             except (ValueError, TypeError):
-                return f"{val}{src(v)}"
+                res = f"{val}{src(v)}"
+            return wrap_text(res)
 
         def ratio(num, den):
             """Safe ratio calculation"""
@@ -240,72 +251,119 @@ def financial_health_node(state: AgentState) -> Command:
                 d = float(d_val)
                 if d == 0:
                     return "N/A (Div0)"
-                return f"{n / d:.2f}"
-            except (
-                ValueError,
-                TypeError,
-            ):  # Fix: Specify exceptions instead of bare except
+                res = f"{n / d:.2f}"
+                return wrap_text(res)
+            except (ValueError, TypeError):
                 return "N/A"
 
         print(
             f"✅ Generated {len(financial_reports)} Financial Health Reports for {resolved_ticker}"
         )
 
-        for report in financial_reports:
-            # Access Base Model
-            base = report.base
-            ext = report.extension
+        # Build Table Data
+        # Sort reports by year descending (usually they come sorted but ensure it)
+        # Assuming fetch returns somewhat ordered, but let's key off fiscal_year if possible
+        # Or just use list order.
 
-            fy_str = base.fiscal_year.value if base.fiscal_year else "N/A"
-            fp_str = base.fiscal_period.value if base.fiscal_period else "N/A"
+        # Headers
+        years_headers = []
+        for r in financial_reports:
+            fy = r.base.fiscal_year.value if r.base.fiscal_year else "N/A"
+            fp = r.base.fiscal_period.value if r.base.fiscal_period else "N/A"
+            years_headers.append(f"{fy} ({fp})")
 
-            print(
-                f"\n📅 --- Fiscal Year: {fy_str} ({fp_str}) [{report.industry_type}] ---"
-            )
+        headers = ["Metric"] + years_headers
 
-            # Key Ratios (Computed on the fly as they are not in base model)
-            # ROE = Net Income / Total Equity
-            roe = ratio(base.net_income, base.total_equity)
-            # Debt/Equity = Total Liabilities / Total Equity
-            de = ratio(base.total_liabilities, base.total_equity)
+        # --- Base Model Table ---
+        base_rows = []
 
-            print(f"   • Debt/Equity: {de}")
-            print(f"   • ROE: {roe}")
+        # Computed Ratios first or last? Let's put them first as summary.
+        roe_row = ["ROE"]
+        de_row = ["Debt/Equity"]
 
-            # Base Financials
-            print("   📉 Income Statement:")
-            print(f"     - Revenue: {fmt(base.total_revenue)}")
-            print(f"     - Net Income: {fmt(base.net_income)}")
+        for r in financial_reports:
+            roe_row.append(ratio(r.base.net_income, r.base.total_equity))
+            de_row.append(ratio(r.base.total_liabilities, r.base.total_equity))
 
-            print("   📊 Balance Sheet:")
-            print(f"     - Cash & Eq: {fmt(base.cash_and_equivalents)}")
-            print(f"     - Total Assets: {fmt(base.total_assets)}")
-            print(f"     - Total Liabilities: {fmt(base.total_liabilities)}")
-            print(f"     - Total Equity: {fmt(base.total_equity)}")
+        base_rows.append(roe_row)
+        base_rows.append(de_row)
+        base_rows.append(["---"] * len(headers))  # Separator
 
-            print("   💸 Cash Flow:")
-            print(f"     - OCF: {fmt(base.operating_cash_flow)}")
+        # Metric mapping: (Label, AttributeName)
+        base_metrics = [
+            ("Revenue", "total_revenue"),
+            ("Net Income", "net_income"),
+            ("Cash & Eq", "cash_and_equivalents"),
+            ("Total Assets", "total_assets"),
+            ("Total Liabilities", "total_liabilities"),
+            ("Total Equity", "total_equity"),
+            ("OCF", "operating_cash_flow"),
+        ]
 
-            # Extension Specifics
-            if ext:
-                if isinstance(ext, IndustrialExtension):
-                    print("   🏭 Industrial Metrics:")
-                    print(f"     - Inventory: {fmt(ext.inventory)}")
-                    print(f"     - Capex: {fmt(ext.capex)}")
-                    print(f"     - R&D: {fmt(ext.rd_expense)}")
+        for label, attr in base_metrics:
+            row = [label]
+            for r in financial_reports:
+                val = getattr(r.base, attr, None)
+                row.append(fmt(val))
+            base_rows.append(row)
 
-                elif isinstance(ext, FinancialServicesExtension):
-                    print("   🏦 Banking Metrics:")
-                    print(f"     - Deposits: {fmt(ext.deposits)}")
-                    print(f"     - Loans: {fmt(ext.loans_and_leases)}")
-                    print(f"     - Interest Income: {fmt(ext.interest_income)}")
+        print(f"\n📊 [{resolved_ticker}] Base Financials & Ratios")
+        print(tabulate(base_rows, headers=headers, tablefmt="grid"))
 
-                elif isinstance(ext, RealEstateExtension):
-                    print("   🏠 Real Estate Metrics:")
-                    print(f"     - Real Estate Assets: {fmt(ext.real_estate_assets)}")
-                    print(f"     - FFO: {fmt(ext.ffo)}")
+        # --- Extension Model Table ---
+        # Determine extension type from first report (assume consistent)
+        first_ext = financial_reports[0].extension if financial_reports else None
 
-            reports_data.append(report.model_dump())
+        if first_ext:
+            ext_rows = []
+            ext_metrics = []
+            title = "Extension Metrics"
+
+            if isinstance(first_ext, IndustrialExtension):
+                title = "🏭 Industrial Metrics"
+                ext_metrics = [
+                    ("Inventory", "inventory"),
+                    ("Accounts Receivable", "accounts_receivable"),
+                    ("COGS", "cogs"),
+                    ("R&D", "rd_expense"),
+                    ("SG&A", "sga_expense"),
+                    ("Capex", "capex"),
+                ]
+            elif isinstance(first_ext, FinancialServicesExtension):
+                title = "🏦 Banking Metrics"
+                ext_metrics = [
+                    ("Loans", "loans_and_leases"),
+                    ("Deposits", "deposits"),
+                    ("Allowance for Credit Losses", "allowance_for_credit_losses"),
+                    ("Interest Income", "interest_income"),
+                    ("Interest Expense", "interest_expense"),
+                    ("Provision for Loan Losses", "provision_for_loan_losses"),
+                ]
+            elif isinstance(first_ext, RealEstateExtension):
+                title = "🏠 Real Estate Metrics"
+                ext_metrics = [
+                    ("Real Estate Assets", "real_estate_assets"),
+                    ("Accumulated Dep", "accumulated_depreciation"),
+                    ("Dep & Amort", "depreciation_and_amortization"),
+                    ("FFO", "ffo"),
+                ]
+
+            for label, attr in ext_metrics:
+                row = [label]
+                for r in financial_reports:
+                    # Need to check if extension exists for this specific report (robustness)
+                    ext = r.extension
+                    if ext:
+                        val = getattr(ext, attr, None)
+                        row.append(fmt(val))
+                    else:
+                        row.append("N/A")
+                ext_rows.append(row)
+
+            print(f"\n{title}")
+            print(tabulate(ext_rows, headers=headers, tablefmt="grid"))
+
+        reports_data = [r.model_dump() for r in financial_reports]
     else:
         print(
             f"⚠️  Could not fetch financial data for {resolved_ticker}, proceeding without it"
