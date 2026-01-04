@@ -17,6 +17,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.types import Command
 
+from src.infrastructure.database import init_db
+from src.services.history import history_service
 from src.workflow.graph import get_graph
 from src.workflow.interrupts import InterruptValue
 from src.workflow.state import AgentState
@@ -82,6 +84,25 @@ class JobManager:
 
                 # Broadcast
                 await self._broadcast(thread_id, {"type": "event", "data": event})
+
+                # Persist AI messages when they finish
+                if event_type == "on_chat_model_end":
+                    # Only persist if it's not a hidden node or if we want to include tool calls in history
+                    # For now, let's persist the assistant response
+                    if node_name not in HIDDEN_NODES:
+                        ai_msg = event["data"]["output"]
+                        await history_service.save_message(thread_id, ai_msg)
+
+                # Persist messages manually added via Command updates (e.g. financial_health, clarification)
+                elif event_type == "on_chain_end":
+                    output = event["data"].get("output")
+                    if isinstance(output, Command) and output.update:
+                        messages = output.update.get("messages")
+                        if messages:
+                            if not isinstance(messages, list):
+                                messages = [messages]
+                            for m in messages:
+                                await history_service.save_message(thread_id, m)
 
             # 2. Check for interrupts
             snapshot = await graph.aget_state(config)
@@ -161,6 +182,22 @@ class JobManager:
 
 
 job_manager = JobManager()
+
+
+@app.get("/history/{thread_id}")
+async def get_history(thread_id: str, limit: int = 20, before: str | None = None):
+    """Retrieve persistent history with cursor pagination."""
+    try:
+        before_dt = None
+        if before:
+            from datetime import datetime
+
+            before_dt = datetime.fromisoformat(before)
+
+        messages = await history_service.get_history(thread_id, limit, before_dt)
+        return [m.to_dict() for m in messages]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/thread/{thread_id}")
@@ -251,19 +288,26 @@ async def stream_agent(body: RequestSchema):
         # If it's a "wakeup" call but job is already running, just return 200 to indicate OK
         return {"status": "running", "thread_id": thread_id}
 
-    # Prepare input
-    if body.resume_payload:
-        input_data = Command(resume=body.resume_payload)
-    elif body.message:
+    # Persist user message immediately
+    if body.message:
+        user_msg = HumanMessage(content=body.message)
+        await history_service.save_message(thread_id, user_msg)
         input_data = AgentState(
-            messages=[HumanMessage(content=body.message)], user_query=body.message
+            messages=[user_msg], user_query=body.message
         ).model_dump()
+    elif body.resume_payload:
+        input_data = Command(resume=body.resume_payload)
     else:
         input_data = None
 
     # Start job
     job_manager.start_job(thread_id, input_data, config)
     return {"status": "started", "thread_id": thread_id}
+
+
+@app.on_event("startup")
+async def startup_event():
+    await init_db()
 
 
 if __name__ == "__main__":

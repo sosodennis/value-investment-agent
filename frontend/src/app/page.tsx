@@ -91,7 +91,7 @@ export interface DashboardProps {
 }
 
 export default function Home({ assistantId = "agent" }: DashboardProps) {
-  const { messages, sendMessage, submitCommand, loadHistory, isLoading, threadId, resolvedTicker } = useAgent(assistantId);
+  const { messages, sendMessage, submitCommand, loadHistory, isLoading, threadId, resolvedTicker, hasMore } = useAgent(assistantId);
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -114,13 +114,25 @@ export default function Home({ assistantId = "agent" }: DashboardProps) {
   // Debug render state
   console.log("🎨 Render - isLoading:", isLoading, "Msgs:", messages.length);
 
-  // Auto-scroll to bottom
+  // Auto-scroll to bottom logic
+  const prevLastMsgIdRef = useRef<string | null>(null);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   useEffect(() => {
-    scrollToBottom();
+    if (messages.length === 0) return;
+
+    const lastMsgId = messages[messages.length - 1].id;
+
+    // Scroll if the LAST message is new (append or creation)
+    // If we prepended history, the LAST message usually stays the same (or we are just loading state)
+    if (prevLastMsgIdRef.current !== lastMsgId) {
+      scrollToBottom();
+    }
+
+    prevLastMsgIdRef.current = lastMsgId;
   }, [messages, isLoading]);
 
 
@@ -176,6 +188,17 @@ export default function Home({ assistantId = "agent" }: DashboardProps) {
 
       {/* Chat Area */}
       <section className="flex-1 w-full max-w-4xl overflow-y-auto px-4 py-8 space-y-6 scrollbar-hide">
+        {hasMore && messages.length > 0 && (
+          <div className="flex justify-center pb-4">
+            <button
+              onClick={() => threadId && loadHistory(threadId, messages[0].created_at)}
+              disabled={isLoading}
+              className="px-4 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-full text-xs text-slate-400 transition-colors disabled:opacity-50"
+            >
+              {isLoading ? 'Loading...' : 'Load older messages'}
+            </button>
+          </div>
+        )}
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center space-y-4 pt-20">
             <div className="bg-slate-900 border border-slate-800 p-8 rounded-2xl max-w-md shadow-xl">

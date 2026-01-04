@@ -6,11 +6,12 @@ import { Interrupt } from '../types/interrupts';
 
 export interface Message {
     id: string;
-    role: 'user' | 'assistant' | 'system';
+    role: 'user' | 'assistant' | 'system' | 'tool';
     content: string;
     type?: 'text' | 'financial_report' | 'interrupt_ticker' | 'interrupt_approval';
     data?: any;
     isInteractive?: boolean;
+    created_at?: string;
 }
 
 const API_URL = process.env.NEXT_PUBLIC_LANGGRAPH_URL || 'http://localhost:8000';
@@ -19,8 +20,8 @@ export function useAgent(assistantId: string = "agent") {
     const [messages, setMessages] = useState<Message[]>([]);
     const [threadId, setThreadId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
-    // Removed separate interrupt and financialReports states
     const [resolvedTicker, setResolvedTicker] = useState<string | null>(null);
+    const [hasMore, setHasMore] = useState(true);
 
     const messagesRef = useRef<Message[]>([]);
     messagesRef.current = messages;
@@ -231,78 +232,86 @@ export function useAgent(assistantId: string = "agent") {
         }
     }, [threadId]);
 
-    const loadHistory = useCallback(async (id: string) => {
+    const loadHistory = useCallback(async (id: string, before?: string) => {
         setIsLoading(true);
         try {
-            console.log(`📜 Loading history for thread: ${id}`);
-            const response = await fetch(`${API_URL}/thread/${id}`);
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            const data = await response.json();
+            console.log(`📜 Loading history for thread: ${id}${before ? ` before ${before}` : ''}`);
 
-            const mappedMessages: Message[] = data.messages.map((m: any) => {
-                let msgType = m.type;
-                if (msgType === 'ticker_selection') msgType = 'interrupt_ticker';
-                if (msgType === 'approval_request') msgType = 'interrupt_approval';
+            // 1. Fetch persistent history from our new endpoint
+            const historyUrl = new URL(`${API_URL}/history/${id}`);
+            if (before) historyUrl.searchParams.append('before', before);
 
-                return {
-                    id: m.id,
-                    role: m.role,
-                    content: m.content,
-                    type: msgType as Message['type'],
-                    data: m.data,
-                    isInteractive: false
-                };
+            const historyResponse = await fetch(historyUrl.toString());
+            if (!historyResponse.ok) throw new Error(`History fetch failed: ${historyResponse.status}`);
+            let historyData: Message[] = await historyResponse.json();
+
+            // Map backend types to frontend render types
+            historyData = historyData.map(msg => {
+                if (msg.type === 'ticker_selection' as any) return { ...msg, type: 'interrupt_ticker' };
+                if (msg.type === 'approval_request' as any) return { ...msg, type: 'interrupt_approval' };
+                return msg;
             });
 
-            if (data.interrupts && data.interrupts.length > 0) {
-                data.interrupts.forEach((interrupt: any, index: number) => {
-                    let msgType: Message['type'] = 'text';
-                    if (interrupt.type === 'ticker_selection') msgType = 'interrupt_ticker';
-                    if (interrupt.type === 'approval_request') msgType = 'interrupt_approval';
-
-                    mappedMessages.push({
-                        id: `interrupt_revived_${index}_${Date.now()}`,
-                        role: 'assistant',
-                        content: '',
-                        type: msgType,
-                        data: interrupt,
-                        isInteractive: true
-                    });
-                });
+            if (historyData.length < 20) {
+                setHasMore(false);
             }
 
-            setMessages(mappedMessages);
+            setMessages(prev => {
+                if (before) {
+                    // Prepend for pagination
+                    return [...historyData, ...prev];
+                }
+                return historyData;
+            });
             setThreadId(id);
-            setResolvedTicker(data.resolved_ticker);
 
-            if (data.is_running) {
-                console.log("🔗 Connecting to active background job...");
-                setIsLoading(true);
-                parseStream(id, `ai_attached_${Date.now()}`);
-            } else if (data.next && data.next.length > 0 && (!data.interrupts || data.interrupts.length === 0)) {
-                console.log("⏰ Incomplete state detected. Triggering Wakeup...");
-                setIsLoading(true);
-                const poke = await fetch(`${API_URL}/stream`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ thread_id: id })
-                });
-                if (poke.ok) parseStream(id, `ai_wakeup_${Date.now()}`);
-                else setIsLoading(false);
-            } else {
-                // If not running, and we have interrupts (or completed), just clear loading
-                console.log("✅ State restored (Interactive / Complete).");
-                setIsLoading(false);
+            // 2. Fetch state metadata (interrupts, status, resolves) from the thread endpoint
+            // This is still needed for active interrupts and ticker resolution state
+            const stateResponse = await fetch(`${API_URL}/thread/${id}`);
+            if (stateResponse.ok) {
+                const stateData = await stateResponse.json();
+                setResolvedTicker(stateData.resolved_ticker);
+
+                // If there are active interrupts, we might need to add them to the message list
+                // if they aren't already represented in the persistent history.
+                // Usually interrupts are represented by AIMessages in LangGraph which our service saves.
+                if (stateData.interrupts && stateData.interrupts.length > 0) {
+                    stateData.interrupts.forEach((interrupt: any, index: number) => {
+                        let msgType: Message['type'] = 'text';
+                        if (interrupt.type === 'ticker_selection') msgType = 'interrupt_ticker';
+                        if (interrupt.type === 'approval_request') msgType = 'interrupt_approval';
+
+                        // Check if this interrupt is already in messages (e.g. by content or data)
+                        // For now we just append if it's the first load
+                        if (!before) {
+                            setMessages(prev => {
+                                const exists = prev.some(m => m.type === msgType && JSON.stringify(m.data) === JSON.stringify(interrupt));
+                                if (exists) return prev;
+                                return [...prev, {
+                                    id: `interrupt_revived_${index}_${Date.now()}`,
+                                    role: 'assistant',
+                                    content: '',
+                                    type: msgType,
+                                    data: interrupt,
+                                    isInteractive: true
+                                }];
+                            });
+                        }
+                    });
+                }
+
+                if (stateData.is_running && !before) {
+                    console.log("🔗 Connecting to active background job...");
+                    await parseStream(id, `ai_attached_${Date.now()}`);
+                }
             }
-
 
         } catch (error) {
             console.error("❌ Error loading history:", error);
         } finally {
-            // Only stop loading if we didn't attach to a stream (parseStream handles its own cleanup)
-            // But for safety, we'll let parseStream handle it.
+            setIsLoading(false);
         }
     }, []);
 
-    return { messages, sendMessage, submitCommand, loadHistory, isLoading, threadId, resolvedTicker };
+    return { messages, sendMessage, submitCommand, loadHistory, isLoading, threadId, resolvedTicker, hasMore };
 }
