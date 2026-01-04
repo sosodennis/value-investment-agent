@@ -17,6 +17,8 @@ export function useAgent(assistantId: string = "agent") {
     const [threadId, setThreadId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [interrupt, setInterrupt] = useState<Interrupt | null>(null);
+    const [financialReports, setFinancialReports] = useState<any[] | null>(null);
+    const [resolvedTicker, setResolvedTicker] = useState<string | null>(null);
 
     const messagesRef = useRef<Message[]>([]);
     messagesRef.current = messages;
@@ -51,12 +53,12 @@ export function useAgent(assistantId: string = "agent") {
 
                     if (line.startsWith('event: ')) {
                         currentEventType = line.slice(7).trim();
-                        console.log(`🎫 Event Type: ${currentEventType}`);
+                        // console.log(`🎫 Event Type: ${currentEventType}`);
                         continue;
                     }
 
                     if (line.startsWith('data: ')) {
-                        console.log(`📩 SSE Data (${currentEventType}):`, line.slice(0, 100) + (line.length > 100 ? '...' : ''));
+                        // console.log(`📩 SSE Data (${currentEventType}):`, line.slice(0, 100) + (line.length > 100 ? '...' : ''));
 
                         try {
                             const eventData = JSON.parse(line.slice(6));
@@ -107,11 +109,43 @@ export function useAgent(assistantId: string = "agent") {
                             // 2. Handle Messages from non-streaming nodes
                             // 'on_chain_stream' usually contains intermediate updates.
                             // 'on_chain_end' might contain final outputs.
-                            if (currentEventType === 'on_chain_stream' || currentEventType === 'on_chain_end') {
+                            if (currentEventType === 'on_chain_end') {
+                                const nodeName = eventData.metadata?.langgraph_node;
+
+                                // Capture Financial Data
+                                if (nodeName === 'financial_health') {
+                                    const output = eventData.data?.output;
+                                    // The output is a Command object, but serialized.
+                                    // Pydantic models might be nested in 'update'.
+                                    // Let's check the structure based on graph.py:
+                                    // Command(update={"financial_reports": reports_data, ...})
+                                    // LangGraph generally merges the update into state, but the event data output
+                                    // should reflect the return value of the node, which is the Command.
+                                    // However, LangGraph v0.2 events for on_chain_end might show the state update or the return value.
+                                    // Let's assume look for 'financial_reports' in output or output.update
+
+                                    const updatePayload = output?.update || output;
+
+                                    if (updatePayload && updatePayload.financial_reports) {
+                                        console.log("📊 Captured Financial Reports:", updatePayload.financial_reports);
+                                        setFinancialReports(updatePayload.financial_reports);
+                                    }
+                                }
+
+                                // Capture Resolved Ticker
+                                if (nodeName === 'deciding' || nodeName === 'clarifying') {
+                                    const output = eventData.data?.output;
+                                    const updatePayload = output?.update || output;
+                                    if (updatePayload && updatePayload.resolved_ticker) {
+                                        setResolvedTicker(updatePayload.resolved_ticker);
+                                    }
+                                }
+
+
                                 const chunk = eventData.data?.chunk || eventData.data?.output;
                                 if (chunk && typeof chunk === 'object') {
                                     if (chunk.messages && Array.isArray(chunk.messages) && chunk.messages.length > 0) {
-                                        // We only care about AI messages that act as "final" or "intermediate" outputs 
+                                        // We only care about AI messages that act as "final" or "intermediate" outputs
                                         // that are NOT the one being streamed right now.
                                         // However, usually we just append if it's a new message.
                                         const lastMsg = chunk.messages[chunk.messages.length - 1];
@@ -151,6 +185,8 @@ export function useAgent(assistantId: string = "agent") {
     const sendMessage = useCallback(async (content: string) => {
         setIsLoading(true);
         setInterrupt(null);
+        setFinancialReports(null); // Reset on new run
+        setResolvedTicker(null);
 
         let currentThreadId = threadId;
         if (!currentThreadId) {
@@ -232,5 +268,5 @@ export function useAgent(assistantId: string = "agent") {
         }
     }, [threadId]);
 
-    return { messages, sendMessage, submitCommand, isLoading, threadId, interrupt };
+    return { messages, sendMessage, submitCommand, isLoading, threadId, interrupt, financialReports, resolvedTicker };
 }

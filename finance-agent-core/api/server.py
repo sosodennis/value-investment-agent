@@ -109,6 +109,12 @@ async def stream_agent(body: RequestSchema):
                 # Standardize event serialization
                 def json_serializable(obj):
                     try:
+                        if isinstance(obj, Command):
+                            return {
+                                "update": obj.update,
+                                "goto": obj.goto,
+                                "graph": obj.graph,
+                            }
                         if hasattr(obj, "model_dump"):
                             return obj.model_dump()
                         if hasattr(obj, "dict"):

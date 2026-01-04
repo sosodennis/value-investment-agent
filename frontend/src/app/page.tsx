@@ -3,14 +3,15 @@
 import { useState, useRef, useEffect } from 'react';
 import { useAgent } from '../hooks/useAgent';
 import { Bot, User, Send, TrendingUp, CheckCircle2, AlertCircle, List } from 'lucide-react';
+import { FinancialTable } from '../components/FinancialTable';
 
 export default function Home() {
-  const { messages, sendMessage, submitCommand, isLoading, threadId, interrupt } = useAgent("agent");
+  const { messages, sendMessage, submitCommand, isLoading, threadId, interrupt, financialReports, resolvedTicker } = useAgent("agent");
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Debug render state
-  console.log("🎨 Render - isLoading:", isLoading, "Input:", input, "Interrupt:", !!interrupt);
+  console.log("🎨 Render - isLoading:", isLoading, "Input:", input, "Interrupt:", !!interrupt, "FinancialReports:", !!financialReports);
 
   // Auto-scroll to bottom
   const scrollToBottom = () => {
@@ -19,7 +20,7 @@ export default function Home() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, isLoading, interrupt]);
+  }, [messages, isLoading, interrupt, financialReports]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInput(e.target.value);
@@ -85,33 +86,47 @@ export default function Home() {
             </div>
           </div>
         ) : (
-          messages.map((m) => (
-            <div
-              key={m.id}
-              className={`flex gap-4 ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
-              {m.role !== 'user' && (
+          <>
+            {messages.map((m) => (
+              <div
+                key={m.id}
+                className={`flex gap-4 ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
+              >
+                {m.role !== 'user' && (
+                  <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center shrink-0">
+                    <Bot size={18} />
+                  </div>
+                )}
+
+                <div className={`max-w-[80%] px-4 py-3 rounded-2xl ${m.role === 'user'
+                  ? 'bg-indigo-600 text-white rounded-tr-none shadow-lg shadow-indigo-500/10'
+                  : 'bg-slate-900 border border-slate-800 rounded-tl-none'
+                  }`}>
+                  <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                    {m.content}
+                  </div>
+                </div>
+
+                {m.role === 'user' && (
+                  <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center shrink-0">
+                    <User size={18} />
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {/* Inject Financial Table if available -- Render it as a "bot" message equivalent visually */}
+            {financialReports && (
+              <div className="flex gap-4 justify-start">
                 <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center shrink-0">
                   <Bot size={18} />
                 </div>
-              )}
-
-              <div className={`max-w-[80%] px-4 py-3 rounded-2xl ${m.role === 'user'
-                ? 'bg-indigo-600 text-white rounded-tr-none shadow-lg shadow-indigo-500/10'
-                : 'bg-slate-900 border border-slate-800 rounded-tl-none'
-                }`}>
-                <div className="whitespace-pre-wrap text-sm leading-relaxed">
-                  {m.content}
+                <div className="w-full max-w-[90%]">
+                  <FinancialTable reports={financialReports} ticker={resolvedTicker || 'Unknown'} />
                 </div>
               </div>
-
-              {m.role === 'user' && (
-                <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center shrink-0">
-                  <User size={18} />
-                </div>
-              )}
-            </div>
-          ))
+            )}
+          </>
         )}
 
         {/* Dynamic Interrupt UI */}
