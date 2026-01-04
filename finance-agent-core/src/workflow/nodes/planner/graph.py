@@ -210,28 +210,51 @@ def financial_health_node(state: AgentState) -> Command:
                 return f" | [Manual: {p.description}]"
             return ""
 
-        def fmt(v):
-            """Format currency values, handling TraceableField"""
+        def fmt_currency(v):
+            """Format currency values"""
             if v is None:
-                return "N/A"
+                return "None"
             val = v.value if hasattr(v, "value") else v
             if val is None:
-                return "N/A"
+                return "None"
             try:
                 fval = float(val)
-                # If value is very large, maybe format differently, but keep simple for now
                 res = f"${fval:,.0f}{src(v)}"
             except (ValueError, TypeError):
                 res = f"{val}{src(v)}"
             return wrap_text(res)
 
-        def pct(v):
-            """Format percentage values, handling TraceableField"""
+        def fmt_num(v):
+            """Format numeric values (non-currency)"""
             if v is None:
-                return "N/A"
+                return "None"
             val = v.value if hasattr(v, "value") else v
             if val is None:
-                return "N/A"
+                return "None"
+            try:
+                fval = float(val)
+                res = f"{fval:,.0f}{src(v)}"
+            except (ValueError, TypeError):
+                res = f"{val}{src(v)}"
+            return wrap_text(res)
+
+        def fmt_str(v):
+            """Format string values"""
+            if v is None:
+                return "None"
+            val = v.value if hasattr(v, "value") else v
+            if val is None:
+                return "None"
+            res = f"{val}{src(v)}"
+            return wrap_text(res)
+
+        def pct(v):
+            """Format percentage values"""
+            if v is None:
+                return "None"
+            val = v.value if hasattr(v, "value") else v
+            if val is None:
+                return "None"
             try:
                 fval = float(val)
                 res = f"{fval:.2%}{src(v)}"
@@ -245,16 +268,16 @@ def financial_health_node(state: AgentState) -> Command:
             d_val = den.value if hasattr(den, "value") else den
 
             if n_val is None or d_val is None:
-                return "N/A"
+                return "None"
             try:
                 n = float(n_val)
                 d = float(d_val)
                 if d == 0:
-                    return "N/A (Div0)"
+                    return "None (Div0)"
                 res = f"{n / d:.2f}"
                 return wrap_text(res)
             except (ValueError, TypeError):
-                return "N/A"
+                return "None"
 
         print(
             f"✅ Generated {len(financial_reports)} Financial Health Reports for {resolved_ticker}"
@@ -289,22 +312,27 @@ def financial_health_node(state: AgentState) -> Command:
         base_rows.append(de_row)
         base_rows.append(["---"] * len(headers))  # Separator
 
-        # Metric mapping: (Label, AttributeName)
+        # Metric mapping: (Label, AttributeName, Formatter)
         base_metrics = [
-            ("Revenue", "total_revenue"),
-            ("Net Income", "net_income"),
-            ("Cash & Eq", "cash_and_equivalents"),
-            ("Total Assets", "total_assets"),
-            ("Total Liabilities", "total_liabilities"),
-            ("Total Equity", "total_equity"),
-            ("OCF", "operating_cash_flow"),
+            ("CIK", "cik", fmt_str),
+            ("SIC Code", "sic_code", fmt_str),
+            ("Company Name", "company_name", fmt_str),
+            ("Shares Outstanding", "shares_outstanding", fmt_num),
+            ("Revenue", "total_revenue", fmt_currency),
+            ("Net Income", "net_income", fmt_currency),
+            ("Income Tax Expense", "income_tax_expense", fmt_currency),
+            ("Cash & Eq", "cash_and_equivalents", fmt_currency),
+            ("Total Assets", "total_assets", fmt_currency),
+            ("Total Liabilities", "total_liabilities", fmt_currency),
+            ("Total Equity", "total_equity", fmt_currency),
+            ("OCF", "operating_cash_flow", fmt_currency),
         ]
 
-        for label, attr in base_metrics:
+        for label, attr, formatter in base_metrics:
             row = [label]
             for r in financial_reports:
                 val = getattr(r.base, attr, None)
-                row.append(fmt(val))
+                row.append(formatter(val))
             base_rows.append(row)
 
         print(f"\n📊 [{resolved_ticker}] Base Financials & Ratios")
@@ -355,9 +383,9 @@ def financial_health_node(state: AgentState) -> Command:
                     ext = r.extension
                     if ext:
                         val = getattr(ext, attr, None)
-                        row.append(fmt(val))
+                        row.append(fmt_currency(val))
                     else:
-                        row.append("N/A")
+                        row.append("None")
                 ext_rows.append(row)
 
             print(f"\n{title}")

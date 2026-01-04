@@ -38,6 +38,7 @@ class BaseFinancialModelFactory:
             if results:
                 # Take the first match (usually the most relevant if sorted or standard)
                 res = results[0]
+                print(f"Found {name} in {config.concept_regex}: {res.value}")
 
                 # Create Provenance
                 provenance = XBRLProvenance(concept=res.concept, period=res.period_key)
@@ -52,7 +53,9 @@ class BaseFinancialModelFactory:
                 except (ValueError, TypeError):
                     # If conversion fails, log/warn or set to None?
                     # For now, strict adherence to target_type is safer than magic fallback
+                    print(f"Failed to convert {name} to {target_type}")
                     val = None
+                    continue
 
                 return TraceableField(name=name, value=val, provenance=provenance)
 
@@ -160,7 +163,15 @@ class BaseFinancialModelFactory:
         )
         tf_cash = BaseFinancialModelFactory._extract_field(
             extractor,
-            [C("us-gaap:CashAndCashEquivalentsAtCarryingValue")],
+            [
+                C("us-gaap:CashAndCashEquivalentsAtCarryingValue"),
+                C("us-gaap:CashAndCashEquivalents"),
+                C("us-gaap:CashAndCashEquivalentsRestrictedCashAndCashEquivalents"),
+                C("us-gaap:Cash"),
+                C("us-gaap:CashAndDueFromBanks"),
+                C("us-gaap:CashAndDueFromBanksAndInterestBearingDeposits"),
+                C("us-gaap:CashEquivalentsAtCarryingValue"),
+            ],
             "Cash & Cash Equivalents",
             target_type=float,
         )
