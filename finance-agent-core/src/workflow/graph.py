@@ -86,11 +86,31 @@ async def get_graph():
         builder.add_edge("calculator", END)
 
         # 3. Initialize Checkpointer
-        import aiosqlite
-        from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+        import os
 
-        conn = await aiosqlite.connect("checkpoints.sqlite")
-        _saver = AsyncSqliteSaver(conn)
+        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+        from psycopg_pool import AsyncConnectionPool
+
+        # Construct DB URI from environment variables
+        pg_user = os.environ.get("POSTGRES_USER", "postgres")
+        pg_pass = os.environ.get("POSTGRES_PASSWORD", "postgres")
+        pg_host = os.environ.get("POSTGRES_HOST", "localhost")
+        pg_port = os.environ.get("POSTGRES_PORT", "5432")
+        pg_db = os.environ.get("POSTGRES_DB", "langgraph")
+
+        db_uri = f"postgresql://{pg_user}:{pg_pass}@{pg_host}:{pg_port}/{pg_db}"
+        print(f"--- Graph: Connecting to Postgres at {pg_host}:{pg_port}/{pg_db} ---")
+
+        # Create connection pool
+        pool = AsyncConnectionPool(
+            conninfo=db_uri, max_size=10, open=False, kwargs={"autocommit": True}
+        )
+        await pool.open()
+
+        _saver = AsyncPostgresSaver(pool)
+
+        # Ensure tables are created
+        await _saver.setup()
 
         # 4. Compile
         _compiled_graph = builder.compile(checkpointer=_saver)
