@@ -1,6 +1,8 @@
+import asyncio
 import json
 import os
 import sys
+from collections import defaultdict
 from typing import Any
 
 import uvicorn
@@ -12,10 +14,10 @@ from pydantic import BaseModel
 # Add the project root to sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.types import Command
 
-from src.workflow.graph import graph
+from src.workflow.graph import get_graph
 from src.workflow.interrupts import InterruptValue
 from src.workflow.state import AgentState
 
@@ -25,75 +27,48 @@ app = FastAPI(
     description="Pure FastAPI implementation for FinGraph Valuation Agent (Path B)",
 )
 
-# Set all CORS enabled origins
+# CORS Middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["*"],
 )
 
 
 class RequestSchema(BaseModel):
-    message: str | None = None
     thread_id: str
-    resume_payload: dict[str, Any] | None = None
+    message: str | None = None
+    resume_payload: Any | None = None
 
 
-@app.get("/")
-async def health_check():
-    return {"status": "ok", "mode": "Pure FastAPI (Path B)"}
-
-
-@app.post("/stream")
-async def stream_agent(body: RequestSchema):
+class JobManager:
     """
-    Unified endpoint for sending messages OR resuming execution.
-    Eliminates the need for separate /resume and /chat endpoints.
+    Manages background graph execution tasks and broadcasts events to listeners.
+    Ensures only one job per thread_id runs at a time.
     """
-    print(
-        f"📥 Received Request: ThreadID={body.thread_id}, Message={body.message}, Resume={body.resume_payload}"
-    )
 
-    config = {"configurable": {"thread_id": body.thread_id}}
+    def __init__(self):
+        self.jobs: dict[str, asyncio.Task] = {}
+        self.queues: dict[str, list[asyncio.Queue]] = defaultdict(list)
 
-    # Decision Logic: Are we starting or resuming?
-    input_data = None
-    if body.resume_payload:
-        # We are resuming: Wrap payload in Command
-        # The payload from frontend usually comes as { "approved": true } etc.
-        print("🔄 Resuming with Command...")
-        input_data = Command(resume=body.resume_payload)
-    elif body.message:
-        # We are starting: Wrap message in state dict.
-        # Also populate 'user_query' as the planner relies on it.
-        print("▶️ Starting new run with Message...")
-        # Use strong typing with AgentState
-        input_data = AgentState(
-            messages=[HumanMessage(content=body.message)], user_query=body.message
-        ).model_dump()
-    else:
-        # It's possible to call with just thread_id to resume without payload if the graph allows,
-        # but for our use case we expect either message or resume payload.
-        raise HTTPException(
-            status_code=400, detail="Must provide message or resume_payload"
-        )
+    def is_running(self, thread_id: str) -> bool:
+        task = self.jobs.get(thread_id)
+        return task is not None and not task.done()
 
-    async def event_generator():
+    async def _run_graph(self, thread_id: str, input_data: Any, config: dict):
         try:
-            # 1. Stream events using the v2 API
-            print("🌊 Starting Event Stream...")
+            print(f"🚀 [JobManager] Starting job for {thread_id}")
+            graph = await get_graph()
+
+            # 1. Stream events
             async for event in graph.astream_events(
                 input_data, config=config, version="v2"
             ):
-                # Filtering logic: Don't stream internal LLM generation (e.g. JSON extraction)
-                # metadata.get("langgraph_node") gives the node name.
+                # Filtering logic: Don't stream internal LLM generation for specific nodes
                 node_name = event.get("metadata", {}).get("langgraph_node", "")
                 event_type = event["event"]
-
-                # List of nodes whose generation we want to HIDE from the chat UI
                 HIDDEN_NODES = {
                     "extraction",
                     "searching",
@@ -102,65 +77,193 @@ async def stream_agent(body: RequestSchema):
                     "auditor",
                 }
 
-                # If we are streaming tokens from a hidden node, skip yielding
                 if event_type == "on_chat_model_stream" and node_name in HIDDEN_NODES:
                     continue
 
-                # Standardize event serialization
-                def json_serializable(obj):
-                    try:
-                        if isinstance(obj, Command):
-                            return {
-                                "update": obj.update,
-                                "goto": obj.goto,
-                                "graph": obj.graph,
-                            }
-                        if hasattr(obj, "model_dump"):
-                            return obj.model_dump()
-                        if hasattr(obj, "dict"):
-                            return obj.dict()
-                        return str(obj)
-                    except Exception:
-                        return str(obj)
+                # Broadcast
+                await self._broadcast(thread_id, {"type": "event", "data": event})
 
-                # Send standard events
-                yield f"event: {event['event']}\ndata: {json.dumps(event, default=json_serializable)}\n\n"
-
-            print("✅ Event Stream Completed. Checking for interrupts...")
-
-            # 2. Explicit Interrupt Detection
-            # After the run completes (or pauses), check the state explicitly
+            # 2. Check for interrupts
             snapshot = await graph.aget_state(config)
-
             if snapshot.next:
-                print(f"⏸️ Graph Paused. Next nodes: {snapshot.next}")
-                # Check for interrupts in the tasks
                 current_interrupts = []
                 for task in snapshot.tasks:
                     if task.interrupts:
-                        # task.interrupts is a tuple of Interrupt objects
                         for i in task.interrupts:
                             try:
-                                # Validate and serialize using our strong types
                                 val = InterruptValue.model_validate(i.value)
                                 current_interrupts.append(val.model_dump())
                             except Exception:
-                                # Fallback if unknown interrupt type
                                 current_interrupts.append(i.value)
 
                 if current_interrupts:
-                    print(f"⚠️ Interrupts Detected: {current_interrupts}")
-                    # Emit a custom 'interrupt' event to the client
-                    yield f"event: interrupt\ndata: {json.dumps(current_interrupts)}\n\n"
-            else:
-                print("🏁 Graph Execution Finished (No pending steps).")
+                    await self._broadcast(
+                        thread_id, {"type": "interrupt", "data": current_interrupts}
+                    )
 
         except Exception as e:
-            print(f"❌ Error during streaming: {str(e)}")
-            error_event = {"error": str(e)}
-            yield f"event: error\ndata: {json.dumps(error_event)}\n\n"
+            print(f"❌ [JobManager] Error in {thread_id}: {str(e)}")
+            await self._broadcast(thread_id, {"type": "error", "data": str(e)})
+        finally:
+            print(f"🏁 [JobManager] Job for {thread_id} finished.")
+            await self._broadcast(thread_id, None)  # Signal EOF
+            if thread_id in self.jobs:
+                del self.jobs[thread_id]
+
+    async def _broadcast(self, thread_id: str, payload: Any):
+        if thread_id not in self.queues:
+            return
+
+        # Standardize event serialization
+        def json_serializable(obj):
+            try:
+                if isinstance(obj, Command):
+                    return {"update": obj.update, "goto": obj.goto, "graph": obj.graph}
+                if hasattr(obj, "model_dump"):
+                    return obj.model_dump()
+                if hasattr(obj, "dict"):
+                    return obj.dict()
+                return str(obj)
+            except Exception:
+                return str(obj)
+
+        msg = (
+            f"data: {json.dumps(payload, default=json_serializable)}\n\n"
+            if payload
+            else None
+        )
+
+        # Send to all connected queues
+        for q in self.queues[thread_id][:]:
+            try:
+                await q.put(msg)
+            except Exception:
+                self.queues[thread_id].remove(q)
+
+    def start_job(self, thread_id: str, input_data: Any, config: dict):
+        if self.is_running(thread_id):
+            return False
+        self.jobs[thread_id] = asyncio.create_task(
+            self._run_graph(thread_id, input_data, config)
+        )
+        return True
+
+    def get_stream(self, thread_id: str):
+        q = asyncio.Queue()
+        self.queues[thread_id].append(q)
+        return q
+
+    def unsubscribe(self, thread_id: str, q: asyncio.Queue):
+        if thread_id in self.queues and q in self.queues[thread_id]:
+            self.queues[thread_id].remove(q)
+            if not self.queues[thread_id]:
+                del self.queues[thread_id]
+
+
+job_manager = JobManager()
+
+
+@app.get("/thread/{thread_id}")
+async def get_thread_history(thread_id: str):
+    """Retrieve history and job status."""
+    config = {"configurable": {"thread_id": thread_id}}
+    try:
+        graph = await get_graph()
+        snapshot = await graph.aget_state(config)
+
+        messages = []
+        for m in snapshot.values.get("messages", []):
+            role = "assistant" if isinstance(m, AIMessage) else "user"
+            messages.append(
+                {
+                    "id": getattr(m, "id", f"msg_{id(m)}"),
+                    "role": role,
+                    "content": m.content,
+                    "type": m.additional_kwargs.get("type", "text"),
+                    "data": m.additional_kwargs.get("data"),
+                }
+            )
+
+        current_interrupts = []
+        for task in snapshot.tasks:
+            if task.interrupts:
+                for i in task.interrupts:
+                    try:
+                        val = InterruptValue.model_validate(i.value)
+                        current_interrupts.append(val.model_dump())
+                    except Exception:
+                        current_interrupts.append(i.value)
+
+        res = {
+            "thread_id": thread_id,
+            "messages": messages,
+            "interrupts": current_interrupts,
+            "resolved_ticker": snapshot.values.get("resolved_ticker"),
+            "status": snapshot.values.get("status"),
+            "next": snapshot.next,
+            "is_running": job_manager.is_running(thread_id),
+        }
+        print(
+            f"DEBUG: get_thread_history({thread_id}) -> is_running={res['is_running']}"
+        )
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get("/stream/{thread_id}")
+async def attach_stream(thread_id: str):
+    """Attach to an existing or recently started background job."""
+
+    async def event_generator():
+        # Quick check if job is already done before we subscribe
+        if not job_manager.is_running(thread_id):
+            print(
+                f"⚠️ [attach_stream] Request for finished job {thread_id}. Closing immediately."
+            )
+            yield None
+            return
+
+        q = job_manager.get_stream(thread_id)
+        try:
+            while True:
+                msg = await q.get()
+                if msg is None:
+                    break  # EOF
+                yield msg
+        finally:
+            job_manager.unsubscribe(thread_id, q)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@app.post("/stream")
+async def stream_agent(body: RequestSchema):
+    """Start or resume a job."""
+    thread_id = body.thread_id
+    config = {"configurable": {"thread_id": thread_id}}
+
+    if job_manager.is_running(thread_id):
+        if body.message or body.resume_payload:
+            raise HTTPException(
+                status_code=409, detail="Job already running for this thread."
+            )
+        # If it's a "wakeup" call but job is already running, just return 200 to indicate OK
+        return {"status": "running", "thread_id": thread_id}
+
+    # Prepare input
+    if body.resume_payload:
+        input_data = Command(resume=body.resume_payload)
+    elif body.message:
+        input_data = AgentState(
+            messages=[HumanMessage(content=body.message)], user_query=body.message
+        ).model_dump()
+    else:
+        input_data = None
+
+    # Start job
+    job_manager.start_job(thread_id, input_data, config)
+    return {"status": "started", "thread_id": thread_id}
 
 
 if __name__ == "__main__":

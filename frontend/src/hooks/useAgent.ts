@@ -25,19 +25,22 @@ export function useAgent(assistantId: string = "agent") {
     const messagesRef = useRef<Message[]>([]);
     messagesRef.current = messages;
 
-    const parseStream = async (response: Response, currentAiMsgId: string) => {
-        const reader = response.body?.getReader();
-        if (!reader) return;
-
-        const decoder = new TextDecoder();
-        let buffer = '';
-        let currentEventType = 'message'; // Default SSE event type
-
+    const parseStream = async (thread_id: string, currentAiMsgId: string) => {
+        console.log(`📡 [parseStream] Opening detached stream for ${thread_id}...`);
+        let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
         try {
+            const response = await fetch(`${API_URL}/stream/${thread_id}`);
+            if (!response.ok) throw new Error("Failed to attach to stream");
+
+            reader = response.body?.getReader();
+            const decoder = new TextDecoder();
+            if (!reader) return;
+
+            let buffer = '';
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) {
-                    console.log("✅ Stream reader done");
+                    console.log(`🏁 [parseStream] Stream for ${thread_id} closed.`);
                     break;
                 }
 
@@ -46,151 +49,130 @@ export function useAgent(assistantId: string = "agent") {
                 buffer = lines.pop() || '';
 
                 for (const line of lines) {
-                    const trimmedLine = line.trim();
-                    if (!trimmedLine) {
-                        // Empty line indicates end of event dispatch
-                        currentEventType = 'message';
-                        continue;
-                    }
-
-                    if (line.startsWith('event: ')) {
-                        currentEventType = line.slice(7).trim();
-                        // console.log(`🎫 Event Type: ${currentEventType}`);
-                        continue;
-                    }
-
                     if (line.startsWith('data: ')) {
-                        // console.log(`📩 SSE Data (${currentEventType}):`, line.slice(0, 100) + (line.length > 100 ? '...' : ''));
+                        const jsonStr = line.slice(6);
+                        if (jsonStr === 'null') {
+                            console.log(`🏁 [parseStream] Received EOF from server.`);
+                            return;
+                        }
 
                         try {
-                            const eventData = JSON.parse(line.slice(6));
+                            const envelope = JSON.parse(jsonStr);
+                            // console.log("📩 SSE Envelope:", envelope);
 
-                            // === HANDLE INTERRUPTS ===
-                            if (currentEventType === 'interrupt') {
-                                if (Array.isArray(eventData) && eventData.length > 0) {
-                                    const interruptVal = eventData[0] as Interrupt;
-                                    console.log("⏸️ Interrupt Detected:", interruptVal);
-
-                                    let msgType: Message['type'] = 'text';
-                                    if (interruptVal.type === 'ticker_selection') msgType = 'interrupt_ticker';
-                                    if (interruptVal.type === 'approval_request') msgType = 'interrupt_approval';
-
-                                    setMessages(prev => [...prev, {
-                                        id: `interrupt_${Date.now()}`,
-                                        role: 'assistant',
-                                        content: '',
-                                        type: msgType,
-                                        data: interruptVal,
-                                        isInteractive: true
-                                    }]);
-                                }
+                            // === 1. HANDLE ERRORS ===
+                            if (envelope.type === 'error') {
+                                console.error("❌ Job Error:", envelope.data);
                                 continue;
                             }
 
-                            // === HANDLE ERRORS ===
-                            if (currentEventType === 'error') {
-                                console.error("❌ Stream Error:", eventData);
+                            // === 2. HANDLE INTERRUPTS ===
+                            else if (envelope.type === 'interrupt') {
+                                const interruptVal = envelope.data[0] as Interrupt;
+                                console.log("⏸️ Interrupt Detected:", interruptVal);
+
+                                let msgType: Message['type'] = 'text';
+                                if (interruptVal.type === 'ticker_selection') msgType = 'interrupt_ticker';
+                                if (interruptVal.type === 'approval_request') msgType = 'interrupt_approval';
+
+                                setMessages(prev => [...prev, {
+                                    id: `interrupt_${Date.now()}`,
+                                    role: 'assistant',
+                                    content: '',
+                                    type: msgType,
+                                    data: interruptVal,
+                                    isInteractive: true
+                                }]);
                                 continue;
                             }
 
-                            // === HANDLE LANGGRAPH EVENTS ===
+                            // === 3. HANDLE LANGGRAPH EVENTS ===
+                            if (envelope.type === 'event') {
+                                const eventData = envelope.data;
+                                const currentEventType = eventData.event;
 
-                            // 1. Handle Token Streaming
-                            if (currentEventType === 'on_chat_model_stream') {
-                                const chunk = eventData.data?.chunk;
-                                if (chunk?.content) {
-                                    const text = typeof chunk.content === 'string'
-                                        ? chunk.content
-                                        : chunk.content[0]?.text || '';
+                                // Token Streaming
+                                if (currentEventType === 'on_chat_model_stream') {
+                                    const chunk = eventData.data?.chunk;
+                                    if (chunk?.content) {
+                                        const text = typeof chunk.content === 'string'
+                                            ? chunk.content
+                                            : chunk.content[0]?.text || '';
 
-                                    if (text) {
-                                        setMessages((prev) => {
-                                            const lastIdx = prev.length - 1;
-                                            const lastMsg = prev[lastIdx];
-                                            if (lastMsg && lastMsg.role === 'assistant' && lastMsg.id === currentAiMsgId && !lastMsg.type) {
-                                                const newMsgs = [...prev];
-                                                newMsgs[lastIdx] = { ...lastMsg, content: lastMsg.content + text };
-                                                return newMsgs;
-                                            } else {
-                                                return [...prev, { id: currentAiMsgId, role: 'assistant', content: text, type: 'text' }];
-                                            }
-                                        });
-                                    }
-                                }
-                            }
-
-                            // 2. Handle Messages from non-streaming nodes
-                            if (currentEventType === 'on_chain_end') {
-                                const nodeName = eventData.metadata?.langgraph_node;
-
-                                // Capture Financial Data
-                                if (nodeName === 'financial_health' || (nodeName && nodeName.endsWith(':financial_health'))) {
-                                    const output = eventData.data?.output;
-                                    const updatePayload = output?.update || output;
-
-                                    if (updatePayload && updatePayload.financial_reports) {
-                                        console.log("📊 Captured Financial Reports:", updatePayload.financial_reports);
-
-                                        setMessages(prev => [
-                                            ...prev,
-                                            {
-                                                id: `fin_report_${Date.now()}`,
-                                                role: 'assistant',
-                                                content: '',
-                                                type: 'financial_report',
-                                                data: updatePayload.financial_reports
-                                            }
-                                        ]);
+                                        if (text) {
+                                            setMessages((prev) => {
+                                                const lastIdx = prev.length - 1;
+                                                const lastMsg = prev[lastIdx];
+                                                if (lastMsg && lastMsg.role === 'assistant' && lastMsg.id === currentAiMsgId && !lastMsg.type) {
+                                                    const newMsgs = [...prev];
+                                                    newMsgs[lastIdx] = { ...lastMsg, content: lastMsg.content + text };
+                                                    return newMsgs;
+                                                } else {
+                                                    return [...prev, { id: currentAiMsgId, role: 'assistant', content: text, type: 'text' }];
+                                                }
+                                            });
+                                        }
                                     }
                                 }
 
-                                // Capture Resolved Ticker
-                                if (nodeName === 'deciding' || nodeName === 'clarifying' || (nodeName && (nodeName.endsWith(':deciding') || nodeName.endsWith(':clarifying')))) {
-                                    const output = eventData.data?.output;
-                                    const updatePayload = output?.update || output;
-                                    if (updatePayload && updatePayload.resolved_ticker) {
-                                        setResolvedTicker(updatePayload.resolved_ticker);
+                                // Chain End Events
+                                if (currentEventType === 'on_chain_end') {
+                                    const nodeName = eventData.metadata?.langgraph_node;
+
+                                    // Capture Financial Data
+                                    if (nodeName === 'financial_health' || (nodeName && nodeName.endsWith(':financial_health'))) {
+                                        const output = eventData.data?.output;
+                                        const updatePayload = output?.update || output;
+                                        if (updatePayload && updatePayload.financial_reports) {
+                                            setMessages(prev => [
+                                                ...prev,
+                                                {
+                                                    id: `fin_report_${Date.now()}`,
+                                                    role: 'assistant',
+                                                    content: '',
+                                                    type: 'financial_report',
+                                                    data: updatePayload.financial_reports
+                                                }
+                                            ]);
+                                        }
                                     }
-                                }
 
+                                    // Capture Resolved Ticker
+                                    if (nodeName === 'deciding' || nodeName === 'clarifying' || (nodeName && (nodeName.endsWith(':deciding') || nodeName.endsWith(':clarifying')))) {
+                                        const output = eventData.data?.output;
+                                        const updatePayload = output?.update || output;
+                                        if (updatePayload && updatePayload.resolved_ticker) {
+                                            setResolvedTicker(updatePayload.resolved_ticker);
+                                        }
+                                    }
 
-                                const chunk = eventData.data?.chunk || eventData.data?.output;
-                                if (chunk && typeof chunk === 'object') {
-                                    if (chunk.messages && Array.isArray(chunk.messages) && chunk.messages.length > 0) {
-                                        // We only care about AI messages that act as "final" or "intermediate" outputs
-                                        // that are NOT the one being streamed right now.
-                                        // However, usually we just append if it's a new message.
+                                    // Fallback for fixed content messages
+                                    const chunk = eventData.data?.chunk || eventData.data?.output;
+                                    if (chunk && typeof chunk === 'object' && chunk.messages && chunk.messages.length > 0) {
                                         const lastMsg = chunk.messages[chunk.messages.length - 1];
                                         if (lastMsg.type === 'ai' && typeof lastMsg.content === 'string') {
                                             const msgContent = lastMsg.content;
                                             setMessages((prev) => {
-                                                // Prevent duplication if the last message is identical
                                                 const lastStateMsg = prev[prev.length - 1];
-                                                if (lastStateMsg && lastStateMsg.content === msgContent) {
-                                                    return prev;
-                                                }
-                                                // Prevent duplication if we just streamed this exact content
-                                                // (Though streaming usually updates the SAME message ID)
-
-                                                return [...prev, {
-                                                    id: `ai_node_${Date.now()}`,
-                                                    role: 'assistant',
-                                                    content: msgContent
-                                                }];
+                                                if (lastStateMsg && lastStateMsg.content === msgContent) return prev;
+                                                return [...prev, { id: `ai_node_${Date.now()}`, role: 'assistant', content: msgContent }];
                                             });
                                         }
                                     }
                                 }
                             }
-
                         } catch (e) {
                             console.error("Error parsing SSE data:", line, e);
                         }
                     }
                 }
             }
+        } catch (error) {
+            console.error("❌ [parseStream] Stream error:", error);
         } finally {
-            reader.releaseLock();
+            console.log(`🧹 [parseStream] Cleaning up loading state for ${thread_id}.`);
+            reader?.releaseLock();
+            setIsLoading(false);
         }
     };
 
@@ -204,81 +186,123 @@ export function useAgent(assistantId: string = "agent") {
             setThreadId(currentThreadId);
         }
 
-        // Add user message optimistically
         const userMsg: Message = { id: `user_${Date.now()}`, role: 'user', content, type: 'text' };
         setMessages(prev => [...prev, userMsg]);
 
         try {
-            console.log(`🌐 Sending Message to /stream: ${content}`);
-            const response = await fetch(`${API_URL}/stream`, {
+            console.log(`🌐 Initiating Job: ${content}`);
+            const res = await fetch(`${API_URL}/stream`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    thread_id: currentThreadId,
-                    message: content
-                })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ thread_id: currentThreadId, message: content })
             });
 
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            await parseStream(response, `ai_${Date.now()}`);
+            if (!res.ok) throw new Error("Could not start job");
+            await parseStream(currentThreadId, `ai_${Date.now()}`);
         } catch (error) {
             console.error("Agent stream error:", error);
-        } finally {
             setIsLoading(false);
         }
     }, [threadId]);
 
     const submitCommand = useCallback(async (payload: any) => {
-        console.log("🚀 submitCommand called (Resuming)", payload);
-        if (!threadId) {
-            console.error("❌ ThreadID is missing in submitCommand");
-            return;
-        }
-
-        // 1. Lock previous interactive messages
+        if (!threadId) return;
         setMessages(prev => prev.map(m => m.isInteractive ? { ...m, isInteractive: false } : m));
 
-        // 2. Optimistically add user interaction to history
         let interactionText = "Resumed execution";
-        if (payload.selected_symbol) {
-            interactionText = `Selected Ticker: ${payload.selected_symbol}`;
-        } else if (typeof payload.approved === 'boolean') {
-            interactionText = payload.approved ? "✅ Approved Audit Plan" : "❌ Rejected Audit Plan";
-        }
+        if (payload.selected_symbol) interactionText = `Selected Ticker: ${payload.selected_symbol}`;
+        else if (typeof payload.approved === 'boolean') interactionText = payload.approved ? "✅ Approved Audit Plan" : "❌ Rejected Audit Plan";
 
-        const interactionMsg: Message = {
-            id: `user_action_${Date.now()}`,
-            role: 'user',
-            content: interactionText,
-            type: 'text'
-        };
-        setMessages(prev => [...prev, interactionMsg]);
-
+        setMessages(prev => [...prev, { id: `user_action_${Date.now()}`, role: 'user', content: interactionText, type: 'text' }]);
         setIsLoading(true);
 
         try {
-            console.log("🌐 Sending Resume to /stream...");
-            const response = await fetch(`${API_URL}/stream`, {
+            const res = await fetch(`${API_URL}/stream`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    thread_id: threadId,
-                    resume_payload: payload
-                })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ thread_id: threadId, resume_payload: payload })
             });
 
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            await parseStream(response, `ai_resume_${Date.now()}`);
+            if (!res.ok) throw new Error("Could not resume job");
+            await parseStream(threadId, `ai_resume_${Date.now()}`);
         } catch (error) {
             console.error("Resume error:", error);
-        } finally {
             setIsLoading(false);
         }
     }, [threadId]);
 
-    return { messages, sendMessage, submitCommand, isLoading, threadId, resolvedTicker };
+    const loadHistory = useCallback(async (id: string) => {
+        setIsLoading(true);
+        try {
+            console.log(`📜 Loading history for thread: ${id}`);
+            const response = await fetch(`${API_URL}/thread/${id}`);
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            const data = await response.json();
+
+            const mappedMessages: Message[] = data.messages.map((m: any) => {
+                let msgType = m.type;
+                if (msgType === 'ticker_selection') msgType = 'interrupt_ticker';
+                if (msgType === 'approval_request') msgType = 'interrupt_approval';
+
+                return {
+                    id: m.id,
+                    role: m.role,
+                    content: m.content,
+                    type: msgType as Message['type'],
+                    data: m.data,
+                    isInteractive: false
+                };
+            });
+
+            if (data.interrupts && data.interrupts.length > 0) {
+                data.interrupts.forEach((interrupt: any, index: number) => {
+                    let msgType: Message['type'] = 'text';
+                    if (interrupt.type === 'ticker_selection') msgType = 'interrupt_ticker';
+                    if (interrupt.type === 'approval_request') msgType = 'interrupt_approval';
+
+                    mappedMessages.push({
+                        id: `interrupt_revived_${index}_${Date.now()}`,
+                        role: 'assistant',
+                        content: '',
+                        type: msgType,
+                        data: interrupt,
+                        isInteractive: true
+                    });
+                });
+            }
+
+            setMessages(mappedMessages);
+            setThreadId(id);
+            setResolvedTicker(data.resolved_ticker);
+
+            if (data.is_running) {
+                console.log("🔗 Connecting to active background job...");
+                setIsLoading(true);
+                parseStream(id, `ai_attached_${Date.now()}`);
+            } else if (data.next && data.next.length > 0 && (!data.interrupts || data.interrupts.length === 0)) {
+                console.log("⏰ Incomplete state detected. Triggering Wakeup...");
+                setIsLoading(true);
+                const poke = await fetch(`${API_URL}/stream`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ thread_id: id })
+                });
+                if (poke.ok) parseStream(id, `ai_wakeup_${Date.now()}`);
+                else setIsLoading(false);
+            } else {
+                // If not running, and we have interrupts (or completed), just clear loading
+                console.log("✅ State restored (Interactive / Complete).");
+                setIsLoading(false);
+            }
+
+
+        } catch (error) {
+            console.error("❌ Error loading history:", error);
+        } finally {
+            // Only stop loading if we didn't attach to a stream (parseStream handles its own cleanup)
+            // But for safety, we'll let parseStream handle it.
+        }
+    }, []);
+
+    return { messages, sendMessage, submitCommand, loadHistory, isLoading, threadId, resolvedTicker };
 }

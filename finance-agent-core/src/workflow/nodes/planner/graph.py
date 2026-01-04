@@ -4,7 +4,6 @@ Handles the flow: Extract Intent -> Search/Verify -> Clarify (if needed).
 Uses Command and interrupt for control flow.
 """
 
-from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 
@@ -398,8 +397,24 @@ def financial_health_node(state: AgentState) -> Command:
         )
         reports_data = []
 
+    from langchain_core.messages import AIMessage
+
     return Command(
-        update={"financial_reports": reports_data, "status": "model_selection"},
+        update={
+            "financial_reports": reports_data,
+            "messages": [
+                AIMessage(
+                    content="",
+                    additional_kwargs={
+                        "type": "financial_report",
+                        "data": reports_data,
+                    },
+                )
+            ]
+            if reports_data
+            else [],
+            "status": "model_selection",
+        },
         goto="model_selection",
     )
 
@@ -533,11 +548,26 @@ def clarification_node(state: AgentState) -> Command:
         print(f"✅ User selected or fallback symbol: {selected_symbol}. Resolving...")
         profile = get_company_profile(selected_symbol)
         if profile:
+            from langchain_core.messages import AIMessage, HumanMessage
+
+            # Persist interactive messages to history
+            new_messages = [
+                AIMessage(
+                    content="",
+                    additional_kwargs={
+                        "type": "ticker_selection",
+                        "data": interrupt_payload.model_dump(),
+                    },
+                ),
+                HumanMessage(content=f"Selected Ticker: {selected_symbol}"),
+            ]
+
             return Command(
                 update={
                     "resolved_ticker": selected_symbol,
                     "company_profile": profile.model_dump(),
                     "status": "financial_health",
+                    "messages": new_messages,
                 },
                 goto="financial_health",
             )
@@ -547,22 +577,31 @@ def clarification_node(state: AgentState) -> Command:
     return Command(update={"status": "extraction"}, goto="extraction")
 
 
-# --- Build Sub-graph ---
-def create_planner_subgraph():
-    builder = StateGraph(AgentState)
-
-    builder.add_node("extraction", extraction_node)
-    builder.add_node("searching", searching_node)
-    builder.add_node("deciding", decision_node)
-    builder.add_node("financial_health", financial_health_node)
-    builder.add_node("model_selection", model_selection_node)
-    builder.add_node("clarifying", clarification_node)
-
-    builder.add_edge(START, "extraction")
-    # Transitions are handled by Command() in each node
-
-    memory = MemorySaver()
-    return builder.compile(checkpointer=memory)
+# Helper for initialization
+_compiled_subgraph = None
+_sub_saver = None
 
 
-planner_subgraph = create_planner_subgraph()
+async def get_planner_subgraph():
+    """Lazy-initialize and return the planner subgraph."""
+    global _compiled_subgraph, _sub_saver
+    if _compiled_subgraph is None:
+        # 1. Build Subgraph
+        builder = StateGraph(AgentState)
+        builder.add_node("extraction", extraction_node)
+        builder.add_node("searching", searching_node)
+        builder.add_node("deciding", decision_node)
+        builder.add_node("financial_health", financial_health_node)
+        builder.add_node("model_selection", model_selection_node)
+        builder.add_node("clarifying", clarification_node)
+        builder.add_edge(START, "extraction")
+
+        # 2. Initialize Checkpointer
+        import aiosqlite
+        from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+
+        conn = await aiosqlite.connect("checkpoints.sqlite")
+        _sub_saver = AsyncSqliteSaver(conn)
+        _compiled_subgraph = builder.compile(checkpointer=_sub_saver)
+
+    return _compiled_subgraph

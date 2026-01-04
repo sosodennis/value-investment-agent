@@ -91,9 +91,25 @@ export interface DashboardProps {
 }
 
 export default function Home({ assistantId = "agent" }: DashboardProps) {
-  const { messages, sendMessage, submitCommand, isLoading, threadId, resolvedTicker } = useAgent(assistantId);
+  const { messages, sendMessage, submitCommand, loadHistory, isLoading, threadId, resolvedTicker } = useAgent(assistantId);
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Load history on mount if threadId exists in localStorage
+  useEffect(() => {
+    const savedThreadId = localStorage.getItem('agent_thread_id');
+    if (savedThreadId) {
+      console.log("📍 Found saved threadId:", savedThreadId);
+      loadHistory(savedThreadId);
+    }
+  }, [loadHistory]);
+
+  // Save threadId to localStorage when it changes
+  useEffect(() => {
+    if (threadId) {
+      localStorage.setItem('agent_thread_id', threadId);
+    }
+  }, [threadId]);
 
   // Debug render state
   console.log("🎨 Render - isLoading:", isLoading, "Msgs:", messages.length);
@@ -106,6 +122,7 @@ export default function Home({ assistantId = "agent" }: DashboardProps) {
   useEffect(() => {
     scrollToBottom();
   }, [messages, isLoading]);
+
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInput(e.target.value);
@@ -142,10 +159,19 @@ export default function Home({ assistantId = "agent" }: DashboardProps) {
           </h1>
         </div>
         {threadId && (
-          <div className="text-[10px] text-slate-500 font-mono bg-slate-900 px-2 py-1 rounded border border-slate-800">
-            ID: {threadId.slice(-8)}
+          <div className="flex items-center gap-3">
+            {isLoading && (
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-lg animate-pulse">
+                <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></div>
+                <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Running</span>
+              </div>
+            )}
+            <div className="text-[10px] text-slate-500 font-mono bg-slate-900 px-2 py-1 rounded border border-slate-800">
+              ID: {threadId.slice(-8)}
+            </div>
           </div>
         )}
+
       </header>
 
       {/* Chat Area */}
