@@ -44,7 +44,7 @@ function InterruptTickerUI({ data, onSelect, isInteractive }: { data: any, onSel
 function InterruptApprovalUI({ data, onApprove, isInteractive }: { data: any, onApprove: (v: boolean) => void, isInteractive?: boolean }) {
   if (!data) return null;
   return (
-    <div className="max-w-[80%] bg-slate-900 border-2 border-emerald-500/50 p-5 rounded-2xl rounded-tl-none shadow-2xl shadow-emerald-500/10">
+    <div className="max-w-[80%] bg-slate-900 border-2 border-indigo-500/50 p-5 rounded-2xl rounded-tl-none shadow-2xl shadow-indigo-500/10">
       <div className="space-y-4">
         <div className="flex items-center gap-2 text-emerald-400">
           <CheckCircle2 size={18} />

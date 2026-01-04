@@ -72,7 +72,7 @@ export const FinancialTable: React.FC<FinancialTableProps> = ({ reports, ticker 
                         <div className="group relative inline-block">
                             {formatter(accessor(r))}
                             {accessor(r)?.provenance && (
-                                <div className="invisible group-hover:visible absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-slate-900 border border-slate-700 rounded shadow-xl text-[10px] text-slate-400 whitespace-pre-wrap">
+                                <div className="invisible group-hover:visible absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2 bg-slate-900 border border-slate-700 rounded shadow-xl text-[10px] text-slate-400 whitespace-pre-wrap break-words text-left">
                                     {accessor(r)?.provenance?.concept ? `XBRL: ${accessor(r)?.provenance?.concept}` : ''}
                                     {accessor(r)?.provenance?.expression ? `Calc: ${accessor(r)?.provenance?.expression}` : ''}
                                     {accessor(r)?.provenance?.description ? `Manual: ${accessor(r)?.provenance?.description}` : ''}
