@@ -1,17 +1,102 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { useAgent } from '../hooks/useAgent';
+import { useAgent, Message } from '../hooks/useAgent';
 import { Bot, User, Send, TrendingUp, CheckCircle2, AlertCircle, List } from 'lucide-react';
 import { FinancialTable } from '../components/FinancialTable';
 
-export default function Home() {
-  const { messages, sendMessage, submitCommand, isLoading, threadId, interrupt, financialReports, resolvedTicker } = useAgent("agent");
+// --- Sub-components for Unified Messaging ---
+
+function InterruptTickerUI({ data, onSelect, isInteractive }: { data: any, onSelect: (t: string) => void, isInteractive?: boolean }) {
+  if (!data) return null;
+  return (
+    <div className="max-w-[80%] bg-slate-900 border-2 border-indigo-500/50 p-5 rounded-2xl rounded-tl-none shadow-2xl shadow-indigo-500/10">
+      <div className="space-y-4">
+        <div className="flex items-center gap-2 text-indigo-400">
+          <List size={18} />
+          <h3 className="font-bold text-sm">Select Ticker</h3>
+        </div>
+        <p className="text-xs text-slate-400">Multiple tickers found. Please select one:</p>
+        <div className="grid grid-cols-1 gap-2">
+          {data.candidates?.map((c: any) => (
+            <button
+              key={c.symbol}
+              onClick={() => isInteractive && onSelect(c.symbol)}
+              disabled={!isInteractive}
+              className={`flex items-center justify-between p-3 border rounded-xl transition-all group ${isInteractive
+                ? 'bg-slate-800 hover:bg-slate-700 border-slate-700 cursor-pointer'
+                : 'bg-slate-900/50 border-slate-800 opacity-50 cursor-not-allowed'
+                }`}
+            >
+              <div className="text-left">
+                <span className="font-bold text-sm block">{c.symbol}</span>
+                <span className="text-[10px] text-slate-500 block line-clamp-1">{c.name} ({c.exchange})</span>
+              </div>
+              <TrendingUp size={14} className="text-slate-600" />
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InterruptApprovalUI({ data, onApprove, isInteractive }: { data: any, onApprove: (v: boolean) => void, isInteractive?: boolean }) {
+  if (!data) return null;
+  return (
+    <div className="max-w-[80%] bg-slate-900 border-2 border-emerald-500/50 p-5 rounded-2xl rounded-tl-none shadow-2xl shadow-emerald-500/10">
+      <div className="space-y-4">
+        <div className="flex items-center gap-2 text-emerald-400">
+          <CheckCircle2 size={18} />
+          <h3 className="font-bold text-sm">Audit Confirmation</h3>
+        </div>
+        <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-2">
+          <div className="flex justify-between text-xs">
+            <span className="text-slate-500 uppercase tracking-tighter font-bold">Ticker</span>
+            <span className="text-slate-200 font-bold">{data.details?.ticker}</span>
+          </div>
+          <div className="flex justify-between text-xs">
+            <span className="text-slate-500 uppercase tracking-tighter font-bold">Model</span>
+            <span className="text-slate-200">{data.details?.model}</span>
+          </div>
+          <div className="pt-2 mt-2 border-t border-slate-800">
+            <p className="text-[10px] text-slate-500 italic">
+              {isInteractive ? "Ready to execute terminal calculation?" : "Audit decision recorded."}
+            </p>
+          </div>
+        </div>
+        {isInteractive && (
+          <div className="flex gap-2">
+            <button
+              onClick={() => onApprove(true)}
+              className="flex-1 px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 rounded-xl text-xs font-bold transition-all shadow-lg text-white"
+            >
+              Approve & Run
+            </button>
+            <button
+              onClick={() => onApprove(false)}
+              className="px-4 py-2.5 bg-slate-800 hover:bg-red-900/40 border border-slate-700 rounded-xl text-xs font-medium transition-all text-white"
+            >
+              Reject
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export interface DashboardProps {
+  assistantId?: string;
+}
+
+export default function Home({ assistantId = "agent" }: DashboardProps) {
+  const { messages, sendMessage, submitCommand, isLoading, threadId, resolvedTicker } = useAgent(assistantId);
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Debug render state
-  console.log("🎨 Render - isLoading:", isLoading, "Input:", input, "Interrupt:", !!interrupt, "FinancialReports:", !!financialReports);
+  console.log("🎨 Render - isLoading:", isLoading, "Msgs:", messages.length);
 
   // Auto-scroll to bottom
   const scrollToBottom = () => {
@@ -20,7 +105,7 @@ export default function Home() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, isLoading, interrupt, financialReports]);
+  }, [messages, isLoading]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInput(e.target.value);
@@ -86,11 +171,58 @@ export default function Home() {
             </div>
           </div>
         ) : (
-          <>
-            {messages.map((m) => (
+          messages.map((m) => {
+            // 1. Render Financial Table Message
+            if (m.type === 'financial_report') {
+              return (
+                <div key={m.id} className="flex gap-4 justify-start animate-in fade-in slide-in-from-bottom-2">
+                  <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center shrink-0">
+                    <Bot size={18} />
+                  </div>
+                  <div className="w-full max-w-[90%]">
+                    <FinancialTable reports={m.data} ticker={resolvedTicker || 'Unknown'} />
+                  </div>
+                </div>
+              );
+            }
+
+            // 2. Render Interrupts (Ticker Selection)
+            if (m.type === 'interrupt_ticker') {
+              return (
+                <div key={m.id} className="flex gap-4 justify-start animate-in fade-in slide-in-from-bottom-2">
+                  <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center shrink-0">
+                    <AlertCircle size={18} />
+                  </div>
+                  <InterruptTickerUI
+                    data={m.data}
+                    onSelect={handleSelectTicker}
+                    isInteractive={m.isInteractive}
+                  />
+                </div>
+              );
+            }
+
+            // 3. Render Interrupts (Approval)
+            if (m.type === 'interrupt_approval') {
+              return (
+                <div key={m.id} className="flex gap-4 justify-start animate-in fade-in slide-in-from-bottom-2">
+                  <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center shrink-0">
+                    <AlertCircle size={18} />
+                  </div>
+                  <InterruptApprovalUI
+                    data={m.data}
+                    onApprove={handleApprove}
+                    isInteractive={m.isInteractive}
+                  />
+                </div>
+              );
+            }
+
+            // 4. Default Text Message (User or Bot)
+            return (
               <div
                 key={m.id}
-                className={`flex gap-4 ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                className={`flex gap-4 ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2`}
               >
                 {m.role !== 'user' && (
                   <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center shrink-0">
@@ -102,7 +234,7 @@ export default function Home() {
                   ? 'bg-indigo-600 text-white rounded-tr-none shadow-lg shadow-indigo-500/10'
                   : 'bg-slate-900 border border-slate-800 rounded-tl-none'
                   }`}>
-                  <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                  <div className="whitespace-pre-wrap text-sm leading-relaxed text-slate-200">
                     {m.content}
                   </div>
                 </div>
@@ -113,96 +245,11 @@ export default function Home() {
                   </div>
                 )}
               </div>
-            ))}
-
-            {/* Inject Financial Table if available -- Render it as a "bot" message equivalent visually */}
-            {financialReports && (
-              <div className="flex gap-4 justify-start">
-                <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center shrink-0">
-                  <Bot size={18} />
-                </div>
-                <div className="w-full max-w-[90%]">
-                  <FinancialTable reports={financialReports} ticker={resolvedTicker || 'Unknown'} />
-                </div>
-              </div>
-            )}
-          </>
+            )
+          })
         )}
 
-        {/* Dynamic Interrupt UI */}
-        {interrupt && (
-          <div className="flex gap-4 justify-start animate-in fade-in slide-in-from-bottom-2 duration-300">
-            <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center shrink-0">
-              <AlertCircle size={18} />
-            </div>
-            <div className="max-w-[80%] bg-slate-900 border-2 border-indigo-500/50 p-5 rounded-2xl rounded-tl-none shadow-2xl shadow-indigo-500/10">
-              {interrupt.type === 'ticker_selection' && (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2 text-indigo-400">
-                    <List size={18} />
-                    <h3 className="font-bold text-sm">Select Ticker</h3>
-                  </div>
-                  <p className="text-xs text-slate-400">I found multiple tickers for "{interrupt.intent?.ticker || interrupt.intent?.company_name}". Please choose the correct one:</p>
-                  <div className="grid grid-cols-1 gap-2">
-                    {interrupt.candidates?.map((c) => (
-                      <button
-                        key={c.symbol}
-                        onClick={() => handleSelectTicker(c.symbol)}
-                        className="flex items-center justify-between p-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-all group"
-                      >
-                        <div className="text-left">
-                          <span className="font-bold text-sm block">{c.symbol}</span>
-                          <span className="text-[10px] text-slate-500 block line-clamp-1">{c.name} ({c.exchange})</span>
-                        </div>
-                        <TrendingUp size={14} className="text-slate-600 group-hover:text-indigo-400 transition-colors" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {interrupt.type === 'approval_request' && (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2 text-emerald-400">
-                    <CheckCircle2 size={18} />
-                    <h3 className="font-bold text-sm">Audit Confirmation</h3>
-                  </div>
-                  <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-2">
-                    <div className="flex justify-between text-xs">
-                      <span className="text-slate-500 uppercase tracking-tighter font-bold">Ticker</span>
-                      <span className="text-slate-200 font-bold">{interrupt.details?.ticker}</span>
-                    </div>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-slate-500 uppercase tracking-tighter font-bold">Model</span>
-                      <span className="text-slate-200">{interrupt.details?.model}</span>
-                    </div>
-                    <div className="pt-2 mt-2 border-t border-slate-800">
-                      <p className="text-[10px] text-slate-500 italic">
-                        Audit report passed. Ready to execute terminal calculation.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleApprove(true)}
-                      className="flex-1 px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 rounded-xl text-xs font-bold transition-all shadow-lg"
-                    >
-                      Approve & Run
-                    </button>
-                    <button
-                      onClick={() => handleApprove(false)}
-                      className="px-4 py-2.5 bg-slate-800 hover:bg-red-900/40 border border-slate-700 rounded-xl text-xs font-medium transition-all"
-                    >
-                      Reject
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {isLoading && !interrupt && (
+        {isLoading && (
           <div className="flex gap-4">
             <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center shrink-0 animate-pulse">
               <Bot size={18} />

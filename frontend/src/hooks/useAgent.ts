@@ -8,6 +8,9 @@ export interface Message {
     id: string;
     role: 'user' | 'assistant' | 'system';
     content: string;
+    type?: 'text' | 'financial_report' | 'interrupt_ticker' | 'interrupt_approval';
+    data?: any;
+    isInteractive?: boolean;
 }
 
 const API_URL = process.env.NEXT_PUBLIC_LANGGRAPH_URL || 'http://localhost:8000';
@@ -16,8 +19,7 @@ export function useAgent(assistantId: string = "agent") {
     const [messages, setMessages] = useState<Message[]>([]);
     const [threadId, setThreadId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
-    const [interrupt, setInterrupt] = useState<Interrupt | null>(null);
-    const [financialReports, setFinancialReports] = useState<any[] | null>(null);
+    // Removed separate interrupt and financialReports states
     const [resolvedTicker, setResolvedTicker] = useState<string | null>(null);
 
     const messagesRef = useRef<Message[]>([]);
@@ -65,11 +67,22 @@ export function useAgent(assistantId: string = "agent") {
 
                             // === HANDLE INTERRUPTS ===
                             if (currentEventType === 'interrupt') {
-                                // The backend sends an array of interrupt values [val.model_dump(), ...]
                                 if (Array.isArray(eventData) && eventData.length > 0) {
                                     const interruptVal = eventData[0] as Interrupt;
                                     console.log("⏸️ Interrupt Detected:", interruptVal);
-                                    setInterrupt(interruptVal);
+
+                                    let msgType: Message['type'] = 'text';
+                                    if (interruptVal.type === 'ticker_selection') msgType = 'interrupt_ticker';
+                                    if (interruptVal.type === 'approval_request') msgType = 'interrupt_approval';
+
+                                    setMessages(prev => [...prev, {
+                                        id: `interrupt_${Date.now()}`,
+                                        role: 'assistant',
+                                        content: '',
+                                        type: msgType,
+                                        data: interruptVal,
+                                        isInteractive: true
+                                    }]);
                                 }
                                 continue;
                             }
@@ -94,12 +107,12 @@ export function useAgent(assistantId: string = "agent") {
                                         setMessages((prev) => {
                                             const lastIdx = prev.length - 1;
                                             const lastMsg = prev[lastIdx];
-                                            if (lastMsg && lastMsg.role === 'assistant' && lastMsg.id === currentAiMsgId) {
+                                            if (lastMsg && lastMsg.role === 'assistant' && lastMsg.id === currentAiMsgId && !lastMsg.type) {
                                                 const newMsgs = [...prev];
                                                 newMsgs[lastIdx] = { ...lastMsg, content: lastMsg.content + text };
                                                 return newMsgs;
                                             } else {
-                                                return [...prev, { id: currentAiMsgId, role: 'assistant', content: text }];
+                                                return [...prev, { id: currentAiMsgId, role: 'assistant', content: text, type: 'text' }];
                                             }
                                         });
                                     }
@@ -107,33 +120,32 @@ export function useAgent(assistantId: string = "agent") {
                             }
 
                             // 2. Handle Messages from non-streaming nodes
-                            // 'on_chain_stream' usually contains intermediate updates.
-                            // 'on_chain_end' might contain final outputs.
                             if (currentEventType === 'on_chain_end') {
                                 const nodeName = eventData.metadata?.langgraph_node;
 
                                 // Capture Financial Data
-                                if (nodeName === 'financial_health') {
+                                if (nodeName === 'financial_health' || (nodeName && nodeName.endsWith(':financial_health'))) {
                                     const output = eventData.data?.output;
-                                    // The output is a Command object, but serialized.
-                                    // Pydantic models might be nested in 'update'.
-                                    // Let's check the structure based on graph.py:
-                                    // Command(update={"financial_reports": reports_data, ...})
-                                    // LangGraph generally merges the update into state, but the event data output
-                                    // should reflect the return value of the node, which is the Command.
-                                    // However, LangGraph v0.2 events for on_chain_end might show the state update or the return value.
-                                    // Let's assume look for 'financial_reports' in output or output.update
-
                                     const updatePayload = output?.update || output;
 
                                     if (updatePayload && updatePayload.financial_reports) {
                                         console.log("📊 Captured Financial Reports:", updatePayload.financial_reports);
-                                        setFinancialReports(updatePayload.financial_reports);
+
+                                        setMessages(prev => [
+                                            ...prev,
+                                            {
+                                                id: `fin_report_${Date.now()}`,
+                                                role: 'assistant',
+                                                content: '',
+                                                type: 'financial_report',
+                                                data: updatePayload.financial_reports
+                                            }
+                                        ]);
                                     }
                                 }
 
                                 // Capture Resolved Ticker
-                                if (nodeName === 'deciding' || nodeName === 'clarifying') {
+                                if (nodeName === 'deciding' || nodeName === 'clarifying' || (nodeName && (nodeName.endsWith(':deciding') || nodeName.endsWith(':clarifying')))) {
                                     const output = eventData.data?.output;
                                     const updatePayload = output?.update || output;
                                     if (updatePayload && updatePayload.resolved_ticker) {
@@ -184,8 +196,6 @@ export function useAgent(assistantId: string = "agent") {
 
     const sendMessage = useCallback(async (content: string) => {
         setIsLoading(true);
-        setInterrupt(null);
-        setFinancialReports(null); // Reset on new run
         setResolvedTicker(null);
 
         let currentThreadId = threadId;
@@ -195,7 +205,7 @@ export function useAgent(assistantId: string = "agent") {
         }
 
         // Add user message optimistically
-        const userMsg: Message = { id: `user_${Date.now()}`, role: 'user', content };
+        const userMsg: Message = { id: `user_${Date.now()}`, role: 'user', content, type: 'text' };
         setMessages(prev => [...prev, userMsg]);
 
         try {
@@ -227,7 +237,10 @@ export function useAgent(assistantId: string = "agent") {
             return;
         }
 
-        // --- NEW: Optimistically add user interaction to history ---
+        // 1. Lock previous interactive messages
+        setMessages(prev => prev.map(m => m.isInteractive ? { ...m, isInteractive: false } : m));
+
+        // 2. Optimistically add user interaction to history
         let interactionText = "Resumed execution";
         if (payload.selected_symbol) {
             interactionText = `Selected Ticker: ${payload.selected_symbol}`;
@@ -238,13 +251,12 @@ export function useAgent(assistantId: string = "agent") {
         const interactionMsg: Message = {
             id: `user_action_${Date.now()}`,
             role: 'user',
-            content: interactionText
+            content: interactionText,
+            type: 'text'
         };
         setMessages(prev => [...prev, interactionMsg]);
-        // -----------------------------------------------------------
 
         setIsLoading(true);
-        setInterrupt(null);
 
         try {
             console.log("🌐 Sending Resume to /stream...");
@@ -268,5 +280,5 @@ export function useAgent(assistantId: string = "agent") {
         }
     }, [threadId]);
 
-    return { messages, sendMessage, submitCommand, isLoading, threadId, interrupt, financialReports, resolvedTicker };
+    return { messages, sendMessage, submitCommand, isLoading, threadId, resolvedTicker };
 }
