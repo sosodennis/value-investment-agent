@@ -33,16 +33,27 @@ def fetch_financial_data(ticker: str, years: int = 3) -> list[FinancialReport]:
     # We allow a small buffer; sometimes 'fiscal_year' for the extractor refers to index year.
     # Let's iterate.
 
-    fetched_count = 0
+    fetched_years = set()
     attempt_year = start_year
 
-    while fetched_count < years and attempt_year > (start_year - years - 2):
+    # Try fetching until we have the requested number of unique reports or we've gone too far back
+    while len(reports) < years and attempt_year > (start_year - years - 5):
         try:
             logger.info(f"Attempting to fetch report for FY{attempt_year}...")
             report = FinancialReportFactory.create_report(ticker, attempt_year)
-            reports.append(report)
-            fetched_count += 1
-            logger.info(f"✅ Successfully fetched report for FY{attempt_year}")
+
+            # Extract actual fiscal year from the report to detect duplicates
+            # (SECReportExtractor might fall back to the latest report if the requested year is not found)
+            actual_year = report.base.fiscal_year.value
+
+            if actual_year in fetched_years:
+                logger.info(
+                    f"ℹ️ Skipping duplicate report for FY{actual_year} (requested FY{attempt_year})"
+                )
+            else:
+                reports.append(report)
+                fetched_years.add(actual_year)
+                logger.info(f"✅ Successfully fetched report for FY{actual_year}")
         except ValueError as ve:
             logger.warning(f"⚠️ Report not found for FY{attempt_year}: {ve}")
         except Exception as e:
