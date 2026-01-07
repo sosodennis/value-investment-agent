@@ -27,7 +27,7 @@ export function useAgent(assistantId: string = "agent") {
     const [currentStatus, setCurrentStatus] = useState<string | null>(null);
     const [activityFeed, setActivityFeed] = useState<{ id: string, node: string, status: string, timestamp: number }[]>([]);
     const [agentStatuses, setAgentStatuses] = useState<Record<string, AgentStatus>>({
-        planner: 'idle',
+        fundamental_analysis: 'idle',
         executor: 'idle',
         auditor: 'idle',
         approval: 'idle',
@@ -179,7 +179,7 @@ export function useAgent(assistantId: string = "agent") {
                                                     content: '',
                                                     type: 'financial_report',
                                                     data: updatePayload.financial_reports,
-                                                    agentId: agentId || 'planner'
+                                                    agentId: agentId || 'fundamental_analysis'
                                                 }
                                             ]);
                                         }
@@ -241,7 +241,7 @@ export function useAgent(assistantId: string = "agent") {
         setCurrentNode(null);
         setCurrentStatus(null);
         setActivityFeed([]);
-        setAgentStatuses(prev => ({ ...prev, planner: 'running' }));
+        setAgentStatuses(prev => ({ ...prev, fundamental_analysis: 'running' }));
 
         let currentThreadId = threadId;
         if (!currentThreadId) {

@@ -33,8 +33,8 @@ class AgentState(BaseModel):
         None, description="Output from Calculator"
     )
 
-    # Planner metadata (kept as Dict/List for now, could be refactored later)
-    planner_output: dict[str, Any] | None = None
+    # Fundamental Analysis metadata (kept as Dict/List for now, could be refactored later)
+    fundamental_analysis_output: dict[str, Any] | None = None
     extracted_intent: dict[str, Any] | None = None
     ticker_candidates: list[Any] | None = None
     resolved_ticker: str | None = None

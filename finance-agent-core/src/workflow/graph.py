@@ -2,7 +2,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 
 from .nodes import auditor_node, calculation_node, executor_node
-from .nodes.planner.graph import get_planner_subgraph
+from .nodes.fundamental_analysis.graph import get_fundamental_analysis_subgraph
 from .state import AgentState
 
 
@@ -85,18 +85,18 @@ async def get_graph():
     global _compiled_graph, _saver
     if _compiled_graph is None:
         # 1. Initialize Subgraph
-        planner_graph = await get_planner_subgraph()
+        fundamental_analysis_graph = await get_fundamental_analysis_subgraph()
 
         # 2. Build Parent Graph
         builder = StateGraph(AgentState)
-        builder.add_node("planner", planner_graph)
+        builder.add_node("fundamental_analysis", fundamental_analysis_graph)
         builder.add_node("executor", executor_node)
         builder.add_node("auditor", auditor_node)
         builder.add_node("approval", approval_node)
         builder.add_node("calculator", calculation_node)
 
-        builder.add_edge(START, "planner")
-        builder.add_edge("planner", "executor")
+        builder.add_edge(START, "fundamental_analysis")
+        builder.add_edge("fundamental_analysis", "executor")
         builder.add_edge("executor", "auditor")
         builder.add_edge("auditor", "approval")
         builder.add_edge("approval", "calculator")

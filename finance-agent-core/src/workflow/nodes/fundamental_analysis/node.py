@@ -11,7 +11,7 @@ This node:
 import logging
 from typing import TYPE_CHECKING
 
-from .graph import planner_subgraph
+from . import graph
 from .structures import ValuationModel
 
 if TYPE_CHECKING:
@@ -20,12 +20,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def planner_node(state: "AgentState") -> dict:
+def fundamental_analysis_node(state: "AgentState") -> dict:
     """
-    Wrapper for the Planner Sub-graph.
+    Wrapper for the Fundamental Analysis Sub-graph.
     """
     try:
-        logger.info("=== Planner Node (Sub-agent) Started ===")
+        logger.info("=== Fundamental Analysis Node (Sub-agent) Started ===")
 
         # 1. Prepare sub-graph input
         user_query = state.get("user_query")
@@ -34,7 +34,7 @@ def planner_node(state: "AgentState") -> dict:
 
         if not user_query:
             return {
-                "planner_output": {
+                "fundamental_analysis_output": {
                     "status": "clarification_needed",
                     "error": "No query provided",
                 }
@@ -47,25 +47,25 @@ def planner_node(state: "AgentState") -> dict:
         }
 
         # 2. Invoke Sub-graph
-        result = planner_subgraph.invoke(sub_graph_input)
+        result = graph.fundamental_analysis_subgraph.invoke(sub_graph_input)
 
         # 3. Handle result
         if result.get("status") == "waiting_for_human":
-            logger.warning("Planner needs clarification")
+            logger.warning("Fundamental analysis needs clarification")
             return {
-                "planner_output": {
+                "fundamental_analysis_output": {
                     "status": "clarification_needed",
                     "candidates": result.get("ticker_candidates"),
                     "intent": result.get("extracted_intent"),
                 }
             }
 
-        output = result.get("planner_output")
+        output = result.get("fundamental_analysis_output")
         if not output:
             return {
-                "planner_output": {
+                "fundamental_analysis_output": {
                     "status": "clarification_needed",
-                    "error": "Planner failed to produce output",
+                    "error": "Fundamental analysis failed to produce output",
                 }
             }
 
@@ -90,8 +90,13 @@ def planner_node(state: "AgentState") -> dict:
         return {
             "ticker": output["ticker"],
             "model_type": model_type,
-            "planner_output": output,
+            "fundamental_analysis_output": output,
         }
     except Exception as e:
-        logger.error(f"Planner failed: {e}")
-        return {"planner_output": {"status": "clarification_needed", "error": str(e)}}
+        logger.error(f"Fundamental analysis failed: {e}")
+        return {
+            "fundamental_analysis_output": {
+                "status": "clarification_needed",
+                "error": str(e),
+            }
+        }

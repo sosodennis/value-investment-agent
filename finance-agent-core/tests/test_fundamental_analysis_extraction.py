@@ -1,4 +1,4 @@
-from src.workflow.nodes.planner.extraction import _heuristic_extract
+from src.workflow.nodes.fundamental_analysis.extraction import _heuristic_extract
 
 
 def test_heuristic_extract_nvidia_valuation():

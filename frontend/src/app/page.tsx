@@ -60,12 +60,12 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
 
   const agents: AgentInfo[] = useMemo(() => [
     {
-      id: 'planner',
-      name: 'Intent Planner',
+      id: 'fundamental_analysis',
+      name: 'Fundamental Analysis',
       role: 'Strategy & Goal Setting',
       description: 'Analyzes user intent and fetches preliminary data.',
       avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix',
-      status: hasTickerInterrupt ? 'attention' : agentStatuses.planner,
+      status: hasTickerInterrupt ? 'attention' : agentStatuses.fundamental_analysis,
     },
     {
       id: 'executor',

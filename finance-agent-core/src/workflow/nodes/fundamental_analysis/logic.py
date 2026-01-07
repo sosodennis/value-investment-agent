@@ -1,5 +1,5 @@
 """
-Model selection logic for the Planner Node.
+Model selection logic for the Fundamental Analysis Node.
 
 Implements GICS-based rules to automatically select the appropriate valuation model.
 """

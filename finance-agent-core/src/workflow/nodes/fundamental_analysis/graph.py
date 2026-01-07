@@ -1,5 +1,5 @@
 """
-Planner Sub-graph implementation.
+Fundamental Analysis Sub-graph implementation.
 Handles the flow: Extract Intent -> Search/Verify -> Clarify (if needed).
 Uses Command and interrupt for control flow.
 """
@@ -25,11 +25,13 @@ def extraction_node(state: AgentState) -> Command:
     """Extract company and model from user query."""
     user_query = state.user_query
     if not user_query:
-        print("--- Planner: No query provided, requesting clarification ---")
+        print(
+            "--- Fundamental Analysis: No query provided, requesting clarification ---"
+        )
         return Command(
             update={
                 "status": "clarifying",
-                "planner_output": {
+                "fundamental_analysis_output": {
                     "status": "clarification_needed",
                     "error": "No query provided",
                 },
@@ -37,12 +39,12 @@ def extraction_node(state: AgentState) -> Command:
             goto="clarifying",
         )
 
-    print(f"--- Planner: Extracting intent from: {user_query} ---")
+    print(f"--- Fundamental Analysis: Extracting intent from: {user_query} ---")
     intent = extract_intent(user_query)
     return Command(
         update={
             "extracted_intent": intent.model_dump(),
-            "node_statuses": {"planner": "running"},
+            "node_statuses": {"fundamental_analysis": "running"},
         },
         goto="searching",
     )
@@ -76,10 +78,12 @@ def searching_node(state: AgentState) -> Command:
             )
             search_queries.append(clean_query)
         else:
-            print("--- Planner: Search query missing, requesting clarification ---")
+            print(
+                "--- Fundamental Analysis: Search query missing, requesting clarification ---"
+            )
             return Command(update={"status": "clarifying"}, goto="clarifying")
 
-    print(f"--- Planner: Searching for queries: {search_queries} ---")
+    print(f"--- Fundamental Analysis: Searching for queries: {search_queries} ---")
     candidate_map = {}
 
     # === Execute Search on All Queries ===
@@ -91,7 +95,7 @@ def searching_node(state: AgentState) -> Command:
         high_confidence_candidates = [c for c in yf_candidates if c.confidence >= 0.9]
         if high_confidence_candidates:
             print(
-                f"--- Planner: High confidence match found via Yahoo for '{query}': {[c.symbol for c in high_confidence_candidates]} ---"
+                f"--- Fundamental Analysis: High confidence match found via Yahoo for '{query}': {[c.symbol for c in high_confidence_candidates]} ---"
             )
 
         for c in yf_candidates:
@@ -125,7 +129,7 @@ def searching_node(state: AgentState) -> Command:
         update={
             "ticker_candidates": [c.model_dump() for c in final_candidates],
             "status": "deciding",
-            "node_statuses": {"planner": "running"},
+            "node_statuses": {"fundamental_analysis": "running"},
         },
         goto="deciding",
     )
@@ -136,7 +140,9 @@ def decision_node(state: AgentState) -> Command:
     candidates = state.ticker_candidates or []
 
     if not candidates:
-        print("--- Planner: No candidates found, requesting clarification ---")
+        print(
+            "--- Fundamental Analysis: No candidates found, requesting clarification ---"
+        )
         return Command(update={"status": "clarifying"}, goto="clarifying")
 
     # Check for ambiguity
@@ -145,17 +151,19 @@ def decision_node(state: AgentState) -> Command:
     candidate_objs = [TickerCandidate(**c) for c in candidates]
 
     if should_request_clarification(candidate_objs):
-        print("--- Planner: Ambiguity detected, requesting clarification ---")
+        print(
+            "--- Fundamental Analysis: Ambiguity detected, requesting clarification ---"
+        )
         return Command(update={"status": "clarifying"}, goto="clarifying")
 
     # Resolved - proceed to financial health check
     resolved_ticker = candidate_objs[0].symbol
-    print(f"--- Planner: Ticker resolved to {resolved_ticker} ---")
+    print(f"--- Fundamental Analysis: Ticker resolved to {resolved_ticker} ---")
     profile = get_company_profile(resolved_ticker)
 
     if not profile:
         print(
-            f"--- Planner: Could not fetch profile for {resolved_ticker}, requesting clarification ---"
+            f"--- Fundamental Analysis: Could not fetch profile for {resolved_ticker}, requesting clarification ---"
         )
         return Command(update={"status": "clarifying"}, goto="clarifying")
 
@@ -174,7 +182,9 @@ def financial_health_node(state: AgentState) -> Command:
     Fetch financial data from SEC EDGAR and generate Financial Health Report.
     """
     resolved_ticker = state.resolved_ticker
-    print(f"--- Planner: Fetching financial health data for {resolved_ticker} ---")
+    print(
+        f"--- Fundamental Analysis: Fetching financial health data for {resolved_ticker} ---"
+    )
 
     # Fetch financial data (mult-year)
     financial_reports = fetch_financial_data(resolved_ticker, years=3)
@@ -411,7 +421,7 @@ def financial_health_node(state: AgentState) -> Command:
                     additional_kwargs={
                         "type": "financial_report",
                         "data": reports_data,
-                        "agent_id": "planner",
+                        "agent_id": "fundamental_analysis",
                     },
                 )
             ]
@@ -432,7 +442,9 @@ def model_selection_node(state: AgentState) -> Command:
     resolved_ticker = state.resolved_ticker
 
     if not profile:
-        print("--- Planner: Missing company profile, cannot select model ---")
+        print(
+            "--- Fundamental Analysis: Missing company profile, cannot select model ---"
+        )
         return Command(update={"status": "clarifying"}, goto="clarifying")
 
     # Select model based on profile
@@ -503,7 +515,7 @@ def model_selection_node(state: AgentState) -> Command:
         update={
             "ticker": resolved_ticker,
             "model_type": model_type,
-            "planner_output": {
+            "fundamental_analysis_output": {
                 "ticker": resolved_ticker,
                 "model_type": model.value,
                 "company_name": profile.name,
@@ -512,7 +524,7 @@ def model_selection_node(state: AgentState) -> Command:
                 "reasoning": reasoning,
                 "financial_reports": state.financial_reports,
             },
-            "node_statuses": {"planner": "done", "executor": "running"},
+            "node_statuses": {"fundamental_analysis": "done", "executor": "running"},
         },
         goto=END,
     )
@@ -522,7 +534,9 @@ def clarification_node(state: AgentState) -> Command:
     """
     Triggers an interrupt to ask the user to select a ticker or provide clarification.
     """
-    print("--- Planner: Ticker Ambiguity Detected. Waiting for user input... ---")
+    print(
+        "--- Fundamental Analysis: Ticker Ambiguity Detected. Waiting for user input... ---"
+    )
 
     from ...interrupts import HumanTickerSelection
     from .extraction import IntentExtraction
@@ -536,7 +550,7 @@ def clarification_node(state: AgentState) -> Command:
         reason="Multiple tickers found or ambiguity detected.",
     )
     user_input = interrupt(interrupt_payload.model_dump())
-    print(f"--- Planner: Received user input: {user_input} ---")
+    print(f"--- Fundamental Analysis: Received user input: {user_input} ---")
 
     # user_input is what the frontend sends back, e.g. { "selected_symbol": "GOOGL" }
     selected_symbol = user_input.get("selected_symbol") or user_input.get("ticker")
@@ -561,7 +575,7 @@ def clarification_node(state: AgentState) -> Command:
                     additional_kwargs={
                         "type": "ticker_selection",
                         "data": interrupt_payload.model_dump(),
-                        "agent_id": "planner",
+                        "agent_id": "fundamental_analysis",
                     },
                 ),
                 HumanMessage(content=f"Selected Ticker: {selected_symbol}"),
@@ -578,18 +592,18 @@ def clarification_node(state: AgentState) -> Command:
             )
 
     # If even fallback fails, retry extraction
-    print("--- Planner: Resolution failed, retrying extraction ---")
+    print("--- Fundamental Analysis: Resolution failed, retrying extraction ---")
     return Command(update={"status": "extraction"}, goto="extraction")
 
 
 # Helper for initialization
-_compiled_subgraph = None
+fundamental_analysis_subgraph = None
 
 
-async def get_planner_subgraph():
-    """Lazy-initialize and return the planner subgraph."""
-    global _compiled_subgraph
-    if _compiled_subgraph is None:
+async def get_fundamental_analysis_subgraph():
+    """Lazy-initialize and return the fundamental_analysis subgraph."""
+    global fundamental_analysis_subgraph
+    if fundamental_analysis_subgraph is None:
         # 1. Build Subgraph
         builder = StateGraph(AgentState)
         builder.add_node("extraction", extraction_node)
@@ -602,6 +616,6 @@ async def get_planner_subgraph():
 
         # 2. Compile
         # Note: No checkpointer passed here; it will be inherited from the parent graph
-        _compiled_subgraph = builder.compile()
+        fundamental_analysis_subgraph = builder.compile()
 
-    return _compiled_subgraph
+    return fundamental_analysis_subgraph

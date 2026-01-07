@@ -3,8 +3,8 @@ from typing import Literal
 from langchain_core.messages import AIMessage  # noqa: F401
 from pydantic import BaseModel, Field
 
-from .nodes.planner.extraction import IntentExtraction
-from .nodes.planner.structures import TickerCandidate
+from .nodes.fundamental_analysis.extraction import IntentExtraction
+from .nodes.fundamental_analysis.structures import TickerCandidate
 
 
 class ApprovalDetails(BaseModel):

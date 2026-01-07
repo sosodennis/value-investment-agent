@@ -45,7 +45,7 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
     const agentMessages = messages.filter(m => m.agentId === agent.id);
 
     // Get specific reports from agentOutput if available (for Planner)
-    const agentReports = agentOutput?.financial_reports || (agent.id === 'planner' ? financialReports : []);
+    const agentReports = agentOutput?.financial_reports || (agent.id === 'fundamental_analysis' ? financialReports : []);
     const latestReport = agentReports.length > 0 ? agentReports[0] : null;
 
     const getScore = (val: any, min: number, max: number) => {
@@ -59,31 +59,31 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
         {
             name: 'Fundamental',
             score: latestReport ? getScore(latestReport.roe || 0.15, 0, 0.3) :
-                (agent.id === 'planner' ? 85 : 0),
+                (agent.id === 'fundamental_analysis' ? 85 : 0),
             color: 'bg-emerald-500'
         },
         {
             name: 'Efficiency',
             score: latestReport ? getScore(latestReport.asset_turnover || 1.0, 0, 2) :
-                (agent.id === 'planner' ? 65 : 0),
+                (agent.id === 'fundamental_analysis' ? 65 : 0),
             color: 'bg-cyan-500'
         },
         {
             name: 'Risk',
             score: latestReport ? 100 - getScore(latestReport.debt_to_equity || 0.5, 0, 2) :
-                (agent.id === 'auditor' ? 90 : (agent.id === 'planner' ? 72 : 0)),
+                (agent.id === 'auditor' ? 90 : (agent.id === 'fundamental_analysis' ? 72 : 0)),
             color: 'bg-emerald-500'
         },
         {
             name: 'Growth',
             score: latestReport ? getScore(latestReport.revenue_growth || 0.1, -0.2, 0.4) :
-                (agent.id === 'planner' ? 60 : 0),
+                (agent.id === 'fundamental_analysis' ? 60 : 0),
             color: 'bg-cyan-500'
         },
         {
             name: 'Valuation',
             score: latestReport ? 100 - getScore(latestReport.pe_ratio || 25, 5, 50) :
-                (agent.id === 'calculator' ? 88 : (agent.id === 'planner' ? 40 : 0)),
+                (agent.id === 'calculator' ? 88 : (agent.id === 'fundamental_analysis' ? 40 : 0)),
             color: 'bg-rose-500'
         },
     ];
@@ -167,7 +167,7 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                                 {/* Active Interrupts (Scoped) */}
                                 {messages.filter(m => {
                                     if (!m.isInteractive) return false;
-                                    if (agent.id === 'planner' && m.type === 'interrupt_ticker') return true;
+                                    if (agent.id === 'fundamental_analysis' && m.type === 'interrupt_ticker') return true;
                                     if (agent.id === 'approval' && m.type === 'interrupt_approval') return true;
                                     return false;
                                 }).map((msg) => (
@@ -256,7 +256,7 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                                 {(() => {
                                     const filteredFeed = activityFeed.filter(step => {
                                         const node = step.node.toLowerCase();
-                                        if (agent.id === 'planner') {
+                                        if (agent.id === 'fundamental_analysis') {
                                             return node.includes('searching') || node.includes('deciding') || node.includes('financial') || node.includes('model_selection') || node.includes('extract');
                                         }
                                         if (agent.id === 'executor') return node.includes('executor');
@@ -479,7 +479,7 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
 
                 {activeTab === 'Output' && (
                     <div className="p-8 h-full animate-in slide-in-from-bottom-2 duration-300">
-                        {agent.id === 'planner' ? (
+                        {agent.id === 'fundamental_analysis' ? (
                             agentReports.length > 0 ? (
                                 <div className="space-y-6">
                                     <div className="flex items-center gap-3 mb-2">
