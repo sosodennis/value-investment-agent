@@ -6,6 +6,7 @@ import { FinancialTable } from './FinancialTable';
 
 interface AgentDetailPanelProps {
     agent: AgentInfo | null;
+    agentOutput?: any;
     messages: Message[];
     onSubmitCommand?: (payload: any) => Promise<void>;
     financialReports?: any[];
@@ -17,6 +18,7 @@ interface AgentDetailPanelProps {
 
 export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
     agent,
+    agentOutput,
     messages,
     onSubmitCommand,
     financialReports = [],
@@ -40,42 +42,48 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
     }
 
     // Filter messages for this agent
-    const agentMessages = messages.filter(m => m.agentId === agent.id || (m.role === 'user' && m.agentId === agent.id));
+    const agentMessages = messages.filter(m => m.agentId === agent.id);
 
-    // Calculate real Dimension Scores if data exists
-    const latestReport = financialReports.length > 0 ? financialReports[0] : null;
+    // Get specific reports from agentOutput if available (for Planner)
+    const agentReports = agentOutput?.financial_reports || (agent.id === 'planner' ? financialReports : []);
+    const latestReport = agentReports.length > 0 ? agentReports[0] : null;
 
     const getScore = (val: any, min: number, max: number) => {
-        if (val === null || val === undefined) return 50; // Neutral fallback
+        if (val === null || val === undefined) return 50;
         const score = ((val - min) / (max - min)) * 100;
         return Math.min(Math.max(Math.round(score), 0), 100);
     };
 
-    // Placeholder logic for news/sentiment/technical until derived from audit
+    // Dimension Scores - Scoped logic
     const dimensionScores: DimensionScore[] = [
         {
             name: 'Fundamental',
-            score: latestReport ? getScore(latestReport.roe || 0.15, 0, 0.3) : 85,
+            score: latestReport ? getScore(latestReport.roe || 0.15, 0, 0.3) :
+                (agent.id === 'planner' ? 85 : 0),
             color: 'bg-emerald-500'
         },
         {
             name: 'Efficiency',
-            score: latestReport ? getScore(latestReport.asset_turnover || 1.0, 0, 2) : 65,
+            score: latestReport ? getScore(latestReport.asset_turnover || 1.0, 0, 2) :
+                (agent.id === 'planner' ? 65 : 0),
             color: 'bg-cyan-500'
         },
         {
             name: 'Risk',
-            score: latestReport ? 100 - getScore(latestReport.debt_to_equity || 0.5, 0, 2) : 72,
+            score: latestReport ? 100 - getScore(latestReport.debt_to_equity || 0.5, 0, 2) :
+                (agent.id === 'auditor' ? 90 : (agent.id === 'planner' ? 72 : 0)),
             color: 'bg-emerald-500'
         },
         {
             name: 'Growth',
-            score: latestReport ? getScore(latestReport.revenue_growth || 0.1, -0.2, 0.4) : 60,
+            score: latestReport ? getScore(latestReport.revenue_growth || 0.1, -0.2, 0.4) :
+                (agent.id === 'planner' ? 60 : 0),
             color: 'bg-cyan-500'
         },
         {
             name: 'Valuation',
-            score: latestReport ? 100 - getScore(latestReport.pe_ratio || 25, 5, 50) : 40,
+            score: latestReport ? 100 - getScore(latestReport.pe_ratio || 25, 5, 50) :
+                (agent.id === 'calculator' ? 88 : (agent.id === 'planner' ? 40 : 0)),
             color: 'bg-rose-500'
         },
     ];
@@ -156,8 +164,13 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                                     </div>
                                 </div>
 
-                                {/* Active Interrupts (Centralized) */}
-                                {messages.filter(m => m.isInteractive && m.type?.startsWith('interrupt')).map((msg) => (
+                                {/* Active Interrupts (Scoped) */}
+                                {messages.filter(m => {
+                                    if (!m.isInteractive) return false;
+                                    if (agent.id === 'planner' && m.type === 'interrupt_ticker') return true;
+                                    if (agent.id === 'approval' && m.type === 'interrupt_approval') return true;
+                                    return false;
+                                }).map((msg) => (
                                     <div key={msg.id} className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-5 animate-in fade-in zoom-in-95 duration-500">
                                         {msg.type === 'interrupt_ticker' && (
                                             <div className="space-y-4">
@@ -240,21 +253,37 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                             </div>
 
                             <div className="space-y-4">
-                                {activityFeed.length === 0 ? (
-                                    <div className="py-8 text-center bg-slate-950/30 rounded-xl border border-dashed border-slate-900">
-                                        <Clock size={20} className="text-slate-800 mx-auto mb-2" />
-                                        <span className="text-[10px] text-slate-700 font-bold uppercase">No history tracked</span>
-                                    </div>
-                                ) : (
-                                    [...activityFeed].reverse().map((step, idx) => (
+                                {(() => {
+                                    const filteredFeed = activityFeed.filter(step => {
+                                        const node = step.node.toLowerCase();
+                                        if (agent.id === 'planner') {
+                                            return node.includes('searching') || node.includes('deciding') || node.includes('financial') || node.includes('model_selection') || node.includes('extract');
+                                        }
+                                        if (agent.id === 'executor') return node.includes('extraction') || node.includes('executor');
+                                        if (agent.id === 'auditor') return node.includes('audit');
+                                        if (agent.id === 'approval') return node.includes('approval') || node.includes('audit');
+                                        if (agent.id === 'calculator') return node.includes('calc') || node.includes('valuation');
+                                        return true;
+                                    });
+
+                                    if (filteredFeed.length === 0) {
+                                        return (
+                                            <div className="py-8 text-center bg-slate-950/30 rounded-xl border border-dashed border-slate-900">
+                                                <Clock size={20} className="text-slate-800 mx-auto mb-2" />
+                                                <span className="text-[10px] text-slate-700 font-bold uppercase">No history tracked</span>
+                                            </div>
+                                        );
+                                    }
+
+                                    return [...filteredFeed].reverse().map((step, idx) => (
                                         <div key={step.id} className="flex gap-4 group">
                                             <div className="flex flex-col items-center gap-1">
                                                 <div className={`w-2 h-2 rounded-full mt-1 ${idx === 0 ? 'bg-cyan-500 shadow-[0_0_5px_rgba(34,211,238,1)]' : 'bg-slate-800 group-hover:bg-slate-700'}`} />
-                                                {idx !== activityFeed.length - 1 && <div className="w-[1px] flex-1 bg-slate-900" />}
+                                                {idx !== filteredFeed.length - 1 && <div className="w-[1px] flex-1 bg-slate-900" />}
                                             </div>
                                             <div className="flex-1 pb-4">
                                                 <div className="flex justify-between items-start">
-                                                    <span className={`text-xs font-bold leading-none capitalize ${idx === 0 ? 'text-slate-200' : 'text-slate-500'}`}>
+                                                    <span className={`text-xs font-bold leading-none capitalize ${idx === 0 ? 'text-slate-200' : 'text-slate-50'}`}>
                                                         {step.node}
                                                     </span>
                                                     <span className="text-[9px] text-slate-700 font-mono">
@@ -266,8 +295,8 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                                                 </div>
                                             </div>
                                         </div>
-                                    ))
-                                )}
+                                    ));
+                                })()}
                             </div>
                         </section>
                     </div>
@@ -450,23 +479,43 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
 
                 {activeTab === 'Output' && (
                     <div className="p-8 h-full animate-in slide-in-from-bottom-2 duration-300">
-                        {financialReports.length > 0 ? (
+                        {agent.id === 'planner' ? (
+                            agentReports.length > 0 ? (
+                                <div className="space-y-6">
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <LayoutPanelTop size={18} className="text-indigo-400" />
+                                        <h3 className="text-sm font-bold text-white uppercase tracking-widest">Financial Data Matrix</h3>
+                                    </div>
+                                    <FinancialTable
+                                        reports={agentReports}
+                                        ticker={resolvedTicker || 'N/A'}
+                                    />
+                                </div>
+                            ) : (
+                                <div className="flex-1 flex flex-col items-center justify-center p-12 text-center h-full">
+                                    <BarChart3 size={48} className="text-slate-900 mb-4" />
+                                    <h4 className="text-slate-500 font-bold text-xs uppercase tracking-widest">No Structured Data</h4>
+                                    <p className="text-slate-700 text-[10px] mt-2 max-w-[240px]">
+                                        Financial reports have not been extracted yet. Please provide a ticker and wait for the Planner to finish extraction.
+                                    </p>
+                                </div>
+                            )
+                        ) : agentOutput ? (
                             <div className="space-y-6">
                                 <div className="flex items-center gap-3 mb-2">
-                                    <LayoutPanelTop size={18} className="text-indigo-400" />
-                                    <h3 className="text-sm font-bold text-white uppercase tracking-widest">Financial Data Matrix</h3>
+                                    <FileText size={18} className="text-indigo-400" />
+                                    <h3 className="text-sm font-bold text-white uppercase tracking-widest">{agent.name} Result</h3>
                                 </div>
-                                <FinancialTable
-                                    reports={financialReports}
-                                    ticker={resolvedTicker || 'N/A'}
-                                />
+                                <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-6 font-mono text-xs overflow-auto max-h-[600px] text-slate-300">
+                                    <pre>{JSON.stringify(agentOutput, null, 2)}</pre>
+                                </div>
                             </div>
                         ) : (
                             <div className="flex-1 flex flex-col items-center justify-center p-12 text-center h-full">
-                                <BarChart3 size={48} className="text-slate-900 mb-4" />
-                                <h4 className="text-slate-500 font-bold text-xs uppercase tracking-widest">No Structured Data</h4>
+                                <Clock size={48} className="text-slate-900 mb-4" />
+                                <h4 className="text-slate-500 font-bold text-xs uppercase tracking-widest">No Output Available</h4>
                                 <p className="text-slate-700 text-[10px] mt-2 max-w-[240px]">
-                                    Financial reports have not been extracted yet. Please provide a ticker and wait for the Planner to finish extraction.
+                                    This agent has not completed its task yet or hasn't produced any structured output.
                                 </p>
                             </div>
                         )}
@@ -477,13 +526,18 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                     <div className="p-8 font-mono text-[10px] text-slate-500 h-full">
                         <div className="flex items-center gap-2 mb-4 text-slate-400">
                             <Activity size={12} />
-                            <span className="font-bold uppercase tracking-widest">System Execution Trace</span>
+                            <span className="font-bold uppercase tracking-widest">System Execution Trace: {agent.name}</span>
                         </div>
                         <div className="space-y-1">
-                            <div>{">"} Initializing agent: {agent.id}</div>
-                            <div>{">"} State: {agent.status}</div>
-                            <div>{">"} Memory: Persisted (Postgres)</div>
-                            <div className="text-cyan-900 animate-pulse">{">"} _awaiting_event_stream...</div>
+                            <div>{">"} Initializing component: {agent.id}</div>
+                            <div>{">"} Instance state: {agent.status}</div>
+                            <div>{">"} Memory Scope: Scoped to {agent.id}</div>
+                            {agent.status === 'running' ? (
+                                <div className="text-cyan-900 animate-pulse">{">"} _awaiting_event_stream...</div>
+                            ) : (
+                                <div className="text-slate-800">{">"} _stream_detached_</div>
+                            )}
+                            {agentOutput && <div>{">"} Scoped data attached (size: {JSON.stringify(agentOutput).length} bytes)</div>}
                         </div>
                     </div>
                 )}

@@ -41,6 +41,13 @@ def executor_node(state: AgentState) -> Command:
         output = ExtractionOutput(params=validated.model_dump())
         return Command(
             update={
+                "messages": [
+                    {
+                        "role": "assistant",
+                        "content": f"Successfully extracted parameters for {state.model_type} analysis.",
+                        "additional_kwargs": {"agent_id": "executor"},
+                    }
+                ],
                 "extraction_output": output,
                 "node_statuses": {"executor": "done", "auditor": "running"},
             },
@@ -49,5 +56,15 @@ def executor_node(state: AgentState) -> Command:
     except Exception as e:
         print(f"Extraction Failed: {e}")
         return Command(
-            update={"node_statuses": {"executor": "error"}}, goto=END
+            update={
+                "messages": [
+                    {
+                        "role": "assistant",
+                        "content": f"Extraction failed for {state.model_type}: {e}",
+                        "additional_kwargs": {"agent_id": "executor"},
+                    }
+                ],
+                "node_statuses": {"executor": "error"},
+            },
+            goto=END,
         )  # Fallback if extraction fails completely

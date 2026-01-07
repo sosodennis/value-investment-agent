@@ -20,7 +20,8 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
     financialReports,
     currentNode,
     currentStatus,
-    activityFeed
+    activityFeed,
+    agentOutputs
   } = useAgent(assistantId);
 
   const [ticker, setTicker] = useState('');
@@ -102,10 +103,11 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
   };
 
   const selectedAgent = agents.find(a => a.id === selectedAgentId) || null;
+  const selectedAgentOutput = selectedAgentId ? agentOutputs[selectedAgentId] : null;
 
   return (
     <main className="flex flex-col h-screen w-full bg-slate-950 overflow-hidden font-sans selection:bg-cyan-500/30">
-      {/* Top Navigation */}
+      {/* ... HeaderBar ... */}
       <HeaderBar
         systemStatus="online"
         activeAgents={agents.filter(a => a.status !== 'idle').length}
@@ -135,6 +137,7 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
           {/* Scrolling content or Scoped Panel */}
           <AgentDetailPanel
             agent={selectedAgent}
+            agentOutput={selectedAgentOutput}
             messages={messages}
             onSubmitCommand={submitCommand}
             financialReports={financialReports}
@@ -143,9 +146,6 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
             currentStatus={currentStatus}
             activityFeed={activityFeed}
           />
-
-          {/* Floating Interaction Feed (optional for Phase 2) */}
-          {/* We could hide the linear chat or show it as a small toggle/sheet */}
         </div>
       </div>
 

@@ -232,6 +232,17 @@ async def get_thread_history(thread_id: str):
                     except Exception:
                         current_interrupts.append(i.value)
 
+        agent_outputs = {
+            "planner": {
+                "financial_reports": snapshot.values.get("financial_reports", []),
+                "resolved_ticker": snapshot.values.get("resolved_ticker"),
+                "company_profile": snapshot.values.get("company_profile"),
+            },
+            "executor": snapshot.values.get("extraction_output"),
+            "auditor": snapshot.values.get("audit_output"),
+            "calculator": snapshot.values.get("calculation_output"),
+        }
+
         res = {
             "thread_id": thread_id,
             "messages": messages,
@@ -242,6 +253,7 @@ async def get_thread_history(thread_id: str):
             "is_running": job_manager.is_running(thread_id),
             "node_statuses": snapshot.values.get("node_statuses", {}),
             "financial_reports": snapshot.values.get("financial_reports", []),
+            "agent_outputs": agent_outputs,
         }
         print(
             f"DEBUG: get_thread_history({thread_id}) -> is_running={res['is_running']}"
@@ -258,10 +270,21 @@ async def get_agent_statuses(thread_id: str):
     try:
         graph = await get_graph()
         snapshot = await graph.aget_state(config)
+        agent_outputs = {
+            "planner": {
+                "financial_reports": snapshot.values.get("financial_reports", []),
+                "resolved_ticker": snapshot.values.get("resolved_ticker"),
+                "company_profile": snapshot.values.get("company_profile"),
+            },
+            "executor": snapshot.values.get("extraction_output"),
+            "auditor": snapshot.values.get("audit_output"),
+            "calculator": snapshot.values.get("calculation_output"),
+        }
         return {
             "node_statuses": snapshot.values.get("node_statuses", {}),
             "financial_reports": snapshot.values.get("financial_reports", []),
             "current_node": snapshot.values.get("current_node"),
+            "agent_outputs": agent_outputs,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e

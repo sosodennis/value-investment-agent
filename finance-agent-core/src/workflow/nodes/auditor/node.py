@@ -35,6 +35,13 @@ def auditor_node(state: AgentState) -> Command:
 
     return Command(
         update={
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": f"Audit completed. Result: {'PASSED' if result.passed else 'FAILED'}. {len(result.messages)} findings identified.",
+                    "additional_kwargs": {"agent_id": "auditor"},
+                }
+            ],
             "audit_output": AuditOutput(passed=result.passed, messages=result.messages),
             "node_statuses": {"auditor": "done", "approval": "running"},
         },

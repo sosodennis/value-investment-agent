@@ -33,6 +33,7 @@ export function useAgent(assistantId: string = "agent") {
         approval: 'idle',
         calculator: 'idle',
     });
+    const [agentOutputs, setAgentOutputs] = useState<Record<string, any>>({});
 
     const messagesRef = useRef<Message[]>([]);
     messagesRef.current = messages;
@@ -329,6 +330,7 @@ export function useAgent(assistantId: string = "agent") {
                 setResolvedTicker(stateData.resolved_ticker);
                 if (stateData.node_statuses) setAgentStatuses(prev => ({ ...prev, ...stateData.node_statuses }));
                 if (stateData.financial_reports) setFinancialReports(stateData.financial_reports);
+                if (stateData.agent_outputs) setAgentOutputs(stateData.agent_outputs);
 
                 if (stateData.interrupts && stateData.interrupts.length > 0 && !before) {
                     stateData.interrupts.forEach((interrupt: any, index: number) => {
@@ -377,5 +379,6 @@ export function useAgent(assistantId: string = "agent") {
         currentNode,
         currentStatus,
         activityFeed,
+        agentOutputs,
     };
 }
