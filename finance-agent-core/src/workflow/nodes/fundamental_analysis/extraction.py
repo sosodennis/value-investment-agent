@@ -27,7 +27,8 @@ class IntentExtraction(BaseModel):
         None, description="The stock ticker if explicitly mentioned."
     )
     is_valuation_request: bool = Field(
-        ..., description="Whether the user is asking for a financial valuation."
+        True,
+        description="Whether the user is asking for a financial valuation (default: True).",
     )
     reasoning: str | None = Field(
         None, description="Brief reasoning for the extraction."
@@ -195,6 +196,7 @@ RULES:
 2. **Ticker**: ONLY extract a ticker if the user EXPLICITLY typed a ticker symbol (e.g., "GOOG", "$TSLA", "stock symbol for Apple").
 3. **CRITICAL**: If the user says "Google", do NOT infer "GOOGL". Leave the ticker field empty.
 4. **CRITICAL**: If the user says "Alphabet", do NOT infer "GOOG". Leave the ticker field empty.
+5. **CRITICAL**: Set `is_valuation_request` to true if the user wants to valuate, price, or analyze a company's financial value.
 
 Return the IntentExtraction object.
 """,

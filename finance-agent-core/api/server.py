@@ -78,6 +78,9 @@ class JobManager:
                     "deciding",
                     "clarifying",
                     "auditor",
+                    # Financial news research internal nodes (use structured output with Pydantic models)
+                    "selector_node",
+                    "analyst_node",
                 }
 
                 if event_type == "on_chat_model_stream" and node_name in HIDDEN_NODES:
@@ -139,14 +142,26 @@ class JobManager:
         # Standardize event serialization
         def json_serializable(obj):
             try:
+                # Handle Enums first (before model_dump check since many Pydantic models include enums)
+                from enum import Enum
+
+                if isinstance(obj, Enum):
+                    return obj.value
                 if isinstance(obj, Command):
                     return {"update": obj.update, "goto": obj.goto, "graph": obj.graph}
+                # Handle Pydantic models
                 if hasattr(obj, "model_dump"):
                     return obj.model_dump()
                 if hasattr(obj, "dict"):
                     return obj.dict()
+                # Handle datetime
+                from datetime import datetime
+
+                if isinstance(obj, datetime):
+                    return obj.isoformat()
                 return str(obj)
-            except Exception:
+            except Exception as e:
+                print(f"json_serializable fallback for {type(obj)}: {e}")
                 return str(obj)
 
         msg = (
