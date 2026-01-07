@@ -59,7 +59,7 @@ export const AgentCard: React.FC<AgentCardProps> = ({
                     {role}
                 </p>
                 <p className={`text-[10px] font-bold mt-1 capitalize ${getStatusColor()}`}>
-                    {status === 'running' ? 'Processing...' : status}
+                    {status === 'running' ? 'Processing...' : status === 'attention' ? 'Human Assist' : status}
                 </p>
             </div>
 

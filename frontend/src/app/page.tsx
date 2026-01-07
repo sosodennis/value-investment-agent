@@ -54,6 +54,10 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
   }, [threadId]);
 
   // Define Agents Roster Data (Linking to current workflow nodes)
+  // Derive 'attention' status from active interrupts
+  const hasTickerInterrupt = messages.some(m => m.isInteractive && m.type === 'interrupt_ticker');
+  const hasApprovalInterrupt = messages.some(m => m.isInteractive && m.type === 'interrupt_approval');
+
   const agents: AgentInfo[] = useMemo(() => [
     {
       id: 'planner',
@@ -61,7 +65,7 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
       role: 'Strategy & Goal Setting',
       description: 'Analyzes user intent and fetches preliminary data.',
       avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix',
-      status: agentStatuses.planner,
+      status: hasTickerInterrupt ? 'attention' : agentStatuses.planner,
     },
     {
       id: 'executor',
@@ -85,7 +89,7 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
       role: 'Final Decision Authority',
       description: 'Manages human-in-the-loop approvals.',
       avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sasha',
-      status: agentStatuses.approval,
+      status: hasApprovalInterrupt ? 'attention' : agentStatuses.approval,
     },
     {
       id: 'calculator',
@@ -95,7 +99,7 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
       avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Coco',
       status: agentStatuses.calculator,
     },
-  ], [agentStatuses]);
+  ], [agentStatuses, hasTickerInterrupt, hasApprovalInterrupt]);
 
   const handleStartAnalysis = () => {
     if (!ticker || isLoading) return;
