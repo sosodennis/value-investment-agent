@@ -271,7 +271,11 @@ export function useAgent(assistantId: string = "agent") {
     }, [threadId, parseStream]);
 
     const submitCommand = useCallback(async (payload: any) => {
-        if (!threadId) return;
+        if (!threadId) {
+            console.error("❌ submitCommand called but threadId is null");
+            setError("Session ID missing. Please refresh the page.");
+            return;
+        }
         setMessages(prev => prev.map(m => m.isInteractive ? { ...m, isInteractive: false } : m));
         setError(null);
         setCurrentNode(null);

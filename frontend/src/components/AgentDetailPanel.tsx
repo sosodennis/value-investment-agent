@@ -259,11 +259,11 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                                         if (agent.id === 'planner') {
                                             return node.includes('searching') || node.includes('deciding') || node.includes('financial') || node.includes('model_selection') || node.includes('extract');
                                         }
-                                        if (agent.id === 'executor') return node.includes('extraction') || node.includes('executor');
+                                        if (agent.id === 'executor') return node.includes('executor');
                                         if (agent.id === 'auditor') return node.includes('audit');
                                         if (agent.id === 'approval') return node.includes('approval') || node.includes('audit');
                                         if (agent.id === 'calculator') return node.includes('calc') || node.includes('valuation');
-                                        return true;
+                                        return false;
                                     });
 
                                     if (filteredFeed.length === 0) {

@@ -319,6 +319,7 @@ async def attach_stream(thread_id: str):
 @app.post("/stream")
 async def stream_agent(body: RequestSchema):
     """Start or resume a job."""
+    print(f"DEBUG: stream_agent called with body: {body}")
     thread_id = body.thread_id
     config = {"configurable": {"thread_id": thread_id}}
 
@@ -338,10 +339,14 @@ async def stream_agent(body: RequestSchema):
             messages=[user_msg], user_query=body.message
         ).model_dump()
     elif body.resume_payload:
+        print(f"DEBUG: Resuming with payload: {body.resume_payload}")
         input_data = Command(resume=body.resume_payload)
     else:
         input_data = None
 
+    print(
+        f"DEBUG: Starting job with input_data type: {type(input_data)} value: {input_data}"
+    )
     # Start job
     job_manager.start_job(thread_id, input_data, config)
     return {"status": "started", "thread_id": thread_id}

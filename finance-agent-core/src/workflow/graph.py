@@ -35,6 +35,7 @@ def approval_node(state: AgentState) -> Command:
     )
 
     ans = interrupt(interrupt_payload.model_dump())
+    print(f"--- Approval: Received user input: {ans} ---")
 
     # When resumed, ans will contain the payload sent from frontend (e.g. { "approved": true })
     from langchain_core.messages import AIMessage, HumanMessage
@@ -96,6 +97,9 @@ async def get_graph():
 
         builder.add_edge(START, "planner")
         builder.add_edge("planner", "executor")
+        builder.add_edge("executor", "auditor")
+        builder.add_edge("auditor", "approval")
+        builder.add_edge("approval", "calculator")
         builder.add_edge("calculator", END)
 
         # 3. Initialize Checkpointer

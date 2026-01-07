@@ -5,6 +5,7 @@ In production, this would use LLM to extract parameters from 10-K filings,
 financial statements, and other sources.
 """
 
+from langchain_core.messages import AIMessage
 from langgraph.graph import END
 from langgraph.types import Command
 
@@ -42,11 +43,10 @@ def executor_node(state: AgentState) -> Command:
         return Command(
             update={
                 "messages": [
-                    {
-                        "role": "assistant",
-                        "content": f"Successfully extracted parameters for {state.model_type} analysis.",
-                        "additional_kwargs": {"agent_id": "executor"},
-                    }
+                    AIMessage(
+                        content=f"Successfully extracted parameters for {state.model_type} analysis.",
+                        additional_kwargs={"agent_id": "executor"},
+                    )
                 ],
                 "extraction_output": output,
                 "node_statuses": {"executor": "done", "auditor": "running"},
@@ -58,11 +58,10 @@ def executor_node(state: AgentState) -> Command:
         return Command(
             update={
                 "messages": [
-                    {
-                        "role": "assistant",
-                        "content": f"Extraction failed for {state.model_type}: {e}",
-                        "additional_kwargs": {"agent_id": "executor"},
-                    }
+                    AIMessage(
+                        content=f"Extraction failed for {state.model_type}: {e}",
+                        additional_kwargs={"agent_id": "executor"},
+                    )
                 ],
                 "node_statuses": {"executor": "error"},
             },

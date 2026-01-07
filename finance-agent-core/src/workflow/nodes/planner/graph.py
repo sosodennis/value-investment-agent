@@ -184,8 +184,6 @@ def financial_health_node(state: AgentState) -> Command:
     if financial_reports:
         import textwrap
 
-        from tabulate import tabulate
-
         from .financial_models import (
             ComputedProvenance,
             FinancialServicesExtension,
@@ -338,8 +336,8 @@ def financial_health_node(state: AgentState) -> Command:
                 row.append(formatter(val))
             base_rows.append(row)
 
-        print(f"\n📊 [{resolved_ticker}] Base Financials & Ratios")
-        print(tabulate(base_rows, headers=headers, tablefmt="grid"))
+        # print(f"\n📊 [{resolved_ticker}] Base Financials & Ratios")
+        # print(tabulate(base_rows, headers=headers, tablefmt="grid"))
 
         # --- Extension Model Table ---
         # Determine extension type from first report (assume consistent)
@@ -348,10 +346,10 @@ def financial_health_node(state: AgentState) -> Command:
         if first_ext:
             ext_rows = []
             ext_metrics = []
-            title = "Extension Metrics"
+            # title = "Extension Metrics"
 
             if isinstance(first_ext, IndustrialExtension):
-                title = "🏭 Industrial Metrics"
+                # title = "🏭 Industrial Metrics"
                 ext_metrics = [
                     ("Inventory", "inventory"),
                     ("Accounts Receivable", "accounts_receivable"),
@@ -361,7 +359,7 @@ def financial_health_node(state: AgentState) -> Command:
                     ("Capex", "capex"),
                 ]
             elif isinstance(first_ext, FinancialServicesExtension):
-                title = "🏦 Banking Metrics"
+                # title = "🏦 Banking Metrics"
                 ext_metrics = [
                     ("Loans", "loans_and_leases"),
                     ("Deposits", "deposits"),
@@ -371,7 +369,7 @@ def financial_health_node(state: AgentState) -> Command:
                     ("Provision for Loan Losses", "provision_for_loan_losses"),
                 ]
             elif isinstance(first_ext, RealEstateExtension):
-                title = "🏠 Real Estate Metrics"
+                # title = "🏠 Real Estate Metrics"
                 ext_metrics = [
                     ("Real Estate Assets", "real_estate_assets"),
                     ("Accumulated Dep", "accumulated_depreciation"),
@@ -391,8 +389,8 @@ def financial_health_node(state: AgentState) -> Command:
                         row.append("None")
                 ext_rows.append(row)
 
-            print(f"\n{title}")
-            print(tabulate(ext_rows, headers=headers, tablefmt="grid"))
+            # print(f"\n{title}")
+            # print(tabulate(ext_rows, headers=headers, tablefmt="grid"))
 
         reports_data = [r.model_dump() for r in financial_reports]
     else:
@@ -538,6 +536,7 @@ def clarification_node(state: AgentState) -> Command:
         reason="Multiple tickers found or ambiguity detected.",
     )
     user_input = interrupt(interrupt_payload.model_dump())
+    print(f"--- Planner: Received user input: {user_input} ---")
 
     # user_input is what the frontend sends back, e.g. { "selected_symbol": "GOOGL" }
     selected_symbol = user_input.get("selected_symbol") or user_input.get("ticker")
