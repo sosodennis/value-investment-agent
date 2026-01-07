@@ -28,11 +28,15 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
 
   // Sync ticker state with resolvedTicker from hook
+  const lastResolvedTickerRef = useRef<string | null>(null);
   useEffect(() => {
-    if (resolvedTicker && !ticker) {
+    if (resolvedTicker && resolvedTicker !== lastResolvedTickerRef.current) {
       setTicker(resolvedTicker);
+      lastResolvedTickerRef.current = resolvedTicker;
+    } else if (!resolvedTicker) {
+      lastResolvedTickerRef.current = null;
     }
-  }, [resolvedTicker, ticker]);
+  }, [resolvedTicker]);
 
   // Load history only once on mount
   const hasLoadedRef = useRef(false);
