@@ -103,7 +103,7 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
 
   const handleStartAnalysis = () => {
     if (!ticker || isLoading) return;
-    sendMessage(`Valuate ${ticker}`);
+    sendMessage(`Valuate ${ticker}`, true);
   };
 
   const selectedAgent = agents.find(a => a.id === selectedAgentId) || null;

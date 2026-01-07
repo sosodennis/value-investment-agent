@@ -234,20 +234,34 @@ export function useAgent(assistantId: string = "agent") {
         }
     };
 
-    const sendMessage = useCallback(async (content: string) => {
+    const sendMessage = useCallback(async (content: string, newSession: boolean = false) => {
         setIsLoading(true);
         setError(null);
+
+        let currentThreadId = threadId;
+
+        if (newSession || !currentThreadId) {
+            currentThreadId = `thread_${Date.now()}`;
+            setThreadId(currentThreadId);
+            setMessages([]);
+            setResolvedTicker(null);
+            setFinancialReports([]);
+            setAgentOutputs({});
+            setActivityFeed([]);
+            setAgentStatuses({
+                fundamental_analysis: 'idle',
+                executor: 'idle',
+                auditor: 'idle',
+                approval: 'idle',
+                calculator: 'idle',
+            });
+        }
+
         setResolvedTicker(null);
         setCurrentNode(null);
         setCurrentStatus(null);
         setActivityFeed([]);
         setAgentStatuses(prev => ({ ...prev, fundamental_analysis: 'running' }));
-
-        let currentThreadId = threadId;
-        if (!currentThreadId) {
-            currentThreadId = `thread_${Date.now()}`;
-            setThreadId(currentThreadId);
-        }
 
         const userMsg: Message = { id: `user_${Date.now()}`, role: 'user', content, type: 'text' };
         setMessages(prev => [...prev, userMsg]);
