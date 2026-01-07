@@ -19,8 +19,13 @@ export function useAgent(assistantId: string = "agent") {
     const [messages, setMessages] = useState<Message[]>([]);
     const [threadId, setThreadId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     const [resolvedTicker, setResolvedTicker] = useState<string | null>(null);
     const [hasMore, setHasMore] = useState(true);
+    const [financialReports, setFinancialReports] = useState<any[]>([]);
+    const [currentNode, setCurrentNode] = useState<string | null>(null);
+    const [currentStatus, setCurrentStatus] = useState<string | null>(null);
+    const [activityFeed, setActivityFeed] = useState<{ id: string, node: string, status: string, timestamp: number }[]>([]);
     const [agentStatuses, setAgentStatuses] = useState<Record<string, AgentStatus>>({
         planner: 'idle',
         executor: 'idle',
@@ -35,6 +40,7 @@ export function useAgent(assistantId: string = "agent") {
     const parseStream = async (thread_id: string, currentAiMsgId: string) => {
         console.log(`📡 [parseStream] Opening detached stream for ${thread_id}...`);
         let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+        let latestAiMsgId = currentAiMsgId;
         try {
             const response = await fetch(`${API_URL}/stream/${thread_id}`);
             if (!response.ok) throw new Error("Failed to attach to stream");
@@ -65,11 +71,11 @@ export function useAgent(assistantId: string = "agent") {
 
                         try {
                             const envelope = JSON.parse(jsonStr);
-                            // console.log("📩 SSE Envelope:", envelope);
 
                             // === 1. HANDLE ERRORS ===
                             if (envelope.type === 'error') {
                                 console.error("❌ Job Error:", envelope.data);
+                                setError(envelope.data.message || "An unknown error occurred.");
                                 continue;
                             }
 
@@ -82,6 +88,7 @@ export function useAgent(assistantId: string = "agent") {
                                 if (interruptVal.type === 'ticker_selection') msgType = 'interrupt_ticker';
                                 if (interruptVal.type === 'approval_request') msgType = 'interrupt_approval';
 
+                                setCurrentStatus('Waiting for input...');
                                 setMessages(prev => [...prev, {
                                     id: `interrupt_${Date.now()}`,
                                     role: 'assistant',
@@ -110,12 +117,14 @@ export function useAgent(assistantId: string = "agent") {
                                             setMessages((prev) => {
                                                 const lastIdx = prev.length - 1;
                                                 const lastMsg = prev[lastIdx];
-                                                if (lastMsg && lastMsg.role === 'assistant' && lastMsg.id === currentAiMsgId && !lastMsg.type) {
+                                                if (lastMsg && lastMsg.role === 'assistant' && lastMsg.id === latestAiMsgId && !lastMsg.type) {
                                                     const newMsgs = [...prev];
                                                     newMsgs[lastIdx] = { ...lastMsg, content: lastMsg.content + text };
                                                     return newMsgs;
                                                 } else {
-                                                    return [...prev, { id: currentAiMsgId, role: 'assistant', content: text, type: 'text' }];
+                                                    const newMsgId = `ai_${Date.now()}`;
+                                                    latestAiMsgId = newMsgId;
+                                                    return [...prev, { id: newMsgId, role: 'assistant', content: text, type: 'text' }];
                                                 }
                                             });
                                         }
@@ -128,20 +137,39 @@ export function useAgent(assistantId: string = "agent") {
                                     const output = eventData.data?.output;
                                     const updatePayload = output?.update || output;
 
-                                    // Extract agent_id from payload if present
                                     const agentId = updatePayload?.metadata?.agent_id ||
                                         updatePayload?.messages?.[0]?.additional_kwargs?.agent_id ||
                                         eventData.metadata?.agent_id;
 
-                                    // --- Update Dashboard Agent Statuses ---
                                     if (updatePayload && updatePayload.node_statuses) {
-                                        console.log("📊 Status Update:", updatePayload.node_statuses);
                                         setAgentStatuses(prev => ({ ...prev, ...updatePayload.node_statuses }));
+                                    }
+
+                                    // --- Track Granular Progress ---
+                                    if (nodeName && (updatePayload?.status || updatePayload?.node_statuses)) {
+                                        const cleanNode = nodeName.split(':').pop() || nodeName;
+                                        const status = updatePayload.status || 'Active';
+
+                                        setCurrentNode(cleanNode);
+                                        setCurrentStatus(status);
+
+                                        setActivityFeed(prev => {
+                                            if (prev.length > 0 && prev[prev.length - 1].node === cleanNode && prev[prev.length - 1].status === status) {
+                                                return prev;
+                                            }
+                                            return [...prev, {
+                                                id: `step_${Date.now()}`,
+                                                node: cleanNode,
+                                                status: status,
+                                                timestamp: Date.now()
+                                            }];
+                                        });
                                     }
 
                                     // Capture Financial Data
                                     if (nodeName === 'financial_health' || (nodeName && nodeName.endsWith(':financial_health'))) {
                                         if (updatePayload && updatePayload.financial_reports) {
+                                            setFinancialReports(updatePayload.financial_reports);
                                             setMessages(prev => [
                                                 ...prev,
                                                 {
@@ -150,20 +178,18 @@ export function useAgent(assistantId: string = "agent") {
                                                     content: '',
                                                     type: 'financial_report',
                                                     data: updatePayload.financial_reports,
-                                                    agentId: agentId || 'planner' // Default for planner
+                                                    agentId: agentId || 'planner'
                                                 }
                                             ]);
                                         }
                                     }
 
-                                    // Capture Resolved Ticker
                                     if (nodeName === 'deciding' || nodeName === 'clarifying' || (nodeName && (nodeName.endsWith(':deciding') || nodeName.endsWith(':clarifying')))) {
                                         if (updatePayload && updatePayload.resolved_ticker) {
                                             setResolvedTicker(updatePayload.resolved_ticker);
                                         }
                                     }
 
-                                    // Fallback for fixed content messages
                                     const chunk = eventData.data?.chunk || eventData.data?.output;
                                     if (chunk && typeof chunk === 'object' && chunk.messages && chunk.messages.length > 0) {
                                         const lastMsg = chunk.messages[chunk.messages.length - 1];
@@ -173,9 +199,13 @@ export function useAgent(assistantId: string = "agent") {
 
                                             setMessages((prev) => {
                                                 const lastStateMsg = prev[prev.length - 1];
-                                                if (lastStateMsg && lastStateMsg.content === msgContent) return prev;
+                                                if (lastStateMsg && lastStateMsg.content === msgContent && lastStateMsg.role === 'assistant') {
+                                                    return prev;
+                                                }
+                                                const newMsgId = `ai_node_${Date.now()}`;
+                                                latestAiMsgId = newMsgId;
                                                 return [...prev, {
-                                                    id: `ai_node_${Date.now()}`,
+                                                    id: newMsgId,
                                                     role: 'assistant',
                                                     content: msgContent,
                                                     agentId: msgAgentId
@@ -183,6 +213,7 @@ export function useAgent(assistantId: string = "agent") {
                                             });
                                         }
                                     }
+                                    latestAiMsgId = `ai_flushed_${Date.now()}`;
                                 }
                             }
                         } catch (e) {
@@ -193,23 +224,23 @@ export function useAgent(assistantId: string = "agent") {
             }
         } catch (error) {
             console.error("❌ [parseStream] Stream error:", error);
+            setError((error as Error).message || "An error occurred during streaming.");
         } finally {
-            console.log(`🧹 [parseStream] Cleaning up loading state for ${thread_id}.`);
             reader?.releaseLock();
             setIsLoading(false);
+            setCurrentNode(null);
+            setCurrentStatus(null);
         }
     };
 
     const sendMessage = useCallback(async (content: string) => {
         setIsLoading(true);
+        setError(null);
         setResolvedTicker(null);
-        setAgentStatuses({
-            planner: 'running', // Assume planner starts
-            executor: 'idle',
-            auditor: 'idle',
-            approval: 'idle',
-            calculator: 'idle',
-        });
+        setCurrentNode(null);
+        setCurrentStatus(null);
+        setActivityFeed([]);
+        setAgentStatuses(prev => ({ ...prev, planner: 'running' }));
 
         let currentThreadId = threadId;
         if (!currentThreadId) {
@@ -221,24 +252,29 @@ export function useAgent(assistantId: string = "agent") {
         setMessages(prev => [...prev, userMsg]);
 
         try {
-            console.log(`🌐 Initiating Job: ${content}`);
             const res = await fetch(`${API_URL}/stream`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ thread_id: currentThreadId, message: content })
             });
 
-            if (!res.ok) throw new Error("Could not start job");
+            if (!res.ok) {
+                const errorData = await res.json();
+                throw new Error(errorData.detail || "Could not start job");
+            }
             await parseStream(currentThreadId, `ai_${Date.now()}`);
         } catch (error) {
-            console.error("Agent stream error:", error);
+            setError((error as Error).message || "Failed to send message.");
             setIsLoading(false);
         }
-    }, [threadId]);
+    }, [threadId, parseStream]);
 
     const submitCommand = useCallback(async (payload: any) => {
         if (!threadId) return;
         setMessages(prev => prev.map(m => m.isInteractive ? { ...m, isInteractive: false } : m));
+        setError(null);
+        setCurrentNode(null);
+        setCurrentStatus(null);
 
         let interactionText = "Resumed execution";
         if (payload.selected_symbol) interactionText = `Selected Ticker: ${payload.selected_symbol}`;
@@ -254,19 +290,21 @@ export function useAgent(assistantId: string = "agent") {
                 body: JSON.stringify({ thread_id: threadId, resume_payload: payload })
             });
 
-            if (!res.ok) throw new Error("Could not resume job");
+            if (!res.ok) {
+                const errorData = await res.json();
+                throw new Error(errorData.detail || "Could not resume job");
+            }
             await parseStream(threadId, `ai_resume_${Date.now()}`);
         } catch (error) {
-            console.error("Resume error:", error);
+            setError((error as Error).message || "Failed to submit command.");
             setIsLoading(false);
         }
-    }, [threadId]);
+    }, [threadId, parseStream]);
 
     const loadHistory = useCallback(async (id: string, before?: string) => {
         setIsLoading(true);
+        setError(null);
         try {
-            console.log(`📜 Loading history for thread: ${id}${before ? ` before ${before}` : ''}`);
-
             const historyUrl = new URL(`${API_URL}/history/${id}`);
             if (before) historyUrl.searchParams.append('before', before);
 
@@ -280,61 +318,49 @@ export function useAgent(assistantId: string = "agent") {
                 return msg;
             });
 
-            if (historyData.length < 20) {
-                setHasMore(false);
-            }
+            if (historyData.length < 20) setHasMore(false);
 
-            setMessages(prev => {
-                if (before) return [...historyData, ...prev];
-                return historyData;
-            });
+            setMessages(prev => before ? [...historyData, ...prev] : historyData);
             setThreadId(id);
 
             const stateResponse = await fetch(`${API_URL}/thread/${id}`);
             if (stateResponse.ok) {
                 const stateData = await stateResponse.json();
                 setResolvedTicker(stateData.resolved_ticker);
+                if (stateData.node_statuses) setAgentStatuses(prev => ({ ...prev, ...stateData.node_statuses }));
+                if (stateData.financial_reports) setFinancialReports(stateData.financial_reports);
 
-                // Load node statuses from persisted state
-                if (stateData.node_statuses) {
-                    setAgentStatuses(prev => ({ ...prev, ...stateData.node_statuses }));
-                }
-
-                if (stateData.interrupts && stateData.interrupts.length > 0) {
+                if (stateData.interrupts && stateData.interrupts.length > 0 && !before) {
                     stateData.interrupts.forEach((interrupt: any, index: number) => {
                         let msgType: Message['type'] = 'text';
                         if (interrupt.type === 'ticker_selection') msgType = 'interrupt_ticker';
                         if (interrupt.type === 'approval_request') msgType = 'interrupt_approval';
 
-                        if (!before) {
-                            setMessages(prev => {
-                                const exists = prev.some(m => m.type === msgType && JSON.stringify(m.data) === JSON.stringify(interrupt));
-                                if (exists) return prev;
-                                return [...prev, {
-                                    id: `interrupt_revived_${index}_${Date.now()}`,
-                                    role: 'assistant',
-                                    content: '',
-                                    type: msgType,
-                                    data: interrupt,
-                                    isInteractive: true
-                                }];
-                            });
-                        }
+                        setMessages(prev => {
+                            const exists = prev.some(m => m.type === msgType && JSON.stringify(m.data) === JSON.stringify(interrupt));
+                            if (exists) return prev;
+                            return [...prev, {
+                                id: `interrupt_revived_${index}_${Date.now()}`,
+                                role: 'assistant',
+                                content: '',
+                                type: msgType,
+                                data: interrupt,
+                                isInteractive: true
+                            }];
+                        });
                     });
                 }
 
                 if (stateData.is_running && !before) {
-                    console.log("🔗 Connecting to active background job...");
                     await parseStream(id, `ai_attached_${Date.now()}`);
                 }
             }
-
         } catch (error) {
-            console.error("❌ Error loading history:", error);
+            setError((error as Error).message || "Failed to load history.");
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [parseStream]);
 
     return {
         messages,
@@ -342,9 +368,14 @@ export function useAgent(assistantId: string = "agent") {
         submitCommand,
         loadHistory,
         isLoading,
+        error,
         threadId,
         resolvedTicker,
         hasMore,
-        agentStatuses
+        agentStatuses,
+        financialReports,
+        currentNode,
+        currentStatus,
+        activityFeed,
     };
 }

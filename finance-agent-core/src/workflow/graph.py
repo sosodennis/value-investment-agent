@@ -34,10 +34,7 @@ def approval_node(state: AgentState) -> Command:
         )
     )
 
-    ans = interrupt(
-        update={"node_statuses": {"approval": "attention"}},
-        value=interrupt_payload.model_dump(),
-    )
+    ans = interrupt(interrupt_payload.model_dump())
 
     # When resumed, ans will contain the payload sent from frontend (e.g. { "approved": true })
     from langchain_core.messages import AIMessage, HumanMessage

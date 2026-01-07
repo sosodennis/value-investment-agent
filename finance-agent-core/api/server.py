@@ -68,7 +68,8 @@ class JobManager:
             async for event in graph.astream_events(
                 input_data, config=config, version="v2"
             ):
-                # Filtering logic: Don't stream internal LLM generation for specific nodes
+                # Filtering logic: Only block internal LLM generation (tokens) for specific nodes.
+                # Allow on_chain_end and other events so status updates and interrupts flow through.
                 node_name = event.get("metadata", {}).get("langgraph_node", "")
                 event_type = event["event"]
                 HIDDEN_NODES = {
@@ -239,11 +240,29 @@ async def get_thread_history(thread_id: str):
             "status": snapshot.values.get("status"),
             "next": snapshot.next,
             "is_running": job_manager.is_running(thread_id),
+            "node_statuses": snapshot.values.get("node_statuses", {}),
+            "financial_reports": snapshot.values.get("financial_reports", []),
         }
         print(
             f"DEBUG: get_thread_history({thread_id}) -> is_running={res['is_running']}"
         )
         return res
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get("/thread/{thread_id}/agents")
+async def get_agent_statuses(thread_id: str):
+    """Retrieve node statuses and financial reports for the dashboard."""
+    config = {"configurable": {"thread_id": thread_id}}
+    try:
+        graph = await get_graph()
+        snapshot = await graph.aget_state(config)
+        return {
+            "node_statuses": snapshot.values.get("node_statuses", {}),
+            "financial_reports": snapshot.values.get("financial_reports", []),
+            "current_node": snapshot.values.get("current_node"),
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
 

@@ -31,7 +31,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                 </div>
                 <div>
                     <h1 className="text-lg font-black tracking-tighter text-white">
-                        QUANT<span className="text-cyan-500">DINGER</span> <span className="text-slate-500 font-medium">AI LAB</span>
+                        FINANCE<span className="text-cyan-500">AI</span> <span className="text-slate-500 font-medium">LAB</span>
                     </h1>
                 </div>
             </div>

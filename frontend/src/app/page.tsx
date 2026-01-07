@@ -16,7 +16,11 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
     isLoading,
     threadId,
     resolvedTicker,
-    agentStatuses
+    agentStatuses,
+    financialReports,
+    currentNode,
+    currentStatus,
+    activityFeed
   } = useAgent(assistantId);
 
   const [ticker, setTicker] = useState('');
@@ -29,13 +33,17 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
     }
   }, [resolvedTicker, ticker]);
 
-  // Load history on mount
+  // Load history only once on mount
+  const hasLoadedRef = useRef(false);
   useEffect(() => {
+    if (hasLoadedRef.current) return;
+    hasLoadedRef.current = true;
     const savedThreadId = localStorage.getItem('agent_thread_id');
     if (savedThreadId) {
       loadHistory(savedThreadId);
     }
-  }, [loadHistory]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Save threadId
   useEffect(() => {
@@ -129,6 +137,11 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
             agent={selectedAgent}
             messages={messages}
             onSubmitCommand={submitCommand}
+            financialReports={financialReports}
+            resolvedTicker={resolvedTicker}
+            currentNode={currentNode}
+            currentStatus={currentStatus}
+            activityFeed={activityFeed}
           />
 
           {/* Floating Interaction Feed (optional for Phase 2) */}

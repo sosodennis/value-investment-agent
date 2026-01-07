@@ -29,15 +29,6 @@ export const AgentCard: React.FC<AgentCardProps> = ({
         }
     };
 
-    const getStatusIcon = () => {
-        switch (status) {
-            case 'done': return <CheckCircle2 size={16} className="text-emerald-500" />;
-            case 'running': return <Loader2 size={16} className="text-cyan-500 animate-spin" />;
-            case 'attention': return <AlertCircle size={16} className="text-amber-500" />;
-            default: return <Circle size={14} className="text-slate-700" />;
-        }
-    };
-
     return (
         <div
             onClick={onClick}
@@ -74,11 +65,14 @@ export const AgentCard: React.FC<AgentCardProps> = ({
 
             {/* Selection/Status Indicator */}
             <div className="shrink-0 flex items-center justify-center w-6">
-                {isSelected ? (
-                    <div className="w-1.5 h-6 bg-cyan-500 rounded-full blur-[2px] opacity-80" />
-                ) : (
-                    getStatusIcon()
-                )}
+                <div className={`
+                    w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all
+                    ${isSelected ? 'border-cyan-500 bg-cyan-500/10' : 'border-slate-800 bg-transparent'}
+                `}>
+                    {isSelected && (
+                        <div className="w-1.5 h-1.5 bg-cyan-400 rounded-full shadow-[0_0_8px_rgba(34,211,238,0.8)]" />
+                    )}
+                </div>
             </div>
 
             {/* Bottom Progress Bar for Running state */}

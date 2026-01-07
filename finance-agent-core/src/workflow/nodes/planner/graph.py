@@ -125,6 +125,7 @@ def searching_node(state: AgentState) -> Command:
         update={
             "ticker_candidates": [c.model_dump() for c in final_candidates],
             "status": "deciding",
+            "node_statuses": {"planner": "running"},
         },
         goto="deciding",
     )
@@ -405,6 +406,7 @@ def financial_health_node(state: AgentState) -> Command:
     return Command(
         update={
             "financial_reports": reports_data,
+            "status": "model_selection",
             "messages": [
                 AIMessage(
                     content="",
@@ -417,7 +419,6 @@ def financial_health_node(state: AgentState) -> Command:
             ]
             if reports_data
             else [],
-            "status": "model_selection",
         },
         goto="model_selection",
     )
@@ -536,10 +537,7 @@ def clarification_node(state: AgentState) -> Command:
         else None,
         reason="Multiple tickers found or ambiguity detected.",
     )
-    user_input = interrupt(
-        update={"node_statuses": {"planner": "attention"}},
-        value=interrupt_payload.model_dump(),
-    )
+    user_input = interrupt(interrupt_payload.model_dump())
 
     # user_input is what the frontend sends back, e.g. { "selected_symbol": "GOOGL" }
     selected_symbol = user_input.get("selected_symbol") or user_input.get("ticker")

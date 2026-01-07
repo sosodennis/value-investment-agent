@@ -1,16 +1,31 @@
 import React, { useState } from 'react';
 import { AgentInfo, DimensionScore } from '../types/agents';
-import { TrendingUp, BarChart3, FileText, Zap, MessageSquare, ListFilter, Activity } from 'lucide-react';
+import { TrendingUp, BarChart3, FileText, Zap, MessageSquare, ListFilter, Activity, LayoutPanelTop, CheckCircle2, Clock } from 'lucide-react';
 import { Message } from '../hooks/useAgent';
+import { FinancialTable } from './FinancialTable';
 
 interface AgentDetailPanelProps {
     agent: AgentInfo | null;
     messages: Message[];
     onSubmitCommand?: (payload: any) => Promise<void>;
+    financialReports?: any[];
+    resolvedTicker?: string | null;
+    currentNode?: string | null;
+    currentStatus?: string | null;
+    activityFeed?: { id: string, node: string, status: string, timestamp: number }[];
 }
 
-export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({ agent, messages, onSubmitCommand }) => {
-    const [activeTab, setActiveTab] = useState<'Score' | 'History' | 'Output' | 'Logs'>('History');
+export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
+    agent,
+    messages,
+    onSubmitCommand,
+    financialReports = [],
+    resolvedTicker,
+    currentNode,
+    currentStatus,
+    activityFeed = []
+}) => {
+    const [activeTab, setActiveTab] = useState<'Workspace' | 'Score' | 'History' | 'Output' | 'Logs'>('Workspace');
 
     if (!agent) {
         return (
@@ -27,13 +42,49 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({ agent, messa
     // Filter messages for this agent
     const agentMessages = messages.filter(m => m.agentId === agent.id || (m.role === 'user' && m.agentId === agent.id));
 
-    // Mock Dimension Scores for preview
+    // Calculate real Dimension Scores if data exists
+    const latestReport = financialReports.length > 0 ? financialReports[0] : null;
+
+    const getScore = (val: any, min: number, max: number) => {
+        if (val === null || val === undefined) return 50; // Neutral fallback
+        const score = ((val - min) / (max - min)) * 100;
+        return Math.min(Math.max(Math.round(score), 0), 100);
+    };
+
+    // Placeholder logic for news/sentiment/technical until derived from audit
     const dimensionScores: DimensionScore[] = [
-        { name: 'Fundamental', score: 85, color: 'bg-emerald-500' },
-        { name: 'News', score: 45, color: 'bg-rose-500' },
-        { name: 'Risk', score: 72, color: 'bg-emerald-500' },
-        { name: 'Sentiment', score: 72, color: 'bg-cyan-500' },
-        { name: 'Technical', score: 72, color: 'bg-cyan-500' },
+        {
+            name: 'Fundamental',
+            score: latestReport ? getScore(latestReport.roe || 0.15, 0, 0.3) : 85,
+            color: 'bg-emerald-500'
+        },
+        {
+            name: 'Efficiency',
+            score: latestReport ? getScore(latestReport.asset_turnover || 1.0, 0, 2) : 65,
+            color: 'bg-cyan-500'
+        },
+        {
+            name: 'Risk',
+            score: latestReport ? 100 - getScore(latestReport.debt_to_equity || 0.5, 0, 2) : 72,
+            color: 'bg-emerald-500'
+        },
+        {
+            name: 'Growth',
+            score: latestReport ? getScore(latestReport.revenue_growth || 0.1, -0.2, 0.4) : 60,
+            color: 'bg-cyan-500'
+        },
+        {
+            name: 'Valuation',
+            score: latestReport ? 100 - getScore(latestReport.pe_ratio || 25, 5, 50) : 40,
+            color: 'bg-rose-500'
+        },
+    ];
+
+    const financialMetrics = [
+        { label: 'ROE', value: latestReport?.roe ? `${(latestReport.roe * 100).toFixed(1)}%` : 'N/A' },
+        { label: 'P/E Ratio', value: latestReport?.pe_ratio ? latestReport.pe_ratio.toFixed(1) : 'N/A' },
+        { label: 'Debt/Equity', value: latestReport?.debt_to_equity ? latestReport.debt_to_equity.toFixed(2) : 'N/A' },
+        { label: 'Rev Growth', value: latestReport?.revenue_growth ? `${(latestReport.revenue_growth * 100).toFixed(1)}%` : 'N/A' },
     ];
 
     return (
@@ -55,7 +106,7 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({ agent, messa
                 </div>
 
                 <div className="flex gap-8">
-                    {(['Score', 'History', 'Output', 'Logs'] as const).map((tab) => (
+                    {(['Workspace', 'Score', 'History', 'Output', 'Logs'] as const).map((tab) => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
@@ -74,13 +125,160 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({ agent, messa
 
             {/* Main Content Scroll Area */}
             <div className="flex-1 overflow-y-auto custom-scrollbar">
+                {activeTab === 'Workspace' && (
+                    <div className="p-8 space-y-8 animate-in slide-in-from-bottom-2 duration-300">
+                        {/* Current Active Step */}
+                        <section className="bg-slate-900/20 border border-slate-800/50 rounded-2xl p-6 backdrop-blur-sm">
+                            <div className="flex items-center justify-between mb-6">
+                                <div className="flex items-center gap-3">
+                                    <LayoutPanelTop size={18} className="text-cyan-400" />
+                                    <h3 className="text-sm font-bold text-white uppercase tracking-widest">Active Workspace</h3>
+                                </div>
+                                {agent.status === 'running' && (
+                                    <div className="flex items-center gap-2 px-3 py-1 bg-cyan-500/10 border border-cyan-500/20 rounded-full">
+                                        <div className="w-1.5 h-1.5 bg-cyan-500 rounded-full animate-pulse shadow-[0_0_5px_rgba(34,211,238,1)]" />
+                                        <span className="text-[10px] font-bold text-cyan-500 uppercase tracking-tighter">Live Session</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="flex flex-col gap-4">
+                                <div className="bg-slate-950/50 border border-slate-800/80 rounded-xl p-5 flex items-center justify-between">
+                                    <div>
+                                        <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">Current Task</div>
+                                        <div className="text-lg font-bold text-white capitalize">{currentNode || (agent.status === 'running' ? 'Initializing...' : 'Idle')}</div>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">Status</div>
+                                        <div className={`text-sm font-bold ${currentStatus === 'attention' ? 'text-amber-500' : 'text-cyan-400'}`}>
+                                            {currentStatus || (agent.status === 'running' ? 'In Progress' : 'Waiting')}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Active Interrupts (Centralized) */}
+                                {messages.filter(m => m.isInteractive && m.type?.startsWith('interrupt')).map((msg) => (
+                                    <div key={msg.id} className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-5 animate-in fade-in zoom-in-95 duration-500">
+                                        {msg.type === 'interrupt_ticker' && (
+                                            <div className="space-y-4">
+                                                <div className="flex items-center gap-2 text-amber-500">
+                                                    <Zap size={14} className="animate-pulse" />
+                                                    <span className="text-[10px] font-bold uppercase tracking-widest">Ticker Resolution Required</span>
+                                                </div>
+                                                <div className="text-xs text-slate-400 mb-2">
+                                                    Multiple possible matches found. Please select the correct company to proceed.
+                                                </div>
+                                                <div className="grid grid-cols-1 gap-2">
+                                                    {msg.data?.candidates?.map((c: any) => (
+                                                        <button
+                                                            key={c.symbol}
+                                                            onClick={() => onSubmitCommand?.({ selected_symbol: c.symbol })}
+                                                            className="flex items-center justify-between p-3 bg-slate-950/80 border border-slate-800 hover:border-cyan-500/50 hover:bg-cyan-500/5 transition-all rounded-xl text-left"
+                                                        >
+                                                            <div>
+                                                                <div className="text-xs font-bold text-white">{c.symbol}</div>
+                                                                <div className="text-[9px] text-slate-500 uppercase">{c.name}</div>
+                                                            </div>
+                                                            <div className="text-[9px] font-bold text-slate-600 bg-slate-900 px-2 py-0.5 rounded">
+                                                                {(c.confidence * 100).toFixed(0)}% Match
+                                                            </div>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {msg.type === 'interrupt_approval' && (
+                                            <div className="space-y-4">
+                                                <div className="flex items-center gap-2 text-amber-500">
+                                                    <Zap size={14} className="animate-pulse" />
+                                                    <span className="text-[10px] font-bold uppercase tracking-widest">Review & Approval Needed</span>
+                                                </div>
+                                                <div className="p-4 bg-slate-950/80 border border-slate-800 rounded-xl space-y-3">
+                                                    <div className="flex justify-between items-center pb-2 border-b border-slate-900">
+                                                        <span className="text-[10px] text-slate-500 uppercase font-bold">Analysis Target</span>
+                                                        <span className="text-xs font-bold text-white">{msg.data?.details?.ticker}</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center pb-2 border-b border-slate-900">
+                                                        <span className="text-[10px] text-slate-500 uppercase font-bold">Model Engine</span>
+                                                        <span className="text-xs font-bold text-cyan-400 capitalize">{msg.data?.details?.model}</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-[10px] text-slate-500 uppercase font-bold">Audit Status</span>
+                                                        <span className={`text-[10px] font-bold uppercase ${msg.data?.details?.audit_passed ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                                            {msg.data?.details?.audit_passed ? 'Passed' : 'Attention Required'}
+                                                        </span>
+                                                    </div>
+
+                                                    <div className="pt-3 flex gap-2">
+                                                        <button
+                                                            onClick={() => onSubmitCommand?.({ approved: true })}
+                                                            className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold py-2 rounded-lg transition-all uppercase tracking-widest shadow-lg shadow-emerald-500/20"
+                                                        >
+                                                            Approve Plan
+                                                        </button>
+                                                        <button
+                                                            onClick={() => onSubmitCommand?.({ approved: false })}
+                                                            className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold py-2 rounded-lg transition-all uppercase tracking-widest"
+                                                        >
+                                                            Reject
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
+
+                        {/* Recent Activity Feed */}
+                        <section className="bg-slate-900/10 border border-slate-900 rounded-2xl p-6">
+                            <div className="flex items-center gap-3 mb-6">
+                                <Activity size={16} className="text-slate-500" />
+                                <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Activity History</h3>
+                            </div>
+
+                            <div className="space-y-4">
+                                {activityFeed.length === 0 ? (
+                                    <div className="py-8 text-center bg-slate-950/30 rounded-xl border border-dashed border-slate-900">
+                                        <Clock size={20} className="text-slate-800 mx-auto mb-2" />
+                                        <span className="text-[10px] text-slate-700 font-bold uppercase">No history tracked</span>
+                                    </div>
+                                ) : (
+                                    [...activityFeed].reverse().map((step, idx) => (
+                                        <div key={step.id} className="flex gap-4 group">
+                                            <div className="flex flex-col items-center gap-1">
+                                                <div className={`w-2 h-2 rounded-full mt-1 ${idx === 0 ? 'bg-cyan-500 shadow-[0_0_5px_rgba(34,211,238,1)]' : 'bg-slate-800 group-hover:bg-slate-700'}`} />
+                                                {idx !== activityFeed.length - 1 && <div className="w-[1px] flex-1 bg-slate-900" />}
+                                            </div>
+                                            <div className="flex-1 pb-4">
+                                                <div className="flex justify-between items-start">
+                                                    <span className={`text-xs font-bold leading-none capitalize ${idx === 0 ? 'text-slate-200' : 'text-slate-500'}`}>
+                                                        {step.node}
+                                                    </span>
+                                                    <span className="text-[9px] text-slate-700 font-mono">
+                                                        {new Date(step.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                                    </span>
+                                                </div>
+                                                <div className="text-[10px] text-slate-600 mt-1 uppercase tracking-tighter transition-all group-hover:text-slate-500">
+                                                    {step.status}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </section>
+                    </div>
+                )}
                 {activeTab === 'Score' && (
                     <div className="p-8 space-y-8 animate-in slide-in-from-bottom-2 duration-300">
                         {/* Dimension Scores Card */}
                         <section className="bg-slate-900/20 border border-slate-800/50 rounded-2xl p-8 backdrop-blur-sm">
                             <div className="flex items-center gap-3 mb-8">
                                 <BarChart3 size={18} className="text-cyan-400" />
-                                <h3 className="text-sm font-bold text-white uppercase tracking-widest">Dimension Scores</h3>
+                                <h3 className="text-sm font-bold text-white uppercase tracking-widest">Analysis Dimensions</h3>
                             </div>
 
                             <div className="space-y-6">
@@ -106,14 +304,10 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({ agent, messa
                             <section className="bg-slate-900/20 border border-slate-800/50 rounded-2xl p-6">
                                 <h3 className="text-sm font-bold text-white mb-6 flex items-center gap-2">
                                     <TrendingUp size={16} className="text-cyan-400" />
-                                    Financial Health
+                                    Core Metrics
                                 </h3>
                                 <div className="space-y-4">
-                                    {[
-                                        { label: 'P/B Ratio', value: '1.2x', trend: 'neutral' },
-                                        { label: 'P/E Ratio', value: '24.5', trend: 'up' },
-                                        { label: 'Debt/Equity', value: '0.45', trend: 'down' },
-                                    ].map(m => (
+                                    {financialMetrics.map(m => (
                                         <div key={m.label} className="flex justify-between items-center border-b border-slate-900 pb-3">
                                             <span className="text-[11px] text-slate-500 font-medium">{m.label}</span>
                                             <span className="text-xs font-bold text-slate-200">{m.value}</span>
@@ -125,12 +319,20 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({ agent, messa
                             <section className="bg-slate-900/20 border border-slate-800/50 rounded-2xl p-6">
                                 <h3 className="text-sm font-bold text-white mb-6 flex items-center gap-2">
                                     <FileText size={16} className="text-cyan-400" />
-                                    Agent Summary
+                                    Agent Context
                                 </h3>
-                                <p className="text-xs text-slate-400 leading-relaxed">
-                                    {agent.description}. Current status is <span className="text-cyan-400 font-bold">{agent.status}</span>.
-                                    Waiting for further instructions or processing current stream data.
-                                </p>
+                                <div className="text-xs text-slate-400 leading-relaxed space-y-2">
+                                    <p>
+                                        {agent.description}. Current status is <span className="text-cyan-400 font-bold">{agent.status}</span>.
+                                    </p>
+                                    <p>
+                                        {latestReport ? (
+                                            `Analyzing financial data for ${latestReport.ticker || 'selected company'} showing a ROE of ${(latestReport.roe * 100).toFixed(1)}%.`
+                                        ) : (
+                                            'Waiting for financial data to be extracted and processed.'
+                                        )}
+                                    </p>
+                                </div>
                             </section>
                         </div>
                     </div>
@@ -247,8 +449,27 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({ agent, messa
                 )}
 
                 {activeTab === 'Output' && (
-                    <div className="p-8 flex items-center justify-center text-slate-600 h-full italic text-xs">
-                        Final structured artifacts will appear here upon node completion.
+                    <div className="p-8 h-full animate-in slide-in-from-bottom-2 duration-300">
+                        {financialReports.length > 0 ? (
+                            <div className="space-y-6">
+                                <div className="flex items-center gap-3 mb-2">
+                                    <LayoutPanelTop size={18} className="text-indigo-400" />
+                                    <h3 className="text-sm font-bold text-white uppercase tracking-widest">Financial Data Matrix</h3>
+                                </div>
+                                <FinancialTable
+                                    reports={financialReports}
+                                    ticker={resolvedTicker || 'N/A'}
+                                />
+                            </div>
+                        ) : (
+                            <div className="flex-1 flex flex-col items-center justify-center p-12 text-center h-full">
+                                <BarChart3 size={48} className="text-slate-900 mb-4" />
+                                <h4 className="text-slate-500 font-bold text-xs uppercase tracking-widest">No Structured Data</h4>
+                                <p className="text-slate-700 text-[10px] mt-2 max-w-[240px]">
+                                    Financial reports have not been extracted yet. Please provide a ticker and wait for the Planner to finish extraction.
+                                </p>
+                            </div>
+                        )}
                     </div>
                 )}
 
