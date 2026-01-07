@@ -43,7 +43,12 @@ def calculation_node(state: AgentState) -> Command:
     return Command(
         update={
             "calculation_output": CalculationOutput(metrics=result),
-            "messages": [AIMessage(content=msg_content)],
+            "messages": [
+                AIMessage(
+                    content=msg_content, additional_kwargs={"agent_id": "calculator"}
+                )
+            ],
+            "node_statuses": {"calculator": "done"},
         },
         goto=END,
     )

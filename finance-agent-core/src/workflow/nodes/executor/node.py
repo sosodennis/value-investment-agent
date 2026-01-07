@@ -39,7 +39,15 @@ def executor_node(state: AgentState) -> Command:
         validated = schema(**mock_data)
         # Wrap in ExtractionOutput
         output = ExtractionOutput(params=validated.model_dump())
-        return Command(update={"extraction_output": output}, goto="auditor")
+        return Command(
+            update={
+                "extraction_output": output,
+                "node_statuses": {"executor": "done", "auditor": "running"},
+            },
+            goto="auditor",
+        )
     except Exception as e:
         print(f"Extraction Failed: {e}")
-        return Command(goto=END)  # Fallback if extraction fails completely
+        return Command(
+            update={"node_statuses": {"executor": "error"}}, goto=END
+        )  # Fallback if extraction fails completely

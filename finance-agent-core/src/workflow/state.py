@@ -11,6 +11,11 @@ from pydantic import BaseModel, Field
 from .schemas import AuditOutput, CalculationOutput, ExtractionOutput
 
 
+def merge_dict(a: dict, b: dict) -> dict:
+    """Simple dict merge reducer."""
+    return {**a, **b}
+
+
 class AgentState(BaseModel):
     """Agent state defined as a Pydantic model."""
 
@@ -38,6 +43,12 @@ class AgentState(BaseModel):
         default_factory=list,
         description="Financial Health Reports from edgartools (Multi-year)",
     )
-    status: str | None = None
     selected_symbol: str | None = None
     approved: bool | None = None
+
+    # Dashboard tracking
+    node_statuses: Annotated[dict[str, str], merge_dict] = Field(
+        default_factory=dict,
+        description="Status of each node: idle, running, done, error",
+    )
+    current_node: str | None = None

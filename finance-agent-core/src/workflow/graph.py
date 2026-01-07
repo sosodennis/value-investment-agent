@@ -34,7 +34,10 @@ def approval_node(state: AgentState) -> Command:
         )
     )
 
-    ans = interrupt(interrupt_payload.model_dump())
+    ans = interrupt(
+        update={"node_statuses": {"approval": "attention"}},
+        value=interrupt_payload.model_dump(),
+    )
 
     # When resumed, ans will contain the payload sent from frontend (e.g. { "approved": true })
     from langchain_core.messages import AIMessage, HumanMessage
@@ -46,6 +49,7 @@ def approval_node(state: AgentState) -> Command:
             additional_kwargs={
                 "type": "approval_request",
                 "data": interrupt_payload.model_dump(),
+                "agent_id": "approval",
             },
         ),
         HumanMessage(content="Approved" if ans.get("approved") else "Rejected"),
@@ -54,11 +58,23 @@ def approval_node(state: AgentState) -> Command:
     if ans.get("approved"):
         print("✅ Received human approval.")
         return Command(
-            update={"approved": True, "messages": new_messages}, goto="calculator"
+            update={
+                "approved": True,
+                "messages": new_messages,
+                "node_statuses": {"approval": "done", "calculator": "running"},
+            },
+            goto="calculator",
         )
     else:
         print("❌ Final approval rejected.")
-        return Command(update={"approved": False, "messages": new_messages}, goto=END)
+        return Command(
+            update={
+                "approved": False,
+                "messages": new_messages,
+                "node_statuses": {"approval": "done"},
+            },
+            goto=END,
+        )
 
 
 # Helper for initialization

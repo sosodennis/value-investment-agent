@@ -35,7 +35,8 @@ def auditor_node(state: AgentState) -> Command:
 
     return Command(
         update={
-            "audit_output": AuditOutput(passed=result.passed, messages=result.messages)
+            "audit_output": AuditOutput(passed=result.passed, messages=result.messages),
+            "node_statuses": {"auditor": "done", "approval": "running"},
         },
         goto="approval",
     )

@@ -1,8 +1,6 @@
-'use client';
-
 import { useState, useCallback, useRef } from 'react';
-
 import { Interrupt } from '../types/interrupts';
+import { AgentStatus } from '../types/agents';
 
 export interface Message {
     id: string;
@@ -12,6 +10,7 @@ export interface Message {
     data?: any;
     isInteractive?: boolean;
     created_at?: string;
+    agentId?: string;
 }
 
 const API_URL = process.env.NEXT_PUBLIC_LANGGRAPH_URL || 'http://localhost:8000';
@@ -22,6 +21,13 @@ export function useAgent(assistantId: string = "agent") {
     const [isLoading, setIsLoading] = useState(false);
     const [resolvedTicker, setResolvedTicker] = useState<string | null>(null);
     const [hasMore, setHasMore] = useState(true);
+    const [agentStatuses, setAgentStatuses] = useState<Record<string, AgentStatus>>({
+        planner: 'idle',
+        executor: 'idle',
+        auditor: 'idle',
+        approval: 'idle',
+        calculator: 'idle',
+    });
 
     const messagesRef = useRef<Message[]>([]);
     messagesRef.current = messages;
@@ -119,11 +125,22 @@ export function useAgent(assistantId: string = "agent") {
                                 // Chain End Events
                                 if (currentEventType === 'on_chain_end') {
                                     const nodeName = eventData.metadata?.langgraph_node;
+                                    const output = eventData.data?.output;
+                                    const updatePayload = output?.update || output;
+
+                                    // Extract agent_id from payload if present
+                                    const agentId = updatePayload?.metadata?.agent_id ||
+                                        updatePayload?.messages?.[0]?.additional_kwargs?.agent_id ||
+                                        eventData.metadata?.agent_id;
+
+                                    // --- Update Dashboard Agent Statuses ---
+                                    if (updatePayload && updatePayload.node_statuses) {
+                                        console.log("📊 Status Update:", updatePayload.node_statuses);
+                                        setAgentStatuses(prev => ({ ...prev, ...updatePayload.node_statuses }));
+                                    }
 
                                     // Capture Financial Data
                                     if (nodeName === 'financial_health' || (nodeName && nodeName.endsWith(':financial_health'))) {
-                                        const output = eventData.data?.output;
-                                        const updatePayload = output?.update || output;
                                         if (updatePayload && updatePayload.financial_reports) {
                                             setMessages(prev => [
                                                 ...prev,
@@ -132,7 +149,8 @@ export function useAgent(assistantId: string = "agent") {
                                                     role: 'assistant',
                                                     content: '',
                                                     type: 'financial_report',
-                                                    data: updatePayload.financial_reports
+                                                    data: updatePayload.financial_reports,
+                                                    agentId: agentId || 'planner' // Default for planner
                                                 }
                                             ]);
                                         }
@@ -140,8 +158,6 @@ export function useAgent(assistantId: string = "agent") {
 
                                     // Capture Resolved Ticker
                                     if (nodeName === 'deciding' || nodeName === 'clarifying' || (nodeName && (nodeName.endsWith(':deciding') || nodeName.endsWith(':clarifying')))) {
-                                        const output = eventData.data?.output;
-                                        const updatePayload = output?.update || output;
                                         if (updatePayload && updatePayload.resolved_ticker) {
                                             setResolvedTicker(updatePayload.resolved_ticker);
                                         }
@@ -153,10 +169,17 @@ export function useAgent(assistantId: string = "agent") {
                                         const lastMsg = chunk.messages[chunk.messages.length - 1];
                                         if (lastMsg.type === 'ai' && typeof lastMsg.content === 'string') {
                                             const msgContent = lastMsg.content;
+                                            const msgAgentId = lastMsg.additional_kwargs?.agent_id || agentId;
+
                                             setMessages((prev) => {
                                                 const lastStateMsg = prev[prev.length - 1];
                                                 if (lastStateMsg && lastStateMsg.content === msgContent) return prev;
-                                                return [...prev, { id: `ai_node_${Date.now()}`, role: 'assistant', content: msgContent }];
+                                                return [...prev, {
+                                                    id: `ai_node_${Date.now()}`,
+                                                    role: 'assistant',
+                                                    content: msgContent,
+                                                    agentId: msgAgentId
+                                                }];
                                             });
                                         }
                                     }
@@ -180,6 +203,13 @@ export function useAgent(assistantId: string = "agent") {
     const sendMessage = useCallback(async (content: string) => {
         setIsLoading(true);
         setResolvedTicker(null);
+        setAgentStatuses({
+            planner: 'running', // Assume planner starts
+            executor: 'idle',
+            auditor: 'idle',
+            approval: 'idle',
+            calculator: 'idle',
+        });
 
         let currentThreadId = threadId;
         if (!currentThreadId) {
@@ -237,7 +267,6 @@ export function useAgent(assistantId: string = "agent") {
         try {
             console.log(`📜 Loading history for thread: ${id}${before ? ` before ${before}` : ''}`);
 
-            // 1. Fetch persistent history from our new endpoint
             const historyUrl = new URL(`${API_URL}/history/${id}`);
             if (before) historyUrl.searchParams.append('before', before);
 
@@ -245,7 +274,6 @@ export function useAgent(assistantId: string = "agent") {
             if (!historyResponse.ok) throw new Error(`History fetch failed: ${historyResponse.status}`);
             let historyData: Message[] = await historyResponse.json();
 
-            // Map backend types to frontend render types
             historyData = historyData.map(msg => {
                 if (msg.type === 'ticker_selection' as any) return { ...msg, type: 'interrupt_ticker' };
                 if (msg.type === 'approval_request' as any) return { ...msg, type: 'interrupt_approval' };
@@ -257,32 +285,27 @@ export function useAgent(assistantId: string = "agent") {
             }
 
             setMessages(prev => {
-                if (before) {
-                    // Prepend for pagination
-                    return [...historyData, ...prev];
-                }
+                if (before) return [...historyData, ...prev];
                 return historyData;
             });
             setThreadId(id);
 
-            // 2. Fetch state metadata (interrupts, status, resolves) from the thread endpoint
-            // This is still needed for active interrupts and ticker resolution state
             const stateResponse = await fetch(`${API_URL}/thread/${id}`);
             if (stateResponse.ok) {
                 const stateData = await stateResponse.json();
                 setResolvedTicker(stateData.resolved_ticker);
 
-                // If there are active interrupts, we might need to add them to the message list
-                // if they aren't already represented in the persistent history.
-                // Usually interrupts are represented by AIMessages in LangGraph which our service saves.
+                // Load node statuses from persisted state
+                if (stateData.node_statuses) {
+                    setAgentStatuses(prev => ({ ...prev, ...stateData.node_statuses }));
+                }
+
                 if (stateData.interrupts && stateData.interrupts.length > 0) {
                     stateData.interrupts.forEach((interrupt: any, index: number) => {
                         let msgType: Message['type'] = 'text';
                         if (interrupt.type === 'ticker_selection') msgType = 'interrupt_ticker';
                         if (interrupt.type === 'approval_request') msgType = 'interrupt_approval';
 
-                        // Check if this interrupt is already in messages (e.g. by content or data)
-                        // For now we just append if it's the first load
                         if (!before) {
                             setMessages(prev => {
                                 const exists = prev.some(m => m.type === msgType && JSON.stringify(m.data) === JSON.stringify(interrupt));
@@ -313,5 +336,15 @@ export function useAgent(assistantId: string = "agent") {
         }
     }, []);
 
-    return { messages, sendMessage, submitCommand, loadHistory, isLoading, threadId, resolvedTicker, hasMore };
+    return {
+        messages,
+        sendMessage,
+        submitCommand,
+        loadHistory,
+        isLoading,
+        threadId,
+        resolvedTicker,
+        hasMore,
+        agentStatuses
+    };
 }

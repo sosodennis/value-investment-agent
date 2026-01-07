@@ -40,7 +40,10 @@ def extraction_node(state: AgentState) -> Command:
     print(f"--- Planner: Extracting intent from: {user_query} ---")
     intent = extract_intent(user_query)
     return Command(
-        update={"extracted_intent": intent.model_dump(), "status": "searching"},
+        update={
+            "extracted_intent": intent.model_dump(),
+            "node_statuses": {"planner": "running"},
+        },
         goto="searching",
     )
 
@@ -408,6 +411,7 @@ def financial_health_node(state: AgentState) -> Command:
                     additional_kwargs={
                         "type": "financial_report",
                         "data": reports_data,
+                        "agent_id": "planner",
                     },
                 )
             ]
@@ -509,7 +513,7 @@ def model_selection_node(state: AgentState) -> Command:
                 "reasoning": reasoning,
                 "financial_reports": state.financial_reports,
             },
-            "status": "done",
+            "node_statuses": {"planner": "done", "executor": "running"},
         },
         goto=END,
     )
@@ -532,7 +536,10 @@ def clarification_node(state: AgentState) -> Command:
         else None,
         reason="Multiple tickers found or ambiguity detected.",
     )
-    user_input = interrupt(interrupt_payload.model_dump())
+    user_input = interrupt(
+        update={"node_statuses": {"planner": "attention"}},
+        value=interrupt_payload.model_dump(),
+    )
 
     # user_input is what the frontend sends back, e.g. { "selected_symbol": "GOOGL" }
     selected_symbol = user_input.get("selected_symbol") or user_input.get("ticker")
@@ -557,6 +564,7 @@ def clarification_node(state: AgentState) -> Command:
                     additional_kwargs={
                         "type": "ticker_selection",
                         "data": interrupt_payload.model_dump(),
+                        "agent_id": "planner",
                     },
                 ),
                 HumanMessage(content=f"Selected Ticker: {selected_symbol}"),
@@ -579,12 +587,11 @@ def clarification_node(state: AgentState) -> Command:
 
 # Helper for initialization
 _compiled_subgraph = None
-_sub_saver = None
 
 
 async def get_planner_subgraph():
     """Lazy-initialize and return the planner subgraph."""
-    global _compiled_subgraph, _sub_saver
+    global _compiled_subgraph
     if _compiled_subgraph is None:
         # 1. Build Subgraph
         builder = StateGraph(AgentState)
@@ -596,35 +603,8 @@ async def get_planner_subgraph():
         builder.add_node("clarifying", clarification_node)
         builder.add_edge(START, "extraction")
 
-        # 2. Initialize Checkpointer
-        import os
-
-        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-        from psycopg_pool import AsyncConnectionPool
-
-        # Construct DB URI from environment variables
-        pg_user = os.environ.get("POSTGRES_USER", "postgres")
-        pg_pass = os.environ.get("POSTGRES_PASSWORD", "postgres")
-        pg_host = os.environ.get("POSTGRES_HOST", "localhost")
-        pg_port = os.environ.get("POSTGRES_PORT", "5432")
-        pg_db = os.environ.get("POSTGRES_DB", "langgraph")
-
-        db_uri = f"postgresql://{pg_user}:{pg_pass}@{pg_host}:{pg_port}/{pg_db}"
-        print(
-            f"--- Planner Subgraph: Connecting to Postgres at {pg_host}:{pg_port}/{pg_db} ---"
-        )
-
-        # Create connection pool
-        pool = AsyncConnectionPool(
-            conninfo=db_uri, max_size=10, open=False, kwargs={"autocommit": True}
-        )
-        await pool.open()
-
-        _sub_saver = AsyncPostgresSaver(pool)
-
-        # Ensure tables are created
-        await _sub_saver.setup()
-
-        _compiled_subgraph = builder.compile(checkpointer=_sub_saver)
+        # 2. Compile
+        # Note: No checkpointer passed here; it will be inherited from the parent graph
+        _compiled_subgraph = builder.compile()
 
     return _compiled_subgraph
