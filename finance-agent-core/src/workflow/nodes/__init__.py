@@ -11,5 +11,11 @@ This package contains all node implementations organized as packages:
 from .auditor.node import auditor_node
 from .calculator.node import calculation_node
 from .executor.node import executor_node
+from .financial_news_research.graph import get_financial_news_research_subgraph
 
-__all__ = ["executor_node", "auditor_node", "calculation_node"]
+__all__ = [
+    "executor_node",
+    "auditor_node",
+    "calculation_node",
+    "get_financial_news_research_subgraph",
+]

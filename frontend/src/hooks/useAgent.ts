@@ -28,6 +28,7 @@ export function useAgent(assistantId: string = "agent") {
     const [activityFeed, setActivityFeed] = useState<{ id: string, node: string, status: string, timestamp: number }[]>([]);
     const [agentStatuses, setAgentStatuses] = useState<Record<string, AgentStatus>>({
         fundamental_analysis: 'idle',
+        financial_news_research: 'idle',
         executor: 'idle',
         auditor: 'idle',
         approval: 'idle',
@@ -250,6 +251,7 @@ export function useAgent(assistantId: string = "agent") {
             setActivityFeed([]);
             setAgentStatuses({
                 fundamental_analysis: 'idle',
+                financial_news_research: 'idle',
                 executor: 'idle',
                 auditor: 'idle',
                 approval: 'idle',

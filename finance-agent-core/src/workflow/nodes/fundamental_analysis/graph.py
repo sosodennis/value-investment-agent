@@ -524,7 +524,10 @@ def model_selection_node(state: AgentState) -> Command:
                 "reasoning": reasoning,
                 "financial_reports": state.financial_reports,
             },
-            "node_statuses": {"fundamental_analysis": "done", "executor": "running"},
+            "node_statuses": {
+                "fundamental_analysis": "done",
+                "financial_news_research": "running",
+            },
         },
         goto=END,
     )

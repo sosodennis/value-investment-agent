@@ -72,6 +72,14 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
       status: hasTickerInterrupt ? 'attention' : agentStatuses.fundamental_analysis,
     },
     {
+      id: 'financial_news_research',
+      name: 'Financial News',
+      role: 'Market Sentiment Analysis',
+      description: 'Researches recent news and developments for the company.',
+      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=News',
+      status: agentStatuses.financial_news_research,
+    },
+    {
       id: 'executor',
       name: 'Data Executor',
       role: 'Market Data Retrieval',

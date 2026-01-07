@@ -43,6 +43,9 @@ class AgentState(BaseModel):
         default_factory=list,
         description="Financial Health Reports from edgartools (Multi-year)",
     )
+    financial_news_output: dict[str, Any] | None = Field(
+        None, description="Output from Financial News Research"
+    )
     selected_symbol: str | None = None
     approved: bool | None = None
 
