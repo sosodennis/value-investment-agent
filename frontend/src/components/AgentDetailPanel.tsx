@@ -259,6 +259,10 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                                         if (agent.id === 'fundamental_analysis') {
                                             return node.includes('searching') || node.includes('deciding') || node.includes('financial') || node.includes('model_selection') || node.includes('extract');
                                         }
+                                        if (agent.id === 'financial_news_research') {
+                                            const newsNodes = new Set(['search_node', 'selector_node', 'fetch_node', 'analyst_node', 'aggregator_node']);
+                                            return newsNodes.has(node);
+                                        }
                                         if (agent.id === 'executor') return node.includes('executor');
                                         if (agent.id === 'auditor') return node.includes('audit');
                                         if (agent.id === 'approval') return node.includes('approval') || node.includes('audit');

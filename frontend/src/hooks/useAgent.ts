@@ -156,8 +156,18 @@ export function useAgent(assistantId: string = "agent") {
                                         setCurrentStatus(status);
 
                                         setActivityFeed(prev => {
-                                            if (prev.length > 0 && prev[prev.length - 1].node === cleanNode && prev[prev.length - 1].status === status) {
-                                                return prev;
+                                            if (prev.length > 0) {
+                                                const lastItem = prev[prev.length - 1];
+                                                if (lastItem.node === cleanNode) {
+                                                    // Update existing item status/timestamp instead of duplicating
+                                                    const newFeed = [...prev];
+                                                    newFeed[newFeed.length - 1] = {
+                                                        ...lastItem,
+                                                        status: status,
+                                                        timestamp: Date.now()
+                                                    };
+                                                    return newFeed;
+                                                }
                                             }
                                             return [...prev, {
                                                 id: `step_${Date.now()}`,

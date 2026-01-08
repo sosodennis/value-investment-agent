@@ -94,7 +94,8 @@ def search_node(state: AgentState) -> Command:
                 "ticker": ticker,
                 "raw_results": results,
                 "formatted_results": formatted_results,
-            }
+            },
+            "node_statuses": {"financial_news_research": "running"},
         },
         goto="selector_node",
     )
@@ -151,7 +152,8 @@ def selector_node(state: AgentState) -> Command:
     )
     return Command(
         update={
-            "financial_news_output": {**output, "selected_indices": selected_indices}
+            "financial_news_output": {**output, "selected_indices": selected_indices},
+            "node_statuses": {"financial_news_research": "running"},
         },
         goto="fetch_node",
     )
@@ -205,7 +207,8 @@ def fetch_node(state: AgentState) -> Command:
     news_items_serialized = [item.model_dump(mode="json") for item in news_items]
     return Command(
         update={
-            "financial_news_output": {**output, "news_items": news_items_serialized}
+            "financial_news_output": {**output, "news_items": news_items_serialized},
+            "node_statuses": {"financial_news_research": "running"},
         },
         goto="analyst_node",
     )
@@ -311,7 +314,10 @@ def analyst_node(state: AgentState) -> Command:
     print(f"--- [News Research] Completed analysis for {analyzed_count} articles ---")
 
     return Command(
-        update={"financial_news_output": {**output, "news_items": news_items}},
+        update={
+            "financial_news_output": {**output, "news_items": news_items},
+            "node_statuses": {"financial_news_research": "running"},
+        },
         goto="aggregator_node",
     )
 
