@@ -53,11 +53,30 @@ Output:
   "reasoning": "Blackwell maintains NVDA's competitive moat. Significant performance leaps suggest sustained demand and pricing power in the data center segment."
 }}"""
 
-ANALYST_USER_PROMPT = """Target Ticker: {ticker}
+ANALYST_USER_PROMPT_BASIC = """Target Ticker: {ticker}
 
 Article Title: {title}
 Source: {source}
 Published At: {published_at}
+
+Content:
+{content}
+
+Analyze the news impact for {ticker}."""
+
+ANALYST_USER_PROMPT_WITH_FINBERT = """Target Ticker: {ticker}
+
+Article Title: {title}
+Source: {source}
+Published At: {published_at}
+
+**Preliminary Analysis (FinBERT Model):**
+- Sentiment: {finbert_sentiment}
+- Confidence: {finbert_confidence}
+
+> NOTE: FinBERT is a specialized financial sentiment model.
+> WARNING: FinBERT struggles with numerical comparisons (e.g., "profit dropped from $20M to $10M").
+> If the content involves numbers/comparisons, trust your own reasoning over FinBERT.
 
 Content:
 {content}

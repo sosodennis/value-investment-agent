@@ -9,9 +9,11 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
 
 from ...state import AgentState
+from .finbert_service import get_finbert_analyzer
 from .prompts import (
     ANALYST_SYSTEM_PROMPT,
-    ANALYST_USER_PROMPT,
+    ANALYST_USER_PROMPT_BASIC,
+    ANALYST_USER_PROMPT_WITH_FINBERT,
     SELECTOR_SYSTEM_PROMPT,
     SELECTOR_USER_PROMPT,
 )
@@ -218,17 +220,30 @@ def analyst_node(state: AgentState) -> Command:
 
     print(f"--- [News Research] Analyzing {len(news_items)} articles for {ticker} ---")
 
+    # Initialize FinBERT Service
+    finbert_analyzer = get_finbert_analyzer()
+
     llm = get_llm()
-    prompt = ChatPromptTemplate.from_messages(
+
+    # Pre-create both chains for flexibility
+    prompt_basic = ChatPromptTemplate.from_messages(
         [
             ("system", ANALYST_SYSTEM_PROMPT),
-            ("user", ANALYST_USER_PROMPT),
+            ("user", ANALYST_USER_PROMPT_BASIC),
         ]
     )
+    prompt_finbert = ChatPromptTemplate.from_messages(
+        [
+            ("system", ANALYST_SYSTEM_PROMPT),
+            ("user", ANALYST_USER_PROMPT_WITH_FINBERT),
+        ]
+    )
+
     try:
-        chain = prompt | llm.with_structured_output(AIAnalysis)
+        chain_basic = prompt_basic | llm.with_structured_output(AIAnalysis)
+        chain_finbert = prompt_finbert | llm.with_structured_output(AIAnalysis)
     except Exception as e:
-        logger.error(f"Failed to create chain for {ticker}: {e}")
+        logger.error(f"Failed to create chains for {ticker}: {e}")
         return Command(
             update={"node_statuses": {"financial_news_research": "done"}}, goto=END
         )
@@ -242,19 +257,49 @@ def analyst_node(state: AgentState) -> Command:
             # Analyze using full content if available, else fallback to snippet
             content_to_analyze = item.get("full_content") or item.get("snippet", "")
             source_info = item.get("source", {})
-            analysis = chain.invoke(
-                {
-                    "ticker": ticker,
-                    "title": title,
-                    "source": source_info.get("name", "Unknown"),
-                    "published_at": "N/A",
-                    "content": content_to_analyze,
-                }
-            )
+
+            # Step 1: Local FinBERT Pre-Analysis
+            finbert_result = None
+            if finbert_analyzer.is_available():
+                finbert_result = finbert_analyzer.analyze(content_to_analyze)
+                if finbert_result:
+                    item["finbert_analysis"] = finbert_result.to_dict()
+                    print(
+                        f"--- [News Research] FinBERT: {finbert_result.label} ({finbert_result.score:.2f}) ---"
+                    )
+
+            # Step 2: LLM Analysis (Always Hybrid or Basic fallback)
+            if finbert_result:
+                # Hybrid mode with FinBERT hints
+                analysis = chain_finbert.invoke(
+                    {
+                        "ticker": ticker,
+                        "title": title,
+                        "source": source_info.get("name", "Unknown"),
+                        "published_at": "N/A",
+                        "content": content_to_analyze,
+                        "finbert_sentiment": finbert_result.label.upper(),
+                        "finbert_confidence": f"{finbert_result.score:.1%}",
+                    }
+                )
+            else:
+                # Basic fallback mode (No FinBERT data)
+                analysis = chain_basic.invoke(
+                    {
+                        "ticker": ticker,
+                        "title": title,
+                        "source": source_info.get("name", "Unknown"),
+                        "published_at": "N/A",
+                        "content": content_to_analyze,
+                    }
+                )
+
             # Serialize AIAnalysis to dict before storing
             item["analysis"] = (
                 analysis.model_dump() if hasattr(analysis, "model_dump") else analysis
             )
+            item["analysis"]["source"] = "llm"
+
             print(f"--- [News Research] ✅ Completed analysis for article {idx+1} ---")
         except Exception as e:
             print(

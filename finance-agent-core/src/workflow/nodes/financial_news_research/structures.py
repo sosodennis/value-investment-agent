@@ -79,6 +79,7 @@ class FinancialNewsItem(BaseModel):
     )
 
     # AI Enrichment
+    finbert_analysis: dict | None = None  # Local FinBERT pre-filter results
     analysis: AIAnalysis | None = None
 
     model_config = ConfigDict(
