@@ -150,7 +150,7 @@ export function useAgent(assistantId: string = "agent") {
                                     // --- Track Granular Progress ---
                                     if (nodeName && (updatePayload?.status || updatePayload?.node_statuses)) {
                                         const cleanNode = nodeName.split(':').pop() || nodeName;
-                                        const status = updatePayload.status || 'Active';
+                                        const status = updatePayload.status || 'Done';
 
                                         setCurrentNode(cleanNode);
                                         setCurrentStatus(status);
@@ -193,6 +193,16 @@ export function useAgent(assistantId: string = "agent") {
                                                     agentId: agentId || 'fundamental_analysis'
                                                 }
                                             ]);
+                                        }
+                                    }
+
+                                    // Capture News Research Data
+                                    if (nodeName === 'aggregator_node' || (nodeName && nodeName.endsWith(':aggregator_node'))) {
+                                        if (updatePayload && updatePayload.financial_news_output) {
+                                            setAgentOutputs(prev => ({
+                                                ...prev,
+                                                financial_news_research: updatePayload.financial_news_output
+                                            }));
                                         }
                                     }
 
