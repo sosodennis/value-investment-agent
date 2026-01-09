@@ -1,13 +1,9 @@
-"""
-Utility tools for Financial News Research.
-"""
-
 import hashlib
 import logging
 from urllib.parse import urlparse
 
 import trafilatura
-from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
+from ddgs import DDGS
 
 logger = logging.getLogger(__name__)
 
@@ -33,19 +29,41 @@ SOURCE_RELIABILITY_MAP = {
 
 def news_search(ticker: str, max_results: int = 8) -> list[dict[str, str]]:
     """
-    Search for news using DuckDuckGo and return structured results.
+    Search for news using duckduckgo-search library directly for better metadata.
+    Returns list of dicts with keys: title, snippet, link, source, date.
     """
     try:
-        query = f"recent news and developments for {ticker} stock"
-        # Use 'y' for past year, but we want very recent, maybe 'm' for month or 'w' for week?
-        # User specified "recent news". Let's use 'w' for week if we want high relevance.
-        # Actually 'm' is safer for less frequent news.
-        print(f"--- [Tool: news_search] Calling DuckDuckGo for: {query} ---")
-        search = DuckDuckGoSearchAPIWrapper(max_results=max_results, time="m")
-        results = search.results(query, max_results=max_results)
-        print(
-            f"--- [Tool: news_search] DuckDuckGo returned {len(results or [])} results ---"
-        )
+        # User specified "recent news". DDGS().news defaults to "m" (month) implicitly or we can specify `safesearch='off', region='wt-wt', time='m'`?
+        # DDGS().news(keywords, region='wt-wt', safesearch='off', time='m', max_results=...)
+        # Note: 'y' for past year, 'm' for month, 'w' for week, 'd' for day.
+        # We'll use 'w' (week) to ensure relevance as 'recent news', or 'm'.
+        # The previous wrapper used 'm'. Let's stick to 'm' but maybe 'w' is better for "recent".
+        # Let's use 'm' to be safe on quantity.
+
+        print(f"--- [Tool: news_search] Calling DDGS for: {ticker} ---")
+        results = []
+        with DDGS() as ddgs:
+            # We search for query e.g. "AAPL stock news" or just Ticker?
+            # Previous query was: f"recent news and developments for {ticker} stock"
+            # DDGS .news() works best with keywords.
+            query = f"{ticker} stock news"
+
+            ddgs_gen = ddgs.news(
+                query, safesearch="off", time="m", max_results=max_results
+            )
+            for r in ddgs_gen:
+                results.append(
+                    {
+                        "title": r.get("title", ""),
+                        "snippet": r.get("body", ""),
+                        "link": r.get("url", ""),
+                        "source": r.get("source", ""),
+                        "date": r.get("date", ""),
+                        "image": r.get("image", ""),
+                    }
+                )
+
+        print(f"--- [Tool: news_search] DDGS returned {len(results)} results ---")
         return results
     except Exception as e:
         logger.error(f"News search failed: {e}")

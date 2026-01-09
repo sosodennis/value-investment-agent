@@ -83,7 +83,7 @@ def search_node(state: AgentState) -> Command:
     # Format for selector
     formatted_results = "\n---\n".join(
         [
-            f"[{i+1}] Source: {r.get('title')}\nSnippet: {r.get('snippet')}"
+            f"[{i+1}] Source: {r.get('source', 'Unknown')} (Date: {r.get('date', 'N/A')})\nTitle: {r.get('title')}\nSnippet: {r.get('snippet')}"
             for i, r in enumerate(results)
         ]
     )
@@ -178,6 +178,18 @@ def fetch_node(state: AgentState) -> Command:
         # Fetch full text
         full_content = fetch_clean_text(url) if url else None
 
+        # Parse date if available
+        published_at = None
+        date_str = res.get("date")
+        if date_str:
+            try:
+                from datetime import datetime
+
+                # DDGS returns ISO format e.g. 2026-01-06T15:00:00+00:00
+                published_at = datetime.fromisoformat(date_str)
+            except Exception:
+                pass
+
         try:
             item = FinancialNewsItem(
                 id=generate_news_id(url, title),
@@ -185,8 +197,10 @@ def fetch_node(state: AgentState) -> Command:
                 title=title,
                 snippet=res.get("snippet", ""),
                 full_content=full_content,
+                published_at=published_at,
                 source=SourceInfo(
-                    name=title.split(" - ")[-1] if " - " in title else "Unknown",
+                    name=res.get("source")
+                    or (title.split(" - ")[-1] if " - " in title else "Unknown"),
                     domain=url.split("//")[-1].split("/")[0] if url else "unknown",
                     reliability_score=get_source_reliability(url) if url else 0.5,
                 ),
