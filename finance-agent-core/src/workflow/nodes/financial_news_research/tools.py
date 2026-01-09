@@ -27,24 +27,55 @@ SOURCE_RELIABILITY_MAP = {
 }
 
 
-async def news_search_multi_timeframe(
-    ticker: str, max_results_total: int = 15
-) -> list[dict]:
+async def news_search_multi_timeframe(ticker: str) -> list[dict]:
     """
-    Parallel search across d, w, m timeframes with deduplication.
-    Uses asyncio.to_thread to run sync DDGS calls in parallel.
-    """
+    Strategic parallel search with QUOTA-BASED diversity balancing.
 
-    # Config: (time_param, query_suffix, fetch_count)
+    Key Features:
+    1. Specificity > Authority: More specific tags (financials, corporate_event)
+       take priority over general tags (trusted_news) during deduplication.
+    2. Quota System: Ensures balanced representation from each category.
+
+    Search Strategy:
+    - [TRUSTED_NEWS] High-trust sources (Reuters, Bloomberg, WSJ)
+    - [CORPORATE_EVENT] M&A, Capex, Management changes
+    - [FINANCIALS] Earnings, SEC filings
+    - [ANALYST_OPINION] Analyst ratings (lower priority)
+    """
+    from collections import defaultdict
+
+    # Build site: filter for high-trust domains
+    trust_domains = ["reuters.com", "bloomberg.com", "wsj.com", "ft.com", "cnbc.com"]
+    trust_query_part = " OR ".join([f"site:{d}" for d in trust_domains])
+
+    # --- Strategic Search Task Configuration ---
+    # Increased fetch counts to fill quota buckets
     tasks_config = [
-        ("d", f"{ticker} stock news", 5),  # Latest breaking
-        ("w", f"{ticker} stock analysis", 5),  # Recent analysis
-        ("m", f"{ticker} earnings and SEC filings", 5),  # Fundamentals
+        # [TRUSTED_NEWS] Weekly + Monthly for coverage
+        ("w", f"{ticker} ({trust_query_part})", 6, "trusted_news"),
+        ("m", f"{ticker} ({trust_query_part})", 6, "trusted_news"),
+        # [CORPORATE_EVENT] M&A, Capex, Management changes
+        (
+            "w",
+            f'{ticker} (merger OR acquisition OR investment OR "capital expenditure" OR CEO OR CFO)',
+            6,
+            "corporate_event",
+        ),
+        (
+            "m",
+            f'{ticker} (merger OR acquisition OR investment OR "capital expenditure" OR CEO OR CFO)',
+            6,
+            "corporate_event",
+        ),
+        # [FINANCIALS] Earnings reports, SEC filings
+        ("m", f"{ticker} earnings SEC filing 10-K 10-Q guidance", 5, "financials"),
+        # [ANALYST_OPINION] Analyst ratings - lower priority
+        ("w", f'{ticker} analyst rating "price target"', 4, "analyst_opinion"),
     ]
 
-    print(f"--- [Search] Starting parallel search for {ticker} (d/w/m) ---")
+    print(f"--- [Search] Starting diversified parallel search for {ticker} ---")
 
-    def fetch_one_sync(time_param, query, limit):
+    def fetch_one_sync(time_param: str, query: str, limit: int, tag: str):
         from ddgs import DDGS
 
         try:
@@ -56,47 +87,82 @@ async def news_search_multi_timeframe(
                     time=time_param,
                     max_results=limit,
                 )
-                # results is a generator/list? DDGS().news usually returns a generator.
-                # Let's convert to list immediately in the thread.
                 results_list = list(results)
                 for r in results_list:
                     r["_time_frame"] = time_param
+                    r["_search_tag"] = tag
                 return results_list
         except Exception as e:
-            logger.error(f"Search failed for time='{time_param}': {e}")
+            logger.error(f"Search failed for tag='{tag}': {e}")
             return []
 
     # Run sync fetches in parallel using threads
     tasks = [
-        asyncio.to_thread(fetch_one_sync, t, q, limit) for t, q, limit in tasks_config
+        asyncio.to_thread(fetch_one_sync, t, q, limit, tag)
+        for t, q, limit, tag in tasks_config
     ]
     results_lists = await asyncio.gather(*tasks)
 
-    # --- Deduplication logic ---
+    # --- Specificity-based Deduplication ---
+    # More specific tags win when same URL appears in multiple searches
+    # This prevents "trusted_news" from cannibalizing event/financial news
+    TAG_SPECIFICITY = {
+        "financials": 4,  # Most specific (10-K, earnings)
+        "corporate_event": 3,  # Very specific (M&A, CEO change)
+        "trusted_news": 2,  # General authority
+        "analyst_opinion": 1,  # General opinion
+    }
+
     unique_map = {}
     all_raw_results = []
     for r_list in results_lists:
         all_raw_results.extend(r_list)
 
-    # Order of importance for coverage: d > w > m
-    # If same URL exists, keep the one from the shorter (more recent) timeframe
     for r in all_raw_results:
         link = r.get("url") or r.get("link")
         if not link:
             continue
 
+        current_tag = r.get("_search_tag")
+        new_priority = TAG_SPECIFICITY.get(current_tag, 0)
+
         if link not in unique_map:
             unique_map[link] = r
         else:
-            # Overwrite if current timeframe is 'd' or 'w' and existing is 'm'
-            current_tf = r.get("_time_frame")
-            existing_tf = unique_map[link].get("_time_frame")
-            if current_tf == "d" or (current_tf == "w" and existing_tf == "m"):
+            # Keep the MORE SPECIFIC tag (e.g., Reuters M&A article -> corporate_event, not trusted_news)
+            existing_tag = unique_map[link].get("_search_tag")
+            existing_priority = TAG_SPECIFICITY.get(existing_tag, 0)
+
+            if new_priority > existing_priority:
                 unique_map[link] = r
 
-    final_results = []
+    # --- Quota-based Bucket Selection ---
+    # Ensure diversity by allocating fixed slots per category
+    buckets = defaultdict(list)
     for r in unique_map.values():
-        final_results.append(
+        tag = r.get("_search_tag", "general")
+        buckets[tag].append(r)
+
+    # Target quotas for balanced output (~12-14 articles total)
+    QUOTAS = {
+        "corporate_event": 4,  # Core: Events are most important for value investing
+        "financials": 3,  # Core: Financial data and filings
+        "trusted_news": 4,  # Base: General trusted news coverage
+        "analyst_opinion": 2,  # Reference: Market sentiment
+    }
+
+    final_results = []
+
+    # Fill buckets in priority order
+    for tag in ["corporate_event", "financials", "trusted_news", "analyst_opinion"]:
+        quota = QUOTAS.get(tag, 2)
+        available = buckets.get(tag, [])
+        final_results.extend(available[:quota])
+
+    # --- Format output ---
+    formatted_results = []
+    for r in final_results:
+        formatted_results.append(
             {
                 "title": r.get("title", ""),
                 "snippet": r.get("body", r.get("snippet", "")),
@@ -105,13 +171,22 @@ async def news_search_multi_timeframe(
                 "date": r.get("date", ""),
                 "image": r.get("image", ""),
                 "_time_frame": r.get("_time_frame", "m"),
+                "_search_tag": r.get("_search_tag", "general"),
             }
         )
 
     print(
-        f"--- [Search] Combined: {len(all_raw_results)} -> Unique: {len(final_results)} ---"
+        f"--- [Search] Combined: {len(all_raw_results)} -> Unique: {len(unique_map)} -> Balanced: {len(formatted_results)} ---"
     )
-    return final_results
+
+    # Debug: Print final distribution
+    final_counts = {}
+    for r in formatted_results:
+        tag = r.get("_search_tag", "general")
+        final_counts[tag] = final_counts.get(tag, 0) + 1
+    print(f"--- [Search] Final Balanced Distribution: {final_counts} ---")
+
+    return formatted_results
 
 
 # def news_search(ticker: str, max_results: int = 8) -> list[dict[str, str]]:

@@ -81,11 +81,12 @@ def search_node(state: AgentState) -> Command:
             goto=END,
         )
 
-    # Format for selector with clearer metadata
+    # Format for selector with clearer metadata including search tag
     formatted_results = ""
     for r in results:
+        tag = r.get("_search_tag", "general").upper()
         formatted_results += f"""
-Source: {r.get('source')} | Date: {r.get('date')} | Frame: {r.get('_time_frame')}
+Source: {r.get('source')} | Tag: [{tag}] | Date: {r.get('date')} | Frame: {r.get('_time_frame')}
 Title: {r.get('title')}
 Snippet: {r.get('snippet')}
 URL: {r.get('link')}

@@ -73,7 +73,7 @@ export const AINewsSummary: React.FC<AINewsSummaryProps> = ({ output }) => {
                             <div className={`absolute inset-0 opacity-10 animate-pulse ${output.sentiment_score > 0 ? 'bg-emerald-500' : output.sentiment_score < 0 ? 'bg-rose-500' : 'bg-slate-500'}`} />
                             {getSentimentIcon(output.overall_sentiment)}
                             <div className="text-[10px] font-bold text-white mt-1 uppercase tracking-tighter">
-                                {scorePercentage}%
+                                {output.sentiment_score > 0 ? '+' : ''}{output.sentiment_score.toFixed(2)}
                             </div>
                         </div>
                     </div>
