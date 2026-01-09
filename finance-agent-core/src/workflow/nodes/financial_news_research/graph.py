@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -25,10 +26,9 @@ from .structures import (
     SourceInfo,
 )
 from .tools import (
-    fetch_clean_text,
     generate_news_id,
     get_source_reliability,
-    news_search,
+    news_search_multi_timeframe,
 )
 
 logger = logging.getLogger(__name__)
@@ -62,7 +62,8 @@ def search_node(state: AgentState) -> Command:
 
     print(f"--- [News Research] Searching news for {ticker} ---")
     try:
-        results = news_search(ticker)
+        # Run async search in sync node
+        results = asyncio.run(news_search_multi_timeframe(ticker))
     except Exception as e:
         print(f"--- [News Research] news_search CRASHED: {e} ---")
         return Command(
@@ -80,13 +81,16 @@ def search_node(state: AgentState) -> Command:
             goto=END,
         )
 
-    # Format for selector
-    formatted_results = "\n---\n".join(
-        [
-            f"[{i+1}] Source: {r.get('source', 'Unknown')} (Date: {r.get('date', 'N/A')})\nTitle: {r.get('title')}\nSnippet: {r.get('snippet')}"
-            for i, r in enumerate(results)
-        ]
-    )
+    # Format for selector with clearer metadata
+    formatted_results = ""
+    for r in results:
+        formatted_results += f"""
+Source: {r.get('source')} | Date: {r.get('date')} | Frame: {r.get('_time_frame')}
+Title: {r.get('title')}
+Snippet: {r.get('snippet')}
+URL: {r.get('link')}
+--------------------------------------------------
+"""
 
     return Command(
         update={
@@ -102,10 +106,11 @@ def search_node(state: AgentState) -> Command:
 
 
 def selector_node(state: AgentState) -> Command:
-    """[Funnel Node 2] Filter top 3 relevant articles from snippets."""
+    """[Funnel Node 2] Filter top relevant articles using URL-based selection."""
     output = state.financial_news_output or {}
     ticker = output.get("ticker")
     formatted_results = output.get("formatted_results")
+    raw_results = output.get("raw_results", [])
 
     print(f"--- [News Research] Selecting top articles for {ticker} ---")
 
@@ -117,6 +122,7 @@ def selector_node(state: AgentState) -> Command:
         ]
     )
 
+    selected_indices = []
     try:
         chain = prompt | llm
         response = chain.invoke({"ticker": ticker, "search_results": formatted_results})
@@ -127,25 +133,32 @@ def selector_node(state: AgentState) -> Command:
         elif "```" in content:
             content = content.split("```")[1].split("```")[0].strip()
 
-        selection = json.loads(content)
-        # Convert 1-based indices from LLM to 0-based
-        selected_indices = [int(i) - 1 for i in selection.get("selected_indices", [])]
+        selection_data = json.loads(content)
+        selected_articles = selection_data.get("selected_articles")
 
-        # Ensure within bounds
-        raw_results = output.get("raw_results", [])
-        selected_indices = [i for i in selected_indices if 0 <= i < len(raw_results)]
+        if selected_articles is not None:
+            # Match URLs back to raw_results indices
+            selected_urls = [a.get("url") for a in selected_articles if a.get("url")]
 
-        # Limit to top 3 if LLM returned too many (funnel safety)
-        if not selected_indices:
-            logger.warning(
-                f"Selector LLM returned no indices for {ticker}. Falling back to top 3."
+            for url in selected_urls:
+                for idx, r in enumerate(raw_results):
+                    if r.get("link") == url:
+                        selected_indices.append(idx)
+                        break
+        else:
+            # Case where LLM didn't return the key at all - fallback
+            print(
+                f"--- [News Research] Selector returned no 'selected_articles' key for {ticker}. Falling back to top 3."
             )
-            selected_indices = [0, 1, 2][: len(raw_results)]
+            if raw_results:
+                selected_indices = [0, 1, 2][: len(raw_results)]
 
     except Exception as e:
         logger.error(f"Selector node failed for {ticker}: {e}. Falling back to top 3.")
-        raw_results = output.get("raw_results", [])
         selected_indices = [0, 1, 2][: len(raw_results)]
+
+    # Limit to top 5 for funnel safety
+    selected_indices = list(dict.fromkeys(selected_indices))[:5]
 
     print(
         f"--- [News Research] Completed selection. Selected indices: {selected_indices} ---"
@@ -160,23 +173,45 @@ def selector_node(state: AgentState) -> Command:
 
 
 def fetch_node(state: AgentState) -> Command:
-    """[Funnel Node 3] Fetch and clean full text for selected articles."""
+    """[Funnel Node 3] Fetch and clean full text for selected articles (async parallel)."""
     output = state.financial_news_output or {}
     raw_results = output.get("raw_results", [])
     selected_indices = output.get("selected_indices", [])
 
     print(f"--- [News Research] Fetching {len(selected_indices)} articles content ---")
 
-    news_items = []
+    # Build list of articles to fetch
+    articles_to_fetch = []
     for idx in selected_indices:
         if idx >= len(raw_results):
             continue
         res = raw_results[idx]
+        articles_to_fetch.append(res)
+
+    # Async fetch all articles in parallel
+    async def fetch_all():
+        from .tools import fetch_clean_text_async
+
+        tasks = [
+            fetch_clean_text_async(res.get("link"))
+            if res.get("link")
+            else asyncio.coroutine(lambda: None)()
+            for res in articles_to_fetch
+        ]
+        return await asyncio.gather(*tasks)
+
+    try:
+        full_contents = asyncio.run(fetch_all())
+    except Exception as e:
+        logger.error(f"Async fetch failed: {e}. Falling back to empty contents.")
+        full_contents = [None] * len(articles_to_fetch)
+
+    # Build news items
+    news_items = []
+    for i, res in enumerate(articles_to_fetch):
         url = res.get("link")
         title = res.get("title")
-
-        # Fetch full text
-        full_content = fetch_clean_text(url) if url else None
+        full_content = full_contents[i]
 
         # Parse date if available
         published_at = None
