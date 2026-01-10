@@ -84,58 +84,46 @@ async def news_search_multi_timeframe(
         (
             "w",
             f'{base_term} (merger OR acquisition OR investment OR "capital expenditure" OR CEO OR CFO)',
-            6,
+            10,
             "corporate_event",
         ),
         (
             "m",
             f'{base_term} (merger OR acquisition OR investment OR "capital expenditure" OR CEO OR CFO)',
-            6,
+            10,
             "corporate_event",
         ),
         # [FINANCIALS] Earnings reports, SEC filings, Guidance
         (
             "m",
             f'{base_term} earnings ("SEC filing" OR 10-K OR 10-Q OR guidance OR revenue)',
-            6,
+            10,
             "financials",
         ),
         # [BULLISH_SIGNAL] Growth catalysts & Valuation (For Bull Agent)
         (
-            "w",
-            f'{base_term} ("price target raised" OR "buy rating" OR upgrade OR outperform OR undervalued OR record OR partnership)',
-            4,
-            "bullish",
-        ),
-        (
             "m",
             f'{base_term} ("price target raised" OR "buy rating" OR upgrade OR outperform OR undervalued OR record OR partnership)',
-            4,
+            10,
             "bullish",
         ),
         (
             "m",
             f"{base_term} bullish",
-            4,
+            10,
             "bullish",
         ),
         # [BEARISH_SIGNAL] Risks, downgrades, & headwinds (For Bear Agent)
         (
-            "w",
-            f'{base_term} (downgrade OR "sell rating" OR underperform OR overvalued OR "short seller" OR lawsuit OR investigation OR headwinds)',
-            4,
-            "bearish",
-        ),
-        (
             "m",
             f'{base_term} (downgrade OR "sell rating" OR underperform OR overvalued OR "short seller" OR lawsuit OR investigation OR headwinds)',
-            4,
+            10,
             "bearish",
         ),
         (
             "m",
             f"{base_term} bearish",
-            4,
+            10,
             "bearish",
         ),
         # [ANALYST_OPINION] General analyst sentiment
@@ -146,33 +134,57 @@ async def news_search_multi_timeframe(
         f"--- [Search] Starting diversified parallel search for {ticker} (Company: {company_name}) ---"
     )
 
+    # === Rate Limit Protection ===
+    # Limit concurrent requests to avoid triggering DDG's anti-scraping measures
+    MAX_CONCURRENT_REQUESTS = 5
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+
     def fetch_one_sync(time_param: str, query: str, limit: int, tag: str):
+        """Synchronous fetch with retry logic."""
+        import time
+
         from ddgs import DDGS
 
-        try:
-            print(f"--- [Search] Starting search for {query} ({time_param}) ---")
-            with DDGS() as ddgs:
-                results = ddgs.news(
-                    query,
-                    region="wt-wt",
-                    safesearch="off",
-                    time=time_param,
-                    max_results=limit,
-                )
-                results_list = list(results)
-                for r in results_list:
-                    r["_time_frame"] = time_param
-                    r["_search_tag"] = tag
-                return results_list
-        except Exception as e:
-            logger.error(f"Search failed for tag='{tag}': {e}")
-            return []
+        max_retries = 2
+        for attempt in range(max_retries):
+            try:
+                if attempt == 0:
+                    print(f"--- [Search] Querying: {query[:60]}... ({time_param}) ---")
 
-    # Run sync fetches in parallel using threads
-    tasks = [
-        asyncio.to_thread(fetch_one_sync, t, q, limit, tag)
-        for t, q, limit, tag in tasks_config
-    ]
+                with DDGS() as ddgs:
+                    results = ddgs.news(
+                        query,
+                        region="wt-wt",
+                        safesearch="off",
+                        time=time_param,
+                        max_results=limit,
+                    )
+                    results_list = list(results)
+                    for r in results_list:
+                        r["_time_frame"] = time_param
+                        r["_search_tag"] = tag
+                    return results_list
+
+            except Exception as e:
+                if attempt == max_retries - 1:
+                    logger.warning(f"Search failed for tag='{tag}' after retries: {e}")
+                else:
+                    time.sleep(1)  # Brief pause before retry
+        return []
+
+    async def fetch_one_managed(time_param: str, query: str, limit: int, tag: str):
+        """Async wrapper with semaphore control and jitter."""
+        import random
+
+        async with semaphore:
+            # Random jitter (0.5-2.0s) to avoid burst patterns
+            await asyncio.sleep(random.uniform(0.5, 2.0))
+            return await asyncio.to_thread(
+                fetch_one_sync, time_param, query, limit, tag
+            )
+
+    # Execute with managed concurrency
+    tasks = [fetch_one_managed(t, q, limit, tag) for t, q, limit, tag in tasks_config]
     results_lists = await asyncio.gather(*tasks)
 
     # --- Orthogonal Deduplication (Stacking Tags) ---
@@ -215,12 +227,12 @@ async def news_search_multi_timeframe(
 
     # Target quotas for each bucket
     QUOTAS = {
-        "corporate_event": 2,
+        "corporate_event": 5,
         "financials": 2,
-        "bullish": 3,
-        "bearish": 3,
+        "bullish": 5,
+        "bearish": 5,
         "analyst_opinion": 2,
-        "trusted_news": 3,
+        "trusted_news": 4,
     }
 
     final_results = []
@@ -344,6 +356,9 @@ def fetch_clean_text(url: str, max_chars: int = 6000) -> str | None:
     """
     Fetch and clean article text using trafilatura (sync fallback).
     """
+    # Sanitize URL: strip trailing colons and invisible Unicode chars
+    url = url.rstrip(":")
+
     try:
         print(f"--- [Tool: fetch_clean_text] Fetching URL: {url} ---")
         downloaded = trafilatura.fetch_url(url)
@@ -378,6 +393,9 @@ async def fetch_clean_text_async(url: str, max_chars: int = 6000) -> str | None:
     2. trafilatura for in-memory parsing (CPU bound but fast)
     """
     import httpx
+
+    # Sanitize URL: strip trailing colons and invisible Unicode chars
+    url = url.rstrip(":")
 
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"

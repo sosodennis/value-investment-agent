@@ -164,7 +164,7 @@ def selector_node(state: AgentState) -> Command:
         selected_indices = [0, 1, 2][: len(raw_results)]
 
     # Limit to top 5 for funnel safety
-    selected_indices = list(dict.fromkeys(selected_indices))[:5]
+    selected_indices = list(dict.fromkeys(selected_indices))[:10]
 
     print(
         f"--- [News Research] Completed selection. Selected indices: {selected_indices} ---"
