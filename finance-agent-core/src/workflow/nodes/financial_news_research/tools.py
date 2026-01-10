@@ -277,7 +277,7 @@ def get_source_reliability(url: str) -> float:
         return 0.5
 
 
-def fetch_clean_text(url: str, max_chars: int = 4000) -> str | None:
+def fetch_clean_text(url: str, max_chars: int = 6000) -> str | None:
     """
     Fetch and clean article text using trafilatura (sync fallback).
     """
@@ -308,7 +308,7 @@ def fetch_clean_text(url: str, max_chars: int = 4000) -> str | None:
         return None
 
 
-async def fetch_clean_text_async(url: str, max_chars: int = 4000) -> str | None:
+async def fetch_clean_text_async(url: str, max_chars: int = 6000) -> str | None:
     """
     High-performance async fetch:
     1. httpx for true async non-blocking download (I/O bound)
