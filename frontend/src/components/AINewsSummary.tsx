@@ -48,69 +48,134 @@ export const AINewsSummary: React.FC<AINewsSummaryProps> = ({ output }) => {
     // Calculate score percentage (mapping -1 to 1 into 0 to 100)
     const scorePercentage = Math.round(((output.sentiment_score + 1) / 2) * 100);
 
+    // Calculate bullish consensus (% of decided articles that are bullish)
+    const decidedCount = bullFactsCount + bearFactsCount;
+    const bullishConsensus = decidedCount > 0 ? Math.round((bullFactsCount / decidedCount) * 100) : 50;
+
+    // Signal confidence based on sample size
+    const totalSources = output.news_items.length;
+    const getSignalConfidence = () => {
+        if (totalSources >= 20) return { level: 'High', color: 'text-emerald-400', icon: '🔥' };
+        if (totalSources >= 10) return { level: 'Medium', color: 'text-amber-400', icon: '⚡' };
+        return { level: 'Low', color: 'text-slate-400', icon: '💨' };
+    };
+    const signalConfidence = getSignalConfidence();
+
+    // Consensus label
+    const getConsensusLabel = () => {
+        if (decidedCount === 0) return 'No Clear Signal';
+        if (bullishConsensus >= 80) return 'Strong Bull Consensus';
+        if (bullishConsensus >= 60) return 'Bullish Leaning';
+        if (bullishConsensus <= 20) return 'Strong Bear Consensus';
+        if (bullishConsensus <= 40) return 'Bearish Leaning';
+        return 'Mixed Signals';
+    };
+
     return (
         <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Overall Sentiment Card */}
+                {/* Overall Sentiment Card - Redesigned to emphasize consensus */}
                 <div className={`col-span-1 md:col-span-2 rounded-2xl border p-6 backdrop-blur-md ${getSentimentBg(output.overall_sentiment)}`}>
-                    <div className="flex items-center justify-between mb-8">
+                    {/* Header with Consensus Label */}
+                    <div className="flex items-center justify-between mb-6">
                         <div className="flex items-center gap-3">
                             <Zap size={18} className="text-amber-400" />
-                            <h3 className="text-sm font-bold text-white uppercase tracking-widest">Aggregate Sentiment</h3>
+                            <h3 className="text-sm font-bold text-white uppercase tracking-widest">Market Consensus</h3>
                         </div>
                         <div className={`px-4 py-1.5 rounded-full border text-xs font-bold uppercase tracking-widest bg-slate-950/40 ${getSentimentColor(output.overall_sentiment)}`}>
-                            {output.overall_sentiment}
+                            {getConsensusLabel()}
                         </div>
                     </div>
 
-                    <div className="flex items-end gap-8">
-                        <div className="flex-1 space-y-4">
-                            <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                                <span>Sentiment Score Intensity</span>
-                                <span className="text-white">{(output.sentiment_score).toFixed(2)}</span>
-                            </div>
-                            <div className="h-3 w-full bg-slate-950/50 rounded-full overflow-hidden border border-slate-800">
-                                <div
-                                    className={`h-full transition-all duration-1000 ease-out shadow-[0_0_15px_rgba(34,211,238,0.2)] ${output.sentiment_score > 0 ? 'bg-emerald-500' : output.sentiment_score < 0 ? 'bg-rose-500' : 'bg-slate-500'
-                                        }`}
-                                    style={{ width: `${scorePercentage}%` }}
-                                />
-                            </div>
-                            <div className="flex justify-between text-[8px] text-slate-600 font-bold uppercase tracking-tighter">
-                                <span>Bearish (-1.0)</span>
-                                <span>Neutral (0.0)</span>
-                                <span>Bullish (+1.0)</span>
-                            </div>
+                    {/* Signal Confidence Indicator */}
+                    <div className="flex items-center gap-2 mb-6 text-[10px] font-bold uppercase tracking-widest">
+                        <span className="text-slate-500">Signal Confidence:</span>
+                        <span className={signalConfidence.color}>{signalConfidence.icon} {signalConfidence.level}</span>
+                        <span className="text-slate-600">(Based on {totalSources} sources, {allFacts.length} evidence points)</span>
+                    </div>
 
-                            {/* Fact Distribution Bar */}
-                            <div className="pt-4 space-y-2">
-                                <div className="flex justify-between text-[9px] font-bold text-slate-500 uppercase tracking-widest">
-                                    <span>Evidence Distribution</span>
-                                    <span>{bullFactsCount} Bull / {neutralFactsCount} Neutral / {bearFactsCount} Bear</span>
-                                </div>
-                                <div className="flex h-1.5 w-full rounded-full overflow-hidden bg-slate-950/50 border border-slate-800">
-                                    <div
-                                        className="bg-emerald-500 transition-all duration-1000"
-                                        style={{ width: `${(bullFactsCount / (allFacts.length || 1)) * 100}%` }}
-                                    />
-                                    <div
-                                        className="bg-rose-500 transition-all duration-1000"
-                                        style={{ width: `${(bearFactsCount / (allFacts.length || 1)) * 100}%` }}
-                                    />
-                                    <div
-                                        className="bg-slate-700 transition-all duration-1000"
-                                        style={{ width: `${((allFacts.length - bullFactsCount - bearFactsCount) / (allFacts.length || 1)) * 100}%` }}
-                                    />
-                                </div>
-                            </div>
+                    {/* HERO: Evidence Distribution - Main Visual */}
+                    <div className="space-y-3 mb-6">
+                        <div className="flex justify-between items-center text-xs font-bold uppercase tracking-widest">
+                            <span className="text-white">Evidence Distribution</span>
+                            {decidedCount > 0 && bearFactsCount === 0 && (
+                                <span className="text-emerald-400 text-[10px]">⚠️ No bearish evidence found</span>
+                            )}
+                            {decidedCount > 0 && bullFactsCount === 0 && (
+                                <span className="text-rose-400 text-[10px]">⚠️ No bullish evidence found</span>
+                            )}
                         </div>
 
-                        <div className="shrink-0 flex flex-col items-center justify-center w-24 h-24 rounded-full border-4 border-slate-900 bg-slate-950/60 shadow-2xl relative overflow-hidden group">
-                            <div className={`absolute inset-0 opacity-10 animate-pulse ${output.sentiment_score > 0 ? 'bg-emerald-500' : output.sentiment_score < 0 ? 'bg-rose-500' : 'bg-slate-500'}`} />
-                            {getSentimentIcon(output.overall_sentiment)}
-                            <div className="text-lg font-bold text-white mt-1">
-                                {scorePercentage}
+                        {/* Thick Stacked Bar - The Hero Visual */}
+                        <div className="flex h-10 w-full rounded-xl overflow-hidden bg-slate-950/50 border border-slate-800 shadow-lg">
+                            {bullFactsCount > 0 && (
+                                <div
+                                    className="bg-gradient-to-r from-emerald-600 to-emerald-500 transition-all duration-1000 flex items-center justify-center relative group"
+                                    style={{ width: `${(bullFactsCount / (allFacts.length || 1)) * 100}%` }}
+                                >
+                                    <div className="flex items-center gap-1.5 text-white font-bold">
+                                        <TrendingUp size={14} />
+                                        <span className="text-sm">{bullFactsCount}</span>
+                                    </div>
+                                </div>
+                            )}
+                            {neutralFactsCount > 0 && (
+                                <div
+                                    className="bg-gradient-to-r from-slate-600 to-slate-500 transition-all duration-1000 flex items-center justify-center"
+                                    style={{ width: `${(neutralFactsCount / (allFacts.length || 1)) * 100}%` }}
+                                >
+                                    <div className="flex items-center gap-1.5 text-slate-300 font-bold">
+                                        <Minus size={14} />
+                                        <span className="text-sm">{neutralFactsCount}</span>
+                                    </div>
+                                </div>
+                            )}
+                            {bearFactsCount > 0 && (
+                                <div
+                                    className="bg-gradient-to-r from-rose-600 to-rose-500 transition-all duration-1000 flex items-center justify-center"
+                                    style={{ width: `${(bearFactsCount / (allFacts.length || 1)) * 100}%` }}
+                                >
+                                    <div className="flex items-center gap-1.5 text-white font-bold">
+                                        <TrendingDown size={14} />
+                                        <span className="text-sm">{bearFactsCount}</span>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Legend */}
+                        <div className="flex justify-center gap-6 text-[9px] font-bold uppercase tracking-widest text-slate-500">
+                            <div className="flex items-center gap-1.5">
+                                <div className="w-3 h-3 rounded bg-emerald-500" />
+                                <span>Bullish ({bullFactsCount})</span>
                             </div>
+                            <div className="flex items-center gap-1.5">
+                                <div className="w-3 h-3 rounded bg-slate-500" />
+                                <span>Neutral ({neutralFactsCount})</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                                <div className="w-3 h-3 rounded bg-rose-500" />
+                                <span>Bearish ({bearFactsCount})</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Supplementary: Average Intensity */}
+                    <div className="pt-4 border-t border-slate-800/50 space-y-2">
+                        <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                            <span>Average Intensity</span>
+                            <span className="text-slate-300">{output.sentiment_score > 0 ? '+' : ''}{output.sentiment_score.toFixed(2)} ({output.sentiment_score > 0.3 ? 'Strong' : output.sentiment_score > 0 ? 'Moderate' : output.sentiment_score < -0.3 ? 'Strong' : output.sentiment_score < 0 ? 'Moderate' : 'Neutral'})</span>
+                        </div>
+                        <div className="h-2 w-full bg-slate-950/50 rounded-full overflow-hidden border border-slate-800">
+                            <div
+                                className={`h-full transition-all duration-1000 ease-out ${output.sentiment_score > 0 ? 'bg-emerald-500/60' : output.sentiment_score < 0 ? 'bg-rose-500/60' : 'bg-slate-500/60'}`}
+                                style={{ width: `${scorePercentage}%` }}
+                            />
+                        </div>
+                        <div className="flex justify-between text-[8px] text-slate-600 font-bold uppercase tracking-tighter">
+                            <span>Bearish (-1.0)</span>
+                            <span>Neutral (0.0)</span>
+                            <span>Bullish (+1.0)</span>
                         </div>
                     </div>
                 </div>
