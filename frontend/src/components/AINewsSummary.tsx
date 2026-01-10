@@ -35,6 +35,7 @@ export const AINewsSummary: React.FC<AINewsSummaryProps> = ({ output }) => {
     const allFacts = output.news_items.flatMap(item => item.analysis?.key_facts || []);
     const bullFactsCount = allFacts.filter(f => f.sentiment === 'bullish').length;
     const bearFactsCount = allFacts.filter(f => f.sentiment === 'bearish').length;
+    const neutralFactsCount = allFacts.filter(f => f.sentiment === 'neutral').length;
     const quantFactsCount = allFacts.filter(f => f.is_quantitative).length;
 
     const categoryStats = output.news_items.reduce((acc, item) => {
@@ -85,7 +86,7 @@ export const AINewsSummary: React.FC<AINewsSummaryProps> = ({ output }) => {
                             <div className="pt-4 space-y-2">
                                 <div className="flex justify-between text-[9px] font-bold text-slate-500 uppercase tracking-widest">
                                     <span>Evidence Distribution</span>
-                                    <span>{bullFactsCount} Bull / {bearFactsCount} Bear</span>
+                                    <span>{bullFactsCount} Bull / {neutralFactsCount} Neutral / {bearFactsCount} Bear</span>
                                 </div>
                                 <div className="flex h-1.5 w-full rounded-full overflow-hidden bg-slate-950/50 border border-slate-800">
                                     <div
@@ -107,8 +108,8 @@ export const AINewsSummary: React.FC<AINewsSummaryProps> = ({ output }) => {
                         <div className="shrink-0 flex flex-col items-center justify-center w-24 h-24 rounded-full border-4 border-slate-900 bg-slate-950/60 shadow-2xl relative overflow-hidden group">
                             <div className={`absolute inset-0 opacity-10 animate-pulse ${output.sentiment_score > 0 ? 'bg-emerald-500' : output.sentiment_score < 0 ? 'bg-rose-500' : 'bg-slate-500'}`} />
                             {getSentimentIcon(output.overall_sentiment)}
-                            <div className="text-[10px] font-bold text-white mt-1 uppercase tracking-tighter">
-                                {output.sentiment_score > 0 ? '+' : ''}{output.sentiment_score.toFixed(2)}
+                            <div className="text-lg font-bold text-white mt-1">
+                                {scorePercentage}
                             </div>
                         </div>
                     </div>

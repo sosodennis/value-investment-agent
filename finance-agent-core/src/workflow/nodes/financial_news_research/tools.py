@@ -74,6 +74,32 @@ async def news_search_multi_timeframe(
     # --- Strategic Search Task Configuration ---
     # Increased fetch counts to fill quota buckets
     tasks_config = [
+        # [BULLISH_SIGNAL] Growth catalysts & Valuation (For Bull Agent)
+        (
+            "m",
+            f'{base_term} stock ("price target raised" OR "buy rating" OR upgrade OR outperform OR undervalued OR record OR partnership)',
+            10,
+            "bullish",
+        ),
+        (
+            "m",
+            f"{base_term} stock bullish news",
+            10,
+            "bullish",
+        ),
+        # [BEARISH_SIGNAL] Risks, downgrades, & headwinds (For Bear Agent)
+        (
+            "m",
+            f'{base_term} stock (downgrade OR "sell rating" OR underperform OR overvalued OR "short seller" OR lawsuit OR investigation OR headwinds)',
+            10,
+            "bearish",
+        ),
+        (
+            "m",
+            f"{base_term} stock bearish news",
+            10,
+            "bearish",
+        ),
         # === [TRUSTED_NEWS] 拆分為 Tier 1 和 Tier 2 執行 ===
         # Avoids overly long queries while increasing coverage
         ("w", f"{base_term} stock news ({q_tier1})", 4, "trusted_news"),
@@ -100,32 +126,6 @@ async def news_search_multi_timeframe(
             10,
             "financials",
         ),
-        # [BULLISH_SIGNAL] Growth catalysts & Valuation (For Bull Agent)
-        (
-            "m",
-            f'{base_term} ("price target raised" OR "buy rating" OR upgrade OR outperform OR undervalued OR record OR partnership)',
-            10,
-            "bullish",
-        ),
-        (
-            "m",
-            f"{base_term} bullish",
-            10,
-            "bullish",
-        ),
-        # [BEARISH_SIGNAL] Risks, downgrades, & headwinds (For Bear Agent)
-        (
-            "m",
-            f'{base_term} (downgrade OR "sell rating" OR underperform OR overvalued OR "short seller" OR lawsuit OR investigation OR headwinds)',
-            10,
-            "bearish",
-        ),
-        (
-            "m",
-            f"{base_term} bearish",
-            10,
-            "bearish",
-        ),
         # [ANALYST_OPINION] General analyst sentiment
         ("w", f'{base_term} analyst rating "price target"', 4, "analyst_opinion"),
     ]
@@ -136,7 +136,7 @@ async def news_search_multi_timeframe(
 
     # === Rate Limit Protection ===
     # Limit concurrent requests to avoid triggering DDG's anti-scraping measures
-    MAX_CONCURRENT_REQUESTS = 5
+    MAX_CONCURRENT_REQUESTS = 2
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
     def fetch_one_sync(time_param: str, query: str, limit: int, tag: str):
@@ -149,7 +149,10 @@ async def news_search_multi_timeframe(
         for attempt in range(max_retries):
             try:
                 if attempt == 0:
-                    print(f"--- [Search] Querying: {query[:60]}... ({time_param}) ---")
+                    print(
+                        f"--- [Search] Querying: {query[:60]}... ({time_param}) ---",
+                        flush=True,
+                    )
 
                 with DDGS() as ddgs:
                     results = ddgs.news(
@@ -178,7 +181,7 @@ async def news_search_multi_timeframe(
 
         async with semaphore:
             # Random jitter (0.5-2.0s) to avoid burst patterns
-            await asyncio.sleep(random.uniform(0.5, 2.0))
+            await asyncio.sleep(random.uniform(3.0, 5.0))
             return await asyncio.to_thread(
                 fetch_one_sync, time_param, query, limit, tag
             )
