@@ -1,5 +1,5 @@
 import React from 'react';
-import { PieChart, List, TrendingUp, TrendingDown, Minus, Zap, BarChart3, Database, ShieldCheck } from 'lucide-react';
+import { PieChart, List, TrendingUp, TrendingDown, Minus, Zap, BarChart3, Database, ShieldCheck, AlertCircle, MessageSquare } from 'lucide-react';
 import { NewsResearchOutput, SentimentLabel, SearchCategory } from '../types/news';
 
 interface AINewsSummaryProps {
@@ -176,9 +176,17 @@ export const AINewsSummary: React.FC<AINewsSummaryProps> = ({ output }) => {
                     <div className="grid grid-cols-2 gap-3">
                         {Object.entries(categoryStats).map(([cat, count]) => (
                             <div key={cat} className="flex justify-between items-center p-2 bg-slate-900/50 rounded-lg border border-slate-800">
-                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
-                                    {cat.replace('_', ' ')}
-                                </span>
+                                <div className="flex items-center gap-2">
+                                    {cat === 'bullish' && <TrendingUp size={10} className="text-emerald-500" />}
+                                    {cat === 'bearish' && <TrendingDown size={10} className="text-rose-500" />}
+                                    {cat === 'corporate_event' && <AlertCircle size={10} className="text-indigo-500" />}
+                                    {cat === 'financials' && <BarChart3 size={10} className="text-cyan-500" />}
+                                    {cat === 'trusted_news' && <ShieldCheck size={10} className="text-amber-500" />}
+                                    {cat === 'analyst_opinion' && <MessageSquare size={10} className="text-amber-500" />}
+                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
+                                        {cat.replace('_', ' ')}
+                                    </span>
+                                </div>
                                 <span className="text-xs font-bold text-white">{count}</span>
                             </div>
                         ))}

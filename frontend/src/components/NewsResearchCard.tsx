@@ -1,5 +1,5 @@
 import React from 'react';
-import { ExternalLink, Calendar, Tag, AlertCircle, Info, TrendingUp, TrendingDown, Minus, Star, BarChart3, MessageSquare } from 'lucide-react';
+import { ExternalLink, Calendar, Tag, AlertCircle, Info, TrendingUp, TrendingDown, Minus, Star, BarChart3, MessageSquare, ShieldCheck } from 'lucide-react';
 import { FinancialNewsItem, SentimentLabel, ImpactLevel, SearchCategory, KeyFact } from '../types/news';
 
 interface NewsResearchCardProps {
@@ -27,13 +27,34 @@ export const NewsResearchCard: React.FC<NewsResearchCardProps> = ({ item }) => {
 
     const getCategoryStyles = (category: SearchCategory) => {
         switch (category) {
-            case 'bullish': return 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20';
-            case 'bearish': return 'bg-rose-500/10 text-rose-500 border-rose-500/20';
-            case 'corporate_event': return 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20';
-            case 'financials': return 'bg-cyan-500/10 text-cyan-500 border-cyan-500/20';
-            case 'trusted_news': return 'bg-slate-500/10 text-slate-400 border-slate-500/20';
-            case 'analyst_opinion': return 'bg-amber-500/10 text-amber-500 border-amber-500/20';
-            default: return 'bg-slate-900/50 text-slate-500 border-slate-800';
+            case 'bullish': return {
+                css: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
+                icon: <TrendingUp size={10} />
+            };
+            case 'bearish': return {
+                css: 'bg-rose-500/10 text-rose-500 border-rose-500/20',
+                icon: <TrendingDown size={10} />
+            };
+            case 'corporate_event': return {
+                css: 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20',
+                icon: <AlertCircle size={10} />
+            };
+            case 'financials': return {
+                css: 'bg-cyan-500/10 text-cyan-500 border-cyan-500/20',
+                icon: <BarChart3 size={10} />
+            };
+            case 'trusted_news': return {
+                css: 'bg-slate-500/10 text-slate-400 border-slate-500/20',
+                icon: <ShieldCheck size={10} className="text-amber-500/70" />
+            };
+            case 'analyst_opinion': return {
+                css: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
+                icon: <MessageSquare size={10} />
+            };
+            default: return {
+                css: 'bg-slate-900/50 text-slate-500 border-slate-800',
+                icon: <Tag size={10} />
+            };
         }
     };
 
@@ -113,11 +134,26 @@ export const NewsResearchCard: React.FC<NewsResearchCardProps> = ({ item }) => {
             </a>
 
             <div className="flex flex-wrap gap-1.5 mb-3">
-                {item.categories.map(cat => (
-                    <div key={cat} className={`px-2 py-0.5 rounded border text-[8px] font-bold uppercase tracking-tighter ${getCategoryStyles(cat)}`}>
-                        {cat.replace('_', ' ')}
-                    </div>
-                ))}
+                {/* Source Tier First */}
+                {item.categories.filter(cat => cat === 'trusted_news').map(cat => {
+                    const styles = getCategoryStyles(cat);
+                    return (
+                        <div key={cat} className={`px-2 py-0.5 rounded border text-[8px] font-bold uppercase tracking-tighter flex items-center gap-1.5 ${styles.css}`}>
+                            {styles.icon}
+                            {cat.replace('_', ' ')}
+                        </div>
+                    );
+                })}
+                {/* Intent/Signal Tiers */}
+                {item.categories.filter(cat => cat !== 'trusted_news').map(cat => {
+                    const styles = getCategoryStyles(cat);
+                    return (
+                        <div key={cat} className={`px-2 py-0.5 rounded border text-[8px] font-bold uppercase tracking-tighter flex items-center gap-1.5 ${styles.css}`}>
+                            {styles.icon}
+                            {cat.replace('_', ' ')}
+                        </div>
+                    );
+                })}
             </div>
 
             <p className="text-xs text-slate-400 leading-relaxed mb-4 line-clamp-3">

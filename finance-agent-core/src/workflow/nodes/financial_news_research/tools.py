@@ -24,89 +24,127 @@ SOURCE_RELIABILITY_MAP = {
     "reddit.com": 0.2,
     "twitter.com": 0.2,
     "x.com": 0.2,
+    "nytimes.com": 0.9,
+    "fortune.com": 0.8,
+    "bbc.com": 0.9,
 }
 
 
-async def news_search_multi_timeframe(ticker: str) -> list[dict]:
+async def news_search_multi_timeframe(
+    ticker: str, company_name: str = None
+) -> list[dict]:
     """
     Strategic parallel search with QUOTA-BASED diversity balancing.
-
-    Key Features:
-    1. Specificity > Authority: More specific tags (financials, corporate_event)
-       take priority over general tags (trusted_news) during deduplication.
-    2. Quota System: Ensures balanced representation from each category.
-
-    Search Strategy:
-    - [TRUSTED_NEWS] High-trust sources (Reuters, Bloomberg, WSJ)
-    - [CORPORATE_EVENT] M&A, Capex, Management changes
-    - [FINANCIALS] Earnings, SEC filings
-    - [ANALYST_OPINION] Analyst ratings (lower priority)
+    Now supports Company Name for better recall.
     """
-    from collections import defaultdict
 
-    # Build site: filter for high-trust domains
-    trust_domains = [
-        "reuters.com",
+    # 1. Define Tiers (Domain Segregation)
+    # Tier 1: Global Financial Core - Highest authority
+    TIER_1_DOMAINS = [
         "bloomberg.com",
+        "reuters.com",
         "wsj.com",
         "ft.com",
-        "cnbc.com",
         "bbc.com",
     ]
-    trust_query_part = " OR ".join([f"site:{d}" for d in trust_domains])
+
+    # Tier 2: Market & Depth Analysis - Supplementary insights
+    TIER_2_DOMAINS = [
+        "cnbc.com",
+        "marketwatch.com",
+        "barrons.com",
+        "finance.yahoo.com",
+        "nytimes.com",
+        "fortune.com",
+    ]
+
+    def build_site_query(domains):
+        return " OR ".join([f"site:{d}" for d in domains])
+
+    q_tier1 = build_site_query(TIER_1_DOMAINS)
+    q_tier2 = build_site_query(TIER_2_DOMAINS)
+
+    # 1. Build Search Term (Precision vs Recall)
+    # If company_name is provided, use (TICKER OR "Company Name")
+    if company_name:
+        base_term = f'({ticker} OR "{company_name}")'
+    else:
+        base_term = ticker
 
     # --- Strategic Search Task Configuration ---
     # Increased fetch counts to fill quota buckets
     tasks_config = [
-        # [TRUSTED_NEWS] Weekly + Monthly for coverage
-        ("w", f"{ticker} ({trust_query_part})", 6, "trusted_news"),
-        ("m", f"{ticker} ({trust_query_part})", 6, "trusted_news"),
+        # === [TRUSTED_NEWS] 拆分為 Tier 1 和 Tier 2 執行 ===
+        # Avoids overly long queries while increasing coverage
+        ("w", f"{base_term} stock news ({q_tier1})", 4, "trusted_news"),
+        ("m", f"{base_term} stock news ({q_tier1})", 4, "trusted_news"),
+        ("w", f"{base_term} stock news ({q_tier2})", 4, "trusted_news"),
+        ("m", f"{base_term} stock news ({q_tier2})", 4, "trusted_news"),
         # [CORPORATE_EVENT] M&A, Capex, Management changes
         (
             "w",
-            f'{ticker} (merger OR acquisition OR investment OR "capital expenditure" OR CEO OR CFO)',
+            f'{base_term} (merger OR acquisition OR investment OR "capital expenditure" OR CEO OR CFO)',
             6,
             "corporate_event",
         ),
         (
             "m",
-            f'{ticker} (merger OR acquisition OR investment OR "capital expenditure" OR CEO OR CFO)',
+            f'{base_term} (merger OR acquisition OR investment OR "capital expenditure" OR CEO OR CFO)',
             6,
             "corporate_event",
         ),
-        # [FINANCIALS] Earnings reports, SEC filings
-        ("m", f"{ticker} earnings SEC filing 10-K 10-Q guidance", 6, "financials"),
-        # [BULLISH_SIGNAL] Growth catalysts (For Bull Agent)
+        # [FINANCIALS] Earnings reports, SEC filings, Guidance
+        (
+            "m",
+            f'{base_term} earnings ("SEC filing" OR 10-K OR 10-Q OR guidance OR revenue)',
+            6,
+            "financials",
+        ),
+        # [BULLISH_SIGNAL] Growth catalysts & Valuation (For Bull Agent)
         (
             "w",
-            f'{ticker} ("price target raised" OR "buy rating" OR "outperform" OR growth OR record OR partnership)',
+            f'{base_term} ("price target raised" OR "buy rating" OR upgrade OR outperform OR undervalued OR record OR partnership)',
             4,
             "bullish",
         ),
         (
             "m",
-            f'{ticker} ("price target raised" OR "buy rating" OR "outperform" OR growth OR record OR partnership)',
+            f'{base_term} ("price target raised" OR "buy rating" OR upgrade OR outperform OR undervalued OR record OR partnership)',
             4,
             "bullish",
         ),
-        # [BEARISH_SIGNAL] Risks and downgrades (For Bear Agent)
+        (
+            "m",
+            f"{base_term} bullish",
+            4,
+            "bullish",
+        ),
+        # [BEARISH_SIGNAL] Risks, downgrades, & headwinds (For Bear Agent)
         (
             "w",
-            f'{ticker} (downgrade OR "sell rating" OR underperform OR "short seller" OR lawsuit OR investigation OR miss)',
+            f'{base_term} (downgrade OR "sell rating" OR underperform OR overvalued OR "short seller" OR lawsuit OR investigation OR headwinds)',
             4,
             "bearish",
         ),
         (
             "m",
-            f'{ticker} (downgrade OR "sell rating" OR underperform OR "short seller" OR lawsuit OR investigation OR miss)',
+            f'{base_term} (downgrade OR "sell rating" OR underperform OR overvalued OR "short seller" OR lawsuit OR investigation OR headwinds)',
             4,
             "bearish",
         ),
-        # [ANALYST_OPINION] Analyst ratings - lower priority
-        ("w", f'{ticker} analyst rating "price target"', 4, "analyst_opinion"),
+        (
+            "m",
+            f"{base_term} bearish",
+            4,
+            "bearish",
+        ),
+        # [ANALYST_OPINION] General analyst sentiment
+        ("w", f'{base_term} analyst rating "price target"', 4, "analyst_opinion"),
     ]
 
-    print(f"--- [Search] Starting diversified parallel search for {ticker} ---")
+    print(
+        f"--- [Search] Starting diversified parallel search for {ticker} (Company: {company_name}) ---"
+    )
 
     def fetch_one_sync(time_param: str, query: str, limit: int, tag: str):
         from ddgs import DDGS
@@ -137,18 +175,8 @@ async def news_search_multi_timeframe(ticker: str) -> list[dict]:
     ]
     results_lists = await asyncio.gather(*tasks)
 
-    # --- Specificity-based Deduplication ---
-    # More specific tags win when same URL appears in multiple searches
-    # This prevents "trusted_news" from cannibalizing event/financial news
-    TAG_SPECIFICITY = {
-        "financials": 4,  # Most specific (10-K, earnings)
-        "corporate_event": 3,  # Very specific (M&A, CEO change)
-        "bullish": 3.5,  # High interest for debate
-        "bearish": 3.5,  # High interest for debate
-        "trusted_news": 2,  # General authority
-        "analyst_opinion": 1,  # General opinion
-    }
-
+    # --- Orthogonal Deduplication (Stacking Tags) ---
+    # URL is the unique key, but Tags are a set (Orthogonal Tagging)
     unique_map = {}
     all_raw_results = []
     for r_list in results_lists:
@@ -160,63 +188,78 @@ async def news_search_multi_timeframe(ticker: str) -> list[dict]:
             continue
 
         current_tag = r.get("_search_tag")
-        new_priority = TAG_SPECIFICITY.get(current_tag, 0)
 
         if link not in unique_map:
-            # Initialize with categorical tag set
+            # First encounter: initialize category set
             r["_categories_set"] = {current_tag}
             unique_map[link] = r
         else:
-            # Merge categories! This ensures "Shared Reality" for Debate Agent
+            # Subsequent encounters: stack tags!
             unique_map[link]["_categories_set"].add(current_tag)
 
-            # Keep the result with the HIGHER priority metadata if multiple found
-            existing_tag = unique_map[link].get("_search_tag")
-            existing_priority = TAG_SPECIFICITY.get(existing_tag, 0)
+            # Keep the result with the LONGER snippet/content
+            if len(r.get("body", "")) > len(unique_map[link].get("body", "")):
+                unique_map[link]["body"] = r.get("body")
+                unique_map[link]["title"] = r.get("title")
 
-            if new_priority > existing_priority:
-                # Update but keep the merged categories
-                merged_categories = unique_map[link]["_categories_set"]
-                unique_map[link] = r
-                unique_map[link]["_categories_set"] = merged_categories
-
-    # --- Quota-based Bucket Selection ---
-    # Ensure diversity by allocating fixed slots per category
-    buckets = defaultdict(list)
-    for r in unique_map.values():
-        tag = r.get("_search_tag", "general")
-        buckets[tag].append(r)
-
-    # Target quotas for balanced output (~12-14 articles total)
-    QUOTAS = {
-        "corporate_event": 5,  # Core: Events are most important for value investing
-        "financials": 3,  # Core: Financial data and filings
-        "bullish": 5,  # Debate ammo
-        "bearish": 5,  # Debate ammo
-        "trusted_news": 5,  # Base: General trusted news coverage
-        "analyst_opinion": 2,  # Reference: Market sentiment
-    }
-
-    final_results = []
-
-    # Fill buckets in priority order
-    for tag in [
+    # --- Quota-based Selection (Bucket Filling) ---
+    # Definition of priority order: fill specific debate ammunition first
+    priority_order = [
         "corporate_event",
         "financials",
         "bullish",
         "bearish",
-        "trusted_news",
         "analyst_opinion",
-    ]:
-        quota = QUOTAS.get(tag, 2)
-        available = buckets.get(tag, [])
-        final_results.extend(available[:quota])
+        "trusted_news",
+    ]
+
+    # Target quotas for each bucket
+    QUOTAS = {
+        "corporate_event": 2,
+        "financials": 2,
+        "bullish": 3,
+        "bearish": 3,
+        "analyst_opinion": 2,
+        "trusted_news": 3,
+    }
+
+    final_results = []
+    seen_urls = set()
+    all_items = list(unique_map.values())
+
+    # Fill buckets in priority order to ensure ammo coverage
+    for target_tag in priority_order:
+        quota = QUOTAS.get(target_tag, 2)
+        count = 0
+        for item in all_items:
+            link = item.get("url")
+            if link in seen_urls:
+                continue
+
+            # If this article hits the target intent
+            if target_tag in item["_categories_set"]:
+                final_results.append(item)
+                seen_urls.add(link)
+                count += 1
+
+            if count >= quota:
+                break
+
+    # Fallback: fill up to 12-15 total results if some buckets are empty
+    if len(final_results) < 10:
+        for item in all_items:
+            link = item.get("url")
+            if link not in seen_urls:
+                final_results.append(item)
+                seen_urls.add(link)
+                if len(final_results) >= 15:
+                    break
 
     # --- Format output ---
     formatted_results = []
     for r in final_results:
         # Convert set to list for serialization
-        categories = list(r.get("_categories_set", {r.get("_search_tag", "general")}))
+        cats = list(r.get("_categories_set", []))
         formatted_results.append(
             {
                 "title": r.get("title", ""),
@@ -226,8 +269,8 @@ async def news_search_multi_timeframe(ticker: str) -> list[dict]:
                 "date": r.get("date", ""),
                 "image": r.get("image", ""),
                 "_time_frame": r.get("_time_frame", "m"),
-                "_search_tag": r.get("_search_tag", "general"),
-                "categories": categories,
+                # Orthogonal categories (list) instead of mutually exclusive search_tag
+                "categories": cats,
             }
         )
 

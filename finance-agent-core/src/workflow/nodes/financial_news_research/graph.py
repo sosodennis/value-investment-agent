@@ -62,8 +62,12 @@ def search_node(state: AgentState) -> Command:
 
     print(f"--- [News Research] Searching news for {ticker} ---")
     try:
+        # Extract company_name from fundamental analysis output if available
+        fa_output = state.fundamental_analysis_output or {}
+        company_name = fa_output.get("company_name")
+
         # Run async search in sync node
-        results = asyncio.run(news_search_multi_timeframe(ticker))
+        results = asyncio.run(news_search_multi_timeframe(ticker, company_name))
     except Exception as e:
         print(f"--- [News Research] news_search CRASHED: {e} ---")
         return Command(
