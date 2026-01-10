@@ -25,6 +25,17 @@ class AssetClass(str, Enum):
     MACRO = "macro"  # e.g., CPI data, Fed rate
 
 
+# --- [NEW] Search Categories for Debate Triage ---
+class SearchCategory(str, Enum):
+    GENERAL = "general"  # General news, broad context
+    CORPORATE_EVENT = "corporate_event"  # M&A, C-Suite changes
+    FINANCIALS = "financials"  # 10-K, 10-Q, Earnings calls
+    TRUSTED_NEWS = "trusted_news"  # Tier-1 sources (Reuters, Bloomberg)
+    ANALYST_OPINION = "analyst_opinion"  # Analyst ratings, price targets
+    BULLISH_SIGNAL = "bullish"  # Growth catalysts, upgrades (For Bull Agent)
+    BEARISH_SIGNAL = "bearish"  # Risks, lawsuits, downgrades (For Bear Agent)
+
+
 # --- Sub-Models ---
 class SourceInfo(BaseModel):
     name: str = Field(..., description="Source name, e.g., Bloomberg, Reuters, WSJ")
@@ -41,6 +52,27 @@ class FinancialEntity(BaseModel):
     relevance_score: float = Field(..., description="Entity relevance to news (0-1)")
 
 
+# --- [NEW] Key Fact for Fact-Checking & Moderator ---
+class KeyFact(BaseModel):
+    """
+    Atomic unit of truth extracted from news.
+    Used by the Debate Moderator to verify claims made by Bull/Bear agents.
+    """
+
+    content: str = Field(
+        ..., description="The specific fact, e.g. 'Revenue grew 20% YoY'"
+    )
+    is_quantitative: bool = Field(
+        ..., description="True if it contains specific numbers/money"
+    )
+    sentiment: SentimentLabel = Field(
+        ..., description="The sentiment context of this specific fact"
+    )
+    citation: str | None = Field(
+        None, description="Direct quote or page number if available"
+    )
+
+
 class AIAnalysis(BaseModel):
     summary: str = Field(..., description="One-sentence financial summary by LLM")
     sentiment: SentimentLabel
@@ -52,6 +84,12 @@ class AIAnalysis(BaseModel):
         None, description="Key event identified, e.g., 'Q3 Earnings Report'"
     )
     reasoning: str = Field(..., description="LLM reasoning for significance")
+
+    # [NEW] Structured Evidence for Debate
+    key_facts: list[KeyFact] = Field(
+        default_factory=list,
+        description="List of irrefutable facts extracted for the Debate Context",
+    )
 
 
 # --- Main Model ---
@@ -74,6 +112,14 @@ class FinancialNewsItem(BaseModel):
     # Structured Data
     source: SourceInfo
     related_tickers: list[FinancialEntity] = Field(default_factory=list)
+
+    # [NEW] Multi-label categorization for Debate Agent routing
+    # e.g. An article can be both ["financials", "bearish"]
+    categories: list[SearchCategory] = Field(
+        default_factory=list,
+        description="Tags indicating search intent (General, Bullish, Bearish, etc.)",
+    )
+
     tags: list[str] = Field(
         default_factory=list, description="e.g., 'Earnings', 'Regulation', 'IPO'"
     )
@@ -101,6 +147,13 @@ class FinancialNewsItem(BaseModel):
                     "sentiment_score": -0.6,
                     "impact_level": "high",
                     "reasoning": "Supply chain issues directly affect revenue guidance.",
+                    "key_facts": [
+                        {
+                            "content": "Shipments down 10% YoY",
+                            "is_quantitative": True,
+                            "sentiment": "bearish",
+                        }
+                    ],
                 },
             }
         }

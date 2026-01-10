@@ -84,9 +84,10 @@ def search_node(state: AgentState) -> Command:
     # Format for selector with clearer metadata including search tag
     formatted_results = ""
     for r in results:
-        tag = r.get("_search_tag", "general").upper()
+        categories = r.get("categories", [r.get("_search_tag", "general")])
+        categories_str = ", ".join([c.upper() for c in categories])
         formatted_results += f"""
-Source: {r.get('source')} | Tag: [{tag}] | Date: {r.get('date')} | Frame: {r.get('_time_frame')}
+Source: {r.get('source')} | [TAGS: {categories_str}] | Date: {r.get('date')} | Frame: {r.get('_time_frame')}
 Title: {r.get('title')}
 Snippet: {r.get('snippet')}
 URL: {r.get('link')}
@@ -240,6 +241,7 @@ def fetch_node(state: AgentState) -> Command:
                     domain=url.split("//")[-1].split("/")[0] if url else "unknown",
                     reliability_score=get_source_reliability(url) if url else 0.5,
                 ),
+                categories=res.get("categories", []),
             )
             news_items.append(item)
             print(f"--- [News Research] ✅ Created news item for: {title[:50]}... ---")
@@ -321,6 +323,10 @@ def analyst_node(state: AgentState) -> Command:
                         f"--- [News Research] FinBERT: {finbert_result.label} ({finbert_result.score:.2f}) ---"
                     )
 
+            # Get Search Tags for prompt
+            categories = item.get("categories", ["general"])
+            search_tag_str = ", ".join([c.upper() for c in categories])
+
             # Step 2: LLM Analysis (Always Hybrid or Basic fallback)
             if finbert_result:
                 # Hybrid mode with FinBERT hints
@@ -329,10 +335,14 @@ def analyst_node(state: AgentState) -> Command:
                         "ticker": ticker,
                         "title": title,
                         "source": source_info.get("name", "Unknown"),
+                        "search_tag": search_tag_str,
                         "published_at": "N/A",
                         "content": content_to_analyze,
                         "finbert_sentiment": finbert_result.label.upper(),
                         "finbert_confidence": f"{finbert_result.score:.1%}",
+                        "finbert_has_numbers": "Yes"
+                        if finbert_result.has_numbers
+                        else "No",
                     }
                 )
             else:
@@ -406,7 +416,12 @@ def aggregator_node(state: AgentState) -> Command:
                 key_event = analysis.get("key_event")
                 if key_event:
                     themes.add(key_event)
-                summaries.append(f"- {analysis.get('summary', 'No summary')}")
+
+                # Summary with key facts count
+                facts_count = len(analysis.get("key_facts", []))
+                summaries.append(
+                    f"- {analysis.get('summary', 'No summary')} ({facts_count} key facts)"
+                )
 
         weighted_score = weighted_score_sum / total_weight if total_weight > 0 else 0.0
 

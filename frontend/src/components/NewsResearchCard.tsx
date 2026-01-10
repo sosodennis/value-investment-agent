@@ -1,6 +1,6 @@
 import React from 'react';
-import { ExternalLink, Calendar, Tag, AlertCircle, Info, TrendingUp, TrendingDown, Minus } from 'lucide-react';
-import { FinancialNewsItem, SentimentLabel, ImpactLevel } from '../types/news';
+import { ExternalLink, Calendar, Tag, AlertCircle, Info, TrendingUp, TrendingDown, Minus, Star, BarChart3, MessageSquare } from 'lucide-react';
+import { FinancialNewsItem, SentimentLabel, ImpactLevel, SearchCategory, KeyFact } from '../types/news';
 
 interface NewsResearchCardProps {
     item: FinancialNewsItem;
@@ -25,6 +25,18 @@ export const NewsResearchCard: React.FC<NewsResearchCardProps> = ({ item }) => {
         }
     };
 
+    const getCategoryStyles = (category: SearchCategory) => {
+        switch (category) {
+            case 'bullish': return 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20';
+            case 'bearish': return 'bg-rose-500/10 text-rose-500 border-rose-500/20';
+            case 'corporate_event': return 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20';
+            case 'financials': return 'bg-cyan-500/10 text-cyan-500 border-cyan-500/20';
+            case 'trusted_news': return 'bg-slate-500/10 text-slate-400 border-slate-500/20';
+            case 'analyst_opinion': return 'bg-amber-500/10 text-amber-500 border-amber-500/20';
+            default: return 'bg-slate-900/50 text-slate-500 border-slate-800';
+        }
+    };
+
     const getImpactColor = (impact: ImpactLevel) => {
         switch (impact) {
             case 'high': return 'text-rose-500';
@@ -45,6 +57,21 @@ export const NewsResearchCard: React.FC<NewsResearchCardProps> = ({ item }) => {
         });
     };
 
+    const renderReliability = (score: number) => {
+        const stars = Math.round(score * 5);
+        return (
+            <div className="flex items-center gap-0.5" title={`Source Reliability: ${(score * 100).toFixed(0)}%`}>
+                {[...Array(5)].map((_, i) => (
+                    <Star
+                        key={i}
+                        size={8}
+                        className={i < stars ? 'fill-amber-500 text-amber-500' : 'text-slate-700'}
+                    />
+                ))}
+            </div>
+        );
+    };
+
     return (
         <div className="bg-slate-900/20 border border-slate-800/50 rounded-2xl p-6 backdrop-blur-sm hover:border-slate-700/50 transition-all group">
             <div className="flex justify-between items-start mb-4">
@@ -53,6 +80,7 @@ export const NewsResearchCard: React.FC<NewsResearchCardProps> = ({ item }) => {
                         <span className="text-[10px] font-bold text-cyan-500 uppercase tracking-widest">
                             {item.source.name}
                         </span>
+                        {renderReliability(item.source.reliability_score)}
                         <div className="w-1 h-1 bg-slate-800 rounded-full" />
                         <div className="flex items-center gap-1 text-[9px] text-slate-500 font-medium">
                             <Calendar size={10} />
@@ -84,16 +112,24 @@ export const NewsResearchCard: React.FC<NewsResearchCardProps> = ({ item }) => {
                 </h3>
             </a>
 
+            <div className="flex flex-wrap gap-1.5 mb-3">
+                {item.categories.map(cat => (
+                    <div key={cat} className={`px-2 py-0.5 rounded border text-[8px] font-bold uppercase tracking-tighter ${getCategoryStyles(cat)}`}>
+                        {cat.replace('_', ' ')}
+                    </div>
+                ))}
+            </div>
+
             <p className="text-xs text-slate-400 leading-relaxed mb-4 line-clamp-3">
                 {item.snippet}
             </p>
 
             {item.analysis && (
-                <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4 space-y-3 mb-4">
-                    <div className="flex items-center justify-between">
+                <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4 space-y-4 mb-4">
+                    <div className="flex items-center justify-between border-b border-slate-900 pb-2">
                         <div className="flex items-center gap-2">
                             <Info size={12} className="text-cyan-500" />
-                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">AI Analysis</span>
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">AI Evidence Extraction</span>
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="text-[9px] text-slate-500 font-bold uppercase">Impact</span>
@@ -103,22 +139,45 @@ export const NewsResearchCard: React.FC<NewsResearchCardProps> = ({ item }) => {
                         </div>
                     </div>
 
-                    <div className="text-xs text-slate-300 leading-relaxed italic">
+                    <div className="text-xs text-slate-300 leading-relaxed italic border-l-2 border-slate-800 pl-3">
                         &quot;{item.analysis.summary}&quot;
                     </div>
+
+                    {item.analysis.key_facts && item.analysis.key_facts.length > 0 && (
+                        <div className="space-y-2">
+                            <div className="text-[9px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-1.5">
+                                <BarChart3 size={10} className="text-slate-600" />
+                                Key Evidence
+                            </div>
+                            <div className="grid grid-cols-1 gap-2">
+                                {item.analysis.key_facts.map((fact, idx) => (
+                                    <div key={idx} className={`p-2 rounded-lg text-[10px] flex items-start gap-2 ${fact.sentiment === 'bullish' ? 'bg-emerald-500/5 text-emerald-200/80' :
+                                            fact.sentiment === 'bearish' ? 'bg-rose-500/5 text-rose-200/80' :
+                                                'bg-slate-900/40 text-slate-400'
+                                        }`}>
+                                        {fact.is_quantitative ? <BarChart3 size={12} className="shrink-0 text-cyan-500 mt-0.5" /> : <MessageSquare size={12} className="shrink-0 text-slate-600 mt-0.5" />}
+                                        <div className="flex-1 leading-normal">
+                                            {fact.content}
+                                            {fact.citation && <span className="text-[8px] opacity-50 ml-1 block">Source: {fact.citation}</span>}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {item.analysis.key_event && (
                         <div className="flex items-start gap-2 pt-2 border-t border-slate-900">
                             <AlertCircle size={12} className="text-amber-500 mt-0.5 shrink-0" />
                             <div>
-                                <div className="text-[9px] text-slate-500 font-bold uppercase tracking-tight">Key Event</div>
+                                <div className="text-[9px] text-slate-500 font-bold uppercase tracking-tight">Core Event Identified</div>
                                 <div className="text-[11px] text-slate-200 font-medium">{item.analysis.key_event}</div>
                             </div>
                         </div>
                     )}
 
                     <div className="text-[10px] text-slate-500 leading-relaxed">
-                        <span className="font-bold uppercase tracking-tighter text-slate-600 mr-1">Reasoning:</span>
+                        <span className="font-bold uppercase tracking-tighter text-slate-600 mr-1">Analyst Reasoning:</span>
                         {item.analysis.reasoning}
                     </div>
                 </div>

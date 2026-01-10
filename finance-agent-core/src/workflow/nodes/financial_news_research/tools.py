@@ -68,7 +68,21 @@ async def news_search_multi_timeframe(ticker: str) -> list[dict]:
             "corporate_event",
         ),
         # [FINANCIALS] Earnings reports, SEC filings
-        ("m", f"{ticker} earnings SEC filing 10-K 10-Q guidance", 5, "financials"),
+        ("m", f"{ticker} earnings SEC filing 10-K 10-Q guidance", 6, "financials"),
+        # [BULLISH_SIGNAL] Growth catalysts (For Bull Agent)
+        (
+            "w",
+            f'{ticker} ("price target raised" OR "buy rating" OR "outperform" OR growth OR record OR partnership)',
+            4,
+            "bullish",
+        ),
+        # [BEARISH_SIGNAL] Risks and downgrades (For Bear Agent)
+        (
+            "m",
+            f'{ticker} (downgrade OR "sell rating" OR underperform OR "short seller" OR lawsuit OR investigation OR miss)',
+            4,
+            "bearish",
+        ),
         # [ANALYST_OPINION] Analyst ratings - lower priority
         ("w", f'{ticker} analyst rating "price target"', 4, "analyst_opinion"),
     ]
@@ -109,6 +123,8 @@ async def news_search_multi_timeframe(ticker: str) -> list[dict]:
     TAG_SPECIFICITY = {
         "financials": 4,  # Most specific (10-K, earnings)
         "corporate_event": 3,  # Very specific (M&A, CEO change)
+        "bullish": 3.5,  # High interest for debate
+        "bearish": 3.5,  # High interest for debate
         "trusted_news": 2,  # General authority
         "analyst_opinion": 1,  # General opinion
     }
@@ -127,14 +143,22 @@ async def news_search_multi_timeframe(ticker: str) -> list[dict]:
         new_priority = TAG_SPECIFICITY.get(current_tag, 0)
 
         if link not in unique_map:
+            # Initialize with categorical tag set
+            r["_categories_set"] = {current_tag}
             unique_map[link] = r
         else:
-            # Keep the MORE SPECIFIC tag (e.g., Reuters M&A article -> corporate_event, not trusted_news)
+            # Merge categories! This ensures "Shared Reality" for Debate Agent
+            unique_map[link]["_categories_set"].add(current_tag)
+
+            # Keep the result with the HIGHER priority metadata if multiple found
             existing_tag = unique_map[link].get("_search_tag")
             existing_priority = TAG_SPECIFICITY.get(existing_tag, 0)
 
             if new_priority > existing_priority:
+                # Update but keep the merged categories
+                merged_categories = unique_map[link]["_categories_set"]
                 unique_map[link] = r
+                unique_map[link]["_categories_set"] = merged_categories
 
     # --- Quota-based Bucket Selection ---
     # Ensure diversity by allocating fixed slots per category
@@ -145,16 +169,25 @@ async def news_search_multi_timeframe(ticker: str) -> list[dict]:
 
     # Target quotas for balanced output (~12-14 articles total)
     QUOTAS = {
-        "corporate_event": 4,  # Core: Events are most important for value investing
+        "corporate_event": 5,  # Core: Events are most important for value investing
         "financials": 3,  # Core: Financial data and filings
-        "trusted_news": 4,  # Base: General trusted news coverage
+        "bullish": 5,  # Debate ammo
+        "bearish": 5,  # Debate ammo
+        "trusted_news": 5,  # Base: General trusted news coverage
         "analyst_opinion": 2,  # Reference: Market sentiment
     }
 
     final_results = []
 
     # Fill buckets in priority order
-    for tag in ["corporate_event", "financials", "trusted_news", "analyst_opinion"]:
+    for tag in [
+        "corporate_event",
+        "financials",
+        "bullish",
+        "bearish",
+        "trusted_news",
+        "analyst_opinion",
+    ]:
         quota = QUOTAS.get(tag, 2)
         available = buckets.get(tag, [])
         final_results.extend(available[:quota])
@@ -162,6 +195,8 @@ async def news_search_multi_timeframe(ticker: str) -> list[dict]:
     # --- Format output ---
     formatted_results = []
     for r in final_results:
+        # Convert set to list for serialization
+        categories = list(r.get("_categories_set", {r.get("_search_tag", "general")}))
         formatted_results.append(
             {
                 "title": r.get("title", ""),
@@ -172,6 +207,7 @@ async def news_search_multi_timeframe(ticker: str) -> list[dict]:
                 "image": r.get("image", ""),
                 "_time_frame": r.get("_time_frame", "m"),
                 "_search_tag": r.get("_search_tag", "general"),
+                "categories": categories,
             }
         )
 

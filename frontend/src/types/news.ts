@@ -1,6 +1,15 @@
 export type SentimentLabel = 'bullish' | 'bearish' | 'neutral';
 export type ImpactLevel = 'high' | 'medium' | 'low';
 
+export type SearchCategory =
+    | 'general'
+    | 'corporate_event'
+    | 'financials'
+    | 'trusted_news'
+    | 'analyst_opinion'
+    | 'bullish'
+    | 'bearish';
+
 export interface SourceInfo {
     name: string;
     domain: string;
@@ -14,6 +23,13 @@ export interface FinancialEntity {
     relevance_score: number;
 }
 
+export interface KeyFact {
+    content: string;
+    is_quantitative: boolean;
+    sentiment: SentimentLabel;
+    citation?: string | null;
+}
+
 export interface AIAnalysis {
     summary: string;
     sentiment: SentimentLabel;
@@ -21,6 +37,7 @@ export interface AIAnalysis {
     impact_level: ImpactLevel;
     key_event?: string | null;
     reasoning: string;
+    key_facts: KeyFact[];
 }
 
 export interface FinancialNewsItem {
@@ -33,6 +50,7 @@ export interface FinancialNewsItem {
     full_content?: string | null;
     source: SourceInfo;
     related_tickers: FinancialEntity[];
+    categories: SearchCategory[];
     tags: string[];
     analysis?: AIAnalysis | null;
 }
