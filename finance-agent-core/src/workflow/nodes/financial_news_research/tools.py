@@ -45,7 +45,14 @@ async def news_search_multi_timeframe(ticker: str) -> list[dict]:
     from collections import defaultdict
 
     # Build site: filter for high-trust domains
-    trust_domains = ["reuters.com", "bloomberg.com", "wsj.com", "ft.com", "cnbc.com"]
+    trust_domains = [
+        "reuters.com",
+        "bloomberg.com",
+        "wsj.com",
+        "ft.com",
+        "cnbc.com",
+        "bbc.com",
+    ]
     trust_query_part = " OR ".join([f"site:{d}" for d in trust_domains])
 
     # --- Strategic Search Task Configuration ---
@@ -76,7 +83,19 @@ async def news_search_multi_timeframe(ticker: str) -> list[dict]:
             4,
             "bullish",
         ),
+        (
+            "m",
+            f'{ticker} ("price target raised" OR "buy rating" OR "outperform" OR growth OR record OR partnership)',
+            4,
+            "bullish",
+        ),
         # [BEARISH_SIGNAL] Risks and downgrades (For Bear Agent)
+        (
+            "w",
+            f'{ticker} (downgrade OR "sell rating" OR underperform OR "short seller" OR lawsuit OR investigation OR miss)',
+            4,
+            "bearish",
+        ),
         (
             "m",
             f'{ticker} (downgrade OR "sell rating" OR underperform OR "short seller" OR lawsuit OR investigation OR miss)',
@@ -93,6 +112,7 @@ async def news_search_multi_timeframe(ticker: str) -> list[dict]:
         from ddgs import DDGS
 
         try:
+            print(f"--- [Search] Starting search for {query} ({time_param}) ---")
             with DDGS() as ddgs:
                 results = ddgs.news(
                     query,
