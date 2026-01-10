@@ -54,10 +54,24 @@ services:
         condition: service_healthy
     restart: always
 
+  # ==========================================
+  # Frontend Service
+  # ==========================================
+  # PRODUCTION MODE (default):
+  #   dockerfile: Dockerfile
+  #   - Optimized build, minified, fast
+  #   - No hot reload
+  #
+  # DEVELOPMENT MODE (for debugging):
+  #   dockerfile: Dockerfile.dev
+  #   - Hot reload enabled
+  #   - Slower, includes dev tools
+  #   - Also uncomment the volumes section below
+  # ==========================================
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile        # <- Change to Dockerfile.dev for development
     platform: linux/arm64
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
@@ -66,6 +80,12 @@ services:
     depends_on:
       - backend
     restart: always
+    # ==========================================
+    # DEVELOPMENT MODE: Uncomment below for hot reload
+    # ==========================================
+    # volumes:
+    #   - ./frontend/src:/app/src
+    #   - ./frontend/public:/app/public
 
 volumes:
   pg_data:

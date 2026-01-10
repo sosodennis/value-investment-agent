@@ -1,0 +1,33 @@
+# ==========================================
+# Development Dockerfile
+# ==========================================
+# Use this for local development with hot reload
+#
+# To use this instead of production Dockerfile:
+# In docker-compose.yml, change:
+#   dockerfile: Dockerfile
+# To:
+#   dockerfile: Dockerfile.dev
+# ==========================================
+
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json package-lock.json* ./
+
+# Install ALL dependencies (including devDependencies)
+RUN npm install
+
+# Copy source code
+COPY . .
+
+# Expose the dev server port
+EXPOSE 3000
+
+# Enable hot reload by polling (required in Docker)
+ENV WATCHPACK_POLLING=true
+
+# Start development server with hot reload
+CMD ["npm", "run", "dev"]

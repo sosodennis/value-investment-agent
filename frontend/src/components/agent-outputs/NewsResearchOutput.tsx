@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Zap, TrendingUp } from 'lucide-react';
 import { NewsResearchCard } from '../NewsResearchCard';
 import { AINewsSummary } from '../AINewsSummary';
@@ -9,7 +9,7 @@ interface NewsResearchOutputProps {
     resolvedTicker: string | null | undefined;
 }
 
-export const NewsResearchOutput: React.FC<NewsResearchOutputProps> = ({
+const NewsResearchOutputComponent: React.FC<NewsResearchOutputProps> = ({
     output,
     resolvedTicker
 }) => {
@@ -48,3 +48,6 @@ export const NewsResearchOutput: React.FC<NewsResearchOutputProps> = ({
         </div>
     );
 };
+
+// Export with React.memo for performance optimization
+export const NewsResearchOutput = memo(NewsResearchOutputComponent);

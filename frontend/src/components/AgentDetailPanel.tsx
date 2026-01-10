@@ -482,26 +482,25 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                     </div>
                 )}
 
-                {activeTab === 'Output' && (
-                    <div className="p-8 h-full animate-in slide-in-from-bottom-2 duration-300">
-                        {agent.id === 'fundamental_analysis' ? (
-                            <FundamentalAnalysisOutput
-                                reports={agentReports}
-                                resolvedTicker={resolvedTicker}
-                            />
-                        ) : agent.id === 'financial_news_research' ? (
-                            <NewsResearchOutputPanel
-                                output={agentOutput as NewsOutputType | null}
-                                resolvedTicker={resolvedTicker}
-                            />
-                        ) : (
-                            <GenericAgentOutput
-                                agentName={agent.name}
-                                output={agentOutput}
-                            />
-                        )}
-                    </div>
-                )}
+                {/* Output tab - kept mounted for performance, hidden via CSS */}
+                <div className={`p-8 h-full ${activeTab === 'Output' ? 'block animate-in slide-in-from-bottom-2 duration-300' : 'hidden'}`}>
+                    {agent.id === 'fundamental_analysis' ? (
+                        <FundamentalAnalysisOutput
+                            reports={agentReports}
+                            resolvedTicker={resolvedTicker}
+                        />
+                    ) : agent.id === 'financial_news_research' ? (
+                        <NewsResearchOutputPanel
+                            output={agentOutput as NewsOutputType | null}
+                            resolvedTicker={resolvedTicker}
+                        />
+                    ) : (
+                        <GenericAgentOutput
+                            agentName={agent.name}
+                            output={agentOutput}
+                        />
+                    )}
+                </div>
 
                 {activeTab === 'Logs' && (
                     <div className="p-8 font-mono text-[10px] text-slate-500 h-full">

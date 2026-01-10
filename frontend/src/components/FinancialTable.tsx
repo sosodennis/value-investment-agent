@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo, useMemo, useCallback } from 'react';
 import {
     FinancialReport,
     TraceableField,
@@ -13,21 +13,25 @@ interface FinancialTableProps {
     ticker: string;
 }
 
-export const FinancialTable: React.FC<FinancialTableProps> = ({ reports, ticker }) => {
-    if (!reports || reports.length === 0) return null;
+const FinancialTableComponent: React.FC<FinancialTableProps> = ({ reports, ticker }) => {
+    // Memoize sorted reports to prevent recalculation on every render
+    const sortedReports = useMemo(() => {
+        if (!reports || reports.length === 0) return [];
+        return [...reports].sort((a, b) => {
+            const yearA = parseInt(String(a.base.fiscal_year?.value || 0));
+            const yearB = parseInt(String(b.base.fiscal_year?.value || 0));
+            return yearB - yearA;
+        });
+    }, [reports]);
 
-    // Sort reports by year (descending)
-    const sortedReports = [...reports].sort((a, b) => {
-        const yearA = parseInt(String(a.base.fiscal_year?.value || 0));
-        const yearB = parseInt(String(b.base.fiscal_year?.value || 0));
-        return yearB - yearA;
-    });
-
-    const headers = sortedReports.map(r => {
+    const headers = useMemo(() => sortedReports.map(r => {
         const fy = r.base.fiscal_year?.value || 'N/A';
         const fp = r.base.fiscal_period?.value || 'N/A';
         return `${fy} (${fp})`;
-    });
+    }), [sortedReports]);
+
+    // Early return if no data
+    if (sortedReports.length === 0) return null;
 
     const formatCurrency = (field: TraceableField | null | undefined) => {
         if (!field || field.value === null || field.value === undefined) return '-';
@@ -179,3 +183,6 @@ export const FinancialTable: React.FC<FinancialTableProps> = ({ reports, ticker 
         </div>
     );
 };
+
+// Export with React.memo for performance optimization
+export const FinancialTable = memo(FinancialTableComponent);

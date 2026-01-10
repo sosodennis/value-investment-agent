@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo, useMemo } from 'react';
 import { PieChart, List, TrendingUp, TrendingDown, Minus, Zap, BarChart3, Database, ShieldCheck, AlertCircle, MessageSquare } from 'lucide-react';
 import { NewsResearchOutput, SentimentLabel, SearchCategory } from '../types/news';
 
@@ -6,7 +6,7 @@ interface AINewsSummaryProps {
     output: NewsResearchOutput;
 }
 
-export const AINewsSummary: React.FC<AINewsSummaryProps> = ({ output }) => {
+const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
     const getSentimentColor = (sentiment: SentimentLabel) => {
         switch (sentiment) {
             case 'bullish': return 'text-emerald-400';
@@ -31,19 +31,24 @@ export const AINewsSummary: React.FC<AINewsSummaryProps> = ({ output }) => {
         }
     };
 
-    // Calculate metrics
-    const allFacts = output.news_items.flatMap(item => item.analysis?.key_facts || []);
-    const bullFactsCount = allFacts.filter(f => f.sentiment === 'bullish').length;
-    const bearFactsCount = allFacts.filter(f => f.sentiment === 'bearish').length;
-    const neutralFactsCount = allFacts.filter(f => f.sentiment === 'neutral').length;
-    const quantFactsCount = allFacts.filter(f => f.is_quantitative).length;
+    // Memoize expensive calculations
+    const { allFacts, bullFactsCount, bearFactsCount, neutralFactsCount, quantFactsCount } = useMemo(() => {
+        const facts = output.news_items.flatMap(item => item.analysis?.key_facts || []);
+        return {
+            allFacts: facts,
+            bullFactsCount: facts.filter(f => f.sentiment === 'bullish').length,
+            bearFactsCount: facts.filter(f => f.sentiment === 'bearish').length,
+            neutralFactsCount: facts.filter(f => f.sentiment === 'neutral').length,
+            quantFactsCount: facts.filter(f => f.is_quantitative).length,
+        };
+    }, [output.news_items]);
 
-    const categoryStats = output.news_items.reduce((acc, item) => {
+    const categoryStats = useMemo(() => output.news_items.reduce((acc, item) => {
         item.categories.forEach(cat => {
             acc[cat] = (acc[cat] || 0) + 1;
         });
         return acc;
-    }, {} as Record<string, number>);
+    }, {} as Record<string, number>), [output.news_items]);
 
     // Calculate score percentage (mapping -1 to 1 into 0 to 100)
     const scorePercentage = Math.round(((output.sentiment_score + 1) / 2) * 100);
@@ -55,8 +60,8 @@ export const AINewsSummary: React.FC<AINewsSummaryProps> = ({ output }) => {
     // Signal confidence based on sample size
     const totalSources = output.news_items.length;
     const getSignalConfidence = () => {
-        if (totalSources >= 20) return { level: 'High', color: 'text-emerald-400', icon: '🔥' };
-        if (totalSources >= 10) return { level: 'Medium', color: 'text-amber-400', icon: '⚡' };
+        if (totalSources >= 8) return { level: 'High', color: 'text-emerald-400', icon: '🔥' };
+        if (totalSources >= 5) return { level: 'Medium', color: 'text-amber-400', icon: '⚡' };
         return { level: 'Low', color: 'text-slate-400', icon: '💨' };
     };
     const signalConfidence = getSignalConfidence();
@@ -262,3 +267,6 @@ export const AINewsSummary: React.FC<AINewsSummaryProps> = ({ output }) => {
         </div>
     );
 };
+
+// Export with React.memo for performance optimization
+export const AINewsSummary = memo(AINewsSummaryComponent);

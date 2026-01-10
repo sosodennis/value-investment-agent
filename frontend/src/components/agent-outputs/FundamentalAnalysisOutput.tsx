@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { LayoutPanelTop, BarChart3 } from 'lucide-react';
 import { FinancialTable } from '../FinancialTable';
 
@@ -7,7 +7,7 @@ interface FundamentalAnalysisOutputProps {
     resolvedTicker: string | null | undefined;
 }
 
-export const FundamentalAnalysisOutput: React.FC<FundamentalAnalysisOutputProps> = ({
+const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProps> = ({
     reports,
     resolvedTicker
 }) => {
@@ -36,3 +36,6 @@ export const FundamentalAnalysisOutput: React.FC<FundamentalAnalysisOutputProps>
         </div>
     );
 };
+
+// Export with React.memo for performance optimization
+export const FundamentalAnalysisOutput = memo(FundamentalAnalysisOutputComponent);

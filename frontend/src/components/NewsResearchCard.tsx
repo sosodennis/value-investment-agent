@@ -1,12 +1,12 @@
-import React from 'react';
-import { ExternalLink, Calendar, Tag, AlertCircle, Info, TrendingUp, TrendingDown, Minus, Star, BarChart3, MessageSquare, ShieldCheck } from 'lucide-react';
+import React, { useState, memo } from 'react';
+import { ExternalLink, Calendar, Tag, AlertCircle, Info, TrendingUp, TrendingDown, Minus, Star, BarChart3, MessageSquare, ShieldCheck, ChevronDown, ChevronUp } from 'lucide-react';
 import { FinancialNewsItem, SentimentLabel, ImpactLevel, SearchCategory, KeyFact } from '../types/news';
 
 interface NewsResearchCardProps {
     item: FinancialNewsItem;
 }
 
-export const NewsResearchCard: React.FC<NewsResearchCardProps> = ({ item }) => {
+const NewsResearchCardComponent: React.FC<NewsResearchCardProps> = ({ item }) => {
     const getSentimentColor = (sentiment: SentimentLabel) => {
         switch (sentiment) {
             case 'bullish': return 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20';
@@ -196,32 +196,7 @@ export const NewsResearchCard: React.FC<NewsResearchCardProps> = ({ item }) => {
 
                     {/* Key Evidence */}
                     {item.analysis.key_facts && item.analysis.key_facts.length > 0 && (
-                        <div className="space-y-3 mb-4">
-                            <div className="text-[9px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-1.5">
-                                <BarChart3 size={10} className="text-slate-600" />
-                                Key Evidence
-                            </div>
-                            <div className="grid grid-cols-1 gap-2">
-                                {item.analysis.key_facts.map((fact, idx) => (
-                                    <div key={idx} className={`p-3 rounded-xl text-[10px] flex flex-col gap-2 ${fact.sentiment === 'bullish' ? 'bg-emerald-500/5 text-emerald-200/80 border border-emerald-500/10' :
-                                        fact.sentiment === 'bearish' ? 'bg-rose-500/5 text-rose-200/80 border border-rose-500/10' :
-                                            'bg-slate-900/40 text-slate-400 border border-slate-800/50'
-                                        }`}>
-                                        <div className="flex items-start gap-2">
-                                            {fact.is_quantitative ? <BarChart3 size={12} className="shrink-0 text-cyan-500 mt-0.5" /> : <MessageSquare size={12} className="shrink-0 text-slate-600 mt-0.5" />}
-                                            <div className="flex-1 leading-normal font-medium">
-                                                {fact.content}
-                                            </div>
-                                        </div>
-                                        {fact.citation && (
-                                            <div className="text-[8px] opacity-40 pl-5 border-t border-slate-800/30 pt-1 mt-1 truncate">
-                                                Source: {fact.citation}
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
+                        <KeyEvidenceSection facts={item.analysis.key_facts} />
                     )}
 
                     {/* Reasoning Footer */}
@@ -257,3 +232,63 @@ export const NewsResearchCard: React.FC<NewsResearchCardProps> = ({ item }) => {
         </div>
     );
 };
+
+// Collapsible Key Evidence Section
+const KeyEvidenceSection: React.FC<{ facts: KeyFact[] }> = ({ facts }) => {
+    const [isExpanded, setIsExpanded] = useState(false);
+    const INITIAL_SHOW_COUNT = 3;
+    const shouldCollapse = facts.length > INITIAL_SHOW_COUNT;
+    const displayedFacts = shouldCollapse && !isExpanded ? facts.slice(0, INITIAL_SHOW_COUNT) : facts;
+    const hiddenCount = facts.length - INITIAL_SHOW_COUNT;
+
+    return (
+        <div className="space-y-3 mb-4">
+            <div className="text-[9px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-1.5">
+                <BarChart3 size={10} className="text-slate-600" />
+                Key Evidence
+                <span className="text-slate-600">({facts.length})</span>
+            </div>
+            <div className="grid grid-cols-1 gap-2">
+                {displayedFacts.map((fact, idx) => (
+                    <div key={idx} className={`p-3 rounded-xl text-[10px] flex flex-col gap-2 ${fact.sentiment === 'bullish' ? 'bg-emerald-500/5 text-emerald-200/80 border border-emerald-500/10' :
+                        fact.sentiment === 'bearish' ? 'bg-rose-500/5 text-rose-200/80 border border-rose-500/10' :
+                            'bg-slate-900/40 text-slate-400 border border-slate-800/50'
+                        }`}>
+                        <div className="flex items-start gap-2">
+                            {fact.is_quantitative ? <BarChart3 size={12} className="shrink-0 text-cyan-500 mt-0.5" /> : <MessageSquare size={12} className="shrink-0 text-slate-600 mt-0.5" />}
+                            <div className="flex-1 leading-normal font-medium">
+                                {fact.content}
+                            </div>
+                        </div>
+                        {fact.citation && (
+                            <div className="text-[8px] opacity-40 pl-5 border-t border-slate-800/30 pt-1 mt-1 truncate">
+                                Source: {fact.citation}
+                            </div>
+                        )}
+                    </div>
+                ))}
+            </div>
+            {shouldCollapse && (
+                <button
+                    onClick={() => setIsExpanded(!isExpanded)}
+                    className="w-full flex items-center justify-center gap-1.5 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-500 hover:text-cyan-400 transition-colors rounded-lg border border-slate-800/50 hover:border-slate-700 bg-slate-950/30"
+                >
+                    {isExpanded ? (
+                        <>
+                            <ChevronUp size={12} />
+                            Show less
+                        </>
+                    ) : (
+                        <>
+                            <ChevronDown size={12} />
+                            Show {hiddenCount} more
+                        </>
+                    )}
+                </button>
+            )}
+        </div>
+    );
+};
+
+// Export with React.memo for performance optimization
+export const NewsResearchCard = memo(NewsResearchCardComponent);
