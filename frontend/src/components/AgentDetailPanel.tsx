@@ -2,10 +2,8 @@ import React, { useState } from 'react';
 import { AgentInfo, DimensionScore } from '../types/agents';
 import { TrendingUp, BarChart3, FileText, Zap, MessageSquare, ListFilter, Activity, LayoutPanelTop, CheckCircle2, Clock } from 'lucide-react';
 import { Message } from '../hooks/useAgent';
-import { FinancialTable } from './FinancialTable';
-import { NewsResearchCard } from './NewsResearchCard';
-import { AINewsSummary } from './AINewsSummary';
-import { NewsResearchOutput } from '../types/news';
+import { NewsResearchOutput as NewsOutputType } from '../types/news';
+import { FundamentalAnalysisOutput, NewsResearchOutput as NewsResearchOutputPanel, GenericAgentOutput } from './agent-outputs';
 
 interface AgentDetailPanelProps {
     agent: AgentInfo | null;
@@ -487,75 +485,20 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                 {activeTab === 'Output' && (
                     <div className="p-8 h-full animate-in slide-in-from-bottom-2 duration-300">
                         {agent.id === 'fundamental_analysis' ? (
-                            agentReports.length > 0 ? (
-                                <div className="space-y-6">
-                                    <div className="flex items-center gap-3 mb-2">
-                                        <LayoutPanelTop size={18} className="text-indigo-400" />
-                                        <h3 className="text-sm font-bold text-white uppercase tracking-widest">Financial Data Matrix</h3>
-                                    </div>
-                                    <FinancialTable
-                                        reports={agentReports}
-                                        ticker={resolvedTicker || 'N/A'}
-                                    />
-                                </div>
-                            ) : (
-                                <div className="flex-1 flex flex-col items-center justify-center p-12 text-center h-full">
-                                    <BarChart3 size={48} className="text-slate-900 mb-4" />
-                                    <h4 className="text-slate-500 font-bold text-xs uppercase tracking-widest">No Structured Data</h4>
-                                    <p className="text-slate-700 text-[10px] mt-2 max-w-[240px]">
-                                        Financial reports have not been extracted yet. Please provide a ticker and wait for the Planner to finish extraction.
-                                    </p>
-                                </div>
-                            )
+                            <FundamentalAnalysisOutput
+                                reports={agentReports}
+                                resolvedTicker={resolvedTicker}
+                            />
                         ) : agent.id === 'financial_news_research' ? (
-                            agentOutput ? (
-                                <div className="space-y-8 pb-12">
-                                    <div className="flex items-center gap-3 mb-2">
-                                        <Zap size={18} className="text-amber-400" />
-                                        <h3 className="text-sm font-bold text-white uppercase tracking-widest">News Research Intelligence</h3>
-                                    </div>
-
-                                    <AINewsSummary output={agentOutput as NewsResearchOutput} />
-
-                                    <div className="space-y-4">
-                                        <div className="flex items-center gap-3 mb-4">
-                                            <TrendingUp size={16} className="text-cyan-400" />
-                                            <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Article Breakdown</h3>
-                                        </div>
-                                        <div className="grid grid-cols-1 gap-6">
-                                            {(agentOutput as NewsResearchOutput).news_items.map((item) => (
-                                                <NewsResearchCard key={item.id} item={item} />
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="flex-1 flex flex-col items-center justify-center p-12 text-center h-full">
-                                    <TrendingUp size={48} className="text-slate-900 mb-4" />
-                                    <h4 className="text-slate-500 font-bold text-xs uppercase tracking-widest">Searching News...</h4>
-                                    <p className="text-slate-700 text-[10px] mt-2 max-w-[240px]">
-                                        Our agents are scanning global financial news for {resolvedTicker || 'the target company'}. Results will appear here shortly.
-                                    </p>
-                                </div>
-                            )
-                        ) : agentOutput ? (
-                            <div className="space-y-6">
-                                <div className="flex items-center gap-3 mb-2">
-                                    <FileText size={18} className="text-indigo-400" />
-                                    <h3 className="text-sm font-bold text-white uppercase tracking-widest">{agent.name} Result</h3>
-                                </div>
-                                <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-6 font-mono text-xs overflow-auto max-h-[600px] text-slate-300">
-                                    <pre>{JSON.stringify(agentOutput, null, 2)}</pre>
-                                </div>
-                            </div>
+                            <NewsResearchOutputPanel
+                                output={agentOutput as NewsOutputType | null}
+                                resolvedTicker={resolvedTicker}
+                            />
                         ) : (
-                            <div className="flex-1 flex flex-col items-center justify-center p-12 text-center h-full">
-                                <Clock size={48} className="text-slate-900 mb-4" />
-                                <h4 className="text-slate-500 font-bold text-xs uppercase tracking-widest">No Output Available</h4>
-                                <p className="text-slate-700 text-[10px] mt-2 max-w-[240px]">
-                                    This agent has not completed its task yet or hasn&apos;t produced any structured output.
-                                </p>
-                            </div>
+                            <GenericAgentOutput
+                                agentName={agent.name}
+                                output={agentOutput}
+                            />
                         )}
                     </div>
                 )}
