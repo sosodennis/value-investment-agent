@@ -128,6 +128,12 @@ async def news_search_multi_timeframe(
         ),
         # [ANALYST_OPINION] General analyst sentiment
         ("w", f'{base_term} analyst rating "price target"', 4, "analyst_opinion"),
+        (
+            "m",
+            f'{base_term} ("upcoming" OR "launch date" OR "roadmap" OR "revenue forecast" OR "outlook" OR "catalyst" OR "next quarter")',
+            8,
+            "financials",
+        ),
     ]
 
     print(
