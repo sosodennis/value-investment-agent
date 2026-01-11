@@ -41,7 +41,7 @@ def debate_aggregator_node(state: AgentState) -> dict[str, Any]:
     Consolidates data from News Research and Fundamental Analysis into
     a single 'analyst_reports' dictionary for the debate agents to consume.
     """
-    print("--- Debate: Aggregating ground truth data ---")
+    print("--- Debate: Aggregating ground truth data ---", flush=True)
 
     # Consolidate news and financials
     reports = {
@@ -64,16 +64,20 @@ async def bull_node(state: AgentState) -> dict[str, Any]:
     """
     round_num = state.debate_current_round + 1
     ticker = state.resolved_ticker or state.ticker
-    print(f"--- Debate: Bull Agent Node (Round {round_num}) ---")
+    print(f"--- Debate: Bull Agent Node (Round {round_num}) ---", flush=True)
 
     llm = get_llm()
     system_content = BULL_AGENT_SYSTEM_PROMPT.format(
         ticker=ticker, reports=json.dumps(state.analyst_reports, indent=2, default=str)
     )
 
-    messages = [SystemMessage(content=system_content)] + state.debate_history
-
+    messages = [SystemMessage(content=system_content)] + state.debate_history[-6:]
     response = await llm.ainvoke(messages)
+
+    print(
+        f"--- Debate: Bull Agent '{ticker}' Arg (Round {round_num}):\n{response.content[:200]}...",
+        flush=True,
+    )
 
     return {
         "debate_history": [AIMessage(content=response.content, name="GrowthHunter")],
@@ -90,7 +94,7 @@ async def bear_node(state: AgentState) -> dict[str, Any]:
     """
     round_num = state.debate_current_round + 1
     ticker = state.resolved_ticker or state.ticker
-    print(f"--- Debate: Bear Agent Node (Round {round_num}) ---")
+    print(f"--- Debate: Bear Agent Node (Round {round_num}) ---", flush=True)
 
     llm = get_llm()
     system_content = BEAR_AGENT_SYSTEM_PROMPT.format(
@@ -98,9 +102,13 @@ async def bear_node(state: AgentState) -> dict[str, Any]:
     )
 
     # Note: State messages includes the Bull's just-finished reply
-    messages = [SystemMessage(content=system_content)] + state.debate_history
-
+    messages = [SystemMessage(content=system_content)] + state.debate_history[-6:]
     response = await llm.ainvoke(messages)
+
+    print(
+        f"--- Debate: Bear Agent '{ticker}' Arg (Round {round_num}):\n{response.content[:200]}...",
+        flush=True,
+    )
 
     return {
         "debate_history": [
@@ -120,7 +128,7 @@ async def moderator_node(state: AgentState) -> dict[str, Any]:
     """
     round_num = state.debate_current_round + 1
     ticker = state.resolved_ticker or state.ticker
-    print(f"--- Debate: Moderator Node (Round {round_num}) ---")
+    print(f"--- Debate: Moderator Node (Round {round_num}) ---", flush=True)
 
     llm = get_llm()
 
@@ -130,8 +138,13 @@ async def moderator_node(state: AgentState) -> dict[str, Any]:
             ticker=ticker,
             reports=json.dumps(state.analyst_reports, indent=2, default=str),
         )
-        messages = [SystemMessage(content=system_content)] + state.debate_history
+        messages = [SystemMessage(content=system_content)] + state.debate_history[-6:]
         response = await llm.ainvoke(messages)
+
+        print(
+            f"--- Debate: Moderator critique (Round {round_num}):\n{response.content[:200]}...",
+            flush=True,
+        )
 
         return {
             "debate_history": [AIMessage(content=response.content, name="Judge")],
@@ -141,7 +154,7 @@ async def moderator_node(state: AgentState) -> dict[str, Any]:
         }
     else:
         # Final Round: Synthesis of the DebateConclusion
-        print("--- Debate: Final Synthesis (Verdict) ---")
+        print("--- Debate: Final Synthesis (Verdict) ---", flush=True)
         history_text = "\n\n".join(
             [f"{msg.name or 'Agent'}: {msg.content}" for msg in state.debate_history]
         )
@@ -151,9 +164,13 @@ async def moderator_node(state: AgentState) -> dict[str, Any]:
         try:
             structured_llm = llm.with_structured_output(DebateConclusion)
             conclusion = await structured_llm.ainvoke(verdict_system)
-            conclusion_data = conclusion.model_dump()
+            # Use mode='json' to handle Enums correctly
+            conclusion_data = conclusion.model_dump(mode="json")
         except Exception as e:
-            print(f"!!! Debate: Structured output failed: {e}. Falling back to text.")
+            print(
+                f"!!! Debate: Structured output failed: {e}. Falling back to text.",
+                flush=True,
+            )
             # Simple fallback (could be or refined more)
             conclusion_data = {
                 "winning_thesis": "See history",
@@ -167,9 +184,18 @@ async def moderator_node(state: AgentState) -> dict[str, Any]:
 
         conclusion_data["debate_rounds"] = round_num
 
+        print(
+            f"--- Debate: Final Verdict for {ticker} ---\n{json.dumps(conclusion_data, indent=2, default=str)}",
+            flush=True,
+        )
+
         return {
             "debate_conclusion": conclusion_data,
             "debate_current_round": round_num,
             "current_node": "moderator",
-            "node_statuses": {"moderator": "done", "executor": "running"},
+            "node_statuses": {
+                "debate": "done",
+                "moderator": "done",
+                "executor": "running",
+            },
         }

@@ -33,6 +33,7 @@ export function useAgent(assistantId: string = "agent") {
         auditor: 'idle',
         approval: 'idle',
         calculator: 'idle',
+        debate: 'idle',
     });
     const [agentOutputs, setAgentOutputs] = useState<Record<string, any>>({});
 
@@ -206,6 +207,16 @@ export function useAgent(assistantId: string = "agent") {
                                         }
                                     }
 
+                                    // Capture Debate Data
+                                    if (nodeName === 'moderator' || (nodeName && nodeName.endsWith(':moderator'))) {
+                                        if (updatePayload && updatePayload.debate_conclusion) {
+                                            setAgentOutputs(prev => ({
+                                                ...prev,
+                                                debate: { conclusion: updatePayload.debate_conclusion }
+                                            }));
+                                        }
+                                    }
+
                                     if (nodeName === 'deciding' || nodeName === 'clarifying' || (nodeName && (nodeName.endsWith(':deciding') || nodeName.endsWith(':clarifying')))) {
                                         if (updatePayload && updatePayload.resolved_ticker) {
                                             setResolvedTicker(updatePayload.resolved_ticker);
@@ -276,6 +287,7 @@ export function useAgent(assistantId: string = "agent") {
                 auditor: 'idle',
                 approval: 'idle',
                 calculator: 'idle',
+                debate: 'idle',
             });
         }
 
@@ -370,7 +382,14 @@ export function useAgent(assistantId: string = "agent") {
                 setResolvedTicker(stateData.resolved_ticker);
                 if (stateData.node_statuses) setAgentStatuses(prev => ({ ...prev, ...stateData.node_statuses }));
                 if (stateData.financial_reports) setFinancialReports(stateData.financial_reports);
-                if (stateData.agent_outputs) setAgentOutputs(stateData.agent_outputs);
+                if (stateData.agent_outputs) {
+                    const outputs = { ...stateData.agent_outputs };
+                    // Wrap debate output if it's not already wrapped
+                    if (outputs.debate && !outputs.debate.conclusion) {
+                        outputs.debate = { conclusion: outputs.debate };
+                    }
+                    setAgentOutputs(outputs);
+                }
 
                 if (stateData.interrupts && stateData.interrupts.length > 0 && !before) {
                     stateData.interrupts.forEach((interrupt: any, index: number) => {

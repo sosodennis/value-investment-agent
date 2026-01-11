@@ -3,7 +3,7 @@ import { AgentInfo, DimensionScore } from '../types/agents';
 import { TrendingUp, BarChart3, FileText, Zap, MessageSquare, ListFilter, Activity, LayoutPanelTop, CheckCircle2, Clock } from 'lucide-react';
 import { Message } from '../hooks/useAgent';
 import { NewsResearchOutput as NewsOutputType } from '../types/news';
-import { FundamentalAnalysisOutput, NewsResearchOutput as NewsResearchOutputPanel, GenericAgentOutput } from './agent-outputs';
+import { FundamentalAnalysisOutput, NewsResearchOutput as NewsResearchOutputPanel, GenericAgentOutput, DebateOutput } from './agent-outputs';
 
 interface AgentDetailPanelProps {
     agent: AgentInfo | null;
@@ -268,6 +268,10 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                                         if (agent.id === 'auditor') return node.includes('audit');
                                         if (agent.id === 'approval') return node.includes('approval') || node.includes('audit');
                                         if (agent.id === 'calculator') return node.includes('calc') || node.includes('valuation');
+                                        if (agent.id === 'debate') {
+                                            const debateNodes = new Set(['debate_aggregator', 'bull', 'bear', 'moderator']);
+                                            return debateNodes.has(node) || node.includes('debate');
+                                        }
                                         return false;
                                     });
 
@@ -492,6 +496,11 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                     ) : agent.id === 'financial_news_research' ? (
                         <NewsResearchOutputPanel
                             output={agentOutput as NewsOutputType | null}
+                            resolvedTicker={resolvedTicker}
+                        />
+                    ) : agent.id === 'debate' ? (
+                        <DebateOutput
+                            output={agentOutput}
                             resolvedTicker={resolvedTicker}
                         />
                     ) : (

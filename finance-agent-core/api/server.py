@@ -14,7 +14,7 @@ from pydantic import BaseModel
 # Add the project root to sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langgraph.types import Command
 
 from src.infrastructure.database import init_db
@@ -86,27 +86,53 @@ class JobManager:
                 if event_type == "on_chat_model_stream" and node_name in HIDDEN_NODES:
                     continue
 
-                # Broadcast
-                await self._broadcast(thread_id, {"type": "event", "data": event})
+                try:
+                    # Broadcast
+                    await self._broadcast(thread_id, {"type": "event", "data": event})
 
-                # Persist AI messages when they finish
-                if event_type == "on_chat_model_end":
-                    # Only persist if it's not a hidden node or if we want to include tool calls in history
-                    # For now, let's persist the assistant response
-                    if node_name not in HIDDEN_NODES:
-                        ai_msg = event["data"]["output"]
-                        await history_service.save_message(thread_id, ai_msg)
+                    # Persist AI messages when they finish
+                    if event_type == "on_chat_model_end":
+                        # Only persist if it's not a hidden node or if we want to include tool calls in history
+                        # For now, let's persist the assistant response
+                        if node_name not in HIDDEN_NODES:
+                            output = event["data"]["output"]
+                            # Only persist if it's a valid LangChain message
+                            if isinstance(output, BaseMessage):
+                                try:
+                                    await history_service.save_message(
+                                        thread_id, output
+                                    )
+                                except Exception as e:
+                                    print(
+                                        f"❌ [JobManager] save_message failed for {node_name}: {e}"
+                                    )
+                                    # Don't re-raise here to avoid crashing the whole job for a history save failure
+                                    pass
+                            else:
+                                print(
+                                    f"ℹ️ [JobManager] Skipping persistence for non-message output from {node_name}: {type(output)}"
+                                )
+                                # Double check if it strangely had .content
+                                if hasattr(output, "content"):
+                                    print(
+                                        f"⚠️ [JobManager] WEIRD: Object {type(output)} has .content but is not BaseMessage!"
+                                    )
 
-                # Persist messages manually added via Command updates (e.g. financial_health, clarification)
-                elif event_type == "on_chain_end":
-                    output = event["data"].get("output")
-                    if isinstance(output, Command) and output.update:
-                        messages = output.update.get("messages")
-                        if messages:
-                            if not isinstance(messages, list):
-                                messages = [messages]
-                            for m in messages:
-                                await history_service.save_message(thread_id, m)
+                    # Persist messages manually added via Command updates (e.g. financial_health, clarification)
+                    elif event_type == "on_chain_end":
+                        output = event["data"].get("output")
+                        if isinstance(output, Command) and output.update:
+                            messages = output.update.get("messages")
+                            if messages:
+                                if not isinstance(messages, list):
+                                    messages = [messages]
+                                for m in messages:
+                                    await history_service.save_message(thread_id, m)
+                except Exception as e:
+                    print(
+                        f"❌ [JobManager] Error processing event {event_type} from {node_name}: {e}"
+                    )
+                    raise e
 
             # 2. Check for interrupts
             snapshot = await graph.aget_state(config)
@@ -151,7 +177,7 @@ class JobManager:
                     return {"update": obj.update, "goto": obj.goto, "graph": obj.graph}
                 # Handle Pydantic models
                 if hasattr(obj, "model_dump"):
-                    return obj.model_dump()
+                    return obj.model_dump(mode="json")
                 if hasattr(obj, "dict"):
                     return obj.dict()
                 # Handle datetime
@@ -164,11 +190,32 @@ class JobManager:
                 print(f"json_serializable fallback for {type(obj)}: {e}")
                 return str(obj)
 
-        msg = (
-            f"data: {json.dumps(payload, default=json_serializable)}\n\n"
-            if payload
-            else None
-        )
+        try:
+            msg = (
+                f"data: {json.dumps(payload, default=json_serializable)}\n\n"
+                if payload
+                else None
+            )
+        except TypeError:
+            print(f"❌ [JobManager] Serialization failed for payload: {payload}")
+            # Try to identify which part failed
+            try:
+                if isinstance(payload, dict) and "data" in payload:
+                    data = payload["data"]
+                    if isinstance(data, dict):
+                        for k, v in data.items():
+                            print(f"Key: {k}, Type: {type(v)}")
+                            try:
+                                json.dumps(v, default=json_serializable)
+                            except TypeError:
+                                print(f"FAILED on key '{k}' with value: {v}")
+            except Exception:
+                pass
+            # Don't re-raise serialization errors to avoid crashing the job
+            print(
+                "⚠️ [JobManager] Serialization failed, skipping broadcast for this event."
+            )
+            return
 
         # Send to all connected queues
         for q in self.queues[thread_id][:]:
@@ -256,6 +303,7 @@ async def get_thread_history(thread_id: str):
             "executor": snapshot.values.get("extraction_output"),
             "auditor": snapshot.values.get("audit_output"),
             "calculator": snapshot.values.get("calculation_output"),
+            "debate": snapshot.values.get("debate_conclusion"),
         }
 
         res = {
@@ -294,6 +342,7 @@ async def get_agent_statuses(thread_id: str):
             "executor": snapshot.values.get("extraction_output"),
             "auditor": snapshot.values.get("audit_output"),
             "calculator": snapshot.values.get("calculation_output"),
+            "debate": snapshot.values.get("debate_conclusion"),
         }
         return {
             "node_statuses": snapshot.values.get("node_statuses", {}),

@@ -31,6 +31,9 @@ class HistoryService:
         if "type" not in metadata:
             metadata["type"] = "text"
 
+        # Sanitize metadata to ensure JSON serializability (handle Pydantic models, etc.)
+        metadata = HistoryService._sanitize_obj(metadata)
+
         async with AsyncSessionLocal() as session:
             db_message = ChatMessage(
                 thread_id=thread_id,
@@ -42,6 +45,24 @@ class HistoryService:
             session.add(db_message)
             await session.commit()
             return db_message
+
+    @staticmethod
+    def _sanitize_obj(obj):
+        """Recursively convert objects to JSON-serializable formats."""
+        if isinstance(obj, dict):
+            return {k: HistoryService._sanitize_obj(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [HistoryService._sanitize_obj(v) for v in obj]
+        elif hasattr(obj, "model_dump"):
+            return obj.model_dump(mode="json")
+        elif hasattr(obj, "dict"):
+            return obj.dict()
+        elif hasattr(obj, "isoformat"):  # datetime, date
+            return obj.isoformat()
+        elif isinstance(obj, str | int | float | bool | type(None)):
+            return obj
+        else:
+            return str(obj)
 
     @staticmethod
     async def get_history(

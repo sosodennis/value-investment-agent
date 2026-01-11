@@ -80,6 +80,14 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
       status: agentStatuses.financial_news_research,
     },
     {
+      id: 'debate',
+      name: 'Debate Arena',
+      role: 'Adversarial Reasoning',
+      description: 'Bull vs Bear debate to scrutinize the investment thesis.',
+      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Arena',
+      status: agentStatuses.debate,
+    },
+    {
       id: 'executor',
       name: 'Data Executor',
       role: 'Market Data Retrieval',
