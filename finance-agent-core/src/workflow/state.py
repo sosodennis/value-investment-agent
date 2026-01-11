@@ -49,6 +49,24 @@ class AgentState(BaseModel):
     selected_symbol: str | None = None
     approved: bool | None = None
 
+    # Debate Agency fields
+    debate_history: Annotated[list[AnyMessage], add_messages] = Field(
+        default_factory=list, description="Adversarial conversation transcript"
+    )
+    bull_thesis: str | None = Field(
+        None, description="The current strongest argument for LONG"
+    )
+    bear_thesis: str | None = Field(
+        None, description="The current strongest argument for SHORT"
+    )
+    debate_conclusion: dict[str, Any] | None = Field(
+        None, description="Final structure output: DebateConclusion"
+    )
+    debate_current_round: int = 0
+    analyst_reports: dict[str, Any] | None = Field(
+        None, description="Aggregated ground truth (news + financials) for debate"
+    )
+
     # Dashboard tracking
     node_statuses: Annotated[dict[str, str], merge_dict] = Field(
         default_factory=dict,

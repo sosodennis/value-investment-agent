@@ -451,7 +451,7 @@ def aggregator_node(state: AgentState) -> Command:
         update={
             # mode='json' ensures HttpUrl, datetime, Enums are serialized as strings for msgpack/checkpoint
             "financial_news_output": final_output.model_dump(mode="json"),
-            "node_statuses": {"financial_news_research": "done", "executor": "running"},
+            "node_statuses": {"financial_news_research": "done", "debate": "running"},
             "messages": [
                 AIMessage(
                     content=f"### News Research: {ticker}\n\n**Overall Sentiment:** {overall_sentiment.value.upper()} ({final_output.sentiment_score})\n\n**Analysis Summaries:**\n{summary_text}\n\n**Themes:** {', '.join(all_themes) or 'N/A'}",

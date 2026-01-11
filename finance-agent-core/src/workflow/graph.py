@@ -7,6 +7,7 @@ from .nodes import (
     executor_node,
     get_financial_news_research_subgraph,
 )
+from .nodes.debate import get_debate_subgraph
 from .nodes.fundamental_analysis.graph import get_fundamental_analysis_subgraph
 from .state import AgentState
 
@@ -92,11 +93,13 @@ async def get_graph():
         # 1. Initialize Subgraphs
         fundamental_analysis_graph = await get_fundamental_analysis_subgraph()
         financial_news_research_graph = await get_financial_news_research_subgraph()
+        debate_graph = await get_debate_subgraph()
 
         # 2. Build Parent Graph
         builder = StateGraph(AgentState)
         builder.add_node("fundamental_analysis", fundamental_analysis_graph)
         builder.add_node("financial_news_research", financial_news_research_graph)
+        builder.add_node("debate", debate_graph)
         builder.add_node("executor", executor_node)
         builder.add_node("auditor", auditor_node)
         builder.add_node("approval", approval_node)
@@ -104,8 +107,10 @@ async def get_graph():
 
         builder.add_edge(START, "fundamental_analysis")
         builder.add_edge("fundamental_analysis", "financial_news_research")
-        builder.add_edge("financial_news_research", "executor")
+        builder.add_edge("financial_news_research", "debate")
+        builder.add_edge("debate", "executor")
         builder.add_edge("executor", "auditor")
+
         builder.add_edge("auditor", "approval")
         builder.add_edge("approval", "calculator")
         builder.add_edge("calculator", END)
