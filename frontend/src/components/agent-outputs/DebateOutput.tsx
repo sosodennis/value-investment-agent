@@ -28,24 +28,21 @@ export const DebateOutput: React.FC<DebateOutputProps> = ({ output, resolvedTick
                     color: 'text-emerald-400',
                     bg: 'bg-emerald-500/10',
                     border: 'border-emerald-500/20',
-                    icon: <TrendingUp size={24} className="text-emerald-500" />,
-                    shadow: 'shadow-emerald-500/20'
+                    icon: <TrendingUp size={20} className="text-emerald-500" />,
                 };
             case 'SHORT':
                 return {
                     color: 'text-rose-400',
                     bg: 'bg-rose-500/10',
                     border: 'border-rose-500/20',
-                    icon: <TrendingDown size={24} className="text-rose-500" />,
-                    shadow: 'shadow-rose-500/20'
+                    icon: <TrendingDown size={20} className="text-rose-500" />,
                 };
             default:
                 return {
                     color: 'text-slate-400',
                     bg: 'bg-slate-500/10',
                     border: 'border-slate-500/20',
-                    icon: <Minus size={24} className="text-slate-500" />,
-                    shadow: 'shadow-slate-500/20'
+                    icon: <Minus size={20} className="text-slate-500" />,
                 };
         }
     };
@@ -53,27 +50,27 @@ export const DebateOutput: React.FC<DebateOutputProps> = ({ output, resolvedTick
     const styles = getDirectionStyles();
 
     return (
-        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            {/* Verdict Header Card */}
-            <div className={`p-6 rounded-2xl border ${styles.border} ${styles.bg} backdrop-blur-md shadow-xl ${styles.shadow}`}>
-                <div className="flex items-center justify-between mb-4">
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-12">
+            {/* Verdict Header Card - Aligned with News Research "Market Consensus" */}
+            <div className={`rounded-2xl border p-6 backdrop-blur-md ${styles.bg} ${styles.border}`}>
+                {/* Header with Verdict Label */}
+                <div className="flex items-center justify-between mb-6">
                     <div className="flex items-center gap-3">
-                        <div className={`p-3 rounded-xl bg-slate-950/50 border ${styles.border} shadow-lg`}>
-                            {styles.icon}
-                        </div>
-                        <div>
-                            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Debate Verdict</div>
-                            <div className={`text-2xl font-black tracking-tight ${styles.color}`}>
-                                {direction}
-                            </div>
-                        </div>
+                        <Shield size={18} className="text-cyan-400" />
+                        <h3 className="text-sm font-bold text-white uppercase tracking-widest">Debate Verdict</h3>
                     </div>
-                    <div className="text-right">
-                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Confidence Score</div>
-                        <div className="text-2xl font-black text-white px-3 py-1 bg-slate-950/40 rounded-lg border border-slate-800">
-                            {(conclusion.confidence_score * 100).toFixed(0)}%
-                        </div>
+                    <div className={`px-4 py-1.5 rounded-full border text-xs font-bold uppercase tracking-widest bg-slate-950/40 ${styles.border} ${styles.color}`}>
+                        {direction}
                     </div>
+                </div>
+
+                {/* Signal Confidence Indicator */}
+                <div className="flex items-center gap-2 mb-2 text-[10px] font-bold uppercase tracking-widest">
+                    <span className="text-slate-500">Confidence Score:</span>
+                    <span className={`${styles.color} text-sm font-black`}>
+                        {(conclusion.confidence_score * 100).toFixed(0)}%
+                    </span>
+                    <span className="text-slate-600">(Based on {conclusion.debate_rounds} rounds)</span>
                 </div>
             </div>
 
@@ -145,7 +142,6 @@ export const DebateOutput: React.FC<DebateOutputProps> = ({ output, resolvedTick
 
             {/* Debate Metadata */}
             <div className="flex items-center justify-between px-2 text-[9px] font-bold text-slate-700 uppercase tracking-[0.2em]">
-                <div>Rounds Concluded: {conclusion.debate_rounds}</div>
                 <div>Ticker: {resolvedTicker || 'N/A'}</div>
             </div>
         </div>
