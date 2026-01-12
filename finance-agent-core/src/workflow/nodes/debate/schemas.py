@@ -16,19 +16,42 @@ class Direction(str, Enum):
     NEUTRAL = "NEUTRAL"
 
 
-class RiskFactor(BaseModel):
-    description: str = Field(..., description="Specific description of the risk")
-    severity: SeverityLevel = Field(..., description="Potential impact on the position")
-    probability: float = Field(..., description="Estimated probability (0.0 to 1.0)")
+class PriceImplication(str, Enum):
+    SURGE = "SURGE"  # > 20%
+    MODERATE_UP = "MODERATE_UP"  # 5-20%
+    FLAT = "FLAT"  # -5% to +5%
+    MODERATE_DOWN = "MODERATE_DOWN"  # -5% to -20%
+    CRASH = "CRASH"  # < -20%
+
+
+class Scenario(BaseModel):
+    probability: float = Field(..., ge=0.0, le=1.0, description="0.0 to 1.0")
+    outcome_description: str = Field(..., description="What happens in this scenario?")
+    price_implication: PriceImplication = Field(
+        ..., description="Implied price movement"
+    )
 
 
 class DebateConclusion(BaseModel):
     """
-    Final structured output from the Debate Sub-Agent.
-    Enforces 'Signal Collapse' for clear decision making.
+    V4.0 Bayesian Conclusion.
+    Enforces probabilistic thinking over binary decisions.
     """
 
-    # Core Decision Layer (Singular - for Signal Collapse)
+    # Bayesian Core
+    scenario_analysis: dict[str, Scenario] = Field(
+        ..., description="Keys: bull_case, bear_case, base_case"
+    )
+
+    # Decision Layer
+    final_verdict: Direction = Field(
+        ..., description="The recommended action direction"
+    )
+    kelly_confidence: float = Field(
+        ..., ge=0.0, le=1.0, description="Adjusted confidence based on EV analysis"
+    )
+
+    # Narrative Context
     winning_thesis: str = Field(
         ..., description="The single, synthesized narrative explaining the conviction."
     )
@@ -39,13 +62,7 @@ class DebateConclusion(BaseModel):
         ..., description="The single most dangerous failure-mode/stop-loss criteria."
     )
 
-    # Signal metrics
-    confidence_score: float = Field(
-        ..., ge=0.0, le=1.0, description="0.0 to 1.0 (Connects text to math)"
-    )
-    direction: Direction = Field(..., description="The recommended action direction")
-
-    # Secondary Context Layer (List - for Human Audit)
+    # Secondary Context Layer
     supporting_factors: list[str] = Field(
         default_factory=list, description="Secondary arguments that support the thesis."
     )

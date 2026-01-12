@@ -153,7 +153,7 @@ class JobManager:
                     )
 
         except Exception as e:
-            print(f"❌ [JobManager] Error in {thread_id}: {str(e)}")
+            print(f"❌ [JobManager] Error in {thread_id}: {str(e)}", flush=True)
             await self._broadcast(thread_id, {"type": "error", "data": str(e)})
         finally:
             print(f"🏁 [JobManager] Job for {thread_id} finished.")
@@ -364,7 +364,6 @@ async def attach_stream(thread_id: str):
             print(
                 f"⚠️ [attach_stream] Request for finished job {thread_id}. Closing immediately."
             )
-            yield None
             return
 
         q = job_manager.get_stream(thread_id)

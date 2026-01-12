@@ -19,7 +19,8 @@ export const DebateOutput: React.FC<DebateOutputProps> = ({ output, resolvedTick
     }
 
     const { conclusion } = output;
-    const direction = conclusion.direction;
+    const direction = conclusion.final_verdict;
+    const scenarios = conclusion.scenario_analysis;
 
     const getDirectionStyles = () => {
         switch (direction) {
@@ -51,7 +52,7 @@ export const DebateOutput: React.FC<DebateOutputProps> = ({ output, resolvedTick
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-12">
-            {/* Verdict Header Card - Aligned with News Research "Market Consensus" */}
+            {/* Verdict Header Card - Bayesian V4.0 */}
             <div className={`rounded-2xl border p-6 backdrop-blur-md ${styles.bg} ${styles.border}`}>
                 {/* Header with Verdict Label */}
                 <div className="flex items-center justify-between mb-6">
@@ -64,11 +65,66 @@ export const DebateOutput: React.FC<DebateOutputProps> = ({ output, resolvedTick
                     </div>
                 </div>
 
-                {/* Signal Confidence Indicator */}
-                <div className="flex items-center gap-2 mb-2 text-[10px] font-bold uppercase tracking-widest">
-                    <span className="text-slate-500">Confidence Score:</span>
+                {/* Scenario Analysis - NEW in V4.0 */}
+                <div className="space-y-4 mb-6">
+                    <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                        <Info size={12} /> Scenario Probability Analysis
+                    </h4>
+                    <div className="grid grid-cols-1 gap-3">
+                        {/* Bull Case */}
+                        <div className="space-y-1.5">
+                            <div className="flex justify-between text-[10px] uppercase font-bold tracking-tight">
+                                <span className="text-emerald-400">Bull Case (Upside)</span>
+                                <span className="text-emerald-500">{(scenarios.bull_case.probability * 100).toFixed(0)}%</span>
+                            </div>
+                            <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                                <div
+                                    className="h-full bg-emerald-500 transition-all duration-1000"
+                                    style={{ width: `${scenarios.bull_case.probability * 100}%` }}
+                                />
+                            </div>
+                            <p className="text-[9px] text-slate-500 leading-tight italic">{scenarios.bull_case.outcome_description}</p>
+                        </div>
+
+                        {/* Base Case */}
+                        <div className="space-y-1.5">
+                            <div className="flex justify-between text-[10px] uppercase font-bold tracking-tight">
+                                <span className="text-slate-400">Base Case (Neutral)</span>
+                                <span className="text-slate-400">{(scenarios.base_case.probability * 100).toFixed(0)}%</span>
+                            </div>
+                            <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                                <div
+                                    className="h-full bg-slate-500 transition-all duration-1000"
+                                    style={{ width: `${scenarios.base_case.probability * 100}%` }}
+                                />
+                            </div>
+                            <p className="text-[9px] text-slate-500 leading-tight italic">{scenarios.base_case.outcome_description}</p>
+                        </div>
+
+                        {/* Bear Case */}
+                        <div className="space-y-1.5">
+                            <div className="flex justify-between text-[10px] uppercase font-bold tracking-tight">
+                                <span className="text-rose-400">Bear Case (Downside)</span>
+                                <span className="text-rose-500">{(scenarios.bear_case.probability * 100).toFixed(0)}%</span>
+                            </div>
+                            <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                                <div
+                                    className="h-full bg-rose-500 transition-all duration-1000"
+                                    style={{ width: `${scenarios.bear_case.probability * 100}%` }}
+                                />
+                            </div>
+                            <p className="text-[9px] text-slate-500 leading-tight italic">{scenarios.bear_case.outcome_description}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="h-px bg-white/5 mb-4" />
+
+                {/* Bayesian Confidence */}
+                <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest">
+                    <span className="text-slate-500">Bayesian Confidence:</span>
                     <span className={`${styles.color} text-sm font-black`}>
-                        {(conclusion.confidence_score * 100).toFixed(0)}%
+                        {(conclusion.kelly_confidence * 100).toFixed(0)}%
                     </span>
                     <span className="text-slate-600">(Based on {conclusion.debate_rounds} rounds)</span>
                 </div>

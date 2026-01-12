@@ -16,6 +16,11 @@ def merge_dict(a: dict, b: dict) -> dict:
     return {**a, **b}
 
 
+def last_value(a: str | None, b: str | None) -> str | None:
+    """Reducer that keeps the last non-None value. Used for parallel node updates."""
+    return b if b is not None else a
+
+
 class AgentState(BaseModel):
     """Agent state defined as a Pydantic model."""
 
@@ -53,10 +58,10 @@ class AgentState(BaseModel):
     debate_history: Annotated[list[AnyMessage], add_messages] = Field(
         default_factory=list, description="Adversarial conversation transcript"
     )
-    bull_thesis: str | None = Field(
+    bull_thesis: Annotated[str | None, last_value] = Field(
         None, description="The current strongest argument for LONG"
     )
-    bear_thesis: str | None = Field(
+    bear_thesis: Annotated[str | None, last_value] = Field(
         None, description="The current strongest argument for SHORT"
     )
     debate_conclusion: dict[str, Any] | None = Field(
@@ -72,4 +77,4 @@ class AgentState(BaseModel):
         default_factory=dict,
         description="Status of each node: idle, running, done, error",
     )
-    current_node: str | None = None
+    current_node: Annotated[str | None, last_value] = None
