@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import logging
+import time
 from urllib.parse import urlparse
 
 import trafilatura
@@ -161,6 +162,7 @@ async def news_search_multi_timeframe(
                     )
 
                 with DDGS() as ddgs:
+                    search_start = time.perf_counter()
                     results = ddgs.news(
                         query,
                         region="wt-wt",
@@ -169,6 +171,13 @@ async def news_search_multi_timeframe(
                         max_results=limit,
                     )
                     results_list = list(results)
+                    search_end = time.perf_counter()
+
+                    print(
+                        f"--- [Search Latency] {search_end - search_start:.2f}s for query: {query[:50]}... ({time_param}) ---",
+                        flush=True,
+                    )
+
                     for r in results_list:
                         r["_time_frame"] = time_param
                         r["_search_tag"] = tag
@@ -387,7 +396,8 @@ def fetch_clean_text(url: str, max_chars: int = 6000) -> str | None:
             return None
 
         print(
-            f"--- [Tool: fetch_clean_text] Successfully extracted {len(text)} chars from {url} ---"
+            f"--- [Tool: fetch_clean_text] Successfully extracted {len(text)} chars from {url} ---",
+            flush=True,
         )
         return text[:max_chars]
     except Exception as e:
@@ -412,34 +422,61 @@ async def fetch_clean_text_async(url: str, max_chars: int = 6000) -> str | None:
 
     try:
         # 1. Async download (true non-blocking)
+        dl_start = time.perf_counter()
         async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
-            print(f"--- [Fetch Async] 🚀 Requesting: {url} ---")
+            print(f"--- [Fetch Async] 🚀 Requesting: {url} ---", flush=True)
             resp = await client.get(url, headers=headers)
 
             if resp.status_code != 200:
+                print(
+                    f"--- [Fetch Latency] ❌ FAILED: Status {resp.status_code} for {url} ---",
+                    flush=True,
+                )
                 logger.warning(f"Failed to fetch {url}: Status {resp.status_code}")
                 return None
 
             html_content = resp.text
+        dl_end = time.perf_counter()
 
         # 2. Sync parse (in-memory, CPU bound but typically < 50ms)
+        parse_start = time.perf_counter()
         text = trafilatura.extract(
             html_content,
             include_comments=False,
             include_tables=False,
             no_fallback=False,
         )
+        parse_end = time.perf_counter()
 
         if not text:
+            print(
+                f"--- [Fetch Latency] ❌ FAILED: Extraction returned empty for {url} ---"
+            )
             logger.warning(f"Failed to extract text from {url}")
             return None
 
-        print(f"--- [Fetch Async] ✅ Extracted {len(text)} chars ---")
+        total_duration = parse_end - dl_start
+        dl_duration = dl_end - dl_start
+        parse_duration = parse_end - parse_start
+
+        print(
+            f"--- [Fetch Latency] {total_duration:.2f}s for {url} (Download: {dl_duration:.2f}s, Parse: {parse_duration:.2f}s) ---",
+            flush=True,
+        )
+        print(f"--- [Fetch Async] ✅ Extracted {len(text)} chars ---", flush=True)
         return text[:max_chars]
 
     except httpx.RequestError as e:
+        print(
+            f"--- [Fetch Latency] ❌ FAILED: Network error for {url}: {e} ---",
+            flush=True,
+        )
         logger.error(f"Network error fetching {url}: {e}")
         return None
     except Exception as e:
+        print(
+            f"--- [Fetch Latency] ❌ FAILED: Unexpected error for {url}: {e} ---",
+            flush=True,
+        )
         logger.error(f"Parsing error for {url}: {e}")
         return None
