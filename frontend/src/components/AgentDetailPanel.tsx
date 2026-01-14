@@ -141,8 +141,7 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
 
             {/* Main Content Scroll Area */}
             <div className="flex-1 overflow-y-auto custom-scrollbar">
-                {activeTab === 'Workspace' && (
-                    <div className="p-8 space-y-8 animate-in slide-in-from-bottom-2 duration-300">
+                <div className={`${activeTab === 'Workspace' ? 'block animate-in slide-in-from-bottom-2 duration-300' : 'hidden'} p-8 space-y-8`}>
                         {/* Current Active Step */}
                         <section className="bg-slate-900/20 border border-slate-800/50 rounded-2xl p-6 backdrop-blur-sm">
                             <div className="flex items-center justify-between mb-6">
@@ -316,9 +315,8 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                             </div>
                         </section>
                     </div>
-                )}
-                {activeTab === 'Score' && (
-                    <div className="p-8 space-y-8 animate-in slide-in-from-bottom-2 duration-300">
+
+                <div className={`${activeTab === 'Score' ? 'block animate-in slide-in-from-bottom-2 duration-300' : 'hidden'} p-8 space-y-8`}>
                         {/* Dimension Scores Card */}
                         <section className="bg-slate-900/20 border border-slate-800/50 rounded-2xl p-8 backdrop-blur-sm">
                             <div className="flex items-center gap-3 mb-8">
@@ -381,10 +379,8 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                             </section>
                         </div>
                     </div>
-                )}
 
-                {activeTab === 'History' && (
-                    <div className="flex flex-col h-full animate-in slide-in-from-bottom-2 duration-300">
+                <div className={`${activeTab === 'History' ? 'flex animate-in slide-in-from-bottom-2 duration-300' : 'hidden'} flex-col h-full`}>
                         {agentMessages.length === 0 ? (
                             <div className="flex-1 flex flex-col items-center justify-center p-12 text-center">
                                 <MessageSquare size={48} className="text-slate-900 mb-4" />
@@ -491,7 +487,6 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                             </div>
                         )}
                     </div>
-                )}
 
                 {/* Output tab - kept mounted for performance, hidden via CSS */}
                 <div className={`p-8 h-full ${activeTab === 'Output' ? 'block animate-in slide-in-from-bottom-2 duration-300' : 'hidden'}`}>
@@ -518,8 +513,7 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                     )}
                 </div>
 
-                {activeTab === 'Logs' && (
-                    <div className="p-8 font-mono text-[10px] text-slate-500 h-full">
+                <div className={`${activeTab === 'Logs' ? 'block' : 'hidden'} p-8 font-mono text-[10px] text-slate-500 h-full`}>
                         <div className="flex items-center gap-2 mb-4 text-slate-400">
                             <Activity size={12} />
                             <span className="font-bold uppercase tracking-widest">System Execution Trace: {agent.name}</span>
@@ -536,7 +530,6 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                             {agentOutput && <div>{">"} Scoped data attached (size: {JSON.stringify(agentOutput).length} bytes)</div>}
                         </div>
                     </div>
-                )}
             </div>
         </div>
     );
