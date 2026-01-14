@@ -1,7 +1,8 @@
-from typing import TypeVar
+from typing import TypeVar, Optional
 
 from .financial_models import (
     BaseFinancialModel,
+    ComputedProvenance,
     FinancialReport,
     FinancialServicesExtension,
     IndustrialExtension,
@@ -244,20 +245,299 @@ class FinancialReportFactory:
                 sic = int(sic_code)
                 if 6000 <= sic <= 6999:  # Banking / Finance
                     industry_type = "Financial Services"
-                    extension = FinancialServicesExtension()  # Empty for now
+                    extension = FinancialReportFactory._create_financial_services_extension(extractor)
                 elif 2000 <= sic <= 3999:  # Manufacturing / Industrial
                     industry_type = "Industrial"
-                    extension = IndustrialExtension()  # Empty for now
+                    extension = FinancialReportFactory._create_industrial_extension(extractor)
                 elif sic == 6798:  # REITs
                     industry_type = "Real Estate"
-                    extension = RealEstateExtension()  # Empty for now
+                    extension = FinancialReportFactory._create_real_estate_extension(extractor, base_model)
                 else:
                     industry_type = "Industrial"  # Default fallback
-                    extension = IndustrialExtension()
+                    extension = FinancialReportFactory._create_industrial_extension(extractor)
             except ValueError:
                 pass
+
+        # Default if something failed or no SIC code found, though logic above covers most
+        if extension is None and industry_type == "General":
+             # Fallback to Industrial if we can't determine, or keep as None?
+             # Original code defaulted to IndustrialExtension if unknown.
+             industry_type = "Industrial"
+             extension = FinancialReportFactory._create_industrial_extension(extractor)
+
 
         # 4. Return Report
         return FinancialReport(
             base=base_model, extension=extension, industry_type=industry_type
+        )
+
+    @staticmethod
+    def _sum_fields(
+        name: str, fields: list[TraceableField[float]]
+    ) -> TraceableField[float]:
+        """
+        Helper to sum multiple TraceableFields and create a ComputedProvenance.
+        Treats None values as 0.0 for calculation, but if all are None, returns None.
+        """
+        total = 0.0
+        all_none = True
+        inputs_map = {}
+
+        field_names = []
+
+        for f in fields:
+            inputs_map[f.name] = f
+            field_names.append(f.name)
+            if f.value is not None:
+                total += f.value
+                all_none = False
+
+        if all_none:
+             return TraceableField(
+                name=name,
+                value=None,
+                provenance=ManualProvenance(
+                    description=f"All components missing for calculation: {', '.join(field_names)}"
+                ),
+            )
+
+        return TraceableField(
+            name=name,
+            value=total,
+            provenance=ComputedProvenance(
+                op_code="SUM",
+                expression=" + ".join(field_names),
+                inputs=inputs_map
+            )
+        )
+
+    @staticmethod
+    def _create_industrial_extension(extractor: SECReportExtractor) -> IndustrialExtension:
+        def C(regex: str) -> SearchConfig:
+            return SearchType.CONSOLIDATED(regex)
+
+        # Inventory: Net -> Gross
+        tf_inventory = BaseFinancialModelFactory._extract_field(
+            extractor,
+            [C("us-gaap:InventoryNet"), C("us-gaap:InventoryGross")],
+            "Inventory",
+            target_type=float
+        )
+
+        # Accounts Receivable: Net Current
+        tf_ar = BaseFinancialModelFactory._extract_field(
+            extractor,
+            [C("us-gaap:AccountsReceivableNetCurrent")],
+            "Accounts Receivable",
+            target_type=float
+        )
+
+        # COGS: GoodsAndServices -> CostOfRevenue
+        tf_cogs = BaseFinancialModelFactory._extract_field(
+            extractor,
+            [C("us-gaap:CostOfGoodsAndServicesSold"), C("us-gaap:CostOfRevenue")],
+            "Cost of Goods Sold (COGS)",
+            target_type=float
+        )
+
+        # R&D
+        tf_rd = BaseFinancialModelFactory._extract_field(
+            extractor,
+            [C("us-gaap:ResearchAndDevelopmentExpense")],
+            "R&D Expense",
+            target_type=float
+        )
+
+        # SG&A: Aggregate -> Sum(Selling + G&A)
+        tf_sga_aggregate = BaseFinancialModelFactory._extract_field(
+            extractor,
+            [C("us-gaap:SellingGeneralAndAdministrativeExpense")],
+            "SG&A Expense",
+            target_type=float
+        )
+
+        if tf_sga_aggregate.value is not None:
+            tf_sga = tf_sga_aggregate
+        else:
+            # Fallback: Calculate Selling + G&A
+            tf_selling = BaseFinancialModelFactory._extract_field(
+                extractor,
+                [C("us-gaap:SellingExpense"), C("us-gaap:SellingAndMarketingExpense")],
+                "Selling Expense",
+                target_type=float
+            )
+            tf_ga = BaseFinancialModelFactory._extract_field(
+                extractor,
+                [C("us-gaap:GeneralAndAdministrativeExpense")],
+                "G&A Expense",
+                target_type=float
+            )
+            tf_sga = FinancialReportFactory._sum_fields("SG&A Expense (Calculated)", [tf_selling, tf_ga])
+
+
+        # CapEx: PaymentsToAcquirePropertyPlantAndEquipment
+        # TODO: Add filtering by Statement Type to avoid "IncurredButNotYetPaid" issues.
+        tf_capex = BaseFinancialModelFactory._extract_field(
+            extractor,
+            [C("us-gaap:PaymentsToAcquirePropertyPlantAndEquipment")],
+            "Capital Expenditures (CapEx)",
+            target_type=float
+        )
+
+        return IndustrialExtension(
+            inventory=tf_inventory,
+            accounts_receivable=tf_ar,
+            cogs=tf_cogs,
+            rd_expense=tf_rd,
+            sga_expense=tf_sga,
+            capex=tf_capex
+        )
+
+    @staticmethod
+    def _create_financial_services_extension(extractor: SECReportExtractor) -> FinancialServicesExtension:
+        def C(regex: str) -> SearchConfig:
+            return SearchType.CONSOLIDATED(regex)
+
+        # Loans & Leases
+        tf_loans = BaseFinancialModelFactory._extract_field(
+            extractor,
+            [C("us-gaap:LoansAndLeasesReceivableNetReportedAmount")],
+            "Loans and Leases",
+            target_type=float
+        )
+
+        # Deposits
+        tf_deposits = BaseFinancialModelFactory._extract_field(
+            extractor,
+            [C("us-gaap:Deposits")],
+            "Deposits",
+            target_type=float
+        )
+
+        # Allowance for Credit Losses: CECL -> Pre-CECL
+        tf_allowance = BaseFinancialModelFactory._extract_field(
+            extractor,
+            [
+                C("us-gaap:FinancingReceivableAllowanceForCreditLosses"), # CECL
+                C("us-gaap:AllowanceForLoanAndLeaseLosses") # Pre-CECL
+            ],
+            "Allowance for Credit Losses",
+            target_type=float
+        )
+
+        # Interest Income
+        tf_int_income = BaseFinancialModelFactory._extract_field(
+            extractor,
+            [C("us-gaap:InterestIncome")],
+            "Interest Income",
+            target_type=float
+        )
+
+        # Interest Expense
+        tf_int_expense = BaseFinancialModelFactory._extract_field(
+            extractor,
+            [C("us-gaap:InterestExpense")],
+            "Interest Expense",
+            target_type=float
+        )
+
+        # Provision for Loan Losses
+        tf_provision = BaseFinancialModelFactory._extract_field(
+            extractor,
+            [
+                C("us-gaap:ProvisionForCreditLosses"),
+                C("us-gaap:ProvisionForLoanLeaseAndOtherLosses")
+            ],
+            "Provision for Loan Losses",
+            target_type=float
+        )
+
+        return FinancialServicesExtension(
+            loans_and_leases=tf_loans,
+            deposits=tf_deposits,
+            allowance_for_credit_losses=tf_allowance,
+            interest_income=tf_int_income,
+            interest_expense=tf_int_expense,
+            provision_for_loan_losses=tf_provision
+        )
+
+    @staticmethod
+    def _create_real_estate_extension(extractor: SECReportExtractor, base_model: BaseFinancialModel) -> RealEstateExtension:
+        def C(regex: str) -> SearchConfig:
+            return SearchType.CONSOLIDATED(regex)
+
+        # Real Estate Assets
+        tf_re_assets = BaseFinancialModelFactory._extract_field(
+            extractor,
+            [C("us-gaap:RealEstateInvestmentPropertyNet")],
+            "Real Estate Assets (at cost)",
+            target_type=float
+        )
+
+        # Accumulated Depreciation
+        tf_acc_dep = BaseFinancialModelFactory._extract_field(
+            extractor,
+            [C("us-gaap:RealEstateInvestmentPropertyAccumulatedDepreciation")],
+            "Accumulated Depreciation",
+            target_type=float
+        )
+
+        # For FFO Calculation:
+        # 1. Depreciation & Amortization
+        tf_dep = BaseFinancialModelFactory._extract_field(
+            extractor,
+            [
+                C("us-gaap:DepreciationAndAmortizationInRealEstate"),
+                C("us-gaap:DepreciationAndAmortization")
+            ],
+            "Depreciation & Amortization",
+            target_type=float
+        )
+
+        # 2. Gain on Sale
+        tf_gain = BaseFinancialModelFactory._extract_field(
+            extractor,
+            [
+                C("us-gaap:GainLossOnSaleOfRealEstateInvestmentProperty"),
+                C("us-gaap:GainLossOnSaleOfProperties")
+            ],
+            "Gain on Sale of Properties",
+            target_type=float
+        )
+
+        # 3. Net Income (From Base Model)
+        tf_net_income = base_model.net_income
+
+        # Calculate FFO: Net Income + Depreciation - GainOnSale
+        # We need to handle None values carefully.
+
+        ni_val = tf_net_income.value if tf_net_income.value is not None else 0.0
+        dep_val = tf_dep.value if tf_dep.value is not None else 0.0
+        gain_val = tf_gain.value if tf_gain.value is not None else 0.0
+
+        ffo_val = ni_val + dep_val - gain_val
+
+        # If all key components are missing (e.g. Net Income is None), strictly speaking FFO is invalid,
+        # but usually Net Income is present. If Net Income is None, the base model extraction failed significantly.
+        # We'll calculate it if at least Net Income is present or we have some data.
+
+        tf_ffo = TraceableField(
+            name="FFO (Funds From Operations)",
+            value=ffo_val,
+            provenance=ComputedProvenance(
+                op_code="FFO_CALC",
+                expression="NetIncome + Depreciation - GainOnSale",
+                inputs={
+                    "Net Income": tf_net_income,
+                    "Depreciation": tf_dep,
+                    "Gain on Sale": tf_gain
+                }
+            )
+        )
+
+        return RealEstateExtension(
+            real_estate_assets=tf_re_assets,
+            accumulated_depreciation=tf_acc_dep,
+            depreciation_and_amortization=tf_dep,
+            ffo=tf_ffo
         )
