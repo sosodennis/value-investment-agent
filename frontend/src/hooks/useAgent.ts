@@ -181,8 +181,9 @@ export function useAgent(assistantId: string = "agent") {
 
                                     // Capture Financial Data
                                     if (nodeName === 'financial_health' || (nodeName && nodeName.endsWith(':financial_health'))) {
-                                        if (updatePayload && updatePayload.financial_reports) {
-                                            setFinancialReports(updatePayload.financial_reports);
+                                        const reports = updatePayload.fundamental?.financial_reports || updatePayload.financial_reports;
+                                        if (reports) {
+                                            setFinancialReports(reports);
                                             setMessages(prev => [
                                                 ...prev,
                                                 {
@@ -190,7 +191,7 @@ export function useAgent(assistantId: string = "agent") {
                                                     role: 'assistant',
                                                     content: '',
                                                     type: 'financial_report',
-                                                    data: updatePayload.financial_reports,
+                                                    data: reports,
                                                     agentId: agentId || 'fundamental_analysis'
                                                 }
                                             ]);
@@ -199,27 +200,30 @@ export function useAgent(assistantId: string = "agent") {
 
                                     // Capture News Research Data
                                     if (nodeName === 'aggregator_node' || (nodeName && nodeName.endsWith(':aggregator_node'))) {
-                                        if (updatePayload && updatePayload.financial_news_output) {
+                                        const newsOutput = updatePayload.financial_news?.output || updatePayload.financial_news_output;
+                                        if (newsOutput) {
                                             setAgentOutputs(prev => ({
                                                 ...prev,
-                                                financial_news_research: updatePayload.financial_news_output
+                                                financial_news_research: newsOutput
                                             }));
                                         }
                                     }
 
                                     // Capture Debate Data
                                     if (nodeName === 'moderator' || (nodeName && nodeName.endsWith(':moderator'))) {
-                                        if (updatePayload && updatePayload.debate_conclusion) {
+                                        const debateOutput = updatePayload.debate?.conclusion || updatePayload.debate_conclusion;
+                                        if (debateOutput) {
                                             setAgentOutputs(prev => ({
                                                 ...prev,
-                                                debate: { conclusion: updatePayload.debate_conclusion }
+                                                debate: debateOutput.conclusion ? debateOutput : { conclusion: debateOutput }
                                             }));
                                         }
                                     }
 
                                     if (nodeName === 'deciding' || nodeName === 'clarifying' || (nodeName && (nodeName.endsWith(':deciding') || nodeName.endsWith(':clarifying')))) {
-                                        if (updatePayload && updatePayload.resolved_ticker) {
-                                            setResolvedTicker(updatePayload.resolved_ticker);
+                                        const ticker = updatePayload.fundamental?.resolved_ticker || updatePayload.resolved_ticker;
+                                        if (ticker) {
+                                            setResolvedTicker(ticker);
                                         }
                                     }
 
@@ -379,17 +383,45 @@ export function useAgent(assistantId: string = "agent") {
             const stateResponse = await fetch(`${API_URL}/thread/${id}`);
             if (stateResponse.ok) {
                 const stateData = await stateResponse.json();
-                setResolvedTicker(stateData.resolved_ticker);
-                if (stateData.node_statuses) setAgentStatuses(prev => ({ ...prev, ...stateData.node_statuses }));
-                if (stateData.financial_reports) setFinancialReports(stateData.financial_reports);
-                if (stateData.agent_outputs) {
-                    const outputs = { ...stateData.agent_outputs };
-                    // Wrap debate output if it's not already wrapped
-                    if (outputs.debate && !outputs.debate.conclusion) {
-                        outputs.debate = { conclusion: outputs.debate };
-                    }
-                    setAgentOutputs(outputs);
+
+                // Map nested state from backend V2
+                const resolvedTicker = stateData.fundamental?.resolved_ticker || stateData.resolved_ticker;
+                const nodeStatuses = stateData.node_statuses || {};
+                const reports = stateData.fundamental?.financial_reports || stateData.financial_reports || [];
+
+                setResolvedTicker(resolvedTicker);
+                if (nodeStatuses) setAgentStatuses(prev => ({ ...prev, ...nodeStatuses }));
+                if (reports) setFinancialReports(reports);
+
+                // Reconstruct agent outputs from nested contexts
+                const outputs: Record<string, any> = {};
+
+                if (stateData.fundamental?.analysis_output) {
+                    outputs.fundamental_analysis = {
+                        analysis_output: stateData.fundamental.analysis_output,
+                        financial_reports: reports
+                    };
                 }
+
+                if (stateData.financial_news?.output) {
+                    outputs.financial_news_research = stateData.financial_news.output;
+                }
+
+                if (stateData.debate?.conclusion) {
+                    outputs.debate = {
+                        conclusion: stateData.debate.conclusion,
+                        history: stateData.debate.history,
+                        bull_thesis: stateData.debate.bull_thesis,
+                        bear_thesis: stateData.debate.bear_thesis
+                    };
+                } else if (stateData.agent_outputs?.debate) {
+                    // Fallback for older sessions or legacy format
+                    outputs.debate = stateData.agent_outputs.debate.conclusion
+                        ? stateData.agent_outputs.debate
+                        : { conclusion: stateData.agent_outputs.debate };
+                }
+
+                setAgentOutputs(outputs);
 
                 if (stateData.interrupts && stateData.interrupts.length > 0 && !before) {
                     stateData.interrupts.forEach((interrupt: any, index: number) => {

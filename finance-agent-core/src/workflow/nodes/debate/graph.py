@@ -35,7 +35,7 @@ async def get_debate_subgraph():
         Round 1: Fan out to both Bull and Bear in parallel using Send API.
         Round 2+: Sequential flow (Bull first).
         """
-        if state.debate_current_round == 0:
+        if state.debate.current_round == 0:
             # Round 1: Parallel execution - both see only analyst_reports, not each other
             return [
                 Send("bull", state),
@@ -55,7 +55,7 @@ async def get_debate_subgraph():
     # In Round 2+, go to Bear first (sequential)
     def route_from_bull(state: AgentState):
         """After Bull speaks, route based on round."""
-        if state.debate_current_round == 0:
+        if state.debate.current_round == 0:
             # Round 1: Parallel mode - Bull's output goes to moderator directly
             # (Bear also goes there independently)
             return "moderator"
@@ -74,7 +74,7 @@ async def get_debate_subgraph():
         Decision node to either continue the debate or finish.
         After R1 moderator critique, goes back to aggregator to route properly.
         """
-        if state.debate_current_round >= 3:
+        if state.debate.current_round >= 3:
             return END
 
         # Continue: Go back to aggregator for proper routing

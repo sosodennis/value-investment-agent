@@ -56,45 +56,63 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
         return Math.min(Math.max(Math.round(score), 0), 100);
     };
 
+    const getFieldValue = (field: any) => {
+        if (!field) return 0;
+        return typeof field.value === 'number' ? field.value : parseFloat(String(field.value)) || 0;
+    };
+
+    const latestBase = latestReport?.base;
+    const previousBase = agentReports.length > 1 ? agentReports[1].base : null;
+
+    const roe = latestBase ? (getFieldValue(latestBase.net_income) / (getFieldValue(latestBase.total_equity) || 1)) : 0;
+    const debtToEquity = latestBase ? (getFieldValue(latestBase.total_liabilities) / (getFieldValue(latestBase.total_equity) || 1)) : 0;
+
+    // Calculate growth if we have at least two years
+    const currentRev = latestBase ? getFieldValue(latestBase.total_revenue) : 0;
+    const prevRev = previousBase ? getFieldValue(previousBase.total_revenue) : 0;
+    const revenueGrowth = (currentRev && prevRev) ? (currentRev - prevRev) / prevRev : 0.05; // Fallback to 5% if no prev year
+
+    const peRatio = latestBase ? getFieldValue(latestBase.pe_ratio) : 20; // Default to 20 if missing
+
     // Dimension Scores - Scoped logic
     const dimensionScores: DimensionScore[] = [
         {
             name: 'Fundamental',
-            score: latestReport ? getScore(latestReport.roe || 0.15, 0, 0.3) :
+            score: latestBase ? getScore(roe, 0, 0.3) :
                 (agent.id === 'fundamental_analysis' ? 85 : 0),
             color: 'bg-emerald-500'
         },
         {
             name: 'Efficiency',
-            score: latestReport ? getScore(latestReport.asset_turnover || 1.0, 0, 2) :
+            score: latestBase ? getScore(roe > 0.15 ? 0.8 : 0.5, 0, 1) : // Higher score if ROE is healthy
                 (agent.id === 'fundamental_analysis' ? 65 : 0),
             color: 'bg-cyan-500'
         },
         {
             name: 'Risk',
-            score: latestReport ? 100 - getScore(latestReport.debt_to_equity || 0.5, 0, 2) :
+            score: latestBase ? 100 - getScore(debtToEquity, 0, 2) :
                 (agent.id === 'auditor' ? 90 : (agent.id === 'fundamental_analysis' ? 72 : 0)),
             color: 'bg-emerald-500'
         },
         {
             name: 'Growth',
-            score: latestReport ? getScore(latestReport.revenue_growth || 0.1, -0.2, 0.4) :
+            score: latestBase ? getScore(revenueGrowth, -0.1, 0.3) :
                 (agent.id === 'fundamental_analysis' ? 60 : 0),
             color: 'bg-cyan-500'
         },
         {
             name: 'Valuation',
-            score: latestReport ? 100 - getScore(latestReport.pe_ratio || 25, 5, 50) :
+            score: latestBase ? 100 - getScore(peRatio, 10, 40) :
                 (agent.id === 'calculator' ? 88 : (agent.id === 'fundamental_analysis' ? 40 : 0)),
             color: 'bg-rose-500'
         },
     ];
 
     const financialMetrics = [
-        { label: 'ROE', value: latestReport?.roe ? `${(latestReport.roe * 100).toFixed(1)}%` : 'N/A' },
-        { label: 'P/E Ratio', value: latestReport?.pe_ratio ? latestReport.pe_ratio.toFixed(1) : 'N/A' },
-        { label: 'Debt/Equity', value: latestReport?.debt_to_equity ? latestReport.debt_to_equity.toFixed(2) : 'N/A' },
-        { label: 'Rev Growth', value: latestReport?.revenue_growth ? `${(latestReport.revenue_growth * 100).toFixed(1)}%` : 'N/A' },
+        { label: 'ROE', value: latestBase ? `${(roe * 100).toFixed(1)}%` : 'N/A' },
+        { label: 'P/E Ratio', value: latestBase && peRatio ? peRatio.toFixed(1) : 'N/A' },
+        { label: 'Debt/Equity', value: latestBase ? debtToEquity.toFixed(2) : 'N/A' },
+        { label: 'Rev Growth', value: latestBase && revenueGrowth ? `${(revenueGrowth * 100).toFixed(1)}%` : 'N/A' },
     ];
 
     return (
