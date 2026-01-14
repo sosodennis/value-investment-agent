@@ -4,210 +4,137 @@
 
 ### **Overview**
 
-The **Neuro-Symbolic Valuation Engine** employs a multi-agent system to decouple semantic parameter extraction (Probabilistic) from financial calculations (Deterministic). This section defines the personas, responsibilities, and interaction patterns of the functional agents.
+The **Neuro-Symbolic Valuation Engine** employs a hierarchical multi-agent system to decouple semantic parameter extraction (Probabilistic/Neuro) from financial calculations (Deterministic/Symbolic). This section defines the personas, responsibilities, and interaction patterns of the functional agents.
 
-### **1. The Planner (Orchestrator)**
+### **1. The Strategist (Fundamental Analysis Subgraph)**
 
-**Role**: System Architect & Router
+**Role**: Architect & Decision Maker
 
-* **Responsibility**:  
-  * **Intent Extraction**: Parses user queries (e.g., "Value Tesla") to identify the company and potential model preference.  
-  * **Comprehensive Ticker Search (Scout)**: 
-      * **Dual-Channel Search**: Queries both reliable financial databases (Yahoo Finance) and Web Search simultaneously to ensure maximum coverage.
-      * **Candidate Aggregation**: Merges results from both sources, filtering competitors via strict semantic rules.
-  * **Ambiguity Resolution**: Detects multiple valid candidates (e.g., "Google" -> GOOG/GOOGL) and triggers human intervention.
-  * **Financial Health Check**: After ticker resolution, fetches financial data from SEC EDGAR using `edgartools` and generates a comprehensive Financial Health Report covering 5 pillars: Liquidity, Solvency, Operational Efficiency, Profitability, and Cash Flow Quality.
-  * **Model Selection (Strategist)**: Determines the industry sector and selects the appropriate valuation model (e.g., SaaS FCFF vs. Manufacturing DCF vs. Bank DDM), enhanced with financial health insights.  
-* **Tools**: YFinance (Primary), WebSearch (Fallback), RAGSearch (Internal), edgartools (SEC EDGAR XBRL).
+*   **Responsibility**: Defines *what* we are valuing and *how*.
+    *   **Intent Extraction**: Identifies the target company and user intent from the initial query.
+    *   **Dual-Channel Search**: Simultaneously queries Yahoo Finance (structured) and Web Search (unstructured) to find the correct ticker symbol, handling ambiguity (e.g., GOOG vs GOOGL).
+    *   **Financial Health Check**: Connects to SEC EDGAR to retrieve XBRL financial statements (Balance Sheet, Income Statement, Cash Flow) and generates a health report.
+    *   **Model Selection**: Determines the appropriate valuation model (e.g., SaaS FCFF vs. Bank DDM) based on the company's industry profile and financial data.
+*   **Key Nodes**: `extraction`, `searching`, `deciding`, `financial_health`, `model_selection`, `clarifying`.
 
-### **2. The Executor (Parameter Hunter)**
+### **2. The Scout (Financial News Research Subgraph)**
 
-**Role**: Research Analyst
+**Role**: Market Intelligence
 
-* **Responsibility**:  
-  * Scans financial documents (10-K, 10-Q, Transcripts).  
-  * Extracts specific parameters required by the selected model.  
-  * Provides "Citations" for every extracted value (Source + Quote).  
-* **Tools**: RAGSearch, WebSearch.
+*   **Responsibility**: Gathers and synthesizes qualitative market sentiment.
+    *   **Search Funnel**: Executes a multi-stage funnel:
+        1.  **Search**: Finds recent news across multiple timeframes.
+        2.  **Selector**: Uses an LLM to filter for high-relevance articles.
+        3.  **Fetch**: Retrieves and cleans full-text content in parallel.
+        4.  **Analyst**: Performs deep sentiment analysis on each article (utilizing FinBERT + LLM hybrid approach).
+        5.  **Aggregator**: Synthesizes a final weighted sentiment score and extracts key themes.
+*   **Key Nodes**: `search_node`, `selector_node`, `fetch_node`, `analyst_node`, `aggregator_node`.
 
-### **3. The Auditor (Compliance Officer)**
+### **3. The Council (Debate Subgraph)**
 
-**Role**: Risk Control & Quality Assurance
+**Role**: Critical Review Board
 
-* **Responsibility**:  
-  * Validates the logical consistency of extracted parameters.  
-  * Enforces hard constraints (e.g., terminal_growth_rate < GDP_growth).  
-  * Flags "Hallucinations" or "Unrealistic Assumptions" for human review.  
-* **Input**: Structured JSON from Executor.  
-* **Output**: Validated JSON or Error Report.
+*   **Responsibility**: Challenges assumptions through adversarial discourse.
+    *   **Bull Agent**: Argues the optimistic case for the stock.
+    *   **Bear Agent**: Argues the pessimistic/risk-focused case.
+    *   **Moderator**: Oversees the debate, evaluates arguments, and produces a final synthesis.
+    *   **Structure**: Supports blind debates (parallel execution) and sequential cross-examination rounds.
+*   **Key Nodes**: `debate_aggregator`, `bull`, `bear`, `moderator`.
 
-### **4. Human-in-the-Loop (HITL) Checkpoints**
+### **4. The Researcher (Executor Node)**
 
-#### **A. Planner Clarification (Ambiguity Resolution)**
+**Role**: Parameter Hunter
 
-**Role**: Disambiguation
+*   **Responsibility**:
+    *   Takes the selected valuation model and financial context.
+    *   Extracts the specific numeric parameters required for that model (e.g., *Risk-Free Rate*, *Beta*, *Terminal Growth Rate*).
+    *   Generates or retrieves "Citations" for extracted values.
+*   **Output**: Structured `ExtractionOutput`.
 
-* **Trigger**: Planner finds multiple valid tickers or is unsure about the model.  
-* **Action**: User selects the correct ticker/model or provides a new query.
+### **5. The Compliance Officer (Auditor Node)**
 
-#### **B. Final Review (Senior PM / Analyst)**
+**Role**: Risk Control & QA
 
-**Role**: Final Decision Maker
+*   **Responsibility**:
+    *   Validates extracted parameters against logical business rules (e.g., "Terminal growth rate cannot exceed GDP growth").
+    *   Flags hallucinations or data inconsistencies.
+*   **Output**: `AuditOutput` (Pass/Fail with messages).
 
-* **Responsibility**:  
-  * Reviews the parameters prepared by the agents before calculation.  
-  * Adjusts assumptions based on intuition or external knowledge.  
-  * Resolves "Clean Surplus Violations" or audit flags.  
-* **Interaction**: Interruption via LangGraph before the CalculationNode.
+### **6. Human-in-the-Loop (Approval)**
+
+**Role**: Final Sign-off
+
+*   **Trigger**: Before the deterministic calculation runs.
+*   **Action**: The user reviews the resolved ticker, selected model, extracted parameters, and audit results. The process pauses until explicit approval is granted.
+
+### **7. The Engine (Calculator Node)**
+
+**Role**: Deterministic Execution
+
+*   **Responsibility**:
+    *   Receives validated parameters.
+    *   Executes the `CalculationGraph` (a DAG of pure Python functions).
+    *   Produces the final Intrinsic Value and sensitivity analysis.
+    *   **Zero-Hallucination Guarantee**: No LLMs are used in this step.
+
+---
 
 ### **Interaction Flow**
 
-graph TD  
-    User[User Request] --> Planner  
-      
-    subgraph Planner_Workflow  
-        Planner --> Extraction  
-        Extraction --> Search  
-        Search --> Decision  
-        Decision --> FinancialHealth[Financial Health Check]  
-        FinancialHealth --> ModelSelection[Model Selection]  
-    end  
-      
-    Decision -->|Ambiguous?| Clarification[HitL: Clarification]  
-    Clarification -->|User Input| Planner  
-      
-    ModelSelection -->|Resolved| Executor  
-    Executor -->|Extract Params| Auditor  
-    Auditor -->|Pass Validation| FinalReview[HitL: Final Review]  
-    Auditor -->|Fail Validation| Executor  
-    FinalReview -->|Approve/Modify| Calculator[Deterministic Engine]  
-    Calculator -->|Result| User
+```mermaid
+graph TD
+    Start([Start]) --> FA[Fundamental Analysis<br/>(The Strategist)]
+
+    subgraph "Neuro (Probabilistic Agents)"
+        FA --> FNR[Financial News Research<br/>(The Scout)]
+        FNR --> Debate[Debate<br/>(The Council)]
+        Debate --> Executor[Executor<br/>(The Researcher)]
+        Executor --> Auditor[Auditor<br/>(The Compliance Officer)]
+    end
+
+    Auditor --> Approval{Human Approval}
+
+    Approval -->|Approved| Calc[Calculator<br/>(The Engine)]
+    Approval -->|Rejected| End([End])
+
+    subgraph "Symbolic (Deterministic)"
+        Calc
+    end
+
+    Calc --> End
+```
+
+---
 
 ## **Part 2: Coding & Development Rules**
 
-This section dictates how AI Assistants and Developers should write code, structure files, and handle errors within the project.
-
 ### **1. Technology Stack & Style**
 
-* **Language**: Python 3.10+ (Primary), TypeScript (Frontend/Dashboard if applicable).  
-* **Package Manager**: `uv` for Python dependency management and virtual environments.  
-* **Frameworks**:  
-  * Orchestration: LangGraph (Functional API v0.2+).
-  * Serving: Pure FastAPI (LangServe removed).
-  * Data Validation: Pydantic (Strict typing is mandatory).  
-  * Financial Data: edgartools (SEC EDGAR XBRL extraction).  
-* **Style Guide**:  
-  * Follow **PEP 8** for Python.  
-  * Use **Snake_case** for variables/functions, **PascalCase** for classes.  
-  * **Strict Typing (Zero Any Policy)**:  
-    * **NO Any allowed**: The use of Any (Python) or any (TypeScript) is **STRICTLY FORBIDDEN**. Explicitly define types, use specific generics, or union types if necessary.  
-    * **Type Hints**: All function signatures MUST have type hints (e.g., def calculate_wacc(beta: float, rm: float) -> float:).
+*   **Frameworks**: LangGraph (Orchestration), FastAPI (Serving), Pydantic (Validation), NetworkX (Calculation Engine).
+*   **Style Guide**:
+    *   **Strict Typing**: All function signatures must have type hints. No `Any`.
+    *   **Pydantic V2**: Use `model_dump()` instead of `dict()`.
 
-### **2. Metadata-Rich Financial Objects (Traceability Architecture)**
+### **2. Traceability Architecture (Provenance)**
 
-**All financial data models use `TraceableField` to enable full auditability:**
+To ensure every number is auditable, the system uses a `TraceableField` generic with specific `Provenance` types:
 
-* **TraceableField**: A Pydantic model that wraps numeric values with metadata:
-  * `value`: The actual numeric value (float)
-  * `source_tags`: List of XBRL tags that contributed to this value
-  * `is_calculated`: Boolean indicating if this is a computed field
-  * `formula_logic`: Human-readable formula description for calculated values
-  
-* **AutoExtractModel**: Base class for financial statement models that:
-  * Automatically extracts XBRL data using waterfall logic (tries multiple tags in priority order)
-  * Supports fuzzy matching for extension tags using regex patterns
-  * Populates TraceableField objects with source metadata
-  * Configured via `json_schema_extra` in Field definitions:
-    * `xbrl_tags`: List of standard XBRL tags to try (in priority order)
-    * `fuzzy_keywords`: Keywords for fuzzy matching extension tags
-    * `exclude_keywords`: Keywords to exclude from fuzzy matches
-
-* **Operator Overloading**: TraceableField supports arithmetic operations (+, -, *, /) that automatically:
-  * Merge source tags from operands
-  * Mark result as calculated
-  * Build formula logic descriptions
+*   **XBRLProvenance**: Data sourced directly from SEC filings.
+    *   Fields: `concept` (XBRL tag), `period`.
+*   **ComputedProvenance**: Data derived from other fields.
+    *   Fields: `expression` (Formula), `inputs` (Source fields).
+*   **ManualProvenance**: Data provided or overridden by human/agent assumptions.
+    *   Fields: `description` (Reasoning), `author`, `modified_at`.
 
 **Example:**
 ```python
-# Field definition with metadata
-debt_current: TraceableField = Field(
-    default_factory=TraceableField,
-    json_schema_extra={
-        'xbrl_tags': ['us-gaap:DebtCurrent', 'us-gaap:ShortTermBorrowings'],
-        'fuzzy_keywords': ['Debt', 'Current'],
-        'exclude_keywords': ['Noncurrent']
-    }
-)
-
-# Computed field automatically tracks sources
-@computed_field
-def total_debt(self) -> TraceableField:
-    result = self.debt_current + self.debt_noncurrent
-    result.formula_logic = "ShortTerm + LongTerm Debt"
-    return result
+class TraceableField(BaseModel, Generic[T]):
+    value: T | None
+    provenance: XBRLProvenance | ComputedProvenance | ManualProvenance
 ```
 
-This architecture enables the system to answer: "Where did this number come from?" and "How was it calculated?"
+### **3. Code Generation Principles**
 
-
-### **2. Code Generation Principles**
-
-**The AI Assistant must adhere to these principles when generating code:**
-
-* **Modular Design**: Each agent (Planner, Executor, Auditor) should have its own module/file. Avoid monolithic scripts.  
-* **Deterministic vs. Probabilistic Separation**:  
-  * Code in calculator/ modules must be pure, deterministic Python functions (No LLM calls inside calculation logic).  
-  * Code in agents/ modules manages LLM interactions and context.  
-* **Error Handling**:  
-  * Use try/except blocks specifically around external API calls.  
-  * Implement **Exponential Backoff** for API rate limits.  
-  * Never fail silently; raise custom exceptions (e.g., TickerNotFoundError, ValidationException).
-
-### **3. Data Structure Standards (Pydantic Models)**
-
-All data passed between agents must be strictly typed using Pydantic.
-
-# Example Standard  
-class ValuationParameter(BaseModel):  
-    name: str = Field(..., description="Name of the financial parameter")  
-    value: float = Field(..., description="The numerical value extracted")  
-    source: str = Field(..., description="URL or Document Name")  
-    confidence: float = Field(ge=0, le=1, description="Model confidence score")  
-      
-class FinancialReport(BaseModel):  
-    ticker: str  
-    fiscal_year: int  
-    parameters: List[ValuationParameter]
-
-### **4. Testing & Validation Rules**
-
-* **Unit Tests**: Every calculation formula (DCF, WACC, etc.) must have a corresponding unit test in tests/calculations/.  
-* **Agent Evaluation**: Use mock responses to test Agent logic. Do not hit live LLM APIs for CI/CD tests.  
-* **Audit Trails**: All critical decisions (Planner model selection, Auditor flags) must be logged to a structured log file or database for debugging.
-
-### **5. Documentation**
-
-* **Docstrings**: Every class and public method must have a docstring (Google Style).  
-* **Comments**: Comment complex financial logic (e.g., *Why* are we adjusting the risk-free rate here?). Do not comment obvious code.  
-* **Sync Domain Agents**: Whenever a feature is implemented or modified, the **Part 1: Domain Agents (Neuro-Symbolic Valuation Engine)** section MUST be updated immediately to ensure the documentation reflects the latest agent behaviors and functional state.
-
-### **6. Security & Keys**
-
-* Never hardcode API keys (OpenAI, Tavily, etc.). Use os.getenv() and .env files.  
-* Ensure no PII (Personally Identifiable Information) is processed unless explicitly authorized.
-
-### **7. API Protocol (Custom Control Path)**
-
-* **Architecture**: Pure FastAPI (Path B).
-* **Endpoint**: Single unified endpoint `POST /stream`.
-* **Request Schema**:
-  ```json
-  {
-    "thread_id": "string",
-    "message": "string (optional)",
-    "resume_payload": "object (optional)"
-  }
-  ```
-* **Streaming**: Server-Sent Events (SSE).
-* **Interrupts**: Explicit `event: interrupt` emitted at the end of the stream if the graph pauses.
-* **State Persistence**: MemorySaver (Currently) -> PostgresSaver (Future).
+*   **Separation of Concerns**: Keep "Thinking" (Agents) separate from "Math" (Calculations).
+*   **Tool Usage**: Agents should rely on tools (e.g., `edgartools`, `yfinance`) rather than internal knowledge.
+*   **Error Handling**: Fail gracefully with explicit error messages in the Agent State.
