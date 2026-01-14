@@ -10,8 +10,12 @@ def project_revenue(initial_revenue: float, growth_rates: list[float]) -> list[f
     return revenue
 
 
-def calculate_ebit(revenue: list[float], operating_margins: list[float]) -> list[float]:
-    return [r * m for r, m in zip(revenue, operating_margins, strict=False)]
+def calculate_ebit(
+    projected_revenue: list[float], operating_margins: list[float]
+) -> list[float]:
+    return [
+        r * m for r, m in zip(projected_revenue, operating_margins, strict=False)
+    ]
 
 
 def calculate_nopat(ebit: list[float], tax_rate: float) -> list[float]:
@@ -20,7 +24,7 @@ def calculate_nopat(ebit: list[float], tax_rate: float) -> list[float]:
 
 def calculate_fcff(
     nopat: list[float],
-    revenue: list[float],
+    projected_revenue: list[float],
     da_rates: list[float],
     capex_rates: list[float],
     wc_rates: list[float],
@@ -33,14 +37,14 @@ def calculate_fcff(
     # Or just Delta Revenue * WC_Rate.
 
     fcff = []
-    # prev_rev = revenue[0] / (1 + 0.1)  # Hack for first period delta? Or pass initial.
-    # Actually, let's assume `revenue` list implies the years.
+    # prev_rev = projected_revenue[0] / (1 + 0.1)  # Hack for first period delta? Or pass initial.
+    # Actually, let's assume `projected_revenue` list implies the years.
 
     # Needs sophisticated logic for accurate delta WC, but let's keep it simple for the prototype.
     # Cash Flow = NOPAT + (Rev*DA) - (Rev*CapEx) - (DeltaRev * WC) + (Rev*SBC)
 
-    for i, _ in enumerate(revenue):
-        r = revenue[i]
+    for i, _ in enumerate(projected_revenue):
+        r = projected_revenue[i]
         n = nopat[i]
 
         da = r * da_rates[i]
@@ -51,7 +55,7 @@ def calculate_fcff(
         if i == 0:
             delta_rev = r * 0.1  # Assumption
         else:
-            delta_rev = r - revenue[i - 1]
+            delta_rev = r - projected_revenue[i - 1]
 
         delta_wc = delta_rev * wc_rates[i]
 
@@ -83,34 +87,9 @@ def calculate_pv(fcff: list[float], terminal_value: float, wacc: float) -> float
 def create_saas_graph() -> CalculationGraph:
     graph = CalculationGraph("SaaS_FCFF")
 
-    # Input Nodes (implicit in function signatures, but can be explicit if needed)
-    # Nodes: initial_revenue, growth_rates, operating_margins, tax_rate, da_rates, capex_rates, wc_rates, sbc_rates, wacc, terminal_growth
-
     graph.add_node("projected_revenue", project_revenue)
     graph.add_node("ebit", calculate_ebit)
-    # Note: calculate_ebit takes (revenue, operating_margins).
-    # But graph node name is "projected_revenue".
-    # The param name in calculate_ebit is 'revenue'.
-    # We need to map 'projected_revenue' -> 'revenue' or rename functions/variables.
-    # For simplicity in this `CalculationGraph` implementation, names must match exactly.
-    # So we need to alias inputs or ensure function arg names match node names.
-
-    # Let's fix names in functions or graph wrapper.
-    # Or strict naming convention.
-
-    # To fix this, I will rename the function signature in `calculate_ebit` to match the node `projected_revenue`?
-    # Or usage: project_revenue(initial_revenue, growth_rates) -> produces 'revenue'
-    # So I should name the node "revenue".
-
-    graph.add_node("revenue", project_revenue)
-
-    # calculate_ebit(revenue, operating_margins)
-    graph.add_node("ebit", calculate_ebit)
-
-    # calculate_nopat(ebit, tax_rate)
     graph.add_node("nopat", calculate_nopat)
-
-    # calculate_fcff(nopat, revenue, da_rates, capex_rates, wc_rates, sbc_rates)
     graph.add_node("fcff", calculate_fcff)
 
     # Wrapper for TV to take specific element
@@ -118,11 +97,7 @@ def create_saas_graph() -> CalculationGraph:
         return fcff[-1]
 
     graph.add_node("final_fcff", get_final_fcff)
-
-    # calculate_terminal_value(final_fcff, wacc, terminal_growth)
     graph.add_node("terminal_value", calculate_terminal_value)
-
-    # calculate_pv(fcff, terminal_value, wacc)
     graph.add_node("equity_value", calculate_pv)
 
     return graph
