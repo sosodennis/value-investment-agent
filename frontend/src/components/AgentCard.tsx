@@ -1,4 +1,5 @@
 import React from 'react';
+import Image from 'next/image';
 import { AgentStatus } from '../types/agents';
 import { CheckCircle2, Circle, Loader2, AlertCircle } from 'lucide-react';
 
@@ -41,7 +42,13 @@ export const AgentCard: React.FC<AgentCardProps> = ({
             {/* Avatar with status ring */}
             <div className="relative shrink-0">
                 <div className={`w-12 h-12 rounded-full overflow-hidden border-2 p-0.5 ${getStatusColor()}`}>
-                    <img src={avatar} alt={name} className="w-full h-full rounded-full object-cover grayscale-[0.2]" />
+                    <Image
+                        src={avatar}
+                        alt={name}
+                        width={48}
+                        height={48}
+                        className="w-full h-full rounded-full object-cover grayscale-[0.2]"
+                    />
                 </div>
                 {status === 'done' && (
                     <div className="absolute -bottom-1 -right-1 bg-slate-950 rounded-full p-0.5">
