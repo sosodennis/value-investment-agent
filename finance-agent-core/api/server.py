@@ -126,8 +126,16 @@ class JobManager:
                             if messages:
                                 if not isinstance(messages, list):
                                     messages = [messages]
-                                for m in messages:
-                                    await history_service.save_message(thread_id, m)
+                                try:
+                                    await history_service.save_messages(
+                                        thread_id, messages
+                                    )
+                                except Exception as e:
+                                    print(
+                                        f"❌ [JobManager] save_messages failed for {node_name}: {e}"
+                                    )
+                                    # Don't re-raise here to avoid crashing the whole job for a history save failure
+                                    pass
                 except Exception as e:
                     print(
                         f"❌ [JobManager] Error processing event {event_type} from {node_name}: {e}"
