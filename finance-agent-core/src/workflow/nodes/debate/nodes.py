@@ -8,16 +8,21 @@ from langchain_openai import ChatOpenAI
 from ...state import AgentState
 from .prompts import (
     BEAR_AGENT_SYSTEM_PROMPT,
+    BEAR_R1_ADVERSARIAL,
+    BEAR_R2_ADVERSARIAL,
     BULL_AGENT_SYSTEM_PROMPT,
+    BULL_R1_ADVERSARIAL,
+    BULL_R2_ADVERSARIAL,
     MODERATOR_SYSTEM_PROMPT,
     VERDICT_PROMPT,
 )
 from .schemas import DebateConclusion
+from .utils import calculate_kelly_and_verdict
 
 # --- LLM Shared Config ---
 DEFAULT_MODEL = "mistralai/devstral-2512:free"
-MAX_CHAR_REPORTS = 30000  # ~4k tokens for ground truth
-MAX_CHAR_HISTORY = 22000  # ~3k tokens for conversation
+MAX_CHAR_REPORTS = 50000
+MAX_CHAR_HISTORY = 32000
 
 
 def _compress_reports(reports: dict, max_chars: int = MAX_CHAR_REPORTS) -> str:
@@ -124,8 +129,15 @@ async def bull_node(state: AgentState) -> dict[str, Any]:
         compressed_reports = _compress_reports(state.analyst_reports)
         trimmed_history = _get_trimmed_history(state.debate_history)
 
+        # Dynamic Instruction Check
+        adversarial_rule = (
+            BULL_R1_ADVERSARIAL if round_num == 1 else BULL_R2_ADVERSARIAL
+        )
+
         system_content = BULL_AGENT_SYSTEM_PROMPT.format(
-            ticker=ticker, reports=compressed_reports
+            ticker=ticker,
+            reports=compressed_reports,
+            adversarial_rule=adversarial_rule,
         )
 
         messages = [SystemMessage(content=system_content)] + trimmed_history
@@ -173,8 +185,15 @@ async def bear_node(state: AgentState) -> dict[str, Any]:
         compressed_reports = _compress_reports(state.analyst_reports)
         trimmed_history = _get_trimmed_history(state.debate_history)
 
+        # Dynamic Instruction Check
+        adversarial_rule = (
+            BEAR_R1_ADVERSARIAL if round_num == 1 else BEAR_R2_ADVERSARIAL
+        )
+
         system_content = BEAR_AGENT_SYSTEM_PROMPT.format(
-            ticker=ticker, reports=compressed_reports
+            ticker=ticker,
+            reports=compressed_reports,
+            adversarial_rule=adversarial_rule,
         )
 
         messages = [SystemMessage(content=system_content)] + trimmed_history
@@ -305,21 +324,40 @@ async def moderator_node(state: AgentState) -> dict[str, Any]:
             # Use mode='json' to handle Enums/Scenarios correctly
             conclusion_data = conclusion.model_dump(mode="json")
 
-            # Bayesian Safety Lock: Override if risk is too high
-            bear_prob = (
-                conclusion_data.get("scenario_analysis", {})
-                .get("bear_case", {})
-                .get("probability", 0)
+            # ==========================================
+            # 🔥 Neuro-Symbolic Calculation Layer 🔥
+            # ==========================================
+            print(
+                f"📊 Raw LLM Verdict: {conclusion_data.get('final_verdict')} | Intuitive Conf: {conclusion_data.get('kelly_confidence')}",
+                flush=True,
             )
-            if bear_prob > 0.4 and conclusion_data.get("final_verdict") == "LONG":
+
+            # Call calculation function to get math-based metrics
+            metrics = calculate_kelly_and_verdict(
+                conclusion_data.get("scenario_analysis", {})
+            )
+
+            # Check if safety lock triggered (Calculated Verdict != Raw LLM Verdict)
+            if (
+                metrics["final_verdict"] == "NEUTRAL"
+                and conclusion_data.get("final_verdict") == "LONG"
+            ):
                 print(
-                    f"⚠️ [Safety Lock] Bear Probability ({bear_prob:.2f}) too high for LONG. Overriding to NEUTRAL.",
+                    "⚠️ [Safety Lock] Risk detected. Overriding LONG to NEUTRAL.",
                     flush=True,
                 )
-                conclusion_data["final_verdict"] = "NEUTRAL"
                 conclusion_data["winning_thesis"] = (
-                    f"[SAFETY OVERRIDE] {conclusion_data['winning_thesis']}"
+                    f"[SAFETY OVERRIDE] {conclusion_data.get('winning_thesis', '')}"
                 )
+
+            # Apply pure calculations to the final output
+            conclusion_data.update(metrics)
+
+            print(
+                f"🧮 Calculated Verdict: {conclusion_data.get('final_verdict')} | Kelly: {conclusion_data.get('kelly_confidence')} | EV: {conclusion_data.get('expected_value')}",
+                flush=True,
+            )
+            # ==========================================
 
         except Exception as e:
             print(
