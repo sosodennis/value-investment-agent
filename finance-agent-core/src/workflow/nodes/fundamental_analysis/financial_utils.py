@@ -1,12 +1,13 @@
-import logging
 from datetime import date
 
 from edgar import set_identity
 
+from src.utils.logger import get_logger
+
 from .factories import FinancialReportFactory
 from .financial_models import FinancialReport
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Set SEC EDGAR identity
 set_identity("ValueInvestmentAgent research@example.com")

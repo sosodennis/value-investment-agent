@@ -5,6 +5,8 @@ from typing import Any
 from langchain_core.messages import AIMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
+from src.utils.logger import get_logger
+
 from ...state import AgentState
 from .prompts import (
     BEAR_AGENT_SYSTEM_PROMPT,
@@ -18,6 +20,8 @@ from .prompts import (
 )
 from .schemas import DebateConclusion
 from .utils import calculate_kelly_and_verdict
+
+logger = get_logger(__name__)
 
 # --- LLM Shared Config ---
 DEFAULT_MODEL = "mistralai/devstral-2512:free"
@@ -41,7 +45,7 @@ def _compress_reports(reports: dict, max_chars: int = MAX_CHAR_REPORTS) -> str:
         return compressed
 
     # Hard truncation with warning
-    print(f"⚠️ Truncating analyst reports: {len(compressed)} -> {max_chars}", flush=True)
+    logger.warning(f"⚠️ Truncating analyst reports: {len(compressed)} -> {max_chars}")
     return compressed[:max_chars] + "\n\n[... TRUNCATED DUE TO TOKEN LIMITS ...]"
 
 
@@ -89,7 +93,7 @@ def debate_aggregator_node(state: AgentState) -> dict[str, Any]:
 
     Includes source reliability weighting to guide agents on evidence quality.
     """
-    print("--- Debate: Aggregating ground truth data ---", flush=True)
+    logger.info("--- Debate: Aggregating ground truth data ---")
 
     # Consolidate news and financials with reliability metadata
     reports = {
@@ -120,7 +124,7 @@ async def bull_node(state: AgentState) -> dict[str, Any]:
     """
     round_num = state.debate_current_round + 1
     ticker = state.resolved_ticker or state.ticker
-    print(f"--- Debate: Bull Agent Node (Round {round_num}) ---", flush=True)
+    logger.info(f"--- Debate: Bull Agent Node (Round {round_num}) ---")
 
     try:
         llm = get_llm()
@@ -143,9 +147,8 @@ async def bull_node(state: AgentState) -> dict[str, Any]:
         messages = [SystemMessage(content=system_content)] + trimmed_history
         response = await llm.ainvoke(messages)
 
-        print(
-            f"--- Debate: Bull Agent '{ticker}' Arg (Round {round_num}):\n{response.content[:200]}...",
-            flush=True,
+        logger.info(
+            f"--- Debate: Bull Agent '{ticker}' Arg (Round {round_num}):\n{response.content[:200]}..."
         )
 
         return {
@@ -157,7 +160,7 @@ async def bull_node(state: AgentState) -> dict[str, Any]:
             "node_statuses": {"bull": "done", "bear": "running"},
         }
     except Exception as e:
-        print(f"❌ Error in Bull Node: {str(e)}", flush=True)
+        logger.error(f"❌ Error in Bull Node: {str(e)}")
         fallback_msg = (
             f"Bull Analysis Error: {str(e)[:100]}. Proceeding with limited data."
         )
@@ -176,7 +179,7 @@ async def bear_node(state: AgentState) -> dict[str, Any]:
     """
     round_num = state.debate_current_round + 1
     ticker = state.resolved_ticker or state.ticker
-    print(f"--- Debate: Bear Agent Node (Round {round_num}) ---", flush=True)
+    logger.info(f"--- Debate: Bear Agent Node (Round {round_num}) ---")
 
     try:
         llm = get_llm()
@@ -199,9 +202,8 @@ async def bear_node(state: AgentState) -> dict[str, Any]:
         messages = [SystemMessage(content=system_content)] + trimmed_history
         response = await llm.ainvoke(messages)
 
-        print(
-            f"--- Debate: Bear Agent '{ticker}' Arg (Round {round_num}):\n{response.content[:200]}...",
-            flush=True,
+        logger.info(
+            f"--- Debate: Bear Agent '{ticker}' Arg (Round {round_num}):\n{response.content[:200]}..."
         )
 
         return {
@@ -213,7 +215,7 @@ async def bear_node(state: AgentState) -> dict[str, Any]:
             "node_statuses": {"bear": "done", "moderator": "running"},
         }
     except Exception as e:
-        print(f"❌ Error in Bear Node: {str(e)}", flush=True)
+        logger.error(f"❌ Error in Bear Node: {str(e)}")
         fallback_msg = (
             f"Bear Analysis Error: {str(e)[:100]}. Proceeding with limited data."
         )
@@ -235,7 +237,7 @@ async def moderator_node(state: AgentState) -> dict[str, Any]:
     """
     round_num = state.debate_current_round + 1
     ticker = state.resolved_ticker or state.ticker
-    print(f"--- Debate: Moderator Node (Round {round_num}) ---", flush=True)
+    logger.info(f"--- Debate: Moderator Node (Round {round_num}) ---")
 
     llm = get_llm()
 
@@ -250,10 +252,9 @@ async def moderator_node(state: AgentState) -> dict[str, Any]:
                 state.bull_thesis or "", state.bear_thesis or ""
             )
 
-            print(
+            logger.info(
                 f"--- Debate: Similarity Check (Round {round_num}): {similarity:.3f} "
-                f"({'SYCOPHANTIC' if is_sycophantic else 'OK'}) ---",
-                flush=True,
+                f"({'SYCOPHANTIC' if is_sycophantic else 'OK'}) ---"
             )
 
             # Optimize context
@@ -281,9 +282,8 @@ async def moderator_node(state: AgentState) -> dict[str, Any]:
             messages = [SystemMessage(content=system_content)] + trimmed_history
             response = await llm.ainvoke(messages)
 
-            print(
-                f"--- Debate: Moderator critique (Round {round_num}):\n{response.content[:200]}...",
-                flush=True,
+            logger.info(
+                f"--- Debate: Moderator critique (Round {round_num}):\n{response.content[:200]}..."
             )
 
             return {
@@ -293,7 +293,7 @@ async def moderator_node(state: AgentState) -> dict[str, Any]:
                 "node_statuses": {"moderator": "done"},
             }
         except Exception as e:
-            print(f"❌ Error in Moderator Node: {str(e)}", flush=True)
+            logger.error(f"❌ Error in Moderator Node: {str(e)}")
             return {
                 "debate_history": [
                     AIMessage(content=f"Moderator Error: {str(e)[:100]}", name="Judge")
@@ -304,7 +304,7 @@ async def moderator_node(state: AgentState) -> dict[str, Any]:
             }
     else:
         # Final Round: Synthesis of the DebateConclusion (Bayesian V4.0)
-        print("--- Debate: Final Synthesis (Verdict) ---", flush=True)
+        logger.info("--- Debate: Final Synthesis (Verdict) ---")
 
         # Optimize context for final verdict
         trimmed_history = _get_trimmed_history(
@@ -327,9 +327,8 @@ async def moderator_node(state: AgentState) -> dict[str, Any]:
             # ==========================================
             # 🔥 Neuro-Symbolic Calculation Layer 🔥
             # ==========================================
-            print(
-                f"📊 Raw LLM Verdict: {conclusion_data.get('final_verdict')} | Intuitive Conf: {conclusion_data.get('kelly_confidence')}",
-                flush=True,
+            logger.info(
+                f"📊 Raw LLM Verdict: {conclusion_data.get('final_verdict')} | Intuitive Conf: {conclusion_data.get('kelly_confidence')}"
             )
 
             # Call calculation function to get math-based metrics
@@ -342,9 +341,8 @@ async def moderator_node(state: AgentState) -> dict[str, Any]:
                 metrics["final_verdict"] == "NEUTRAL"
                 and conclusion_data.get("final_verdict") == "LONG"
             ):
-                print(
-                    "⚠️ [Safety Lock] Risk detected. Overriding LONG to NEUTRAL.",
-                    flush=True,
+                logger.warning(
+                    "⚠️ [Safety Lock] Risk detected. Overriding LONG to NEUTRAL."
                 )
                 conclusion_data["winning_thesis"] = (
                     f"[SAFETY OVERRIDE] {conclusion_data.get('winning_thesis', '')}"
@@ -353,16 +351,14 @@ async def moderator_node(state: AgentState) -> dict[str, Any]:
             # Apply pure calculations to the final output
             conclusion_data.update(metrics)
 
-            print(
-                f"🧮 Calculated Verdict: {conclusion_data.get('final_verdict')} | Kelly: {conclusion_data.get('kelly_confidence')} | EV: {conclusion_data.get('expected_value')}",
-                flush=True,
+            logger.info(
+                f"🧮 Calculated Verdict: {conclusion_data.get('final_verdict')} | Kelly: {conclusion_data.get('kelly_confidence')} | EV: {conclusion_data.get('expected_value')}"
             )
             # ==========================================
 
         except Exception as e:
-            print(
-                f"!!! Debate: Structured output failed: {e}. Falling back to text.",
-                flush=True,
+            logger.error(
+                f"!!! Debate: Structured output failed: {e}. Falling back to text."
             )
             # Simple fallback (could be refined more)
             conclusion_data = {
@@ -393,9 +389,8 @@ async def moderator_node(state: AgentState) -> dict[str, Any]:
 
         conclusion_data["debate_rounds"] = round_num
 
-        print(
-            f"--- Debate: Final Verdict for {ticker} ---\n{json.dumps(conclusion_data, indent=2, default=str)}",
-            flush=True,
+        logger.info(
+            f"--- Debate: Final Verdict for {ticker} ---\n{json.dumps(conclusion_data, indent=2, default=str)}"
         )
 
         return {

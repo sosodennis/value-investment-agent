@@ -4,11 +4,11 @@ Model selection logic for the Fundamental Analysis Node.
 Implements GICS-based rules to automatically select the appropriate valuation model.
 """
 
-import logging
+from src.utils.logger import get_logger
 
 from .structures import CompanyProfile, ValuationModel
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def select_valuation_model(profile: CompanyProfile) -> tuple[ValuationModel, str]:

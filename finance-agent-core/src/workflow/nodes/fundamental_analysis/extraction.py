@@ -163,9 +163,9 @@ def extract_candidates_from_search(
 
         return response.candidates
     except Exception as e:
-        import logging
+        from src.utils.logger import get_logger
 
-        logger = logging.getLogger(__name__)
+        logger = get_logger(__name__)
         logger.warning(f"LLM Search Extraction failed: {e}. Returning empty list.")
         return []
 
@@ -209,8 +209,8 @@ Return the IntentExtraction object.
         response = chain.invoke({"query": query})
         return response
     except Exception as e:
-        import logging
+        from src.utils.logger import get_logger
 
-        logger = logging.getLogger(__name__)
+        logger = get_logger(__name__)
         logger.warning(f"LLM Extraction failed: {e}. Using fallback.")
         return _heuristic_extract(query)

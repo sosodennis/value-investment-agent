@@ -304,7 +304,7 @@ async def news_search_multi_timeframe(
             }
         )
 
-    print(
+    logger.info(
         f"--- [Search] Combined: {len(all_raw_results)} -> Unique: {len(unique_map)} -> Balanced: {len(formatted_results)} ---"
     )
 
@@ -313,7 +313,7 @@ async def news_search_multi_timeframe(
     for r in formatted_results:
         tag = r.get("_search_tag", "general")
         final_counts[tag] = final_counts.get(tag, 0) + 1
-    print(f"--- [Search] Final Balanced Distribution: {final_counts} ---")
+    logger.info(f"--- [Search] Final Balanced Distribution: {final_counts} ---")
 
     return formatted_results
 
@@ -323,7 +323,7 @@ async def news_search_multi_timeframe(
 #     Existing sync news search (fallback).
 #     """
 #     try:
-#         print(f"--- [Tool: news_search] Calling DDGS for: {ticker} ---")
+#         logger.info(f"--- [Tool: news_search] Calling DDGS for: {ticker} ---")
 #         results = []
 #         with DDGS() as ddgs:
 #             query = f"{ticker} stock news"
