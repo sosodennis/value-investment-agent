@@ -9,17 +9,21 @@ from langchain_core.messages import AIMessage
 from langgraph.graph import END
 from langgraph.types import Command
 
+from src.utils.logger import get_logger
+
 from ...manager import SkillRegistry
 from ...schemas import ExtractionOutput
 from ...state import AgentState
 from .tools import generate_mock_bank_data, generate_mock_saas_data
+
+logger = get_logger(__name__)
 
 
 def executor_node(state: AgentState) -> Command:
     """
     Extracts valuation parameters for the selected model type.
     """
-    print(f"--- Executor: Extracting parameters for {state.model_type} ---")
+    logger.info(f"--- Executor: Extracting parameters for {state.model_type} ---")
 
     skill = SkillRegistry.get_skill(state.model_type)
     if not skill:
@@ -54,7 +58,7 @@ def executor_node(state: AgentState) -> Command:
             goto="auditor",
         )
     except Exception as e:
-        print(f"Extraction Failed: {e}")
+        logger.error(f"Extraction Failed: {e}")
         return Command(
             update={
                 "messages": [

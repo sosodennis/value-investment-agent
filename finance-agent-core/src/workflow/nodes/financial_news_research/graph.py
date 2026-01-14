@@ -1,6 +1,5 @@
 import asyncio
 import json
-import logging
 import os
 
 from langchain_core.messages import AIMessage
@@ -8,6 +7,8 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
+
+from src.utils.logger import get_logger
 
 from ...state import AgentState
 from .finbert_service import get_finbert_analyzer
@@ -31,7 +32,7 @@ from .tools import (
     news_search_multi_timeframe,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # --- LLM Shared Config ---
 DEFAULT_MODEL = "mistralai/devstral-2512:free"
@@ -60,7 +61,7 @@ def search_node(state: AgentState) -> Command:
             update={"node_statuses": {"financial_news_research": "done"}}, goto=END
         )
 
-    print(f"--- [News Research] Searching news for {ticker} ---")
+    logger.info(f"--- [News Research] Searching news for {ticker} ---")
     try:
         # Extract company_name from fundamental analysis output if available
         fa_output = state.fundamental_analysis_output or {}
@@ -69,12 +70,12 @@ def search_node(state: AgentState) -> Command:
         # Run async search in sync node
         results = asyncio.run(news_search_multi_timeframe(ticker, company_name))
     except Exception as e:
-        print(f"--- [News Research] news_search CRASHED: {e} ---")
+        logger.error(f"--- [News Research] news_search CRASHED: {e} ---")
         return Command(
             update={"node_statuses": {"financial_news_research": "done"}}, goto=END
         )
 
-    print(f"--- [News Research] Found {len(results or [])} raw results ---")
+    logger.info(f"--- [News Research] Found {len(results or [])} raw results ---")
 
     if not results:
         return Command(
@@ -118,7 +119,7 @@ def selector_node(state: AgentState) -> Command:
     formatted_results = output.get("formatted_results")
     raw_results = output.get("raw_results", [])
 
-    print(f"--- [News Research] Selecting top articles for {ticker} ---")
+    logger.info(f"--- [News Research] Selecting top articles for {ticker} ---")
 
     llm = get_llm()
     prompt = ChatPromptTemplate.from_messages(
@@ -153,7 +154,7 @@ def selector_node(state: AgentState) -> Command:
                         break
         else:
             # Case where LLM didn't return the key at all - fallback
-            print(
+            logger.warning(
                 f"--- [News Research] Selector returned no 'selected_articles' key for {ticker}. Falling back to top 3."
             )
             if raw_results:
@@ -166,7 +167,7 @@ def selector_node(state: AgentState) -> Command:
     # Limit to top 5 for funnel safety
     selected_indices = list(dict.fromkeys(selected_indices))[:10]
 
-    print(
+    logger.info(
         f"--- [News Research] Completed selection. Selected indices: {selected_indices} ---"
     )
     return Command(
@@ -184,7 +185,7 @@ def fetch_node(state: AgentState) -> Command:
     raw_results = output.get("raw_results", [])
     selected_indices = output.get("selected_indices", [])
 
-    print(f"--- [News Research] Fetching {len(selected_indices)} articles content ---")
+    logger.info(f"--- [News Research] Fetching {len(selected_indices)} articles content ---")
 
     # Build list of articles to fetch
     articles_to_fetch = []
@@ -248,14 +249,14 @@ def fetch_node(state: AgentState) -> Command:
                 categories=res.get("categories", []),
             )
             news_items.append(item)
-            print(f"--- [News Research] ✅ Created news item for: {title[:50]}... ---")
+            logger.info(f"--- [News Research] ✅ Created news item for: {title[:50]}... ---")
         except Exception as e:
-            print(
+            logger.error(
                 f"--- [News Research] ❌ Failed to create news item for URL {url}: {e} ---"
             )
             logger.error(f"Failed to create FinancialNewsItem: {e}")
 
-    print(
+    logger.info(
         f"--- [News Research] Completed fetching {len(news_items)} articles content ---"
     )
     # Serialize Pydantic models to dicts for JSON compatibility
@@ -277,7 +278,7 @@ def analyst_node(state: AgentState) -> Command:
     # news_items are now dicts (serialized from fetch_node)
     news_items: list[dict] = output.get("news_items", [])
 
-    print(f"--- [News Research] Analyzing {len(news_items)} articles for {ticker} ---")
+    logger.info(f"--- [News Research] Analyzing {len(news_items)} articles for {ticker} ---")
 
     # Initialize FinBERT Service
     finbert_analyzer = get_finbert_analyzer()
@@ -310,7 +311,7 @@ def analyst_node(state: AgentState) -> Command:
     for idx, item in enumerate(news_items):
         try:
             title = item.get("title", "Unknown")
-            print(
+            logger.info(
                 f"--- [News Research] Analyzing article {idx+1}/{len(news_items)}: {title[:50]}... ---"
             )
             # Analyze using full content if available, else fallback to snippet
@@ -323,7 +324,7 @@ def analyst_node(state: AgentState) -> Command:
                 finbert_result = finbert_analyzer.analyze(content_to_analyze)
                 if finbert_result:
                     item["finbert_analysis"] = finbert_result.to_dict()
-                    print(
+                    logger.debug(
                         f"--- [News Research] FinBERT: {finbert_result.label} ({finbert_result.score:.2f}) ---"
                     )
 
@@ -367,15 +368,15 @@ def analyst_node(state: AgentState) -> Command:
             )
             item["analysis"]["source"] = "llm"
 
-            print(f"--- [News Research] ✅ Completed analysis for article {idx+1} ---")
+            logger.info(f"--- [News Research] ✅ Completed analysis for article {idx+1} ---")
         except Exception as e:
-            print(
+            logger.error(
                 f"--- [News Research] ❌ Analysis FAILED for article {idx+1}: {e} ---"
             )
             logger.error(f"Analysis failed for {item.get('title', 'Unknown')}: {e}")
 
     analyzed_count = len([i for i in news_items if i.get("analysis")])
-    print(f"--- [News Research] Completed analysis for {analyzed_count} articles ---")
+    logger.info(f"--- [News Research] Completed analysis for {analyzed_count} articles ---")
 
     return Command(
         update={
@@ -393,7 +394,7 @@ def aggregator_node(state: AgentState) -> Command:
     # news_items are now dicts (serialized from previous nodes)
     news_items: list[dict] = output.get("news_items", [])
 
-    print(f"--- [News Research] Aggregating results for {ticker} ---")
+    logger.info(f"--- [News Research] Aggregating results for {ticker} ---")
 
     if not news_items:
         summary_text = "No detailed news analysis available."

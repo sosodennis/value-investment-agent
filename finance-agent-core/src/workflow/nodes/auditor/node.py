@@ -7,45 +7,49 @@ This is a simple wrapper around the SkillRegistry auditor functions.
 from langchain_core.messages import AIMessage
 from langgraph.types import Command
 
+from src.utils.logger import get_logger
+
 from ...manager import SkillRegistry
 from ...schemas import AuditOutput
 from ...state import AgentState
+
+logger = get_logger(__name__)
 
 
 def auditor_node(state: AgentState) -> Command:
     """
     Validates extracted parameters using skill-specific audit rules.
     """
-    print("--- Auditor: Checking parameters ---")
-    print(f"DEBUG: Auditor State Keys: {state.model_dump().keys()}")
+    logger.info("--- Auditor: Checking parameters ---")
+    logger.debug(f"DEBUG: Auditor State Keys: {state.model_dump().keys()}")
 
     # Access Pydantic fields
     try:
         if not state.extraction_output:
-            print("ERROR: Auditor found no extraction_output in state")
+            logger.error("ERROR: Auditor found no extraction_output in state")
             raise ValueError("No extraction output found in state")
 
         params_dict = state.extraction_output.params
         model_type = state.model_type
-        print(f"DEBUG: Check params for model={model_type}: {params_dict}")
+        logger.debug(f"DEBUG: Check params for model={model_type}: {params_dict}")
 
         skill = SkillRegistry.get_skill(model_type)
         if not skill:
-            print(f"ERROR: Skill not found for {model_type}")
+            logger.error(f"ERROR: Skill not found for {model_type}")
             raise ValueError(f"Skill not found regarding {model_type}")
 
         schema = skill["schema"]
         audit_func = skill["auditor"]
-        print(f"DEBUG: Found skill schema={schema}, auditor={audit_func}")
+        logger.debug(f"DEBUG: Found skill schema={schema}, auditor={audit_func}")
 
         # Rehydrate Pydantic object
-        print("DEBUG: Rehydrating Pydantic object...")
+        logger.debug("DEBUG: Rehydrating Pydantic object...")
         params_obj = schema(**params_dict)
-        print("DEBUG: Pydantic object created successfully.")
+        logger.debug("DEBUG: Pydantic object created successfully.")
 
-        print("DEBUG: Running audit function...")
+        logger.debug("DEBUG: Running audit function...")
         result = audit_func(params_obj)
-        print(f"DEBUG: Audit result: {result}")
+        logger.debug(f"DEBUG: Audit result: {result}")
 
         return Command(
             update={
@@ -63,7 +67,7 @@ def auditor_node(state: AgentState) -> Command:
             goto="approval",
         )
     except Exception as e:
-        print(f"Audit Failed: {e}")
+        logger.error(f"Audit Failed: {e}")
         from langgraph.graph import END
 
         return Command(

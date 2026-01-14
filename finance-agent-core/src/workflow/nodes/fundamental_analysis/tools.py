@@ -4,14 +4,14 @@ OpenBB and Web Search integration tools for the Planner Node.
 Provides wrapper functions for entity resolution, company profile retrieval, and web search.
 """
 
-import logging
-
 import yfinance as yf
 from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
 
+from src.utils.logger import get_logger
+
 from .structures import CompanyProfile, TickerCandidate
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def search_ticker(query: str, limit: int = 5) -> list[TickerCandidate]:

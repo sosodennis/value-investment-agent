@@ -1,9 +1,10 @@
-import logging
 import re
 from dataclasses import asdict, dataclass
 from typing import Any, Optional
 
-logger = logging.getLogger(__name__)
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 # Model chosen from research: project-aps/finbert-finetune
 FINBERT_MODEL_NAME = "project-aps/finbert-finetune"
@@ -67,11 +68,11 @@ class FinBERTAnalyzer:
             self.load_error = (
                 f"Missing dependencies: {e}. Please install transformers and torch."
             )
-            print(f"FinBERT disabled: {self.load_error}")
+            logger.warning(f"FinBERT disabled: {self.load_error}")
             return False
         except Exception as e:
             self.load_error = str(e)
-            print(f"Failed to load FinBERT model: {e}")
+            logger.error(f"Failed to load FinBERT model: {e}")
             return False
 
     def is_available(self) -> bool:

@@ -8,8 +8,9 @@ This node:
 4. Supports Human-in-the-Loop for ambiguous cases
 """
 
-import logging
 from typing import TYPE_CHECKING
+
+from src.utils.logger import get_logger
 
 from . import graph
 from .structures import ValuationModel
@@ -17,7 +18,7 @@ from .structures import ValuationModel
 if TYPE_CHECKING:
     from ...state import AgentState
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def fundamental_analysis_node(state: "AgentState") -> dict:

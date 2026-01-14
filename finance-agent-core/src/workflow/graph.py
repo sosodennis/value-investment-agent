@@ -1,6 +1,8 @@
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 
+from src.utils.logger import get_logger
+
 from .nodes import (
     auditor_node,
     calculation_node,
@@ -11,12 +13,14 @@ from .nodes.debate import get_debate_subgraph
 from .nodes.fundamental_analysis.graph import get_fundamental_analysis_subgraph
 from .state import AgentState
 
+logger = get_logger(__name__)
+
 
 def approval_node(state: AgentState) -> Command:
     """
     Waits for human approval using the interrupt() function.
     """
-    print("--- Approval: Requesting human approval ---")
+    logger.info("--- Approval: Requesting human approval ---")
 
     # Access Pydantic fields
     if state.approved:
@@ -41,7 +45,7 @@ def approval_node(state: AgentState) -> Command:
     )
 
     ans = interrupt(interrupt_payload.model_dump())
-    print(f"--- Approval: Received user input: {ans} ---")
+    logger.info(f"--- Approval: Received user input: {ans} ---")
 
     # When resumed, ans will contain the payload sent from frontend (e.g. { "approved": true })
     from langchain_core.messages import AIMessage, HumanMessage
@@ -60,7 +64,7 @@ def approval_node(state: AgentState) -> Command:
     ]
 
     if ans.get("approved"):
-        print("✅ Received human approval.")
+        logger.info("✅ Received human approval.")
         return Command(
             update={
                 "approved": True,
@@ -70,7 +74,7 @@ def approval_node(state: AgentState) -> Command:
             goto="calculator",
         )
     else:
-        print("❌ Final approval rejected.")
+        logger.warning("❌ Final approval rejected.")
         return Command(
             update={
                 "approved": False,
@@ -129,7 +133,7 @@ async def get_graph():
         pg_db = os.environ.get("POSTGRES_DB", "langgraph")
 
         db_uri = f"postgresql://{pg_user}:{pg_pass}@{pg_host}:{pg_port}/{pg_db}"
-        print(f"--- Graph: Connecting to Postgres at {pg_host}:{pg_port}/{pg_db} ---")
+        logger.info(f"--- Graph: Connecting to Postgres at {pg_host}:{pg_port}/{pg_db} ---")
 
         # Create connection pool
         pool = AsyncConnectionPool(

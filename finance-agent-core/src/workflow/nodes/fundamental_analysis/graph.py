@@ -7,6 +7,8 @@ Uses Command and interrupt for control flow.
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 
+from src.utils.logger import get_logger
+
 from ...state import AgentState
 from .extraction import (
     deduplicate_candidates,
@@ -18,6 +20,8 @@ from .logic import select_valuation_model, should_request_clarification
 from .structures import ValuationModel
 from .tools import get_company_profile, search_ticker, web_search
 
+logger = get_logger(__name__)
+
 # --- Nodes ---
 
 
@@ -25,7 +29,7 @@ def extraction_node(state: AgentState) -> Command:
     """Extract company and model from user query."""
     user_query = state.user_query
     if not user_query:
-        print(
+        logger.warning(
             "--- Fundamental Analysis: No query provided, requesting clarification ---"
         )
         return Command(
@@ -39,7 +43,7 @@ def extraction_node(state: AgentState) -> Command:
             goto="clarifying",
         )
 
-    print(f"--- Fundamental Analysis: Extracting intent from: {user_query} ---")
+    logger.info(f"--- Fundamental Analysis: Extracting intent from: {user_query} ---")
     intent = extract_intent(user_query)
     return Command(
         update={
@@ -78,12 +82,12 @@ def searching_node(state: AgentState) -> Command:
             )
             search_queries.append(clean_query)
         else:
-            print(
+            logger.warning(
                 "--- Fundamental Analysis: Search query missing, requesting clarification ---"
             )
             return Command(update={"status": "clarifying"}, goto="clarifying")
 
-    print(f"--- Fundamental Analysis: Searching for queries: {search_queries} ---")
+    logger.info(f"--- Fundamental Analysis: Searching for queries: {search_queries} ---")
     candidate_map = {}
 
     # === Execute Search on All Queries ===
@@ -94,7 +98,7 @@ def searching_node(state: AgentState) -> Command:
         # Check for high confidence matches (Short-circuit removed per user request to always do dual-search)
         high_confidence_candidates = [c for c in yf_candidates if c.confidence >= 0.9]
         if high_confidence_candidates:
-            print(
+            logger.info(
                 f"--- Fundamental Analysis: High confidence match found via Yahoo for '{query}': {[c.symbol for c in high_confidence_candidates]} ---"
             )
 
@@ -123,7 +127,7 @@ def searching_node(state: AgentState) -> Command:
             candidate_map[c.symbol] = c
 
     final_candidates = deduplicate_candidates(list(candidate_map.values()))
-    print(f"Final candidates: {[c.symbol for c in final_candidates]}")
+    logger.info(f"Final candidates: {[c.symbol for c in final_candidates]}")
 
     return Command(
         update={
@@ -140,7 +144,7 @@ def decision_node(state: AgentState) -> Command:
     candidates = state.ticker_candidates or []
 
     if not candidates:
-        print(
+        logger.warning(
             "--- Fundamental Analysis: No candidates found, requesting clarification ---"
         )
         return Command(update={"status": "clarifying"}, goto="clarifying")
@@ -151,18 +155,18 @@ def decision_node(state: AgentState) -> Command:
     candidate_objs = [TickerCandidate(**c) for c in candidates]
 
     if should_request_clarification(candidate_objs):
-        print(
+        logger.warning(
             "--- Fundamental Analysis: Ambiguity detected, requesting clarification ---"
         )
         return Command(update={"status": "clarifying"}, goto="clarifying")
 
     # Resolved - proceed to financial health check
     resolved_ticker = candidate_objs[0].symbol
-    print(f"--- Fundamental Analysis: Ticker resolved to {resolved_ticker} ---")
+    logger.info(f"--- Fundamental Analysis: Ticker resolved to {resolved_ticker} ---")
     profile = get_company_profile(resolved_ticker)
 
     if not profile:
-        print(
+        logger.warning(
             f"--- Fundamental Analysis: Could not fetch profile for {resolved_ticker}, requesting clarification ---"
         )
         return Command(update={"status": "clarifying"}, goto="clarifying")
@@ -182,7 +186,7 @@ def financial_health_node(state: AgentState) -> Command:
     Fetch financial data from SEC EDGAR and generate Financial Health Report.
     """
     resolved_ticker = state.resolved_ticker
-    print(
+    logger.info(
         f"--- Fundamental Analysis: Fetching financial health data for {resolved_ticker} ---"
     )
 
@@ -290,7 +294,7 @@ def financial_health_node(state: AgentState) -> Command:
             except (ValueError, TypeError):
                 return "None"
 
-        print(
+        logger.info(
             f"✅ Generated {len(financial_reports)} Financial Health Reports for {resolved_ticker}"
         )
 
@@ -404,7 +408,7 @@ def financial_health_node(state: AgentState) -> Command:
 
         reports_data = [r.model_dump() for r in financial_reports]
     else:
-        print(
+        logger.warning(
             f"⚠️  Could not fetch financial data for {resolved_ticker}, proceeding without it"
         )
         reports_data = []
@@ -442,7 +446,7 @@ def model_selection_node(state: AgentState) -> Command:
     resolved_ticker = state.resolved_ticker
 
     if not profile:
-        print(
+        logger.warning(
             "--- Fundamental Analysis: Missing company profile, cannot select model ---"
         )
         return Command(update={"status": "clarifying"}, goto="clarifying")
@@ -498,7 +502,7 @@ def model_selection_node(state: AgentState) -> Command:
 
             reasoning += health_context
         except Exception as e:
-            print(f"⚠️  Could not parse financial report for insights: {e}")
+            logger.warning(f"⚠️  Could not parse financial report for insights: {e}")
 
     # Map model_type for calculation node compatibility
     model_type_map = {
@@ -537,7 +541,7 @@ def clarification_node(state: AgentState) -> Command:
     """
     Triggers an interrupt to ask the user to select a ticker or provide clarification.
     """
-    print(
+    logger.warning(
         "--- Fundamental Analysis: Ticker Ambiguity Detected. Waiting for user input... ---"
     )
 
@@ -553,7 +557,7 @@ def clarification_node(state: AgentState) -> Command:
         reason="Multiple tickers found or ambiguity detected.",
     )
     user_input = interrupt(interrupt_payload.model_dump())
-    print(f"--- Fundamental Analysis: Received user input: {user_input} ---")
+    logger.info(f"--- Fundamental Analysis: Received user input: {user_input} ---")
 
     # user_input is what the frontend sends back, e.g. { "selected_symbol": "GOOGL" }
     selected_symbol = user_input.get("selected_symbol") or user_input.get("ticker")
@@ -566,7 +570,7 @@ def clarification_node(state: AgentState) -> Command:
             selected_symbol = top.get("symbol") if isinstance(top, dict) else top.symbol
 
     if selected_symbol:
-        print(f"✅ User selected or fallback symbol: {selected_symbol}. Resolving...")
+        logger.info(f"✅ User selected or fallback symbol: {selected_symbol}. Resolving...")
         profile = get_company_profile(selected_symbol)
         if profile:
             from langchain_core.messages import AIMessage, HumanMessage
@@ -595,7 +599,7 @@ def clarification_node(state: AgentState) -> Command:
             )
 
     # If even fallback fails, retry extraction
-    print("--- Fundamental Analysis: Resolution failed, retrying extraction ---")
+    logger.warning("--- Fundamental Analysis: Resolution failed, retrying extraction ---")
     return Command(update={"status": "extraction"}, goto="extraction")
 
 
