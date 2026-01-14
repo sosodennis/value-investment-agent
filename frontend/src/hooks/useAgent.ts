@@ -40,7 +40,7 @@ export function useAgent(assistantId: string = "agent") {
     const messagesRef = useRef<Message[]>([]);
     messagesRef.current = messages;
 
-    const parseStream = async (thread_id: string, currentAiMsgId: string) => {
+    const parseStream = useCallback(async (thread_id: string, currentAiMsgId: string) => {
         console.log(`📡 [parseStream] Opening detached stream for ${thread_id}...`);
         let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
         let latestAiMsgId = currentAiMsgId;
@@ -264,7 +264,7 @@ export function useAgent(assistantId: string = "agent") {
             setCurrentNode(null);
             setCurrentStatus(null);
         }
-    };
+    }, []);
 
     const sendMessage = useCallback(async (content: string, newSession: boolean = false) => {
         setIsLoading(true);
