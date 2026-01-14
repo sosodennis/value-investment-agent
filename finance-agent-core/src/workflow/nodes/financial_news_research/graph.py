@@ -146,11 +146,17 @@ def selector_node(state: AgentState) -> Command:
             # Match URLs back to raw_results indices
             selected_urls = [a.get("url") for a in selected_articles if a.get("url")]
 
+            # Pre-compute URL to index map for O(1) lookup
+            # We want the FIRST occurrence index, just like the original loop with 'break'
+            url_to_idx = {}
+            for idx, r in enumerate(raw_results):
+                url = r.get("link")
+                if url and url not in url_to_idx:
+                    url_to_idx[url] = idx
+
             for url in selected_urls:
-                for idx, r in enumerate(raw_results):
-                    if r.get("link") == url:
-                        selected_indices.append(idx)
-                        break
+                if url in url_to_idx:
+                    selected_indices.append(url_to_idx[url])
         else:
             # Case where LLM didn't return the key at all - fallback
             print(
