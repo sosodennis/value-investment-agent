@@ -302,28 +302,38 @@ async def get_thread_history(thread_id: str):
                     except Exception:
                         current_interrupts.append(i.value)
 
+        # Helper to safely extract nested context
+        def get_context(name: str) -> dict:
+            val = snapshot.values.get(name)
+            if val and hasattr(val, "model_dump"):
+                return val.model_dump()
+            return val or {}
+
+        fundamental = get_context("fundamental")
+        debate = get_context("debate")
+
         agent_outputs = {
             "planner": {
-                "financial_reports": snapshot.values.get("financial_reports", []),
-                "resolved_ticker": snapshot.values.get("resolved_ticker"),
-                "company_profile": snapshot.values.get("company_profile"),
+                "financial_reports": fundamental.get("financial_reports", []),
+                "resolved_ticker": fundamental.get("resolved_ticker"),
+                "company_profile": fundamental.get("company_profile"),
             },
             "executor": snapshot.values.get("extraction_output"),
             "auditor": snapshot.values.get("audit_output"),
             "calculator": snapshot.values.get("calculation_output"),
-            "debate": snapshot.values.get("debate_conclusion"),
+            "debate": debate.get("conclusion"),
         }
 
         res = {
             "thread_id": thread_id,
             "messages": messages,
             "interrupts": current_interrupts,
-            "resolved_ticker": snapshot.values.get("resolved_ticker"),
-            "status": snapshot.values.get("status"),
+            "resolved_ticker": fundamental.get("resolved_ticker"),
+            "status": fundamental.get("status"),
             "next": snapshot.next,
             "is_running": job_manager.is_running(thread_id),
             "node_statuses": snapshot.values.get("node_statuses", {}),
-            "financial_reports": snapshot.values.get("financial_reports", []),
+            "financial_reports": fundamental.get("financial_reports", []),
             "agent_outputs": agent_outputs,
         }
         print(
@@ -341,20 +351,31 @@ async def get_agent_statuses(thread_id: str):
     try:
         graph = await get_graph()
         snapshot = await graph.aget_state(config)
+
+        # Helper to safely extract nested context
+        def get_context(name: str) -> dict:
+            val = snapshot.values.get(name)
+            if val and hasattr(val, "model_dump"):
+                return val.model_dump()
+            return val or {}
+
+        fundamental = get_context("fundamental")
+        debate = get_context("debate")
+
         agent_outputs = {
             "planner": {
-                "financial_reports": snapshot.values.get("financial_reports", []),
-                "resolved_ticker": snapshot.values.get("resolved_ticker"),
-                "company_profile": snapshot.values.get("company_profile"),
+                "financial_reports": fundamental.get("financial_reports", []),
+                "resolved_ticker": fundamental.get("resolved_ticker"),
+                "company_profile": fundamental.get("company_profile"),
             },
             "executor": snapshot.values.get("extraction_output"),
             "auditor": snapshot.values.get("audit_output"),
             "calculator": snapshot.values.get("calculation_output"),
-            "debate": snapshot.values.get("debate_conclusion"),
+            "debate": debate.get("conclusion"),
         }
         return {
             "node_statuses": snapshot.values.get("node_statuses", {}),
-            "financial_reports": snapshot.values.get("financial_reports", []),
+            "financial_reports": fundamental.get("financial_reports", []),
             "current_node": snapshot.values.get("current_node"),
             "agent_outputs": agent_outputs,
         }

@@ -54,7 +54,7 @@ def get_llm(model: str = DEFAULT_MODEL, temperature: float = 0):
 
 def search_node(state: AgentState) -> Command:
     """[Funnel Node 1] Search for recent news snippets."""
-    ticker = state.resolved_ticker or state.ticker
+    ticker = state.fundamental.resolved_ticker or state.ticker
     if not ticker:
         logger.warning("Financial News Research: No ticker resolved, skipping.")
         return Command(
@@ -64,7 +64,7 @@ def search_node(state: AgentState) -> Command:
     logger.info(f"--- [News Research] Searching news for {ticker} ---")
     try:
         # Extract company_name from fundamental analysis output if available
-        fa_output = state.fundamental_analysis_output or {}
+        fa_output = state.fundamental.analysis_output or {}
         company_name = fa_output.get("company_name")
 
         # Run async search in sync node
@@ -80,7 +80,7 @@ def search_node(state: AgentState) -> Command:
     if not results:
         return Command(
             update={
-                "financial_news_output": {"ticker": ticker, "news_items": []},
+                "financial_news": {"output": {"ticker": ticker, "news_items": []}},
                 "node_statuses": {"financial_news_research": "done"},
             },
             goto=END,
@@ -102,10 +102,12 @@ URL: {r.get('link')}
 
     return Command(
         update={
-            "financial_news_output": {
-                "ticker": ticker,
-                "raw_results": results,
-                "formatted_results": formatted_results,
+            "financial_news": {
+                "output": {
+                    "ticker": ticker,
+                    "raw_results": results,
+                    "formatted_results": formatted_results,
+                }
             },
             "node_statuses": {"financial_news_research": "running"},
         },
@@ -115,7 +117,7 @@ URL: {r.get('link')}
 
 def selector_node(state: AgentState) -> Command:
     """[Funnel Node 2] Filter top relevant articles using URL-based selection."""
-    output = state.financial_news_output or {}
+    output = state.financial_news.output or {}
     ticker = output.get("ticker")
     formatted_results = output.get("formatted_results")
     raw_results = output.get("raw_results", [])
@@ -179,7 +181,9 @@ def selector_node(state: AgentState) -> Command:
     )
     return Command(
         update={
-            "financial_news_output": {**output, "selected_indices": selected_indices},
+            "financial_news": {
+                "output": {**output, "selected_indices": selected_indices}
+            },
             "node_statuses": {"financial_news_research": "running"},
         },
         goto="fetch_node",
@@ -188,11 +192,13 @@ def selector_node(state: AgentState) -> Command:
 
 def fetch_node(state: AgentState) -> Command:
     """[Funnel Node 3] Fetch and clean full text for selected articles (async parallel)."""
-    output = state.financial_news_output or {}
+    output = state.financial_news.output or {}
     raw_results = output.get("raw_results", [])
     selected_indices = output.get("selected_indices", [])
 
-    logger.info(f"--- [News Research] Fetching {len(selected_indices)} articles content ---")
+    logger.info(
+        f"--- [News Research] Fetching {len(selected_indices)} articles content ---"
+    )
 
     # Build list of articles to fetch
     articles_to_fetch = []
@@ -256,7 +262,9 @@ def fetch_node(state: AgentState) -> Command:
                 categories=res.get("categories", []),
             )
             news_items.append(item)
-            logger.info(f"--- [News Research] ✅ Created news item for: {title[:50]}... ---")
+            logger.info(
+                f"--- [News Research] ✅ Created news item for: {title[:50]}... ---"
+            )
         except Exception as e:
             logger.error(
                 f"--- [News Research] ❌ Failed to create news item for URL {url}: {e} ---"
@@ -271,7 +279,9 @@ def fetch_node(state: AgentState) -> Command:
     news_items_serialized = [item.model_dump(mode="json") for item in news_items]
     return Command(
         update={
-            "financial_news_output": {**output, "news_items": news_items_serialized},
+            "financial_news": {
+                "output": {**output, "news_items": news_items_serialized}
+            },
             "node_statuses": {"financial_news_research": "running"},
         },
         goto="analyst_node",
@@ -280,12 +290,14 @@ def fetch_node(state: AgentState) -> Command:
 
 def analyst_node(state: AgentState) -> Command:
     """[Funnel Node 4] Deep analysis per article."""
-    output = state.financial_news_output or {}
+    output = state.financial_news.output or {}
     ticker = output.get("ticker")
     # news_items are now dicts (serialized from fetch_node)
     news_items: list[dict] = output.get("news_items", [])
 
-    logger.info(f"--- [News Research] Analyzing {len(news_items)} articles for {ticker} ---")
+    logger.info(
+        f"--- [News Research] Analyzing {len(news_items)} articles for {ticker} ---"
+    )
 
     # Initialize FinBERT Service
     finbert_analyzer = get_finbert_analyzer()
@@ -375,7 +387,9 @@ def analyst_node(state: AgentState) -> Command:
             )
             item["analysis"]["source"] = "llm"
 
-            logger.info(f"--- [News Research] ✅ Completed analysis for article {idx+1} ---")
+            logger.info(
+                f"--- [News Research] ✅ Completed analysis for article {idx+1} ---"
+            )
         except Exception as e:
             logger.error(
                 f"--- [News Research] ❌ Analysis FAILED for article {idx+1}: {e} ---"
@@ -383,11 +397,13 @@ def analyst_node(state: AgentState) -> Command:
             logger.error(f"Analysis failed for {item.get('title', 'Unknown')}: {e}")
 
     analyzed_count = len([i for i in news_items if i.get("analysis")])
-    logger.info(f"--- [News Research] Completed analysis for {analyzed_count} articles ---")
+    logger.info(
+        f"--- [News Research] Completed analysis for {analyzed_count} articles ---"
+    )
 
     return Command(
         update={
-            "financial_news_output": {**output, "news_items": news_items},
+            "financial_news": {"output": {**output, "news_items": news_items}},
             "node_statuses": {"financial_news_research": "running"},
         },
         goto="aggregator_node",
@@ -396,7 +412,7 @@ def analyst_node(state: AgentState) -> Command:
 
 def aggregator_node(state: AgentState) -> Command:
     """[Funnel Node 5] Aggregate results and update state."""
-    output = state.financial_news_output or {}
+    output = state.financial_news.output or {}
     ticker = output.get("ticker")
     # news_items are now dicts (serialized from previous nodes)
     news_items: list[dict] = output.get("news_items", [])
@@ -458,7 +474,7 @@ def aggregator_node(state: AgentState) -> Command:
     return Command(
         update={
             # mode='json' ensures HttpUrl, datetime, Enums are serialized as strings for msgpack/checkpoint
-            "financial_news_output": final_output.model_dump(mode="json"),
+            "financial_news": {"output": final_output.model_dump(mode="json")},
             "node_statuses": {"financial_news_research": "done", "debate": "running"},
             "messages": [
                 AIMessage(

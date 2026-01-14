@@ -21,6 +21,110 @@ def last_value(a: str | None, b: str | None) -> str | None:
     return b if b is not None else a
 
 
+# --- Context Models ---
+
+
+class DebateContext(BaseModel):
+    history: list[AnyMessage] = Field(
+        default_factory=list, description="Adversarial conversation transcript"
+    )
+    bull_thesis: str | None = Field(
+        None, description="The current strongest argument for LONG"
+    )
+    bear_thesis: str | None = Field(
+        None, description="The current strongest argument for SHORT"
+    )
+    conclusion: dict[str, Any] | None = Field(
+        None, description="Final structure output: DebateConclusion"
+    )
+    current_round: int = 0
+    analyst_reports: dict[str, Any] | None = Field(
+        None, description="Aggregated ground truth (news + financials) for debate"
+    )
+
+
+def merge_debate_context(
+    current: DebateContext | None, new: DebateContext | dict
+) -> DebateContext:
+    if current is None:
+        current = DebateContext()
+
+    if isinstance(new, DebateContext):
+        new_data = new.model_dump()
+    else:
+        new_data = new
+
+    # Handle history merging with add_messages
+    if "history" in new_data and new_data["history"] is not None:
+        current.history = add_messages(current.history, new_data["history"])
+
+    # Handle other fields
+    for k, v in new_data.items():
+        if k == "history":
+            continue
+        if v is not None:
+            setattr(current, k, v)
+
+    return current
+
+
+class FundamentalAnalysisContext(BaseModel):
+    analysis_output: dict[str, Any] | None = None
+    extracted_intent: dict[str, Any] | None = None
+    ticker_candidates: list[Any] | None = None
+    resolved_ticker: str | None = None
+    company_profile: dict[str, Any] | None = None
+    financial_reports: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Financial Health Reports from edgartools (Multi-year)",
+    )
+    selected_symbol: str | None = None
+    approved: bool | None = None
+    status: str | None = None
+
+
+def merge_fundamental_context(
+    current: FundamentalAnalysisContext | None, new: FundamentalAnalysisContext | dict
+) -> FundamentalAnalysisContext:
+    if current is None:
+        current = FundamentalAnalysisContext()
+
+    if isinstance(new, FundamentalAnalysisContext):
+        new_data = new.model_dump()
+    else:
+        new_data = new
+
+    for k, v in new_data.items():
+        if v is not None:
+            setattr(current, k, v)
+
+    return current
+
+
+class FinancialNewsContext(BaseModel):
+    output: dict[str, Any] | None = Field(
+        None, description="Output from Financial News Research"
+    )
+
+
+def merge_financial_news_context(
+    current: FinancialNewsContext | None, new: FinancialNewsContext | dict
+) -> FinancialNewsContext:
+    if current is None:
+        current = FinancialNewsContext()
+
+    if isinstance(new, FinancialNewsContext):
+        new_data = new.model_dump()
+    else:
+        new_data = new
+
+    for k, v in new_data.items():
+        if v is not None:
+            setattr(current, k, v)
+
+    return current
+
+
 class AgentState(BaseModel):
     """Agent state defined as a Pydantic model."""
 
@@ -38,38 +142,15 @@ class AgentState(BaseModel):
         None, description="Output from Calculator"
     )
 
-    # Fundamental Analysis metadata (kept as Dict/List for now, could be refactored later)
-    fundamental_analysis_output: dict[str, Any] | None = None
-    extracted_intent: dict[str, Any] | None = None
-    ticker_candidates: list[Any] | None = None
-    resolved_ticker: str | None = None
-    company_profile: dict[str, Any] | None = None
-    financial_reports: list[dict[str, Any]] = Field(
-        default_factory=list,
-        description="Financial Health Reports from edgartools (Multi-year)",
+    # Sub-Agent Contexts
+    fundamental: Annotated[
+        FundamentalAnalysisContext, merge_fundamental_context
+    ] = Field(default_factory=FundamentalAnalysisContext)
+    financial_news: Annotated[FinancialNewsContext, merge_financial_news_context] = (
+        Field(default_factory=FinancialNewsContext)
     )
-    financial_news_output: dict[str, Any] | None = Field(
-        None, description="Output from Financial News Research"
-    )
-    selected_symbol: str | None = None
-    approved: bool | None = None
-
-    # Debate Agency fields
-    debate_history: Annotated[list[AnyMessage], add_messages] = Field(
-        default_factory=list, description="Adversarial conversation transcript"
-    )
-    bull_thesis: Annotated[str | None, last_value] = Field(
-        None, description="The current strongest argument for LONG"
-    )
-    bear_thesis: Annotated[str | None, last_value] = Field(
-        None, description="The current strongest argument for SHORT"
-    )
-    debate_conclusion: dict[str, Any] | None = Field(
-        None, description="Final structure output: DebateConclusion"
-    )
-    debate_current_round: int = 0
-    analyst_reports: dict[str, Any] | None = Field(
-        None, description="Aggregated ground truth (news + financials) for debate"
+    debate: Annotated[DebateContext, merge_debate_context] = Field(
+        default_factory=DebateContext
     )
 
     # Dashboard tracking
