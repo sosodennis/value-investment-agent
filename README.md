@@ -8,17 +8,61 @@ Traditional LLM-based financial tools often hallucinate numbers or struggle with
 *   **Agents (Neuro)**: Understand user intent, research companies, analyze news, and extract specific valuation parameters from unstructured data (10-Ks, 10-Qs).
 *   **Engine (Symbolic)**: A deterministic calculation layer that accepts validated parameters and executes financial models (e.g., DCF, DDM) with mathematical precision.
 
-## ✨ Key Features
+## 🧠 Neuro-Symbolic Architecture
 
-### 🤖 Multi-Agent Workflow
-The system is orchestrated by **LangGraph** and consists of specialized agents:
-1.  **Fundamental Analysis**: Performs comprehensive ticker search, identifies the correct company, and gathers core financial data.
-2.  **Financial News Research**: Analyzes market sentiment and gathers recent news relevant to the valuation.
-3.  **Debate**: A multi-agent debate session to challenge assumptions and refine the investment thesis.
-4.  **Executor (Parameter Extraction)**: Scans financial documents to extract specific inputs required for the selected valuation model (e.g., "Risk-Free Rate", "Growth Rate").
-5.  **Auditor**: Validates the extracted parameters, checks for logical inconsistencies, and flags potential hallucinations.
-6.  **Approval (Human-in-the-Loop)**: An interactive step where the user reviews the assumptions and extracted parameters before the final calculation is performed.
-7.  **Calculator**: Executes the deterministic financial model using the approved inputs.
+The system is built on two core pillars:
+
+### 1. Agents & Workflow (The "Graph")
+
+The probabilistic side of the system is a **LangGraph** workflow that orchestrates specialized agents to gather, analyze, and validate data.
+
+```mermaid
+graph TD
+    Start([Start]) --> FA[Fundamental Analysis]
+    FA --> FNR[Financial News Research]
+    FNR --> Debate[Debate]
+    Debate --> Executor[Executor]
+    Executor --> Auditor[Auditor]
+    Auditor --> Approval{Approval}
+    Approval -->|Approved| Calc[Calculator]
+    Approval -->|Rejected| End([End])
+    Calc --> End
+```
+
+#### Agent Hierarchy
+
+*   **`fundamental_analysis`** (Subgraph): Resolves the ticker, checks financial health, and selects the valuation model.
+    *   `extraction`: Identifies user intent (company and desired model) from the query.
+    *   `searching`: Performs dual-channel search (Yahoo Finance + Web) to find candidates.
+    *   `deciding`: Logic to resolve ambiguity or request clarification.
+    *   `financial_health`: Fetches XBRL data from SEC EDGAR and generates a health report.
+    *   `model_selection`: Selects the appropriate valuation model (e.g., SaaS, Bank) based on industry.
+    *   `clarifying`: Handles Human-in-the-Loop (HITL) interactions for ambiguity resolution.
+*   **`financial_news_research`** (Subgraph): Gathers and analyzes market sentiment.
+    *   `search_node`: Finds relevant news articles across multiple timeframes.
+    *   `selector_node`: Filters articles for relevance using an LLM.
+    *   `fetch_node`: Retrieves full text content for selected articles in parallel.
+    *   `analyst_node`: Performs deep analysis on each article (Sentiment + Key Facts).
+    *   `aggregator_node`: Synthesizes all analyses into a final sentiment score and summary.
+*   **`debate`** (Subgraph): Challenges assumptions through multi-agent discourse.
+    *   `debate_aggregator`: Prepares topics for debate based on research.
+    *   `bull`: Argues for the investment case.
+    *   `bear`: Argues against the investment case (risk focus).
+    *   `moderator`: Evaluates arguments and decides the winner/conclusion.
+*   **`executor`** (Node): The "Parameter Hunter". Scans financial documents to extract specific inputs required for the selected model.
+*   **`auditor`** (Node): Validates extracted parameters against logical constraints and flags potential hallucinations.
+*   **`approval`** (Node): A Human-in-the-Loop checkpoint where the user reviews and approves assumptions before calculation.
+*   **`calculator`** (Node): The bridge to the deterministic engine.
+
+### 2. Calculation Engine (The "Math")
+
+The deterministic side is handled by the **`CalculationGraph`** (`src/engine/core.py`).
+
+*   **Dependency Inference**: It automatically builds a Directed Acyclic Graph (DAG) by inspecting function signatures.
+*   **Topological Execution**: Uses NetworkX to determine the correct order of operations, ensuring variable dependencies (e.g., `revenue` -> `ebit` -> `fcff`) are resolved before calculation.
+*   **Traceability**: Every number is traceable back to its source (XBRL tag, formula, or user assumption).
+
+## ✨ Key Features
 
 ### 📊 Valuation Models
 Currently supported models:
