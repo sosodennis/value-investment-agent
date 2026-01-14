@@ -35,38 +35,47 @@ def fundamental_analysis_node(state: "AgentState") -> dict:
 
         if not user_query:
             return {
-                "fundamental_analysis_output": {
-                    "status": "clarification_needed",
-                    "error": "No query provided",
+                "fundamental": {
+                    "analysis_output": {
+                        "status": "clarification_needed",
+                        "error": "No query provided",
+                    }
                 }
             }
 
         sub_graph_input = {
             "user_query": user_query,
             "messages": state.get("messages") or [],
-            "status": "extraction",
+            "fundamental": {"status": "extraction"},
         }
 
         # 2. Invoke Sub-graph
         result = graph.fundamental_analysis_subgraph.invoke(sub_graph_input)
 
         # 3. Handle result
-        if result.get("status") == "waiting_for_human":
+        fundamental_result = result.get("fundamental", {})
+        status = fundamental_result.get("status")
+
+        if status == "waiting_for_human":
             logger.warning("Fundamental analysis needs clarification")
             return {
-                "fundamental_analysis_output": {
-                    "status": "clarification_needed",
-                    "candidates": result.get("ticker_candidates"),
-                    "intent": result.get("extracted_intent"),
+                "fundamental": {
+                    "analysis_output": {
+                        "status": "clarification_needed",
+                        "candidates": fundamental_result.get("ticker_candidates"),
+                        "intent": fundamental_result.get("extracted_intent"),
+                    }
                 }
             }
 
-        output = result.get("fundamental_analysis_output")
+        output = fundamental_result.get("analysis_output")
         if not output:
             return {
-                "fundamental_analysis_output": {
-                    "status": "clarification_needed",
-                    "error": "Fundamental analysis failed to produce output",
+                "fundamental": {
+                    "analysis_output": {
+                        "status": "clarification_needed",
+                        "error": "Fundamental analysis failed to produce output",
+                    }
                 }
             }
 
@@ -91,13 +100,15 @@ def fundamental_analysis_node(state: "AgentState") -> dict:
         return {
             "ticker": output["ticker"],
             "model_type": model_type,
-            "fundamental_analysis_output": output,
+            "fundamental": {"analysis_output": output},
         }
     except Exception as e:
         logger.error(f"Fundamental analysis failed: {e}")
         return {
-            "fundamental_analysis_output": {
-                "status": "clarification_needed",
-                "error": str(e),
+            "fundamental": {
+                "analysis_output": {
+                    "status": "clarification_needed",
+                    "error": str(e),
+                }
             }
         }

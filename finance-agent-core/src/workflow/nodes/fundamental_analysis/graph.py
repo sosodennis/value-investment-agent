@@ -34,11 +34,13 @@ def extraction_node(state: AgentState) -> Command:
         )
         return Command(
             update={
-                "status": "clarifying",
-                "fundamental_analysis_output": {
-                    "status": "clarification_needed",
-                    "error": "No query provided",
-                },
+                "fundamental": {
+                    "status": "clarifying",
+                    "analysis_output": {
+                        "status": "clarification_needed",
+                        "error": "No query provided",
+                    },
+                }
             },
             goto="clarifying",
         )
@@ -47,7 +49,9 @@ def extraction_node(state: AgentState) -> Command:
     intent = extract_intent(user_query)
     return Command(
         update={
-            "extracted_intent": intent.model_dump(),
+            "fundamental": {
+                "extracted_intent": intent.model_dump(),
+            },
             "node_statuses": {"fundamental_analysis": "running"},
         },
         goto="searching",
@@ -56,7 +60,7 @@ def extraction_node(state: AgentState) -> Command:
 
 def searching_node(state: AgentState) -> Command:
     """Search for the ticker based on extracted intent."""
-    intent = state.extracted_intent or {}
+    intent = state.fundamental.extracted_intent or {}
 
     # Extract explicit fields
     extracted_ticker = intent.get("ticker")
@@ -85,7 +89,9 @@ def searching_node(state: AgentState) -> Command:
             logger.warning(
                 "--- Fundamental Analysis: Search query missing, requesting clarification ---"
             )
-            return Command(update={"status": "clarifying"}, goto="clarifying")
+            return Command(
+                update={"fundamental": {"status": "clarifying"}}, goto="clarifying"
+            )
 
     logger.info(f"--- Fundamental Analysis: Searching for queries: {search_queries} ---")
     candidate_map = {}
@@ -131,8 +137,10 @@ def searching_node(state: AgentState) -> Command:
 
     return Command(
         update={
-            "ticker_candidates": [c.model_dump() for c in final_candidates],
-            "status": "deciding",
+            "fundamental": {
+                "ticker_candidates": [c.model_dump() for c in final_candidates],
+                "status": "deciding",
+            },
             "node_statuses": {"fundamental_analysis": "running"},
         },
         goto="deciding",
@@ -141,13 +149,15 @@ def searching_node(state: AgentState) -> Command:
 
 def decision_node(state: AgentState) -> Command:
     """Decide if ticker is resolved or needs clarification."""
-    candidates = state.ticker_candidates or []
+    candidates = state.fundamental.ticker_candidates or []
 
     if not candidates:
         logger.warning(
             "--- Fundamental Analysis: No candidates found, requesting clarification ---"
         )
-        return Command(update={"status": "clarifying"}, goto="clarifying")
+        return Command(
+            update={"fundamental": {"status": "clarifying"}}, goto="clarifying"
+        )
 
     # Check for ambiguity
     from .structures import TickerCandidate
@@ -158,7 +168,9 @@ def decision_node(state: AgentState) -> Command:
         logger.warning(
             "--- Fundamental Analysis: Ambiguity detected, requesting clarification ---"
         )
-        return Command(update={"status": "clarifying"}, goto="clarifying")
+        return Command(
+            update={"fundamental": {"status": "clarifying"}}, goto="clarifying"
+        )
 
     # Resolved - proceed to financial health check
     resolved_ticker = candidate_objs[0].symbol
@@ -169,13 +181,17 @@ def decision_node(state: AgentState) -> Command:
         logger.warning(
             f"--- Fundamental Analysis: Could not fetch profile for {resolved_ticker}, requesting clarification ---"
         )
-        return Command(update={"status": "clarifying"}, goto="clarifying")
+        return Command(
+            update={"fundamental": {"status": "clarifying"}}, goto="clarifying"
+        )
 
     return Command(
         update={
-            "resolved_ticker": resolved_ticker,
-            "company_profile": profile.model_dump(),
-            "status": "financial_health",
+            "fundamental": {
+                "resolved_ticker": resolved_ticker,
+                "company_profile": profile.model_dump(),
+                "status": "financial_health",
+            }
         },
         goto="financial_health",
     )
@@ -185,7 +201,7 @@ def financial_health_node(state: AgentState) -> Command:
     """
     Fetch financial data from SEC EDGAR and generate Financial Health Report.
     """
-    resolved_ticker = state.resolved_ticker
+    resolved_ticker = state.fundamental.resolved_ticker
     logger.info(
         f"--- Fundamental Analysis: Fetching financial health data for {resolved_ticker} ---"
     )
@@ -417,8 +433,10 @@ def financial_health_node(state: AgentState) -> Command:
 
     return Command(
         update={
-            "financial_reports": reports_data,
-            "status": "model_selection",
+            "fundamental": {
+                "financial_reports": reports_data,
+                "status": "model_selection",
+            },
             "messages": [
                 AIMessage(
                     content="",
@@ -442,25 +460,31 @@ def model_selection_node(state: AgentState) -> Command:
     """
     from .structures import CompanyProfile
 
-    profile = CompanyProfile(**state.company_profile) if state.company_profile else None
-    resolved_ticker = state.resolved_ticker
+    profile = (
+        CompanyProfile(**state.fundamental.company_profile)
+        if state.fundamental.company_profile
+        else None
+    )
+    resolved_ticker = state.fundamental.resolved_ticker
 
     if not profile:
         logger.warning(
             "--- Fundamental Analysis: Missing company profile, cannot select model ---"
         )
-        return Command(update={"status": "clarifying"}, goto="clarifying")
+        return Command(
+            update={"fundamental": {"status": "clarifying"}}, goto="clarifying"
+        )
 
     # Select model based on profile
     model, reasoning = select_valuation_model(profile)
 
     # Enhance reasoning with financial health insights (using latest report)
-    if state.financial_reports:
+    if state.fundamental.financial_reports:
         try:
             from .financial_models import FinancialReport
 
             # Use most recent year (index 0)
-            latest_report_data = state.financial_reports[0]
+            latest_report_data = state.fundamental.financial_reports[0]
             # FinancialReport is a Pydantic model, so we can parse it
             report = FinancialReport(**latest_report_data)
             base = report.base
@@ -498,7 +522,9 @@ def model_selection_node(state: AgentState) -> Command:
                 else ""
             )
             health_context += f"\n- ROE: {roe_val:.2%}" if roe_val is not None else ""
-            health_context += f"\n- OCF: ${ocf_val:,.0f}" if ocf_val is not None else ""
+            health_context += (
+                f"\n- OCF: ${ocf_val:,.0f}" if ocf_val is not None else ""
+            )
 
             reasoning += health_context
         except Exception as e:
@@ -519,14 +545,16 @@ def model_selection_node(state: AgentState) -> Command:
         update={
             "ticker": resolved_ticker,
             "model_type": model_type,
-            "fundamental_analysis_output": {
-                "ticker": resolved_ticker,
-                "model_type": model.value,
-                "company_name": profile.name,
-                "sector": profile.sector,
-                "industry": profile.industry,
-                "reasoning": reasoning,
-                "financial_reports": state.financial_reports,
+            "fundamental": {
+                "analysis_output": {
+                    "ticker": resolved_ticker,
+                    "model_type": model.value,
+                    "company_name": profile.name,
+                    "sector": profile.sector,
+                    "industry": profile.industry,
+                    "reasoning": reasoning,
+                    "financial_reports": state.fundamental.financial_reports,
+                }
             },
             "node_statuses": {
                 "fundamental_analysis": "done",
@@ -550,9 +578,9 @@ def clarification_node(state: AgentState) -> Command:
 
     # Trigger interrupt with candidates
     interrupt_payload = HumanTickerSelection(
-        candidates=state.ticker_candidates or [],
-        intent=IntentExtraction(**state.extracted_intent)
-        if state.extracted_intent
+        candidates=state.fundamental.ticker_candidates or [],
+        intent=IntentExtraction(**state.fundamental.extracted_intent)
+        if state.fundamental.extracted_intent
         else None,
         reason="Multiple tickers found or ambiguity detected.",
     )
@@ -564,13 +592,15 @@ def clarification_node(state: AgentState) -> Command:
 
     if not selected_symbol:
         # Fallback to top candidate if resumed without choice
-        candidates = state.ticker_candidates or []
+        candidates = state.fundamental.ticker_candidates or []
         if candidates:
             top = candidates[0]
             selected_symbol = top.get("symbol") if isinstance(top, dict) else top.symbol
 
     if selected_symbol:
-        logger.info(f"✅ User selected or fallback symbol: {selected_symbol}. Resolving...")
+        logger.info(
+            f"✅ User selected or fallback symbol: {selected_symbol}. Resolving..."
+        )
         profile = get_company_profile(selected_symbol)
         if profile:
             from langchain_core.messages import AIMessage, HumanMessage
@@ -590,17 +620,21 @@ def clarification_node(state: AgentState) -> Command:
 
             return Command(
                 update={
-                    "resolved_ticker": selected_symbol,
-                    "company_profile": profile.model_dump(),
-                    "status": "financial_health",
+                    "fundamental": {
+                        "resolved_ticker": selected_symbol,
+                        "company_profile": profile.model_dump(),
+                        "status": "financial_health",
+                    },
                     "messages": new_messages,
                 },
                 goto="financial_health",
             )
 
     # If even fallback fails, retry extraction
-    logger.warning("--- Fundamental Analysis: Resolution failed, retrying extraction ---")
-    return Command(update={"status": "extraction"}, goto="extraction")
+    logger.warning(
+        "--- Fundamental Analysis: Resolution failed, retrying extraction ---"
+    )
+    return Command(update={"fundamental": {"status": "extraction"}}, goto="extraction")
 
 
 # Helper for initialization

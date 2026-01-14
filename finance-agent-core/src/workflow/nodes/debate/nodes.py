@@ -98,20 +98,20 @@ def debate_aggregator_node(state: AgentState) -> dict[str, Any]:
     # Consolidate news and financials with reliability metadata
     reports = {
         "financials": {
-            "data": state.financial_reports,
+            "data": state.fundamental.financial_reports,
             "source_weight": "HIGH",
             "rationale": "Primary source: SEC XBRL filings (audited, regulatory-grade data)",
         },
         "news": {
-            "data": state.financial_news_output,
+            "data": state.financial_news.output,
             "source_weight": "MEDIUM",
             "rationale": "Secondary source: Curated financial news (editorial bias possible)",
         },
-        "ticker": state.resolved_ticker or state.ticker,
+        "ticker": state.fundamental.resolved_ticker or state.ticker,
     }
 
     return {
-        "analyst_reports": reports,
+        "debate": {"analyst_reports": reports},
         "current_node": "debate_aggregator",
         "node_statuses": {"debate_aggregator": "done", "bull": "running"},
     }
@@ -122,16 +122,16 @@ async def bull_node(state: AgentState) -> dict[str, Any]:
     [Phase 2] Bull Agent (The Growth Hunter)
     Role: Focus on catalysts, growth potential, and bullish news.
     """
-    round_num = state.debate_current_round + 1
-    ticker = state.resolved_ticker or state.ticker
+    round_num = state.debate.current_round + 1
+    ticker = state.fundamental.resolved_ticker or state.ticker
     logger.info(f"--- Debate: Bull Agent Node (Round {round_num}) ---")
 
     try:
         llm = get_llm()
 
         # Optimize context
-        compressed_reports = _compress_reports(state.analyst_reports)
-        trimmed_history = _get_trimmed_history(state.debate_history)
+        compressed_reports = _compress_reports(state.debate.analyst_reports)
+        trimmed_history = _get_trimmed_history(state.debate.history)
 
         # Dynamic Instruction Check
         adversarial_rule = (
@@ -152,10 +152,10 @@ async def bull_node(state: AgentState) -> dict[str, Any]:
         )
 
         return {
-            "debate_history": [
-                AIMessage(content=response.content, name="GrowthHunter")
-            ],
-            "bull_thesis": response.content,
+            "debate": {
+                "history": [AIMessage(content=response.content, name="GrowthHunter")],
+                "bull_thesis": response.content,
+            },
             "current_node": "bull",
             "node_statuses": {"bull": "done", "bear": "running"},
         }
@@ -165,8 +165,10 @@ async def bull_node(state: AgentState) -> dict[str, Any]:
             f"Bull Analysis Error: {str(e)[:100]}. Proceeding with limited data."
         )
         return {
-            "debate_history": [AIMessage(content=fallback_msg, name="GrowthHunter")],
-            "bull_thesis": fallback_msg,
+            "debate": {
+                "history": [AIMessage(content=fallback_msg, name="GrowthHunter")],
+                "bull_thesis": fallback_msg,
+            },
             "current_node": "bull",
             "node_statuses": {"bull": "error", "bear": "running"},
         }
@@ -177,16 +179,16 @@ async def bear_node(state: AgentState) -> dict[str, Any]:
     [Phase 2] Bear Agent (The Forensic Accountant)
     Role: Focus on risks, red flags, and challenging the Bull's narrative.
     """
-    round_num = state.debate_current_round + 1
-    ticker = state.resolved_ticker or state.ticker
+    round_num = state.debate.current_round + 1
+    ticker = state.fundamental.resolved_ticker or state.ticker
     logger.info(f"--- Debate: Bear Agent Node (Round {round_num}) ---")
 
     try:
         llm = get_llm()
 
         # Optimize context
-        compressed_reports = _compress_reports(state.analyst_reports)
-        trimmed_history = _get_trimmed_history(state.debate_history)
+        compressed_reports = _compress_reports(state.debate.analyst_reports)
+        trimmed_history = _get_trimmed_history(state.debate.history)
 
         # Dynamic Instruction Check
         adversarial_rule = (
@@ -207,10 +209,12 @@ async def bear_node(state: AgentState) -> dict[str, Any]:
         )
 
         return {
-            "debate_history": [
-                AIMessage(content=response.content, name="ForensicAccountant")
-            ],
-            "bear_thesis": response.content,
+            "debate": {
+                "history": [
+                    AIMessage(content=response.content, name="ForensicAccountant")
+                ],
+                "bear_thesis": response.content,
+            },
             "current_node": "bear",
             "node_statuses": {"bear": "done", "moderator": "running"},
         }
@@ -220,10 +224,12 @@ async def bear_node(state: AgentState) -> dict[str, Any]:
             f"Bear Analysis Error: {str(e)[:100]}. Proceeding with limited data."
         )
         return {
-            "debate_history": [
-                AIMessage(content=fallback_msg, name="ForensicAccountant")
-            ],
-            "bear_thesis": fallback_msg,
+            "debate": {
+                "history": [
+                    AIMessage(content=fallback_msg, name="ForensicAccountant")
+                ],
+                "bear_thesis": fallback_msg,
+            },
             "current_node": "bear",
             "node_statuses": {"bear": "error", "moderator": "running"},
         }
@@ -235,8 +241,8 @@ async def moderator_node(state: AgentState) -> dict[str, Any]:
     Role: Decides if consensus is reached or if debate should continue/conclude.
     Also handles the final 'Verdict' synthesis in Phase 3.
     """
-    round_num = state.debate_current_round + 1
-    ticker = state.resolved_ticker or state.ticker
+    round_num = state.debate.current_round + 1
+    ticker = state.fundamental.resolved_ticker or state.ticker
     logger.info(f"--- Debate: Moderator Node (Round {round_num}) ---")
 
     llm = get_llm()
@@ -249,7 +255,7 @@ async def moderator_node(state: AgentState) -> dict[str, Any]:
 
             detector = get_sycophancy_detector()
             similarity, is_sycophantic = detector.check_consensus(
-                state.bull_thesis or "", state.bear_thesis or ""
+                state.debate.bull_thesis or "", state.debate.bear_thesis or ""
             )
 
             logger.info(
@@ -258,8 +264,8 @@ async def moderator_node(state: AgentState) -> dict[str, Any]:
             )
 
             # Optimize context
-            compressed_reports = _compress_reports(state.analyst_reports)
-            trimmed_history = _get_trimmed_history(state.debate_history)
+            compressed_reports = _compress_reports(state.debate.analyst_reports)
+            trimmed_history = _get_trimmed_history(state.debate.history)
 
             system_content = MODERATOR_SYSTEM_PROMPT.format(
                 ticker=ticker,
@@ -287,18 +293,22 @@ async def moderator_node(state: AgentState) -> dict[str, Any]:
             )
 
             return {
-                "debate_history": [AIMessage(content=response.content, name="Judge")],
-                "debate_current_round": round_num,
+                "debate": {
+                    "history": [AIMessage(content=response.content, name="Judge")],
+                    "current_round": round_num,
+                },
                 "current_node": "moderator",
                 "node_statuses": {"moderator": "done"},
             }
         except Exception as e:
             logger.error(f"❌ Error in Moderator Node: {str(e)}")
             return {
-                "debate_history": [
-                    AIMessage(content=f"Moderator Error: {str(e)[:100]}", name="Judge")
-                ],
-                "debate_current_round": round_num,
+                "debate": {
+                    "history": [
+                        AIMessage(content=f"Moderator Error: {str(e)[:100]}", name="Judge")
+                    ],
+                    "current_round": round_num,
+                },
                 "current_node": "moderator",
                 "node_statuses": {"moderator": "error"},
             }
@@ -308,7 +318,7 @@ async def moderator_node(state: AgentState) -> dict[str, Any]:
 
         # Optimize context for final verdict
         trimmed_history = _get_trimmed_history(
-            state.debate_history, max_chars=MAX_CHAR_HISTORY * 1.5
+            state.debate.history, max_chars=MAX_CHAR_HISTORY * 1.5
         )
 
         history_text = "\n\n".join(
@@ -394,8 +404,10 @@ async def moderator_node(state: AgentState) -> dict[str, Any]:
         )
 
         return {
-            "debate_conclusion": conclusion_data,
-            "debate_current_round": round_num,
+            "debate": {
+                "conclusion": conclusion_data,
+                "current_round": round_num,
+            },
             "current_node": "moderator",
             "node_statuses": {
                 "debate": "done",
