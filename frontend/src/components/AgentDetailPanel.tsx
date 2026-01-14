@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import Image from 'next/image';
 import { AgentInfo, DimensionScore } from '../types/agents';
 import { TrendingUp, BarChart3, FileText, Zap, MessageSquare, ListFilter, Activity, LayoutPanelTop, CheckCircle2, Clock } from 'lucide-react';
 import { Message } from '../hooks/useAgent';
@@ -101,7 +102,13 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
             {/* Header / Tabs */}
             <div className="px-8 pt-6 border-b border-slate-900 bg-slate-950/20 backdrop-blur-md shrink-0">
                 <div className="flex items-center gap-4 mb-6">
-                    <img src={agent.avatar} alt={agent.name} className="w-10 h-10 rounded-xl bg-slate-900 p-1 border border-slate-800 shadow-xl" />
+                    <Image
+                        src={agent.avatar}
+                        alt={agent.name}
+                        width={40}
+                        height={40}
+                        className="w-10 h-10 rounded-xl bg-slate-900 p-1 border border-slate-800 shadow-xl"
+                    />
                     <div>
                         <h2 className="text-lg font-bold text-white tracking-tight">{agent.name}</h2>
                         <div className="flex items-center gap-2">
