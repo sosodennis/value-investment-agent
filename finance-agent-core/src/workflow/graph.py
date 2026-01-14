@@ -23,7 +23,7 @@ def approval_node(state: AgentState) -> Command:
     logger.info("--- Approval: Requesting human approval ---")
 
     # Access Pydantic fields
-    if state.approved:
+    if state.fundamental.approved:
         return Command(goto="calculator")
 
     audit_passed = False
@@ -67,7 +67,7 @@ def approval_node(state: AgentState) -> Command:
         logger.info("✅ Received human approval.")
         return Command(
             update={
-                "approved": True,
+                "fundamental": {"approved": True},
                 "messages": new_messages,
                 "node_statuses": {"approval": "done", "calculator": "running"},
             },
@@ -77,7 +77,7 @@ def approval_node(state: AgentState) -> Command:
         logger.warning("❌ Final approval rejected.")
         return Command(
             update={
-                "approved": False,
+                "fundamental": {"approved": False},
                 "messages": new_messages,
                 "node_statuses": {"approval": "done"},
             },
