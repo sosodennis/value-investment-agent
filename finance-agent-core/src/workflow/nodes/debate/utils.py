@@ -1,10 +1,16 @@
 """
 Utility functions for debate agent enhancements.
-Includes sycophancy detection using FastEmbed.
+Includes sycophancy detection using FastEmbed and CAPM-based hurdle rate calculation.
 """
 
 import numpy as np
 from fastembed import TextEmbedding
+
+from .market_data import (
+    calculate_capm_hurdle,
+    get_dynamic_crash_impact,
+    get_dynamic_payoff_map,
+)
 
 
 class SycophancyDetector:
@@ -73,84 +79,157 @@ def get_sycophancy_detector() -> SycophancyDetector:
     return _detector
 
 
-def calculate_kelly_and_verdict(scenarios: dict) -> dict:
+def calculate_kelly_and_verdict(conclusion_data: dict, ticker: str = None) -> dict:
     """
-    Pure Python function: Calculates mathematical indicators based on LLM-provided probabilities.
-    Returns calculated final_verdict, kelly_confidence, and expected_value.
-    """
+    V8.0: CAPM-Based Dynamic Hurdle Rate + Mean-Variance Kelly Optimization
 
-    # 1. Extract probabilities (clean string or float)
-    def parse_prob(val):
+    Integrates enterprise-level CAPM to replace hardcoded thresholds with
+    market-driven Beta calculations. The Debate AI determines EV; CAPM sets
+    the minimum required return based on the stock's historical volatility.
+
+    Args:
+        conclusion_data: Debate conclusion with scenario analysis
+        ticker: Stock ticker symbol (optional, for real-time Beta calculation)
+
+    Returns:
+        Dict with verdict, kelly_confidence, and CAPM metrics
+    """
+    scenarios = conclusion_data.get("scenario_analysis", {})
+    risk_profile = conclusion_data.get("risk_profile", "GROWTH_TECH")
+
+    # --- 1. 解析分數與歸一化 (Normalization) ---
+    # 優化點：移除 "v*100" 的 hack。利用歸一化的數學特性，
+    # 無論輸入是 [0.8, 0.1, 0.1] 還是 [80, 10, 10]，結果都一樣。
+    def parse_score(val):
         if isinstance(val, str):
-            return float(val.replace("%", "")) / 100 if "%" in val else float(val)
+            val = val.replace("%", "").strip()
         try:
             return float(val)
         except (ValueError, TypeError):
             return 0.0
 
-    p_bull = parse_prob(scenarios.get("bull_case", {}).get("probability", 0))
-    p_bear = parse_prob(scenarios.get("bear_case", {}).get("probability", 0))
-    p_base = parse_prob(scenarios.get("base_case", {}).get("probability", 0))
+    s_bull = parse_score(scenarios.get("bull_case", {}).get("probability", 0))
+    s_bear = parse_score(scenarios.get("bear_case", {}).get("probability", 0))
+    s_base = parse_score(scenarios.get("base_case", {}).get("probability", 0))
 
-    # Normalize probabilities (ensure they sum to 1.0)
-    total_prob = p_bull + p_bear + p_base
-    if total_prob == 0:
+    total_score = s_bull + s_bear + s_base
+    if total_score == 0:
         p_bull, p_bear, p_base = 0.33, 0.33, 0.34
     else:
-        p_bull /= total_prob
-        p_bear /= total_prob
-        p_base /= total_prob
+        p_bull = s_bull / total_score
+        p_bear = s_bear / total_score
+        p_base = s_base / total_score
 
-    # 2. Define payoff map (Return on investment for each scenario)
-    payoff_map = {
-        "SURGE": 0.25,
-        "MODERATE_UP": 0.10,
-        "FLAT": 0.0,
-        "MODERATE_DOWN": -0.10,
-        "CRASH": -0.25,
-    }
+    # --- 2. Dynamic Payoff Map (VaR Integration) ---
+    # Get theory-based crash impact first so it is available in all branches
+    crash_impact = get_dynamic_crash_impact(risk_profile)
+
+    if ticker:
+        # Use historical volatility for Upside, Theory-based for Downside
+        payoff_map = get_dynamic_payoff_map(ticker, risk_profile)
+    else:
+        # Fallback: Use static map (for unit tests or missing ticker)
+        payoff_map = {
+            "SURGE": 0.25,
+            "MODERATE_UP": 0.10,
+            "FLAT": 0.0,
+            "MODERATE_DOWN": -0.10,
+            "CRASH": crash_impact,
+        }
 
     def get_return(case_key):
         impl = scenarios.get(case_key, {}).get("price_implication", "FLAT")
-        if hasattr(impl, "value"):  # Handle Enums
+        if hasattr(impl, "value"):
             impl = impl.value
         impl = str(impl).upper()
-
-        for key, val in payoff_map.items():
-            if key in impl:
-                return val
+        for k, v in payoff_map.items():
+            if k in impl:
+                return v
         return 0.0
 
     r_bull = get_return("bull_case")
     r_bear = get_return("bear_case")
     r_base = get_return("base_case")
 
-    # 3. Calculate Expected Value (EV)
+    # --- 3. EV & Variance Calculation ---
     ev = (p_bull * r_bull) + (p_bear * r_bear) + (p_base * r_base)
 
-    # 4. Calculate Kelly-style Confidence
+    # 方差 (Variance) = Sum(Prob * (Return - EV)^2)
+    # 這代表了這筆交易的「不確定性」。如果 Bull=+50% 且 Bear=-50%，方差會極大，倉位會自動降低。
+    variance = (
+        (p_bull * (r_bull - ev) ** 2)
+        + (p_bear * (r_bear - ev) ** 2)
+        + (p_base * (r_base - ev) ** 2)
+    )
+
+    # --- 4. Enterprise CAPM Hurdle Rate ---
+    if ticker:
+        hurdle_rate, beta, data_source = calculate_capm_hurdle(ticker, risk_profile)
+    else:
+        # Static defaults for robustness
+        from .market_data import (
+            DEFAULT_MARKET_RISK_PREMIUM,
+            DEFAULT_RISK_FREE_RATE,
+            STATIC_BETA_MAP,
+        )
+
+        beta = STATIC_BETA_MAP.get(risk_profile.upper(), 1.5)
+        annual_hurdle = DEFAULT_RISK_FREE_RATE + beta * DEFAULT_MARKET_RISK_PREMIUM
+        hurdle_rate = annual_hurdle / 4.0
+        data_source = "STATIC_FALLBACK"
+
+    # --- 5. Mean-Variance Kelly Optimization ---
     kelly_fraction = 0.0
     final_verdict = "NEUTRAL"
-    if ev > 0.015:
-        final_verdict = "LONG"
-        kelly_fraction = min(ev / 0.05, 1.0)
-    elif ev < -0.015:
-        final_verdict = "SHORT"
-        kelly_fraction = min(abs(ev) / 0.05, 1.0)
+    safe_variance = variance if variance > 0.0001 else 0.0001
 
-    # 5. Safety Lock (Hard Risk Control)
+    if ev > hurdle_rate:
+        final_verdict = "LONG"
+        # 廣義 Kelly 公式
+        raw_kelly = ev / safe_variance
+        # 應用 Half-Kelly (半凱利) 策略：業界標準，為了平滑波動，只使用計算值的一半
+        kelly_fraction = raw_kelly * 0.5
+
+    elif ev < -hurdle_rate:
+        final_verdict = "SHORT"
+        raw_kelly = abs(ev) / safe_variance
+        kelly_fraction = raw_kelly * 0.5
+
+    kelly_fraction = max(0.0, min(kelly_fraction, 1.0))
+
+    # --- 6. Smart Safety Lock ---
+    risk_profile_upper = risk_profile.upper()
+    tolerance_map = {
+        "DEFENSIVE_VALUE": 0.15,
+        "GROWTH_TECH": 0.35,
+        "SPECULATIVE_CRYPTO_BIO": 0.45,
+    }
+    crash_tolerance = tolerance_map.get(risk_profile_upper, 0.25)
+
     bear_impl = str(scenarios.get("bear_case", {}).get("price_implication", "")).upper()
-    if p_bear > 0.40:
-        if final_verdict == "LONG":
-            final_verdict = "NEUTRAL"
-            kelly_fraction = 0.0
-    elif "CRASH" in bear_impl and p_bear > 0.30:
-        if final_verdict == "LONG":
-            final_verdict = "NEUTRAL"
-            kelly_fraction = 0.0
+    risk_override = False
+
+    if p_bear > 0.55:
+        risk_override = True
+    elif "CRASH" in bear_impl and p_bear > crash_tolerance:
+        risk_override = True
+
+    if risk_override and final_verdict == "LONG":
+        final_verdict = "NEUTRAL"
+        kelly_confidence = 0.0
+    else:
+        kelly_confidence = kelly_fraction
 
     return {
         "final_verdict": final_verdict,
-        "kelly_confidence": round(float(kelly_fraction), 2),
+        "kelly_confidence": round(float(kelly_confidence), 2),
         "expected_value": round(float(ev), 4),
+        "variance": round(float(variance), 4),
+        "hurdle_rate": round(float(hurdle_rate), 4),
+        "beta": round(float(beta), 2) if beta else None,
+        "crash_impact": round(float(crash_impact), 2),
+        "data_source": data_source,
+        "risk_override": risk_override,
+        "p_bull": round(p_bull, 2),
+        "p_bear": round(p_bear, 2),
     }

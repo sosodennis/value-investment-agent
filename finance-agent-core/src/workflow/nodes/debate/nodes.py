@@ -225,9 +225,7 @@ async def bear_node(state: AgentState) -> dict[str, Any]:
         )
         return {
             "debate": {
-                "history": [
-                    AIMessage(content=fallback_msg, name="ForensicAccountant")
-                ],
+                "history": [AIMessage(content=fallback_msg, name="ForensicAccountant")],
                 "bear_thesis": fallback_msg,
             },
             "current_node": "bear",
@@ -305,7 +303,9 @@ async def moderator_node(state: AgentState) -> dict[str, Any]:
             return {
                 "debate": {
                     "history": [
-                        AIMessage(content=f"Moderator Error: {str(e)[:100]}", name="Judge")
+                        AIMessage(
+                            content=f"Moderator Error: {str(e)[:100]}", name="Judge"
+                        )
                     ],
                     "current_round": round_num,
                 },
@@ -313,7 +313,7 @@ async def moderator_node(state: AgentState) -> dict[str, Any]:
                 "node_statuses": {"moderator": "error"},
             }
     else:
-        # Final Round: Synthesis of the DebateConclusion (Bayesian V4.0)
+        # Final Round: Synthesis of the DebateConclusion (Bayesian V6.0)
         logger.info("--- Debate: Final Synthesis (Verdict) ---")
 
         # Optimize context for final verdict
@@ -335,34 +335,53 @@ async def moderator_node(state: AgentState) -> dict[str, Any]:
             conclusion_data = conclusion.model_dump(mode="json")
 
             # ==========================================
-            # 🔥 Neuro-Symbolic Calculation Layer 🔥
+            # 🔥 Neuro-Symbolic Calculation Layer V2 🔥
             # ==========================================
+            risk_profile = conclusion_data.get("risk_profile", "UNKNOWN")
             logger.info(
-                f"📊 Raw LLM Verdict: {conclusion_data.get('final_verdict')} | Intuitive Conf: {conclusion_data.get('kelly_confidence')}"
+                f"📊 LLM Verdict: {conclusion_data.get('final_verdict')} | Profile: {risk_profile}"
             )
 
-            # Call calculation function to get math-based metrics
-            metrics = calculate_kelly_and_verdict(
-                conclusion_data.get("scenario_analysis", {})
+            # 1. 執行數學計算 (傳入 ticker 以啟用 CAPM 實時計算)
+            metrics = calculate_kelly_and_verdict(conclusion_data, ticker=ticker)
+
+            # Log CAPM metrics for transparency
+            logger.info(
+                f"📊 CAPM Metrics: Hurdle={metrics.get('hurdle_rate', 0):.1%} | "
+                f"Beta={metrics.get('beta', 'N/A')} | "
+                f"Source={metrics.get('data_source', 'N/A')}"
             )
 
-            # Check if safety lock triggered (Calculated Verdict != Raw LLM Verdict)
-            if (
-                metrics["final_verdict"] == "NEUTRAL"
-                and conclusion_data.get("final_verdict") == "LONG"
-            ):
+            # 2. 處理風控覆蓋 (Risk Override)
+            if metrics["risk_override"]:
+                bear_prob = metrics.get("p_bear", 0)
                 logger.warning(
-                    "⚠️ [Safety Lock] Risk detected. Overriding LONG to NEUTRAL."
+                    f"⚠️ [Safety Lock] Risk Profile '{risk_profile}' tolerance exceeded (Bear Prob: {bear_prob:.1%}). Forcing NEUTRAL."
                 )
                 conclusion_data["winning_thesis"] = (
-                    f"[SAFETY OVERRIDE] {conclusion_data.get('winning_thesis', '')}"
+                    f"[RISK OVERRIDE] Originally LONG, but Bear probability ({bear_prob:.1%}) "
+                    f"exceeds tolerance for {risk_profile}. \n\n{conclusion_data.get('winning_thesis', '')}"
                 )
 
-            # Apply pure calculations to the final output
+            # 3. 處理 "Strong Buy" 信號注入 (激進 Alpha)
+            # 如果是 LONG 且 EV 很高，我們在 thesis 裡強調這一點
+            elif (
+                metrics["final_verdict"] == "LONG" and metrics["kelly_confidence"] > 0.8
+            ):
+                ev_val = metrics.get("expected_value", 0)
+                conclusion_data["winning_thesis"] = (
+                    f"💰 [QUANT SIGNAL: STRONG BUY] Expected Value is +{ev_val:.1%}. "
+                    f"Asymmetric upside detected. \n\n{conclusion_data.get('winning_thesis', '')}"
+                )
+
+            # 4. 將計算結果更新回數據結構
             conclusion_data.update(metrics)
 
             logger.info(
-                f"🧮 Calculated Verdict: {conclusion_data.get('final_verdict')} | Kelly: {conclusion_data.get('kelly_confidence')} | EV: {conclusion_data.get('expected_value')}"
+                f"🧮 Calculated: {conclusion_data.get('final_verdict')} | "
+                f"Kelly: {conclusion_data.get('kelly_confidence')} | "
+                f"EV: {conclusion_data.get('expected_value')} | "
+                f"Prob(Bull/Bear): {metrics.get('p_bull')}/{metrics.get('p_bear')}"
             )
             # ==========================================
 
@@ -370,31 +389,32 @@ async def moderator_node(state: AgentState) -> dict[str, Any]:
             logger.error(
                 f"!!! Debate: Structured output failed: {e}. Falling back to text."
             )
-            # Simple fallback (could be refined more)
+            # Fallback (建議加上 risk_profile 的默認值)
             conclusion_data = {
                 "scenario_analysis": {
                     "bull_case": {
-                        "probability": 0.33,
+                        "probability": 33,
                         "outcome_description": "Error",
                         "price_implication": "FLAT",
                     },
                     "bear_case": {
-                        "probability": 0.33,
+                        "probability": 33,
                         "outcome_description": "Error",
                         "price_implication": "FLAT",
                     },
                     "base_case": {
-                        "probability": 0.34,
+                        "probability": 34,
                         "outcome_description": "Error",
                         "price_implication": "FLAT",
                     },
                 },
+                "risk_profile": "GROWTH_TECH",  # Default fallback
                 "final_verdict": "NEUTRAL",
                 "kelly_confidence": 0.0,
-                "winning_thesis": "Analysis error - defaulting to safety.",
+                "winning_thesis": f"System Error: {str(e)}",
                 "primary_catalyst": "N/A",
-                "primary_risk": "System error during synthesis",
-                "supporting_factors": [str(e)],
+                "primary_risk": "System error",
+                "supporting_factors": [],
             }
 
         conclusion_data["debate_rounds"] = round_num
