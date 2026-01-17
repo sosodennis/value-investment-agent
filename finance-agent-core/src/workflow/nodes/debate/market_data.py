@@ -6,6 +6,7 @@ and centralized yfinance data parsing.
 """
 
 from datetime import datetime, timedelta
+from functools import lru_cache
 
 import numpy as np
 import pandas as pd
@@ -178,7 +179,40 @@ def calculate_capm_hurdle(
     logger.info(
         f"📈 CAPM: {ticker} | Hurdle: {quarterly_hurdle:.1%} (Q) | Beta: {beta:.2f} [{data_source}]"
     )
-    return quarterly_hurdle, beta, data_source
+    return float(quarterly_hurdle), float(beta), data_source
+
+
+@lru_cache(maxsize=1)
+def get_current_risk_free_rate() -> float:
+    """
+    動態獲取當前美國 3個月期國庫券 (Risk-Free Rate)。
+    企業級系統不會把利率寫死 (Hardcode)，因為市場環境會變。
+
+    Return:
+        float: 季度無風險利率 (例如 0.01125 代表 1.125%)
+    """
+    try:
+        # ^IRX 是 13週 (3個月) 美國國債收益率指數
+        ticker = yf.Ticker("^IRX")
+        # 獲取最新價格 (Yield)
+        hist = ticker.history(period="5d")
+        if hist.empty:
+            return DEFAULT_RISK_FREE_RATE / 4.0
+
+        # ^IRX 報價是年化百分比，例如 4.5 代表 4.5%
+        annual_yield_percent = hist["Close"].iloc[-1]
+        annual_yield_decimal = annual_yield_percent / 100.0
+
+        # 轉為季度利率
+        quarterly_yield = annual_yield_decimal / 4.0
+        logger.info(f"📊 Dynamic Risk-Free Rate fetched: {quarterly_yield:.4%} (Q)")
+        return float(quarterly_yield)
+
+    except Exception as e:
+        logger.warning(
+            f"⚠️ Failed to fetch dynamic risk-free rate: {e}. Using fallback."
+        )
+        return DEFAULT_RISK_FREE_RATE / 4.0
 
 
 def get_dynamic_crash_impact(risk_profile: str) -> float:
@@ -226,11 +260,11 @@ def get_dynamic_payoff_map(
         quarterly_vol = np.clip(quarterly_vol, VOLATILITY_FLOOR, VOLATILITY_CEILING)
 
         dynamic_map = {
-            "SURGE": round(quarterly_vol * 2.0, 3),
-            "MODERATE_UP": round(quarterly_vol * 1.0, 3),
+            "SURGE": float(round(quarterly_vol * 2.0, 3)),
+            "MODERATE_UP": float(round(quarterly_vol * 1.0, 3)),
             "FLAT": 0.0,
-            "MODERATE_DOWN": round(-quarterly_vol * 1.0, 3),
-            "CRASH": sector_crash,  # Theory-based
+            "MODERATE_DOWN": float(round(-quarterly_vol * 1.0, 3)),
+            "CRASH": float(sector_crash),  # Theory-based
         }
 
         logger.info(

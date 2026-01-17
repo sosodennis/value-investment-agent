@@ -19,7 +19,9 @@ from .prompts import (
     VERDICT_PROMPT,
 )
 from .schemas import DebateConclusion
-from .utils import calculate_kelly_and_verdict
+from .utils import (
+    calculate_pragmatic_verdict,
+)
 
 logger = get_logger(__name__)
 
@@ -148,7 +150,7 @@ async def bull_node(state: AgentState) -> dict[str, Any]:
         response = await llm.ainvoke(messages)
 
         logger.info(
-            f"--- Debate: Bull Agent '{ticker}' Arg (Round {round_num}):\n{response.content[:200]}..."
+            f"--- Debate: Bull Agent '{ticker}' Arg (Round {round_num}):\n{response.content[:2500]}..."
         )
 
         return {
@@ -205,7 +207,7 @@ async def bear_node(state: AgentState) -> dict[str, Any]:
         response = await llm.ainvoke(messages)
 
         logger.info(
-            f"--- Debate: Bear Agent '{ticker}' Arg (Round {round_num}):\n{response.content[:200]}..."
+            f"--- Debate: Bear Agent '{ticker}' Arg (Round {round_num}):\n{response.content[:2500]}..."
         )
 
         return {
@@ -342,46 +344,17 @@ async def moderator_node(state: AgentState) -> dict[str, Any]:
                 f"📊 LLM Verdict: {conclusion_data.get('final_verdict')} | Profile: {risk_profile}"
             )
 
-            # 1. 執行數學計算 (傳入 ticker 以啟用 CAPM 實時計算)
-            metrics = calculate_kelly_and_verdict(conclusion_data, ticker=ticker)
+            # 1. 執行核心邏輯 (V2.0 Simplified)
+            metrics = calculate_pragmatic_verdict(conclusion_data, ticker=ticker)
 
-            # Log CAPM metrics for transparency
-            logger.info(
-                f"📊 CAPM Metrics: Hurdle={metrics.get('hurdle_rate', 0):.1%} | "
-                f"Beta={metrics.get('beta', 'N/A')} | "
-                f"Source={metrics.get('data_source', 'N/A')}"
-            )
-
-            # 2. 處理風控覆蓋 (Risk Override)
-            if metrics["risk_override"]:
-                bear_prob = metrics.get("p_bear", 0)
-                logger.warning(
-                    f"⚠️ [Safety Lock] Risk Profile '{risk_profile}' tolerance exceeded (Bear Prob: {bear_prob:.1%}). Forcing NEUTRAL."
-                )
-                conclusion_data["winning_thesis"] = (
-                    f"[RISK OVERRIDE] Originally LONG, but Bear probability ({bear_prob:.1%}) "
-                    f"exceeds tolerance for {risk_profile}. \n\n{conclusion_data.get('winning_thesis', '')}"
-                )
-
-            # 3. 處理 "Strong Buy" 信號注入 (激進 Alpha)
-            # 如果是 LONG 且 EV 很高，我們在 thesis 裡強調這一點
-            elif (
-                metrics["final_verdict"] == "LONG" and metrics["kelly_confidence"] > 0.8
-            ):
-                ev_val = metrics.get("expected_value", 0)
-                conclusion_data["winning_thesis"] = (
-                    f"💰 [QUANT SIGNAL: STRONG BUY] Expected Value is +{ev_val:.1%}. "
-                    f"Asymmetric upside detected. \n\n{conclusion_data.get('winning_thesis', '')}"
-                )
-
-            # 4. 將計算結果更新回數據結構
+            # 2. 將計算結果更新回數據結構
             conclusion_data.update(metrics)
 
             logger.info(
                 f"🧮 Calculated: {conclusion_data.get('final_verdict')} | "
-                f"Kelly: {conclusion_data.get('kelly_confidence')} | "
-                f"EV: {conclusion_data.get('expected_value')} | "
-                f"Prob(Bull/Bear): {metrics.get('p_bull')}/{metrics.get('p_bear')}"
+                f"RR Ratio: {metrics.get('rr_ratio')}x | "
+                f"Alpha: {metrics.get('alpha'):.2%} | "
+                f"Conviction: {metrics.get('conviction')}%"
             )
             # ==========================================
 
@@ -410,11 +383,12 @@ async def moderator_node(state: AgentState) -> dict[str, Any]:
                 },
                 "risk_profile": "GROWTH_TECH",  # Default fallback
                 "final_verdict": "NEUTRAL",
-                "kelly_confidence": 0.0,
                 "winning_thesis": f"System Error: {str(e)}",
                 "primary_catalyst": "N/A",
                 "primary_risk": "System error",
                 "supporting_factors": [],
+                "rr_ratio": 0.0,
+                "alpha": 0.0,
             }
 
         conclusion_data["debate_rounds"] = round_num

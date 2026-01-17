@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-Direction = Literal["LONG", "SHORT", "NEUTRAL"]
+Direction = Literal["STRONG_LONG", "LONG", "NEUTRAL", "AVOID", "SHORT", "STRONG_SHORT"]
 
 
 # 定義風險屬性枚舉
@@ -38,10 +38,40 @@ class DebateConclusion(BaseModel):
         default=0.0, description="Calculated variance of the trade."
     )
 
-    winning_thesis: str
-    primary_catalyst: str
-    primary_risk: str
-    supporting_factors: list[str]
+    # V2.0 Simplified Metrics
+    alpha: float | None = Field(
+        default=None, description="Excess return over Risk-Free Rate"
+    )
+    risk_free_benchmark: float | None = Field(
+        default=None, description="Dynamic quarterly Risk-Free Rate used"
+    )
+    rr_ratio: float | None = Field(
+        default=None, description="Reward/Risk Ratio (Upside / Downside)"
+    )
+    raw_ev: float | None = Field(default=0.0, description="Raw expected value")
+    analysis_bias: str | None = Field(
+        default=None, description="Qualitative bias (BULLISH/BEARISH/FLAT)"
+    )
+    conviction: int | None = Field(default=None, description="Confidence score (0-100)")
+    model_summary: str | None = Field(
+        default=None, description="Quant summary of RR and Alpha"
+    )
+    data_quality_warning: bool | None = Field(
+        default=False, description="Flag for suspicious data quality"
+    )
+
+    winning_thesis: str = Field(
+        ..., description="A concise 1-sentence summary of the core investment reason."
+    )
+    primary_catalyst: str = Field(
+        ..., description="The most important single event that will drive price action."
+    )
+    primary_risk: str = Field(
+        ..., description="The most critical factor that could break the thesis."
+    )
+    supporting_factors: list[str] = Field(
+        ..., description="A list of secondary supporting facts."
+    )
     debate_rounds: int = Field(
         default=0, description="Number of debate rounds performed"
     )

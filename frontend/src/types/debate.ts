@@ -1,4 +1,4 @@
-export type Direction = 'LONG' | 'SHORT' | 'NEUTRAL';
+export type Direction = 'STRONG_LONG' | 'LONG' | 'NEUTRAL' | 'AVOID' | 'SHORT' | 'STRONG_SHORT';
 
 export type PriceImplication = 'SURGE' | 'MODERATE_UP' | 'FLAT' | 'MODERATE_DOWN' | 'CRASH';
 
@@ -16,18 +16,20 @@ export interface DebateConclusion {
         bear_case: Scenario;
         base_case: Scenario;
     };
+    // V2.0 Simplified Metrics
+    rr_ratio?: number;
+    alpha?: number;
+    risk_free_benchmark?: number;
+    raw_ev?: number;
+
+    // V2.0 Metrics & State
     risk_profile: RiskProfileType;
     final_verdict: Direction;
-    kelly_confidence: number;
-    expected_value?: number;
-    variance?: number;
-    hurdle_rate?: number;  // CAPM-calculated threshold
-    beta?: number;  // Stock's market volatility
-    crash_impact?: number;  // VaR stress test value
-    data_source?: string;  // "REAL_TIME" or "STATIC_FALLBACK"
-    risk_override?: boolean;
-    p_bull?: number;
-    p_bear?: number;
+    conviction?: number;
+    analysis_bias?: string;
+    model_summary?: string;
+    data_quality_warning?: boolean;
+
     winning_thesis: string;
     primary_catalyst: string;
     primary_risk: string;

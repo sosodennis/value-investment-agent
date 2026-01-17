@@ -6,11 +6,14 @@ Includes sycophancy detection using FastEmbed and CAPM-based hurdle rate calcula
 import numpy as np
 from fastembed import TextEmbedding
 
+from src.utils.logger import get_logger
+
 from .market_data import (
-    calculate_capm_hurdle,
-    get_dynamic_crash_impact,
+    get_current_risk_free_rate,
     get_dynamic_payoff_map,
 )
+
+logger = get_logger(__name__)
 
 
 class SycophancyDetector:
@@ -79,157 +82,160 @@ def get_sycophancy_detector() -> SycophancyDetector:
     return _detector
 
 
-def calculate_kelly_and_verdict(conclusion_data: dict, ticker: str = None) -> dict:
+def _parse_score(val) -> float:
+    """Helper to parse probability scores from various formats."""
+    if isinstance(val, str):
+        val = val.replace("%", "").strip()
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return 0.0
+
+
+def _get_normalized_probabilities(scenarios: dict) -> tuple[float, float, float]:
+    """Extract and normalize probabilities for bull, bear, and base cases."""
+    s_bull = _parse_score(scenarios.get("bull_case", {}).get("probability", 0))
+    s_bear = _parse_score(scenarios.get("bear_case", {}).get("probability", 0))
+    s_base = _parse_score(scenarios.get("base_case", {}).get("probability", 0))
+
+    total_score = s_bull + s_bear + s_base
+    if total_score == 0:
+        return 0.33, 0.33, 0.34
+    return s_bull / total_score, s_bear / total_score, s_base / total_score
+
+
+def _get_return_from_scenario(
+    scenarios: dict, case_key: str, payoff_map: dict
+) -> float:
+    """Map price implication strings to numerical return values."""
+    impl = scenarios.get(case_key, {}).get("price_implication", "FLAT")
+    if hasattr(impl, "value"):
+        impl = impl.value
+    impl = str(impl).upper()
+
+    for k, v in payoff_map.items():
+        if k in impl:
+            return v
+    return 0.0
+
+
+def calculate_pragmatic_verdict(conclusion_data: dict, ticker: str = None) -> dict:
     """
-    V8.0: CAPM-Based Dynamic Hurdle Rate + Mean-Variance Kelly Optimization
+    V2.0 Simplified: The Pragmatic Reward/Risk Model
 
-    Integrates enterprise-level CAPM to replace hardcoded thresholds with
-    market-driven Beta calculations. The Debate AI determines EV; CAPM sets
-    the minimum required return based on the stock's historical volatility.
-
-    Args:
-        conclusion_data: Debate conclusion with scenario analysis
-        ticker: Stock ticker symbol (optional, for real-time Beta calculation)
-
-    Returns:
-        Dict with verdict, kelly_confidence, and CAPM metrics
+    核心哲學：
+    1. 只有兩個變數重要：潛在獲利 (Upside) 和 潛在虧損 (Downside)。
+    2. 波動不是風險，"永久性虧損" 才是風險。
+    3. 如果賠率 (Odds) 夠好，我們就賭。
     """
     scenarios = conclusion_data.get("scenario_analysis", {})
     risk_profile = conclusion_data.get("risk_profile", "GROWTH_TECH")
 
-    # --- 1. 解析分數與歸一化 (Normalization) ---
-    # 優化點：移除 "v*100" 的 hack。利用歸一化的數學特性，
-    # 無論輸入是 [0.8, 0.1, 0.1] 還是 [80, 10, 10]，結果都一樣。
-    def parse_score(val):
-        if isinstance(val, str):
-            val = val.replace("%", "").strip()
-        try:
-            return float(val)
-        except (ValueError, TypeError):
-            return 0.0
+    # 1. 提取基本數據
+    # 這裡我們使用與之前相同的 normalized 概率 helpers, 確保概率和為 1 (或接近)
+    p_bull, p_bear, p_base = _get_normalized_probabilities(scenarios)
 
-    s_bull = parse_score(scenarios.get("bull_case", {}).get("probability", 0))
-    s_bear = parse_score(scenarios.get("bear_case", {}).get("probability", 0))
-    s_base = parse_score(scenarios.get("base_case", {}).get("probability", 0))
+    # 獲取回報值 (使用 Payoff Map，動態映射 LLM 的 price_implication)
+    payoff_map = get_dynamic_payoff_map(ticker, risk_profile)
+    r_bull = _get_return_from_scenario(scenarios, "bull_case", payoff_map)
+    r_base = _get_return_from_scenario(scenarios, "base_case", payoff_map)
+    r_bear = _get_return_from_scenario(scenarios, "bear_case", payoff_map)
 
-    total_score = s_bull + s_bear + s_base
-    if total_score == 0:
-        p_bull, p_bear, p_base = 0.33, 0.33, 0.34
+    # 2. 計算加權期望值 (EV)
+    # 這是我們的 "羅盤"，告訴我們大方向
+    raw_ev = (p_bull * r_bull) + (p_base * r_base) + (p_bear * r_bear)
+
+    # 3. 計算 "機會成本" (Alpha)
+    # 這是唯一的 "過濾器"：如果連美債都跑不贏，就別玩了
+    risk_free = get_current_risk_free_rate()
+    alpha = raw_ev - risk_free
+
+    # 4. 核心邏輯：盈虧比 (Reward / Risk Ratio)
+    # 我們只關心：看對了賺多少(Upside) vs 看錯了賠多少(Downside)
+
+    # Upside Potential (只看漲的情境)
+    # 這裡我們稍微修改一下 User 的邏輯，讓 Base Case 如果是正的也算 Upside
+    weighted_upside = (p_bull * r_bull) + (p_base * max(0, r_base))
+
+    # Downside Risk (只看跌的情境，取絕對值)
+    # 我們加一點權重(1.5倍)，代表我們稍微討厭賠錢，但不要像之前 Lambda 那麼誇張
+    weighted_downside = (p_bear * abs(r_bear)) + (p_base * abs(min(0, r_base)))
+    weighted_downside = weighted_downside * 1.5
+
+    # --- 數據質量檢查 (Data Quality Gate) ---
+    # 如果 downside 接近 0，這通常是數據錯誤或 LLM Hallucination，不是真正的無風險套利
+    data_quality_issue = False
+    if weighted_downside < 0.001:
+        # 檢查是否是合理的「無風險」情境（例如國債、貨幣基金）
+        # 如果不是，這是數據錯誤
+        if abs(r_bear) < 0.01 and abs(r_base) < 0.01:
+            # Bear 和 Base 都接近 0，這不合理（除非是現金等價物）
+            data_quality_issue = True
+            # 強制設定一個最小風險，避免除以零
+            weighted_downside = 0.05  # 假設至少有 5% 的潛在虧損
+        else:
+            # 真正的低風險情境（例如 p_bear 很低）
+            rr_ratio = 10.0  # 保留原邏輯
     else:
-        p_bull = s_bull / total_score
-        p_bear = s_bear / total_score
-        p_base = s_base / total_score
+        rr_ratio = weighted_upside / weighted_downside
 
-    # --- 2. Dynamic Payoff Map (VaR Integration) ---
-    # Get theory-based crash impact first so it is available in all branches
-    crash_impact = get_dynamic_crash_impact(risk_profile)
+    # --- 5. 最終判決 (簡單明瞭) ---
 
-    if ticker:
-        # Use historical volatility for Upside, Theory-based for Downside
-        payoff_map = get_dynamic_payoff_map(ticker, risk_profile)
-    else:
-        # Fallback: Use static map (for unit tests or missing ticker)
-        payoff_map = {
-            "SURGE": 0.25,
-            "MODERATE_UP": 0.10,
-            "FLAT": 0.0,
-            "MODERATE_DOWN": -0.10,
-            "CRASH": crash_impact,
-        }
+    direction = "NEUTRAL"
+    bias = "FLAT"
+    conviction = 50
 
-    def get_return(case_key):
-        impl = scenarios.get(case_key, {}).get("price_implication", "FLAT")
-        if hasattr(impl, "value"):
-            impl = impl.value
-        impl = str(impl).upper()
-        for k, v in payoff_map.items():
-            if k in impl:
-                return v
-        return 0.0
-
-    r_bull = get_return("bull_case")
-    r_bear = get_return("bear_case")
-    r_base = get_return("base_case")
-
-    # --- 3. EV & Variance Calculation ---
-    ev = (p_bull * r_bull) + (p_bear * r_bear) + (p_base * r_base)
-
-    # 方差 (Variance) = Sum(Prob * (Return - EV)^2)
-    # 這代表了這筆交易的「不確定性」。如果 Bull=+50% 且 Bear=-50%，方差會極大，倉位會自動降低。
-    variance = (
-        (p_bull * (r_bull - ev) ** 2)
-        + (p_bear * (r_bear - ev) ** 2)
-        + (p_base * (r_base - ev) ** 2)
-    )
-
-    # --- 4. Enterprise CAPM Hurdle Rate ---
-    if ticker:
-        hurdle_rate, beta, data_source = calculate_capm_hurdle(ticker, risk_profile)
-    else:
-        # Static defaults for robustness
-        from .market_data import (
-            DEFAULT_MARKET_RISK_PREMIUM,
-            DEFAULT_RISK_FREE_RATE,
-            STATIC_BETA_MAP,
+    # 🚨 數據質量覆蓋 (Data Quality Override)
+    if data_quality_issue:
+        direction = "NEUTRAL"
+        bias = "UNCERTAIN"
+        conviction = 30  # 低信心
+        logger.warning(
+            f"⚠️ Data Quality Issue detected for {ticker}: "
+            f"Near-zero downside (r_bear={r_bear:.4f}, r_base={r_base:.4f}). "
+            f"Forcing NEUTRAL verdict."
         )
-
-        beta = STATIC_BETA_MAP.get(risk_profile.upper(), 1.5)
-        annual_hurdle = DEFAULT_RISK_FREE_RATE + beta * DEFAULT_MARKET_RISK_PREMIUM
-        hurdle_rate = annual_hurdle / 4.0
-        data_source = "STATIC_FALLBACK"
-
-    # --- 5. Mean-Variance Kelly Optimization ---
-    kelly_fraction = 0.0
-    final_verdict = "NEUTRAL"
-    safe_variance = variance if variance > 0.0001 else 0.0001
-
-    if ev > hurdle_rate:
-        final_verdict = "LONG"
-        # 廣義 Kelly 公式
-        raw_kelly = ev / safe_variance
-        # 應用 Half-Kelly (半凱利) 策略：業界標準，為了平滑波動，只使用計算值的一半
-        kelly_fraction = raw_kelly * 0.5
-
-    elif ev < -hurdle_rate:
-        final_verdict = "SHORT"
-        raw_kelly = abs(ev) / safe_variance
-        kelly_fraction = raw_kelly * 0.5
-
-    kelly_fraction = max(0.0, min(kelly_fraction, 1.0))
-
-    # --- 6. Smart Safety Lock ---
-    risk_profile_upper = risk_profile.upper()
-    tolerance_map = {
-        "DEFENSIVE_VALUE": 0.15,
-        "GROWTH_TECH": 0.35,
-        "SPECULATIVE_CRYPTO_BIO": 0.45,
-    }
-    crash_tolerance = tolerance_map.get(risk_profile_upper, 0.25)
-
-    bear_impl = str(scenarios.get("bear_case", {}).get("price_implication", "")).upper()
-    risk_override = False
-
-    if p_bear > 0.55:
-        risk_override = True
-    elif "CRASH" in bear_impl and p_bear > crash_tolerance:
-        risk_override = True
-
-    if risk_override and final_verdict == "LONG":
-        final_verdict = "NEUTRAL"
-        kelly_confidence = 0.0
     else:
-        kelly_confidence = kelly_fraction
+        # 條件 A: 顯著看多
+        # 賠率 > 2.0 (賺的潛力是賠的兩倍) 且 Alpha 是正的
+        if rr_ratio > 2.0 and alpha > 0:
+            direction = "STRONG_LONG"
+            bias = "BULLISH"
+            conviction = 90
+
+        # 條件 B: 普通看多
+        # 賠率 > 1.3 (稍微划算) 且 Alpha 是正的
+        elif rr_ratio > 1.3 and alpha > 0:
+            direction = "LONG"
+            bias = "BULLISH"
+            conviction = 70
+
+        # 條件 C: 必須做空 (垃圾股)
+        # 期望值跑輸美債，且 賠率很差 (賺的潛力 < 賠的風險)
+        elif alpha < 0 and rr_ratio < 0.8:
+            direction = "SHORT"
+            bias = "BEARISH"
+            conviction = 70
+
+        # 條件 D: 雞肋 / 觀望
+        else:
+            # 如果 Alpha 是負的，但賠率還可以 (rr_ratio > 1)，說明是 "食之無味棄之可惜"
+            if alpha < 0:
+                direction = "AVOID"  # 建議別買，但也別空
+                bias = "BEARISH"
+            else:
+                direction = "NEUTRAL"  # 真的沒方向
+                bias = "FLAT"
 
     return {
-        "final_verdict": final_verdict,
-        "kelly_confidence": round(float(kelly_confidence), 2),
-        "expected_value": round(float(ev), 4),
-        "variance": round(float(variance), 4),
-        "hurdle_rate": round(float(hurdle_rate), 4),
-        "beta": round(float(beta), 2) if beta else None,
-        "crash_impact": round(float(crash_impact), 2),
-        "data_source": data_source,
-        "risk_override": risk_override,
-        "p_bull": round(p_bull, 2),
-        "p_bear": round(p_bear, 2),
+        "ticker": ticker,
+        "final_verdict": direction,
+        "analysis_bias": bias,
+        "rr_ratio": round(rr_ratio, 2),  # 這是最直觀的指標
+        "alpha": round(alpha, 4),
+        "raw_ev": round(raw_ev, 4),
+        "conviction": conviction,
+        "model_summary": f"Reward/Risk: {rr_ratio:.2f}x, Alpha: {alpha:.2%}",
+        "risk_free_benchmark": round(risk_free, 4),
+        "data_quality_warning": data_quality_issue,  # 新增：數據質量警告
     }

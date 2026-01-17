@@ -89,6 +89,10 @@ For each scenario, assign a **Likelihood Score (0-100)**.
 - **DO NOT** give generic scores like 40/30/30.
 - You must take a stance. If one side won the debate, their score should be significantly higher.
 
+**QUALITATIVE SYNTHESIS**:
+- **Winning Thesis**: Based on the debate, what is the single most compelling reason to invest (or avoid)?
+- **Catalyst & Risk**: Identify the one trigger that matters most and the one failure mode that keeps you up at night.
+
 **RISK PROFILE CLASSIFICATION**:
 - **DEFENSIVE_VALUE**: Utilities, Staples, Mature Banks. (Low Volatility)
 - **GROWTH_TECH**: AI, SaaS, Semi, Consumer Discretionary. (High Volatility)
