@@ -9,8 +9,10 @@ from .nodes import (
     executor_node,
     get_financial_news_research_subgraph,
 )
+from .nodes.consolidate_research import consolidate_research_node
 from .nodes.debate import get_debate_subgraph
 from .nodes.fundamental_analysis.graph import get_fundamental_analysis_subgraph
+from .nodes.intent_extraction import get_intent_extraction_subgraph
 from .state import AgentState
 
 logger = get_logger(__name__)
@@ -95,23 +97,30 @@ async def get_graph():
     global _compiled_graph, _saver
     if _compiled_graph is None:
         # 1. Initialize Subgraphs
+        intent_extraction_graph = await get_intent_extraction_subgraph()
         fundamental_analysis_graph = await get_fundamental_analysis_subgraph()
         financial_news_research_graph = await get_financial_news_research_subgraph()
         debate_graph = await get_debate_subgraph()
 
         # 2. Build Parent Graph
         builder = StateGraph(AgentState)
+        builder.add_node("intent_extraction", intent_extraction_graph)
         builder.add_node("fundamental_analysis", fundamental_analysis_graph)
         builder.add_node("financial_news_research", financial_news_research_graph)
+        builder.add_node("consolidate_research", consolidate_research_node)
         builder.add_node("debate", debate_graph)
         builder.add_node("executor", executor_node)
         builder.add_node("auditor", auditor_node)
         builder.add_node("approval", approval_node)
         builder.add_node("calculator", calculation_node)
 
-        builder.add_edge(START, "fundamental_analysis")
-        builder.add_edge("fundamental_analysis", "financial_news_research")
-        builder.add_edge("financial_news_research", "debate")
+        # 3. Define edges for parallel execution
+        builder.add_edge(START, "intent_extraction")
+        builder.add_edge("intent_extraction", "fundamental_analysis")
+        builder.add_edge("intent_extraction", "financial_news_research")
+        builder.add_edge("fundamental_analysis", "consolidate_research")
+        builder.add_edge("financial_news_research", "consolidate_research")
+        builder.add_edge("consolidate_research", "debate")
         builder.add_edge("debate", "executor")
         builder.add_edge("executor", "auditor")
 
@@ -133,7 +142,9 @@ async def get_graph():
         pg_db = os.environ.get("POSTGRES_DB", "langgraph")
 
         db_uri = f"postgresql://{pg_user}:{pg_pass}@{pg_host}:{pg_port}/{pg_db}"
-        logger.info(f"--- Graph: Connecting to Postgres at {pg_host}:{pg_port}/{pg_db} ---")
+        logger.info(
+            f"--- Graph: Connecting to Postgres at {pg_host}:{pg_port}/{pg_db} ---"
+        )
 
         # Create connection pool
         pool = AsyncConnectionPool(

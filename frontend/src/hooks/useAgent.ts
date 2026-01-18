@@ -27,6 +27,7 @@ export function useAgent(assistantId: string = "agent") {
     const [currentStatus, setCurrentStatus] = useState<string | null>(null);
     const [activityFeed, setActivityFeed] = useState<{ id: string, node: string, status: string, timestamp: number }[]>([]);
     const [agentStatuses, setAgentStatuses] = useState<Record<string, AgentStatus>>({
+        intent_extraction: 'idle',
         fundamental_analysis: 'idle',
         financial_news_research: 'idle',
         executor: 'idle',
@@ -134,6 +135,47 @@ export function useAgent(assistantId: string = "agent") {
                                     }
                                 }
 
+                                // Chain Start Events - Track when nodes begin execution
+                                if (currentEventType === 'on_chain_start') {
+                                    const nodeName = eventData.metadata?.langgraph_node;
+                                    if (nodeName) {
+                                        const cleanNode = nodeName.split(':').pop() || nodeName;
+
+                                        // Map internal node names to agent IDs
+                                        const nodeToAgentMap: Record<string, string> = {
+                                            'extraction': 'intent_extraction',
+                                            'searching': 'intent_extraction',
+                                            'deciding': 'intent_extraction',
+                                            'clarifying': 'intent_extraction',
+                                            'intent_extraction': 'intent_extraction',
+                                            'financial_health': 'fundamental_analysis',
+                                            'model_selection': 'fundamental_analysis',
+                                            'fundamental_analysis': 'fundamental_analysis',
+                                            'search_node': 'financial_news_research',
+                                            'selector_node': 'financial_news_research',
+                                            'fetch_node': 'financial_news_research',
+                                            'analyst_node': 'financial_news_research',
+                                            'aggregator_node': 'financial_news_research',
+                                            'financial_news_research': 'financial_news_research',
+                                            'debate_aggregator': 'debate',
+                                            'bull': 'debate',
+                                            'bear': 'debate',
+                                            'moderator': 'debate',
+                                            'debate': 'debate',
+                                            'executor': 'executor',
+                                            'auditor': 'auditor',
+                                            'approval': 'approval',
+                                            'calculator': 'calculator',
+                                        };
+
+                                        const agentId = nodeToAgentMap[cleanNode];
+                                        if (agentId) {
+                                            console.log(`[useAgent] Node started: ${cleanNode} -> ${agentId} = running`);
+                                            setAgentStatuses(prev => ({ ...prev, [agentId]: 'running' }));
+                                        }
+                                    }
+                                }
+
                                 // Chain End Events
                                 if (currentEventType === 'on_chain_end') {
                                     const nodeName = eventData.metadata?.langgraph_node;
@@ -144,8 +186,69 @@ export function useAgent(assistantId: string = "agent") {
                                         updatePayload?.messages?.[0]?.additional_kwargs?.agent_id ||
                                         eventData.metadata?.agent_id;
 
+                                    // Primary: Use node_statuses from the update payload if available
                                     if (updatePayload && updatePayload.node_statuses) {
-                                        setAgentStatuses(prev => ({ ...prev, ...updatePayload.node_statuses }));
+                                        console.log('[useAgent] Received node_statuses update:', {
+                                            nodeName,
+                                            statuses: updatePayload.node_statuses,
+                                            timestamp: new Date().toISOString()
+                                        });
+
+                                        setAgentStatuses(prev => {
+                                            const updated = { ...prev };
+
+                                            // Apply node_statuses updates with safeguards
+                                            // This is now secondary to lifecycle events (on_chain_start/end)
+                                            for (const [key, newStatus] of Object.entries(updatePayload.node_statuses)) {
+                                                const currentStatus = prev[key as keyof typeof prev];
+
+                                                // Status progression levels
+                                                const statusLevel: Record<string, number> = {
+                                                    'idle': 0, 'waiting': 1, 'running': 2, 'done': 3, 'error': 4, 'attention': 5
+                                                };
+
+                                                const currentLevel = statusLevel[currentStatus] ?? 0;
+                                                const newLevel = statusLevel[newStatus as string] ?? 0;
+
+                                                // Allow update if:
+                                                // 1. Status is progressing forward (higher level)
+                                                // 2. It's the node that just completed
+                                                // 3. Current status is idle/undefined (initialization)
+                                                const isProgressing = newLevel > currentLevel;
+                                                const isNodeUpdate = nodeName === key || nodeName?.includes(key);
+                                                const isInitializing = !currentStatus || currentStatus === 'idle';
+
+                                                if (isProgressing || isNodeUpdate || isInitializing) {
+                                                    updated[key as keyof typeof updated] = newStatus as AgentStatus;
+                                                } else {
+                                                    console.log(`[useAgent] Skipped stale update: ${key} ${currentStatus} -> ${newStatus}`);
+                                                }
+                                            }
+
+                                            console.log('[useAgent] Updated agentStatuses:', updated);
+                                            return updated;
+                                        });
+                                    }
+
+                                    // Fallback: Derive status from node completion if no explicit status update
+                                    else if (nodeName) {
+                                        const cleanNode = nodeName.split(':').pop() || nodeName;
+
+                                        // Map internal node names to agent IDs
+                                        const nodeToAgentMap: Record<string, string> = {
+                                            'model_selection': 'fundamental_analysis',
+                                            'fundamental_analysis': 'fundamental_analysis',
+                                            'aggregator_node': 'financial_news_research',
+                                            'financial_news_research': 'financial_news_research',
+                                            'moderator': 'debate',
+                                            'debate': 'debate',
+                                        };
+
+                                        const agentId = nodeToAgentMap[cleanNode];
+                                        if (agentId) {
+                                            console.log(`[useAgent] Node completed: ${cleanNode} -> ${agentId} = done`);
+                                            setAgentStatuses(prev => ({ ...prev, [agentId]: 'done' }));
+                                        }
                                     }
 
                                     // --- Track Granular Progress ---
@@ -220,8 +323,9 @@ export function useAgent(assistantId: string = "agent") {
                                         }
                                     }
 
+                                    // Capture resolved ticker from intent_extraction
                                     if (nodeName === 'deciding' || nodeName === 'clarifying' || (nodeName && (nodeName.endsWith(':deciding') || nodeName.endsWith(':clarifying')))) {
-                                        const ticker = updatePayload.fundamental?.resolved_ticker || updatePayload.resolved_ticker;
+                                        const ticker = updatePayload.intent_extraction?.resolved_ticker || updatePayload.resolved_ticker;
                                         if (ticker) {
                                             setResolvedTicker(ticker);
                                         }
@@ -285,6 +389,7 @@ export function useAgent(assistantId: string = "agent") {
             setAgentOutputs({});
             setActivityFeed([]);
             setAgentStatuses({
+                intent_extraction: 'idle',
                 fundamental_analysis: 'idle',
                 financial_news_research: 'idle',
                 executor: 'idle',
@@ -299,7 +404,7 @@ export function useAgent(assistantId: string = "agent") {
         setCurrentNode(null);
         setCurrentStatus(null);
         setActivityFeed([]);
-        setAgentStatuses(prev => ({ ...prev, fundamental_analysis: 'running' }));
+        setAgentStatuses(prev => ({ ...prev, intent_extraction: 'running' }));
 
         const userMsg: Message = { id: `user_${Date.now()}`, role: 'user', content, type: 'text' };
         setMessages(prev => [...prev, userMsg]);
@@ -385,7 +490,7 @@ export function useAgent(assistantId: string = "agent") {
                 const stateData = await stateResponse.json();
 
                 // Map nested state from backend V2
-                const resolvedTicker = stateData.fundamental?.resolved_ticker || stateData.resolved_ticker;
+                const resolvedTicker = stateData.intent_extraction?.resolved_ticker || stateData.fundamental?.resolved_ticker || stateData.resolved_ticker;
                 const nodeStatuses = stateData.node_statuses || {};
                 const reports = stateData.fundamental?.financial_reports || stateData.financial_reports || [];
 

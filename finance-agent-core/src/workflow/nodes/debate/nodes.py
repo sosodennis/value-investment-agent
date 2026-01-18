@@ -145,7 +145,7 @@ async def debate_aggregator_node(state: AgentState) -> dict[str, Any]:
             "source_weight": "MEDIUM",
             "rationale": "Secondary source: Curated financial news (editorial bias possible)",
         },
-        "ticker": state.fundamental.resolved_ticker or state.ticker,
+        "ticker": state.intent_extraction.resolved_ticker or state.ticker,
     }
 
     return {
@@ -161,7 +161,7 @@ async def bull_node(state: AgentState) -> dict[str, Any]:
     Role: Focus on catalysts, growth potential, and bullish news.
     """
     round_num = state.debate.current_round + 1
-    ticker = state.fundamental.resolved_ticker or state.ticker
+    ticker = state.intent_extraction.resolved_ticker or state.ticker
     logger.info(f"--- Debate: Bull Agent Node (Round {round_num}) ---")
 
     try:
@@ -262,7 +262,7 @@ async def bear_node(state: AgentState) -> dict[str, Any]:
     Role: Focus on risks, red flags, and challenging the Bull's narrative.
     """
     round_num = state.debate.current_round + 1
-    ticker = state.fundamental.resolved_ticker or state.ticker
+    ticker = state.intent_extraction.resolved_ticker or state.ticker
     logger.info(f"--- Debate: Bear Agent Node (Round {round_num}) ---")
 
     try:
@@ -366,7 +366,7 @@ async def moderator_node(state: AgentState) -> dict[str, Any]:
     Also handles the final 'Verdict' synthesis in Phase 3.
     """
     round_num = state.debate.current_round + 1
-    ticker = state.fundamental.resolved_ticker or state.ticker
+    ticker = state.intent_extraction.resolved_ticker or state.ticker
     logger.info(f"--- Debate: Moderator Node (Round {round_num}) ---")
 
     llm = get_llm()

@@ -64,12 +64,20 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
 
   const agents: AgentInfo[] = useMemo(() => [
     {
+      id: 'intent_extraction',
+      name: 'Intent Extraction',
+      role: 'Query Understanding',
+      description: 'Extracts intent and resolves ticker from user query.',
+      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Intent',
+      status: hasTickerInterrupt ? 'attention' : agentStatuses.intent_extraction,
+    },
+    {
       id: 'fundamental_analysis',
       name: 'Fundamental Analysis',
-      role: 'Strategy & Goal Setting',
-      description: 'Analyzes user intent and fetches preliminary data.',
+      role: 'Financial Health',
+      description: 'Fetches financial data and selects valuation model.',
       avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix',
-      status: hasTickerInterrupt ? 'attention' : agentStatuses.fundamental_analysis,
+      status: agentStatuses.fundamental_analysis,
     },
     {
       id: 'financial_news_research',

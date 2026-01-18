@@ -54,7 +54,8 @@ def get_llm(model: str = DEFAULT_MODEL, temperature: float = 0):
 
 def search_node(state: AgentState) -> Command:
     """[Funnel Node 1] Search for recent news snippets."""
-    ticker = state.fundamental.resolved_ticker or state.ticker
+    # Get ticker from intent_extraction context (primary) or fallback to state.ticker
+    ticker = state.intent_extraction.resolved_ticker or state.ticker
     if not ticker:
         logger.warning("Financial News Research: No ticker resolved, skipping.")
         return Command(
@@ -63,9 +64,10 @@ def search_node(state: AgentState) -> Command:
 
     logger.info(f"--- [News Research] Searching news for {ticker} ---")
     try:
-        # Extract company_name from fundamental analysis output if available
-        fa_output = state.fundamental.analysis_output or {}
-        company_name = fa_output.get("company_name")
+        # Extract company_name from intent_extraction context if available
+        company_name = None
+        if state.intent_extraction.company_profile:
+            company_name = state.intent_extraction.company_profile.get("name")
 
         # Run async search in sync node
         results = asyncio.run(news_search_multi_timeframe(ticker, company_name))
@@ -475,7 +477,7 @@ def aggregator_node(state: AgentState) -> Command:
         update={
             # mode='json' ensures HttpUrl, datetime, Enums are serialized as strings for msgpack/checkpoint
             "financial_news": {"output": final_output.model_dump(mode="json")},
-            "node_statuses": {"financial_news_research": "done", "debate": "running"},
+            "node_statuses": {"financial_news_research": "done"},
             "messages": [
                 AIMessage(
                     content=f"### News Research: {ticker}\n\n**Overall Sentiment:** {overall_sentiment.value.upper()} ({final_output.sentiment_score})\n\n**Analysis Summaries:**\n{summary_text}\n\n**Themes:** {', '.join(all_themes) or 'N/A'}",

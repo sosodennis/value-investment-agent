@@ -193,7 +193,7 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                                 {/* Active Interrupts (Scoped) */}
                                 {messages.filter(m => {
                                     if (!m.isInteractive) return false;
-                                    if (agent.id === 'fundamental_analysis' && m.type === 'interrupt_ticker') return true;
+                                    if (agent.id === 'intent_extraction' && m.type === 'interrupt_ticker') return true;
                                     if (agent.id === 'approval' && m.type === 'interrupt_approval') return true;
                                     return false;
                                 }).map((msg) => (
@@ -282,8 +282,12 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                                 {(() => {
                                     const filteredFeed = activityFeed.filter(step => {
                                         const node = step.node.toLowerCase();
+                                        if (agent.id === 'intent_extraction') {
+                                            const intentNodes = new Set(['extraction', 'searching', 'deciding', 'clarifying']);
+                                            return intentNodes.has(node) || node.includes('intent');
+                                        }
                                         if (agent.id === 'fundamental_analysis') {
-                                            return node.includes('searching') || node.includes('deciding') || node.includes('financial') || node.includes('model_selection') || node.includes('extract');
+                                            return node.includes('financial') || node.includes('model_selection') || node.includes('health');
                                         }
                                         if (agent.id === 'financial_news_research') {
                                             const newsNodes = new Set(['search_node', 'selector_node', 'fetch_node', 'analyst_node', 'aggregator_node']);

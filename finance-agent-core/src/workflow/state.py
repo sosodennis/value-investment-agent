@@ -24,6 +24,46 @@ def last_value(a: str | None, b: str | None) -> str | None:
 # --- Context Models ---
 
 
+class IntentExtractionContext(BaseModel):
+    """Context for intent extraction workflow."""
+
+    extracted_intent: dict[str, Any] | None = Field(
+        None, description="Parsed intent from user query (ticker, company_name, etc.)"
+    )
+    ticker_candidates: list[Any] | None = Field(
+        None, description="List of possible ticker matches from search"
+    )
+    resolved_ticker: str | None = Field(
+        None, description="Final resolved ticker symbol"
+    )
+    company_profile: dict[str, Any] | None = Field(
+        None, description="Company profile information for resolved ticker"
+    )
+    status: str | None = Field(
+        None,
+        description="Current status: extraction, searching, deciding, clarifying, resolved",
+    )
+
+
+def merge_intent_extraction_context(
+    current: IntentExtractionContext | None, new: IntentExtractionContext | dict
+) -> IntentExtractionContext:
+    """Merge function for IntentExtractionContext."""
+    if current is None:
+        current = IntentExtractionContext()
+
+    if isinstance(new, IntentExtractionContext):
+        new_data = new.model_dump()
+    else:
+        new_data = new
+
+    for k, v in new_data.items():
+        if v is not None:
+            setattr(current, k, v)
+
+    return current
+
+
 class DebateContext(BaseModel):
     history: list[AnyMessage] = Field(
         default_factory=list, description="Adversarial conversation transcript"
@@ -70,15 +110,10 @@ def merge_debate_context(
 
 class FundamentalAnalysisContext(BaseModel):
     analysis_output: dict[str, Any] | None = None
-    extracted_intent: dict[str, Any] | None = None
-    ticker_candidates: list[Any] | None = None
-    resolved_ticker: str | None = None
-    company_profile: dict[str, Any] | None = None
     financial_reports: list[dict[str, Any]] = Field(
         default_factory=list,
         description="Financial Health Reports from edgartools (Multi-year)",
     )
-    selected_symbol: str | None = None
     approved: bool | None = None
     status: str | None = None
 
@@ -128,24 +163,29 @@ def merge_financial_news_context(
 class AgentState(BaseModel):
     """Agent state defined as a Pydantic model."""
 
-    user_query: str | None = None
+    user_query: Annotated[str | None, last_value] = None
     messages: Annotated[list[AnyMessage], add_messages] = Field(default_factory=list)
-    ticker: str | None = None
-    model_type: str | None = None
+    ticker: Annotated[str | None, last_value] = None
+    model_type: Annotated[str | None, last_value] = None
 
     # Refactored fields with strict schemas
-    extraction_output: ExtractionOutput | None = Field(
+    extraction_output: Annotated[ExtractionOutput | None, last_value] = Field(
         None, description="Output from Executor"
     )
-    audit_output: AuditOutput | None = Field(None, description="Output from Auditor")
-    calculation_output: CalculationOutput | None = Field(
+    audit_output: Annotated[AuditOutput | None, last_value] = Field(
+        None, description="Output from Auditor"
+    )
+    calculation_output: Annotated[CalculationOutput | None, last_value] = Field(
         None, description="Output from Calculator"
     )
 
     # Sub-Agent Contexts
-    fundamental: Annotated[
-        FundamentalAnalysisContext, merge_fundamental_context
-    ] = Field(default_factory=FundamentalAnalysisContext)
+    intent_extraction: Annotated[
+        IntentExtractionContext, merge_intent_extraction_context
+    ] = Field(default_factory=IntentExtractionContext)
+    fundamental: Annotated[FundamentalAnalysisContext, merge_fundamental_context] = (
+        Field(default_factory=FundamentalAnalysisContext)
+    )
     financial_news: Annotated[FinancialNewsContext, merge_financial_news_context] = (
         Field(default_factory=FinancialNewsContext)
     )
