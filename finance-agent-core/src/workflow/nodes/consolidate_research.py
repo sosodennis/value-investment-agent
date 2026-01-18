@@ -1,7 +1,4 @@
-"""
-Consolidate Research Node.
-Synchronizes parallel branches (fundamental_analysis and financial_news_research).
-"""
+import traceback
 
 from langgraph.graph import END
 from langgraph.types import Command
@@ -63,7 +60,6 @@ def consolidate_research_node(state: AgentState) -> Command:
         logger.error(
             f"❌ [DEBUG] consolidate_research_node: ERROR - {type(e).__name__}: {str(e)}"
         )
-        import traceback
 
         logger.error(
             f"[DEBUG] consolidate_research_node: Traceback:\n{traceback.format_exc()}"

@@ -1,14 +1,27 @@
+import os
+import traceback
+
+from langchain_core.messages import AIMessage, HumanMessage
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
+from psycopg_pool import AsyncConnectionPool
 
 from src.utils.logger import get_logger
 
-from .nodes import (
-    auditor_node,
-    calculation_node,
-    executor_node,
-)
+from .interrupts import ApprovalDetails, HumanApprovalRequest
+from .nodes import auditor_node, calculation_node, executor_node
 from .nodes.consolidate_research import consolidate_research_node
+from .nodes.debate.graph import get_debate_subgraph
+from .nodes.debate.subgraph_state import DebateSubgraphState
+from .nodes.financial_news_research.graph import get_financial_news_research_subgraph
+from .nodes.financial_news_research.subgraph_state import FinancialNewsSubgraphState
+from .nodes.fundamental_analysis.graph import get_fundamental_analysis_subgraph
+from .nodes.fundamental_analysis.subgraph_state import (
+    FundamentalAnalysisSubgraphState,
+)
+from .nodes.intent_extraction.graph import get_intent_extraction_subgraph
+from .nodes.intent_extraction.subgraph_state import IntentExtractionSubgraphState
 from .state import AgentState
 
 logger = get_logger(__name__)
@@ -30,8 +43,6 @@ def approval_node(state: AgentState) -> Command:
         audit_passed = state.audit_output.passed
         audit_messages = state.audit_output.messages
 
-    from .interrupts import ApprovalDetails, HumanApprovalRequest
-
     # Trigger interrupt. This pauses the graph and returns the user input when resumed.
     interrupt_payload = HumanApprovalRequest(
         details=ApprovalDetails(
@@ -46,8 +57,6 @@ def approval_node(state: AgentState) -> Command:
     logger.info(f"--- Approval: Received user input: {ans} ---")
 
     # When resumed, ans will contain the payload sent from frontend (e.g. { "approved": true })
-    from langchain_core.messages import AIMessage, HumanMessage
-
     # Persist interaction to history
     new_messages = [
         AIMessage(
@@ -87,7 +96,7 @@ def approval_node(state: AgentState) -> Command:
 # Wrapper Nodes for Isolated Subgraph State (LangGraph Best Practice)
 # ============================================================================
 # These wrapper nodes transform state between parent AgentState and isolated
-# subgraph states, preventing stale status updates from subgraph completions.
+# subgraph states, preventing stale status updates from polluting the parent.
 
 
 async def debate_wrapper_node(state: AgentState) -> dict:
@@ -101,9 +110,6 @@ async def debate_wrapper_node(state: AgentState) -> dict:
         logger.info("=== [DEBUG] debate_wrapper_node: Starting ===")
         logger.info(f"[DEBUG] debate_wrapper_node: state type = {type(state)}")
         logger.info(f"[DEBUG] debate_wrapper_node: state.ticker = {state.ticker}")
-
-        from src.workflow.nodes.debate.graph import get_debate_subgraph
-        from src.workflow.nodes.debate.subgraph_state import DebateSubgraphState
 
         logger.info("[DEBUG] debate_wrapper_node: Imports successful")
 
@@ -145,8 +151,6 @@ async def debate_wrapper_node(state: AgentState) -> dict:
         logger.error(
             f"❌ [DEBUG] debate_wrapper_node: ERROR - {type(e).__name__}: {str(e)}"
         )
-        import traceback
-
         logger.error(
             f"[DEBUG] debate_wrapper_node: Traceback:\n{traceback.format_exc()}"
         )
@@ -177,18 +181,10 @@ async def fundamental_analysis_wrapper_node(state: AgentState) -> dict:
 
     Transforms parent AgentState → FundamentalAnalysisSubgraphState → parent updates.
     """
-    from src.workflow.nodes.fundamental_analysis.subgraph_state import (
-        FundamentalAnalysisSubgraphState,
-    )
-
     subgraph_input = FundamentalAnalysisSubgraphState(
         ticker=state.ticker,
         intent_extraction=state.intent_extraction,
         fundamental=state.fundamental,
-    )
-
-    from src.workflow.nodes.fundamental_analysis.graph import (
-        get_fundamental_analysis_subgraph,
     )
 
     fa_graph = await get_fundamental_analysis_subgraph()
@@ -214,18 +210,10 @@ async def financial_news_wrapper_node(state: AgentState) -> dict:
 
     Transforms parent AgentState → FinancialNewsSubgraphState → parent updates.
     """
-    from src.workflow.nodes.financial_news_research.subgraph_state import (
-        FinancialNewsSubgraphState,
-    )
-
     subgraph_input = FinancialNewsSubgraphState(
         ticker=state.ticker,
         intent_extraction=state.intent_extraction,
         financial_news=state.financial_news,
-    )
-
-    from src.workflow.nodes.financial_news_research.graph import (
-        get_financial_news_research_subgraph,
     )
 
     news_graph = await get_financial_news_research_subgraph()
@@ -244,19 +232,11 @@ async def intent_extraction_wrapper_node(state: AgentState) -> dict:
 
     Transforms parent AgentState → IntentExtractionSubgraphState → parent updates.
     """
-    from src.workflow.nodes.intent_extraction.subgraph_state import (
-        IntentExtractionSubgraphState,
-    )
-
     subgraph_input = IntentExtractionSubgraphState(
         ticker=state.ticker,
         user_query=state.user_query,
         messages=state.messages,
         intent_extraction=state.intent_extraction,
-    )
-
-    from src.workflow.nodes.intent_extraction.graph import (
-        get_intent_extraction_subgraph,
     )
 
     intent_graph = await get_intent_extraction_subgraph()
@@ -321,10 +301,6 @@ async def get_graph():
 
             # 3. Initialize Checkpointer
             logger.info("[DEBUG] get_graph: Initializing checkpointer...")
-            import os
-
-            from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-            from psycopg_pool import AsyncConnectionPool
 
             # Construct DB URI from environment variables
             pg_user = os.environ.get("POSTGRES_USER", "postgres")
@@ -361,8 +337,6 @@ async def get_graph():
             logger.error(
                 f"❌ [DEBUG] get_graph: ERROR during compilation - {type(e).__name__}: {str(e)}"
             )
-            import traceback
-
             logger.error(f"[DEBUG] get_graph: Traceback:\n{traceback.format_exc()}")
             raise
 
