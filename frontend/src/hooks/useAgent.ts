@@ -141,34 +141,11 @@ export function useAgent(assistantId: string = "agent") {
                                     if (nodeName) {
                                         const cleanNode = nodeName.split(':').pop() || nodeName;
 
-                                        // Map internal node names to agent IDs
-                                        const nodeToAgentMap: Record<string, string> = {
-                                            'extraction': 'intent_extraction',
-                                            'searching': 'intent_extraction',
-                                            'deciding': 'intent_extraction',
-                                            'clarifying': 'intent_extraction',
-                                            'intent_extraction': 'intent_extraction',
-                                            'financial_health': 'fundamental_analysis',
-                                            'model_selection': 'fundamental_analysis',
-                                            'fundamental_analysis': 'fundamental_analysis',
-                                            'search_node': 'financial_news_research',
-                                            'selector_node': 'financial_news_research',
-                                            'fetch_node': 'financial_news_research',
-                                            'analyst_node': 'financial_news_research',
-                                            'aggregator_node': 'financial_news_research',
-                                            'financial_news_research': 'financial_news_research',
-                                            'debate_aggregator': 'debate',
-                                            'bull': 'debate',
-                                            'bear': 'debate',
-                                            'moderator': 'debate',
-                                            'debate': 'debate',
-                                            'executor': 'executor',
-                                            'auditor': 'auditor',
-                                            'approval': 'approval',
-                                            'calculator': 'calculator',
-                                        };
+                                        // Use centralized node-to-agent mapping
+                                        const { createNodeToAgentMap } = require('../config/agents');
+                                        const nodeToAgentMap = createNodeToAgentMap();
 
-                                        const agentId = nodeToAgentMap[cleanNode];
+                                        const agentId = nodeToAgentMap[cleanNode.toLowerCase()];
                                         if (agentId) {
                                             console.log(`[useAgent] Node started: ${cleanNode} -> ${agentId} = running`);
                                             setAgentStatuses(prev => ({ ...prev, [agentId]: 'running' }));
@@ -234,17 +211,10 @@ export function useAgent(assistantId: string = "agent") {
                                     else if (nodeName) {
                                         const cleanNode = nodeName.split(':').pop() || nodeName;
 
-                                        // Map internal node names to agent IDs
-                                        const nodeToAgentMap: Record<string, string> = {
-                                            'model_selection': 'fundamental_analysis',
-                                            'fundamental_analysis': 'fundamental_analysis',
-                                            'aggregator_node': 'financial_news_research',
-                                            'financial_news_research': 'financial_news_research',
-                                            'moderator': 'debate',
-                                            'debate': 'debate',
-                                        };
+                                        // Use centralized node-to-agent mapping
+                                        const { getAgentIdFromNode } = require('../config/agents');
+                                        const agentId = getAgentIdFromNode(cleanNode);
 
-                                        const agentId = nodeToAgentMap[cleanNode];
                                         if (agentId) {
                                             console.log(`[useAgent] Node completed: ${cleanNode} -> ${agentId} = done`);
                                             setAgentStatuses(prev => ({ ...prev, [agentId]: 'done' }));

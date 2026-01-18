@@ -280,28 +280,11 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
 
                             <div className="space-y-4">
                                 {(() => {
+                                    // Import centralized config
+                                    const { nodeMatchesAgent } = require('../config/agents');
+
                                     const filteredFeed = activityFeed.filter(step => {
-                                        const node = step.node.toLowerCase();
-                                        if (agent.id === 'intent_extraction') {
-                                            const intentNodes = new Set(['extraction', 'searching', 'deciding', 'clarifying']);
-                                            return intentNodes.has(node) || node.includes('intent');
-                                        }
-                                        if (agent.id === 'fundamental_analysis') {
-                                            return node.includes('financial') || node.includes('model_selection') || node.includes('health');
-                                        }
-                                        if (agent.id === 'financial_news_research') {
-                                            const newsNodes = new Set(['search_node', 'selector_node', 'fetch_node', 'analyst_node', 'aggregator_node']);
-                                            return newsNodes.has(node);
-                                        }
-                                        if (agent.id === 'executor') return node.includes('executor');
-                                        if (agent.id === 'auditor') return node.includes('audit');
-                                        if (agent.id === 'approval') return node.includes('approval') || node.includes('audit');
-                                        if (agent.id === 'calculator') return node.includes('calc') || node.includes('valuation');
-                                        if (agent.id === 'debate') {
-                                            const debateNodes = new Set(['debate_aggregator', 'bull', 'bear', 'moderator']);
-                                            return debateNodes.has(node) || node.includes('debate');
-                                        }
-                                        return false;
+                                        return nodeMatchesAgent(step.node, agent.id);
                                     });
 
                                     if (filteredFeed.length === 0) {

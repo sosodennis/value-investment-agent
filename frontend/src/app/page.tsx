@@ -62,72 +62,21 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
   const hasTickerInterrupt = messages.some(m => m.isInteractive && m.type === 'interrupt_ticker');
   const hasApprovalInterrupt = messages.some(m => m.isInteractive && m.type === 'interrupt_approval');
 
-  const agents: AgentInfo[] = useMemo(() => [
-    {
-      id: 'intent_extraction',
-      name: 'Intent Extraction',
-      role: 'Query Understanding',
-      description: 'Extracts intent and resolves ticker from user query.',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Intent',
-      status: hasTickerInterrupt ? 'attention' : agentStatuses.intent_extraction,
-    },
-    {
-      id: 'fundamental_analysis',
-      name: 'Fundamental Analysis',
-      role: 'Financial Health',
-      description: 'Fetches financial data and selects valuation model.',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix',
-      status: agentStatuses.fundamental_analysis,
-    },
-    {
-      id: 'financial_news_research',
-      name: 'Financial News',
-      role: 'Market Sentiment Analysis',
-      description: 'Researches recent news and developments for the company.',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=News',
-      status: agentStatuses.financial_news_research,
-    },
-    {
-      id: 'debate',
-      name: 'Debate Arena',
-      role: 'Adversarial Reasoning',
-      description: 'Bull vs Bear debate to scrutinize the investment thesis.',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Arena',
-      status: agentStatuses.debate,
-    },
-    {
-      id: 'executor',
-      name: 'Data Executor',
-      role: 'Market Data Retrieval',
-      description: 'Executes tools to fetch real-time financial data.',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Aneka',
-      status: agentStatuses.executor,
-    },
-    {
-      id: 'auditor',
-      name: 'Risk Auditor',
-      role: 'Compliance & Validation',
-      description: 'Audits data integrity and checks for anomalies.',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Liam',
-      status: agentStatuses.auditor,
-    },
-    {
-      id: 'approval',
-      name: 'Chief Auditor',
-      role: 'Final Decision Authority',
-      description: 'Manages human-in-the-loop approvals.',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sasha',
-      status: hasApprovalInterrupt ? 'attention' : agentStatuses.approval,
-    },
-    {
-      id: 'calculator',
-      name: 'Valuation Engine',
-      role: 'DCF & Model Execution',
-      description: 'Performs finalized financial calculations.',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Coco',
-      status: agentStatuses.calculator,
-    },
-  ], [agentStatuses, hasTickerInterrupt, hasApprovalInterrupt]);
+  const agents: AgentInfo[] = useMemo(() => {
+    // Import agent configs
+    const { AGENT_CONFIGS } = require('../config/agents');
+
+    return AGENT_CONFIGS.map((config: any) => ({
+      id: config.id,
+      name: config.name,
+      role: config.role,
+      description: config.description,
+      avatar: config.avatar,
+      status: config.getStatus
+        ? config.getStatus(agentStatuses[config.id], hasTickerInterrupt, hasApprovalInterrupt)
+        : agentStatuses[config.id],
+    }));
+  }, [agentStatuses, hasTickerInterrupt, hasApprovalInterrupt]);
 
   const handleStartAnalysis = () => {
     if (!ticker || isLoading) return;
