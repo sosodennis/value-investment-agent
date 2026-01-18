@@ -15,6 +15,48 @@ export interface Message {
 
 const API_URL = process.env.NEXT_PUBLIC_LANGGRAPH_URL || 'http://localhost:8000';
 
+/**
+ * Status progression levels for forward-only updates
+ */
+const STATUS_LEVELS: Record<string, number> = {
+    'idle': 0,
+    'waiting': 1,
+    'running': 2,
+    'done': 3,
+    'error': 4,
+    'attention': 5
+};
+
+/**
+ * Apply status updates with forward-only progression safeguard
+ * Prevents stale statuses from subgraph completions from regressing current state
+ */
+function applyStatusUpdates(
+    currentStatuses: Record<string, AgentStatus>,
+    newStatuses: Record<string, string>
+): Record<string, AgentStatus> {
+    const updated = { ...currentStatuses };
+
+    for (const [key, newStatus] of Object.entries(newStatuses)) {
+        const currentStatus = currentStatuses[key as keyof typeof currentStatuses];
+        const currentLevel = STATUS_LEVELS[currentStatus] ?? 0;
+        const newLevel = STATUS_LEVELS[newStatus] ?? 0;
+
+        // Only allow forward progression or initialization
+        const isProgressing = newLevel > currentLevel;
+        const isInitializing = !currentStatus || currentStatus === 'idle';
+
+        if (isProgressing || isInitializing) {
+            updated[key as keyof typeof updated] = newStatus as AgentStatus;
+        } else {
+            console.log(`[useAgent] Blocked regression: ${key} ${currentStatus} -/-> ${newStatus}`);
+        }
+    }
+
+    return updated;
+}
+
+
 export function useAgent(assistantId: string = "agent") {
     const [messages, setMessages] = useState<Message[]>([]);
     const [threadId, setThreadId] = useState<string | null>(null);
@@ -164,59 +206,21 @@ export function useAgent(assistantId: string = "agent") {
                                         eventData.metadata?.agent_id;
 
                                     // Primary: Use node_statuses from the update payload if available
-                                    if (updatePayload && updatePayload.node_statuses) {
-                                        console.log('[useAgent] Received node_statuses update:', {
-                                            nodeName,
-                                            statuses: updatePayload.node_statuses,
-                                            timestamp: new Date().toISOString()
-                                        });
+                                    // Handle status updates from node_statuses payload
+                                    if (updatePayload?.node_statuses) {
+                                        console.log('[useAgent] Received node_statuses:', updatePayload.node_statuses);
 
-                                        setAgentStatuses(prev => {
-                                            const updated = { ...prev };
-
-                                            // Apply node_statuses updates with safeguards
-                                            // This is now secondary to lifecycle events (on_chain_start/end)
-                                            for (const [key, newStatus] of Object.entries(updatePayload.node_statuses)) {
-                                                const currentStatus = prev[key as keyof typeof prev];
-
-                                                // Status progression levels
-                                                const statusLevel: Record<string, number> = {
-                                                    'idle': 0, 'waiting': 1, 'running': 2, 'done': 3, 'error': 4, 'attention': 5
-                                                };
-
-                                                const currentLevel = statusLevel[currentStatus] ?? 0;
-                                                const newLevel = statusLevel[newStatus as string] ?? 0;
-
-                                                // Allow update if:
-                                                // 1. Status is progressing forward (higher level)
-                                                // 2. It's the node that just completed
-                                                // 3. Current status is idle/undefined (initialization)
-                                                const isProgressing = newLevel > currentLevel;
-                                                const isNodeUpdate = nodeName === key || nodeName?.includes(key);
-                                                const isInitializing = !currentStatus || currentStatus === 'idle';
-
-                                                if (isProgressing || isNodeUpdate || isInitializing) {
-                                                    updated[key as keyof typeof updated] = newStatus as AgentStatus;
-                                                } else {
-                                                    console.log(`[useAgent] Skipped stale update: ${key} ${currentStatus} -> ${newStatus}`);
-                                                }
-                                            }
-
-                                            console.log('[useAgent] Updated agentStatuses:', updated);
-                                            return updated;
-                                        });
+                                        setAgentStatuses(prev =>
+                                            applyStatusUpdates(prev, updatePayload.node_statuses)
+                                        );
                                     }
-
-                                    // Fallback: Derive status from node completion if no explicit status update
+                                    // Fallback: Derive status from node completion
                                     else if (nodeName) {
-                                        const cleanNode = nodeName.split(':').pop() || nodeName;
-
-                                        // Use centralized node-to-agent mapping
                                         const { getAgentIdFromNode } = require('../config/agents');
-                                        const agentId = getAgentIdFromNode(cleanNode);
+                                        const agentId = getAgentIdFromNode(nodeName.split(':').pop() || nodeName);
 
                                         if (agentId) {
-                                            console.log(`[useAgent] Node completed: ${cleanNode} -> ${agentId} = done`);
+                                            console.log(`[useAgent] Node completed: ${nodeName} -> ${agentId} = done`);
                                             setAgentStatuses(prev => ({ ...prev, [agentId]: 'done' }));
                                         }
                                     }

@@ -19,29 +19,53 @@ def consolidate_research_node(state: AgentState) -> Command:
     Waits for both fundamental_analysis and financial_news_research to complete.
     This node acts as a barrier/join point for parallel execution.
     """
-    fa_status = state.node_statuses.get("fundamental_analysis", "idle")
-    news_status = state.node_statuses.get("financial_news_research", "idle")
-
-    logger.info(f"--- Consolidate Research: FA={fa_status}, News={news_status} ---")
-
-    # Check if both are done
-    if fa_status == "done" and news_status == "done":
+    try:
+        logger.info("=== [DEBUG] consolidate_research_node: Starting ===")
+        logger.info(f"[DEBUG] consolidate_research_node: state type = {type(state)}")
         logger.info(
-            "--- Consolidate Research: Both branches complete, proceeding to debate ---"
-        )
-        return Command(
-            update={
-                "node_statuses": {"consolidate_research": "done", "debate": "running"}
-            },
-            goto="debate",
+            f"[DEBUG] consolidate_research_node: AgentState module = {AgentState.__module__}"
         )
 
-    # If either is still running or not started, wait
-    # Don't update any statuses here to avoid race conditions
-    logger.info(
-        "--- Consolidate Research: Waiting for parallel branches to complete ---"
-    )
-    return Command(
-        update={"node_statuses": {"consolidate_research": "waiting"}},
-        goto=END,
-    )
+        fa_status = state.node_statuses.get("fundamental_analysis", "idle")
+        news_status = state.node_statuses.get("financial_news_research", "idle")
+
+        logger.info(f"--- Consolidate Research: FA={fa_status}, News={news_status} ---")
+
+        # Check if both are done
+        if fa_status == "done" and news_status == "done":
+            logger.info(
+                "--- Consolidate Research: Both branches complete, proceeding to debate ---"
+            )
+            logger.info(
+                "[DEBUG] consolidate_research_node: Creating Command to goto debate"
+            )
+            return Command(
+                update={
+                    "node_statuses": {
+                        "consolidate_research": "done",
+                        "debate": "running",
+                    }
+                },
+                goto="debate",
+            )
+
+        # If either is still running or not started, wait
+        # Don't update any statuses here to avoid race conditions
+        logger.info(
+            "--- Consolidate Research: Waiting for parallel branches to complete ---"
+        )
+        logger.info("[DEBUG] consolidate_research_node: Creating Command to goto END")
+        return Command(
+            update={"node_statuses": {"consolidate_research": "waiting"}},
+            goto=END,
+        )
+    except Exception as e:
+        logger.error(
+            f"❌ [DEBUG] consolidate_research_node: ERROR - {type(e).__name__}: {str(e)}"
+        )
+        import traceback
+
+        logger.error(
+            f"[DEBUG] consolidate_research_node: Traceback:\n{traceback.format_exc()}"
+        )
+        raise

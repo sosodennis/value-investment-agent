@@ -7,7 +7,6 @@ from langgraph.types import Command, interrupt
 
 from src.utils.logger import get_logger
 
-from ...state import AgentState
 from ..fundamental_analysis.extraction import (
     IntentExtraction,
     deduplicate_candidates,
@@ -17,11 +16,12 @@ from ..fundamental_analysis.extraction import (
 from ..fundamental_analysis.logic import should_request_clarification
 from ..fundamental_analysis.structures import TickerCandidate
 from ..fundamental_analysis.tools import get_company_profile, search_ticker, web_search
+from .subgraph_state import IntentExtractionSubgraphState
 
 logger = get_logger(__name__)
 
 
-def extraction_node(state: AgentState) -> Command:
+def extraction_node(state: IntentExtractionSubgraphState) -> Command:
     """Extract company and model from user query."""
     user_query = state.user_query
     if not user_query:
@@ -52,7 +52,7 @@ def extraction_node(state: AgentState) -> Command:
     )
 
 
-def searching_node(state: AgentState) -> Command:
+def searching_node(state: IntentExtractionSubgraphState) -> Command:
     """Search for the ticker based on extracted intent."""
     intent = state.intent_extraction.extracted_intent or {}
 
@@ -145,7 +145,7 @@ def searching_node(state: AgentState) -> Command:
     )
 
 
-def decision_node(state: AgentState) -> Command:
+def decision_node(state: IntentExtractionSubgraphState) -> Command:
     """Decide if ticker is resolved or needs clarification."""
     candidates = state.intent_extraction.ticker_candidates or []
 
@@ -213,7 +213,7 @@ def decision_node(state: AgentState) -> Command:
     )
 
 
-def clarification_node(state: AgentState) -> Command:
+def clarification_node(state: IntentExtractionSubgraphState) -> Command:
     """
     Triggers an interrupt to ask the user to select a ticker or provide clarification.
     """

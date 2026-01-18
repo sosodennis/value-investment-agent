@@ -64,6 +64,18 @@ class JobManager:
             print(f"🚀 [JobManager] Starting job for {thread_id}")
             graph = await get_graph()
 
+            # Use centralized agent configuration for hidden nodes
+            # Can be overridden with DEBUG_SHOW_ALL_STREAMING=true environment variable
+            from src.config.agents import get_hidden_nodes
+
+            DEBUG_MODE = (
+                os.environ.get("DEBUG_SHOW_ALL_STREAMING", "false").lower() == "true"
+            )
+            HIDDEN_NODES = set() if DEBUG_MODE else get_hidden_nodes()
+
+            if DEBUG_MODE:
+                print("🔍 [JobManager] DEBUG MODE: Showing all token streaming")
+
             # 1. Stream events
             async for event in graph.astream_events(
                 input_data, config=config, version="v2"
@@ -72,16 +84,6 @@ class JobManager:
                 # Allow on_chain_end and other events so status updates and interrupts flow through.
                 node_name = event.get("metadata", {}).get("langgraph_node", "")
                 event_type = event["event"]
-                HIDDEN_NODES = {
-                    "extraction",
-                    "searching",
-                    "deciding",
-                    "clarifying",
-                    "auditor",
-                    # Financial news research internal nodes (use structured output with Pydantic models)
-                    "selector_node",
-                    "analyst_node",
-                }
 
                 if event_type == "on_chat_model_stream" and node_name in HIDDEN_NODES:
                     continue

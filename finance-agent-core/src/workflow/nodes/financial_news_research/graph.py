@@ -10,7 +10,6 @@ from langgraph.types import Command
 
 from src.utils.logger import get_logger
 
-from ...state import AgentState
 from .finbert_service import get_finbert_analyzer
 from .prompts import (
     ANALYST_SYSTEM_PROMPT,
@@ -26,6 +25,7 @@ from .structures import (
     SentimentLabel,
     SourceInfo,
 )
+from .subgraph_state import FinancialNewsSubgraphState
 from .tools import (
     generate_news_id,
     get_source_reliability,
@@ -52,7 +52,7 @@ def get_llm(model: str = DEFAULT_MODEL, temperature: float = 0):
 # --- Nodes ---
 
 
-def search_node(state: AgentState) -> Command:
+def search_node(state: FinancialNewsSubgraphState) -> Command:
     """[Funnel Node 1] Search for recent news snippets."""
     # Get ticker from intent_extraction context (primary) or fallback to state.ticker
     ticker = state.intent_extraction.resolved_ticker or state.ticker
@@ -117,7 +117,7 @@ URL: {r.get('link')}
     )
 
 
-def selector_node(state: AgentState) -> Command:
+def selector_node(state: FinancialNewsSubgraphState) -> Command:
     """[Funnel Node 2] Filter top relevant articles using URL-based selection."""
     output = state.financial_news.output or {}
     ticker = output.get("ticker")
@@ -192,7 +192,7 @@ def selector_node(state: AgentState) -> Command:
     )
 
 
-def fetch_node(state: AgentState) -> Command:
+def fetch_node(state: FinancialNewsSubgraphState) -> Command:
     """[Funnel Node 3] Fetch and clean full text for selected articles (async parallel)."""
     output = state.financial_news.output or {}
     raw_results = output.get("raw_results", [])
@@ -290,7 +290,7 @@ def fetch_node(state: AgentState) -> Command:
     )
 
 
-def analyst_node(state: AgentState) -> Command:
+def analyst_node(state: FinancialNewsSubgraphState) -> Command:
     """[Funnel Node 4] Deep analysis per article."""
     output = state.financial_news.output or {}
     ticker = output.get("ticker")
@@ -412,7 +412,7 @@ def analyst_node(state: AgentState) -> Command:
     )
 
 
-def aggregator_node(state: AgentState) -> Command:
+def aggregator_node(state: FinancialNewsSubgraphState) -> Command:
     """[Funnel Node 5] Aggregate results and update state."""
     output = state.financial_news.output or {}
     ticker = output.get("ticker")
@@ -494,7 +494,7 @@ def aggregator_node(state: AgentState) -> Command:
 
 async def get_financial_news_research_subgraph():
     """Build and return the financial_news_research subgraph."""
-    builder = StateGraph(AgentState)
+    builder = StateGraph(FinancialNewsSubgraphState)
     builder.add_node("search_node", search_node)
     builder.add_node("selector_node", selector_node)
     builder.add_node("fetch_node", fetch_node)

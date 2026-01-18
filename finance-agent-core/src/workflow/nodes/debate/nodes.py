@@ -7,7 +7,6 @@ from langchain_openai import ChatOpenAI
 
 from src.utils.logger import get_logger
 
-from ...state import AgentState
 from .prompts import (
     BEAR_AGENT_SYSTEM_PROMPT,
     BEAR_R1_ADVERSARIAL,
@@ -19,6 +18,7 @@ from .prompts import (
     VERDICT_PROMPT,
 )
 from .schemas import DebateConclusion
+from .subgraph_state import DebateSubgraphState
 from .utils import (
     calculate_pragmatic_verdict,
     compress_financial_data,
@@ -129,7 +129,7 @@ def _get_last_message_from_role(history: list, role_name: str) -> str:
     return ""
 
 
-async def debate_aggregator_node(state: AgentState) -> dict[str, Any]:
+async def debate_aggregator_node(state: DebateSubgraphState) -> dict[str, Any]:
     # Compress data before passing to debate state
     clean_financials = compress_financial_data(state.fundamental.financial_reports)
     clean_news = compress_news_data(state.financial_news.output)
@@ -151,11 +151,11 @@ async def debate_aggregator_node(state: AgentState) -> dict[str, Any]:
     return {
         "debate": {"analyst_reports": reports},
         "current_node": "debate_aggregator",
-        "node_statuses": {"debate_aggregator": "done", "bull": "running"},
+        "internal_progress": {"debate_aggregator": "done", "bull": "running"},
     }
 
 
-async def bull_node(state: AgentState) -> dict[str, Any]:
+async def bull_node(state: DebateSubgraphState) -> dict[str, Any]:
     """
     [Phase 2] Bull Agent (The Growth Hunter)
     Role: Focus on catalysts, growth potential, and bullish news.
@@ -239,7 +239,7 @@ async def bull_node(state: AgentState) -> dict[str, Any]:
                 "bull_thesis": response.content,
             },
             "current_node": "bull",
-            "node_statuses": {"bull": "done", "bear": "running"},
+            "internal_progress": {"bull": "done", "bear": "running"},
         }
     except Exception as e:
         logger.error(f"❌ Error in Bull Node: {str(e)}")
@@ -252,11 +252,11 @@ async def bull_node(state: AgentState) -> dict[str, Any]:
                 "bull_thesis": fallback_msg,
             },
             "current_node": "bull",
-            "node_statuses": {"bull": "error", "bear": "running"},
+            "internal_progress": {"bull": "error", "bear": "running"},
         }
 
 
-async def bear_node(state: AgentState) -> dict[str, Any]:
+async def bear_node(state: DebateSubgraphState) -> dict[str, Any]:
     """
     [Phase 2] Bear Agent (The Forensic Accountant)
     Role: Focus on risks, red flags, and challenging the Bull's narrative.
@@ -342,7 +342,7 @@ async def bear_node(state: AgentState) -> dict[str, Any]:
                 "bear_thesis": response.content,
             },
             "current_node": "bear",
-            "node_statuses": {"bear": "done", "moderator": "running"},
+            "internal_progress": {"bear": "done", "moderator": "running"},
         }
     except Exception as e:
         logger.error(f"❌ Error in Bear Node: {str(e)}")
@@ -355,11 +355,11 @@ async def bear_node(state: AgentState) -> dict[str, Any]:
                 "bear_thesis": fallback_msg,
             },
             "current_node": "bear",
-            "node_statuses": {"bear": "error", "moderator": "running"},
+            "internal_progress": {"bear": "error", "moderator": "running"},
         }
 
 
-async def moderator_node(state: AgentState) -> dict[str, Any]:
+async def moderator_node(state: DebateSubgraphState) -> dict[str, Any]:
     """
     [Phase 2/3] Moderator Agent (The Judge)
     Role: Decides if consensus is reached or if debate should continue/conclude.
@@ -431,7 +431,7 @@ async def moderator_node(state: AgentState) -> dict[str, Any]:
                     "current_round": round_num,
                 },
                 "current_node": "moderator",
-                "node_statuses": {"moderator": "done"},
+                "internal_progress": {"moderator": "done"},
             }
         except Exception as e:
             logger.error(f"❌ Error in Moderator Node: {str(e)}")
@@ -445,7 +445,7 @@ async def moderator_node(state: AgentState) -> dict[str, Any]:
                     "current_round": round_num,
                 },
                 "current_node": "moderator",
-                "node_statuses": {"moderator": "error"},
+                "internal_progress": {"moderator": "error"},
             }
     else:
         # Final Round: Synthesis of the DebateConclusion (Bayesian V6.0)
@@ -539,9 +539,8 @@ async def moderator_node(state: AgentState) -> dict[str, Any]:
                 "current_round": round_num,
             },
             "current_node": "moderator",
-            "node_statuses": {
-                "debate": "done",
+            "internal_progress": {
                 "moderator": "done",
-                "executor": "running",
+                # Note: "debate" and "executor" statuses will be set by wrapper node
             },
         }

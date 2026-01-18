@@ -4,8 +4,8 @@ Intent Extraction Subgraph.
 
 from langgraph.graph import START, StateGraph
 
-from ...state import AgentState
 from .nodes import clarification_node, decision_node, extraction_node, searching_node
+from .subgraph_state import IntentExtractionSubgraphState
 
 # Helper for initialization
 intent_extraction_subgraph = None
@@ -16,7 +16,7 @@ async def get_intent_extraction_subgraph():
     global intent_extraction_subgraph
     if intent_extraction_subgraph is None:
         # 1. Build Subgraph
-        builder = StateGraph(AgentState)
+        builder = StateGraph(IntentExtractionSubgraphState)
         builder.add_node("extraction", extraction_node)
         builder.add_node("searching", searching_node)
         builder.add_node("deciding", decision_node)

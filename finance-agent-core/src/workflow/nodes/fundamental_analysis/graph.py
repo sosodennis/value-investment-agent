@@ -9,10 +9,10 @@ from langgraph.types import Command
 
 from src.utils.logger import get_logger
 
-from ...state import AgentState
 from .financial_utils import fetch_financial_data
 from .logic import select_valuation_model
 from .structures import ValuationModel
+from .subgraph_state import FundamentalAnalysisSubgraphState
 
 logger = get_logger(__name__)
 
@@ -22,7 +22,7 @@ logger = get_logger(__name__)
 # Extraction nodes removed - now handled by intent_extraction subgraph
 
 
-def financial_health_node(state: AgentState) -> Command:
+def financial_health_node(state: FundamentalAnalysisSubgraphState) -> Command:
     """
     Fetch financial data from SEC EDGAR and generate Financial Health Report.
     """
@@ -288,7 +288,7 @@ def financial_health_node(state: AgentState) -> Command:
     )
 
 
-def model_selection_node(state: AgentState) -> Command:
+def model_selection_node(state: FundamentalAnalysisSubgraphState) -> Command:
     """
     Select appropriate valuation model based on company profile and financial health.
     """
@@ -409,7 +409,7 @@ async def get_fundamental_analysis_subgraph():
     global fundamental_analysis_subgraph
     if fundamental_analysis_subgraph is None:
         # 1. Build Subgraph
-        builder = StateGraph(AgentState)
+        builder = StateGraph(FundamentalAnalysisSubgraphState)
         builder.add_node("financial_health", financial_health_node)
         builder.add_node("model_selection", model_selection_node)
         builder.add_edge(START, "financial_health")
