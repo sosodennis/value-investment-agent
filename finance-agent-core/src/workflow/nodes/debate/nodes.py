@@ -2,7 +2,7 @@ import json
 import os
 from typing import Any
 
-from langchain_core.messages import AIMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
 from src.utils.logger import get_logger
@@ -21,6 +21,8 @@ from .prompts import (
 from .schemas import DebateConclusion
 from .utils import (
     calculate_pragmatic_verdict,
+    compress_financial_data,
+    compress_news_data,
 )
 
 logger = get_logger(__name__)
@@ -87,25 +89,59 @@ def get_llm(model: str = DEFAULT_MODEL, temperature: float = 0):
     )
 
 
-def debate_aggregator_node(state: AgentState) -> dict[str, Any]:
-    """
-    [Phase 1] Aggregator Node
-    Consolidates data from News Research and Fundamental Analysis into
-    a single 'analyst_reports' dictionary for the debate agents to consume.
+def _log_messages(messages: list, agent_name: str, round_num: int = 0):
+    """Log full message content for audit/debugging."""
+    log_header = f"DEBUG - PROMPT SENT TO {agent_name}"
+    if round_num:
+        log_header += f" (Round {round_num})"
 
-    Includes source reliability weighting to guide agents on evidence quality.
-    """
-    logger.info("--- Debate: Aggregating ground truth data ---")
+    formatted_msg = "\n" + "=" * 50 + f"\n{log_header}\n" + "=" * 50 + "\n"
+    for i, msg in enumerate(messages):
+        role = (
+            "System"
+            if isinstance(msg, SystemMessage)
+            else "Human"
+            if isinstance(msg, HumanMessage)
+            else "AI"
+            if isinstance(msg, AIMessage)
+            else "Unknown"
+        )
+        content = msg.content
+        formatted_msg += f"[{i+1}] {role} Message:\n{content}\n" + "-" * 30 + "\n"
+    formatted_msg += "=" * 50
+    logger.info(formatted_msg)
 
-    # Consolidate news and financials with reliability metadata
+
+def _get_last_message_from_role(history: list, role_name: str) -> str:
+    """Helper to extract the last message from a specific role with fallback."""
+    if not history:
+        return ""
+    for msg in reversed(history):
+        # 優先檢查 .name 屬性
+        if hasattr(msg, "name") and msg.name == role_name:
+            return msg.content
+        # 其次檢查 additional_kwargs (某些模型會放在這裡)
+        if (
+            isinstance(msg, AIMessage)
+            and msg.additional_kwargs.get("name") == role_name
+        ):
+            return msg.content
+    return ""
+
+
+async def debate_aggregator_node(state: AgentState) -> dict[str, Any]:
+    # Compress data before passing to debate state
+    clean_financials = compress_financial_data(state.fundamental.financial_reports)
+    clean_news = compress_news_data(state.financial_news.output)
+
     reports = {
         "financials": {
-            "data": state.fundamental.financial_reports,
+            "data": clean_financials,
             "source_weight": "HIGH",
             "rationale": "Primary source: SEC XBRL filings (audited, regulatory-grade data)",
         },
         "news": {
-            "data": state.financial_news.output,
+            "data": clean_news,
             "source_weight": "MEDIUM",
             "rationale": "Secondary source: Curated financial news (editorial bias possible)",
         },
@@ -133,7 +169,6 @@ async def bull_node(state: AgentState) -> dict[str, Any]:
 
         # Optimize context
         compressed_reports = _compress_reports(state.debate.analyst_reports)
-        trimmed_history = _get_trimmed_history(state.debate.history)
 
         # Dynamic Instruction Check
         adversarial_rule = (
@@ -146,11 +181,56 @@ async def bull_node(state: AgentState) -> dict[str, Any]:
             adversarial_rule=adversarial_rule,
         )
 
-        messages = [SystemMessage(content=system_content)] + trimmed_history
+        messages = [SystemMessage(content=system_content)]
+
+        # --- Context Sandwich Construction ---
+        if round_num == 1:
+            # Round 1: Keep it clean, just reports + system prompt
+            pass
+
+        else:
+            # Round 2+: Construct the Sandwich
+
+            # A. Extract Key History Elements
+            my_last_arg = _get_last_message_from_role(
+                state.debate.history, "GrowthHunter"
+            )
+            bear_last_arg = _get_last_message_from_role(
+                state.debate.history, "ForensicAccountant"
+            )
+            judge_feedback = _get_last_message_from_role(state.debate.history, "Judge")
+
+            # B. Self-Anchor (Consistency)
+            if my_last_arg:
+                messages.append(
+                    AIMessage(
+                        content=f"(My Previous Argument in Round 1):\n{my_last_arg}"
+                    )
+                )
+
+            # C. Judge's Order (Authority)
+            if judge_feedback:
+                messages.append(
+                    HumanMessage(
+                        content=f"<moderator_feedback>\n{judge_feedback}\n</moderator_feedback>\n"
+                        f"INSTRUCTION: Address the Moderator's feedback in your response."
+                    )
+                )
+
+            # D. The Target (The Enemy)
+            if bear_last_arg:
+                target_prompt = (
+                    f"The Bear Agent has just responded.\n"
+                    f"Your task is to DESTROY this specific argument:\n\n"
+                    f"<opponent_argument_to_shred>\n{bear_last_arg}\n</opponent_argument_to_shred>"
+                )
+                messages.append(HumanMessage(content=target_prompt))
+
+        _log_messages(messages, "BULL_AGENT", round_num)
         response = await llm.ainvoke(messages)
 
         logger.info(
-            f"--- Debate: Bull Agent '{ticker}' Arg (Round {round_num}):\n{response.content[:2500]}..."
+            f"--- Debate: Bull Agent '{ticker}' Arg (Round {round_num}):\n{response.content}..."
         )
 
         return {
@@ -190,7 +270,6 @@ async def bear_node(state: AgentState) -> dict[str, Any]:
 
         # Optimize context
         compressed_reports = _compress_reports(state.debate.analyst_reports)
-        trimmed_history = _get_trimmed_history(state.debate.history)
 
         # Dynamic Instruction Check
         adversarial_rule = (
@@ -203,11 +282,56 @@ async def bear_node(state: AgentState) -> dict[str, Any]:
             adversarial_rule=adversarial_rule,
         )
 
-        messages = [SystemMessage(content=system_content)] + trimmed_history
+        messages = [SystemMessage(content=system_content)]
+
+        # --- Context Sandwich Construction ---
+        if round_num == 1:
+            # Round 1: Keep it clean
+            pass
+
+        else:
+            # Round 2+: Construct the Sandwich
+
+            # A. Extract Key History Elements
+            my_last_arg = _get_last_message_from_role(
+                state.debate.history, "ForensicAccountant"
+            )
+            bull_last_arg = _get_last_message_from_role(
+                state.debate.history, "GrowthHunter"
+            )
+            judge_feedback = _get_last_message_from_role(state.debate.history, "Judge")
+
+            # B. Self-Anchor (Consistency)
+            if my_last_arg:
+                messages.append(
+                    AIMessage(
+                        content=f"(My Previous Argument in Round 1):\n{my_last_arg}"
+                    )
+                )
+
+            # C. Judge's Order (Authority)
+            if judge_feedback:
+                messages.append(
+                    HumanMessage(
+                        content=f"<moderator_feedback>\n{judge_feedback}\n</moderator_feedback>\n"
+                        f"INSTRUCTION: Address the Moderator's feedback in your response."
+                    )
+                )
+
+            # D. The Target (The Enemy)
+            if bull_last_arg:
+                target_prompt = (
+                    f"The Bull Agent has just responded.\n"
+                    f"Your task is to DESTROY this specific argument:\n\n"
+                    f"<opponent_argument_to_shred>\n{bull_last_arg}\n</opponent_argument_to_shred>"
+                )
+                messages.append(HumanMessage(content=target_prompt))
+
+        _log_messages(messages, "BEAR_AGENT", round_num)
         response = await llm.ainvoke(messages)
 
         logger.info(
-            f"--- Debate: Bear Agent '{ticker}' Arg (Round {round_num}):\n{response.content[:2500]}..."
+            f"--- Debate: Bear Agent '{ticker}' Arg (Round {round_num}):\n{response.content}..."
         )
 
         return {
@@ -286,10 +410,19 @@ async def moderator_node(state: AgentState) -> dict[str, Any]:
     """
 
             messages = [SystemMessage(content=system_content)] + trimmed_history
+
+            # 強制添加一個 Trigger，防止它開始總結
+            messages.append(
+                HumanMessage(
+                    content="Based on the last argument, point out the logical flaw and instruct the next speaker. DO NOT SUMMARIZE. \n\nIMPORTANT: Do not make it easy for the next speaker. While asking them to refute the opponent, you must ALSO demand they provide evidence for their own weakest assumption."
+                )
+            )
+
+            _log_messages(messages, "MODERATOR_CRITIQUE", round_num)
             response = await llm.ainvoke(messages)
 
             logger.info(
-                f"--- Debate: Moderator critique (Round {round_num}):\n{response.content[:200]}..."
+                f"--- Debate: Moderator critique (Round {round_num}):\n{response.content}..."
             )
 
             return {
@@ -330,6 +463,9 @@ async def moderator_node(state: AgentState) -> dict[str, Any]:
 
         # Attempt structured output - fallback to manual parse if model fails
         try:
+            _log_messages(
+                [SystemMessage(content=verdict_system)], "MODERATOR_VERDICT", round_num
+            )
             structured_llm = llm.with_structured_output(DebateConclusion)
             conclusion = await structured_llm.ainvoke(verdict_system)
 

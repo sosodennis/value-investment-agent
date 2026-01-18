@@ -219,7 +219,7 @@ def calculate_pragmatic_verdict(conclusion_data: dict, ticker: str = None) -> di
 
         # 條件 D: 雞肋 / 觀望
         else:
-            # 如果 Alpha 是負的，但賠率還可以 (rr_ratio > 1)，說明是 "食之無味棄之可惜"
+            # 如果 Alpha 是負的，但賠率還可以 (rr_ratio > 1)，說明是 "食之無味棄之考慮"
             if alpha < 0:
                 direction = "AVOID"  # 建議別買，但也別空
                 bias = "BEARISH"
@@ -239,3 +239,93 @@ def calculate_pragmatic_verdict(conclusion_data: dict, ticker: str = None) -> di
         "risk_free_benchmark": round(risk_free, 4),
         "data_quality_warning": data_quality_issue,  # 新增：數據質量警告
     }
+
+
+def compress_financial_data(financial_reports: list[dict]) -> list[dict]:
+    """
+    Compresses raw SEC financial reports by removing metadata and flattening the structure.
+    Optimizes for LLM context window.
+    """
+    compressed = []
+    for report in financial_reports:
+        # Extract basic info
+        base = report.get("base", {})
+        ext = report.get("extension", {})
+
+        # We care about the year and the numerical values
+        year = base.get("fiscal_year", {}).get("value", "Unknown")
+
+        # Flattened metrics
+        metrics = {}
+
+        # Helper to extract value safely
+        def get_val(item):
+            if isinstance(item, dict):
+                return item.get("value")
+            return item
+
+        # Base metrics
+        main_fields = [
+            "total_revenue",
+            "net_income",
+            "operating_cash_flow",
+            "total_assets",
+            "total_liabilities",
+            "total_equity",
+            "cash_and_equivalents",
+            "shares_outstanding",
+        ]
+        for field in main_fields:
+            val = get_val(base.get(field))
+            if val is not None:
+                metrics[field] = val
+
+        # Extension metrics
+        ext_fields = [
+            "inventory",
+            "accounts_receivable",
+            "cogs",
+            "rd_expense",
+            "sga_expense",
+            "capex",
+        ]
+        for field in ext_fields:
+            val = get_val(ext.get(field))
+            if val is not None:
+                metrics[field] = val
+
+        compressed.append(
+            {
+                "fiscal_year": year,
+                "metrics": metrics,
+                "industry": report.get("industry_type", "Unknown"),
+            }
+        )
+
+    return compressed
+
+
+def compress_news_data(news_output: dict) -> list[dict]:
+    """
+    Compresses news research output by removing full content and technical metadata.
+    """
+    if not news_output or "news_items" not in news_output:
+        return []
+
+    compressed = []
+    for item in news_output.get("news_items", []):
+        analysis = item.get("analysis", {})
+
+        # Focus on the summary and key facts
+        compressed_item = {
+            "date": item.get("published_at", "N/A")[:10],  # Just YYYY-MM-DD
+            "title": item.get("title"),
+            "source": item.get("source", {}).get("name", "Unknown"),
+            "summary": analysis.get("summary"),
+            "sentiment": analysis.get("sentiment"),
+            "impact": analysis.get("impact_level"),
+            "key_facts": [f.get("content") for f in analysis.get("key_facts", [])],
+        }
+        compressed.append(compressed_item)
+
+    return compressed
