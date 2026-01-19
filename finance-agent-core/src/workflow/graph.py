@@ -23,6 +23,10 @@ from .nodes.fundamental_analysis.subgraph_state import (
 )
 from .nodes.intent_extraction.graph import get_intent_extraction_subgraph
 from .nodes.intent_extraction.subgraph_state import IntentExtractionSubgraphState
+from .nodes.technical_analysis.graph import get_technical_analysis_subgraph
+from .nodes.technical_analysis.subgraph_state import (
+    TechnicalAnalysisSubgraphState,
+)
 from .state import AgentState
 
 logger = get_logger(__name__)
@@ -122,6 +126,7 @@ async def debate_wrapper_node(state: AgentState, config: RunnableConfig) -> dict
             debate=state.debate,
             fundamental=state.fundamental,
             financial_news=state.financial_news,
+            technical_analysis=state.technical_analysis,
             internal_progress={},  # Initialize internal tracking
             current_node="",
         )
@@ -257,6 +262,30 @@ async def intent_extraction_wrapper_node(
     }
 
 
+async def technical_analysis_wrapper_node(
+    state: AgentState, config: RunnableConfig
+) -> dict:
+    """
+    Wrapper for technical analysis subgraph with isolated state.
+
+    Transforms parent AgentState → TechnicalAnalysisSubgraphState → parent updates.
+    """
+    subgraph_input = TechnicalAnalysisSubgraphState(
+        ticker=state.ticker,
+        intent_extraction=state.intent_extraction,
+        technical_analysis=state.technical_analysis,
+    )
+
+    ta_graph = await get_technical_analysis_subgraph()
+    result = await ta_graph.ainvoke(subgraph_input.model_dump(), config=config)
+
+    return {
+        "technical_analysis": result["technical_analysis"],
+        "messages": result.get("messages", []),
+        "node_statuses": {"technical_analysis": "done"},
+    }
+
+
 # Helper for initialization
 _compiled_graph = None
 _saver = None
@@ -279,6 +308,7 @@ async def get_graph():
             builder.add_node("intent_extraction", intent_extraction_wrapper_node)
             builder.add_node("fundamental_analysis", fundamental_analysis_wrapper_node)
             builder.add_node("financial_news_research", financial_news_wrapper_node)
+            builder.add_node("technical_analysis", technical_analysis_wrapper_node)
             builder.add_node("consolidate_research", consolidate_research_node)
             logger.info("[DEBUG] get_graph: Adding debate_wrapper_node...")
             builder.add_node(
@@ -295,8 +325,10 @@ async def get_graph():
             builder.add_edge(START, "intent_extraction")
             builder.add_edge("intent_extraction", "fundamental_analysis")
             builder.add_edge("intent_extraction", "financial_news_research")
+            builder.add_edge("intent_extraction", "technical_analysis")
             builder.add_edge("fundamental_analysis", "consolidate_research")
             builder.add_edge("financial_news_research", "consolidate_research")
+            builder.add_edge("technical_analysis", "consolidate_research")
             builder.add_edge("consolidate_research", "debate")
             builder.add_edge("debate", "executor")
             builder.add_edge("executor", "auditor")

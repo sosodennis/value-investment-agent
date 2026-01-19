@@ -46,6 +46,14 @@ export const AGENT_CONFIGS: AgentConfig[] = [
         nodes: ['financial_health', 'model_selection', 'fundamental_analysis'],
     },
     {
+        id: 'technical_analysis',
+        name: 'Technical Analyst',
+        role: 'Quantitative Signals',
+        description: 'Analyzes price action using Fractional Differentiation.',
+        avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Tech',
+        nodes: ['data_fetch', 'fracdiff_compute', 'semantic_translate', 'technical_analysis'],
+    },
+    {
         id: 'financial_news_research',
         name: 'Financial News',
         role: 'Market Sentiment Analysis',

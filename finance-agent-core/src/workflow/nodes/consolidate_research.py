@@ -25,11 +25,14 @@ def consolidate_research_node(state: AgentState) -> Command:
 
         fa_status = state.node_statuses.get("fundamental_analysis", "idle")
         news_status = state.node_statuses.get("financial_news_research", "idle")
+        ta_status = state.node_statuses.get("technical_analysis", "idle")
 
-        logger.info(f"--- Consolidate Research: FA={fa_status}, News={news_status} ---")
+        logger.info(
+            f"--- Consolidate Research: FA={fa_status}, News={news_status}, TA={ta_status} ---"
+        )
 
-        # Check if both are done
-        if fa_status == "done" and news_status == "done":
+        # Check if all three are done
+        if fa_status == "done" and news_status == "done" and ta_status == "done":
             logger.info(
                 "--- Consolidate Research: Both branches complete, proceeding to debate ---"
             )
@@ -46,10 +49,10 @@ def consolidate_research_node(state: AgentState) -> Command:
                 goto="debate",
             )
 
-        # If either is still running or not started, wait
+        # If any is still running or not started, wait
         # Don't update any statuses here to avoid race conditions
         logger.info(
-            "--- Consolidate Research: Waiting for parallel branches to complete ---"
+            "--- Consolidate Research: Waiting for all 3 parallel branches to complete ---"
         )
         logger.info("[DEBUG] consolidate_research_node: Creating Command to goto END")
         return Command(

@@ -160,6 +160,30 @@ def merge_financial_news_context(
     return current
 
 
+class TechnicalAnalysisContext(BaseModel):
+    output: dict[str, Any] | None = Field(
+        None, description="Output from Technical Analysis"
+    )
+
+
+def merge_technical_analysis_context(
+    current: TechnicalAnalysisContext | None, new: TechnicalAnalysisContext | dict
+) -> TechnicalAnalysisContext:
+    if current is None:
+        current = TechnicalAnalysisContext()
+
+    if isinstance(new, TechnicalAnalysisContext):
+        new_data = new.model_dump()
+    else:
+        new_data = new
+
+    for k, v in new_data.items():
+        if v is not None:
+            setattr(current, k, v)
+
+    return current
+
+
 class AgentState(BaseModel):
     """Agent state defined as a Pydantic model."""
 
@@ -189,6 +213,9 @@ class AgentState(BaseModel):
     financial_news: Annotated[FinancialNewsContext, merge_financial_news_context] = (
         Field(default_factory=FinancialNewsContext)
     )
+    technical_analysis: Annotated[
+        TechnicalAnalysisContext, merge_technical_analysis_context
+    ] = Field(default_factory=TechnicalAnalysisContext)
     debate: Annotated[DebateContext, merge_debate_context] = Field(
         default_factory=DebateContext
     )

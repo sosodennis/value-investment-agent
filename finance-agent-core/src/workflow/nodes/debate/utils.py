@@ -329,3 +329,36 @@ def compress_news_data(news_output: dict) -> list[dict]:
         compressed.append(compressed_item)
 
     return compressed
+
+
+def compress_ta_data(ta_output: dict | None) -> dict | None:
+    """
+    Compresses technical analysis output for debate context.
+    Focuses on semantic tags and key metrics, removes raw data.
+    """
+    if not ta_output:
+        return None
+
+    # Extract key information
+    compressed = {
+        "ticker": ta_output.get("ticker"),
+        "timestamp": ta_output.get("timestamp"),
+        "signal_summary": {
+            "z_score": ta_output.get("signal_state", {}).get("z_score"),
+            "direction": ta_output.get("signal_state", {}).get("direction"),
+            "risk_level": ta_output.get("signal_state", {}).get("risk_level"),
+            "statistical_state": ta_output.get("signal_state", {}).get(
+                "statistical_state"
+            ),
+        },
+        "memory_metrics": {
+            "optimal_d": ta_output.get("frac_diff_metrics", {}).get("optimal_d"),
+            "memory_strength": ta_output.get("frac_diff_metrics", {}).get(
+                "memory_strength"
+            ),
+        },
+        "semantic_tags": ta_output.get("semantic_tags", []),
+        "interpretation": ta_output.get("llm_interpretation"),
+    }
+
+    return compressed

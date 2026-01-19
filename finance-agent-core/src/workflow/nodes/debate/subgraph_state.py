@@ -12,6 +12,7 @@ from ...state import (
     FinancialNewsContext,
     FundamentalAnalysisContext,
     IntentExtractionContext,
+    TechnicalAnalysisContext,
     last_value,
     merge_debate_context,
     merge_dict,
@@ -38,6 +39,7 @@ class DebateSubgraphState(BaseModel):
 
     fundamental: FundamentalAnalysisContext
     financial_news: FinancialNewsContext
+    technical_analysis: TechnicalAnalysisContext
 
     # Internal progress tracking (NOT shared with parent) - needs reducer for parallel updates
     internal_progress: Annotated[dict[str, str], merge_dict] = Field(

@@ -66,7 +66,7 @@ def _fetch_price_series(
             start=start_date,
             end=end_date,
             progress=False,
-            auto_adjust=False,
+            auto_adjust=True,
         )
 
         if raw_data.empty:

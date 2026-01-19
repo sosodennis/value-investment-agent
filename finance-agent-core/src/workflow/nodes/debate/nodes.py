@@ -23,6 +23,7 @@ from .utils import (
     calculate_pragmatic_verdict,
     compress_financial_data,
     compress_news_data,
+    compress_ta_data,
 )
 
 logger = get_logger(__name__)
@@ -133,6 +134,7 @@ async def debate_aggregator_node(state: DebateSubgraphState) -> dict[str, Any]:
     # Compress data before passing to debate state
     clean_financials = compress_financial_data(state.fundamental.financial_reports)
     clean_news = compress_news_data(state.financial_news.output)
+    clean_ta = compress_ta_data(state.technical_analysis.output)
 
     reports = {
         "financials": {
@@ -144,6 +146,11 @@ async def debate_aggregator_node(state: DebateSubgraphState) -> dict[str, Any]:
             "data": clean_news,
             "source_weight": "MEDIUM",
             "rationale": "Secondary source: Curated financial news (editorial bias possible)",
+        },
+        "technical_analysis": {
+            "data": clean_ta,
+            "source_weight": "MEDIUM",
+            "rationale": "Quantitative source: Fractional differentiation analysis (statistical signals)",
         },
         "ticker": state.intent_extraction.resolved_ticker or state.ticker,
     }

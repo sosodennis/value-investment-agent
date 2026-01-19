@@ -4,7 +4,8 @@ import { AgentInfo, DimensionScore } from '../types/agents';
 import { TrendingUp, BarChart3, FileText, Zap, MessageSquare, ListFilter, Activity, LayoutPanelTop, CheckCircle2, Clock } from 'lucide-react';
 import { Message } from '../hooks/useAgent';
 import { NewsResearchOutput as NewsOutputType } from '../types/news';
-import { FundamentalAnalysisOutput, NewsResearchOutput as NewsResearchOutputPanel, GenericAgentOutput, DebateOutput } from './agent-outputs';
+import { FundamentalAnalysisOutput, NewsResearchOutput as NewsResearchOutputPanel, GenericAgentOutput, DebateOutput, TechnicalAnalysisOutput } from './agent-outputs';
+import { TechnicalSignalOutput } from '../types/technical';
 
 interface AgentDetailPanelProps {
     agent: AgentInfo | null;
@@ -91,7 +92,10 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
         {
             name: 'Risk',
             score: latestBase ? 100 - getScore(debtToEquity, 0, 2) :
-                (agent.id === 'auditor' ? 90 : (agent.id === 'fundamental_analysis' ? 72 : 0)),
+                (agent.id === 'technical_analysis' && agentOutput ?
+                    (agentOutput.signal_state?.risk_level === 'low' ? 90 :
+                        agentOutput.signal_state?.risk_level === 'medium' ? 60 : 20) :
+                    (agent.id === 'auditor' ? 90 : (agent.id === 'fundamental_analysis' ? 72 : 0))),
             color: 'bg-emerald-500'
         },
         {
@@ -103,7 +107,9 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
         {
             name: 'Valuation',
             score: latestBase ? 100 - getScore(peRatio, 10, 40) :
-                (agent.id === 'calculator' ? 88 : (agent.id === 'fundamental_analysis' ? 40 : 0)),
+                (agent.id === 'technical_analysis' && agentOutput ?
+                    (Math.abs(agentOutput.signal_state?.z_score || 0) > 2 ? 80 : 50) : // Z-score anomaly implies actionable valuation gap
+                    (agent.id === 'calculator' ? 88 : (agent.id === 'fundamental_analysis' ? 40 : 0))),
             color: 'bg-rose-500'
         },
     ];
@@ -513,6 +519,11 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                     ) : agent.id === 'debate' ? (
                         <DebateOutput
                             output={agentOutput}
+                            resolvedTicker={resolvedTicker}
+                        />
+                    ) : agent.id === 'technical_analysis' ? (
+                        <TechnicalAnalysisOutput
+                            output={agentOutput as TechnicalSignalOutput | null}
                             resolvedTicker={resolvedTicker}
                         />
                     ) : (
