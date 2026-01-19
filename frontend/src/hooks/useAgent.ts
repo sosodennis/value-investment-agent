@@ -226,33 +226,59 @@ export function useAgent(assistantId: string = "agent") {
                                     }
 
                                     // --- Track Granular Progress ---
-                                    if (nodeName && (updatePayload?.status || updatePayload?.node_statuses)) {
-                                        const cleanNode = nodeName.split(':').pop() || nodeName;
-                                        const status = updatePayload.status || 'Done';
+                                    if (nodeName && (updatePayload?.status || updatePayload?.node_statuses || updatePayload?.internal_progress || updatePayload?.current_node)) {
+                                        const cleanNode = updatePayload?.current_node || nodeName.split(':').pop() || nodeName;
 
+                                        // Status priority: explicit status > internal_progress[cleanNode] > node_statuses[cleanNode] > Done
+                                        let status = updatePayload.status;
+                                        if (!status && updatePayload.internal_progress && updatePayload.internal_progress[cleanNode]) {
+                                            status = updatePayload.internal_progress[cleanNode];
+                                        }
+                                        if (!status && updatePayload.node_statuses && updatePayload.node_statuses[cleanNode]) {
+                                            status = updatePayload.node_statuses[cleanNode];
+                                        }
+                                        if (!status) status = 'Done';
+
+                                        console.log(`[useAgent] Tracking progress: ${cleanNode} (${status})`);
                                         setCurrentNode(cleanNode);
                                         setCurrentStatus(status);
 
+                                        // Update activity feed for all nodes in internal_progress if provided
+                                        // or just the current cleanNode
+                                        const updates: Array<{ node: string, status: string }> = [];
+                                        if (updatePayload.internal_progress) {
+                                            Object.entries(updatePayload.internal_progress).forEach(([node, stat]) => {
+                                                updates.push({ node, status: stat as string });
+                                            });
+                                        } else {
+                                            updates.push({ node: cleanNode, status });
+                                        }
+
                                         setActivityFeed(prev => {
-                                            if (prev.length > 0) {
-                                                const lastItem = prev[prev.length - 1];
-                                                if (lastItem.node === cleanNode) {
-                                                    // Update existing item status/timestamp instead of duplicating
-                                                    const newFeed = [...prev];
-                                                    newFeed[newFeed.length - 1] = {
-                                                        ...lastItem,
-                                                        status: status,
+                                            let newFeed = [...prev];
+
+                                            updates.forEach(update => {
+                                                const existingIdx = newFeed.findIndex(item => item.node === update.node);
+                                                if (existingIdx !== -1) {
+                                                    // Update existing item
+                                                    newFeed[existingIdx] = {
+                                                        ...newFeed[existingIdx],
+                                                        status: update.status,
                                                         timestamp: Date.now()
                                                     };
-                                                    return newFeed;
+                                                } else {
+                                                    // Add new item
+                                                    newFeed.push({
+                                                        id: `step_${update.node}_${Date.now()}`,
+                                                        node: update.node,
+                                                        status: update.status,
+                                                        timestamp: Date.now()
+                                                    });
                                                 }
-                                            }
-                                            return [...prev, {
-                                                id: `step_${Date.now()}`,
-                                                node: cleanNode,
-                                                status: status,
-                                                timestamp: Date.now()
-                                            }];
+                                            });
+
+                                            // Final sort/filter if needed, but append order is generally fine
+                                            return newFeed;
                                         });
                                     }
 

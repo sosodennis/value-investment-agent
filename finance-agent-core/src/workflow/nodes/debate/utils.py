@@ -249,8 +249,8 @@ def compress_financial_data(financial_reports: list[dict]) -> list[dict]:
     compressed = []
     for report in financial_reports:
         # Extract basic info
-        base = report.get("base", {})
-        ext = report.get("extension", {})
+        base = report.get("base") or {}
+        ext = report.get("extension") or {}
 
         # We care about the year and the numerical values
         year = base.get("fiscal_year", {}).get("value", "Unknown")
@@ -314,7 +314,7 @@ def compress_news_data(news_output: dict) -> list[dict]:
 
     compressed = []
     for item in news_output.get("news_items", []):
-        analysis = item.get("analysis", {})
+        analysis = item.get("analysis") or {}
 
         # Focus on the summary and key facts
         compressed_item = {

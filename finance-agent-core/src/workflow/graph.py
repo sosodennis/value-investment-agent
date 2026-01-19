@@ -2,6 +2,7 @@ import os
 import traceback
 
 from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
@@ -99,7 +100,7 @@ def approval_node(state: AgentState) -> Command:
 # subgraph states, preventing stale status updates from polluting the parent.
 
 
-async def debate_wrapper_node(state: AgentState) -> dict:
+async def debate_wrapper_node(state: AgentState, config: RunnableConfig) -> dict:
     """
     Wrapper for debate subgraph with isolated state.
 
@@ -132,7 +133,7 @@ async def debate_wrapper_node(state: AgentState) -> dict:
         logger.info("[DEBUG] debate_wrapper_node: Getting debate subgraph...")
         debate_graph = await get_debate_subgraph()
         logger.info("[DEBUG] debate_wrapper_node: Invoking debate subgraph...")
-        result = await debate_graph.ainvoke(subgraph_input.model_dump())
+        result = await debate_graph.ainvoke(subgraph_input.model_dump(), config=config)
         logger.info("[DEBUG] debate_wrapper_node: Debate subgraph completed")
 
         # 3. Transform subgraph output → parent state
@@ -175,7 +176,9 @@ def map_model_to_skill(model_name: str | None) -> str:
     return "saas"
 
 
-async def fundamental_analysis_wrapper_node(state: AgentState) -> dict:
+async def fundamental_analysis_wrapper_node(
+    state: AgentState, config: RunnableConfig
+) -> dict:
     """
     Wrapper for fundamental analysis subgraph with isolated state.
 
@@ -188,7 +191,7 @@ async def fundamental_analysis_wrapper_node(state: AgentState) -> dict:
     )
 
     fa_graph = await get_fundamental_analysis_subgraph()
-    result = await fa_graph.ainvoke(subgraph_input.model_dump())
+    result = await fa_graph.ainvoke(subgraph_input.model_dump(), config=config)
 
     # Extract and map model_type for parent state
     model_type = "saas"
@@ -204,7 +207,9 @@ async def fundamental_analysis_wrapper_node(state: AgentState) -> dict:
     }
 
 
-async def financial_news_wrapper_node(state: AgentState) -> dict:
+async def financial_news_wrapper_node(
+    state: AgentState, config: RunnableConfig
+) -> dict:
     """
     Wrapper for financial news research subgraph with isolated state.
 
@@ -217,7 +222,7 @@ async def financial_news_wrapper_node(state: AgentState) -> dict:
     )
 
     news_graph = await get_financial_news_research_subgraph()
-    result = await news_graph.ainvoke(subgraph_input.model_dump())
+    result = await news_graph.ainvoke(subgraph_input.model_dump(), config=config)
 
     return {
         "financial_news": result["financial_news"],
@@ -226,7 +231,9 @@ async def financial_news_wrapper_node(state: AgentState) -> dict:
     }
 
 
-async def intent_extraction_wrapper_node(state: AgentState) -> dict:
+async def intent_extraction_wrapper_node(
+    state: AgentState, config: RunnableConfig
+) -> dict:
     """
     Wrapper for intent extraction subgraph with isolated state.
 
@@ -240,7 +247,7 @@ async def intent_extraction_wrapper_node(state: AgentState) -> dict:
     )
 
     intent_graph = await get_intent_extraction_subgraph()
-    result = await intent_graph.ainvoke(subgraph_input.model_dump())
+    result = await intent_graph.ainvoke(subgraph_input.model_dump(), config=config)
 
     return {
         "intent_extraction": result["intent_extraction"],

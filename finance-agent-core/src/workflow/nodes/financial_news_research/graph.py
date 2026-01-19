@@ -59,7 +59,11 @@ def search_node(state: FinancialNewsSubgraphState) -> Command:
     if not ticker:
         logger.warning("Financial News Research: No ticker resolved, skipping.")
         return Command(
-            update={"node_statuses": {"financial_news_research": "done"}}, goto=END
+            update={
+                "current_node": "searching",
+                "internal_progress": {"searching": "done"},
+            },
+            goto=END,
         )
 
     logger.info(f"--- [News Research] Searching news for {ticker} ---")
@@ -74,7 +78,11 @@ def search_node(state: FinancialNewsSubgraphState) -> Command:
     except Exception as e:
         logger.error(f"--- [News Research] news_search CRASHED: {e} ---")
         return Command(
-            update={"node_statuses": {"financial_news_research": "done"}}, goto=END
+            update={
+                "current_node": "searching",
+                "internal_progress": {"searching": "error"},
+            },
+            goto=END,
         )
 
     logger.info(f"--- [News Research] Found {len(results or [])} raw results ---")
@@ -83,7 +91,8 @@ def search_node(state: FinancialNewsSubgraphState) -> Command:
         return Command(
             update={
                 "financial_news": {"output": {"ticker": ticker, "news_items": []}},
-                "node_statuses": {"financial_news_research": "done"},
+                "current_node": "searching",
+                "internal_progress": {"searching": "done"},
             },
             goto=END,
         )
@@ -111,7 +120,8 @@ URL: {r.get('link')}
                     "formatted_results": formatted_results,
                 }
             },
-            "node_statuses": {"financial_news_research": "running"},
+            "current_node": "search_node",
+            "internal_progress": {"search_node": "done", "selector_node": "running"},
         },
         goto="selector_node",
     )
@@ -186,7 +196,8 @@ def selector_node(state: FinancialNewsSubgraphState) -> Command:
             "financial_news": {
                 "output": {**output, "selected_indices": selected_indices}
             },
-            "node_statuses": {"financial_news_research": "running"},
+            "current_node": "selector_node",
+            "internal_progress": {"selector_node": "done", "fetch_node": "running"},
         },
         goto="fetch_node",
     )
@@ -284,7 +295,8 @@ def fetch_node(state: FinancialNewsSubgraphState) -> Command:
             "financial_news": {
                 "output": {**output, "news_items": news_items_serialized}
             },
-            "node_statuses": {"financial_news_research": "running"},
+            "current_node": "fetch_node",
+            "internal_progress": {"fetch_node": "done", "analyst_node": "running"},
         },
         goto="analyst_node",
     )
@@ -326,7 +338,11 @@ def analyst_node(state: FinancialNewsSubgraphState) -> Command:
     except Exception as e:
         logger.error(f"Failed to create chains for {ticker}: {e}")
         return Command(
-            update={"node_statuses": {"financial_news_research": "done"}}, goto=END
+            update={
+                "current_node": "analyst_node",
+                "internal_progress": {"analyst_node": "error"},
+            },
+            goto=END,
         )
 
     for idx, item in enumerate(news_items):
@@ -406,7 +422,8 @@ def analyst_node(state: FinancialNewsSubgraphState) -> Command:
     return Command(
         update={
             "financial_news": {"output": {**output, "news_items": news_items}},
-            "node_statuses": {"financial_news_research": "running"},
+            "current_node": "analyst_node",
+            "internal_progress": {"analyst_node": "done", "aggregator_node": "running"},
         },
         goto="aggregator_node",
     )
@@ -477,7 +494,8 @@ def aggregator_node(state: FinancialNewsSubgraphState) -> Command:
         update={
             # mode='json' ensures HttpUrl, datetime, Enums are serialized as strings for msgpack/checkpoint
             "financial_news": {"output": final_output.model_dump(mode="json")},
-            "node_statuses": {"financial_news_research": "done"},
+            "current_node": "aggregator_node",
+            "internal_progress": {"aggregator_node": "done"},
             "messages": [
                 AIMessage(
                     content=f"### News Research: {ticker}\n\n**Overall Sentiment:** {overall_sentiment.value.upper()} ({final_output.sentiment_score})\n\n**Analysis Summaries:**\n{summary_text}\n\n**Themes:** {', '.join(all_themes) or 'N/A'}",

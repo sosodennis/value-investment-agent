@@ -33,7 +33,11 @@ def financial_health_node(state: FundamentalAnalysisSubgraphState) -> Command:
             "--- Fundamental Analysis: No resolved ticker available, cannot proceed ---"
         )
         return Command(
-            update={"node_statuses": {"fundamental_analysis": "error"}}, goto=END
+            update={
+                "current_node": "financial_health",
+                "internal_progress": {"financial_health": "error"},
+            },
+            goto=END,
         )
 
     logger.info(
@@ -271,6 +275,11 @@ def financial_health_node(state: FundamentalAnalysisSubgraphState) -> Command:
                 "financial_reports": reports_data,
                 "status": "model_selection",
             },
+            "current_node": "financial_health",
+            "internal_progress": {
+                "financial_health": "done",
+                "model_selection": "running",
+            },
             "messages": [
                 AIMessage(
                     content="",
@@ -307,7 +316,12 @@ def model_selection_node(state: FundamentalAnalysisSubgraphState) -> Command:
             "--- Fundamental Analysis: Missing company profile, cannot select model ---"
         )
         return Command(
-            update={"fundamental": {"status": "clarifying"}}, goto="clarifying"
+            update={
+                "fundamental": {"status": "clarifying"},
+                "current_node": "model_selection",
+                "internal_progress": {"model_selection": "waiting"},
+            },
+            goto="clarifying",
         )
 
     # Select model based on profile
@@ -389,8 +403,9 @@ def model_selection_node(state: FundamentalAnalysisSubgraphState) -> Command:
                     "financial_reports": state.fundamental.financial_reports,
                 }
             },
-            "node_statuses": {
-                "fundamental_analysis": "done",
+            "current_node": "model_selection",
+            "internal_progress": {
+                "model_selection": "done",
             },
         },
         goto=END,

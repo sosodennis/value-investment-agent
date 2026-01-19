@@ -33,7 +33,8 @@ def extraction_node(state: IntentExtractionSubgraphState) -> Command:
                 "intent_extraction": {
                     "status": "clarifying",
                 },
-                "node_statuses": {"intent_extraction": "running"},
+                "current_node": "extraction",
+                "internal_progress": {"extraction": "done", "clarifying": "running"},
             },
             goto="clarifying",
         )
@@ -46,7 +47,8 @@ def extraction_node(state: IntentExtractionSubgraphState) -> Command:
                 "extracted_intent": intent.model_dump(),
                 "status": "searching",
             },
-            "node_statuses": {"intent_extraction": "running"},
+            "current_node": "extraction",
+            "internal_progress": {"extraction": "done", "searching": "running"},
         },
         goto="searching",
     )
@@ -86,7 +88,8 @@ def searching_node(state: IntentExtractionSubgraphState) -> Command:
             return Command(
                 update={
                     "intent_extraction": {"status": "clarifying"},
-                    "node_statuses": {"intent_extraction": "running"},
+                    "current_node": "searching",
+                    "internal_progress": {"searching": "done", "clarifying": "running"},
                 },
                 goto="clarifying",
             )
@@ -139,7 +142,8 @@ def searching_node(state: IntentExtractionSubgraphState) -> Command:
                 "ticker_candidates": [c.model_dump() for c in final_candidates],
                 "status": "deciding",
             },
-            "node_statuses": {"intent_extraction": "running"},
+            "current_node": "searching",
+            "internal_progress": {"searching": "done", "deciding": "running"},
         },
         goto="deciding",
     )
@@ -156,7 +160,8 @@ def decision_node(state: IntentExtractionSubgraphState) -> Command:
         return Command(
             update={
                 "intent_extraction": {"status": "clarifying"},
-                "node_statuses": {"intent_extraction": "running"},
+                "current_node": "deciding",
+                "internal_progress": {"deciding": "done", "clarifying": "running"},
             },
             goto="clarifying",
         )
@@ -171,7 +176,8 @@ def decision_node(state: IntentExtractionSubgraphState) -> Command:
         return Command(
             update={
                 "intent_extraction": {"status": "clarifying"},
-                "node_statuses": {"intent_extraction": "running"},
+                "current_node": "deciding",
+                "internal_progress": {"deciding": "done", "clarifying": "running"},
             },
             goto="clarifying",
         )
@@ -188,7 +194,8 @@ def decision_node(state: IntentExtractionSubgraphState) -> Command:
         return Command(
             update={
                 "intent_extraction": {"status": "clarifying"},
-                "node_statuses": {"intent_extraction": "running"},
+                "current_node": "deciding",
+                "internal_progress": {"deciding": "done", "clarifying": "running"},
             },
             goto="clarifying",
         )
@@ -203,11 +210,8 @@ def decision_node(state: IntentExtractionSubgraphState) -> Command:
                 "status": "resolved",
             },
             "ticker": resolved_ticker,
-            "node_statuses": {
-                "intent_extraction": "done",
-                "fundamental_analysis": "running",
-                "financial_news_research": "running",
-            },
+            "current_node": "deciding",
+            "internal_progress": {"deciding": "done"},
         },
         goto=END,
     )
@@ -275,11 +279,8 @@ def clarification_node(state: IntentExtractionSubgraphState) -> Command:
                     },
                     "ticker": selected_symbol,
                     "messages": new_messages,
-                    "node_statuses": {
-                        "intent_extraction": "done",
-                        "fundamental_analysis": "running",
-                        "financial_news_research": "running",
-                    },
+                    "current_node": "clarifying",
+                    "internal_progress": {"clarifying": "done"},
                 },
                 goto=END,
             )
@@ -289,7 +290,8 @@ def clarification_node(state: IntentExtractionSubgraphState) -> Command:
     return Command(
         update={
             "intent_extraction": {"status": "extraction"},
-            "node_statuses": {"intent_extraction": "running"},
+            "current_node": "clarifying",
+            "internal_progress": {"clarifying": "done", "extraction": "running"},
         },
         goto="extraction",
     )
