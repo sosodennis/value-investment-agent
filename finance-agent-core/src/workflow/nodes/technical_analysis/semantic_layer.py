@@ -51,12 +51,6 @@ class SemanticAssembler:
             "low": 20.0,
             "extreme_low": 5.0,
         }
-        # Legacy constants for backward compatibility
-        self.RSI_EXTREME_HIGH = 95.0
-        self.RSI_HIGH = 80.0
-        self.RSI_LOW = 20.0
-        self.RSI_EXTREME_LOW = 5.0
-        self.Z_CRITICAL = 2.5
 
     def assemble(
         self,
