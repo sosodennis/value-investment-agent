@@ -9,6 +9,7 @@ from langgraph.types import Command
 
 from src.utils.logger import get_logger
 
+from .backtester import CombinedBacktester, format_backtest_for_llm
 from .semantic_layer import assembler, generate_interpretation
 from .structures import (
     FracDiffMetrics,
@@ -139,6 +140,28 @@ def fracdiff_compute_node(state: TechnicalAnalysisSubgraphState) -> Command:
     # Calculate FD-OBV (volume analysis)
     obv_data = calculate_fd_obv(prices, volumes)
 
+    # [Fix] Remove pandas Series from indicators for msgpack serialization
+    # Keep only scalar values for state storage
+    bollinger_serializable = {
+        "upper": bollinger_data["upper"],
+        "middle": bollinger_data["middle"],
+        "lower": bollinger_data["lower"],
+        "state": bollinger_data["state"],
+        "bandwidth": bollinger_data["bandwidth"],
+    }
+
+    rsi_serializable = {
+        "value": rsi_data["value"],
+        "thresholds": rsi_data["thresholds"],
+    }
+
+    obv_serializable = {
+        "raw_obv_val": obv_data["raw_obv_val"],
+        "fd_obv_z": obv_data["fd_obv_z"],
+        "optimal_d": obv_data["optimal_d"],
+        "state": obv_data["state"],
+    }
+
     # Update state with FracDiff metrics and indicators
     return Command(
         update={
@@ -153,10 +176,10 @@ def fracdiff_compute_node(state: TechnicalAnalysisSubgraphState) -> Command:
                         "z_score": float(z_score),
                     },
                     "indicators": {
-                        "bollinger": bollinger_data,
-                        "rsi": rsi_data,  # [Change] Now a dict
+                        "bollinger": bollinger_serializable,
+                        "rsi": rsi_serializable,
                         "macd": macd_data,
-                        "obv": obv_data,
+                        "obv": obv_serializable,
                     },
                     "raw_data": {
                         **output["raw_data"],
@@ -213,8 +236,45 @@ async def semantic_translate_node(state: TechnicalAnalysisSubgraphState) -> Comm
         obv_data=indicators.get("obv", {"state": "NEUTRAL", "fd_obv_z": 0.0}),
     )
 
-    # Generate LLM interpretation
-    llm_interpretation = await generate_interpretation(tags_dict, ticker)
+    # [NEW] Run Backtesting for Statistical Verification
+    try:
+        # Reconstruct price series from raw_data
+        import pandas as pd
+
+        price_dict = output["raw_data"]["price_series"]
+        prices = pd.Series(price_dict)
+        prices.index = pd.to_datetime(prices.index)
+
+        # Reconstruct Z-Score series from fracdiff_series
+        fd_dict = output["raw_data"]["fracdiff_series"]
+        fd_series = pd.Series(fd_dict)
+        fd_series.index = pd.to_datetime(fd_series.index)
+
+        # Initialize backtester
+        backtester = CombinedBacktester(
+            price_series=prices,
+            z_score_series=fd_series,
+            rsi_dict=indicators.get("rsi", {}),
+            obv_dict=indicators.get("obv", {}),
+            bollinger_dict=indicators.get("bollinger", {}),
+        )
+
+        # Run backtest with 0.1% transaction cost
+        bt_results = backtester.run(transaction_cost=0.001)
+
+        # Format for LLM
+        backtest_context = format_backtest_for_llm(bt_results)
+        logger.info(f"Backtest Context Generated: {backtest_context}")
+    except Exception as e:
+        logger.warning(
+            f"Backtesting failed: {e}. Proceeding without statistical verification."
+        )
+        backtest_context = ""
+
+    # Generate LLM interpretation with backtest context
+    llm_interpretation = await generate_interpretation(
+        tags_dict, ticker, backtest_context
+    )
 
     # Build final TechnicalSignal structure
     frac_diff_metrics = FracDiffMetrics(

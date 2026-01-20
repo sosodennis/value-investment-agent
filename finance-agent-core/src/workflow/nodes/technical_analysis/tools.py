@@ -265,6 +265,9 @@ def calculate_fd_bollinger(
         "lower": float(last_lower),
         "state": state,
         "bandwidth": float(last_upper - last_lower),
+        # --- NEW FIELDS FOR BACKTESTER ---
+        "series_upper": upper,
+        "series_lower": lower,
     }
 
 
@@ -328,7 +331,12 @@ def calculate_fd_rsi_metrics(fd_series: pd.Series, window: int = 14) -> dict:
     # Calculate dynamic thresholds for this specific stock
     thresholds = calculate_dynamic_thresholds(rsi_series, window=252)
 
-    return {"value": rsi_score, "thresholds": thresholds}
+    return {
+        "value": rsi_score,
+        "thresholds": thresholds,
+        # --- NEW FIELD FOR BACKTESTER ---
+        "series_value": rsi_series,  # Full historical RSI series
+    }
 
 
 def calculate_fd_macd(
@@ -414,7 +422,7 @@ def calculate_fd_obv(price_series: pd.Series, volume_series: pd.Series) -> dict:
     # 3. Apply FracDiff with the specific d found for OBV
     fd_obv_series = frac_diff_ffd(raw_obv, optimal_d_obv)
 
-    # 4. Calculate Z-Score
+    # 4. Calculate Z-Score (Current value)
     lookback = min(len(fd_obv_series), 126)
     recent = fd_obv_series.iloc[-lookback:]
 
@@ -423,6 +431,15 @@ def calculate_fd_obv(price_series: pd.Series, volume_series: pd.Series) -> dict:
         z_score_obv = 0.0
     else:
         z_score_obv = (fd_obv_series.iloc[-1] - recent.mean()) / std_val
+
+    # [NEW] Calculate full Z-Score series for backtesting (Vectorized)
+    # Use rolling mean/std to calculate historical Z-Score series
+    rolling_mean = fd_obv_series.rolling(window=lookback).mean()
+    rolling_std = fd_obv_series.rolling(window=lookback).std()
+
+    # Avoid division by zero
+    z_score_series = (fd_obv_series - rolling_mean) / rolling_std
+    z_score_series = z_score_series.fillna(0.0)
 
     # 5. Determine State
     state = "NEUTRAL"
@@ -438,6 +455,8 @@ def calculate_fd_obv(price_series: pd.Series, volume_series: pd.Series) -> dict:
     return {
         "raw_obv_val": float(raw_obv.iloc[-1]),
         "fd_obv_z": float(z_score_obv),
-        "optimal_d": float(optimal_d_obv),  # Useful for debugging
+        "optimal_d": float(optimal_d_obv),
         "state": state,
+        # --- NEW FIELD FOR BACKTESTER ---
+        "series_z": z_score_series,  # Full historical OBV Z-Score series
     }
