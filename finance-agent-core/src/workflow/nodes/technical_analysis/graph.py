@@ -9,11 +9,19 @@ from langgraph.types import Command
 
 from src.utils.logger import get_logger
 
-from .semantic_layer import generate_interpretation, translate_to_tags
-from .structures import FracDiffMetrics, SignalState, TechnicalSignal
+from .semantic_layer import assembler, generate_interpretation
+from .structures import (
+    FracDiffMetrics,
+    SignalState,
+    TechnicalSignal,
+)
 from .subgraph_state import TechnicalAnalysisSubgraphState
 from .tools import (
     apply_fracdiff,
+    calculate_fd_bollinger,
+    calculate_fd_macd,
+    calculate_fd_obv,
+    calculate_fd_rsi_metrics,
     compute_z_score,
     fetch_daily_ohlcv,
     find_optimal_d,
@@ -67,7 +75,11 @@ def data_fetch_node(state: TechnicalAnalysisSubgraphState) -> Command:
                         "price_series": df["price"]
                         .rename(index=lambda x: x.strftime("%Y-%m-%d"))
                         .map(float)
-                        .to_dict()
+                        .to_dict(),
+                        "volume_series": df["volume"]
+                        .rename(index=lambda x: x.strftime("%Y-%m-%d"))
+                        .map(float)
+                        .to_dict(),
                     },
                 }
             },
@@ -102,8 +114,13 @@ def fracdiff_compute_node(state: TechnicalAnalysisSubgraphState) -> Command:
     import pandas as pd
 
     price_dict = output["raw_data"]["price_series"]
+    volume_dict = output["raw_data"]["volume_series"]
+
     prices = pd.Series(price_dict)
     prices.index = pd.to_datetime(prices.index)
+
+    volumes = pd.Series(volume_dict)
+    volumes.index = pd.to_datetime(volumes.index)
 
     # Find optimal d value
     optimal_d, window_length, adf_stat, adf_pvalue = find_optimal_d(prices)
@@ -114,7 +131,15 @@ def fracdiff_compute_node(state: TechnicalAnalysisSubgraphState) -> Command:
     # Compute Z-score
     z_score = compute_z_score(fd_series, lookback=252)
 
-    # Update state with FracDiff metrics
+    # Calculate confluence indicators
+    bollinger_data = calculate_fd_bollinger(fd_series)
+    rsi_data = calculate_fd_rsi_metrics(fd_series)  # [Change] Returns dict now
+    macd_data = calculate_fd_macd(fd_series)
+
+    # Calculate FD-OBV (volume analysis)
+    obv_data = calculate_fd_obv(prices, volumes)
+
+    # Update state with FracDiff metrics and indicators
     return Command(
         update={
             "technical_analysis": {
@@ -126,6 +151,12 @@ def fracdiff_compute_node(state: TechnicalAnalysisSubgraphState) -> Command:
                         "adf_statistic": float(adf_stat),
                         "adf_pvalue": float(adf_pvalue),
                         "z_score": float(z_score),
+                    },
+                    "indicators": {
+                        "bollinger": bollinger_data,
+                        "rsi": rsi_data,  # [Change] Now a dict
+                        "macd": macd_data,
+                        "obv": obv_data,
                     },
                     "raw_data": {
                         **output["raw_data"],
@@ -166,11 +197,21 @@ async def semantic_translate_node(state: TechnicalAnalysisSubgraphState) -> Comm
 
     ticker = output["ticker"]
     metrics = output["fracdiff_metrics"]
+    indicators = output.get("indicators", {})
     optimal_d = metrics["optimal_d"]
     z_score = metrics["z_score"]
 
-    # Generate deterministic tags
-    tags_dict = translate_to_tags(z_score, optimal_d)
+    # Use SemanticAssembler for multi-dimensional analysis
+    tags_dict = assembler.assemble(
+        z_score=z_score,
+        optimal_d=optimal_d,
+        bollinger_data=indicators.get("bollinger", {"state": "INSIDE"}),
+        rsi_data=indicators.get(
+            "rsi", {"value": 50.0, "thresholds": {}}
+        ),  # [Change] Expect dict
+        macd_data=indicators.get("macd", {"momentum_state": "NEUTRAL"}),
+        obv_data=indicators.get("obv", {"state": "NEUTRAL", "fd_obv_z": 0.0}),
+    )
 
     # Generate LLM interpretation
     llm_interpretation = await generate_interpretation(tags_dict, ticker)
@@ -189,6 +230,7 @@ async def semantic_translate_node(state: TechnicalAnalysisSubgraphState) -> Comm
         statistical_state=tags_dict["statistical_state"],
         direction=tags_dict["direction"],
         risk_level=tags_dict["risk_level"],
+        confluence=tags_dict["confluence"],
     )
 
     technical_signal = TechnicalSignal(

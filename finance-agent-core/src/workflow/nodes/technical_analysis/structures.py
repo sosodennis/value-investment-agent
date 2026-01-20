@@ -49,6 +49,17 @@ class FracDiffMetrics(BaseModel):
     )
 
 
+class ConfluenceEvidence(BaseModel):
+    """Container for multi-indicator confluence evidence."""
+
+    bollinger_state: str = Field(
+        ..., description="Bollinger band state (INSIDE, BREAKOUT_UPPER, BREAKOUT_LOWER)"
+    )
+    rsi_score: float = Field(..., description="FD-RSI Type B score (0-100)")
+    macd_momentum: str = Field(..., description="MACD momentum state")
+    obv_state: str = Field(..., description="FD-OBV volume flow state")
+
+
 class SignalState(BaseModel):
     """Current signal state from FracDiff analysis."""
 
@@ -62,6 +73,9 @@ class SignalState(BaseModel):
         ..., description="Direction: BULLISH_EXTENSION or BEARISH_EXTENSION"
     )
     risk_level: RiskLevel = Field(..., description="Risk level classification")
+    confluence: ConfluenceEvidence = Field(
+        ..., description="Secondary indicator evidence"
+    )
 
 
 class TechnicalSignal(BaseModel):
