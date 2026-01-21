@@ -31,6 +31,8 @@ interface TechnicalAnalysisOutputProps {
     output: TechnicalSignalOutput | null;
 }
 
+type Timeframe = '1W' | '2W' | '1M' | '3M' | '1Y' | 'ALL';
+
 // --- 1. Semantic Helpers (語意轉譯層) ---
 
 const getSignalStrengthLabel = (d: number, pValue: number) => {
@@ -117,6 +119,7 @@ export const TechnicalAnalysisOutput: React.FC<TechnicalAnalysisOutputProps> = (
 }) => {
     const [showAdvanced, setShowAdvanced] = useState(false);
     const [isAutoFit, setIsAutoFit] = useState(false);
+    const [timeframe, setTimeframe] = useState<Timeframe>('ALL');
 
     if (!output) return (
         <div className="flex flex-col items-center justify-center p-12 text-slate-500">
@@ -156,24 +159,55 @@ export const TechnicalAnalysisOutput: React.FC<TechnicalAnalysisOutputProps> = (
             .sort((a, b) => a.timestamp - b.timestamp)
         : [];
 
+    // Filter chart data by timeframe
+    const filteredChartData = React.useMemo(() => {
+        if (timeframe === 'ALL' || chartData.length === 0) return chartData;
+
+        const latestTimestamp = chartData[chartData.length - 1].timestamp;
+        let cutoffTime: number;
+
+        const now = new Date(latestTimestamp);
+        switch (timeframe) {
+            case '1W':
+                cutoffTime = new Date(now).setDate(now.getDate() - 7);
+                break;
+            case '2W':
+                cutoffTime = new Date(now).setDate(now.getDate() - 14);
+                break;
+            case '1M':
+                cutoffTime = new Date(now).setMonth(now.getMonth() - 1);
+                break;
+            case '3M':
+                cutoffTime = new Date(now).setMonth(now.getMonth() - 3);
+                break;
+            case '1Y':
+                cutoffTime = new Date(now).setFullYear(now.getFullYear() - 1);
+                break;
+            default:
+                return chartData;
+        }
+
+        return chartData.filter(d => d.timestamp >= cutoffTime);
+    }, [chartData, timeframe]);
+
     // [CRITICAL FIX] Pre-calculate Y-Axis Domain
     // 我們在這裡直接算出數值，並排除無效數據 (NaN/null)，確保穩定性
-    const dataValues = chartData
+    const dataValues = filteredChartData
         .map(d => d.value)
         .filter(v => typeof v === 'number' && !isNaN(v) && isFinite(v));
 
-    // 1. Fixed Range Mode: Ensures benchmark lines (+/- 2.0) are visible
-    const fixedMax = dataValues.length > 0 ? Math.max(...dataValues, 2.5) : 2.5;
-    const fixedMin = dataValues.length > 0 ? Math.min(...dataValues, -2.5) : -2.5;
+    // 1. Fixed Range Mode: Strictly defined to visualize the standard deviation context
+    // We clip outliers here to force a consistent visual scale for risk verification
+    const fixedDomain: [number, number] = [-3, 3];
 
-    // 2. Auto-Fit Mode: Focuses on the volatility detail
+    // 2. Auto-Fit Mode: Fits the visible data range (including outliers up to clamp limit)
     const autoMax = dataValues.length > 0 ? Math.max(...dataValues) + 0.1 : 'auto';
     const autoMin = dataValues.length > 0 ? Math.min(...dataValues) - 0.1 : 'auto';
 
     // 決定當前使用哪個 Domain (Explicitly cast to [any, any] for Recharts compatibility)
     const currentDomain: [any, any] = isAutoFit
         ? [autoMin, autoMax]
-        : [fixedMin, fixedMax];
+        : fixedDomain;
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-700">
@@ -309,6 +343,22 @@ export const TechnicalAnalysisOutput: React.FC<TechnicalAnalysisOutputProps> = (
                                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">FracDiff Stream</span>
                                 </div>
                                 <div className="flex items-center gap-4">
+                                    {/* Timeframe Selectors */}
+                                    <div className="flex items-center bg-slate-800/50 rounded-lg p-0.5 border border-slate-700/50">
+                                        {(['1W', '2W', '1M', '3M', '1Y', 'ALL'] as Timeframe[]).map((tf) => (
+                                            <button
+                                                key={tf}
+                                                onClick={() => setTimeframe(tf)}
+                                                className={`px-2 py-1 rounded text-[9px] font-bold transition-all ${timeframe === tf
+                                                    ? 'bg-cyan-500/20 text-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.1)]'
+                                                    : 'text-slate-500 hover:text-slate-300'
+                                                    }`}
+                                            >
+                                                {tf}
+                                            </button>
+                                        ))}
+                                    </div>
+
                                     {/* Legend (Only in fixed mode) */}
                                     {!isAutoFit && (
                                         <div className="flex items-center gap-2 text-[8px] font-bold text-slate-500 uppercase">
@@ -335,7 +385,7 @@ export const TechnicalAnalysisOutput: React.FC<TechnicalAnalysisOutputProps> = (
                             <div className="h-64 w-full">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <AreaChart
-                                        data={chartData}
+                                        data={filteredChartData}
                                         margin={{ top: 10, right: 40, left: 0, bottom: 0 }}
                                     >
                                         <defs>
@@ -377,21 +427,28 @@ export const TechnicalAnalysisOutput: React.FC<TechnicalAnalysisOutputProps> = (
                                             animationDuration={500}
                                         />
 
-                                        {/* Benchmark Lines: Visible even in zoom mode if they fit in the range */}
-                                        <ReferenceLine
-                                            y={2}
-                                            stroke="#f43f5e"
-                                            strokeDasharray="4 4"
-                                            opacity={0.8}
-                                            label={{ value: 'Overbought', position: 'insideTopRight', fill: '#f43f5e', fontSize: 10, fontWeight: 'bold' }}
-                                        />
-                                        <ReferenceLine
-                                            y={-2}
-                                            stroke="#f43f5e"
-                                            strokeDasharray="4 4"
-                                            opacity={0.8}
-                                            label={{ value: 'Oversold', position: 'insideBottomRight', fill: '#f43f5e', fontSize: 10, fontWeight: 'bold' }}
-                                        />
+                                        {/* Benchmark Lines: In Auto Mode, only show if they are relevant to the visible range */
+                                            /* This prevents the chart from "zooming out" just to show empty space */
+                                            (!isAutoFit || (autoMax as number) > 1.8) && (
+                                                <ReferenceLine
+                                                    y={2}
+                                                    stroke="#f43f5e"
+                                                    strokeDasharray="4 4"
+                                                    opacity={0.8}
+                                                    label={{ value: 'Overbought', position: 'insideTopRight', fill: '#f43f5e', fontSize: 10, fontWeight: 'bold' }}
+                                                />
+                                            )}
+
+                                        {(!isAutoFit || (autoMin as number) < -1.8) && (
+                                            <ReferenceLine
+                                                y={-2}
+                                                stroke="#f43f5e"
+                                                strokeDasharray="4 4"
+                                                opacity={0.8}
+                                                label={{ value: 'Oversold', position: 'insideBottomRight', fill: '#f43f5e', fontSize: 10, fontWeight: 'bold' }}
+                                            />
+                                        )}
+
                                         <ReferenceLine y={0} stroke="#475569" strokeOpacity={0.2} />
                                     </AreaChart>
                                 </ResponsiveContainer>
