@@ -154,9 +154,55 @@ class PerfectStormStrategy(BaseStrategy):
         return signal
 
 
+class HealthyTrendFollowingStrategy(BaseStrategy):
+    """
+    Trend following strategy for healthy momentum.
+
+    Captures steady trends in stable stocks by entering when momentum
+    is positive but not overheated, and structure is robust.
+    """
+
+    @property
+    def name(self) -> str:
+        return "Healthy Trend Following"
+
+    @property
+    def description(self) -> str:
+        return "Buying when price shows mild momentum (Z 0.5~2.0) without overheating."
+
+    def generate_signal(self, ctx: StrategyContext) -> pd.Series:
+        signal = pd.Series(0, index=ctx.prices.index)
+
+        # Entry (Long):
+        # 1. Z-Score in healthy range (0.5 ~ 2.0) - trending but not extreme
+        # 2. RSI in strong but safe range (50 ~ 75) - positive momentum
+        # 3. Price > 20-day MA (Bollinger Middle) - structural uptrend
+        ma20 = ctx.bb_upper.rolling(
+            20
+        ).mean()  # Approximation of middle band if not explicit
+        entry_mask = (
+            (ctx.z_score > 0.5)
+            & (ctx.z_score < 2.0)
+            & (ctx.rsi > 50)
+            & (ctx.rsi < 75)
+            & (ctx.prices > ma20)
+        )
+
+        signal[entry_mask] = 1  # Enter Long
+
+        # Exit:
+        # 1. Trend reversal (Z < 0)
+        # 2. Overheating (RSI > 80)
+        signal[ctx.z_score < 0] = 0
+        signal[ctx.rsi > 80] = 0
+
+        return signal
+
+
 # Registry of all available strategies
 ALL_STRATEGIES = [
     MeanReversionStrategy(),
     MomentumExhaustionStrategy(),
     PerfectStormStrategy(),
+    HealthyTrendFollowingStrategy(),
 ]
