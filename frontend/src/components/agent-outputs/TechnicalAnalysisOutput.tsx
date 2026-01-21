@@ -134,6 +134,12 @@ export const TechnicalAnalysisOutput: React.FC<TechnicalAnalysisOutputProps> = (
     // This ensures the data mathematically aligns with +/- 2.0 thresholds
     const chartData = raw_data?.z_score_series
         ? Object.entries(raw_data.z_score_series)
+            .filter(([_, value]) => {
+                // [CRITICAL FIX] 2. 過濾掉 "暖身期" 的 0.0 數據
+                // FracDiff 算法前 100+ 天因為數據不足會填 0，畫出來會像一條死魚，必須藏起來
+                if (Math.abs(value) < 0.0001) return false;
+                return true;
+            })
             .map(([date, value]) => {
                 // [FIX] Clamp extreme outliers to +/- 10.0 for visualization
                 let displayValue = value;
