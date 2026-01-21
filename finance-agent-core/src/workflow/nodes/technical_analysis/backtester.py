@@ -424,11 +424,24 @@ class WalkForwardOptimizer:
         max_dd = drawdown.min()  # Most severe drawdown (negative value)
 
         total_ret = wfa_cumulative.iloc[-1] - 1.0 if not wfa_cumulative.empty else 0.0
-        sharpe = (
-            (wfa_returns.mean() / wfa_returns.std() * np.sqrt(252))
-            if wfa_returns.std() > 0
-            else 0
-        )
+
+        # [SYNC FIX] Synchronize Sharpe Calculation with Backtester
+        # Access 'daily_rf' directly from parent backtester instance
+        # ensuring both In-Sample and Out-of-Sample use the SAME risk-free rate
+
+        # 1. Get the Risk-Free Rate series (aligned with the same index)
+        rf_series = self.bt.daily_rf
+
+        # 2. Calculate Excess Returns (WFA Return - Risk Free Rate)
+        # Note: Pandas aligns them by index automatically
+        wfa_excess_returns = wfa_returns - rf_series
+
+        # 3. Calculate Sharpe Ratio using Excess Returns
+        std_excess = wfa_excess_returns.std()
+        if std_excess > 1e-6:
+            sharpe = (wfa_excess_returns.mean() / std_excess) * np.sqrt(252)
+        else:
+            sharpe = 0.0
 
         logger.info(
             f"WFA Complete: Sharpe={sharpe:.2f}, Total Return={total_ret*100:.1f}%, Max DD={max_dd*100:.1f}%"
