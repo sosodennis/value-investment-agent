@@ -260,7 +260,7 @@ async def semantic_translate_node(state: TechnicalAnalysisSubgraphState) -> Comm
         # [Fix] Transform Raw FracDiff into rolling Z-Scores for Backtesting
         # This fixes the "Unit Discrepancy" where strategies received raw values (0.2)
         # instead of standard deviations (1.5, -2.0, etc.)
-        z_score_series = calculate_rolling_z_score(fd_series, lookback=126)
+        z_score_series = calculate_rolling_z_score(fd_series, lookback=252)
 
         # [Fix] Re-calculate full indicator series for Backtester (Amnesia Bug Fix)
         # State only stores scalar values for serialization. We must rebuild historical series
