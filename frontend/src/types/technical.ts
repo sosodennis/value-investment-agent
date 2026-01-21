@@ -62,5 +62,6 @@ export interface TechnicalSignalOutput {
     raw_data?: {
         price_series?: Record<string, number>;
         fracdiff_series?: Record<string, number>;
+        z_score_series?: Record<string, number>;
     };
 }

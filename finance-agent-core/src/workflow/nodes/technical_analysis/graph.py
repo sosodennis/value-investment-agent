@@ -136,8 +136,12 @@ def fracdiff_compute_node(state: TechnicalAnalysisSubgraphState) -> Command:
     # Apply FracDiff
     fd_series = apply_fracdiff(prices, optimal_d)
 
-    # Compute Z-score
+    # Compute Z-score (current value)
     z_score = compute_z_score(fd_series, lookback=252)
+
+    # [CRITICAL FIX] Calculate rolling Z-score series for frontend chart
+    # This ensures the chart data mathematically aligns with +/- 2.0 thresholds
+    z_score_series = calculate_rolling_z_score(fd_series, lookback=252)
 
     # Calculate confluence indicators
     bollinger_data = calculate_fd_bollinger(fd_series)
@@ -191,6 +195,12 @@ def fracdiff_compute_node(state: TechnicalAnalysisSubgraphState) -> Command:
                     "raw_data": {
                         **output["raw_data"],
                         "fracdiff_series": fd_series.rename(
+                            index=lambda x: x.strftime("%Y-%m-%d")
+                        )
+                        .map(float)
+                        .to_dict(),
+                        # [CRITICAL FIX] Add Z-score series for frontend chart
+                        "z_score_series": z_score_series.rename(
                             index=lambda x: x.strftime("%Y-%m-%d")
                         )
                         .map(float)

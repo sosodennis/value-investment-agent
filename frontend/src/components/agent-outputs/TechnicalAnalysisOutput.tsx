@@ -130,8 +130,10 @@ export const TechnicalAnalysisOutput: React.FC<TechnicalAnalysisOutputProps> = (
     const StrengthIcon = strength.icon;
 
     // Data Processing & Outlier Filtering
-    const chartData = raw_data?.fracdiff_series
-        ? Object.entries(raw_data.fracdiff_series)
+    // [CRITICAL FIX] Use z_score_series instead of fracdiff_series for chart
+    // This ensures the data mathematically aligns with +/- 2.0 thresholds
+    const chartData = raw_data?.z_score_series
+        ? Object.entries(raw_data.z_score_series)
             .map(([date, value]) => {
                 // [FIX] Clamp extreme outliers to +/- 10.0 for visualization
                 let displayValue = value;
