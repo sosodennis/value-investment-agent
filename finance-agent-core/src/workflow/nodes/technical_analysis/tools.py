@@ -224,6 +224,29 @@ def compute_z_score(fd_series: pd.Series, lookback: int = 126) -> float:
     return z_score
 
 
+def calculate_rolling_z_score(fd_series: pd.Series, lookback: int = 126) -> pd.Series:
+    """
+    Generate the full historical Z-Score series from Raw FracDiff data.
+    Essential for Backtesting to match real-time logic.
+    """
+    # 1. Calculate rolling mean and standard deviation
+    rolling_mean = fd_series.rolling(window=lookback).mean()
+    rolling_std = fd_series.rolling(window=lookback).std()
+
+    # 2. Calculate Z-Score series
+    # Z = (Value - Mean) / Std
+    z_score_series = (fd_series - rolling_mean) / rolling_std
+
+    # 3. Handle NaNs and Infinity (first 'lookback' days will be NaN)
+    # Fill with 0.0 to represent no statistical deviation (neutral state)
+    z_score_series = z_score_series.fillna(0.0).replace([np.inf, -np.inf], 0.0)
+
+    logger.info(
+        f"✅ Generated rolling Z-score series with {len(z_score_series)} values"
+    )
+    return z_score_series
+
+
 def get_timestamp() -> str:
     """Get current timestamp in ISO format."""
     return datetime.utcnow().isoformat() + "Z"
@@ -460,3 +483,43 @@ def calculate_fd_obv(price_series: pd.Series, volume_series: pd.Series) -> dict:
         # --- NEW FIELD FOR BACKTESTER ---
         "series_z": z_score_series,  # Full historical OBV Z-Score series
     }
+
+
+def fetch_risk_free_series(period: str = "5y") -> pd.Series | None:
+    """
+    [Enterprise] Fetch historical risk-free rate (10-Year Treasury Yield - ^TNX).
+    Returns a daily series of 'Daily Risk Free Rate' (decimal).
+
+    Args:
+        period: Historical period to fetch (default: 5y)
+
+    Returns:
+        pd.Series of daily risk-free rates, or None if fetch fails
+    """
+    try:
+        logger.info(f"--- TA: Fetching Risk-Free Rate (^TNX) for {period} ---")
+        # ^TNX price is the yield percentage (e.g., 4.25 means 4.25%)
+        tnx = yf.Ticker("^TNX")
+        hist = tnx.history(period=period, interval="1d")
+
+        if hist.empty:
+            logger.warning("⚠️ Failed to fetch ^TNX, system will use fallback rate.")
+            return None
+
+        # 1. Take Close price (annual yield in %)
+        # 2. Convert to decimal (4.25 -> 0.0425)
+        # 3. Convert to daily rate (assuming 252 trading days per year)
+        daily_rf = (hist["Close"] / 100.0) / 252.0
+
+        # Simple cleaning: forward-fill gaps
+        daily_rf = daily_rf.ffill().fillna(0.0)
+
+        # [Defensive] Remove potential negative rates or extreme values
+        daily_rf = daily_rf.clip(lower=0.0)
+
+        logger.info(f"✅ Fetched {len(daily_rf)} days of risk-free rate data")
+        return daily_rf
+
+    except Exception as e:
+        logger.error(f"❌ Error fetching risk-free rate: {e}")
+        return None

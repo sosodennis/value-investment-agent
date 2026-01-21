@@ -9,7 +9,12 @@ from langgraph.types import Command
 
 from src.utils.logger import get_logger
 
-from .backtester import CombinedBacktester, format_backtest_for_llm
+from .backtester import (
+    CombinedBacktester,
+    WalkForwardOptimizer,
+    format_backtest_for_llm,
+    format_wfa_for_llm,
+)
 from .semantic_layer import assembler, generate_interpretation
 from .structures import (
     FracDiffMetrics,
@@ -23,8 +28,10 @@ from .tools import (
     calculate_fd_macd,
     calculate_fd_obv,
     calculate_fd_rsi_metrics,
+    calculate_rolling_z_score,
     compute_z_score,
     fetch_daily_ohlcv,
+    fetch_risk_free_series,
     find_optimal_d,
     get_timestamp,
 )
@@ -245,35 +252,72 @@ async def semantic_translate_node(state: TechnicalAnalysisSubgraphState) -> Comm
         prices = pd.Series(price_dict)
         prices.index = pd.to_datetime(prices.index)
 
-        # Reconstruct Z-Score series from fracdiff_series
+        # Reconstruct FracDiff series from raw_data
         fd_dict = output["raw_data"]["fracdiff_series"]
         fd_series = pd.Series(fd_dict)
         fd_series.index = pd.to_datetime(fd_series.index)
 
-        # Initialize backtester
+        # [Fix] Transform Raw FracDiff into rolling Z-Scores for Backtesting
+        # This fixes the "Unit Discrepancy" where strategies received raw values (0.2)
+        # instead of standard deviations (1.5, -2.0, etc.)
+        z_score_series = calculate_rolling_z_score(fd_series, lookback=126)
+
+        # [Fix] Re-calculate full indicator series for Backtester (Amnesia Bug Fix)
+        # State only stores scalar values for serialization. We must rebuild historical series
+        # on-the-fly since we have prices and fd_series available.
+
+        # 1. Reconstruct Volume series (needed for OBV)
+        vol_dict = output["raw_data"]["volume_series"]
+        volumes = pd.Series(vol_dict)
+        volumes.index = pd.to_datetime(volumes.index)
+
+        # 2. Re-calculate indicators with full historical series
+        rsi_full = calculate_fd_rsi_metrics(fd_series)
+        bb_full = calculate_fd_bollinger(fd_series)
+        obv_full = calculate_fd_obv(prices, volumes)
+
+        # [Enterprise] 3. Fetch Risk-Free Rate for accurate Sharpe calculation
+        rf_series = fetch_risk_free_series(period="5y")
+
+        # Initialize backtester with complete indicator data
         backtester = CombinedBacktester(
             price_series=prices,
-            z_score_series=fd_series,
-            rsi_dict=indicators.get("rsi", {}),
-            obv_dict=indicators.get("obv", {}),
-            bollinger_dict=indicators.get("bollinger", {}),
+            z_score_series=z_score_series,
+            rsi_dict=rsi_full,  # ✅ Now contains series_value
+            obv_dict=obv_full,  # ✅ Now contains series_z
+            bollinger_dict=bb_full,  # ✅ Now contains series_upper/lower
+            rf_series=rf_series,  # ✅ Risk-free rate for Sharpe calculation
         )
 
-        # Run backtest with 0.1% transaction cost
-        bt_results = backtester.run(transaction_cost=0.001)
+        # Run backtest with 0.05% transaction cost
+        bt_results = backtester.run(transaction_cost=0.0005)
 
         # Format for LLM
         backtest_context = format_backtest_for_llm(bt_results)
         logger.info(f"Backtest Context Generated: {backtest_context}")
+
+        # [NEW] Run Walk-Forward Analysis for Robustness Validation
+        try:
+            wfa_optimizer = WalkForwardOptimizer(backtester)
+            wfa_results = wfa_optimizer.run(train_window=252, test_window=63)
+            wfa_context = format_wfa_for_llm(wfa_results)
+            logger.info("WFA Context Generated")
+        except Exception as e:
+            logger.warning(
+                f"Walk-Forward Analysis failed: {e}. Proceeding without WFA."
+            )
+            wfa_context = ""
+
     except Exception as e:
         logger.warning(
             f"Backtesting failed: {e}. Proceeding without statistical verification."
         )
         backtest_context = ""
+        wfa_context = ""
 
-    # Generate LLM interpretation with backtest context
+    # Generate LLM interpretation with backtest and WFA context
     llm_interpretation = await generate_interpretation(
-        tags_dict, ticker, backtest_context
+        tags_dict, ticker, backtest_context, wfa_context
     )
 
     # Build final TechnicalSignal structure

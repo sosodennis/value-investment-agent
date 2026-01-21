@@ -13,7 +13,12 @@ Benefits:
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
+import numpy as np
 import pandas as pd
+
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -92,9 +97,22 @@ class MeanReversionStrategy(BaseStrategy):
         return "Shorting simply when Price Z-Score > 2.5 (Statistical Extreme)."
 
     def generate_signal(self, ctx: StrategyContext) -> pd.Series:
-        signal = pd.Series(0, index=ctx.prices.index)
+        # Initialize as NaN (Hold / No Action)
+        signal = pd.Series(np.nan, index=ctx.prices.index)
+
+        # Entry (Short)
         signal[ctx.z_score > 2.5] = -1  # Enter Short
-        signal[ctx.z_score < 0.5] = 0  # Exit
+
+        # Exit (Flat)
+        exit_mask = ctx.z_score < 0.5
+        signal[exit_mask] = 0  # Exit to Cash
+
+        # [Logging]
+        logger.info(
+            f"Strategy [{self.name}] Analysis: "
+            f"Z={ctx.z_score.iloc[-1]:.2f} | "
+            f"Signals Generated: Entries={(signal == -1).sum()}, Exits={(signal == 0).sum()}"
+        )
         return signal
 
 
@@ -118,10 +136,23 @@ class MomentumExhaustionStrategy(BaseStrategy):
         )
 
     def generate_signal(self, ctx: StrategyContext) -> pd.Series:
-        signal = pd.Series(0, index=ctx.prices.index)
+        # Initialize as NaN (Hold / No Action)
+        signal = pd.Series(np.nan, index=ctx.prices.index)
+
+        # Entry (Short)
         entry_mask = (ctx.z_score > 2.0) & (ctx.rsi > 90)
         signal[entry_mask] = -1  # Enter Short
-        signal[ctx.z_score < 0.5] = 0  # Exit
+
+        # Exit (Flat)
+        exit_mask = ctx.z_score < 0.5
+        signal[exit_mask] = 0  # Exit to Cash
+
+        # [Logging]
+        logger.info(
+            f"Strategy [{self.name}] Analysis: "
+            f"Z={ctx.z_score.iloc[-1]:.2f}, RSI={ctx.rsi.iloc[-1]:.1f} | "
+            f"Signals Generated: Entries={entry_mask.sum()}, Exits={(signal == 0).sum()}"
+        )
         return signal
 
 
@@ -143,14 +174,25 @@ class PerfectStormStrategy(BaseStrategy):
         return "Shorting when Price breaks out (Z>2, >BB Upper) BUT Smart Money Volume is fleeing (OBV Divergence)."
 
     def generate_signal(self, ctx: StrategyContext) -> pd.Series:
-        signal = pd.Series(0, index=ctx.prices.index)
+        # Initialize as NaN (Hold / No Action)
+        signal = pd.Series(np.nan, index=ctx.prices.index)
 
-        # Entry: Statistical Extreme + Volatility Breakout + Volume Divergence
+        # Entry (Short): Statistical Extreme + Volatility Breakout + Volume Divergence
         entry_mask = (
             (ctx.z_score > 2.0) & (ctx.prices > ctx.bb_upper) & (ctx.obv_z < -0.5)
         )
         signal[entry_mask] = -1  # Enter Short
-        signal[ctx.z_score < 0.0] = 0  # Stricter exit for this setup
+
+        # Exit (Flat)
+        exit_mask = ctx.z_score < 0.0
+        signal[exit_mask] = 0  # Stricter exit for this setup
+
+        # [Logging]
+        logger.info(
+            f"Strategy [{self.name}] Analysis: "
+            f"Z={ctx.z_score.iloc[-1]:.2f}, OBV_Z={ctx.obv_z.iloc[-1]:.2f}, Price={ctx.prices.iloc[-1]:.2f} | "
+            f"Signals Generated: Entries={entry_mask.sum()}, Exits={exit_mask.sum()}"
+        )
         return signal
 
 
@@ -171,15 +213,16 @@ class HealthyTrendFollowingStrategy(BaseStrategy):
         return "Buying when price shows mild momentum (Z 0.5~2.0) without overheating."
 
     def generate_signal(self, ctx: StrategyContext) -> pd.Series:
-        signal = pd.Series(0, index=ctx.prices.index)
+        # Initialize as NaN (Hold / No Action)
+        signal = pd.Series(np.nan, index=ctx.prices.index)
+
+        # [Fix] Calculate MA20 directly from prices for structural trend detection
+        ma20 = ctx.prices.rolling(window=20).mean()
 
         # Entry (Long):
         # 1. Z-Score in healthy range (0.5 ~ 2.0) - trending but not extreme
         # 2. RSI in strong but safe range (50 ~ 75) - positive momentum
-        # 3. Price > 20-day MA (Bollinger Middle) - structural uptrend
-        ma20 = ctx.bb_upper.rolling(
-            20
-        ).mean()  # Approximation of middle band if not explicit
+        # 3. Price > 20-day MA - structural uptrend
         entry_mask = (
             (ctx.z_score > 0.5)
             & (ctx.z_score < 2.0)
@@ -190,11 +233,27 @@ class HealthyTrendFollowingStrategy(BaseStrategy):
 
         signal[entry_mask] = 1  # Enter Long
 
-        # Exit:
+        # [Fix] Exit Conditions (Explicitly set 0 for Flat)
         # 1. Trend reversal (Z < 0)
         # 2. Overheating (RSI > 80)
-        signal[ctx.z_score < 0] = 0
-        signal[ctx.rsi > 80] = 0
+        exit_mask = (ctx.z_score < 0) | (ctx.rsi > 80)
+        signal[exit_mask] = 0  # Exit to Cash
+
+        # [Logging] Show latest metrics for debugging
+        latest_price = ctx.prices.iloc[-1]
+        latest_z = ctx.z_score.iloc[-1]
+        latest_rsi = ctx.rsi.iloc[-1]
+        latest_ma = ma20.iloc[-1]
+
+        # Statistics for historical activity
+        total_entries = entry_mask.sum()
+        total_exits = exit_mask.sum()
+
+        logger.info(
+            f"Strategy [{self.name}] Analysis: "
+            f"Price={latest_price:.2f}, Z={latest_z:.2f}, RSI={latest_rsi:.1f}, MA20={latest_ma:.2f} | "
+            f"Signals Generated: Entries={total_entries}, Exits={total_exits}"
+        )
 
         return signal
 

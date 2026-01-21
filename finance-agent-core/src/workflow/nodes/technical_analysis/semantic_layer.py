@@ -276,12 +276,13 @@ Risk Level: {risk_level}
 Z-Score: {z_score}
 Evidence: {evidence}
 {backtest_context}
+{wfa_context}
 
 Generate a brief, professional technical analysis report."""
 
 
 async def generate_interpretation(
-    tags_dict: dict, ticker: str, backtest_context: str = ""
+    tags_dict: dict, ticker: str, backtest_context: str = "", wfa_context: str = ""
 ) -> str:
     """
     Generate LLM interpretation from semantic tags.
@@ -290,6 +291,7 @@ async def generate_interpretation(
         tags_dict: Dictionary from SemanticAssembler.assemble()
         ticker: Stock ticker symbol
         backtest_context: Optional backtest verification string
+        wfa_context: Optional Walk-Forward Analysis robustness string
 
     Returns:
         LLM-generated interpretation string
@@ -322,7 +324,8 @@ async def generate_interpretation(
                 "risk_level": tags_dict["risk_level"].value,
                 "z_score": tags_dict["z_score"],
                 "evidence": evidence_str,
-                "backtest_context": backtest_context,  # Add backtest verification
+                "backtest_context": backtest_context,
+                "wfa_context": wfa_context,  # Add WFA robustness verification
             }
         )
 
