@@ -323,6 +323,17 @@ export function useAgent(assistantId: string = "agent") {
                                         }
                                     }
 
+                                    // Capture Technical Analysis Data
+                                    if (nodeName === 'semantic_translate' || (nodeName && nodeName.endsWith(':semantic_translate'))) {
+                                        const taOutput = updatePayload.technical_analysis?.output;
+                                        if (taOutput) {
+                                            setAgentOutputs(prev => ({
+                                                ...prev,
+                                                technical_analysis: taOutput
+                                            }));
+                                        }
+                                    }
+
                                     // Capture resolved ticker from intent_extraction
                                     if (nodeName === 'deciding' || nodeName === 'clarifying' || (nodeName && (nodeName.endsWith(':deciding') || nodeName.endsWith(':clarifying')))) {
                                         const ticker = updatePayload.intent_extraction?.resolved_ticker || updatePayload.resolved_ticker;
@@ -524,6 +535,10 @@ export function useAgent(assistantId: string = "agent") {
                     outputs.debate = stateData.agent_outputs.debate.conclusion
                         ? stateData.agent_outputs.debate
                         : { conclusion: stateData.agent_outputs.debate };
+                }
+
+                if (stateData.technical_analysis?.output) {
+                    outputs.technical_analysis = stateData.technical_analysis.output;
                 }
 
                 setAgentOutputs(outputs);

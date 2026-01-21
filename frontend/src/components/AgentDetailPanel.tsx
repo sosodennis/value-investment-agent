@@ -524,7 +524,6 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                     ) : agent.id === 'technical_analysis' ? (
                         <TechnicalAnalysisOutput
                             output={agentOutput as TechnicalSignalOutput | null}
-                            resolvedTicker={resolvedTicker}
                         />
                     ) : (
                         <GenericAgentOutput

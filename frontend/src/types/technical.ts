@@ -30,11 +30,26 @@ export interface FracDiffMetrics {
     memory_strength: MemoryStrength;
 }
 
+export interface ConfluenceEvidence {
+    bollinger_state: string;
+    rsi_score: number;
+    macd_momentum: string;
+    obv_state: string;
+}
+
+export interface ConfluenceEvidence {
+    bollinger_state: string;
+    rsi_score: number;
+    macd_momentum: string;
+    obv_state: string;
+}
+
 export interface SignalState {
     z_score: number;
     statistical_state: StatisticalState;
     direction: string;
     risk_level: RiskLevel;
+    confluence: ConfluenceEvidence;
 }
 
 export interface TechnicalSignalOutput {
