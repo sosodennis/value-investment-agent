@@ -510,7 +510,7 @@ def aggregator_node(state: FinancialNewsSubgraphState) -> Command:
     )
 
 
-async def get_financial_news_research_subgraph():
+def build_financial_news_subgraph():
     """Build and return the financial_news_research subgraph."""
     builder = StateGraph(FinancialNewsSubgraphState)
     builder.add_node("search_node", search_node)

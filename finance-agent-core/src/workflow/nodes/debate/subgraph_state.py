@@ -41,6 +41,9 @@ class DebateSubgraphState(BaseModel):
     financial_news: FinancialNewsContext
     technical_analysis: TechnicalAnalysisContext
 
+    # Model type (can be updated by moderator conclusion)
+    model_type: str | None = None
+
     # Internal progress tracking (NOT shared with parent) - needs reducer for parallel updates
     internal_progress: Annotated[dict[str, str], merge_dict] = Field(
         default_factory=dict

@@ -10,7 +10,7 @@ from .nodes import (
 from .subgraph_state import DebateSubgraphState
 
 
-async def get_debate_subgraph():
+def build_debate_subgraph():
     """
     Build and return the cognitive debate sub-graph with blind debate mechanism.
 

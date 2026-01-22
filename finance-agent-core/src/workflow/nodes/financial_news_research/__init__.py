@@ -1,3 +1,3 @@
-from .graph import get_financial_news_research_subgraph
+from .graph import build_financial_news_subgraph
 
-__all__ = ["get_financial_news_research_subgraph"]
+__all__ = ["build_financial_news_subgraph"]

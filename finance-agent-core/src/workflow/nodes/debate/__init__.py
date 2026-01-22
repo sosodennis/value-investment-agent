@@ -1,3 +1,3 @@
-from .graph import get_debate_subgraph
+from .graph import build_debate_subgraph
 
-__all__ = ["get_debate_subgraph"]
+__all__ = ["build_debate_subgraph"]

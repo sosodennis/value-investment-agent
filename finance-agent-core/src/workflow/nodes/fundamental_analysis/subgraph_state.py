@@ -26,12 +26,14 @@ class FundamentalAnalysisSubgraphState(BaseModel):
     """
 
     # Input from parent
-    ticker: str | None
+    ticker: str | None = None
     # TODO: Add model_type field here in the future to support explicit model selection in Fundamental Analysis
-    intent_extraction: (
-        IntentExtractionContext  # Needed for resolved_ticker and company_profile
+    intent_extraction: IntentExtractionContext = Field(
+        default_factory=IntentExtractionContext
     )
-    fundamental: Annotated[FundamentalAnalysisContext, merge_fundamental_context]
+    fundamental: Annotated[FundamentalAnalysisContext, merge_fundamental_context] = (
+        Field(default_factory=FundamentalAnalysisContext)
+    )
 
     # Internal progress tracking (NOT shared with parent)
     internal_progress: Annotated[dict[str, str], merge_dict] = Field(

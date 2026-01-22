@@ -3,10 +3,11 @@ import json
 import os
 import sys
 from collections import defaultdict
+from contextlib import asynccontextmanager
 from typing import Any
 
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -23,10 +24,32 @@ from src.workflow.graph import get_graph
 from src.workflow.interrupts import InterruptValue
 from src.workflow.state import AgentState
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Lifecycle manager for the FastAPI application.
+    Constructs and compiles the graph once at startup.
+    """
+    print("🚀 [Lifespan] Initializing application resources...")
+    # Initialize DB
+    await init_db()
+
+    # Initialize Graph
+    print("🚀 [Lifespan] Building workflow graph...")
+    graph = await get_graph()
+    app.state.graph = graph
+
+    print("✅ [Lifespan] Initialization complete.")
+    yield
+    print("🛑 [Lifespan] Shutting down...")
+
+
 app = FastAPI(
     title="Neuro-Symbolic Valuation Engine API",
     version="2.0",
     description="Pure FastAPI implementation for FinGraph Valuation Agent (Path B)",
+    lifespan=lifespan,
 )
 
 # CORS Middleware
@@ -59,10 +82,11 @@ class JobManager:
         task = self.jobs.get(thread_id)
         return task is not None and not task.done()
 
-    async def _run_graph(self, thread_id: str, input_data: Any, config: dict):
+    async def _run_graph(
+        self, thread_id: str, input_data: Any, config: dict, graph: Any
+    ):
         try:
             print(f"🚀 [JobManager] Starting job for {thread_id}")
-            graph = await get_graph()
 
             # Use centralized agent configuration for hidden nodes
             # Can be overridden with DEBUG_SHOW_ALL_STREAMING=true environment variable
@@ -234,11 +258,11 @@ class JobManager:
             except Exception:
                 self.queues[thread_id].remove(q)
 
-    def start_job(self, thread_id: str, input_data: Any, config: dict):
+    def start_job(self, thread_id: str, input_data: Any, config: dict, graph: Any):
         if self.is_running(thread_id):
             return False
         self.jobs[thread_id] = asyncio.create_task(
-            self._run_graph(thread_id, input_data, config)
+            self._run_graph(thread_id, input_data, config, graph)
         )
         return True
 
@@ -274,11 +298,11 @@ async def get_history(thread_id: str, limit: int = 20, before: str | None = None
 
 
 @app.get("/thread/{thread_id}")
-async def get_thread_history(thread_id: str):
+async def get_thread_history(request: Request, thread_id: str):
     """Retrieve history and job status."""
     config = {"configurable": {"thread_id": thread_id}}
     try:
-        graph = await get_graph()
+        graph = request.app.state.graph
         snapshot = await graph.aget_state(config)
 
         messages = []
@@ -348,11 +372,11 @@ async def get_thread_history(thread_id: str):
 
 
 @app.get("/thread/{thread_id}/agents")
-async def get_agent_statuses(thread_id: str):
+async def get_agent_statuses(request: Request, thread_id: str):
     """Retrieve node statuses and financial reports for the dashboard."""
     config = {"configurable": {"thread_id": thread_id}}
     try:
-        graph = await get_graph()
+        graph = request.app.state.graph
         snapshot = await graph.aget_state(config)
 
         # Helper to safely extract nested context
@@ -413,7 +437,7 @@ async def attach_stream(thread_id: str):
 
 
 @app.post("/stream")
-async def stream_agent(body: RequestSchema):
+async def stream_agent(request: Request, body: RequestSchema):
     """Start or resume a job."""
     print(f"DEBUG: stream_agent called with body: {body}")
     thread_id = body.thread_id
@@ -444,13 +468,11 @@ async def stream_agent(body: RequestSchema):
         f"DEBUG: Starting job with input_data type: {type(input_data)} value: {input_data}"
     )
     # Start job
-    job_manager.start_job(thread_id, input_data, config)
+    job_manager.start_job(thread_id, input_data, config, request.app.state.graph)
     return {"status": "started", "thread_id": thread_id}
 
 
-@app.on_event("startup")
-async def startup_event():
-    await init_db()
+# Removed app.on_event("startup") in favor of lifespan
 
 
 if __name__ == "__main__":

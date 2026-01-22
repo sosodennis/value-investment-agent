@@ -26,6 +26,9 @@ def financial_health_node(state: FundamentalAnalysisSubgraphState) -> Command:
     """
     Fetch financial data from SEC EDGAR and generate Financial Health Report.
     """
+    logger.info(
+        f"DEBUG: [Fundamental Analysis] financial_health_node called with ticker={state.ticker}"
+    )
     # Get resolved ticker from intent_extraction context
     resolved_ticker = state.intent_extraction.resolved_ticker or state.ticker
     if not resolved_ticker:
@@ -301,6 +304,7 @@ def model_selection_node(state: FundamentalAnalysisSubgraphState) -> Command:
     """
     Select appropriate valuation model based on company profile and financial health.
     """
+    logger.info("DEBUG: [Fundamental Analysis] model_selection_node called")
     from .structures import CompanyProfile
 
     # Get company profile from intent_extraction context
@@ -415,23 +419,16 @@ def model_selection_node(state: FundamentalAnalysisSubgraphState) -> Command:
 # Clarification node removed - now handled by intent_extraction subgraph
 
 
-# Helper for initialization
-fundamental_analysis_subgraph = None
+# --- Graph Construction ---
 
 
-async def get_fundamental_analysis_subgraph():
-    """Lazy-initialize and return the fundamental_analysis subgraph."""
-    global fundamental_analysis_subgraph
-    if fundamental_analysis_subgraph is None:
-        # 1. Build Subgraph
-        builder = StateGraph(FundamentalAnalysisSubgraphState)
-        builder.add_node("financial_health", financial_health_node)
-        builder.add_node("model_selection", model_selection_node)
-        builder.add_edge(START, "financial_health")
-        builder.add_edge("financial_health", "model_selection")
+def build_fundamental_subgraph():
+    """纯函數：構建並編譯子圖"""
+    builder = StateGraph(FundamentalAnalysisSubgraphState)
+    builder.add_node("financial_health", financial_health_node)
+    builder.add_node("model_selection", model_selection_node)
+    builder.add_edge(START, "financial_health")
+    builder.add_edge("financial_health", "model_selection")
 
-        # 2. Compile
-        # Note: No checkpointer passed here; it will be inherited from the parent graph
-        fundamental_analysis_subgraph = builder.compile()
-
-    return fundamental_analysis_subgraph
+    # 注意：這裡不需要傳入 checkpointer，因為它會繼承父圖的
+    return builder.compile()

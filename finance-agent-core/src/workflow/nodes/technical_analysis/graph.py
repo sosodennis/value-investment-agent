@@ -378,25 +378,15 @@ async def semantic_translate_node(state: TechnicalAnalysisSubgraphState) -> Comm
     )
 
 
-# Helper for initialization
-technical_analysis_subgraph = None
+def build_technical_subgraph():
+    """Build and return the technical_analysis subgraph."""
+    builder = StateGraph(TechnicalAnalysisSubgraphState)
+    builder.add_node("data_fetch", data_fetch_node)
+    builder.add_node("fracdiff_compute", fracdiff_compute_node)
+    builder.add_node("semantic_translate", semantic_translate_node)
 
+    builder.add_edge(START, "data_fetch")
+    builder.add_edge("data_fetch", "fracdiff_compute")
+    builder.add_edge("fracdiff_compute", "semantic_translate")
 
-async def get_technical_analysis_subgraph():
-    """Lazy-initialize and return the technical_analysis subgraph."""
-    global technical_analysis_subgraph
-    if technical_analysis_subgraph is None:
-        # Build Subgraph
-        builder = StateGraph(TechnicalAnalysisSubgraphState)
-        builder.add_node("data_fetch", data_fetch_node)
-        builder.add_node("fracdiff_compute", fracdiff_compute_node)
-        builder.add_node("semantic_translate", semantic_translate_node)
-
-        builder.add_edge(START, "data_fetch")
-        builder.add_edge("data_fetch", "fracdiff_compute")
-        builder.add_edge("fracdiff_compute", "semantic_translate")
-
-        # Compile (no checkpointer - inherited from parent)
-        technical_analysis_subgraph = builder.compile()
-
-    return technical_analysis_subgraph
+    return builder.compile()

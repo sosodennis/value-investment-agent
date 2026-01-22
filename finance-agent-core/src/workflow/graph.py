@@ -1,8 +1,8 @@
 import os
 import traceback
+from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage
-from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
@@ -13,20 +13,37 @@ from src.utils.logger import get_logger
 from .interrupts import ApprovalDetails, HumanApprovalRequest
 from .nodes import auditor_node, calculation_node, executor_node
 from .nodes.consolidate_research import consolidate_research_node
-from .nodes.debate.graph import get_debate_subgraph
-from .nodes.debate.subgraph_state import DebateSubgraphState
-from .nodes.financial_news_research.graph import get_financial_news_research_subgraph
-from .nodes.financial_news_research.subgraph_state import FinancialNewsSubgraphState
-from .nodes.fundamental_analysis.graph import get_fundamental_analysis_subgraph
-from .nodes.fundamental_analysis.subgraph_state import (
-    FundamentalAnalysisSubgraphState,
+from .nodes.debate.adapter import (
+    input_adapter as debate_input_adapter,
 )
-from .nodes.intent_extraction.graph import get_intent_extraction_subgraph
-from .nodes.intent_extraction.subgraph_state import IntentExtractionSubgraphState
-from .nodes.technical_analysis.graph import get_technical_analysis_subgraph
-from .nodes.technical_analysis.subgraph_state import (
-    TechnicalAnalysisSubgraphState,
+from .nodes.debate.adapter import (
+    output_adapter as debate_output_adapter,
 )
+from .nodes.debate.graph import build_debate_subgraph
+from .nodes.financial_news_research.adapter import (
+    input_adapter as news_input_adapter,
+)
+from .nodes.financial_news_research.adapter import (
+    output_adapter as news_output_adapter,
+)
+from .nodes.financial_news_research.graph import build_financial_news_subgraph
+from .nodes.fundamental_analysis.adapter import input_adapter as fa_input_adapter
+from .nodes.fundamental_analysis.adapter import output_adapter as fa_output_adapter
+from .nodes.fundamental_analysis.graph import build_fundamental_subgraph
+from .nodes.intent_extraction.adapter import (
+    input_adapter as intent_input_adapter,
+)
+from .nodes.intent_extraction.adapter import (
+    output_adapter as intent_output_adapter,
+)
+from .nodes.intent_extraction.graph import build_intent_extraction_subgraph
+from .nodes.technical_analysis.adapter import (
+    input_adapter as ta_input_adapter,
+)
+from .nodes.technical_analysis.adapter import (
+    output_adapter as ta_output_adapter,
+)
+from .nodes.technical_analysis.graph import build_technical_subgraph
 from .state import AgentState
 
 logger = get_logger(__name__)
@@ -97,193 +114,72 @@ def approval_node(state: AgentState) -> Command:
         )
 
 
-# ============================================================================
-# Wrapper Nodes for Isolated Subgraph State (LangGraph Best Practice)
-# ============================================================================
-# These wrapper nodes transform state between parent AgentState and isolated
-# subgraph states, preventing stale status updates from polluting the parent.
+# Node Adapter Implementations
 
 
-async def debate_wrapper_node(state: AgentState, config: RunnableConfig) -> dict:
-    """
-    Wrapper for debate subgraph with isolated state.
-
-    Transforms parent AgentState → DebateSubgraphState → parent updates.
-    This prevents stale node_statuses from polluting the parent graph.
-    """
-    try:
-        logger.info("=== [DEBUG] debate_wrapper_node: Starting ===")
-        logger.info(f"[DEBUG] debate_wrapper_node: state type = {type(state)}")
-        logger.info(f"[DEBUG] debate_wrapper_node: state.ticker = {state.ticker}")
-
-        logger.info("[DEBUG] debate_wrapper_node: Imports successful")
-
-        # 1. Transform parent state → subgraph input (Pydantic BaseModel)
-        logger.info("[DEBUG] debate_wrapper_node: Creating DebateSubgraphState...")
-        subgraph_input = DebateSubgraphState(
-            ticker=state.ticker,
-            intent_extraction=state.intent_extraction,  # Needed for resolved_ticker
-            debate=state.debate,
-            fundamental=state.fundamental,
-            financial_news=state.financial_news,
-            technical_analysis=state.technical_analysis,
-            internal_progress={},  # Initialize internal tracking
-            current_node="",
-        )
-        logger.info(
-            f"[DEBUG] debate_wrapper_node: DebateSubgraphState created, type = {type(subgraph_input)}"
-        )
-
-        # 2. Invoke isolated subgraph
-        logger.info("[DEBUG] debate_wrapper_node: Getting debate subgraph...")
-        debate_graph = await get_debate_subgraph()
-        logger.info("[DEBUG] debate_wrapper_node: Invoking debate subgraph...")
-        result = await debate_graph.ainvoke(subgraph_input.model_dump(), config=config)
-        logger.info("[DEBUG] debate_wrapper_node: Debate subgraph completed")
-
-        # 3. Transform subgraph output → parent state
-        # ONLY update what changed - explicit and clean!
-        return_value = {
-            "debate": result["debate"],
-            "current_node": result.get("current_node", "debate"),
-            "node_statuses": {
-                "debate": "done",  # Clean, explicit status update
-                "executor": "running",  # Next node in parent graph
-            },
-        }
-        return return_value
-
-    except Exception as e:
-        logger.error(
-            f"❌ [DEBUG] debate_wrapper_node: ERROR - {type(e).__name__}: {str(e)}"
-        )
-        logger.error(
-            f"[DEBUG] debate_wrapper_node: Traceback:\n{traceback.format_exc()}"
-        )
-        raise
+async def prepare_debate_node(state: AgentState) -> dict:
+    """Prepare input for debate subgraph."""
+    logger.info("--- [Debate Agent] Preparing Debate ---")
+    return debate_input_adapter(state)
 
 
-def map_model_to_skill(model_name: str | None) -> str:
-    """
-    Maps a valuation model name or enum value to a valid SkillRegistry key.
-
-    Currently supports:
-    - 'bank' (for DDM/Bank models)
-    - 'saas' (default, for all DCF/Growth models using FCFF engine)
-    """
-    if not model_name:
-        return "saas"
-
-    name_lower = str(model_name).lower()
-    if any(x in name_lower for x in ["bank", "ddm"]):
-        return "bank"
-
-    return "saas"
+async def process_debate_node(state: Any) -> dict:
+    """Process output from debate subgraph."""
+    logger.info("--- [Debate Agent] Processing Debate output ---")
+    data = state.model_dump() if hasattr(state, "model_dump") else state
+    return debate_output_adapter(data)
 
 
-async def fundamental_analysis_wrapper_node(
-    state: AgentState, config: RunnableConfig
-) -> dict:
-    """
-    Wrapper for fundamental analysis subgraph with isolated state.
-
-    Transforms parent AgentState → FundamentalAnalysisSubgraphState → parent updates.
-    """
-    subgraph_input = FundamentalAnalysisSubgraphState(
-        ticker=state.ticker,
-        intent_extraction=state.intent_extraction,
-        fundamental=state.fundamental,
-    )
-
-    fa_graph = await get_fundamental_analysis_subgraph()
-    result = await fa_graph.ainvoke(subgraph_input.model_dump(), config=config)
-
-    # Extract and map model_type for parent state
-    model_type = "saas"
-    fundamental_ctx = result["fundamental"]
-    if fundamental_ctx.analysis_output:
-        raw_model = fundamental_ctx.analysis_output.get("model_type")
-        model_type = map_model_to_skill(raw_model)
-
-    return {
-        "fundamental": result["fundamental"],
-        "model_type": model_type,
-        "node_statuses": {"fundamental_analysis": "done"},
-    }
+async def prepare_fundamental_node(state: AgentState) -> dict:
+    """Prepare input for fundamental analysis subgraph."""
+    logger.info("--- [FA Agent] Preparing Fundamental Analysis ---")
+    return fa_input_adapter(state)
 
 
-async def financial_news_wrapper_node(
-    state: AgentState, config: RunnableConfig
-) -> dict:
-    """
-    Wrapper for financial news research subgraph with isolated state.
-
-    Transforms parent AgentState → FinancialNewsSubgraphState → parent updates.
-    """
-    subgraph_input = FinancialNewsSubgraphState(
-        ticker=state.ticker,
-        intent_extraction=state.intent_extraction,
-        financial_news=state.financial_news,
-    )
-
-    news_graph = await get_financial_news_research_subgraph()
-    result = await news_graph.ainvoke(subgraph_input.model_dump(), config=config)
-
-    return {
-        "financial_news": result["financial_news"],
-        "messages": result.get("messages", []),
-        "node_statuses": {"financial_news_research": "done"},
-    }
+async def process_fundamental_node(state: Any) -> dict:
+    """Process output from fundamental analysis subgraph."""
+    logger.info("--- [FA Agent] Processing Fundamental Analysis output ---")
+    data = state.model_dump() if hasattr(state, "model_dump") else state
+    return fa_output_adapter(data)
 
 
-async def intent_extraction_wrapper_node(
-    state: AgentState, config: RunnableConfig
-) -> dict:
-    """
-    Wrapper for intent extraction subgraph with isolated state.
-
-    Transforms parent AgentState → IntentExtractionSubgraphState → parent updates.
-    """
-    subgraph_input = IntentExtractionSubgraphState(
-        ticker=state.ticker,
-        user_query=state.user_query,
-        messages=state.messages,
-        intent_extraction=state.intent_extraction,
-    )
-
-    intent_graph = await get_intent_extraction_subgraph()
-    result = await intent_graph.ainvoke(subgraph_input.model_dump(), config=config)
-
-    return {
-        "intent_extraction": result["intent_extraction"],
-        "ticker": result.get("ticker"),  # Intent extraction resolves ticker
-        "messages": result.get("messages", []),
-        "node_statuses": {"intent_extraction": "done"},
-    }
+async def prepare_news_node(state: AgentState) -> dict:
+    """Prepare input for financial news research subgraph."""
+    logger.info("--- [News Agent] Preparing News Research ---")
+    return news_input_adapter(state)
 
 
-async def technical_analysis_wrapper_node(
-    state: AgentState, config: RunnableConfig
-) -> dict:
-    """
-    Wrapper for technical analysis subgraph with isolated state.
+async def process_news_node(state: Any) -> dict:
+    """Process output from financial news research subgraph."""
+    logger.info("--- [News Agent] Processing News Research output ---")
+    data = state.model_dump() if hasattr(state, "model_dump") else state
+    return news_output_adapter(data)
 
-    Transforms parent AgentState → TechnicalAnalysisSubgraphState → parent updates.
-    """
-    subgraph_input = TechnicalAnalysisSubgraphState(
-        ticker=state.ticker,
-        intent_extraction=state.intent_extraction,
-        technical_analysis=state.technical_analysis,
-    )
 
-    ta_graph = await get_technical_analysis_subgraph()
-    result = await ta_graph.ainvoke(subgraph_input.model_dump(), config=config)
+async def prepare_intent_node(state: AgentState) -> dict:
+    """Prepare input for intent extraction subgraph."""
+    logger.info("--- [Intent Agent] Preparing Intent Extraction ---")
+    return intent_input_adapter(state)
 
-    return {
-        "technical_analysis": result["technical_analysis"],
-        "messages": result.get("messages", []),
-        "node_statuses": {"technical_analysis": "done"},
-    }
+
+async def process_intent_node(state: Any) -> dict:
+    """Process output from intent extraction subgraph."""
+    logger.info("--- [Intent Agent] Processing Intent Extraction output ---")
+    data = state.model_dump() if hasattr(state, "model_dump") else state
+    return intent_output_adapter(data)
+
+
+async def prepare_technical_node(state: AgentState) -> dict:
+    """Prepare input for technical analysis subgraph."""
+    logger.info("--- [TA Agent] Preparing Technical Analysis ---")
+    return ta_input_adapter(state)
+
+
+async def process_technical_node(state: Any) -> dict:
+    """Process output from technical analysis subgraph."""
+    logger.info("--- [TA Agent] Processing Technical Analysis output ---")
+    data = state.model_dump() if hasattr(state, "model_dump") else state
+    return ta_output_adapter(data)
 
 
 # Helper for initialization
@@ -305,15 +201,35 @@ async def get_graph():
             # 2. Build Parent Graph
             logger.info("[DEBUG] get_graph: Building parent graph...")
             builder = StateGraph(AgentState)
-            builder.add_node("intent_extraction", intent_extraction_wrapper_node)
-            builder.add_node("fundamental_analysis", fundamental_analysis_wrapper_node)
-            builder.add_node("financial_news_research", financial_news_wrapper_node)
-            builder.add_node("technical_analysis", technical_analysis_wrapper_node)
+
+            # --- Subgraph Setup ---
+            # (Now handled inside wrapper nodes for better isolation during migration)
+
+            # --- Node Definitions ---
+            builder.add_node("prepare_intent", prepare_intent_node)
+            builder.add_node("intent_agent", build_intent_extraction_subgraph())
+            builder.add_node("process_intent", process_intent_node)
+
+            # Fundamental Analysis Agent (Native Subgraph Chain)
+            builder.add_node("prepare_fundamental", prepare_fundamental_node)
+            builder.add_node("fundamental_agent", build_fundamental_subgraph())
+            builder.add_node("process_fundamental", process_fundamental_node)
+
+            # Financial News Research Agent (Native Subgraph Chain)
+            builder.add_node("prepare_news", prepare_news_node)
+            builder.add_node("news_agent", build_financial_news_subgraph())
+            builder.add_node("process_news", process_news_node)
+            # Technical Analysis Agent (Native Subgraph Chain)
+            builder.add_node("prepare_technical", prepare_technical_node)
+            builder.add_node("technical_agent", build_technical_subgraph())
+            builder.add_node("process_technical", process_technical_node)
             builder.add_node("consolidate_research", consolidate_research_node)
-            logger.info("[DEBUG] get_graph: Adding debate_wrapper_node...")
-            builder.add_node(
-                "debate", debate_wrapper_node
-            )  # ✅ Using wrapper with isolated state
+
+            # Debate Agent (Native Subgraph Chain)
+            builder.add_node("prepare_debate", prepare_debate_node)
+            builder.add_node("debate_agent", build_debate_subgraph())
+            builder.add_node("process_debate", process_debate_node)
+
             builder.add_node("executor", executor_node)
             builder.add_node("auditor", auditor_node)
             builder.add_node("approval", approval_node)
@@ -322,15 +238,31 @@ async def get_graph():
 
             # 3. Define edges for parallel execution
             logger.info("[DEBUG] get_graph: Adding edges...")
-            builder.add_edge(START, "intent_extraction")
-            builder.add_edge("intent_extraction", "fundamental_analysis")
-            builder.add_edge("intent_extraction", "financial_news_research")
-            builder.add_edge("intent_extraction", "technical_analysis")
-            builder.add_edge("fundamental_analysis", "consolidate_research")
-            builder.add_edge("financial_news_research", "consolidate_research")
-            builder.add_edge("technical_analysis", "consolidate_research")
-            builder.add_edge("consolidate_research", "debate")
-            builder.add_edge("debate", "executor")
+            builder.add_edge(START, "prepare_intent")
+            builder.add_edge("prepare_intent", "intent_agent")
+            builder.add_edge("intent_agent", "process_intent")
+
+            # Parallel Routing
+            builder.add_edge("process_intent", "prepare_fundamental")
+            builder.add_edge("process_intent", "prepare_news")
+            builder.add_edge("process_intent", "prepare_technical")
+
+            builder.add_edge("prepare_fundamental", "fundamental_agent")
+            builder.add_edge("fundamental_agent", "process_fundamental")
+
+            builder.add_edge("prepare_news", "news_agent")
+            builder.add_edge("news_agent", "process_news")
+
+            builder.add_edge("prepare_technical", "technical_agent")
+            builder.add_edge("technical_agent", "process_technical")
+
+            builder.add_edge("process_fundamental", "consolidate_research")
+            builder.add_edge("process_news", "consolidate_research")
+            builder.add_edge("process_technical", "consolidate_research")
+            builder.add_edge("consolidate_research", "prepare_debate")
+            builder.add_edge("prepare_debate", "debate_agent")
+            builder.add_edge("debate_agent", "process_debate")
+            builder.add_edge("process_debate", "executor")
             builder.add_edge("executor", "auditor")
 
             builder.add_edge("auditor", "approval")
