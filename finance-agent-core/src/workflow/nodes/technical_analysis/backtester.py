@@ -46,7 +46,7 @@ class CombinedBacktester:
         self,
         price_series: pd.Series,
         z_score_series: pd.Series,
-        rsi_dict: dict,
+        stat_strength_dict: dict,  # [Change] Replaces rsi_dict
         obv_dict: dict,
         bollinger_dict: dict,
         rf_series: pd.Series = None,  # [Enterprise] Risk-free rate series
@@ -57,7 +57,7 @@ class CombinedBacktester:
         Args:
             price_series: Adjusted Close prices.
             z_score_series: FracDiff Z-Score history.
-            rsi_dict: Output from calculate_fd_rsi_metrics (must contain 'series_value').
+            stat_strength_dict: Output from calculate_statistical_strength.
             obv_dict: Output from calculate_fd_obv (must contain 'series_z').
             bollinger_dict: Output from calculate_fd_bollinger (must contain 'series_upper'/'lower').
         """
@@ -68,7 +68,10 @@ class CombinedBacktester:
         # Unpack indicators
         # [Defensive] Use .get() and fallback to zeros if series missing
         self.z = z_score_series
-        self.rsi = rsi_dict.get("series_value", pd.Series(50, index=self.prices.index))
+        # [Change] Unpack CDF series
+        self.stat_strength = stat_strength_dict.get(
+            "series_value", pd.Series(50, index=self.prices.index)
+        )
         self.obv_z = obv_dict.get("series_z", pd.Series(0, index=self.prices.index))
         self.bb_upper = bollinger_dict.get(
             "series_upper", pd.Series(float("inf"), index=self.prices.index)
@@ -77,7 +80,7 @@ class CombinedBacktester:
         # Align indices (Crucial for vectorization)
         # Ensure all series share the exact same index as prices
         self.z = self.z.reindex(self.prices.index).ffill()
-        self.rsi = self.rsi.reindex(self.prices.index).ffill()
+        self.stat_strength = self.stat_strength.reindex(self.prices.index).ffill()
         self.obv_z = self.obv_z.reindex(self.prices.index).ffill()
         self.bb_upper = self.bb_upper.reindex(self.prices.index).ffill()
         self.bb_lower = bollinger_dict.get(
@@ -89,7 +92,7 @@ class CombinedBacktester:
         self.ctx = StrategyContext(
             prices=self.prices,
             z_score=self.z,
-            rsi=self.rsi,
+            stat_strength=self.stat_strength,
             obv_z=self.obv_z,
             bb_upper=self.bb_upper,
             bb_lower=self.bb_lower,

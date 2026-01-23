@@ -55,7 +55,9 @@ class ConfluenceEvidence(BaseModel):
     bollinger_state: str = Field(
         ..., description="Bollinger band state (INSIDE, BREAKOUT_UPPER, BREAKOUT_LOWER)"
     )
-    rsi_score: float = Field(..., description="FD-RSI Type B score (0-100)")
+    statistical_strength: float = Field(
+        ..., description="Statistical Strength (CDF Probability 0-100)"
+    )
     macd_momentum: str = Field(..., description="MACD momentum state")
     obv_state: str = Field(..., description="FD-OBV volume flow state")
 

@@ -32,7 +32,7 @@ class StrategyContext:
 
     prices: pd.Series
     z_score: pd.Series
-    rsi: pd.Series
+    stat_strength: pd.Series
     obv_z: pd.Series
     bb_upper: pd.Series
     bb_lower: pd.Series
@@ -118,10 +118,10 @@ class MeanReversionStrategy(BaseStrategy):
 
 class MomentumExhaustionStrategy(BaseStrategy):
     """
-    Momentum exhaustion strategy with RSI confluence.
+    Momentum exhaustion strategy with Statistical Strength confluence.
 
     Only shorts when BOTH price is statistically high (Z>2) AND
-    momentum is extremely overbought (RSI>90). This filters out
+    probability is extremely overbought (CDF>95%). This filters out
     strong trending moves.
     """
 
@@ -131,16 +131,15 @@ class MomentumExhaustionStrategy(BaseStrategy):
 
     @property
     def description(self) -> str:
-        return (
-            "Shorting when Price Z-Score > 2.0 AND RSI is extremely overbought (>90)."
-        )
+        return "Shorting when Price Z-Score > 2.0 AND Probability is extremely overbought (CDF>95%)."
 
     def generate_signal(self, ctx: StrategyContext) -> pd.Series:
         # Initialize as NaN (Hold / No Action)
         signal = pd.Series(np.nan, index=ctx.prices.index)
 
         # Entry (Short)
-        entry_mask = (ctx.z_score > 2.0) & (ctx.rsi > 90)
+        # [Update] Use CDF > 95.0 (approx 1.65 sigma) for exhaustion
+        entry_mask = (ctx.z_score > 2.0) & (ctx.stat_strength > 95.0)
         signal[entry_mask] = -1  # Enter Short
 
         # Exit (Flat)
@@ -150,7 +149,7 @@ class MomentumExhaustionStrategy(BaseStrategy):
         # [Logging]
         logger.info(
             f"Strategy [{self.name}] Analysis: "
-            f"Z={ctx.z_score.iloc[-1]:.2f}, RSI={ctx.rsi.iloc[-1]:.1f} | "
+            f"Z={ctx.z_score.iloc[-1]:.2f}, Prob={ctx.stat_strength.iloc[-1]:.1f}% | "
             f"Signals Generated: Entries={entry_mask.sum()}, Exits={(signal == 0).sum()}"
         )
         return signal
@@ -221,13 +220,15 @@ class HealthyTrendFollowingStrategy(BaseStrategy):
 
         # Entry (Long):
         # 1. Z-Score in healthy range (0.5 ~ 2.0) - trending but not extreme
-        # 2. RSI in strong but safe range (50 ~ 75) - positive momentum
+        # 2. Probability in strong confirmed trend range (60% ~ 90%)
+        #    - > 50% means trend is positive
+        #    - < 90% means not yet overextended (approx 1.3 sigma)
         # 3. Price > 20-day MA - structural uptrend
         entry_mask = (
             (ctx.z_score > 0.5)
             & (ctx.z_score < 2.0)
-            & (ctx.rsi > 50)
-            & (ctx.rsi < 75)
+            & (ctx.stat_strength > 60.0)
+            & (ctx.stat_strength < 90.0)
             & (ctx.prices > ma20)
         )
 
@@ -235,14 +236,14 @@ class HealthyTrendFollowingStrategy(BaseStrategy):
 
         # [Fix] Exit Conditions (Explicitly set 0 for Flat)
         # 1. Trend reversal (Z < 0)
-        # 2. Overheating (RSI > 80)
-        exit_mask = (ctx.z_score < 0) | (ctx.rsi > 80)
+        # 2. Overheating (Probability > 97.7% / +2 Sigma)
+        exit_mask = (ctx.z_score < 0) | (ctx.stat_strength > 97.7)
         signal[exit_mask] = 0  # Exit to Cash
 
         # [Logging] Show latest metrics for debugging
         latest_price = ctx.prices.iloc[-1]
         latest_z = ctx.z_score.iloc[-1]
-        latest_rsi = ctx.rsi.iloc[-1]
+        latest_prob = ctx.stat_strength.iloc[-1]
         latest_ma = ma20.iloc[-1]
 
         # Statistics for historical activity
@@ -251,7 +252,7 @@ class HealthyTrendFollowingStrategy(BaseStrategy):
 
         logger.info(
             f"Strategy [{self.name}] Analysis: "
-            f"Price={latest_price:.2f}, Z={latest_z:.2f}, RSI={latest_rsi:.1f}, MA20={latest_ma:.2f} | "
+            f"Price={latest_price:.2f}, Z={latest_z:.2f}, Prob={latest_prob:.1f}%, MA20={latest_ma:.2f} | "
             f"Signals Generated: Entries={total_entries}, Exits={total_exits}"
         )
 

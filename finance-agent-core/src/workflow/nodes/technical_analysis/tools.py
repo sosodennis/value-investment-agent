@@ -10,6 +10,7 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 import yfinance as yf
+from scipy.stats import norm
 from statsmodels.tsa.stattools import adfuller
 
 from src.utils.logger import get_logger
@@ -347,55 +348,31 @@ def calculate_dynamic_thresholds(series: pd.Series, window: int = 252) -> dict:
     }
 
 
-def calculate_fd_rsi_metrics(fd_series: pd.Series, window: int = 14) -> dict:
+def calculate_statistical_strength(z_score_series: pd.Series) -> dict:
     """
-    Calculate FD-RSI (Type B / Stochastic Style) with dynamic thresholds.
-    Returns both the current value and stock-specific thresholds.
-    Uses pure vectorization for performance.
+    Calculate Statistical Strength (CDF) based on Z-Score.
+    This replaces the flawed "FD-RSI" (Stochastic) with a proper probability metric.
+
+    Returns:
+        float: 0-100 score representing cumulative probability.
+        50 = Equilibrium (Z=0)
+        97.7 = +2 Sigma (Extreme Overheating)
+        2.3 = -2 Sigma (Extreme Fear)
     """
-    s = pd.Series(fd_series.values.flatten(), index=fd_series.index)
+    if z_score_series.empty:
+        return {"value": 50.0, "series_value": pd.Series()}
 
-    # Calculate rolling min/max for the entire series (vectorized)
-    rolling_min = s.rolling(window=window).min()
-    rolling_max = s.rolling(window=window).max()
+    # Calculate CDF for the entire series (Vectorized)
+    # Norm.cdf returns 0.0-1.0, we scale to 0-100
+    cdf_series = pd.Series(norm.cdf(z_score_series) * 100.0, index=z_score_series.index)
 
-    # Calculate current RSI value
-    current_val = s.iloc[-1]
-    c_min = rolling_min.iloc[-1]
-    c_max = rolling_max.iloc[-1]
-
-    # Edge case: max == min
-    if c_max == c_min:
-        rsi_score = 50.0
-    else:
-        # Calculate position percentage (0-100)
-        rsi_score = (current_val - c_min) / (c_max - c_min) * 100.0
-
-    # Boundary limit
-    rsi_score = float(max(0.0, min(100.0, rsi_score)))
-
-    # [Vectorized] Build full RSI series for threshold calculation
-    # Calculate the range (max - min) for each window
-    range_vals = rolling_max - rolling_min
-
-    # Vectorized RSI calculation: (value - min) / (max - min) * 100
-    # Handle division by zero by replacing with 50.0
-    rsi_series = ((s - rolling_min) / range_vals * 100.0).fillna(50.0)
-
-    # Replace any remaining inf values with 50.0
-    rsi_series = rsi_series.replace([np.inf, -np.inf], 50.0)
-
-    # Drop NaN values from the beginning (first 'window' values)
-    rsi_series = rsi_series.dropna()
-
-    # Calculate dynamic thresholds for this specific stock
-    thresholds = calculate_dynamic_thresholds(rsi_series, window=252)
+    current_val = cdf_series.iloc[-1]
 
     return {
-        "value": rsi_score,
-        "thresholds": thresholds,
-        # --- NEW FIELD FOR BACKTESTER ---
-        "series_value": rsi_series,  # Full historical RSI series
+        "value": float(current_val),
+        "series_value": cdf_series,  # Full historical probability series
+        # Note: Thresholds are now fixed statistical constants (2.3, 16, 50, 84, 97.7)
+        # so we don't need dynamic threshold calculation anymore.
     }
 
 

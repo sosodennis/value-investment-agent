@@ -26,9 +26,9 @@ from .tools import (
     calculate_fd_bollinger,
     calculate_fd_macd,
     calculate_fd_obv,
-    calculate_fd_rsi_metrics,
     calculate_rolling_fracdiff,
     calculate_rolling_z_score,
+    calculate_statistical_strength,
     compute_z_score,
     fetch_daily_ohlcv,
     fetch_risk_free_series,
@@ -146,7 +146,9 @@ def fracdiff_compute_node(state: TechnicalAnalysisSubgraphState) -> Command:
 
     # Calculate confluence indicators
     bollinger_data = calculate_fd_bollinger(fd_series)
-    rsi_data = calculate_fd_rsi_metrics(fd_series)  # [Change] Returns dict now
+    stat_strength_data = calculate_statistical_strength(
+        z_score_series
+    )  # [Change] Use CDF
     macd_data = calculate_fd_macd(fd_series)
 
     # Calculate FD-OBV (volume analysis)
@@ -162,9 +164,9 @@ def fracdiff_compute_node(state: TechnicalAnalysisSubgraphState) -> Command:
         "bandwidth": bollinger_data["bandwidth"],
     }
 
-    rsi_serializable = {
-        "value": rsi_data["value"],
-        "thresholds": rsi_data["thresholds"],
+    stat_strength_serializable = {
+        "value": stat_strength_data["value"],
+        # Thresholds are irrelevant for CDF (fixed constants)
     }
 
     obv_serializable = {
@@ -189,7 +191,7 @@ def fracdiff_compute_node(state: TechnicalAnalysisSubgraphState) -> Command:
                     },
                     "indicators": {
                         "bollinger": bollinger_serializable,
-                        "rsi": rsi_serializable,
+                        "statistical_strength": stat_strength_serializable,
                         "macd": macd_data,
                         "obv": obv_serializable,
                     },
@@ -247,9 +249,9 @@ async def semantic_translate_node(state: TechnicalAnalysisSubgraphState) -> Comm
         z_score=z_score,
         optimal_d=optimal_d,
         bollinger_data=indicators.get("bollinger", {"state": "INSIDE"}),
-        rsi_data=indicators.get(
-            "rsi", {"value": 50.0, "thresholds": {}}
-        ),  # [Change] Expect dict
+        stat_strength_data=indicators.get(
+            "statistical_strength", {"value": 50.0}
+        ),  # [Change] Use CDF
         macd_data=indicators.get("macd", {"momentum_state": "NEUTRAL"}),
         obv_data=indicators.get("obv", {"state": "NEUTRAL", "fd_obv_z": 0.0}),
     )
@@ -283,7 +285,7 @@ async def semantic_translate_node(state: TechnicalAnalysisSubgraphState) -> Comm
         volumes.index = pd.to_datetime(volumes.index)
 
         # 2. Re-calculate indicators with full historical series
-        rsi_full = calculate_fd_rsi_metrics(fd_series)
+        stat_strength_full = calculate_statistical_strength(z_score_series)
         bb_full = calculate_fd_bollinger(fd_series)
         obv_full = calculate_fd_obv(prices, volumes)
 
@@ -294,7 +296,7 @@ async def semantic_translate_node(state: TechnicalAnalysisSubgraphState) -> Comm
         backtester = CombinedBacktester(
             price_series=prices,
             z_score_series=z_score_series,
-            rsi_dict=rsi_full,  # ✅ Now contains series_value
+            stat_strength_dict=stat_strength_full,  # [Change] Correct argument name
             obv_dict=obv_full,  # ✅ Now contains series_z
             bollinger_dict=bb_full,  # ✅ Now contains series_upper/lower
             rf_series=rf_series,  # ✅ Risk-free rate for Sharpe calculation

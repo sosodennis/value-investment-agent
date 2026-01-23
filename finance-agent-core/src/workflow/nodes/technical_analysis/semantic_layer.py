@@ -57,18 +57,18 @@ class SemanticAssembler:
         z_score: float,
         optimal_d: float,
         bollinger_data: dict,
-        rsi_data: dict,  # [Change] Type hint changed to dict
+        stat_strength_data: dict,
         macd_data: dict,
         obv_data: dict,
     ) -> dict:
         tags = []
-        evidence_text = []  # Human-readable evidence chain
+        evidence_text = []
 
-        # [Logic Update] Extract RSI value and thresholds dynamically
-        rsi_val = rsi_data.get("value", 50.0)
-        thresh = rsi_data.get("thresholds", self.DEFAULT_THRESHOLDS)
+        # 1. 獲取 CDF 值僅用於 "敘事" (Display/Narrative)，不用於 "邏輯" (Logic)
+        # 這樣避免了拿 "攝氏度" 和 "華氏度" 同時做判斷的邏輯混亂
+        cdf_val = stat_strength_data.get("value", 50.0)
 
-        # --- 1. Base Physical State (Z-Score) ---
+        # --- 1. Base Physical State ---
         abs_z = abs(z_score)
         stat_state = StatisticalState.EQUILIBRIUM
         risk = RiskLevel.LOW
@@ -84,7 +84,7 @@ class SemanticAssembler:
             risk = RiskLevel.CRITICAL
             tags.append("STATISTICAL_EXTREME")
 
-        # --- 2. Memory Strength (d value) ---
+        # --- 2. Memory Strength ---
         mem_strength = MemoryStrength.BALANCED
         if optimal_d < 0.3:
             mem_strength = MemoryStrength.STRUCTURALLY_STABLE
@@ -93,51 +93,50 @@ class SemanticAssembler:
             mem_strength = MemoryStrength.FRAGILE
             tags.append("STRUCTURE_FRAGILE")
 
-        # --- 3. Confluence Detection (The Core Logic) ---
+        # --- 3. Confluence Detection (Cleaned Logic) ---
 
-        # Scenario A: Perfect Storm (Short) - High price + Breakout + RSI Top
-        if (
-            (z_score > 2.0)
-            and (bollinger_data["state"] == "BREAKOUT_UPPER")
-            and (rsi_val > thresh["high"])  # [Change] Use dynamic threshold
-        ):
+        # Scenario A: Perfect Storm (Short)
+        # Logic: Extreme deviation + Breakout
+        if (z_score > 2.0) and (bollinger_data["state"] == "BREAKOUT_UPPER"):
             tags.append("SETUP_PERFECT_STORM_SHORT")
             risk = RiskLevel.CRITICAL
+            # Narrative: Use CDF here to make it sound professional
             evidence_text.append(
-                "CRITICAL: Statistical anomaly confirmed by volatility breakout and momentum exhaustion."
+                f"CRITICAL: Statistical anomaly confirmed (Z={z_score:.1f}, Prob>{cdf_val:.1f}%) with volatility breakout."
             )
 
-        # Scenario B: Perfect Storm (Long) - Low price + Breakdown + RSI Bottom
-        elif (
-            (z_score < -2.0)
-            and (bollinger_data["state"] == "BREAKOUT_LOWER")
-            and (rsi_val < thresh["low"])  # [Change] Use dynamic threshold
-        ):
+        # Scenario B: Perfect Storm (Long)
+        elif (z_score < -2.0) and (bollinger_data["state"] == "BREAKOUT_LOWER"):
             tags.append("SETUP_PERFECT_STORM_LONG")
             risk = RiskLevel.CRITICAL
             evidence_text.append(
-                "CRITICAL: Price structure implies imminent mean reversion bounce."
+                f"CRITICAL: Price structure implies imminent mean reversion (Z={z_score:.1f}, Prob<{cdf_val:.1f}%)."
             )
 
         # Scenario C: Healthy Momentum (Trend Continuation)
-        elif (
-            (z_score > 1.0)
-            and (z_score < 2.5)
-            and (rsi_val < thresh["high"])  # [Change] Use dynamic threshold
-            and (macd_data["momentum_state"] == "BULLISH_EXPANDING")
+        # Logic: Strong trend (Z > 1) BUT NOT Extreme (Z < 2) AND MACD supports it
+        # [Fix] Removed the contradictory cdf_val check
+        elif (1.0 < z_score < 2.0) and (
+            macd_data["momentum_state"] == "BULLISH_EXPANDING"
         ):
             tags.append("SETUP_HEALTHY_MOMENTUM")
             evidence_text.append(
-                "Trend is supported by expanding memory momentum without overheating."
+                f"Trend is supported by expanding memory momentum (Prob: {cdf_val:.1f}%) without statistical overheating."
             )
 
-        # Scenario D: Warning (RSI Extreme but price not confirmed)
-        elif (rsi_val > thresh["extreme_high"]) and (
-            abs_z < 2.0
-        ):  # [Change] Use dynamic threshold
-            tags.append("WARNING_INTERNAL_OVERHEATING")
+        # Scenario D: Warning (Overheating without breakout)
+        # Logic: Z is getting high (e.g., > 1.5) but strictly NOT yet extreme (> 2.0)
+        # This captures the "Early Warning" zone
+        elif 1.5 < z_score < 2.0:
+            tags.append("WARNING_INTERNAL_PRESSURE")
             evidence_text.append(
-                f"Internal structure is overheated (RSI: {rsi_val:.1f}) despite price staying within bounds."
+                f"Internal structure is heating up (Prob: {cdf_val:.1f}%) approaching statistical limits."
+            )
+
+        elif -2.0 < z_score < -1.5:
+            tags.append("WARNING_INTERNAL_WEAKNESS")
+            evidence_text.append(
+                f"Internal structure is weakening (Prob: {cdf_val:.1f}%) approaching statistical limits."
             )
 
         # --- 4. Volume-Price Relationship Analysis (The Lie Detector) ---
@@ -231,7 +230,7 @@ class SemanticAssembler:
         # Construct new data structure
         confluence = ConfluenceEvidence(
             bollinger_state=bollinger_data["state"],
-            rsi_score=float(round(rsi_val, 2)),  # [Change] Use rsi_val
+            statistical_strength=float(round(cdf_val, 2)),  # [Change] Use CDF
             macd_momentum=macd_data["momentum_state"],
             obv_state=obv_data["state"],
         )

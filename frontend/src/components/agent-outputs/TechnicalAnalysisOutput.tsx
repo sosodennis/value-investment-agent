@@ -90,23 +90,70 @@ const MarketStatusBadge = ({ zScore }: { zScore: number }) => {
 
 // --- 2. Visual Components ---
 
-const RSIBar = ({ value }: { value: number }) => {
-    let color = 'bg-slate-500';
-    if (value > 70) color = 'bg-rose-500';
-    if (value < 30) color = 'bg-emerald-500';
+const ProbabilityGauge = ({ value }: { value: number }) => {
+    // Value is 0-100% Probability
+    // 0-16%: Extreme Low (Oversold) - Emerald
+    // 16-84%: Noise / Trend - Slate/Blue
+    // 84-100%: Extreme High (Overbought) - Rose
+
+    let colorClass = 'bg-slate-600';
+    let label = 'Neutral';
+    let labelColor = 'text-slate-400';
+
+    if (value > 95) {
+        colorClass = 'bg-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.6)]';
+        label = 'Extreme High (Bubble)';
+        labelColor = 'text-rose-400';
+    } else if (value > 84) {
+        colorClass = 'bg-rose-400';
+        label = 'High Prob (Overheating)';
+        labelColor = 'text-rose-300';
+    } else if (value < 5) {
+        colorClass = 'bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.6)]';
+        label = 'Extreme Low (Deep Value)';
+        labelColor = 'text-emerald-400';
+    } else if (value < 16) {
+        colorClass = 'bg-emerald-400';
+        label = 'Low Prob (Discounted)';
+        labelColor = 'text-emerald-300';
+    }
 
     return (
         <div className="w-full">
-            <div className="flex justify-between text-[10px] text-slate-400 mb-1 font-mono uppercase tracking-tighter">
-                <span>Oversold (30)</span>
-                <span className={value > 70 || value < 30 ? 'text-white font-bold' : ''}>{value.toFixed(1)}</span>
-                <span>Overbought (70)</span>
+            <div className="flex justify-between items-end mb-2">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Statistical Strength (CDF)</span>
+                <div className="text-right">
+                    <span className={`text-[10px] font-black uppercase ${labelColor} mr-2`}>{label}</span>
+                    <span className={`text-sm font-mono font-bold ${labelColor}`}>{value.toFixed(1)}%</span>
+                </div>
             </div>
-            <div className="h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-700/50">
+
+            {/* Gauge Track */}
+            <div className="h-3 bg-slate-900 rounded-full relative overflow-hidden border border-slate-800">
+                {/* Zones Background */}
+                <div className="absolute inset-0 flex opacity-20">
+                    <div className="w-[16%] bg-emerald-500/50 h-full border-r border-slate-900/50"></div>
+                    <div className="w-[68%] bg-slate-500/10 h-full"></div>
+                    <div className="w-[16%] bg-rose-500/50 h-full border-l border-slate-900/50"></div>
+                </div>
+
+                {/* Marker */}
                 <div
-                    className={`h-full transition-all duration-700 ease-out shadow-[0_0_10px_rgba(0,0,0,0.5)] ${color}`}
+                    className="absolute h-full w-1.5 bg-white shadow-[0_0_10px_white] z-10 transition-all duration-700 ease-out"
+                    style={{ left: `calc(${value}% - 3px)` }}
+                />
+
+                {/* Fill Bar (Optional, simpler to just show marker for probability) */}
+                <div
+                    className={`h-full opacity-60 transition-all duration-700 ease-out ${colorClass}`}
                     style={{ width: `${value}%` }}
                 />
+            </div>
+
+            <div className="flex justify-between text-[8px] font-mono text-slate-600 mt-1 uppercase">
+                <span>-2σ (2.3%)</span>
+                <span>MEAN (50%)</span>
+                <span>+2σ (97.7%)</span>
             </div>
         </div>
     );
@@ -269,10 +316,7 @@ export const TechnicalAnalysisOutput: React.FC<TechnicalAnalysisOutputProps> = (
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                         <div className="space-y-3">
-                            <div className="flex items-center justify-between">
-                                <span className="text-[10px] text-slate-400 font-black uppercase">Relative Strength (RSI)</span>
-                            </div>
-                            <RSIBar value={signal_state.confluence.rsi_score} />
+                            <ProbabilityGauge value={signal_state.confluence.statistical_strength} />
                         </div>
                         <div className="flex flex-col justify-center border-l border-slate-800 pl-8">
                             <span className="text-[10px] text-slate-400 font-black uppercase mb-3">Volatility Structure</span>
