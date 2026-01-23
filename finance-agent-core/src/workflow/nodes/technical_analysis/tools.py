@@ -168,31 +168,68 @@ def find_optimal_d(
     return float(optimal_d), int(window_length), float(adf_stat), float(adf_pvalue)
 
 
-def apply_fracdiff(prices: pd.Series, d: float) -> pd.Series:
+def calculate_rolling_fracdiff(
+    prices: pd.Series, lookback_window: int = 252, recalc_step: int = 5
+) -> tuple[pd.Series, float, int, float, float]:
     """
-    Apply Fixed-Width Window Fractional Differentiation to LOG prices.
+    Correct way to apply FracDiff: simulated time flow with NO look-ahead bias.
+    Recalculates optimal d every 'recalc_step' days for performance.
+
+    Returns:
+        tuple: (fd_series, final_d, window_length, adf_stat, adf_pval)
     """
-    logger.info(f"--- TA: Applying FFD FracDiff with d={d:.3f} ---")
+    logger.info(
+        f"--- TA: Calculating rolling FracDiff (window={lookback_window}, step={recalc_step}) ---"
+    )
 
-    try:
-        # [Defensive] Filter out zero or negative prices
-        if (prices <= 0).any():
-            logger.warning(
-                "⚠️ Detected zero or negative prices in apply_fracdiff. Filtering."
-            )
-            prices = prices[prices > 0]
+    results = {}
+    current_d = 0.5  # Initial guess
+    st_stat, st_pval = 0.0, 1.0
+    win_len = 0  # Initialize win_len
 
-        log_prices = np.log(prices)
-        log_prices = log_prices.replace([np.inf, -np.inf], np.nan).dropna()
+    # [Defensive] Filter invalid prices first to maintain index alignment logic
+    # Note: If prices are filtered, 't' iteration needs to be careful about strict index alignment
+    # But since we iterate by range(len), we assume strict sequential data.
+    prices = prices[prices > 0]
 
-        fd_series = frac_diff_ffd(log_prices, d)
+    # Iterate through time (Start after we have enough history for the first window)
+    for t in range(lookback_window, len(prices)):
+        current_date = prices.index[t]
 
-        logger.info(f"✅ Generated FFD series with {len(fd_series)} values")
-        return fd_series
+        # 1. Periodically recalculate the optimal d based on PAST window
+        # (e.g., every 5 days for performance)
+        if t % recalc_step == 0 or t == lookback_window:
+            # Strictly use past history
+            history = prices.iloc[t - lookback_window : t + 1]
+            current_d, win_len, st_stat, st_pval = find_optimal_d(history)
 
-    except Exception as e:
-        logger.error(f"❌ FFD FracDiff computation failed: {e}")
-        raise
+        # 2. Apply FracDiff using the current d
+        # [Fix] Safety check: Ensure start index is not negative
+        start_idx = max(0, t - win_len)
+        history_for_fd = prices.iloc[start_idx : t + 1]
+
+        # [Defensive] Check if we have enough history to compute FFD
+        # FFD requires at least 'win_len' weights. The slice length must be >= win_len.
+        if len(history_for_fd) <= win_len:
+            # Not enough history yet for this specific d value, skip this day
+            continue
+
+        log_prices_win = (
+            np.log(history_for_fd).replace([np.inf, -np.inf], np.nan).dropna()
+        )
+
+        # Apply FFD on LOG prices
+        # Note: This is slightly inefficient (O(N*W)) but necessary for correct rolling window
+        fd_val_series = frac_diff_ffd(log_prices_win, current_d)
+
+        if not fd_val_series.empty:
+            # We only take the LATEST value (simulation of "today's" calculation)
+            results[current_date] = fd_val_series.iloc[-1]
+
+    fd_series = pd.Series(results)
+    logger.info(f"✅ Generated rolling FracDiff series with {len(fd_series)} values")
+
+    return fd_series, current_d, win_len, st_stat, st_pval
 
 
 def compute_z_score(fd_series: pd.Series, lookback: int = 126) -> float:

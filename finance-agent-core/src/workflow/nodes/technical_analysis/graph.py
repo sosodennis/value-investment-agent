@@ -23,16 +23,15 @@ from .structures import (
 )
 from .subgraph_state import TechnicalAnalysisSubgraphState
 from .tools import (
-    apply_fracdiff,
     calculate_fd_bollinger,
     calculate_fd_macd,
     calculate_fd_obv,
     calculate_fd_rsi_metrics,
+    calculate_rolling_fracdiff,
     calculate_rolling_z_score,
     compute_z_score,
     fetch_daily_ohlcv,
     fetch_risk_free_series,
-    find_optimal_d,
     get_timestamp,
 )
 
@@ -103,9 +102,10 @@ def data_fetch_node(state: TechnicalAnalysisSubgraphState) -> Command:
 
 def fracdiff_compute_node(state: TechnicalAnalysisSubgraphState) -> Command:
     """
-    [Node 2] Compute optimal d and apply FracDiff transformation.
+    [Node 2] Compute optimal d and apply FracDiff transformation using ROLLING window.
+    Eliminates look-ahead bias for enterprise-grade backtesting.
     """
-    logger.info("--- TA: Computing FracDiff ---")
+    logger.info("--- TA: Computing Rolling FracDiff ---")
 
     # Extract price series from state
     output = state.technical_analysis.output
@@ -130,11 +130,12 @@ def fracdiff_compute_node(state: TechnicalAnalysisSubgraphState) -> Command:
     volumes = pd.Series(volume_dict)
     volumes.index = pd.to_datetime(volumes.index)
 
-    # Find optimal d value
-    optimal_d, window_length, adf_stat, adf_pvalue = find_optimal_d(prices)
-
-    # Apply FracDiff
-    fd_series = apply_fracdiff(prices, optimal_d)
+    # [EVOLUTION] Use ROLLING FracDiff instead of static global d
+    # This simulates a "Live" environment where we only know past data.
+    # We use a 252-day (1 year) lookback window for the ADF test.
+    fd_series, optimal_d, window_length, adf_stat, adf_pvalue = (
+        calculate_rolling_fracdiff(prices, lookback_window=252, recalc_step=5)
+    )
 
     # Compute Z-score (current value)
     z_score = compute_z_score(fd_series, lookback=252)
