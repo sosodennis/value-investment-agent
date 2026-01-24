@@ -399,7 +399,7 @@ async def get_agent_statuses(request: Request, thread_id: str):
             "executor": snapshot.values.get("extraction_output"),
             "auditor": snapshot.values.get("audit_output"),
             "calculator": snapshot.values.get("calculation_output"),
-            "debate": debate.get("conclusion"),
+            "debate": {"conclusion": debate.get("conclusion")},
         }
         return {
             "node_statuses": snapshot.values.get("node_statuses", {}),

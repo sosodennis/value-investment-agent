@@ -313,13 +313,25 @@ export function useAgent(assistantId: string = "agent") {
                                     }
 
                                     // Capture Debate Data
-                                    if (nodeName === 'moderator' || (nodeName && nodeName.endsWith(':moderator'))) {
-                                        const debateOutput = updatePayload.debate?.conclusion || updatePayload.debate_conclusion;
+                                    if (nodeName === 'moderator' || nodeName === 'verdict' || nodeName === 'process_debate' ||
+                                        (nodeName && (nodeName.endsWith(':moderator') || nodeName.endsWith(':verdict') || nodeName.endsWith(':process_debate')))) {
+                                        const debateOutput = updatePayload.debate?.conclusion || updatePayload.debate_conclusion || updatePayload.debate;
                                         if (debateOutput) {
-                                            setAgentOutputs(prev => ({
-                                                ...prev,
-                                                debate: debateOutput.conclusion ? debateOutput : { conclusion: debateOutput }
-                                            }));
+                                            // Handle case where debateOutput is the full context vs just conclusion
+                                            const conclusion = debateOutput.conclusion || (debateOutput.scenario_analysis ? debateOutput : null);
+
+                                            if (conclusion) {
+                                                setAgentOutputs(prev => ({
+                                                    ...prev,
+                                                    debate: {
+                                                        conclusion,
+                                                        // Preserve other context if available
+                                                        history: debateOutput.history || prev.debate?.history,
+                                                        bull_thesis: debateOutput.bull_thesis || prev.debate?.bull_thesis,
+                                                        bear_thesis: debateOutput.bear_thesis || prev.debate?.bear_thesis
+                                                    }
+                                                }));
+                                            }
                                         }
                                     }
 

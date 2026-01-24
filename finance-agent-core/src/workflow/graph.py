@@ -120,7 +120,9 @@ def approval_node(state: AgentState) -> Command:
 async def prepare_debate_node(state: AgentState) -> dict:
     """Prepare input for debate subgraph."""
     logger.info("--- [Debate Agent] Preparing Debate ---")
-    return debate_input_adapter(state)
+    data = debate_input_adapter(state)
+    data["node_statuses"] = {"debate": "running"}
+    return data
 
 
 async def process_debate_node(state: Any) -> dict:
@@ -133,7 +135,9 @@ async def process_debate_node(state: Any) -> dict:
 async def prepare_fundamental_node(state: AgentState) -> dict:
     """Prepare input for fundamental analysis subgraph."""
     logger.info("--- [FA Agent] Preparing Fundamental Analysis ---")
-    return fa_input_adapter(state)
+    data = fa_input_adapter(state)
+    data["node_statuses"] = {"fundamental_analysis": "running"}
+    return data
 
 
 async def process_fundamental_node(state: Any) -> dict:
@@ -146,7 +150,9 @@ async def process_fundamental_node(state: Any) -> dict:
 async def prepare_news_node(state: AgentState) -> dict:
     """Prepare input for financial news research subgraph."""
     logger.info("--- [News Agent] Preparing News Research ---")
-    return news_input_adapter(state)
+    data = news_input_adapter(state)
+    data["node_statuses"] = {"financial_news_research": "running"}
+    return data
 
 
 async def process_news_node(state: Any) -> dict:
@@ -159,7 +165,9 @@ async def process_news_node(state: Any) -> dict:
 async def prepare_intent_node(state: AgentState) -> dict:
     """Prepare input for intent extraction subgraph."""
     logger.info("--- [Intent Agent] Preparing Intent Extraction ---")
-    return intent_input_adapter(state)
+    data = intent_input_adapter(state)
+    data["node_statuses"] = {"intent_extraction": "running"}
+    return data
 
 
 async def process_intent_node(state: Any) -> dict:
@@ -172,7 +180,9 @@ async def process_intent_node(state: Any) -> dict:
 async def prepare_technical_node(state: AgentState) -> dict:
     """Prepare input for technical analysis subgraph."""
     logger.info("--- [TA Agent] Preparing Technical Analysis ---")
-    return ta_input_adapter(state)
+    data = ta_input_adapter(state)
+    data["node_statuses"] = {"technical_analysis": "running"}
+    return data
 
 
 async def process_technical_node(state: Any) -> dict:
@@ -256,9 +266,10 @@ async def get_graph():
             builder.add_edge("prepare_technical", "technical_agent")
             builder.add_edge("technical_agent", "process_technical")
 
-            builder.add_edge("process_fundamental", "consolidate_research")
-            builder.add_edge("process_news", "consolidate_research")
-            builder.add_edge("process_technical", "consolidate_research")
+            builder.add_edge(
+                ["process_fundamental", "process_news", "process_technical"],
+                "consolidate_research",
+            )
             builder.add_edge("consolidate_research", "prepare_debate")
             builder.add_edge("prepare_debate", "debate_agent")
             builder.add_edge("debate_agent", "process_debate")

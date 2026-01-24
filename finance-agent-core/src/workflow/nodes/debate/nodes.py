@@ -155,50 +155,41 @@ async def debate_aggregator_node(state: DebateState) -> dict[str, Any]:
         "ticker": state.intent_extraction.resolved_ticker or state.ticker,
     }
 
+    # In the linear DAG, aggregator always leads to Round 1 (Parallel)
+    next_progress = {
+        "debate_aggregator": "done",
+        "r1_bull": "running",
+        "r1_bear": "running",
+    }
+
     return {
         "debate": {"analyst_reports": reports},
         "current_node": "debate_aggregator",
-        "internal_progress": {"debate_aggregator": "done", "bull": "running"},
+        "internal_progress": next_progress,
     }
 
 
-async def bull_node(state: DebateState) -> dict[str, Any]:
-    """
-    [Phase 2] Bull Agent (The Growth Hunter)
-    Role: Focus on catalysts, growth potential, and bullish news.
-    """
-    round_num = state.debate.current_round + 1
-    ticker = state.intent_extraction.resolved_ticker or state.ticker
-    logger.info(f"--- Debate: Bull Agent Node (Round {round_num}) ---")
+# --- Agent Logic Helpers (DRY) ---
 
+
+async def _execute_bull_agent(
+    state: DebateState, round_num: int, adversarial_rule: str
+) -> dict[str, Any]:
+    """Internal helper for Bull logic across rounds."""
+    ticker = state.intent_extraction.resolved_ticker or state.ticker
     try:
         llm = get_llm()
-
-        # Optimize context
         compressed_reports = _compress_reports(state.debate.analyst_reports)
-
-        # Dynamic Instruction Check
-        adversarial_rule = (
-            BULL_R1_ADVERSARIAL if round_num == 1 else BULL_R2_ADVERSARIAL
-        )
 
         system_content = BULL_AGENT_SYSTEM_PROMPT.format(
             ticker=ticker,
             reports=compressed_reports,
             adversarial_rule=adversarial_rule,
         )
-
         messages = [SystemMessage(content=system_content)]
 
-        # --- Context Sandwich Construction ---
-        if round_num == 1:
-            # Round 1: Keep it clean, just reports + system prompt
-            pass
-
-        else:
-            # Round 2+: Construct the Sandwich
-
-            # A. Extract Key History Elements
+        # Context Sandwich for R2+
+        if round_num > 1:
             my_last_arg = _get_last_message_from_role(
                 state.debate.history, "GrowthHunter"
             )
@@ -207,99 +198,51 @@ async def bull_node(state: DebateState) -> dict[str, Any]:
             )
             judge_feedback = _get_last_message_from_role(state.debate.history, "Judge")
 
-            # B. Self-Anchor (Consistency)
             if my_last_arg:
                 messages.append(
-                    AIMessage(
-                        content=f"(My Previous Argument in Round 1):\n{my_last_arg}"
-                    )
+                    AIMessage(content=f"(My Previous Argument):\n{my_last_arg}")
                 )
-
-            # C. Judge's Order (Authority)
             if judge_feedback:
                 messages.append(
                     HumanMessage(
-                        content=f"<moderator_feedback>\n{judge_feedback}\n</moderator_feedback>\n"
-                        f"INSTRUCTION: Address the Moderator's feedback in your response."
+                        content=f"<moderator_feedback>\n{judge_feedback}\n</moderator_feedback>"
                     )
                 )
-
-            # D. The Target (The Enemy)
             if bear_last_arg:
-                target_prompt = (
-                    f"The Bear Agent has just responded.\n"
-                    f"Your task is to DESTROY this specific argument:\n\n"
-                    f"<opponent_argument_to_shred>\n{bear_last_arg}\n</opponent_argument_to_shred>"
+                messages.append(
+                    HumanMessage(content=f"DESTROY this argument:\n\n{bear_last_arg}")
                 )
-                messages.append(HumanMessage(content=target_prompt))
 
         _log_messages(messages, "BULL_AGENT", round_num)
         response = await llm.ainvoke(messages)
 
-        logger.info(
-            f"--- Debate: Bull Agent '{ticker}' Arg (Round {round_num}):\n{response.content}..."
-        )
-
         return {
-            "debate": {
-                "history": [AIMessage(content=response.content, name="GrowthHunter")],
-                "bull_thesis": response.content,
-            },
-            "current_node": "bull",
-            "internal_progress": {"bull": "done", "bear": "running"},
+            "history": [AIMessage(content=response.content, name="GrowthHunter")],
+            "thesis": response.content,
         }
     except Exception as e:
-        logger.error(f"❌ Error in Bull Node: {str(e)}")
-        fallback_msg = (
-            f"Bull Analysis Error: {str(e)[:100]}. Proceeding with limited data."
-        )
-        return {
-            "debate": {
-                "history": [AIMessage(content=fallback_msg, name="GrowthHunter")],
-                "bull_thesis": fallback_msg,
-            },
-            "current_node": "bull",
-            "internal_progress": {"bull": "error", "bear": "running"},
-        }
+        logger.error(f"❌ Error in Bull Logic (R{round_num}): {str(e)}")
+        raise e
 
 
-async def bear_node(state: DebateState) -> dict[str, Any]:
-    """
-    [Phase 2] Bear Agent (The Forensic Accountant)
-    Role: Focus on risks, red flags, and challenging the Bull's narrative.
-    """
-    round_num = state.debate.current_round + 1
+async def _execute_bear_agent(
+    state: DebateState, round_num: int, adversarial_rule: str
+) -> dict[str, Any]:
+    """Internal helper for Bear logic across rounds."""
     ticker = state.intent_extraction.resolved_ticker or state.ticker
-    logger.info(f"--- Debate: Bear Agent Node (Round {round_num}) ---")
-
     try:
         llm = get_llm()
-
-        # Optimize context
         compressed_reports = _compress_reports(state.debate.analyst_reports)
-
-        # Dynamic Instruction Check
-        adversarial_rule = (
-            BEAR_R1_ADVERSARIAL if round_num == 1 else BEAR_R2_ADVERSARIAL
-        )
 
         system_content = BEAR_AGENT_SYSTEM_PROMPT.format(
             ticker=ticker,
             reports=compressed_reports,
             adversarial_rule=adversarial_rule,
         )
-
         messages = [SystemMessage(content=system_content)]
 
-        # --- Context Sandwich Construction ---
-        if round_num == 1:
-            # Round 1: Keep it clean
-            pass
-
-        else:
-            # Round 2+: Construct the Sandwich
-
-            # A. Extract Key History Elements
+        # Context Sandwich for R2+
+        if round_num > 1:
             my_last_arg = _get_last_message_from_role(
                 state.debate.history, "ForensicAccountant"
             )
@@ -308,246 +251,173 @@ async def bear_node(state: DebateState) -> dict[str, Any]:
             )
             judge_feedback = _get_last_message_from_role(state.debate.history, "Judge")
 
-            # B. Self-Anchor (Consistency)
             if my_last_arg:
                 messages.append(
-                    AIMessage(
-                        content=f"(My Previous Argument in Round 1):\n{my_last_arg}"
-                    )
+                    AIMessage(content=f"(My Previous Argument):\n{my_last_arg}")
                 )
-
-            # C. Judge's Order (Authority)
             if judge_feedback:
                 messages.append(
                     HumanMessage(
-                        content=f"<moderator_feedback>\n{judge_feedback}\n</moderator_feedback>\n"
-                        f"INSTRUCTION: Address the Moderator's feedback in your response."
+                        content=f"<moderator_feedback>\n{judge_feedback}\n</moderator_feedback>"
                     )
                 )
-
-            # D. The Target (The Enemy)
             if bull_last_arg:
-                target_prompt = (
-                    f"The Bull Agent has just responded.\n"
-                    f"Your task is to DESTROY this specific argument:\n\n"
-                    f"<opponent_argument_to_shred>\n{bull_last_arg}\n</opponent_argument_to_shred>"
+                messages.append(
+                    HumanMessage(content=f"DESTROY this argument:\n\n{bull_last_arg}")
                 )
-                messages.append(HumanMessage(content=target_prompt))
 
         _log_messages(messages, "BEAR_AGENT", round_num)
         response = await llm.ainvoke(messages)
 
-        logger.info(
-            f"--- Debate: Bear Agent '{ticker}' Arg (Round {round_num}):\n{response.content}..."
-        )
-
         return {
-            "debate": {
-                "history": [
-                    AIMessage(content=response.content, name="ForensicAccountant")
-                ],
-                "bear_thesis": response.content,
-            },
-            "current_node": "bear",
-            "internal_progress": {"bear": "done", "moderator": "running"},
+            "history": [AIMessage(content=response.content, name="ForensicAccountant")],
+            "thesis": response.content,
         }
     except Exception as e:
-        logger.error(f"❌ Error in Bear Node: {str(e)}")
-        fallback_msg = (
-            f"Bear Analysis Error: {str(e)[:100]}. Proceeding with limited data."
-        )
-        return {
-            "debate": {
-                "history": [AIMessage(content=fallback_msg, name="ForensicAccountant")],
-                "bear_thesis": fallback_msg,
-            },
-            "current_node": "bear",
-            "internal_progress": {"bear": "error", "moderator": "running"},
-        }
+        logger.error(f"❌ Error in Bear Logic (R{round_num}): {str(e)}")
+        raise e
 
 
-async def moderator_node(state: DebateState) -> dict[str, Any]:
-    """
-    [Phase 2/3] Moderator Agent (The Judge)
-    Role: Decides if consensus is reached or if debate should continue/conclude.
-    Also handles the final 'Verdict' synthesis in Phase 3.
-    """
-    round_num = state.debate.current_round + 1
+async def _execute_moderator_critique(
+    state: DebateState, round_num: int
+) -> dict[str, Any]:
+    """Internal helper for Moderator Critique across rounds."""
     ticker = state.intent_extraction.resolved_ticker or state.ticker
-    logger.info(f"--- Debate: Moderator Node (Round {round_num}) ---")
+    try:
+        llm = get_llm()
+        from .utils import get_sycophancy_detector
 
-    llm = get_llm()
+        detector = get_sycophancy_detector()
+        similarity, is_sycophantic = detector.check_consensus(
+            state.debate.bull_thesis or "", state.debate.bear_thesis or ""
+        )
 
-    if round_num < 3:
-        # Standard Critique/Redirect Round with Sycophancy Check
-        try:
-            # Check for excessive agreement (sycophancy)
-            from .utils import get_sycophancy_detector
+        compressed_reports = _compress_reports(state.debate.analyst_reports)
+        trimmed_history = _get_trimmed_history(state.debate.history)
+        system_content = MODERATOR_SYSTEM_PROMPT.format(
+            ticker=ticker, reports=compressed_reports
+        )
 
-            detector = get_sycophancy_detector()
-            similarity, is_sycophantic = detector.check_consensus(
-                state.debate.bull_thesis or "", state.debate.bear_thesis or ""
-            )
+        if is_sycophantic:
+            system_content += "\n⚠️ SYCOPHANCY DETECTED. Demand counter-arguments."
 
-            logger.info(
-                f"--- Debate: Similarity Check (Round {round_num}): {similarity:.3f} "
-                f"({'SYCOPHANTIC' if is_sycophantic else 'OK'}) ---"
-            )
+        messages = [SystemMessage(content=system_content)] + trimmed_history
+        messages.append(
+            HumanMessage(content="Point out logical flaws. DO NOT SUMMARIZE.")
+        )
 
-            # Optimize context
-            compressed_reports = _compress_reports(state.debate.analyst_reports)
-            trimmed_history = _get_trimmed_history(state.debate.history)
+        _log_messages(messages, "MODERATOR_CRITIQUE", round_num)
+        response = await llm.ainvoke(messages)
 
-            system_content = MODERATOR_SYSTEM_PROMPT.format(
-                ticker=ticker,
-                reports=compressed_reports,
-            )
+        return {
+            "history": [AIMessage(content=response.content, name="Judge")],
+            "current_round": round_num,
+        }
+    except Exception as e:
+        logger.error(f"❌ Error in Moderator Critique (R{round_num}): {str(e)}")
+        raise e
 
-            # If sycophantic, add forced re-challenge instruction
-            if is_sycophantic:
-                system_content += f"""
 
-    ⚠️ SYCOPHANCY DETECTED (Similarity: {similarity:.2f})
-    The Bull and Bear agents are in excessive agreement. This defeats the purpose of adversarial debate.
+# --- EXPLICIT NODES ---
 
-    MANDATORY INTERVENTION:
-    1. Identify the specific point where they are agreeing.
-    2. Command the NEXT agent to find AT LEAST 3 specific counter-arguments or risks that were NOT addressed.
-    3. Do NOT allow generic statements. Demand data-backed objections.
-    """
 
-            messages = [SystemMessage(content=system_content)] + trimmed_history
+# --- Round 1 ---
+async def r1_bull_node(state: DebateState) -> dict[str, Any]:
+    res = await _execute_bull_agent(state, 1, BULL_R1_ADVERSARIAL)
+    return {
+        "debate": {"history": res["history"], "bull_thesis": res["thesis"]},
+        "internal_progress": {
+            "r1_bull": "done",
+            "r1_bear": "running",
+        },  # Helpful if parallel UI updates
+    }
 
-            # 強制添加一個 Trigger，防止它開始總結
-            messages.append(
-                HumanMessage(
-                    content="Based on the last argument, point out the logical flaw and instruct the next speaker. DO NOT SUMMARIZE. \n\nIMPORTANT: Do not make it easy for the next speaker. While asking them to refute the opponent, you must ALSO demand they provide evidence for their own weakest assumption."
-                )
-            )
 
-            _log_messages(messages, "MODERATOR_CRITIQUE", round_num)
-            response = await llm.ainvoke(messages)
+async def r1_bear_node(state: DebateState) -> dict[str, Any]:
+    res = await _execute_bear_agent(state, 1, BEAR_R1_ADVERSARIAL)
+    return {
+        "debate": {"history": res["history"], "bear_thesis": res["thesis"]},
+        "internal_progress": {"r1_bear": "done"},
+    }
 
-            logger.info(
-                f"--- Debate: Moderator critique (Round {round_num}):\n{response.content}..."
-            )
 
-            return {
-                "debate": {
-                    "history": [AIMessage(content=response.content, name="Judge")],
-                    "current_round": round_num,
-                },
-                "current_node": "moderator",
-                "internal_progress": {"moderator": "done"},
-            }
-        except Exception as e:
-            logger.error(f"❌ Error in Moderator Node: {str(e)}")
-            return {
-                "debate": {
-                    "history": [
-                        AIMessage(
-                            content=f"Moderator Error: {str(e)[:100]}", name="Judge"
-                        )
-                    ],
-                    "current_round": round_num,
-                },
-                "current_node": "moderator",
-                "internal_progress": {"moderator": "error"},
-            }
-    else:
-        # Final Round: Synthesis of the DebateConclusion (Bayesian V6.0)
-        logger.info("--- Debate: Final Synthesis (Verdict) ---")
+async def r1_moderator_node(state: DebateState) -> dict[str, Any]:
+    res = await _execute_moderator_critique(state, 1)
+    return {
+        "debate": res,
+        "internal_progress": {"r1_moderator": "done", "r2_bull": "running"},
+    }
 
-        # Optimize context for final verdict
+
+# --- Round 2 ---
+async def r2_bull_node(state: DebateState) -> dict[str, Any]:
+    res = await _execute_bull_agent(state, 2, BULL_R2_ADVERSARIAL)
+    return {
+        "debate": {"history": res["history"], "bull_thesis": res["thesis"]},
+        "internal_progress": {"r2_bull": "done", "r2_bear": "running"},
+    }
+
+
+async def r2_bear_node(state: DebateState) -> dict[str, Any]:
+    res = await _execute_bear_agent(state, 2, BEAR_R2_ADVERSARIAL)
+    return {
+        "debate": {"history": res["history"], "bear_thesis": res["thesis"]},
+        "internal_progress": {"r2_bear": "done", "r2_moderator": "running"},
+    }
+
+
+async def r2_moderator_node(state: DebateState) -> dict[str, Any]:
+    res = await _execute_moderator_critique(state, 2)
+    return {
+        "debate": res,
+        "internal_progress": {"r2_moderator": "done", "r3_bear": "running"},
+    }
+
+
+# --- Round 3 ---
+async def r3_bear_node(state: DebateState) -> dict[str, Any]:
+    res = await _execute_bear_agent(state, 3, BEAR_R2_ADVERSARIAL)
+    return {
+        "debate": {"history": res["history"], "bear_thesis": res["thesis"]},
+        "internal_progress": {"r3_bear": "done", "r3_bull": "running"},
+    }
+
+
+async def r3_bull_node(state: DebateState) -> dict[str, Any]:
+    res = await _execute_bull_agent(state, 3, BULL_R2_ADVERSARIAL)
+    return {
+        "debate": {"history": res["history"], "bull_thesis": res["thesis"]},
+        "internal_progress": {"r3_bull": "done", "verdict": "running"},
+    }
+
+
+# --- Final Verdict ---
+async def verdict_node(state: DebateState) -> dict[str, Any]:
+    """Final Verdict Node"""
+    ticker = state.intent_extraction.resolved_ticker or state.ticker
+    try:
+        llm = get_llm()
         trimmed_history = _get_trimmed_history(
             state.debate.history, max_chars=MAX_CHAR_HISTORY * 1.5
         )
-
         history_text = "\n\n".join(
             [f"{msg.name or 'Agent'}: {msg.content}" for msg in trimmed_history]
         )
         verdict_system = VERDICT_PROMPT.format(ticker=ticker, history=history_text)
 
-        # Attempt structured output - fallback to manual parse if model fails
-        try:
-            _log_messages(
-                [SystemMessage(content=verdict_system)], "MODERATOR_VERDICT", round_num
-            )
-            structured_llm = llm.with_structured_output(DebateConclusion)
-            conclusion = await structured_llm.ainvoke(verdict_system)
+        _log_messages([SystemMessage(content=verdict_system)], "VERDICT", 3)
+        structured_llm = llm.with_structured_output(DebateConclusion)
+        conclusion = await structured_llm.ainvoke(verdict_system)
+        conclusion_data = conclusion.model_dump(mode="json")
 
-            # Use mode='json' to handle Enums/Scenarios correctly
-            conclusion_data = conclusion.model_dump(mode="json")
-
-            # ==========================================
-            # 🔥 Neuro-Symbolic Calculation Layer V2 🔥
-            # ==========================================
-            risk_profile = conclusion_data.get("risk_profile", "UNKNOWN")
-            logger.info(
-                f"📊 LLM Verdict: {conclusion_data.get('final_verdict')} | Profile: {risk_profile}"
-            )
-
-            # 1. 執行核心邏輯 (V2.0 Simplified)
-            metrics = calculate_pragmatic_verdict(conclusion_data, ticker=ticker)
-
-            # 2. 將計算結果更新回數據結構
-            conclusion_data.update(metrics)
-
-            logger.info(
-                f"🧮 Calculated: {conclusion_data.get('final_verdict')} | "
-                f"RR Ratio: {metrics.get('rr_ratio')}x | "
-                f"Alpha: {metrics.get('alpha'):.2%} | "
-                f"Conviction: {metrics.get('conviction')}%"
-            )
-            # ==========================================
-
-        except Exception as e:
-            logger.error(
-                f"!!! Debate: Structured output failed: {e}. Falling back to text."
-            )
-            # Fallback (建議加上 risk_profile 的默認值)
-            conclusion_data = {
-                "scenario_analysis": {
-                    "bull_case": {
-                        "probability": 33,
-                        "outcome_description": "Error",
-                        "price_implication": "FLAT",
-                    },
-                    "bear_case": {
-                        "probability": 33,
-                        "outcome_description": "Error",
-                        "price_implication": "FLAT",
-                    },
-                    "base_case": {
-                        "probability": 34,
-                        "outcome_description": "Error",
-                        "price_implication": "FLAT",
-                    },
-                },
-                "risk_profile": "GROWTH_TECH",  # Default fallback
-                "final_verdict": "NEUTRAL",
-                "winning_thesis": f"System Error: {str(e)}",
-                "primary_catalyst": "N/A",
-                "primary_risk": "System error",
-                "supporting_factors": [],
-                "rr_ratio": 0.0,
-                "alpha": 0.0,
-            }
-
-        conclusion_data["debate_rounds"] = round_num
-
-        logger.info(
-            f"--- Debate: Final Verdict for {ticker} ---\n{json.dumps(conclusion_data, indent=2, default=str)}"
-        )
+        metrics = calculate_pragmatic_verdict(conclusion_data, ticker=ticker)
+        conclusion_data.update(metrics)
+        conclusion_data["debate_rounds"] = 3
 
         return {
-            "debate": {
-                "conclusion": conclusion_data,
-                "current_round": round_num,
-            },
-            "current_node": "moderator",
-            "internal_progress": {
-                "moderator": "done",
-                # Note: "debate" and "executor" statuses will be set by wrapper node
-            },
+            "debate": {"conclusion": conclusion_data},
+            "internal_progress": {"verdict": "done"},
         }
+    except Exception as e:
+        logger.error(f"❌ Error in Verdict Node: {str(e)}")
+        return {"internal_progress": {"verdict": "error"}}

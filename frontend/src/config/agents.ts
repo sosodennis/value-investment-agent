@@ -67,7 +67,7 @@ export const AGENT_CONFIGS: AgentConfig[] = [
         role: 'Adversarial Reasoning',
         description: 'Bull vs Bear debate to scrutinize the investment thesis.',
         avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Arena',
-        nodes: ['debate_aggregator', 'bull', 'bear', 'moderator', 'debate'],
+        nodes: ['debate_aggregator', 'r1_bull', 'r1_bear', 'r1_moderator', 'r2_bull', 'r2_bear', 'r2_moderator', 'r3_bull', 'r3_bear', 'verdict'],
     },
     {
         id: 'executor',

@@ -1,11 +1,16 @@
 from langgraph.graph import END, START, StateGraph
-from langgraph.types import Send
 
 from .nodes import (
-    bear_node,
-    bull_node,
     debate_aggregator_node,
-    moderator_node,
+    r1_bear_node,
+    r1_bull_node,
+    r1_moderator_node,
+    r2_bear_node,
+    r2_bull_node,
+    r2_moderator_node,
+    r3_bear_node,
+    r3_bull_node,
+    verdict_node,
 )
 from .subgraph_state import DebateInput, DebateOutput, DebateState
 
@@ -16,9 +21,8 @@ def build_debate_subgraph():
 
     Uses isolated DebateState (not AgentState) to prevent stale status updates.
 
-    Round 1: Bull and Bear execute in PARALLEL (blind debate - no anchoring)
-             Using LangGraph's Send API for dynamic fan-out.
-    Round 2+: Sequential execution with cross-review (each sees the other's arguments)
+    Round 1 (Parallel): Clean fan-out to r1_bull and r1_bear, joined at moderator.
+    Round 2+ (Sequential): Serial flow (bull -> bear -> moderator) for cross-review.
     """
     builder = StateGraph(
         DebateState,
@@ -28,66 +32,45 @@ def build_debate_subgraph():
 
     # 1. Add Nodes
     builder.add_node("debate_aggregator", debate_aggregator_node)
-    builder.add_node("bull", bull_node)
-    builder.add_node("bear", bear_node)
-    builder.add_node("moderator", moderator_node)
 
-    # 2. Define Edges
+    # Round 1 Agents (Parallel)
+    builder.add_node("r1_bull", r1_bull_node)
+    builder.add_node("r1_bear", r1_bear_node)
+    builder.add_node("r1_moderator", r1_moderator_node)
+
+    # Round 2 Agents (Sequential)
+    builder.add_node("r2_bull", r2_bull_node)
+    builder.add_node("r2_bear", r2_bear_node)
+    builder.add_node("r2_moderator", r2_moderator_node)
+
+    # Round 3 Agents (Sequential)
+    builder.add_node("r3_bull", r3_bull_node)
+    builder.add_node("r3_bear", r3_bear_node)
+
+    # Final Synthesis
+    builder.add_node("verdict", verdict_node)
+
+    # 2. Define Edges (Strict Linear DAG)
     builder.add_edge(START, "debate_aggregator")
 
-    # Conditional routing from aggregator: Parallel in Round 1, Sequential in Round 2+
-    def route_from_aggregator(state: DebateState):
-        """
-        Round 1: Fan out to both Bull and Bear in parallel using Send API.
-        Round 2+: Sequential flow (Bull first).
-        """
-        if state.debate.current_round == 0:
-            # Round 1: Parallel execution - both see only analyst_reports, not each other
-            return [
-                Send("bull", state),
-                Send("bear", state),
-            ]
-        else:
-            # Round 2+: Sequential - Bull goes first, then Bear
-            return "bull"
+    # Fan-out to Round 1
+    builder.add_edge("debate_aggregator", "r1_bull")
+    builder.add_edge("debate_aggregator", "r1_bear")
 
-    builder.add_conditional_edges(
-        "debate_aggregator",
-        route_from_aggregator,
-        ["bull", "bear"],  # Possible destinations
-    )
+    # Sync Round 1 at Moderator
+    builder.add_edge(["r1_bull", "r1_bear"], "r1_moderator")
 
-    # Routing from Bull: In Round 1 (parallel), go directly to moderator
-    # In Round 2+, go to Bear first (sequential)
-    def route_from_bull(state: DebateState):
-        """After Bull speaks, route based on round."""
-        if state.debate.current_round == 0:
-            # Round 1: Parallel mode - Bull's output goes to moderator directly
-            # (Bear also goes there independently)
-            return "moderator"
-        else:
-            # Round 2+: Sequential - Bull -> Bear -> Moderator
-            return "bear"
+    # Transition to Round 2
+    builder.add_edge("r1_moderator", "r2_bull")
+    builder.add_edge("r2_bull", "r2_bear")
+    builder.add_edge("r2_bear", "r2_moderator")
 
-    builder.add_conditional_edges("bull", route_from_bull, ["bear", "moderator"])
+    # Transition to Round 3 (Swapped Order: Bear -> Bull)
+    builder.add_edge("r2_moderator", "r3_bear")
+    builder.add_edge("r3_bear", "r3_bull")
 
-    # Bear always goes to moderator (either from parallel R1 or sequential R2+)
-    builder.add_edge("bear", "moderator")
-
-    # 3. Moderator Loop: Continue debate or end
-    def should_continue_debate(state: DebateState):
-        """
-        Decision node to either continue the debate or finish.
-        After R1 moderator critique, goes back to aggregator to route properly.
-        """
-        if state.debate.current_round >= 3:
-            return END
-
-        # Continue: Go back to aggregator for proper routing
-        return "debate_aggregator"
-
-    builder.add_conditional_edges(
-        "moderator", should_continue_debate, ["debate_aggregator", END]
-    )
+    # Final Verdict
+    builder.add_edge("r3_bull", "verdict")
+    builder.add_edge("verdict", END)
 
     return builder.compile()
