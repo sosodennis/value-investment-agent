@@ -8,7 +8,7 @@ logger = get_logger(__name__)
 
 
 def input_adapter(state: AgentState) -> dict[str, Any]:
-    """Maps parent AgentState to TechnicalAnalysisSubgraphState input."""
+    """Maps parent AgentState to TechnicalAnalysisState input."""
     logger.info(
         f"--- [TA Adapter] Mapping parent state to subgraph input for {state.ticker} ---"
     )
@@ -20,7 +20,7 @@ def input_adapter(state: AgentState) -> dict[str, Any]:
 
 
 def output_adapter(sub_output: dict[str, Any]) -> dict[str, Any]:
-    """Maps TechnicalAnalysisSubgraphState output back to parent state updates."""
+    """Maps TechnicalAnalysisState output back to parent state updates."""
     logger.info("--- [TA Adapter] Mapping subgraph output back to parent state ---")
     return {
         "technical_analysis": sub_output.get("technical_analysis"),

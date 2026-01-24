@@ -16,29 +16,47 @@ from ...state import (
 )
 
 
-class FundamentalAnalysisSubgraphState(BaseModel):
+class FundamentalAnalysisInput(BaseModel):
     """
-    Isolated state for fundamental analysis subgraph.
-
-    This state is completely separate from the parent AgentState.
-    It does NOT include node_statuses to prevent stale status updates.
-    Uses Pydantic BaseModel to match parent AgentState structure.
+    Input schema for Fundamental Analysis subgraph.
+    Defines the contract for what the parent graph must provide.
     """
 
-    # Input from parent
     ticker: str | None = None
-    # TODO: Add model_type field here in the future to support explicit model selection in Fundamental Analysis
     intent_extraction: IntentExtractionContext = Field(
         default_factory=IntentExtractionContext
     )
+
+
+class FundamentalAnalysisOutput(BaseModel):
+    """
+    Output schema for Fundamental Analysis subgraph.
+    Defines exactly what fields are returned to the parent state.
+    """
+
+    fundamental: FundamentalAnalysisContext
+
+
+class FundamentalAnalysisState(BaseModel):
+    """
+    Internal state for fundamental analysis subgraph.
+    Combines input fields, output fields, and private state.
+    """
+
+    # --- From Input ---
+    ticker: str | None = None
+    intent_extraction: IntentExtractionContext = Field(
+        default_factory=IntentExtractionContext
+    )
+
+    # --- Core State (Reducers applied) ---
     fundamental: Annotated[FundamentalAnalysisContext, merge_fundamental_context] = (
         Field(default_factory=FundamentalAnalysisContext)
     )
 
-    # Internal progress tracking (NOT shared with parent)
+    # --- Private State (Not exposed in FundamentalAnalysisOutput) ---
     internal_progress: Annotated[dict[str, str], merge_dict] = Field(
         default_factory=dict
     )
-
-    # Current node tracking
     current_node: Annotated[str, last_value] = ""
+    model_type: Annotated[str, last_value] = "saas"

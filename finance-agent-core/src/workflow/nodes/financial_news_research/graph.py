@@ -25,7 +25,11 @@ from .structures import (
     SentimentLabel,
     SourceInfo,
 )
-from .subgraph_state import FinancialNewsSubgraphState
+from .subgraph_state import (
+    FinancialNewsInput,
+    FinancialNewsOutput,
+    FinancialNewsState,
+)
 from .tools import (
     generate_news_id,
     get_source_reliability,
@@ -52,7 +56,7 @@ def get_llm(model: str = DEFAULT_MODEL, temperature: float = 0):
 # --- Nodes ---
 
 
-def search_node(state: FinancialNewsSubgraphState) -> Command:
+def search_node(state: FinancialNewsState) -> Command:
     """[Funnel Node 1] Search for recent news snippets."""
     # Get ticker from intent_extraction context (primary) or fallback to state.ticker
     ticker = state.intent_extraction.resolved_ticker or state.ticker
@@ -127,7 +131,7 @@ URL: {r.get('link')}
     )
 
 
-def selector_node(state: FinancialNewsSubgraphState) -> Command:
+def selector_node(state: FinancialNewsState) -> Command:
     """[Funnel Node 2] Filter top relevant articles using URL-based selection."""
     output = state.financial_news.output or {}
     ticker = output.get("ticker")
@@ -203,7 +207,7 @@ def selector_node(state: FinancialNewsSubgraphState) -> Command:
     )
 
 
-def fetch_node(state: FinancialNewsSubgraphState) -> Command:
+def fetch_node(state: FinancialNewsState) -> Command:
     """[Funnel Node 3] Fetch and clean full text for selected articles (async parallel)."""
     output = state.financial_news.output or {}
     raw_results = output.get("raw_results", [])
@@ -302,7 +306,7 @@ def fetch_node(state: FinancialNewsSubgraphState) -> Command:
     )
 
 
-def analyst_node(state: FinancialNewsSubgraphState) -> Command:
+def analyst_node(state: FinancialNewsState) -> Command:
     """[Funnel Node 4] Deep analysis per article."""
     output = state.financial_news.output or {}
     ticker = output.get("ticker")
@@ -429,7 +433,7 @@ def analyst_node(state: FinancialNewsSubgraphState) -> Command:
     )
 
 
-def aggregator_node(state: FinancialNewsSubgraphState) -> Command:
+def aggregator_node(state: FinancialNewsState) -> Command:
     """[Funnel Node 5] Aggregate results and update state."""
     output = state.financial_news.output or {}
     ticker = output.get("ticker")
@@ -512,7 +516,9 @@ def aggregator_node(state: FinancialNewsSubgraphState) -> Command:
 
 def build_financial_news_subgraph():
     """Build and return the financial_news_research subgraph."""
-    builder = StateGraph(FinancialNewsSubgraphState)
+    builder = StateGraph(
+        FinancialNewsState, input=FinancialNewsInput, output=FinancialNewsOutput
+    )
     builder.add_node("search_node", search_node)
     builder.add_node("selector_node", selector_node)
     builder.add_node("fetch_node", fetch_node)

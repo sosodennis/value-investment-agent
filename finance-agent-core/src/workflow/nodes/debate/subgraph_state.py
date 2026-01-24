@@ -19,35 +19,61 @@ from ...state import (
 )
 
 
-class DebateSubgraphState(BaseModel):
+class DebateInput(BaseModel):
     """
-    Isolated state for debate subgraph.
-
-    This state is completely separate from the parent AgentState.
-    It does NOT include node_statuses to prevent stale status updates.
-    Uses Pydantic BaseModel to match parent AgentState structure.
-
-    All fields that can be updated concurrently (Bull & Bear in Round 1) use reducers.
+    Input schema for debate subgraph.
     """
 
-    # Input from parent (required for debate logic)
-    ticker: str | None
-    intent_extraction: IntentExtractionContext  # Needed for resolved_ticker
+    ticker: str | None = None
+    intent_extraction: IntentExtractionContext = Field(
+        default_factory=IntentExtractionContext
+    )
+    debate: DebateContext = Field(default_factory=DebateContext)
+    fundamental: FundamentalAnalysisContext = Field(
+        default_factory=FundamentalAnalysisContext
+    )
+    financial_news: FinancialNewsContext = Field(default_factory=FinancialNewsContext)
+    technical_analysis: TechnicalAnalysisContext = Field(
+        default_factory=TechnicalAnalysisContext
+    )
 
-    # Use Annotated with reducer to handle concurrent updates from Bull & Bear in Round 1
-    debate: Annotated[DebateContext, merge_debate_context]
 
-    fundamental: FundamentalAnalysisContext
-    financial_news: FinancialNewsContext
-    technical_analysis: TechnicalAnalysisContext
+class DebateOutput(BaseModel):
+    """
+    Output schema for debate subgraph.
+    """
 
-    # Model type (can be updated by moderator conclusion)
+    debate: DebateContext
     model_type: str | None = None
 
-    # Internal progress tracking (NOT shared with parent) - needs reducer for parallel updates
+
+class DebateState(BaseModel):
+    """
+    Internal state for debate subgraph.
+    """
+
+    # --- From Input ---
+    ticker: str | None = None
+    intent_extraction: IntentExtractionContext = Field(
+        default_factory=IntentExtractionContext
+    )
+    fundamental: FundamentalAnalysisContext = Field(
+        default_factory=FundamentalAnalysisContext
+    )
+    financial_news: FinancialNewsContext = Field(default_factory=FinancialNewsContext)
+    technical_analysis: TechnicalAnalysisContext = Field(
+        default_factory=TechnicalAnalysisContext
+    )
+
+    # --- Core State (Reducers applied) ---
+    # Use Annotated with reducer to handle concurrent updates from Bull & Bear in Round 1
+    debate: Annotated[DebateContext, merge_debate_context] = Field(
+        default_factory=DebateContext
+    )
+    model_type: Annotated[str | None, last_value] = None
+
+    # --- Private State ---
     internal_progress: Annotated[dict[str, str], merge_dict] = Field(
         default_factory=dict
     )
-
-    # Current node tracking - needs reducer for parallel updates (last value wins)
     current_node: Annotated[str, last_value] = ""

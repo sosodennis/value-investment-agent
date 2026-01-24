@@ -9,7 +9,7 @@ logger = get_logger(__name__)
 
 
 def input_adapter(state: AgentState) -> dict[str, Any]:
-    """Maps parent AgentState to DebateSubgraphState input."""
+    """Maps parent AgentState to DebateState input."""
     logger.info("--- [Debate Adapter] Mapping parent state to subgraph input ---")
     return {
         "ticker": state.ticker,
@@ -24,7 +24,7 @@ def input_adapter(state: AgentState) -> dict[str, Any]:
 
 
 def output_adapter(sub_output: dict[str, Any]) -> dict[str, Any]:
-    """Maps DebateSubgraphState output back to parent state updates."""
+    """Maps DebateState output back to parent state updates."""
     logger.info("--- [Debate Adapter] Mapping subgraph output back to parent state ---")
 
     # Handle model_type update if conclusion reached

@@ -8,7 +8,7 @@ logger = get_logger(__name__)
 
 
 def input_adapter(state: AgentState) -> dict[str, Any]:
-    """Maps parent AgentState to IntentExtractionSubgraphState input."""
+    """Maps parent AgentState to IntentExtractionState input."""
     logger.info("--- [Intent Adapter] Mapping parent state to subgraph input ---")
     return {
         "ticker": state.ticker,
@@ -19,7 +19,7 @@ def input_adapter(state: AgentState) -> dict[str, Any]:
 
 
 def output_adapter(sub_output: dict[str, Any]) -> dict[str, Any]:
-    """Maps IntentExtractionSubgraphState output back to parent state updates."""
+    """Maps IntentExtractionState output back to parent state updates."""
     logger.info("--- [Intent Adapter] Mapping subgraph output back to parent state ---")
     return {
         "intent_extraction": sub_output.get("intent_extraction"),

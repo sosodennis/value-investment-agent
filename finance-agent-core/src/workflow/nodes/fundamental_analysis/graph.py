@@ -12,7 +12,11 @@ from src.utils.logger import get_logger
 from .financial_utils import fetch_financial_data
 from .logic import select_valuation_model
 from .structures import ValuationModel
-from .subgraph_state import FundamentalAnalysisSubgraphState
+from .subgraph_state import (
+    FundamentalAnalysisInput,
+    FundamentalAnalysisOutput,
+    FundamentalAnalysisState,
+)
 
 logger = get_logger(__name__)
 
@@ -22,7 +26,7 @@ logger = get_logger(__name__)
 # Extraction nodes removed - now handled by intent_extraction subgraph
 
 
-def financial_health_node(state: FundamentalAnalysisSubgraphState) -> Command:
+def financial_health_node(state: FundamentalAnalysisState) -> Command:
     """
     Fetch financial data from SEC EDGAR and generate Financial Health Report.
     """
@@ -300,7 +304,7 @@ def financial_health_node(state: FundamentalAnalysisSubgraphState) -> Command:
     )
 
 
-def model_selection_node(state: FundamentalAnalysisSubgraphState) -> Command:
+def model_selection_node(state: FundamentalAnalysisState) -> Command:
     """
     Select appropriate valuation model based on company profile and financial health.
     """
@@ -424,7 +428,11 @@ def model_selection_node(state: FundamentalAnalysisSubgraphState) -> Command:
 
 def build_fundamental_subgraph():
     """纯函數：構建並編譯子圖"""
-    builder = StateGraph(FundamentalAnalysisSubgraphState)
+    builder = StateGraph(
+        FundamentalAnalysisState,
+        input=FundamentalAnalysisInput,
+        output=FundamentalAnalysisOutput,
+    )
     builder.add_node("financial_health", financial_health_node)
     builder.add_node("model_selection", model_selection_node)
     builder.add_edge(START, "financial_health")

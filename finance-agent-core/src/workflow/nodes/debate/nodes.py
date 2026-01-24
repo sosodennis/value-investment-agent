@@ -18,7 +18,7 @@ from .prompts import (
     VERDICT_PROMPT,
 )
 from .schemas import DebateConclusion
-from .subgraph_state import DebateSubgraphState
+from .subgraph_state import DebateState
 from .utils import (
     calculate_pragmatic_verdict,
     compress_financial_data,
@@ -130,7 +130,7 @@ def _get_last_message_from_role(history: list, role_name: str) -> str:
     return ""
 
 
-async def debate_aggregator_node(state: DebateSubgraphState) -> dict[str, Any]:
+async def debate_aggregator_node(state: DebateState) -> dict[str, Any]:
     # Compress data before passing to debate state
     clean_financials = compress_financial_data(state.fundamental.financial_reports)
     clean_news = compress_news_data(state.financial_news.output)
@@ -162,7 +162,7 @@ async def debate_aggregator_node(state: DebateSubgraphState) -> dict[str, Any]:
     }
 
 
-async def bull_node(state: DebateSubgraphState) -> dict[str, Any]:
+async def bull_node(state: DebateState) -> dict[str, Any]:
     """
     [Phase 2] Bull Agent (The Growth Hunter)
     Role: Focus on catalysts, growth potential, and bullish news.
@@ -263,7 +263,7 @@ async def bull_node(state: DebateSubgraphState) -> dict[str, Any]:
         }
 
 
-async def bear_node(state: DebateSubgraphState) -> dict[str, Any]:
+async def bear_node(state: DebateState) -> dict[str, Any]:
     """
     [Phase 2] Bear Agent (The Forensic Accountant)
     Role: Focus on risks, red flags, and challenging the Bull's narrative.
@@ -366,7 +366,7 @@ async def bear_node(state: DebateSubgraphState) -> dict[str, Any]:
         }
 
 
-async def moderator_node(state: DebateSubgraphState) -> dict[str, Any]:
+async def moderator_node(state: DebateState) -> dict[str, Any]:
     """
     [Phase 2/3] Moderator Agent (The Judge)
     Role: Decides if consensus is reached or if debate should continue/conclude.

@@ -16,24 +16,44 @@ from ...state import (
 )
 
 
-class FinancialNewsSubgraphState(BaseModel):
+class FinancialNewsInput(BaseModel):
     """
-    Isolated state for financial news research subgraph.
-
-    This state is completely separate from the parent AgentState.
-    It does NOT include node_statuses to prevent stale status updates.
-    Uses Pydantic BaseModel to match parent AgentState structure.
+    Input schema for financial news research subgraph.
     """
 
-    # Input from parent
-    ticker: str | None
-    intent_extraction: IntentExtractionContext  # Needed for resolved_ticker
-    financial_news: Annotated[FinancialNewsContext, merge_financial_news_context]
+    ticker: str | None = None
+    intent_extraction: IntentExtractionContext = Field(
+        default_factory=IntentExtractionContext
+    )
+    financial_news: FinancialNewsContext = Field(default_factory=FinancialNewsContext)
 
-    # Internal progress tracking (NOT shared with parent)
+
+class FinancialNewsOutput(BaseModel):
+    """
+    Output schema for financial news research subgraph.
+    """
+
+    financial_news: FinancialNewsContext
+
+
+class FinancialNewsState(BaseModel):
+    """
+    Internal state for financial news research subgraph.
+    """
+
+    # --- From Input ---
+    ticker: str | None = None
+    intent_extraction: IntentExtractionContext = Field(
+        default_factory=IntentExtractionContext
+    )
+
+    # --- Core State (Reducers applied) ---
+    financial_news: Annotated[FinancialNewsContext, merge_financial_news_context] = (
+        Field(default_factory=FinancialNewsContext)
+    )
+
+    # --- Private State ---
     internal_progress: Annotated[dict[str, str], merge_dict] = Field(
         default_factory=dict
     )
-
-    # Current node tracking
     current_node: Annotated[str, last_value] = ""

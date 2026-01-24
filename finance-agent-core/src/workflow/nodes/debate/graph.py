@@ -7,20 +7,24 @@ from .nodes import (
     debate_aggregator_node,
     moderator_node,
 )
-from .subgraph_state import DebateSubgraphState
+from .subgraph_state import DebateInput, DebateOutput, DebateState
 
 
 def build_debate_subgraph():
     """
     Build and return the cognitive debate sub-graph with blind debate mechanism.
 
-    Uses isolated DebateSubgraphState (not AgentState) to prevent stale status updates.
+    Uses isolated DebateState (not AgentState) to prevent stale status updates.
 
     Round 1: Bull and Bear execute in PARALLEL (blind debate - no anchoring)
              Using LangGraph's Send API for dynamic fan-out.
     Round 2+: Sequential execution with cross-review (each sees the other's arguments)
     """
-    builder = StateGraph(DebateSubgraphState)
+    builder = StateGraph(
+        DebateState,
+        input=DebateInput,
+        output=DebateOutput,
+    )
 
     # 1. Add Nodes
     builder.add_node("debate_aggregator", debate_aggregator_node)
@@ -32,7 +36,7 @@ def build_debate_subgraph():
     builder.add_edge(START, "debate_aggregator")
 
     # Conditional routing from aggregator: Parallel in Round 1, Sequential in Round 2+
-    def route_from_aggregator(state: DebateSubgraphState):
+    def route_from_aggregator(state: DebateState):
         """
         Round 1: Fan out to both Bull and Bear in parallel using Send API.
         Round 2+: Sequential flow (Bull first).
@@ -55,7 +59,7 @@ def build_debate_subgraph():
 
     # Routing from Bull: In Round 1 (parallel), go directly to moderator
     # In Round 2+, go to Bear first (sequential)
-    def route_from_bull(state: DebateSubgraphState):
+    def route_from_bull(state: DebateState):
         """After Bull speaks, route based on round."""
         if state.debate.current_round == 0:
             # Round 1: Parallel mode - Bull's output goes to moderator directly
@@ -71,7 +75,7 @@ def build_debate_subgraph():
     builder.add_edge("bear", "moderator")
 
     # 3. Moderator Loop: Continue debate or end
-    def should_continue_debate(state: DebateSubgraphState):
+    def should_continue_debate(state: DebateState):
         """
         Decision node to either continue the debate or finish.
         After R1 moderator critique, goes back to aggregator to route properly.

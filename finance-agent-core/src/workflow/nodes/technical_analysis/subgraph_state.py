@@ -16,26 +16,46 @@ from ...state import (
 )
 
 
-class TechnicalAnalysisSubgraphState(BaseModel):
+class TechnicalAnalysisInput(BaseModel):
     """
-    Isolated state for technical analysis subgraph.
-
-    This state is completely separate from the parent AgentState.
-    It does NOT include node_statuses to prevent stale status updates.
-    Uses Pydantic BaseModel to match parent AgentState structure.
+    Input schema for technical analysis subgraph.
     """
 
-    # Input from parent
-    ticker: str | None
-    intent_extraction: IntentExtractionContext  # Needed for resolved_ticker
+    ticker: str | None = None
+    intent_extraction: IntentExtractionContext = Field(
+        default_factory=IntentExtractionContext
+    )
+    technical_analysis: TechnicalAnalysisContext = Field(
+        default_factory=TechnicalAnalysisContext
+    )
+
+
+class TechnicalAnalysisOutput(BaseModel):
+    """
+    Output schema for technical analysis subgraph.
+    """
+
+    technical_analysis: TechnicalAnalysisContext
+
+
+class TechnicalAnalysisState(BaseModel):
+    """
+    Internal state for technical analysis subgraph.
+    """
+
+    # --- From Input ---
+    ticker: str | None = None
+    intent_extraction: IntentExtractionContext = Field(
+        default_factory=IntentExtractionContext
+    )
+
+    # --- Core State (Reducers applied) ---
     technical_analysis: Annotated[
         TechnicalAnalysisContext, merge_technical_analysis_context
-    ]
+    ] = Field(default_factory=TechnicalAnalysisContext)
 
-    # Internal progress tracking (NOT shared with parent)
+    # --- Private State ---
     internal_progress: Annotated[dict[str, str], merge_dict] = Field(
         default_factory=dict
     )
-
-    # Current node tracking
     current_node: Annotated[str, last_value] = ""

@@ -21,7 +21,11 @@ from .structures import (
     SignalState,
     TechnicalSignal,
 )
-from .subgraph_state import TechnicalAnalysisSubgraphState
+from .subgraph_state import (
+    TechnicalAnalysisInput,
+    TechnicalAnalysisOutput,
+    TechnicalAnalysisState,
+)
 from .tools import (
     calculate_fd_bollinger,
     calculate_fd_macd,
@@ -41,7 +45,7 @@ logger = get_logger(__name__)
 # --- Nodes ---
 
 
-def data_fetch_node(state: TechnicalAnalysisSubgraphState) -> Command:
+def data_fetch_node(state: TechnicalAnalysisState) -> Command:
     """
     [Node 1] Fetch historical daily OHLCV data via yfinance.
     """
@@ -100,7 +104,7 @@ def data_fetch_node(state: TechnicalAnalysisSubgraphState) -> Command:
     )
 
 
-def fracdiff_compute_node(state: TechnicalAnalysisSubgraphState) -> Command:
+def fracdiff_compute_node(state: TechnicalAnalysisState) -> Command:
     """
     [Node 2] Compute optimal d and apply FracDiff transformation using ROLLING window.
     Eliminates look-ahead bias for enterprise-grade backtesting.
@@ -221,7 +225,7 @@ def fracdiff_compute_node(state: TechnicalAnalysisSubgraphState) -> Command:
     )
 
 
-async def semantic_translate_node(state: TechnicalAnalysisSubgraphState) -> Command:
+async def semantic_translate_node(state: TechnicalAnalysisState) -> Command:
     """
     [Node 3] Generate semantic tags and LLM interpretation.
     """
@@ -383,7 +387,11 @@ async def semantic_translate_node(state: TechnicalAnalysisSubgraphState) -> Comm
 
 def build_technical_subgraph():
     """Build and return the technical_analysis subgraph."""
-    builder = StateGraph(TechnicalAnalysisSubgraphState)
+    builder = StateGraph(
+        TechnicalAnalysisState,
+        input=TechnicalAnalysisInput,
+        output=TechnicalAnalysisOutput,
+    )
     builder.add_node("data_fetch", data_fetch_node)
     builder.add_node("fracdiff_compute", fracdiff_compute_node)
     builder.add_node("semantic_translate", semantic_translate_node)
