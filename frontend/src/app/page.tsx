@@ -59,8 +59,8 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
 
   // Define Agents Roster Data (Linking to current workflow nodes)
   // Derive 'attention' status from active interrupts
-  const hasTickerInterrupt = messages.some(m => m.isInteractive && m.type === 'interrupt_ticker');
-  const hasApprovalInterrupt = messages.some(m => m.isInteractive && m.type === 'interrupt_approval');
+  const hasTickerInterrupt = messages.some(m => m.isInteractive && (m.type === 'interrupt_ticker' || m.agentId === 'intent_extraction'));
+  const hasApprovalInterrupt = messages.some(m => m.isInteractive && (m.type === 'interrupt_approval' || m.agentId === 'approval'));
 
   const agents: AgentInfo[] = useMemo(() => {
     // Import agent configs

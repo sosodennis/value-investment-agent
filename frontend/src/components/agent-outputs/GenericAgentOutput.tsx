@@ -1,23 +1,28 @@
 import React from 'react';
 import { FileText, Clock } from 'lucide-react';
 
+import { AgentStatus } from '../../types/agents';
+
 interface GenericAgentOutputProps {
     agentName: string;
     output: any | null;
+    status: AgentStatus;
 }
 
 export const GenericAgentOutput: React.FC<GenericAgentOutputProps> = ({
     agentName,
-    output
+    output,
+    status
 }) => {
-    if (!output) {
+    if (status !== 'done' || !output) {
         return (
             <div className="flex-1 flex flex-col items-center justify-center p-12 text-center h-full">
-                <Clock size={48} className="text-slate-900 mb-4" />
-                <h4 className="text-slate-500 font-bold text-xs uppercase tracking-widest">No Output Available</h4>
+                <Clock size={48} className="text-slate-900 mb-4 animate-pulse opacity-50" />
+                <h4 className="text-slate-500 font-bold text-xs uppercase tracking-widest">Processing...</h4>
                 <p className="text-slate-700 text-[10px] mt-2 max-w-[240px]">
-                    This agent has not completed its task yet or hasn&apos;t produced any structured output.
+                    This agent is currently working on its task.
                 </p>
+                <p className="text-[10px] text-slate-500 mt-2">Status: {status}</p>
             </div>
         );
     }

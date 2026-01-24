@@ -41,12 +41,21 @@ def map_model_to_skill(model_name: str | None) -> str:
 def output_adapter(sub_output: dict[str, Any]) -> dict[str, Any]:
     """將子圖輸出轉換為父圖更新"""
     logger.info("--- [FA Adapter] Mapping subgraph output back to parent state ---")
-    # 從子圖結果中提取關鍵數據
+
     fundamental_ctx = sub_output.get("fundamental")
     raw_model = None
 
-    if fundamental_ctx and fundamental_ctx.get("analysis_output"):
-        raw_model = fundamental_ctx["analysis_output"].get("model_type")
+    # Prepare standard event data for the UI
+    reports = None
+
+    if fundamental_ctx:
+        # Try to get reports from top level or nested analysis_output
+        reports = fundamental_ctx.get("financial_reports")
+        if not reports and fundamental_ctx.get("analysis_output"):
+            reports = fundamental_ctx["analysis_output"].get("financial_reports")
+
+        if fundamental_ctx.get("analysis_output"):
+            raw_model = fundamental_ctx["analysis_output"].get("model_type")
 
     model_type = map_model_to_skill(raw_model)
 

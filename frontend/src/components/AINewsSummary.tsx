@@ -7,6 +7,16 @@ interface AINewsSummaryProps {
 }
 
 const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
+    // Defensive check: ensure critical fields exist before rendering
+    if (!output.news_items || output.news_items.length === 0 || typeof output.sentiment_score !== 'number') {
+        return (
+            <div className="flex flex-col items-center justify-center p-12 text-slate-500">
+                <Zap className="w-12 h-12 mb-4 animate-pulse opacity-50" />
+                <p className="font-bold uppercase tracking-widest text-[10px]">Analyzing News Sentiment...</p>
+            </div>
+        );
+    }
+
     const getSentimentColor = (sentiment: SentimentLabel) => {
         switch (sentiment) {
             case 'bullish': return 'text-emerald-400';

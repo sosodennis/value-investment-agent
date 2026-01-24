@@ -22,8 +22,11 @@ def input_adapter(state: AgentState) -> dict[str, Any]:
 def output_adapter(sub_output: dict[str, Any]) -> dict[str, Any]:
     """Maps TechnicalAnalysisState output back to parent state updates."""
     logger.info("--- [TA Adapter] Mapping subgraph output back to parent state ---")
+
+    ta_ctx = sub_output.get("technical_analysis")
+
     return {
-        "technical_analysis": sub_output.get("technical_analysis"),
+        "technical_analysis": ta_ctx,
         "messages": sub_output.get("messages", []),
         "node_statuses": {"technical_analysis": "done"},
     }

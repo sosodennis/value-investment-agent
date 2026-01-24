@@ -1,7 +1,7 @@
 import asyncio
-import json
 import os
 import sys
+import uuid
 from collections import defaultdict
 from contextlib import asynccontextmanager
 from typing import Any
@@ -19,10 +19,15 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langgraph.types import Command
 
 from src.infrastructure.database import init_db
+from src.interface.adapters import adapt_langgraph_event, create_interrupt_event
+from src.interface.protocol import AgentEvent
 from src.services.history import history_service
+from src.utils.logger import get_logger
 from src.workflow.graph import get_graph
 from src.workflow.interrupts import InterruptValue
 from src.workflow.state import AgentState
+
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
@@ -31,18 +36,18 @@ async def lifespan(app: FastAPI):
     Lifecycle manager for the FastAPI application.
     Constructs and compiles the graph once at startup.
     """
-    print("🚀 [Lifespan] Initializing application resources...")
+    logger.info("🚀 [Lifespan] Initializing application resources...")
     # Initialize DB
     await init_db()
 
     # Initialize Graph
-    print("🚀 [Lifespan] Building workflow graph...")
+    logger.info("🚀 [Lifespan] Building workflow graph...")
     graph = await get_graph()
     app.state.graph = graph
 
-    print("✅ [Lifespan] Initialization complete.")
+    logger.info("✅ [Lifespan] Initialization complete.")
     yield
-    print("🛑 [Lifespan] Shutting down...")
+    logger.info("🛑 [Lifespan] Shutting down...")
 
 
 app = FastAPI(
@@ -68,217 +73,184 @@ class RequestSchema(BaseModel):
     resume_payload: Any | None = None
 
 
-class JobManager:
+# Track active tasks, event replay buffers, and sequence counters
+active_tasks: dict[str, asyncio.Task] = {}
+running_queues: dict[str, list[asyncio.Queue]] = defaultdict(list)
+event_replay_buffers: dict[str, list[str]] = defaultdict(list)
+thread_sequences: dict[str, int] = defaultdict(lambda: 1)
+
+
+async def event_generator(thread_id: str, input_data: Any, config: dict, graph: Any):
     """
-    Manages background graph execution tasks and broadcasts events to listeners.
-    Ensures only one job per thread_id runs at a time.
+    Core event generator that transforms LangGraph events into standardized AgentEvents.
     """
+    seq_counter = thread_sequences[thread_id]
+    run_id = str(uuid.uuid4())
+    logger.info(
+        f"📡 [Server] Starting event_generator for {thread_id} at seq {seq_counter}..."
+    )
 
-    def __init__(self):
-        self.jobs: dict[str, asyncio.Task] = {}
-        self.queues: dict[str, list[asyncio.Queue]] = defaultdict(list)
+    try:
+        # State for token batching
+        batch_state = {"buffer": [], "last_event": None}
 
-    def is_running(self, thread_id: str) -> bool:
-        task = self.jobs.get(thread_id)
-        return task is not None and not task.done()
+        async def flush_deltas():
+            nonlocal seq_counter
+            last_delta = batch_state["last_event"]
+            delta_buffer = batch_state["buffer"]
 
-    async def _run_graph(
-        self, thread_id: str, input_data: Any, config: dict, graph: Any
-    ):
-        try:
-            print(f"🚀 [JobManager] Starting job for {thread_id}")
+            if not last_delta or not delta_buffer:
+                return
 
-            # Use centralized agent configuration for hidden nodes
-            # Can be overridden with DEBUG_SHOW_ALL_STREAMING=true environment variable
-            from src.config.agents import get_hidden_nodes
+            # Combine all buffered contents
+            combined_content = "".join(delta_buffer)
+            # Update the last delta event with combined content
+            last_delta.data["content"] = combined_content
+            last_delta.seq_id = seq_counter
 
-            DEBUG_MODE = (
-                os.environ.get("DEBUG_SHOW_ALL_STREAMING", "false").lower() == "true"
+            msg = f"data: {last_delta.model_dump_json()}\n\n"
+            # Silence high-frequency logs by using DEBUG level
+            logger.debug(
+                f"📤 [Server] Dispatching batched tokens ({len(delta_buffer)}) from {last_delta.source}"
             )
-            HIDDEN_NODES = set() if DEBUG_MODE else get_hidden_nodes()
 
-            if DEBUG_MODE:
-                print("🔍 [JobManager] DEBUG MODE: Showing all token streaming")
+            event_replay_buffers[thread_id].append(msg)
+            if len(event_replay_buffers[thread_id]) > 50:
+                event_replay_buffers[thread_id].pop(0)
 
-            # 1. Stream events
-            async for event in graph.astream_events(
-                input_data, config=config, version="v2"
-            ):
-                # Filtering logic: Only block internal LLM generation (tokens) for specific nodes.
-                # Allow on_chain_end and other events so status updates and interrupts flow through.
-                node_name = event.get("metadata", {}).get("langgraph_node", "")
-                event_type = event["event"]
-
-                if event_type == "on_chat_model_stream" and node_name in HIDDEN_NODES:
-                    continue
-
-                try:
-                    # Broadcast
-                    await self._broadcast(thread_id, {"type": "event", "data": event})
-
-                    # Persist AI messages when they finish
-                    if event_type == "on_chat_model_end":
-                        # Only persist if it's not a hidden node or if we want to include tool calls in history
-                        # For now, let's persist the assistant response
-                        if node_name not in HIDDEN_NODES:
-                            output = event["data"]["output"]
-                            # Only persist if it's a valid LangChain message
-                            if isinstance(output, BaseMessage):
-                                try:
-                                    await history_service.save_message(
-                                        thread_id, output
-                                    )
-                                except Exception as e:
-                                    print(
-                                        f"❌ [JobManager] save_message failed for {node_name}: {e}"
-                                    )
-                                    # Don't re-raise here to avoid crashing the whole job for a history save failure
-                                    pass
-                            else:
-                                print(
-                                    f"ℹ️ [JobManager] Skipping persistence for non-message output from {node_name}: {type(output)}"
-                                )
-                                # Double check if it strangely had .content
-                                if hasattr(output, "content"):
-                                    print(
-                                        f"⚠️ [JobManager] WEIRD: Object {type(output)} has .content but is not BaseMessage!"
-                                    )
-
-                    # Persist messages manually added via Command updates (e.g. financial_health, clarification)
-                    elif event_type == "on_chain_end":
-                        output = event["data"].get("output")
-                        if isinstance(output, Command) and output.update:
-                            messages = output.update.get("messages")
-                            if messages:
-                                if not isinstance(messages, list):
-                                    messages = [messages]
-                                try:
-                                    await history_service.save_messages(
-                                        thread_id, messages
-                                    )
-                                except Exception as e:
-                                    print(
-                                        f"❌ [JobManager] save_messages failed for {node_name}: {e}"
-                                    )
-                                    # Don't re-raise here to avoid crashing the whole job for a history save failure
-                                    pass
-                except Exception as e:
-                    print(
-                        f"❌ [JobManager] Error processing event {event_type} from {node_name}: {e}"
-                    )
-                    raise e
-
-            # 2. Check for interrupts
-            snapshot = await graph.aget_state(config)
-            if snapshot.next:
-                current_interrupts = []
-                for task in snapshot.tasks:
-                    if task.interrupts:
-                        for i in task.interrupts:
-                            try:
-                                val = InterruptValue.model_validate(i.value)
-                                current_interrupts.append(val.model_dump())
-                            except Exception:
-                                current_interrupts.append(i.value)
-
-                if current_interrupts:
-                    await self._broadcast(
-                        thread_id, {"type": "interrupt", "data": current_interrupts}
-                    )
-
-        except Exception as e:
-            print(f"❌ [JobManager] Error in {thread_id}: {str(e)}", flush=True)
-            await self._broadcast(thread_id, {"type": "error", "data": str(e)})
-        finally:
-            print(f"🏁 [JobManager] Job for {thread_id} finished.")
-            await self._broadcast(thread_id, None)  # Signal EOF
-            if thread_id in self.jobs:
-                del self.jobs[thread_id]
-
-    async def _broadcast(self, thread_id: str, payload: Any):
-        if thread_id not in self.queues:
-            return
-
-        # Standardize event serialization
-        def json_serializable(obj):
-            try:
-                # Handle Enums first (before model_dump check since many Pydantic models include enums)
-                from enum import Enum
-
-                if isinstance(obj, Enum):
-                    return obj.value
-                if isinstance(obj, Command):
-                    return {"update": obj.update, "goto": obj.goto, "graph": obj.graph}
-                # Handle Pydantic models
-                if hasattr(obj, "model_dump"):
-                    return obj.model_dump(mode="json")
-                if hasattr(obj, "dict"):
-                    return obj.dict()
-                # Handle datetime
-                from datetime import datetime
-
-                if isinstance(obj, datetime):
-                    return obj.isoformat()
-                return str(obj)
-            except Exception as e:
-                print(f"json_serializable fallback for {type(obj)}: {e}")
-                return str(obj)
-
-        try:
-            msg = (
-                f"data: {json.dumps(payload, default=json_serializable)}\n\n"
-                if payload
-                else None
-            )
-        except TypeError:
-            print(f"❌ [JobManager] Serialization failed for payload: {payload}")
-            # Try to identify which part failed
-            try:
-                if isinstance(payload, dict) and "data" in payload:
-                    data = payload["data"]
-                    if isinstance(data, dict):
-                        for k, v in data.items():
-                            print(f"Key: {k}, Type: {type(v)}")
-                            try:
-                                json.dumps(v, default=json_serializable)
-                            except TypeError:
-                                print(f"FAILED on key '{k}' with value: {v}")
-            except Exception:
-                pass
-            # Don't re-raise serialization errors to avoid crashing the job
-            print(
-                "⚠️ [JobManager] Serialization failed, skipping broadcast for this event."
-            )
-            return
-
-        # Send to all connected queues
-        for q in self.queues[thread_id][:]:
-            try:
+            for q in running_queues[thread_id][:]:
                 await q.put(msg)
-            except Exception:
-                self.queues[thread_id].remove(q)
 
-    def start_job(self, thread_id: str, input_data: Any, config: dict, graph: Any):
-        if self.is_running(thread_id):
-            return False
-        self.jobs[thread_id] = asyncio.create_task(
-            self._run_graph(thread_id, input_data, config, graph)
+            seq_counter += 1
+            thread_sequences[thread_id] = seq_counter
+            batch_state["buffer"].clear()
+            batch_state["last_event"] = None
+
+        # 1. Stream refined events using adapter
+        async for event in graph.astream_events(
+            input_data, config=config, version="v2"
+        ):
+            # Check for batching/flushing BEFORE adapting the next event
+            # to ensure we don't use a duplicate seq_id
+
+            # Handle token batching logic
+            if event["event"] == "on_chat_model_stream":
+                agent_events = adapt_langgraph_event(
+                    event, thread_id, seq_counter, run_id
+                )
+
+                # We expect only ONE event for token streaming usually, but let's be robust
+                for agent_event in agent_events:
+                    if agent_event.type == "content.delta":
+                        # Flush if source changed or buffer reached threshold
+                        last_event = batch_state["last_event"]
+                        if last_event and (
+                            last_event.source != agent_event.source
+                            or len(batch_state["buffer"]) >= 25
+                        ):
+                            await flush_deltas()
+
+                        if not batch_state["last_event"]:
+                            batch_state["last_event"] = agent_event
+
+                        batch_state["buffer"].append(
+                            agent_event.data.get("content", "")
+                        )
+                continue  # Wait for more tokens
+
+            # If it's not a stream chunk, or it's a stream chunk from a new source:
+            # First, flush any pending deltas
+            await flush_deltas()
+
+            # Now adapt the current event with the fresh seq_counter
+            agent_events = adapt_langgraph_event(event, thread_id, seq_counter, run_id)
+
+            for agent_event in agent_events:
+                msg = f"data: {agent_event.model_dump_json()}\n\n"
+                logger.info(
+                    f"📤 [Server] Dispatching event {seq_counter}: {agent_event.type} from {agent_event.source}"
+                )
+
+                event_replay_buffers[thread_id].append(msg)
+                if len(event_replay_buffers[thread_id]) > 50:
+                    event_replay_buffers[thread_id].pop(0)
+
+                for q in running_queues[thread_id][:]:
+                    await q.put(msg)
+
+                seq_counter += 1
+                thread_sequences[thread_id] = seq_counter
+
+            # Internal housekeeping: save AI messages to history
+            if event["event"] == "on_chat_model_end":
+                output = event["data"]["output"]
+                if isinstance(output, BaseMessage):
+                    try:
+                        await history_service.save_message(thread_id, output)
+                    except Exception as e:
+                        logger.error(f"❌ [Server] history save failed: {e}")
+
+        # Final flush after the stream ends
+        await flush_deltas()
+
+        # 2. Check for interrupts after graph pauses
+        snapshot = await graph.aget_state(config)
+        if snapshot.next:
+            for task in snapshot.tasks:
+                if task.interrupts:
+                    for i in task.interrupts:
+                        # Resolve the internal node name to a high-level agent ID if possible
+                        from src.config.agents import get_agent_id_from_node
+
+                        source = get_agent_id_from_node(task.name) or task.name
+
+                        agent_event = create_interrupt_event(
+                            i.value, thread_id, seq_counter, run_id, source=source
+                        )
+                        msg = f"data: {agent_event.model_dump_json()}\n\n"
+                        logger.info(
+                            f"📤 [Server] Dispatching interrupt: {agent_event.type}"
+                        )
+
+                        event_replay_buffers[thread_id].append(msg)
+                        for q in running_queues[thread_id][:]:
+                            await q.put(msg)
+                        seq_counter += 1
+                        thread_sequences[thread_id] = seq_counter
+
+    except Exception as e:
+        logger.error(f"❌ [Server] Error in {thread_id}: {str(e)}")
+        import traceback
+
+        logger.error(f"Traceback: {traceback.format_exc()}")
+
+        error_event = AgentEvent(
+            thread_id=thread_id,
+            run_id=run_id,
+            seq_id=seq_counter,
+            type="error",
+            source="System",
+            data={"message": str(e)},
         )
-        return True
+        msg = f"data: {error_event.model_dump_json()}\n\n"
+        for q in running_queues[thread_id][:]:
+            await q.put(msg)
+    finally:
+        # Signal EOF to all queues
+        for q in running_queues[thread_id][:]:
+            await q.put(None)
 
-    def get_stream(self, thread_id: str):
-        q = asyncio.Queue()
-        self.queues[thread_id].append(q)
-        return q
+        # Keep buffer for a few seconds to let pending GETs finish
+        await asyncio.sleep(2)
 
-    def unsubscribe(self, thread_id: str, q: asyncio.Queue):
-        if thread_id in self.queues and q in self.queues[thread_id]:
-            self.queues[thread_id].remove(q)
-            if not self.queues[thread_id]:
-                del self.queues[thread_id]
-
-
-job_manager = JobManager()
+        # Cleanup
+        if thread_id in active_tasks:
+            del active_tasks[thread_id]
+        if thread_id in running_queues:
+            del running_queues[thread_id]
+        if thread_id in event_replay_buffers:
+            del event_replay_buffers[thread_id]
+        logger.info(f"🏁 [Server] Task for {thread_id} finished.")
 
 
 @app.get("/history/{thread_id}")
@@ -358,16 +330,14 @@ async def get_thread_history(request: Request, thread_id: str):
             "resolved_ticker": fundamental.get("resolved_ticker"),
             "status": fundamental.get("status"),
             "next": snapshot.next,
-            "is_running": job_manager.is_running(thread_id),
+            "is_running": thread_id in active_tasks,
             "node_statuses": snapshot.values.get("node_statuses", {}),
             "financial_reports": fundamental.get("financial_reports", []),
             "agent_outputs": agent_outputs,
         }
-        print(
-            f"DEBUG: get_thread_history({thread_id}) -> is_running={res['is_running']}"
-        )
         return res
     except Exception as e:
+        logger.error(f"❌ [Server] get_thread_history failed: {e}")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -413,62 +383,72 @@ async def get_agent_statuses(request: Request, thread_id: str):
 
 @app.get("/stream/{thread_id}")
 async def attach_stream(thread_id: str):
-    """Attach to an existing or recently started background job."""
+    """Attach to an existing background job's event stream."""
 
-    async def event_generator():
-        # Quick check if job is already done before we subscribe
-        if not job_manager.is_running(thread_id):
-            print(
-                f"⚠️ [attach_stream] Request for finished job {thread_id}. Closing immediately."
+    async def sse_adapter():
+        # 1. Create a queue for the new listener
+        q = asyncio.Queue()
+        running_queues[thread_id].append(q)
+
+        # 2. Replay already generated events for this thread (race condition fix)
+        if thread_id in event_replay_buffers:
+            logger.info(
+                f"🔄 [Server] Replaying {len(event_replay_buffers[thread_id])} events for attacher on {thread_id}"
             )
-            return
+            for msg in event_replay_buffers[thread_id]:
+                await q.put(msg)
 
-        q = job_manager.get_stream(thread_id)
         try:
             while True:
                 msg = await q.get()
                 if msg is None:
-                    break  # EOF
+                    # EOF signal
+                    break
                 yield msg
         finally:
-            job_manager.unsubscribe(thread_id, q)
+            if thread_id in running_queues and q in running_queues[thread_id]:
+                running_queues[thread_id].remove(q)
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(sse_adapter(), media_type="text/event-stream")
 
 
 @app.post("/stream")
 async def stream_agent(request: Request, body: RequestSchema):
     """Start or resume a job."""
-    print(f"DEBUG: stream_agent called with body: {body}")
     thread_id = body.thread_id
     config = {"configurable": {"thread_id": thread_id}}
 
-    if job_manager.is_running(thread_id):
+    if thread_id in active_tasks:
         if body.message or body.resume_payload:
             raise HTTPException(
                 status_code=409, detail="Job already running for this thread."
             )
-        # If it's a "wakeup" call but job is already running, just return 200 to indicate OK
         return {"status": "running", "thread_id": thread_id}
 
-    # Persist user message immediately
+    # Prepare input
     if body.message:
+        # BRAND NEW analysis: Reset sequence and clear previous event buffers
+        thread_sequences[thread_id] = 1
+        if thread_id in event_replay_buffers:
+            event_replay_buffers[thread_id] = []
+
         user_msg = HumanMessage(content=body.message)
         await history_service.save_message(thread_id, user_msg)
         input_data = AgentState(
             messages=[user_msg], user_query=body.message
         ).model_dump()
     elif body.resume_payload:
-        print(f"DEBUG: Resuming with payload: {body.resume_payload}")
+        # RESUME: Keep existing sequence
         input_data = Command(resume=body.resume_payload)
     else:
         input_data = None
 
-    print(
-        f"DEBUG: Starting job with input_data type: {type(input_data)} value: {input_data}"
+    # Start independent task
+    task = asyncio.create_task(
+        event_generator(thread_id, input_data, config, request.app.state.graph)
     )
-    # Start job
-    job_manager.start_job(thread_id, input_data, config, request.app.state.graph)
+    active_tasks[thread_id] = task
+
     return {"status": "started", "thread_id": thread_id}
 
 

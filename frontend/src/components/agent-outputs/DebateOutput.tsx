@@ -2,18 +2,22 @@ import React from 'react';
 import { Shield, Target, AlertTriangle, TrendingUp, TrendingDown, Minus, Info, CheckCircle2, Zap } from 'lucide-react';
 import { DebateAgentOutput } from '../../types/debate';
 
+import { AgentStatus } from '../../types/agents';
+
 interface DebateOutputProps {
     output: DebateAgentOutput | null;
     resolvedTicker?: string | null;
+    status: AgentStatus;
 }
 
-export const DebateOutput: React.FC<DebateOutputProps> = ({ output, resolvedTicker }) => {
-    if (!output || !output.conclusion) {
+export const DebateOutput: React.FC<DebateOutputProps> = ({ output, resolvedTicker, status }) => {
+    if (status !== 'done' || !output || !output.conclusion) {
         return (
             <div className="flex flex-col items-center justify-center h-full text-slate-500 py-12">
-                <Shield size={48} className="text-slate-800 mb-4 opacity-50" />
-                <p className="text-sm font-bold uppercase tracking-widest">No Debate Verdict Available</p>
+                <Shield size={48} className="text-slate-800 mb-4 opacity-50 animate-pulse" />
+                <p className="text-sm font-bold uppercase tracking-widest">Debate in Progress</p>
                 <p className="text-[10px] mt-2 opacity-60">Wait for the debate between Bull and Bear agents to conclude.</p>
+                <p className="text-[10px] text-slate-600 mt-2">Status: {status}</p>
             </div>
         );
     }

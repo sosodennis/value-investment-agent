@@ -30,10 +30,13 @@ def output_adapter(sub_output: dict[str, Any]) -> dict[str, Any]:
     # Handle model_type update if conclusion reached
     model_type = sub_output.get("model_type")
     debate_ctx = sub_output.get("debate")
-    if debate_ctx and debate_ctx.get("conclusion"):
-        raw_model = debate_ctx["conclusion"].get("model_type")
-        if raw_model:
-            model_type = map_model_to_skill(raw_model)
+
+    if debate_ctx and isinstance(debate_ctx, dict):
+        conclusion = debate_ctx.get("conclusion")
+        if conclusion:
+            raw_model = conclusion.get("model_type")
+            if raw_model:
+                model_type = map_model_to_skill(raw_model)
 
     return {
         "debate": debate_ctx,

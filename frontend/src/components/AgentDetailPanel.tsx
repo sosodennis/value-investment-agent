@@ -2,10 +2,12 @@ import React, { useState } from 'react';
 import Image from 'next/image';
 import { AgentInfo, DimensionScore } from '../types/agents';
 import { TrendingUp, BarChart3, FileText, Zap, MessageSquare, ListFilter, Activity, LayoutPanelTop, CheckCircle2, Clock } from 'lucide-react';
-import { Message } from '../hooks/useAgent';
+import { Message } from '../types/protocol';
 import { NewsResearchOutput as NewsOutputType } from '../types/news';
 import { FundamentalAnalysisOutput, NewsResearchOutput as NewsResearchOutputPanel, GenericAgentOutput, DebateOutput, TechnicalAnalysisOutput } from './agent-outputs';
 import { TechnicalSignalOutput } from '../types/technical';
+import { DynamicInterruptForm } from './DynamicInterruptForm';
+import { nodeMatchesAgent } from '../config/agents';
 
 interface AgentDetailPanelProps {
     agent: AgentInfo | null;
@@ -199,77 +201,31 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                                 {/* Active Interrupts (Scoped) */}
                                 {messages.filter(m => {
                                     if (!m.isInteractive) return false;
+
+                                    // 1. Check if the message is explicitly assigned to this agent
+                                    if (m.agentId === agent.id) return true;
+
+                                    // 2. Fallback: Check if the source node belongs to this agent
+                                    if (m.agentId && nodeMatchesAgent(m.agentId, agent.id)) return true;
+
+                                    // 3. Legacy fallbacks
                                     if (agent.id === 'intent_extraction' && m.type === 'interrupt_ticker') return true;
                                     if (agent.id === 'approval' && m.type === 'interrupt_approval') return true;
+
                                     return false;
                                 }).map((msg) => (
-                                    <div key={msg.id} className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-5 animate-in fade-in zoom-in-95 duration-500">
-                                        {msg.type === 'interrupt_ticker' && (
-                                            <div className="space-y-4">
-                                                <div className="flex items-center gap-2 text-amber-500">
-                                                    <Zap size={14} className="animate-pulse" />
-                                                    <span className="text-[10px] font-bold uppercase tracking-widest">Ticker Resolution Required</span>
-                                                </div>
-                                                <div className="text-xs text-slate-400 mb-2">
-                                                    Multiple possible matches found. Please select the correct company to proceed.
-                                                </div>
-                                                <div className="grid grid-cols-1 gap-2">
-                                                    {msg.data?.candidates?.map((c: any) => (
-                                                        <button
-                                                            key={c.symbol}
-                                                            onClick={() => onSubmitCommand?.({ selected_symbol: c.symbol })}
-                                                            className="flex items-center justify-between p-3 bg-slate-950/80 border border-slate-800 hover:border-cyan-500/50 hover:bg-cyan-500/5 transition-all rounded-xl text-left"
-                                                        >
-                                                            <div>
-                                                                <div className="text-xs font-bold text-white">{c.symbol}</div>
-                                                                <div className="text-[9px] text-slate-500 uppercase">{c.name}</div>
-                                                            </div>
-                                                            <div className="text-[9px] font-bold text-slate-600 bg-slate-900 px-2 py-0.5 rounded">
-                                                                {(c.confidence * 100).toFixed(0)}% Match
-                                                            </div>
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {msg.type === 'interrupt_approval' && (
-                                            <div className="space-y-4">
-                                                <div className="flex items-center gap-2 text-amber-500">
-                                                    <Zap size={14} className="animate-pulse" />
-                                                    <span className="text-[10px] font-bold uppercase tracking-widest">Review & Approval Needed</span>
-                                                </div>
-                                                <div className="p-4 bg-slate-950/80 border border-slate-800 rounded-xl space-y-3">
-                                                    <div className="flex justify-between items-center pb-2 border-b border-slate-900">
-                                                        <span className="text-[10px] text-slate-500 uppercase font-bold">Analysis Target</span>
-                                                        <span className="text-xs font-bold text-white">{msg.data?.details?.ticker}</span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center pb-2 border-b border-slate-900">
-                                                        <span className="text-[10px] text-slate-500 uppercase font-bold">Model Engine</span>
-                                                        <span className="text-xs font-bold text-cyan-400 capitalize">{msg.data?.details?.model}</span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-[10px] text-slate-500 uppercase font-bold">Audit Status</span>
-                                                        <span className={`text-[10px] font-bold uppercase ${msg.data?.details?.audit_passed ? 'text-emerald-500' : 'text-rose-500'}`}>
-                                                            {msg.data?.details?.audit_passed ? 'Passed' : 'Attention Required'}
-                                                        </span>
-                                                    </div>
-
-                                                    <div className="pt-3 flex gap-2">
-                                                        <button
-                                                            onClick={() => onSubmitCommand?.({ approved: true })}
-                                                            className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold py-2 rounded-lg transition-all uppercase tracking-widest shadow-lg shadow-emerald-500/20"
-                                                        >
-                                                            Approve Plan
-                                                        </button>
-                                                        <button
-                                                            onClick={() => onSubmitCommand?.({ approved: false })}
-                                                            className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold py-2 rounded-lg transition-all uppercase tracking-widest"
-                                                        >
-                                                            Reject
-                                                        </button>
-                                                    </div>
-                                                </div>
+                                    <div key={msg.id} className="mt-4">
+                                        {msg.data?.schema ? (
+                                            <DynamicInterruptForm
+                                                schema={msg.data.schema}
+                                                uiSchema={msg.data.ui_schema}
+                                                title={msg.data.title}
+                                                description={msg.data.description}
+                                                onSubmit={(data) => onSubmitCommand?.(data)}
+                                            />
+                                        ) : (
+                                            <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 text-xs text-amber-200">
+                                                Interruption requested, but no UI schema provided.
                                             </div>
                                         )}
                                     </div>
@@ -286,12 +242,10 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
 
                             <div className="space-y-4">
                                 {(() => {
-                                    // Import centralized config
-                                    const { nodeMatchesAgent } = require('../config/agents');
-
-                                    const filteredFeed = activityFeed.filter(step => {
-                                        return nodeMatchesAgent(step.node, agent.id);
-                                    });
+                                    // 1. Filter by agent
+                                    const filteredFeed = activityFeed.filter(step =>
+                                        nodeMatchesAgent(step.node, agent.id)
+                                    );
 
                                     if (filteredFeed.length === 0) {
                                         return (
@@ -302,22 +256,33 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                                         );
                                     }
 
-                                    return [...filteredFeed].reverse().map((step, idx) => (
+                                    // 2. Map to unique nodes to avoid duplication in display if backend emits multiple events
+                                    //    We take the LATEST status for each node name.
+                                    const latestByNode = new Map<string, typeof filteredFeed[0]>();
+                                    filteredFeed.forEach(step => {
+                                        latestByNode.set(step.node, step);
+                                    });
+
+                                    // 3. Convert back to array and sort by timestamp (newest first)
+                                    const displayFeed = Array.from(latestByNode.values())
+                                        .sort((a, b) => b.timestamp - a.timestamp);
+
+                                    return displayFeed.map((step, idx) => (
                                         <div key={step.id} className="flex gap-4 group">
                                             <div className="flex flex-col items-center gap-1">
                                                 <div className={`w-2 h-2 rounded-full mt-1 ${idx === 0 ? 'bg-cyan-500 shadow-[0_0_5px_rgba(34,211,238,1)]' : 'bg-slate-800 group-hover:bg-slate-700'}`} />
-                                                {idx !== filteredFeed.length - 1 && <div className="w-[1px] flex-1 bg-slate-900" />}
+                                                {idx !== displayFeed.length - 1 && <div className="w-[1px] flex-1 bg-slate-900" />}
                                             </div>
                                             <div className="flex-1 pb-4">
                                                 <div className="flex justify-between items-start">
                                                     <span className={`text-xs font-bold leading-none capitalize ${idx === 0 ? 'text-slate-200' : 'text-slate-50'}`}>
-                                                        {step.node}
+                                                        {step.node.replace(/_/g, ' ')}
                                                     </span>
                                                     <span className="text-[9px] text-slate-700 font-mono">
                                                         {new Date(step.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                                                     </span>
                                                 </div>
-                                                <div className="text-[10px] text-slate-600 mt-1 uppercase tracking-tighter transition-all group-hover:text-slate-500">
+                                                <div className={`text-[10px] mt-1 uppercase tracking-tighter transition-all ${step.status === 'running' ? 'text-cyan-500 animate-pulse' : 'text-slate-600 group-hover:text-slate-500'}`}>
                                                     {step.status}
                                                 </div>
                                             </div>
@@ -422,71 +387,16 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                                                 </div>
                                             )}
 
-                                            {/* Interactive Ticker Selection */}
-                                            {msg.type === 'interrupt_ticker' && msg.isInteractive && (
-                                                <div className="mt-6 space-y-4">
-                                                    <div className="flex items-center gap-2 text-amber-500">
-                                                        <Zap size={14} className="animate-pulse" />
-                                                        <span className="text-[10px] font-bold uppercase tracking-widest">Ticker Resolution Required</span>
-                                                    </div>
-                                                    <div className="grid grid-cols-1 gap-2">
-                                                        {msg.data?.candidates?.map((c: any) => (
-                                                            <button
-                                                                key={c.symbol}
-                                                                onClick={() => onSubmitCommand?.({ selected_symbol: c.symbol })}
-                                                                className="flex items-center justify-between p-3 bg-slate-950/80 border border-slate-800 hover:border-cyan-500/50 hover:bg-cyan-500/5 transition-all rounded-xl text-left"
-                                                            >
-                                                                <div>
-                                                                    <div className="text-xs font-bold text-white">{c.symbol}</div>
-                                                                    <div className="text-[9px] text-slate-500 uppercase">{c.name}</div>
-                                                                </div>
-                                                                <div className="text-[9px] font-bold text-slate-600 bg-slate-900 px-2 py-0.5 rounded">
-                                                                    {(c.confidence * 100).toFixed(0)}% Match
-                                                                </div>
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* Interactive Approval Request */}
-                                            {msg.type === 'interrupt_approval' && msg.isInteractive && (
-                                                <div className="mt-6 space-y-4">
-                                                    <div className="flex items-center gap-2 text-amber-500">
-                                                        <Zap size={14} className="animate-pulse" />
-                                                        <span className="text-[10px] font-bold uppercase tracking-widest">Review & Approval Needed</span>
-                                                    </div>
-                                                    <div className="p-4 bg-slate-950/80 border border-slate-800 rounded-xl space-y-3">
-                                                        <div className="flex justify-between items-center pb-2 border-b border-slate-900">
-                                                            <span className="text-[10px] text-slate-500 uppercase font-bold">Analysis Target</span>
-                                                            <span className="text-xs font-bold text-white">{msg.data?.details?.ticker}</span>
-                                                        </div>
-                                                        <div className="flex justify-between items-center pb-2 border-b border-slate-900">
-                                                            <span className="text-[10px] text-slate-500 uppercase font-bold">Model Engine</span>
-                                                            <span className="text-xs font-bold text-cyan-400 capitalize">{msg.data?.details?.model}</span>
-                                                        </div>
-                                                        <div className="flex justify-between items-center">
-                                                            <span className="text-[10px] text-slate-500 uppercase font-bold">Audit Status</span>
-                                                            <span className={`text-[10px] font-bold uppercase ${msg.data?.details?.audit_passed ? 'text-emerald-500' : 'text-rose-500'}`}>
-                                                                {msg.data?.details?.audit_passed ? 'Passed' : 'Attention Required'}
-                                                            </span>
-                                                        </div>
-
-                                                        <div className="pt-3 flex gap-2">
-                                                            <button
-                                                                onClick={() => onSubmitCommand?.({ approved: true })}
-                                                                className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold py-2 rounded-lg transition-all uppercase tracking-widest shadow-lg shadow-emerald-500/20"
-                                                            >
-                                                                Approve Plan
-                                                            </button>
-                                                            <button
-                                                                onClick={() => onSubmitCommand?.({ approved: false })}
-                                                                className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold py-2 rounded-lg transition-all uppercase tracking-widest"
-                                                            >
-                                                                Reject
-                                                            </button>
-                                                        </div>
-                                                    </div>
+                                            {/* Dynamic Interrupt Forms (SDUI) */}
+                                            {msg.isInteractive && msg.data?.schema && (
+                                                <div className="mt-6">
+                                                    <DynamicInterruptForm
+                                                        schema={msg.data.schema}
+                                                        uiSchema={msg.data.ui_schema}
+                                                        title={msg.data.title}
+                                                        description={msg.data.description}
+                                                        onSubmit={(data) => onSubmitCommand?.(data)}
+                                                    />
                                                 </div>
                                             )}
 
@@ -510,25 +420,30 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                         <FundamentalAnalysisOutput
                             reports={agentReports}
                             resolvedTicker={resolvedTicker}
+                            status={agent.status}
                         />
                     ) : agent.id === 'financial_news_research' ? (
                         <NewsResearchOutputPanel
                             output={agentOutput as NewsOutputType | null}
                             resolvedTicker={resolvedTicker}
+                            status={agent.status}
                         />
                     ) : agent.id === 'debate' ? (
                         <DebateOutput
                             output={agentOutput}
                             resolvedTicker={resolvedTicker}
+                            status={agent.status}
                         />
                     ) : agent.id === 'technical_analysis' ? (
                         <TechnicalAnalysisOutput
                             output={agentOutput as TechnicalSignalOutput | null}
+                            status={agent.status}
                         />
                     ) : (
                         <GenericAgentOutput
                             agentName={agent.name}
                             output={agentOutput}
+                            status={agent.status}
                         />
                     )}
                 </div>

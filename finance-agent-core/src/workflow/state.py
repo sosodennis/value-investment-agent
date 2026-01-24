@@ -58,7 +58,7 @@ def merge_intent_extraction_context(
         new_data = new
 
     for k, v in new_data.items():
-        if v is not None:
+        if v is not None and hasattr(current, k):
             setattr(current, k, v)
 
     return current
@@ -102,7 +102,7 @@ def merge_debate_context(
     for k, v in new_data.items():
         if k == "history":
             continue
-        if v is not None:
+        if v is not None and hasattr(current, k):
             setattr(current, k, v)
 
     return current
@@ -130,7 +130,7 @@ def merge_fundamental_context(
         new_data = new
 
     for k, v in new_data.items():
-        if v is not None:
+        if v is not None and hasattr(current, k):
             setattr(current, k, v)
 
     return current
@@ -154,7 +154,7 @@ def merge_financial_news_context(
         new_data = new
 
     for k, v in new_data.items():
-        if v is not None:
+        if v is not None and hasattr(current, k):
             setattr(current, k, v)
 
     return current
@@ -178,7 +178,7 @@ def merge_technical_analysis_context(
         new_data = new
 
     for k, v in new_data.items():
-        if v is not None:
+        if v is not None and hasattr(current, k):
             setattr(current, k, v)
 
     return current
@@ -225,4 +225,5 @@ class AgentState(BaseModel):
         default_factory=dict,
         description="Status of each node: idle, running, done, error",
     )
+
     current_node: Annotated[str | None, last_value] = None

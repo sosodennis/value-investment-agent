@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import { AgentStatus } from '../../types/agents';
 import {
     ResponsiveContainer,
     AreaChart,
@@ -30,6 +31,7 @@ import { TechnicalSignalOutput } from '../../types/technical';
 
 interface TechnicalAnalysisOutputProps {
     output: TechnicalSignalOutput | null;
+    status: AgentStatus;
 }
 
 type Timeframe = '1W' | '2W' | '1M' | '3M' | '1Y' | 'ALL';
@@ -163,7 +165,8 @@ const ProbabilityGauge = ({ value }: { value: number }) => {
 // --- 3. Main Component ---
 
 export const TechnicalAnalysisOutput: React.FC<TechnicalAnalysisOutputProps> = ({
-    output
+    output,
+    status
 }) => {
     const [showAdvanced, setShowAdvanced] = useState(false);
     const [isAutoFit, setIsAutoFit] = useState(false);
@@ -229,12 +232,16 @@ export const TechnicalAnalysisOutput: React.FC<TechnicalAnalysisOutputProps> = (
         return chartData.filter(d => d.timestamp >= cutoffTime);
     }, [chartData, timeframe]);
 
-    if (!output) return (
-        <div className="flex flex-col items-center justify-center p-12 text-slate-500">
-            <Activity className="w-12 h-12 mb-4 animate-pulse opacity-50" />
-            <p className="font-bold uppercase tracking-widest text-[10px]">Processing Statistical Framework...</p>
-        </div>
-    );
+    // Wait for completion before showing data
+    if (status !== 'done' || !output || !output.frac_diff_metrics) {
+        return (
+            <div className="flex flex-col items-center justify-center p-12 text-slate-500">
+                <Activity className="w-12 h-12 mb-4 animate-pulse opacity-50" />
+                <p className="font-bold uppercase tracking-widest text-[10px]">Processing Statistical Framework...</p>
+                <p className="text-[10px] text-slate-600 mt-2">Status: {status}</p>
+            </div>
+        );
+    }
 
     const { frac_diff_metrics, signal_state, llm_interpretation, semantic_tags } = output;
     const strength = getSignalStrengthLabel(frac_diff_metrics.optimal_d, frac_diff_metrics.adf_pvalue);

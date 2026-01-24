@@ -4,16 +4,21 @@ import { NewsResearchCard } from '../NewsResearchCard';
 import { AINewsSummary } from '../AINewsSummary';
 import { NewsResearchOutput as NewsResearchOutputType } from '../../types/news';
 
+import { AgentStatus } from '../../types/agents';
+
 interface NewsResearchOutputProps {
     output: NewsResearchOutputType | null;
     resolvedTicker: string | null | undefined;
+    status: AgentStatus;
 }
 
 const NewsResearchOutputComponent: React.FC<NewsResearchOutputProps> = ({
     output,
-    resolvedTicker
+    resolvedTicker,
+    status
 }) => {
-    if (!output) {
+    // Wait for completion before showing data
+    if (status !== 'done' || !output || !output.news_items || output.news_items.length === 0) {
         return (
             <div className="flex-1 flex flex-col items-center justify-center p-12 text-center h-full">
                 <TrendingUp size={48} className="text-slate-900 mb-4" />
@@ -21,6 +26,7 @@ const NewsResearchOutputComponent: React.FC<NewsResearchOutputProps> = ({
                 <p className="text-slate-700 text-[10px] mt-2 max-w-[240px]">
                     Our agents are scanning global financial news for {resolvedTicker || 'the target company'}. Results will appear here shortly.
                 </p>
+                <p className="text-[10px] text-slate-500 mt-2">Status: {status}</p>
             </div>
         );
     }

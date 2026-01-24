@@ -9,36 +9,95 @@ single source of truth for agent metadata in the backend.
 AGENT_CONFIGS = [
     {
         "id": "intent_extraction",
+        "name": "Intent Planner",
         "nodes": [
+            "intent_extraction",
+            "intent_agent",
+            "prepare_intent",
+            "process_intent",
+        ],
+        "hide_token_streaming": [
             "extraction",
             "searching",
             "deciding",
             "clarifying",
-            "intent_extraction",
+            "prepare_intent",
+            "process_intent",
         ],
-        "hide_token_streaming": ["extraction", "searching", "deciding", "clarifying"],
     },
     {
         "id": "fundamental_analysis",
-        "nodes": ["financial_health", "model_selection", "fundamental_analysis"],
-        "hide_token_streaming": [],
+        "name": "Fundamental Analyst",
+        "nodes": [
+            "fundamental_analysis",
+            "fundamental_agent",
+            "prepare_fundamental",
+            "process_fundamental",
+            "financial_health",  # Subgraph Node
+            "model_selection",  # Subgraph Node
+        ],
+        "hide_token_streaming": ["prepare_fundamental", "process_fundamental"],
+    },
+    {
+        "id": "technical_analysis",
+        "name": "Technical Analyst",
+        "nodes": [
+            "technical_analysis",
+            "technical_agent",
+            "prepare_technical",
+            "process_technical",
+            "data_fetch",  # Subgraph Node
+            "fracdiff_compute",  # Subgraph Node
+            "semantic_translate",  # Subgraph Node
+        ],
+        "hide_token_streaming": [
+            "data_fetch",
+            "fracdiff_compute",
+            "prepare_technical",
+            "process_technical",
+        ],
     },
     {
         "id": "financial_news_research",
+        "name": "Financial News",
         "nodes": [
-            "search_node",
-            "selector_node",
-            "fetch_node",
-            "analyst_node",
-            "aggregator_node",
             "financial_news_research",
+            "news_agent",
+            "prepare_news",
+            "process_news",
+            "search_node",  # Subgraph Node
+            "selector_node",  # Subgraph Node
+            "fetch_node",  # Subgraph Node
+            "analyst_node",  # Subgraph Node
+            "aggregator_node",  # Subgraph Node
         ],
-        "hide_token_streaming": ["selector_node", "analyst_node"],
+        "hide_token_streaming": [
+            "selector_node",
+            "analyst_node",
+            "prepare_news",
+            "process_news",
+        ],
     },
     {
         "id": "debate",
-        "nodes": ["debate_aggregator", "bull", "bear", "moderator", "debate"],
-        "hide_token_streaming": [],
+        "name": "Debate Arena",
+        "nodes": [
+            "debate",
+            "debate_agent",
+            "prepare_debate",
+            "process_debate",
+            "debate_aggregator",  # Subgraph Node
+            "r1_bull",  # Subgraph Node
+            "r1_bear",  # Subgraph Node
+            "r1_moderator",  # Subgraph Node
+            "r2_bull",  # Subgraph Node
+            "r2_bear",  # Subgraph Node
+            "r2_moderator",  # Subgraph Node
+            "r3_bull",  # Subgraph Node
+            "r3_bear",  # Subgraph Node
+            "verdict",  # Subgraph Node
+        ],
+        "hide_token_streaming": ["prepare_debate", "process_debate"],
     },
     {
         "id": "executor",
@@ -52,6 +111,7 @@ AGENT_CONFIGS = [
     },
     {
         "id": "approval",
+        "name": "Chief Auditor",
         "nodes": ["approval"],
         "hide_token_streaming": [],
     },
