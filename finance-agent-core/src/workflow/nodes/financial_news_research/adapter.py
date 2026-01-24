@@ -22,8 +22,13 @@ def input_adapter(state: AgentState) -> dict[str, Any]:
 def output_adapter(sub_output: dict[str, Any]) -> dict[str, Any]:
     """Maps FinancialNewsState output back to parent state updates."""
     logger.info("--- [News Adapter] Mapping subgraph output back to parent state ---")
+
+    # Explicitly pull only recognized fields to prevent any implicit state leakage
+    financial_news = sub_output.get("financial_news")
+    messages = sub_output.get("messages", [])
+
     return {
-        "financial_news": sub_output.get("financial_news"),
-        "messages": sub_output.get("messages", []),
+        "financial_news": financial_news,
+        "messages": messages,
         "node_statuses": {"financial_news_research": "done"},
     }

@@ -149,8 +149,13 @@ async def process_fundamental_node(state: Any) -> dict:
 
 async def prepare_news_node(state: AgentState) -> dict:
     """Prepare input for financial news research subgraph."""
-    logger.info("--- [News Agent] Preparing News Research ---")
+    logger.info(
+        f"--- [News Agent] Preparing News Research for ticker={state.ticker} ---"
+    )
     data = news_input_adapter(state)
+    logger.info(
+        "--- [News Agent] Setting node_statuses['financial_news_research'] = 'running' ---"
+    )
     data["node_statuses"] = {"financial_news_research": "running"}
     return data
 
@@ -159,7 +164,11 @@ async def process_news_node(state: Any) -> dict:
     """Process output from financial news research subgraph."""
     logger.info("--- [News Agent] Processing News Research output ---")
     data = state.model_dump() if hasattr(state, "model_dump") else state
-    return news_output_adapter(data)
+    result = news_output_adapter(data)
+    logger.info(
+        f"--- [News Agent] Output mapping complete. Status will be set to: {result.get('node_statuses')} ---"
+    )
+    return result
 
 
 async def prepare_intent_node(state: AgentState) -> dict:
