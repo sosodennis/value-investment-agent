@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 import {
     ResponsiveContainer,
     AreaChart,
@@ -168,22 +169,13 @@ export const TechnicalAnalysisOutput: React.FC<TechnicalAnalysisOutputProps> = (
     const [isAutoFit, setIsAutoFit] = useState(false);
     const [timeframe, setTimeframe] = useState<Timeframe>('ALL');
 
-    if (!output) return (
-        <div className="flex flex-col items-center justify-center p-12 text-slate-500">
-            <Activity className="w-12 h-12 mb-4 animate-pulse opacity-50" />
-            <p className="font-bold uppercase tracking-widest text-[10px]">Processing Statistical Framework...</p>
-        </div>
-    );
-
-    const { frac_diff_metrics, signal_state, llm_interpretation, raw_data, semantic_tags } = output;
-    const strength = getSignalStrengthLabel(frac_diff_metrics.optimal_d, frac_diff_metrics.adf_pvalue);
-    const StrengthIcon = strength.icon;
-
     // Data Processing & Outlier Filtering
     // [CRITICAL FIX] Use z_score_series instead of fracdiff_series for chart
     // This ensures the data mathematically aligns with +/- 2.0 thresholds
-    const chartData = raw_data?.z_score_series
-        ? Object.entries(raw_data.z_score_series)
+    const chartData = React.useMemo(() => {
+        if (!output?.raw_data?.z_score_series) return [];
+
+        return Object.entries(output.raw_data.z_score_series)
             .filter(([_, value]) => {
                 // [CRITICAL FIX] 2. 過濾掉 "暖身期" 的 0.0 數據
                 // FracDiff 算法前 100+ 天因為數據不足會填 0，畫出來會像一條死魚，必須藏起來
@@ -203,8 +195,8 @@ export const TechnicalAnalysisOutput: React.FC<TechnicalAnalysisOutputProps> = (
                     timestamp: new Date(date).getTime()
                 };
             })
-            .sort((a, b) => a.timestamp - b.timestamp)
-        : [];
+            .sort((a, b) => a.timestamp - b.timestamp);
+    }, [output]);
 
     // Filter chart data by timeframe
     const filteredChartData = React.useMemo(() => {
@@ -236,6 +228,17 @@ export const TechnicalAnalysisOutput: React.FC<TechnicalAnalysisOutputProps> = (
 
         return chartData.filter(d => d.timestamp >= cutoffTime);
     }, [chartData, timeframe]);
+
+    if (!output) return (
+        <div className="flex flex-col items-center justify-center p-12 text-slate-500">
+            <Activity className="w-12 h-12 mb-4 animate-pulse opacity-50" />
+            <p className="font-bold uppercase tracking-widest text-[10px]">Processing Statistical Framework...</p>
+        </div>
+    );
+
+    const { frac_diff_metrics, signal_state, llm_interpretation, semantic_tags } = output;
+    const strength = getSignalStrengthLabel(frac_diff_metrics.optimal_d, frac_diff_metrics.adf_pvalue);
+    const StrengthIcon = strength.icon;
 
     // [CRITICAL FIX] Pre-calculate Y-Axis Domain
     // 我們在這裡直接算出數值，並排除無效數據 (NaN/null)，確保穩定性
@@ -288,9 +291,20 @@ export const TechnicalAnalysisOutput: React.FC<TechnicalAnalysisOutputProps> = (
                     <BrainCircuit size={18} className="text-indigo-400" />
                     <span className="text-xs font-black text-indigo-200 uppercase tracking-[0.2em]">Analyst Perspective</span>
                 </div>
-                <p className="text-base text-slate-200 leading-relaxed font-light italic">
-                    {llm_interpretation || "Synthesizing market dynamics into actionable intelligence..."}
-                </p>
+                <div className="text-base text-slate-200 leading-relaxed font-light italic">
+                    {llm_interpretation ? (
+                        <ReactMarkdown
+                            components={{
+                                strong: ({ node, ...props }) => <span className="font-bold text-indigo-300 not-italic" {...props} />,
+                                p: ({ node, ...props }) => <p className="mb-2 last:mb-0" {...props} />
+                            }}
+                        >
+                            {llm_interpretation}
+                        </ReactMarkdown>
+                    ) : (
+                        "Synthesizing market dynamics into actionable intelligence..."
+                    )}
+                </div>
                 <div className="flex flex-wrap gap-2 mt-6">
                     {semantic_tags.map(tag => (
                         <span key={tag} className="px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-[10px] font-bold text-indigo-300 uppercase tracking-wider">
