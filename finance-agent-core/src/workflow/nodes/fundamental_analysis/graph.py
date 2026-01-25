@@ -415,6 +415,9 @@ def model_selection_node(state: FundamentalAnalysisState) -> Command:
             "internal_progress": {
                 "model_selection": "done",
             },
+            # [BSP Fix] Emit status immediately to bypass LangGraph's sync barrier
+            # allowing the UI to update without waiting for parallel branches (TA/News)
+            "node_statuses": {"fundamental_analysis": "done"},
         },
         goto=END,
     )

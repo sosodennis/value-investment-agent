@@ -500,6 +500,9 @@ def aggregator_node(state: FinancialNewsState) -> Command:
             "financial_news": {"output": final_output.model_dump(mode="json")},
             "current_node": "aggregator_node",
             "internal_progress": {"aggregator_node": "done"},
+            # [BSP Fix] Emit status immediately to bypass LangGraph's sync barrier
+            # allowing the UI to update without waiting for parallel branches (FA/TA)
+            "node_statuses": {"financial_news_research": "done"},
             "messages": [
                 AIMessage(
                     content=f"### News Research: {ticker}\n\n**Overall Sentiment:** {overall_sentiment.value.upper()} ({final_output.sentiment_score})\n\n**Analysis Summaries:**\n{summary_text}\n\n**Themes:** {', '.join(all_themes) or 'N/A'}",

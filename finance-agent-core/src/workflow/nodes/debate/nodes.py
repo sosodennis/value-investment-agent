@@ -417,6 +417,8 @@ async def verdict_node(state: DebateState) -> dict[str, Any]:
         return {
             "debate": {"conclusion": conclusion_data},
             "internal_progress": {"verdict": "done"},
+            # [BSP Fix] Emit status immediately to bypass LangGraph's sync barrier
+            "node_statuses": {"debate": "done"},
         }
     except Exception as e:
         logger.error(f"❌ Error in Verdict Node: {str(e)}")

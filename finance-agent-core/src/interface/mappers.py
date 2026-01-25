@@ -46,8 +46,14 @@ class NodeOutputMapper:
         ta_context = output.get("technical_analysis", {})
         if isinstance(ta_context, dict):
             ta_output = ta_context.get("output")
-            if isinstance(ta_output, dict):
-                return NodeOutputMapper._merge_standard_fields(ta_output, output)
+            # If output exists, use it. Otherwise use empty dict to allow merging standard fields
+            target_payload = ta_output if isinstance(ta_output, dict) else {}
+
+            # Only return if we have domain data OR standard fields
+            if target_payload or any(
+                k in output for k in ["node_statuses", "messages"]
+            ):
+                return NodeOutputMapper._merge_standard_fields(target_payload, output)
 
         return None
 
@@ -65,8 +71,14 @@ class NodeOutputMapper:
         fundamental_context = output.get("fundamental", {})
         if isinstance(fundamental_context, dict):
             analysis_output = fundamental_context.get("analysis_output")
-            if isinstance(analysis_output, dict):
-                return NodeOutputMapper._merge_standard_fields(analysis_output, output)
+            target_payload = (
+                analysis_output if isinstance(analysis_output, dict) else {}
+            )
+
+            if target_payload or any(
+                k in output for k in ["node_statuses", "messages"]
+            ):
+                return NodeOutputMapper._merge_standard_fields(target_payload, output)
 
         return None
 
@@ -84,8 +96,12 @@ class NodeOutputMapper:
         news_context = output.get("financial_news", {})
         if isinstance(news_context, dict):
             news_output = news_context.get("output")
-            if isinstance(news_output, dict):
-                return NodeOutputMapper._merge_standard_fields(news_output, output)
+            target_payload = news_output if isinstance(news_output, dict) else {}
+
+            if target_payload or any(
+                k in output for k in ["node_statuses", "messages"]
+            ):
+                return NodeOutputMapper._merge_standard_fields(target_payload, output)
 
         return None
 

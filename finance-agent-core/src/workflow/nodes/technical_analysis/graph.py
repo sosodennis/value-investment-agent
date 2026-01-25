@@ -379,6 +379,9 @@ async def semantic_translate_node(state: TechnicalAnalysisState) -> Command:
             "technical_analysis": {"output": technical_signal.model_dump()},
             "current_node": "semantic_translate",
             "internal_progress": {"semantic_translate": "done"},
+            # [BSP Fix] Emit status immediately to bypass LangGraph's sync barrier
+            # allowing the UI to update without waiting for parallel branches (FA/News)
+            "node_statuses": {"technical_analysis": "done"},
             "messages": [message],
         },
         goto=END,
