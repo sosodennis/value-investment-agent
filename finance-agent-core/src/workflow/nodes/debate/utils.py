@@ -309,12 +309,34 @@ def compress_news_data(news_output: dict) -> list[dict]:
     """
     Compresses news research output by removing full content and technical metadata.
     """
-    if not news_output or "news_items" not in news_output:
+    logger.info(f"🔍 [compress_news_data] Input type: {type(news_output)}")
+    logger.info(f"🔍 [compress_news_data] Input truthy: {bool(news_output)}")
+
+    if not news_output:
+        logger.warning("⚠️ [compress_news_data] Received empty/None input, returning []")
         return []
 
+    logger.info(
+        f"🔍 [compress_news_data] Input keys: {news_output.keys() if isinstance(news_output, dict) else 'N/A'}"
+    )
+
+    if "news_items" not in news_output:
+        logger.warning(
+            f"⚠️ [compress_news_data] Missing 'news_items' key. Available keys: {list(news_output.keys())}"
+        )
+        return []
+
+    news_items = news_output.get("news_items", [])
+    logger.info(
+        f"🔍 [compress_news_data] Found {len(news_items)} news items to compress"
+    )
+
     compressed = []
-    for item in news_output.get("news_items", []):
+    for idx, item in enumerate(news_items):
         analysis = item.get("analysis") or {}
+        logger.info(
+            f"🔍 [compress_news_data] Item {idx}: title={item.get('title', 'N/A')[:50]}, has_analysis={bool(analysis)}"
+        )
 
         # Focus on the summary and key facts
         compressed_item = {
@@ -328,6 +350,9 @@ def compress_news_data(news_output: dict) -> list[dict]:
         }
         compressed.append(compressed_item)
 
+    logger.info(
+        f"✅ [compress_news_data] Successfully compressed {len(compressed)} news items"
+    )
     return compressed
 
 
@@ -336,8 +361,17 @@ def compress_ta_data(ta_output: dict | None) -> dict | None:
     Compresses technical analysis output for debate context.
     Focuses on semantic tags and key metrics, removes raw data.
     """
+    logger.info(f"🔍 [compress_ta_data] Input type: {type(ta_output)}")
+    logger.info(f"🔍 [compress_ta_data] Input truthy: {bool(ta_output)}")
+
     if not ta_output:
+        logger.warning("⚠️ [compress_ta_data] Received empty/None input, returning None")
         return None
+
+    logger.info(
+        f"🔍 [compress_ta_data] Input keys: {ta_output.keys() if isinstance(ta_output, dict) else 'N/A'}"
+    )
+    logger.info(f"🔍 [compress_ta_data] Input preview: {str(ta_output)[:500]}...")
 
     # Extract key information
     compressed = {
@@ -361,4 +395,8 @@ def compress_ta_data(ta_output: dict | None) -> dict | None:
         "interpretation": ta_output.get("llm_interpretation"),
     }
 
+    logger.info(
+        f"✅ [compress_ta_data] Successfully compressed TA data for ticker: {compressed.get('ticker')}"
+    )
+    logger.info(f"🔍 [compress_ta_data] Compressed keys: {compressed.keys()}")
     return compressed

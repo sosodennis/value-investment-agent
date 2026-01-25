@@ -20,11 +20,11 @@ def calculation_node(state: AgentState) -> Command:
     print("--- Calculator: Running Deterministic Engine ---")
 
     try:
-        if not state.extraction_output:
+        if not state.fundamental_analysis.extraction_output:
             raise ValueError("No extraction output found in state")
 
-        params_dict = state.extraction_output.params
-        model_type = state.model_type
+        params_dict = state.fundamental_analysis.extraction_output.params
+        model_type = state.fundamental_analysis.model_type
         skill = SkillRegistry.get_skill(model_type)
 
         schema = skill["schema"]

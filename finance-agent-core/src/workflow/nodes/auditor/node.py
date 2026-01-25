@@ -25,12 +25,12 @@ def auditor_node(state: AgentState) -> Command:
 
     # Access Pydantic fields
     try:
-        if not state.extraction_output:
+        if not state.fundamental_analysis.extraction_output:
             logger.error("ERROR: Auditor found no extraction_output in state")
             raise ValueError("No extraction output found in state")
 
-        params_dict = state.extraction_output.params
-        model_type = state.model_type
+        params_dict = state.fundamental_analysis.extraction_output.params
+        model_type = state.fundamental_analysis.model_type
         logger.debug(f"DEBUG: Check params for model={model_type}: {params_dict}")
 
         skill = SkillRegistry.get_skill(model_type)
@@ -59,9 +59,11 @@ def auditor_node(state: AgentState) -> Command:
                         additional_kwargs={"agent_id": "auditor"},
                     )
                 ],
-                "audit_output": AuditOutput(
-                    passed=result.passed, messages=result.messages
-                ),
+                "fundamental_analysis": {
+                    "audit_output": AuditOutput(
+                        passed=result.passed, messages=result.messages
+                    )
+                },
                 "node_statuses": {"auditor": "done", "approval": "running"},
             },
             goto="approval",

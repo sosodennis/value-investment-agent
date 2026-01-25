@@ -113,7 +113,7 @@ def find_optimal_d(
     """
     Find minimum d value that achieves ADF stationarity using LOG-PRICES and FFD.
     """
-    logger.info("--- TA: Searching for optimal d value (FFD) ---")
+    # logger.info("--- TA: Searching for optimal d value (FFD) ---")
 
     # 必須轉換為 Log Prices 以消除異方差性
     # [Defensive] Filter out zero or negative prices before log transform

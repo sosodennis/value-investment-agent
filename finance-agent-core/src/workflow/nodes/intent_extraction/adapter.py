@@ -23,14 +23,6 @@ def output_adapter(sub_output: dict[str, Any]) -> dict[str, Any]:
     logger.info("--- [Intent Adapter] Mapping subgraph output back to parent state ---")
 
     intent_ctx = sub_output.get("intent_extraction", {})
-    artifact = sub_output.get("artifact")
-
-    # [Compatibility] Copy flat artifact back to nested context
-    if artifact:
-        if isinstance(intent_ctx, dict):
-            intent_ctx["artifact"] = artifact
-        else:
-            intent_ctx.artifact = artifact
 
     return {
         "intent_extraction": intent_ctx,

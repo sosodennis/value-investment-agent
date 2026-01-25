@@ -360,10 +360,12 @@ async def semantic_translate_node(state: TechnicalAnalysisState) -> Command:
 
     return Command(
         update={
-            "artifact": AgentOutputArtifact(
-                summary=f"Technical Analysis: {technical_signal.signal_state.direction.upper()} (p={technical_signal.frac_diff_metrics.optimal_d:.2f})",
-                data=technical_signal.model_dump(),
-            ),
+            "technical_analysis": {
+                "artifact": AgentOutputArtifact(
+                    summary=f"Technical Analysis: {technical_signal.signal_state.direction.upper()} (p={technical_signal.frac_diff_metrics.optimal_d:.2f})",
+                    data=technical_signal.model_dump(),
+                ),
+            },
             "current_node": "semantic_translate",
             "internal_progress": {"semantic_translate": "done"},
             # [BSP Fix] Emit status immediately to bypass LangGraph's sync barrier

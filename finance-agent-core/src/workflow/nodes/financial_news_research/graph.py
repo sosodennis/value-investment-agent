@@ -484,10 +484,12 @@ def aggregator_node(state: FinancialNewsState) -> Command:
 
     return Command(
         update={
-            "artifact": AgentOutputArtifact(
-                summary=f"Overall Sentiment: {overall_sentiment.value.upper()} ({final_output.sentiment_score}) from {len(news_items)} articles. Themes: {', '.join(all_themes)}",
-                data=final_output.model_dump(mode="json"),
-            ),
+            "financial_news_research": {
+                "artifact": AgentOutputArtifact(
+                    summary=f"Overall Sentiment: {overall_sentiment.value.upper()} ({final_output.sentiment_score}) from {len(news_items)} articles. Themes: {', '.join(all_themes)}",
+                    data=final_output.model_dump(mode="json"),
+                ),
+            },
             "current_node": "aggregator_node",
             "internal_progress": {"aggregator_node": "done"},
             # [BSP Fix] Emit status immediately to bypass LangGraph's sync barrier

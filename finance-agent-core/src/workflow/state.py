@@ -55,10 +55,13 @@ def create_pydantic_reducer(model_class: type[T]):
 
         if history_update is not None and hasattr(current, "history"):
             # Use LangGraph's add_messages to handle message appending/updates correctly
-            current.history = add_messages(current.history, history_update)
+            # CRITICAL: Write merged result BACK to new_data to prevent model_copy from overwriting
+            merged_history = add_messages(current.history, history_update)
+            new_data["history"] = merged_history
 
         # Pydantic copy & update
         # Using model_copy with update is robust
+        # Now new_data["history"] contains the fully merged history
         updated = current.model_copy(update=new_data)
         return updated
 
@@ -120,6 +123,14 @@ class FundamentalAnalysisContext(BaseModel):
     status: str | None = None
     model_type: str | None = Field(
         None, description="The skill/model to use for valuation (e.g. saas, bank)"
+    )
+    # TODO: Refactor executor, auditor, and calculator into their own sub-agent with dedicated context
+    # These fields should move to a new ExecutorContext/AuditorContext in the future
+    extraction_output: Any | None = Field(
+        None, description="Extracted parameters from executor node"
+    )
+    audit_output: Any | None = Field(
+        None, description="Audit results from auditor node"
     )
     artifact: AgentOutputArtifact | None = None
 

@@ -23,21 +23,22 @@ def executor_node(state: AgentState) -> Command:
     """
     Extracts valuation parameters for the selected model type.
     """
-    logger.info(f"--- Executor: Extracting parameters for {state.model_type} ---")
+    model_type = state.fundamental_analysis.model_type
+    logger.info(f"--- Executor: Extracting parameters for {model_type} ---")
 
-    skill = SkillRegistry.get_skill(state.model_type)
+    skill = SkillRegistry.get_skill(model_type)
     if not skill:
-        raise ValueError(f"Unknown model type: {state.model_type}")
+        raise ValueError(f"Unknown model type: {model_type}")
 
     schema = skill["schema"]
 
     # MOCK DATA GENERATION
-    if state.model_type == "saas":
+    if model_type == "saas":
         mock_data = generate_mock_saas_data(state.ticker)
-    elif state.model_type == "bank":
+    elif model_type == "bank":
         mock_data = generate_mock_bank_data(state.ticker)
     else:
-        raise ValueError(f"Unsupported model type: {state.model_type}")
+        raise ValueError(f"Unsupported model type: {model_type}")
 
     # Validate structure via Pydantic
     try:
@@ -48,11 +49,11 @@ def executor_node(state: AgentState) -> Command:
             update={
                 "messages": [
                     AIMessage(
-                        content=f"Successfully extracted parameters for {state.model_type} analysis.",
+                        content=f"Successfully extracted parameters for {model_type} analysis.",
                         additional_kwargs={"agent_id": "executor"},
                     )
                 ],
-                "extraction_output": output,
+                "fundamental_analysis": {"extraction_output": output},
                 "node_statuses": {"executor": "done", "auditor": "running"},
             },
             goto="auditor",
@@ -63,7 +64,7 @@ def executor_node(state: AgentState) -> Command:
             update={
                 "messages": [
                     AIMessage(
-                        content=f"Extraction failed for {state.model_type}: {e}",
+                        content=f"Extraction failed for {model_type}: {e}",
                         additional_kwargs={"agent_id": "executor"},
                     )
                 ],

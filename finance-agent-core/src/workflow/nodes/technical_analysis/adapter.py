@@ -23,15 +23,11 @@ def output_adapter(sub_output: dict[str, Any]) -> dict[str, Any]:
     """Maps TechnicalAnalysisState output back to parent state updates."""
     logger.info("--- [TA Adapter] Mapping subgraph output back to parent state ---")
 
+    # Extract the technical_analysis context from subgraph output
     ta_ctx = sub_output.get("technical_analysis", {})
-    artifact = sub_output.get("artifact")
 
-    # [Compatibility] Copy flat artifact back to nested context
-    if artifact:
-        if isinstance(ta_ctx, dict):
-            ta_ctx["artifact"] = artifact
-        else:
-            ta_ctx.artifact = artifact
+    # The artifact should be in the technical_analysis context
+    # but we don't need to extract it here anymore as it's passed via ta_ctx dict/model
 
     return {
         "technical_analysis": ta_ctx,

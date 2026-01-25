@@ -8,8 +8,6 @@ from typing import Annotated
 from langgraph.graph import add_messages
 from pydantic import BaseModel, Field
 
-from src.interface.schemas import AgentOutputArtifact
-
 from ...state import (
     FinancialNewsContext,
     IntentExtractionContext,
@@ -37,7 +35,6 @@ class FinancialNewsOutput(BaseModel):
     """
 
     financial_news_research: FinancialNewsContext
-    artifact: AgentOutputArtifact | None = None
     messages: list = Field(default_factory=list)
 
 
@@ -57,8 +54,6 @@ class FinancialNewsState(BaseModel):
         FinancialNewsContext, create_pydantic_reducer(FinancialNewsContext)
     ] = Field(default_factory=FinancialNewsContext)
 
-    # --- Output (Direct in State layer for Flat Pattern) ---
-    artifact: AgentOutputArtifact | None = None
     messages: Annotated[list, add_messages] = Field(default_factory=list)
 
     # --- Intermediate State (Multi-stage pipeline) ---

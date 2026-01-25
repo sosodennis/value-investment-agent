@@ -43,14 +43,6 @@ def output_adapter(sub_output: dict[str, Any]) -> dict[str, Any]:
     logger.info("--- [FA Adapter] Mapping subgraph output back to parent state ---")
 
     fundamental_ctx = sub_output.get("fundamental_analysis", {})
-    artifact = sub_output.get("artifact")
-
-    # [Compatibility] Copy flat artifact back to nested context
-    if artifact:
-        if isinstance(fundamental_ctx, dict):
-            fundamental_ctx["artifact"] = artifact
-        else:
-            fundamental_ctx.artifact = artifact
 
     # Map model_type from Context field if available
     raw_model = sub_output.get("model_type")

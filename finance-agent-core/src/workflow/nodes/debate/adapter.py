@@ -28,21 +28,23 @@ def output_adapter(sub_output: dict[str, Any]) -> dict[str, Any]:
     logger.info("--- [Debate Adapter] Mapping subgraph output back to parent state ---")
 
     debate_ctx = sub_output.get("debate", {})
-    artifact = sub_output.get("artifact")
     messages = sub_output.get("messages", [])
     model_type = sub_output.get("model_type")
 
-    # [Compatibility] Copy flat artifact back to nested context
-    if artifact:
-        if isinstance(debate_ctx, dict):
-            debate_ctx["artifact"] = artifact
-        else:
-            debate_ctx.artifact = artifact
-
-        # Handle model_type update if conclusion reached
-        data = artifact.data if hasattr(artifact, "data") else artifact.get("data")
+    # Extract model_type from debate conclusion if available
+    if isinstance(debate_ctx, dict) and debate_ctx.get("artifact"):
+        artifact = debate_ctx["artifact"]
+        data = (
+            artifact.get("data")
+            if isinstance(artifact, dict)
+            else getattr(artifact, "data", None)
+        )
         if data:
-            raw_model = data.get("model_type")
+            raw_model = (
+                data.get("model_type")
+                if isinstance(data, dict)
+                else getattr(data, "model_type", None)
+            )
             if raw_model:
                 model_type = map_model_to_skill(raw_model)
 
@@ -54,7 +56,7 @@ def output_adapter(sub_output: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "debate": debate_ctx,
-        "fundamental_analysis": fundamental_update,  # Update the shared context
+        "fundamental_analysis": fundamental_update,
         "messages": messages,
         "node_statuses": {"debate": "done"},
     }

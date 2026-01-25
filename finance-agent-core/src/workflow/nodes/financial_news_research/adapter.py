@@ -23,17 +23,12 @@ def output_adapter(sub_output: dict[str, Any]) -> dict[str, Any]:
     """Maps FinancialNewsState output back to parent state updates."""
     logger.info("--- [News Adapter] Mapping subgraph output back to parent state ---")
 
+    # Extract the financial_news_research context from subgraph output
     financial_news = sub_output.get("financial_news_research", {})
-    artifact = sub_output.get("artifact")
     messages = sub_output.get("messages", [])
 
-    # [Compatibility] Copy flat artifact back to nested context
-    if artifact:
-        if isinstance(financial_news, dict):
-            financial_news["artifact"] = artifact
-        else:
-            # If it's a Pydantic model (though usually dict in sub_output)
-            financial_news.artifact = artifact
+    # The artifact should be in the financial_news_research context
+    # but we don't need to extract it here anymore as it's passed via financial_news dict/model
 
     return {
         "financial_news_research": financial_news,

@@ -8,8 +8,6 @@ from typing import Annotated, Any
 from langgraph.graph import add_messages
 from pydantic import BaseModel, Field
 
-from src.interface.schemas import AgentOutputArtifact
-
 from ...state import (
     IntentExtractionContext,
     TechnicalAnalysisContext,
@@ -39,7 +37,6 @@ class TechnicalAnalysisOutput(BaseModel):
     """
 
     technical_analysis: TechnicalAnalysisContext
-    artifact: AgentOutputArtifact | None = None
     messages: list = Field(default_factory=list)
 
 
@@ -58,9 +55,6 @@ class TechnicalAnalysisState(BaseModel):
     technical_analysis: Annotated[
         TechnicalAnalysisContext, create_pydantic_reducer(TechnicalAnalysisContext)
     ] = Field(default_factory=TechnicalAnalysisContext)
-
-    # --- Output (Direct in State layer for Flat Pattern) ---
-    artifact: AgentOutputArtifact | None = None
     messages: Annotated[list, add_messages] = Field(default_factory=list)
 
     # --- Intermediate State (Multi-stage pipeline) ---

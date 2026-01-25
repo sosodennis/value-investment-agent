@@ -62,15 +62,15 @@ def approval_node(state: AgentState) -> Command:
 
     audit_passed = False
     audit_messages = []
-    if state.audit_output:
-        audit_passed = state.audit_output.passed
-        audit_messages = state.audit_output.messages
+    if state.fundamental_analysis.audit_output:
+        audit_passed = state.fundamental_analysis.audit_output.passed
+        audit_messages = state.fundamental_analysis.audit_output.messages
 
     # Trigger interrupt. This pauses the graph and returns the user input when resumed.
     interrupt_payload = HumanApprovalRequest(
         details=ApprovalDetails(
             ticker=state.ticker,
-            model=state.model_type,
+            model=state.fundamental_analysis.model_type,
             audit_passed=audit_passed,
             audit_messages=audit_messages,
         )

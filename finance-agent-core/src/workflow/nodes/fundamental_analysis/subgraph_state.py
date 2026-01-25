@@ -8,8 +8,6 @@ from typing import Annotated
 from langgraph.graph import add_messages
 from pydantic import BaseModel, Field
 
-from src.interface.schemas import AgentOutputArtifact
-
 from ...state import (
     FundamentalAnalysisContext,
     IntentExtractionContext,
@@ -38,7 +36,6 @@ class FundamentalAnalysisOutput(BaseModel):
     """
 
     fundamental_analysis: FundamentalAnalysisContext
-    artifact: AgentOutputArtifact | None = None
     messages: list = Field(default_factory=list)
 
 
@@ -58,9 +55,6 @@ class FundamentalAnalysisState(BaseModel):
     fundamental_analysis: Annotated[
         FundamentalAnalysisContext, create_pydantic_reducer(FundamentalAnalysisContext)
     ] = Field(default_factory=FundamentalAnalysisContext)
-
-    # --- Output (Direct in State layer for Flat Pattern) ---
-    artifact: AgentOutputArtifact | None = None
     messages: Annotated[list, add_messages] = Field(default_factory=list)
 
     # --- Private State (Not exposed in FundamentalAnalysisOutput) ---

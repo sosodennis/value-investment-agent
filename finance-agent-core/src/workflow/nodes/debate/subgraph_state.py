@@ -8,8 +8,6 @@ from typing import Annotated
 from langgraph.graph import add_messages
 from pydantic import BaseModel, Field
 
-from src.interface.schemas import AgentOutputArtifact
-
 from ...state import (
     DebateContext,
     FinancialNewsContext,
@@ -50,7 +48,6 @@ class DebateOutput(BaseModel):
 
     debate: DebateContext
     model_type: str | None = None
-    artifact: AgentOutputArtifact | None = None
     messages: list = Field(default_factory=list)
 
 
@@ -80,9 +77,6 @@ class DebateState(BaseModel):
         default_factory=DebateContext
     )
     model_type: Annotated[str | None, last_value] = None
-
-    # --- Output (Direct in State layer for Flat Pattern) ---
-    artifact: AgentOutputArtifact | None = None
     messages: Annotated[list, add_messages] = Field(default_factory=list)
 
     # --- Private State ---

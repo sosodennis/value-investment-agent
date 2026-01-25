@@ -399,20 +399,22 @@ def model_selection_node(state: FundamentalAnalysisState) -> Command:
 
     return Command(
         update={
-            "ticker": resolved_ticker,
-            "model_type": model_type,
-            "artifact": AgentOutputArtifact(
-                summary=f"Selected {model.value} model for {profile.name}",
-                data={
-                    "ticker": resolved_ticker,
-                    "model_type": model.value,
-                    "company_name": profile.name,
-                    "sector": profile.sector,
-                    "industry": profile.industry,
-                    "reasoning": reasoning,
-                    "financial_reports": state.fundamental_analysis.financial_reports,
-                },
-            ),
+            "fundamental_analysis": {
+                "model_type": model_type,
+                "artifact": AgentOutputArtifact(
+                    summary=f"Selected {model.value} model for {profile.name}",
+                    data={
+                        "ticker": resolved_ticker,
+                        "model_type": model.value,
+                        "company_name": profile.name,
+                        "sector": profile.sector,
+                        "industry": profile.industry,
+                        "reasoning": reasoning,
+                        "financial_reports": state.fundamental_analysis.financial_reports,
+                    },
+                ),
+            },
+            "ticker": resolved_ticker,  # Keep ticker at top level for global state
             "current_node": "model_selection",
             "internal_progress": {
                 "model_selection": "done",

@@ -134,24 +134,26 @@ def _get_last_message_from_role(history: list, role_name: str) -> str:
 async def debate_aggregator_node(state: DebateState) -> dict[str, Any]:
     # Compress data before passing to debate state
     # Now that we've removed the legacy .output fields, we read from the standardized .artifact.data
+
+    # News Data
     news_artifact = state.financial_news_research.artifact
-    news_data = (
-        news_artifact.data
-        if hasattr(news_artifact, "data")
-        else news_artifact.get("data")
-        if news_artifact
-        else {}
-    )
+    news_data = {}
+    if news_artifact:
+        if hasattr(news_artifact, "data"):
+            news_data = news_artifact.data
+        elif isinstance(news_artifact, dict):
+            news_data = news_artifact.get("data", {})
 
+    # Technical Analysis Data
     ta_artifact = state.technical_analysis.artifact
-    ta_data = (
-        ta_artifact.data
-        if hasattr(ta_artifact, "data")
-        else ta_artifact.get("data")
-        if ta_artifact
-        else {}
-    )
+    ta_data = {}
+    if ta_artifact:
+        if hasattr(ta_artifact, "data"):
+            ta_data = ta_artifact.data
+        elif isinstance(ta_artifact, dict):
+            ta_data = ta_artifact.get("data", {})
 
+    # === Compress Data ===
     clean_financials = compress_financial_data(
         state.fundamental_analysis.financial_reports
     )
