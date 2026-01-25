@@ -2,6 +2,7 @@
 Intent Extraction Subgraph.
 """
 
+from langchain_core.runnables import RunnableLambda
 from langgraph.graph import START, StateGraph
 
 from .nodes import clarification_node, decision_node, extraction_node, searching_node
@@ -20,10 +21,26 @@ def build_intent_extraction_subgraph():
         input=IntentExtractionInput,
         output=IntentExtractionOutput,
     )
-    builder.add_node("extraction", extraction_node)
-    builder.add_node("searching", searching_node)
-    builder.add_node("deciding", decision_node)
-    builder.add_node("clarifying", clarification_node)
+    builder.add_node(
+        "extraction",
+        RunnableLambda(extraction_node).with_config(tags=["hide_stream"]),
+        metadata={"agent_id": "intent_extraction"},
+    )
+    builder.add_node(
+        "searching",
+        RunnableLambda(searching_node).with_config(tags=["hide_stream"]),
+        metadata={"agent_id": "intent_extraction"},
+    )
+    builder.add_node(
+        "deciding",
+        RunnableLambda(decision_node).with_config(tags=["hide_stream"]),
+        metadata={"agent_id": "intent_extraction"},
+    )
+    builder.add_node(
+        "clarifying",
+        RunnableLambda(clarification_node).with_config(tags=["hide_stream"]),
+        metadata={"agent_id": "intent_extraction"},
+    )
     builder.add_edge(START, "extraction")
 
     # 2. Compile

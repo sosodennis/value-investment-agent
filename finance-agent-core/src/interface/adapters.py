@@ -1,15 +1,19 @@
 from typing import Any
 
-from src.config.agents import get_agent_id_from_node
 from src.interface.mappers import NodeOutputMapper
 from src.interface.protocol import AgentEvent
 
 
-def get_agent_name(node_name: str) -> str:
-    """Map internal node name to high-level agent name."""
-    agent_id = get_agent_id_from_node(node_name)
-    if agent_id:
-        return agent_id
+def get_agent_name(metadata: dict | None = None) -> str:
+    """
+    Map internal node name to high-level agent name.
+
+    Zero Config Policy:
+    1. Check if 'agent_id' is present in metadata (Preferred)
+    2. Fallback to 'System' if not found
+    """
+    if metadata and "agent_id" in metadata:
+        return metadata["agent_id"]
     return "System"
 
 
@@ -27,8 +31,14 @@ def adapt_langgraph_event(
     kind = event["event"]
     metadata = event.get("metadata", {})
     node_name = metadata.get("langgraph_node", "")
+    tags = event.get("tags", []) or []
 
-    # 1. Handle Token Streaming (Typewriter effect)
+    # 1. Handle Tag-Based Stream Control
+    # If a node is tagged with "hide_stream", we ignore its chat model streaming events
+    if "hide_stream" in tags and kind == "on_chat_model_stream":
+        return []
+
+    # 2. Handle Token Streaming (Typewriter effect)
     if kind == "on_chat_model_stream":
         chunk = event["data"].get("chunk")
         if chunk and hasattr(chunk, "content") and chunk.content:
@@ -38,15 +48,15 @@ def adapt_langgraph_event(
                     run_id=run_id,
                     seq_id=seq_id,
                     type="content.delta",
-                    source=get_agent_name(node_name),
+                    source=get_agent_name(metadata),
                     data={"content": str(chunk.content)},
                 )
             ]
 
     # 2. Handle Agent Status Changes
     elif kind == "on_chain_start":
-        agent_id = get_agent_id_from_node(node_name)
-        if agent_id:
+        agent_id = get_agent_name(metadata)
+        if agent_id and agent_id != "System":
             return [
                 AgentEvent(
                     thread_id=thread_id,
@@ -59,7 +69,7 @@ def adapt_langgraph_event(
             ]
 
     elif kind == "on_chain_end":
-        agent_id = get_agent_id_from_node(node_name)
+        agent_id = get_agent_name(metadata)
         raw_output = event["data"].get("output")
 
         # Step 1: Unwrap Command objects (LangGraph returns {update: {...}, goto: ...})
@@ -78,7 +88,7 @@ def adapt_langgraph_event(
         events = []
 
         # Step 2: Transform nested state to UI payload using mapper
-        if agent_id:
+        if agent_id and agent_id != "System":
             ui_payload = NodeOutputMapper.transform(agent_id, output)
 
             if ui_payload:
@@ -121,7 +131,7 @@ def adapt_langgraph_event(
                 run_id=run_id,
                 seq_id=seq_id,
                 type="error",
-                source=get_agent_name(node_name),
+                source=get_agent_name(metadata),
                 data={
                     "message": str(event.get("data", {}).get("error", "Unknown error"))
                 },

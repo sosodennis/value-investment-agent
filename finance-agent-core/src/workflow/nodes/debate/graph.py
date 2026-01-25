@@ -31,24 +31,26 @@ def build_debate_subgraph():
     )
 
     # 1. Add Nodes
-    builder.add_node("debate_aggregator", debate_aggregator_node)
+    builder.add_node(
+        "debate_aggregator", debate_aggregator_node, metadata={"agent_id": "debate"}
+    )
 
     # Round 1 Agents (Parallel)
-    builder.add_node("r1_bull", r1_bull_node)
-    builder.add_node("r1_bear", r1_bear_node)
-    builder.add_node("r1_moderator", r1_moderator_node)
+    builder.add_node("r1_bull", r1_bull_node, metadata={"agent_id": "debate"})
+    builder.add_node("r1_bear", r1_bear_node, metadata={"agent_id": "debate"})
+    builder.add_node("r1_moderator", r1_moderator_node, metadata={"agent_id": "debate"})
 
     # Round 2 Agents (Sequential)
-    builder.add_node("r2_bull", r2_bull_node)
-    builder.add_node("r2_bear", r2_bear_node)
-    builder.add_node("r2_moderator", r2_moderator_node)
+    builder.add_node("r2_bull", r2_bull_node, metadata={"agent_id": "debate"})
+    builder.add_node("r2_bear", r2_bear_node, metadata={"agent_id": "debate"})
+    builder.add_node("r2_moderator", r2_moderator_node, metadata={"agent_id": "debate"})
 
     # Round 3 Agents (Sequential)
-    builder.add_node("r3_bull", r3_bull_node)
-    builder.add_node("r3_bear", r3_bear_node)
+    builder.add_node("r3_bull", r3_bull_node, metadata={"agent_id": "debate"})
+    builder.add_node("r3_bear", r3_bear_node, metadata={"agent_id": "debate"})
 
     # Final Synthesis
-    builder.add_node("verdict", verdict_node)
+    builder.add_node("verdict", verdict_node, metadata={"agent_id": "debate"})
 
     # 2. Define Edges (Strict Linear DAG)
     builder.add_edge(START, "debate_aggregator")

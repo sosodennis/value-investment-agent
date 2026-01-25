@@ -4,6 +4,7 @@ Handles the flow: Data Fetch -> FracDiff Compute -> Semantic Translate.
 """
 
 from langchain_core.messages import AIMessage
+from langchain_core.runnables import RunnableLambda
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
 
@@ -395,9 +396,21 @@ def build_technical_subgraph():
         input=TechnicalAnalysisInput,
         output=TechnicalAnalysisOutput,
     )
-    builder.add_node("data_fetch", data_fetch_node)
-    builder.add_node("fracdiff_compute", fracdiff_compute_node)
-    builder.add_node("semantic_translate", semantic_translate_node)
+    builder.add_node(
+        "data_fetch",
+        RunnableLambda(data_fetch_node).with_config(tags=["hide_stream"]),
+        metadata={"agent_id": "technical_analysis"},
+    )
+    builder.add_node(
+        "fracdiff_compute",
+        RunnableLambda(fracdiff_compute_node).with_config(tags=["hide_stream"]),
+        metadata={"agent_id": "technical_analysis"},
+    )
+    builder.add_node(
+        "semantic_translate",
+        semantic_translate_node,
+        metadata={"agent_id": "technical_analysis"},
+    )
 
     builder.add_edge(START, "data_fetch")
     builder.add_edge("data_fetch", "fracdiff_compute")

@@ -16,6 +16,7 @@ from pydantic import BaseModel
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command
 
 from src.infrastructure.database import init_db
@@ -44,6 +45,10 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 [Lifespan] Building workflow graph...")
     graph = await get_graph()
     app.state.graph = graph
+
+    # Build Agent Identity Lookup (Zero Config)
+    app.state.agent_lookup = build_agent_lookup(graph)
+    logger.info(f"🔎 [Lifespan] Discovered {len(app.state.agent_lookup)} agent nodes.")
 
     logger.info("✅ [Lifespan] Initialization complete.")
     yield
@@ -80,10 +85,46 @@ event_replay_buffers: dict[str, list[str]] = defaultdict(list)
 thread_sequences: dict[str, int] = defaultdict(lambda: 1)
 
 
-async def event_generator(thread_id: str, input_data: Any, config: dict, graph: Any):
+def build_agent_lookup(graph: Any) -> dict[str, str]:
+    """
+    Recursively traverse the graph to build a node_name -> agent_id map.
+    This enables Zero Config architecture by discovering identity at runtime.
+    """
+    lookup = {}
+
+    def traverse(g):
+        if not hasattr(g, "nodes"):
+            return
+
+        for name, node in g.nodes.items():
+            # 1. Map current node
+            if (
+                hasattr(node, "metadata")
+                and node.metadata
+                and "agent_id" in node.metadata
+            ):
+                lookup[name] = node.metadata["agent_id"]
+
+            # 2. Recurse into subgraphs
+            runnable = getattr(node, "bound", None)
+            if isinstance(runnable, CompiledStateGraph):
+                traverse(runnable)
+
+    traverse(graph)
+    return lookup
+
+
+async def event_generator(
+    thread_id: str,
+    input_data: Any,
+    config: dict,
+    graph: Any,
+    agent_lookup: dict[str, str] | None = None,
+):
     """
     Core event generator that transforms LangGraph events into standardized AgentEvents.
     """
+    agent_lookup = agent_lookup or {}
     seq_counter = thread_sequences[thread_id]
     run_id = str(uuid.uuid4())
     logger.info(
@@ -200,9 +241,10 @@ async def event_generator(thread_id: str, input_data: Any, config: dict, graph: 
                 if task.interrupts:
                     for i in task.interrupts:
                         # Resolve the internal node name to a high-level agent ID if possible
-                        from src.config.agents import get_agent_id_from_node
-
-                        source = get_agent_id_from_node(task.name) or task.name
+                        # Resolve the internal node name to a high-level agent ID
+                        # using the runtime lookup map (Zero Config)
+                        agent_id = agent_lookup.get(task.name)
+                        source = agent_id or task.name
 
                         agent_event = create_interrupt_event(
                             i.value, thread_id, seq_counter, run_id, source=source
@@ -445,7 +487,13 @@ async def stream_agent(request: Request, body: RequestSchema):
 
     # Start independent task
     task = asyncio.create_task(
-        event_generator(thread_id, input_data, config, request.app.state.graph)
+        event_generator(
+            thread_id,
+            input_data,
+            config,
+            request.app.state.graph,
+            request.app.state.agent_lookup,
+        )
     )
     active_tasks[thread_id] = task
 

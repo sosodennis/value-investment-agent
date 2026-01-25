@@ -3,6 +3,7 @@ import traceback
 from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.runnables import RunnableLambda
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
@@ -225,34 +226,110 @@ async def get_graph():
             # (Now handled inside wrapper nodes for better isolation during migration)
 
             # --- Node Definitions ---
-            builder.add_node("prepare_intent", prepare_intent_node)
-            builder.add_node("intent_agent", build_intent_extraction_subgraph())
-            builder.add_node("process_intent", process_intent_node)
+            builder.add_node(
+                "prepare_intent",
+                RunnableLambda(prepare_intent_node).with_config(tags=["hide_stream"]),
+                metadata={"agent_id": "intent_extraction"},
+            )
+            builder.add_node(
+                "intent_agent",
+                build_intent_extraction_subgraph(),
+                metadata={"agent_id": "intent_extraction"},
+            )
+            builder.add_node(
+                "process_intent",
+                RunnableLambda(process_intent_node).with_config(tags=["hide_stream"]),
+                metadata={"agent_id": "intent_extraction"},
+            )
 
             # Fundamental Analysis Agent (Native Subgraph Chain)
-            builder.add_node("prepare_fundamental", prepare_fundamental_node)
-            builder.add_node("fundamental_agent", build_fundamental_subgraph())
-            builder.add_node("process_fundamental", process_fundamental_node)
+            builder.add_node(
+                "prepare_fundamental",
+                RunnableLambda(prepare_fundamental_node).with_config(
+                    tags=["hide_stream"]
+                ),
+                metadata={"agent_id": "fundamental_analysis"},
+            )
+            builder.add_node(
+                "fundamental_agent",
+                build_fundamental_subgraph(),
+                metadata={"agent_id": "fundamental_analysis"},
+            )
+            builder.add_node(
+                "process_fundamental",
+                RunnableLambda(process_fundamental_node).with_config(
+                    tags=["hide_stream"]
+                ),
+                metadata={"agent_id": "fundamental_analysis"},
+            )
 
             # Financial News Research Agent (Native Subgraph Chain)
-            builder.add_node("prepare_news", prepare_news_node)
-            builder.add_node("news_agent", build_financial_news_subgraph())
-            builder.add_node("process_news", process_news_node)
+            builder.add_node(
+                "prepare_news",
+                RunnableLambda(prepare_news_node).with_config(tags=["hide_stream"]),
+                metadata={"agent_id": "financial_news_research"},
+            )
+            builder.add_node(
+                "news_agent",
+                build_financial_news_subgraph(),
+                metadata={"agent_id": "financial_news_research"},
+            )
+            builder.add_node(
+                "process_news",
+                RunnableLambda(process_news_node).with_config(tags=["hide_stream"]),
+                metadata={"agent_id": "financial_news_research"},
+            )
             # Technical Analysis Agent (Native Subgraph Chain)
-            builder.add_node("prepare_technical", prepare_technical_node)
-            builder.add_node("technical_agent", build_technical_subgraph())
-            builder.add_node("process_technical", process_technical_node)
+            builder.add_node(
+                "prepare_technical",
+                RunnableLambda(prepare_technical_node).with_config(
+                    tags=["hide_stream"]
+                ),
+                metadata={"agent_id": "technical_analysis"},
+            )
+            builder.add_node(
+                "technical_agent",
+                build_technical_subgraph(),
+                metadata={"agent_id": "technical_analysis"},
+            )
+            builder.add_node(
+                "process_technical",
+                RunnableLambda(process_technical_node).with_config(
+                    tags=["hide_stream"]
+                ),
+                metadata={"agent_id": "technical_analysis"},
+            )
             builder.add_node("consolidate_research", consolidate_research_node)
 
             # Debate Agent (Native Subgraph Chain)
-            builder.add_node("prepare_debate", prepare_debate_node)
-            builder.add_node("debate_agent", build_debate_subgraph())
-            builder.add_node("process_debate", process_debate_node)
+            builder.add_node(
+                "prepare_debate",
+                RunnableLambda(prepare_debate_node).with_config(tags=["hide_stream"]),
+                metadata={"agent_id": "debate"},
+            )
+            builder.add_node(
+                "debate_agent", build_debate_subgraph(), metadata={"agent_id": "debate"}
+            )
+            builder.add_node(
+                "process_debate",
+                RunnableLambda(process_debate_node).with_config(tags=["hide_stream"]),
+                metadata={"agent_id": "debate"},
+            )
 
-            builder.add_node("executor", executor_node)
-            builder.add_node("auditor", auditor_node)
-            builder.add_node("approval", approval_node)
-            builder.add_node("calculator", calculation_node)
+            builder.add_node(
+                "executor", executor_node, metadata={"agent_id": "executor"}
+            )
+            builder.add_node(
+                "auditor",
+                RunnableLambda(auditor_node).with_config(tags=["hide_stream"]),
+                metadata={"agent_id": "auditor"},
+            )
+            builder.add_node(
+                "approval", approval_node, metadata={"agent_id": "approval"}
+            )
+            builder.add_node(
+                "calculator", calculation_node, metadata={"agent_id": "calculator"}
+            )
             logger.info("[DEBUG] get_graph: All nodes added successfully")
 
             # 3. Define edges for parallel execution

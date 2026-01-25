@@ -21,46 +21,57 @@ def test_agent_event_serialization():
 def test_adapt_token_stream():
     lg_event = {
         "event": "on_chat_model_stream",
-        "metadata": {"langgraph_node": "debate:bull"},
+        "metadata": {"langgraph_node": "r1_bull", "agent_id": "debate"},
         "data": {"chunk": AIMessageChunk(content="thought")},
     }
     adapted = adapt_langgraph_event(lg_event, "thread_1", 5)
-    assert adapted is not None
-    assert adapted.type == "content.delta"
-    assert adapted.data["content"] == "thought"
-    assert adapted.source == "debate"  # From node mapping
-    assert adapted.seq_id == 5
+    assert adapted and isinstance(adapted, list)
+    event = adapted[0]
+    assert event.type == "content.delta"
+    assert event.data["content"] == "thought"
+    assert event.source == "debate"  # From node mapping
+    assert event.seq_id == 5
 
 
 def test_adapt_agent_status_start():
     lg_event = {
         "event": "on_chain_start",
-        "metadata": {"langgraph_node": "fundamental_analysis"},
+        "metadata": {
+            "langgraph_node": "fundamental_analysis",
+            "agent_id": "fundamental_analysis",
+        },
         "data": {},
     }
     adapted = adapt_langgraph_event(lg_event, "thread_1", 10)
-    assert adapted is not None
-    assert adapted.type == "agent.status"
-    assert adapted.data["status"] == "running"
-    assert adapted.source == "fundamental_analysis"
+    assert adapted and isinstance(adapted, list)
+    event = adapted[0]
+    assert event.type == "agent.status"
+    assert event.data["status"] == "running"
+    assert event.source == "fundamental_analysis"
 
 
 def test_adapt_state_update_news():
     lg_event = {
         "event": "on_chain_end",
-        "metadata": {"langgraph_node": "aggregator_node"},
+        "metadata": {
+            "langgraph_node": "aggregator_node",
+            "agent_id": "financial_news_research",
+        },
         "data": {
             "output": {
-                "__event_data__": {"news_items": [{"id": "1", "title": "market up"}]}
+                "financial_news": {
+                    "output": {"news_items": [{"id": "1", "title": "market up"}]}
+                }
             }
         },
     }
     adapted = adapt_langgraph_event(lg_event, "thread_1", 15)
-    assert adapted is not None
+    assert adapted and isinstance(adapted, list)
+    event = adapted[0]
     # aggregator_node logic now flattens the result
-    assert adapted.type == "state.update"
-    assert "news_items" in adapted.data
-    assert adapted.data["news_items"][0]["title"] == "market up"
+    assert event.type == "state.update"
+    assert "news_items" in event.data
+    assert event.data["news_items"][0]["title"] == "market up"
 
 
 def test_create_interrupt():

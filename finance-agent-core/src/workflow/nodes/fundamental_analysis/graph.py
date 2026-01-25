@@ -436,8 +436,16 @@ def build_fundamental_subgraph():
         input=FundamentalAnalysisInput,
         output=FundamentalAnalysisOutput,
     )
-    builder.add_node("financial_health", financial_health_node)
-    builder.add_node("model_selection", model_selection_node)
+    builder.add_node(
+        "financial_health",
+        financial_health_node,
+        metadata={"agent_id": "fundamental_analysis"},
+    )
+    builder.add_node(
+        "model_selection",
+        model_selection_node,
+        metadata={"agent_id": "fundamental_analysis"},
+    )
     builder.add_edge(START, "financial_health")
     builder.add_edge("financial_health", "model_selection")
 

@@ -24,13 +24,13 @@ def test_find_optimal_d_returns_valid_range():
 
 def test_apply_fracdiff_preserves_structure():
     """Test that FracDiff output has expected structure."""
-    from src.workflow.nodes.technical_analysis.tools import apply_fracdiff
+    from src.workflow.nodes.technical_analysis.tools import frac_diff_ffd
 
     # Create synthetic price series
     np.random.seed(42)
     prices = pd.Series(100 + np.cumsum(np.random.randn(500) * 0.5))
 
-    fd_series = apply_fracdiff(prices, d=0.5)
+    fd_series = frac_diff_ffd(prices, d=0.5)
 
     assert isinstance(fd_series, pd.Series), "Output should be pandas Series"
     assert len(fd_series) > 0, "Output should not be empty"
@@ -54,27 +54,54 @@ def test_compute_z_score():
 
 def test_semantic_tags_mapping():
     """Test that semantic tags are correctly mapped based on thresholds."""
-    from src.workflow.nodes.technical_analysis.semantic_layer import translate_to_tags
+    from src.workflow.nodes.technical_analysis.semantic_layer import assembler
     from src.workflow.nodes.technical_analysis.structures import (
         MemoryStrength,
         RiskLevel,
         StatisticalState,
     )
 
+    # Dummy data for confluence
+    dummy_bb = {"state": "INSIDE"}
+    dummy_stat = {"value": 50.0}
+    dummy_macd = {"momentum_state": "NEUTRAL"}
+    dummy_obv = {"fd_obv_z": 0.0, "state": "NEUTRAL"}
+
     # Test case 1: Low d, low Z
-    tags_dict = translate_to_tags(z_score=0.5, optimal_d=0.2)
+    tags_dict = assembler.assemble(
+        z_score=0.5,
+        optimal_d=0.2,
+        bollinger_data=dummy_bb,
+        stat_strength_data=dummy_stat,
+        macd_data=dummy_macd,
+        obv_data=dummy_obv,
+    )
     assert tags_dict["memory_strength"] == MemoryStrength.STRUCTURALLY_STABLE
     assert tags_dict["statistical_state"] == StatisticalState.EQUILIBRIUM
     assert tags_dict["risk_level"] == RiskLevel.LOW
 
     # Test case 2: High d, high Z
-    tags_dict = translate_to_tags(z_score=2.5, optimal_d=0.7)
+    tags_dict = assembler.assemble(
+        z_score=2.5,
+        optimal_d=0.7,
+        bollinger_data=dummy_bb,
+        stat_strength_data=dummy_stat,
+        macd_data=dummy_macd,
+        obv_data=dummy_obv,
+    )
     assert tags_dict["memory_strength"] == MemoryStrength.FRAGILE
     assert tags_dict["statistical_state"] == StatisticalState.STATISTICAL_ANOMALY
     assert tags_dict["risk_level"] == RiskLevel.CRITICAL
 
     # Test case 3: Balanced d, medium Z
-    tags_dict = translate_to_tags(z_score=1.5, optimal_d=0.4)
+    tags_dict = assembler.assemble(
+        z_score=1.5,
+        optimal_d=0.4,
+        bollinger_data=dummy_bb,
+        stat_strength_data=dummy_stat,
+        macd_data=dummy_macd,
+        obv_data=dummy_obv,
+    )
     assert tags_dict["memory_strength"] == MemoryStrength.BALANCED
     assert tags_dict["statistical_state"] == StatisticalState.DEVIATING
     assert tags_dict["risk_level"] == RiskLevel.MEDIUM

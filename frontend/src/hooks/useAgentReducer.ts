@@ -14,7 +14,7 @@ export interface AgentState {
     error: string | null;
     currentNode: string | null;
     currentStatus: string | null;
-    statusHistory: Array<{ id: string, node: string, status: string, timestamp: number }>;
+    statusHistory: Array<{ id: string, node: string, agentId: string, status: string, timestamp: number }>;
 }
 
 export type AgentAction =
@@ -144,6 +144,7 @@ function agentReducer(state: AgentState, action: AgentAction): AgentState {
                         {
                             id: `status_${event.id}`,
                             node: node || agentId,
+                            agentId: agentId,
                             status: status,
                             timestamp: new Date(event.timestamp).getTime()
                         }

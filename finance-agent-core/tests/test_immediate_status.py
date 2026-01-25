@@ -1,10 +1,13 @@
 import asyncio
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from src.workflow.nodes.debate.nodes import verdict_node
 from src.workflow.nodes.fundamental_analysis.graph import model_selection_node
 
 
+@pytest.mark.anyio
 async def test_immediate_status_emission():
     """
     Verify that terminal nodes inside subgraphs emit node_statuses.

@@ -4,6 +4,7 @@ import os
 
 from langchain_core.messages import AIMessage
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnableLambda
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
@@ -522,11 +523,27 @@ def build_financial_news_subgraph():
     builder = StateGraph(
         FinancialNewsState, input=FinancialNewsInput, output=FinancialNewsOutput
     )
-    builder.add_node("search_node", search_node)
-    builder.add_node("selector_node", selector_node)
-    builder.add_node("fetch_node", fetch_node)
-    builder.add_node("analyst_node", analyst_node)
-    builder.add_node("aggregator_node", aggregator_node)
+    builder.add_node(
+        "search_node", search_node, metadata={"agent_id": "financial_news_research"}
+    )
+    builder.add_node(
+        "selector_node",
+        RunnableLambda(selector_node).with_config(tags=["hide_stream"]),
+        metadata={"agent_id": "financial_news_research"},
+    )
+    builder.add_node(
+        "fetch_node", fetch_node, metadata={"agent_id": "financial_news_research"}
+    )
+    builder.add_node(
+        "analyst_node",
+        RunnableLambda(analyst_node).with_config(tags=["hide_stream"]),
+        metadata={"agent_id": "financial_news_research"},
+    )
+    builder.add_node(
+        "aggregator_node",
+        aggregator_node,
+        metadata={"agent_id": "financial_news_research"},
+    )
 
     builder.add_edge(START, "search_node")
     # Transitions are handled by Command(goto=...) in the nodes above.

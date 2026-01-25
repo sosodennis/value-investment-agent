@@ -2,6 +2,7 @@ import asyncio
 import time
 from typing import Annotated
 
+import pytest
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from pydantic import BaseModel
@@ -51,6 +52,7 @@ builder.add_edge("fast_follower", END)
 graph = builder.compile()
 
 
+@pytest.mark.anyio
 async def test_blocking():
     print("TIMING START")
     start = time.time()

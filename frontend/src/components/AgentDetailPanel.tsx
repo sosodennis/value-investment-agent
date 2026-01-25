@@ -7,7 +7,6 @@ import { NewsResearchOutput as NewsOutputType } from '../types/news';
 import { FundamentalAnalysisOutput, NewsResearchOutput as NewsResearchOutputPanel, GenericAgentOutput, DebateOutput, TechnicalAnalysisOutput } from './agent-outputs';
 import { TechnicalSignalOutput } from '../types/technical';
 import { DynamicInterruptForm } from './DynamicInterruptForm';
-import { nodeMatchesAgent } from '../config/agents';
 
 interface AgentDetailPanelProps {
     agent: AgentInfo | null;
@@ -18,7 +17,7 @@ interface AgentDetailPanelProps {
     resolvedTicker?: string | null;
     currentNode?: string | null;
     currentStatus?: string | null;
-    activityFeed?: { id: string, node: string, status: string, timestamp: number }[];
+    activityFeed?: { id: string, node: string, agentId?: string, status: string, timestamp: number }[];
 }
 
 export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
@@ -202,17 +201,9 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                                 {messages.filter(m => {
                                     if (!m.isInteractive) return false;
 
-                                    // 1. Check if the message is explicitly assigned to this agent
-                                    if (m.agentId === agent.id) return true;
-
-                                    // 2. Fallback: Check if the source node belongs to this agent
-                                    if (m.agentId && nodeMatchesAgent(m.agentId, agent.id)) return true;
-
-                                    // 3. Legacy fallbacks
-                                    if (agent.id === 'intent_extraction' && m.type === 'interrupt_ticker') return true;
-                                    if (agent.id === 'approval' && m.type === 'interrupt_approval') return true;
-
-                                    return false;
+                                    // Strict Check: The backend MUST explicitly assign the interrupt to this agent.
+                                    // We no longer guess based on node names.
+                                    return m.agentId === agent.id;
                                 }).map((msg) => (
                                     <div key={msg.id} className="mt-4">
                                         {msg.data?.schema ? (
@@ -244,7 +235,7 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                                 {(() => {
                                     // 1. Filter by agent
                                     const filteredFeed = activityFeed.filter(step =>
-                                        nodeMatchesAgent(step.node, agent.id)
+                                        step.agentId === agent.id
                                     );
 
                                     if (filteredFeed.length === 0) {

@@ -6,8 +6,8 @@ from src.interface.mappers import NodeOutputMapper
 # ... (Previous tests remain, I will append the new test case) ...
 
 
-@patch("src.interface.adapters.get_agent_id_from_node")
-def test_on_chain_end_status_behavior(mock_get_agent_id):
+# Removed patch since we use metadata now
+def test_on_chain_end_status_behavior():
     """
     Test that adapt_langgraph_event does NOT automatically emit agent.status='done'
     just because a node finished (on_chain_end).
@@ -18,12 +18,12 @@ def test_on_chain_end_status_behavior(mock_get_agent_id):
     run_id = "test_run"
 
     # 1. Simulate a node that maps to an agent (e.g. debate_aggregator -> debate)
-    mock_get_agent_id.return_value = "debate"
+    # mock_get_agent_id.return_value = "debate"  <-- No longer needed
     node_name = "debate_aggregator"
 
     event = {
         "event": "on_chain_end",
-        "metadata": {"langgraph_node": node_name},
+        "metadata": {"langgraph_node": node_name, "agent_id": "debate"},
         "data": {"output": {"some": "data"}},
     }
 
@@ -52,13 +52,16 @@ def test_on_chain_end_status_behavior(mock_get_agent_id):
     ), f"Expected 0 status updates, found: {[e.data for e in status_updates]}"
 
 
-@patch("src.interface.adapters.get_agent_id_from_node")
-def test_explicit_status_update_via_state_with_mapper(mock_get_agent_id):
+@patch("src.interface.adapters.get_agent_name")
+def test_explicit_status_update_via_state_with_mapper(mock_get_agent_name):
     """
     Test that NodeOutputMapper correctly passes through node_statuses.
     This replicates the issue where mappers were stripping this field.
     """
-    mock_get_agent_id.return_value = "intent_extraction"
+    # mock_get_agent_id.return_value = "intent_extraction" <-- Unused as we test Mapper directly?
+    # Actually this test seems to invoke NodeOutputMapper directly, so the adapter patch is irrelevant
+    # except that the test signature requires it.
+    pass
 
     # Adapter output typically looks like this:
     adapter_output = {
