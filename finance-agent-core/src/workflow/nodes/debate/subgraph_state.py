@@ -5,7 +5,10 @@ Following LangGraph best practices - does NOT share node_statuses with parent.
 
 from typing import Annotated
 
+from langgraph.graph import add_messages
 from pydantic import BaseModel, Field
+
+from src.interface.schemas import AgentOutputArtifact
 
 from ...state import (
     DebateContext,
@@ -29,10 +32,12 @@ class DebateInput(BaseModel):
         default_factory=IntentExtractionContext
     )
     debate: DebateContext = Field(default_factory=DebateContext)
-    fundamental: FundamentalAnalysisContext = Field(
+    fundamental_analysis: FundamentalAnalysisContext = Field(
         default_factory=FundamentalAnalysisContext
     )
-    financial_news: FinancialNewsContext = Field(default_factory=FinancialNewsContext)
+    financial_news_research: FinancialNewsContext = Field(
+        default_factory=FinancialNewsContext
+    )
     technical_analysis: TechnicalAnalysisContext = Field(
         default_factory=TechnicalAnalysisContext
     )
@@ -45,6 +50,8 @@ class DebateOutput(BaseModel):
 
     debate: DebateContext
     model_type: str | None = None
+    artifact: AgentOutputArtifact | None = None
+    messages: list = Field(default_factory=list)
 
 
 class DebateState(BaseModel):
@@ -57,10 +64,12 @@ class DebateState(BaseModel):
     intent_extraction: IntentExtractionContext = Field(
         default_factory=IntentExtractionContext
     )
-    fundamental: FundamentalAnalysisContext = Field(
+    fundamental_analysis: FundamentalAnalysisContext = Field(
         default_factory=FundamentalAnalysisContext
     )
-    financial_news: FinancialNewsContext = Field(default_factory=FinancialNewsContext)
+    financial_news_research: FinancialNewsContext = Field(
+        default_factory=FinancialNewsContext
+    )
     technical_analysis: TechnicalAnalysisContext = Field(
         default_factory=TechnicalAnalysisContext
     )
@@ -71,6 +80,10 @@ class DebateState(BaseModel):
         default_factory=DebateContext
     )
     model_type: Annotated[str | None, last_value] = None
+
+    # --- Output (Direct in State layer for Flat Pattern) ---
+    artifact: AgentOutputArtifact | None = None
+    messages: Annotated[list, add_messages] = Field(default_factory=list)
 
     # --- Private State ---
     internal_progress: Annotated[dict[str, str], merge_dict] = Field(

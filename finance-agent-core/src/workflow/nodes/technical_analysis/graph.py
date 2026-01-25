@@ -3,6 +3,7 @@ Technical Analysis Sub-graph implementation.
 Handles the flow: Data Fetch -> FracDiff Compute -> Semantic Translate.
 """
 
+import pandas as pd
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableLambda
 from langgraph.graph import END, START, StateGraph
@@ -81,21 +82,14 @@ def data_fetch_node(state: TechnicalAnalysisState) -> Command:
     # Store raw data in state
     return Command(
         update={
-            "technical_analysis": {
-                "output": {
-                    "ticker": resolved_ticker,
-                    "raw_data": {
-                        "price_series": df["price"]
-                        .rename(index=lambda x: x.strftime("%Y-%m-%d"))
-                        .map(float)
-                        .to_dict(),
-                        "volume_series": df["volume"]
-                        .rename(index=lambda x: x.strftime("%Y-%m-%d"))
-                        .map(float)
-                        .to_dict(),
-                    },
-                }
-            },
+            "price_series": df["price"]
+            .rename(index=lambda x: x.strftime("%Y-%m-%d"))
+            .map(float)
+            .to_dict(),
+            "volume_series": df["volume"]
+            .rename(index=lambda x: x.strftime("%Y-%m-%d"))
+            .map(float)
+            .to_dict(),
             "current_node": "data_fetch",
             "internal_progress": {
                 "data_fetch": "done",
@@ -114,8 +108,10 @@ def fracdiff_compute_node(state: TechnicalAnalysisState) -> Command:
     logger.info("--- TA: Computing Rolling FracDiff ---")
 
     # Extract price series from state
-    output = state.technical_analysis.output
-    if not output or "raw_data" not in output:
+    price_dict = state.price_series
+    volume_dict = state.volume_series
+
+    if not price_dict or not volume_dict:
         logger.error("--- TA: No raw data available for FracDiff computation ---")
         return Command(
             update={
@@ -124,11 +120,6 @@ def fracdiff_compute_node(state: TechnicalAnalysisState) -> Command:
             },
             goto=END,
         )
-
-    import pandas as pd
-
-    price_dict = output["raw_data"]["price_series"]
-    volume_dict = output["raw_data"]["volume_series"]
 
     prices = pd.Series(price_dict)
     prices.index = pd.to_datetime(prices.index)
@@ -185,38 +176,27 @@ def fracdiff_compute_node(state: TechnicalAnalysisState) -> Command:
     # Update state with FracDiff metrics and indicators
     return Command(
         update={
-            "technical_analysis": {
-                "output": {
-                    "ticker": output["ticker"],
-                    "fracdiff_metrics": {
-                        "optimal_d": float(optimal_d),
-                        "window_length": int(window_length),
-                        "adf_statistic": float(adf_stat),
-                        "adf_pvalue": float(adf_pvalue),
-                        "z_score": float(z_score),
-                    },
-                    "indicators": {
-                        "bollinger": bollinger_serializable,
-                        "statistical_strength": stat_strength_serializable,
-                        "macd": macd_data,
-                        "obv": obv_serializable,
-                    },
-                    "raw_data": {
-                        **output["raw_data"],
-                        "fracdiff_series": fd_series.rename(
-                            index=lambda x: x.strftime("%Y-%m-%d")
-                        )
-                        .map(float)
-                        .to_dict(),
-                        # [CRITICAL FIX] Add Z-score series for frontend chart
-                        "z_score_series": z_score_series.rename(
-                            index=lambda x: x.strftime("%Y-%m-%d")
-                        )
-                        .map(float)
-                        .to_dict(),
-                    },
-                }
+            "fracdiff_metrics": {
+                "optimal_d": float(optimal_d),
+                "window_length": int(window_length),
+                "adf_statistic": float(adf_stat),
+                "adf_pvalue": float(adf_pvalue),
+                "z_score": float(z_score),
             },
+            "indicators": {
+                "bollinger": bollinger_serializable,
+                "statistical_strength": stat_strength_serializable,
+                "macd": macd_data,
+                "obv": obv_serializable,
+            },
+            "fracdiff_series": fd_series.rename(index=lambda x: x.strftime("%Y-%m-%d"))
+            .map(float)
+            .to_dict(),
+            "z_score_series": z_score_series.rename(
+                index=lambda x: x.strftime("%Y-%m-%d")
+            )
+            .map(float)
+            .to_dict(),
             "current_node": "fracdiff_compute",
             "internal_progress": {
                 "fracdiff_compute": "done",
@@ -233,8 +213,9 @@ async def semantic_translate_node(state: TechnicalAnalysisState) -> Command:
     """
     logger.info("--- TA: Generating semantic interpretation ---")
 
-    output = state.technical_analysis.output
-    if not output or "fracdiff_metrics" not in output:
+    metrics = state.fracdiff_metrics
+    indicators = state.indicators
+    if not metrics:
         logger.error("--- TA: No FracDiff metrics available for translation ---")
         return Command(
             update={
@@ -244,9 +225,7 @@ async def semantic_translate_node(state: TechnicalAnalysisState) -> Command:
             goto=END,
         )
 
-    ticker = output["ticker"]
-    metrics = output["fracdiff_metrics"]
-    indicators = output.get("indicators", {})
+    ticker = state.intent_extraction.resolved_ticker or state.ticker
     optimal_d = metrics["optimal_d"]
     z_score = metrics["z_score"]
 
@@ -264,15 +243,13 @@ async def semantic_translate_node(state: TechnicalAnalysisState) -> Command:
 
     # [NEW] Run Backtesting for Statistical Verification
     try:
-        # Reconstruct price series from raw_data
-        import pandas as pd
-
-        price_dict = output["raw_data"]["price_series"]
+        # Reconstruct price series from state fields
+        price_dict = state.price_series
         prices = pd.Series(price_dict)
         prices.index = pd.to_datetime(prices.index)
 
-        # Reconstruct FracDiff series from raw_data
-        fd_dict = output["raw_data"]["fracdiff_series"]
+        # Reconstruct FracDiff series from state
+        fd_dict = state.fracdiff_series
         fd_series = pd.Series(fd_dict)
         fd_series.index = pd.to_datetime(fd_series.index)
 
@@ -286,7 +263,7 @@ async def semantic_translate_node(state: TechnicalAnalysisState) -> Command:
         # on-the-fly since we have prices and fd_series available.
 
         # 1. Reconstruct Volume series (needed for OBV)
-        vol_dict = output["raw_data"]["volume_series"]
+        vol_dict = state.volume_series
         volumes = pd.Series(vol_dict)
         volumes.index = pd.to_datetime(volumes.index)
 
@@ -363,7 +340,12 @@ async def semantic_translate_node(state: TechnicalAnalysisState) -> Command:
         signal_state=signal_state,
         semantic_tags=tags_dict["tags"],
         llm_interpretation=llm_interpretation,
-        raw_data=output.get("raw_data", {}),
+        raw_data={
+            "price_series": state.price_series,
+            "volume_series": state.volume_series,
+            "fracdiff_series": state.fracdiff_series,
+            "z_score_series": state.z_score_series,
+        },
     )
 
     # Create AI message for frontend
@@ -378,13 +360,10 @@ async def semantic_translate_node(state: TechnicalAnalysisState) -> Command:
 
     return Command(
         update={
-            "technical_analysis": {
-                "output": technical_signal.model_dump(),
-                "artifact": AgentOutputArtifact(
-                    summary=f"Technical Analysis: {technical_signal.signal_state.direction.upper()} (p={technical_signal.frac_diff_metrics.optimal_d:.2f})",
-                    data=technical_signal.model_dump(),
-                ),
-            },
+            "artifact": AgentOutputArtifact(
+                summary=f"Technical Analysis: {technical_signal.signal_state.direction.upper()} (p={technical_signal.frac_diff_metrics.optimal_d:.2f})",
+                data=technical_signal.model_dump(),
+            ),
             "current_node": "semantic_translate",
             "internal_progress": {"semantic_translate": "done"},
             # [BSP Fix] Emit status immediately to bypass LangGraph's sync barrier

@@ -279,7 +279,7 @@ def financial_health_node(state: FundamentalAnalysisState) -> Command:
 
     return Command(
         update={
-            "fundamental": {
+            "fundamental_analysis": {
                 "financial_reports": reports_data,
                 "status": "model_selection",
             },
@@ -337,12 +337,12 @@ def model_selection_node(state: FundamentalAnalysisState) -> Command:
     model, reasoning = select_valuation_model(profile)
 
     # Enhance reasoning with financial health insights (using latest report)
-    if state.fundamental.financial_reports:
+    if state.fundamental_analysis.financial_reports:
         try:
             from .financial_models import FinancialReport
 
             # Use most recent year (index 0)
-            latest_report_data = state.fundamental.financial_reports[0]
+            latest_report_data = state.fundamental_analysis.financial_reports[0]
             # FinancialReport is a Pydantic model, so we can parse it
             report = FinancialReport(**latest_report_data)
             base = report.base
@@ -401,29 +401,18 @@ def model_selection_node(state: FundamentalAnalysisState) -> Command:
         update={
             "ticker": resolved_ticker,
             "model_type": model_type,
-            "fundamental": {
-                "analysis_output": {
+            "artifact": AgentOutputArtifact(
+                summary=f"Selected {model.value} model for {profile.name}",
+                data={
                     "ticker": resolved_ticker,
                     "model_type": model.value,
                     "company_name": profile.name,
                     "sector": profile.sector,
                     "industry": profile.industry,
                     "reasoning": reasoning,
-                    "financial_reports": state.fundamental.financial_reports,
+                    "financial_reports": state.fundamental_analysis.financial_reports,
                 },
-                "artifact": AgentOutputArtifact(
-                    summary=f"Selected {model.value} model for {profile.name}",
-                    data={
-                        "ticker": resolved_ticker,
-                        "model_type": model.value,
-                        "company_name": profile.name,
-                        "sector": profile.sector,
-                        "industry": profile.industry,
-                        "reasoning": reasoning,
-                        "financial_reports": state.fundamental.financial_reports,
-                    },
-                ),
-            },
+            ),
             "current_node": "model_selection",
             "internal_progress": {
                 "model_selection": "done",

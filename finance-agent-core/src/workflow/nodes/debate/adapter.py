@@ -14,8 +14,8 @@ def input_adapter(state: AgentState) -> dict[str, Any]:
     return {
         "ticker": state.ticker,
         "intent_extraction": state.intent_extraction,
-        "fundamental": state.fundamental,
-        "financial_news": state.financial_news,
+        "fundamental_analysis": state.fundamental_analysis,
+        "financial_news_research": state.financial_news_research,
         "technical_analysis": state.technical_analysis,
         "debate": state.debate,
         "messages": state.messages,
@@ -27,20 +27,28 @@ def output_adapter(sub_output: dict[str, Any]) -> dict[str, Any]:
     """Maps DebateState output back to parent state updates."""
     logger.info("--- [Debate Adapter] Mapping subgraph output back to parent state ---")
 
-    # Handle model_type update if conclusion reached
+    debate_ctx = sub_output.get("debate", {})
+    artifact = sub_output.get("artifact")
+    messages = sub_output.get("messages", [])
     model_type = sub_output.get("model_type")
-    debate_ctx = sub_output.get("debate")
 
-    if debate_ctx and isinstance(debate_ctx, dict):
-        conclusion = debate_ctx.get("conclusion")
-        if conclusion:
-            raw_model = conclusion.get("model_type")
+    # [Compatibility] Copy flat artifact back to nested context
+    if artifact:
+        if isinstance(debate_ctx, dict):
+            debate_ctx["artifact"] = artifact
+        else:
+            debate_ctx.artifact = artifact
+
+        # Handle model_type update if conclusion reached
+        data = artifact.data if hasattr(artifact, "data") else artifact.get("data")
+        if data:
+            raw_model = data.get("model_type")
             if raw_model:
                 model_type = map_model_to_skill(raw_model)
 
     return {
         "debate": debate_ctx,
-        "messages": sub_output.get("messages", []),
+        "messages": messages,
         "model_type": model_type,
         "node_statuses": {"debate": "done"},
     }

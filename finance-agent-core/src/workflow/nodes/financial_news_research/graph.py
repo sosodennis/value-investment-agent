@@ -96,7 +96,7 @@ def search_node(state: FinancialNewsState) -> Command:
     if not results:
         return Command(
             update={
-                "financial_news": {"output": {"ticker": ticker, "news_items": []}},
+                "news_items": [],
                 "current_node": "searching",
                 "internal_progress": {"searching": "done"},
             },
@@ -119,13 +119,8 @@ URL: {r.get('link')}
 
     return Command(
         update={
-            "financial_news": {
-                "output": {
-                    "ticker": ticker,
-                    "raw_results": results,
-                    "formatted_results": formatted_results,
-                }
-            },
+            "raw_results": results,
+            "formatted_results": formatted_results,
             "current_node": "search_node",
             "internal_progress": {"search_node": "done", "selector_node": "running"},
         },
@@ -135,10 +130,9 @@ URL: {r.get('link')}
 
 def selector_node(state: FinancialNewsState) -> Command:
     """[Funnel Node 2] Filter top relevant articles using URL-based selection."""
-    output = state.financial_news.output or {}
-    ticker = output.get("ticker")
-    formatted_results = output.get("formatted_results")
-    raw_results = output.get("raw_results", [])
+    formatted_results = state.formatted_results
+    raw_results = state.raw_results
+    ticker = state.intent_extraction.resolved_ticker or state.ticker
 
     logger.info(f"--- [News Research] Selecting top articles for {ticker} ---")
 
@@ -199,9 +193,7 @@ def selector_node(state: FinancialNewsState) -> Command:
     )
     return Command(
         update={
-            "financial_news": {
-                "output": {**output, "selected_indices": selected_indices}
-            },
+            "selected_indices": selected_indices,
             "current_node": "selector_node",
             "internal_progress": {"selector_node": "done", "fetch_node": "running"},
         },
@@ -211,9 +203,8 @@ def selector_node(state: FinancialNewsState) -> Command:
 
 def fetch_node(state: FinancialNewsState) -> Command:
     """[Funnel Node 3] Fetch and clean full text for selected articles (async parallel)."""
-    output = state.financial_news.output or {}
-    raw_results = output.get("raw_results", [])
-    selected_indices = output.get("selected_indices", [])
+    raw_results = state.raw_results
+    selected_indices = state.selected_indices
 
     logger.info(
         f"--- [News Research] Fetching {len(selected_indices)} articles content ---"
@@ -298,9 +289,7 @@ def fetch_node(state: FinancialNewsState) -> Command:
     news_items_serialized = [item.model_dump(mode="json") for item in news_items]
     return Command(
         update={
-            "financial_news": {
-                "output": {**output, "news_items": news_items_serialized}
-            },
+            "news_items": news_items_serialized,
             "current_node": "fetch_node",
             "internal_progress": {"fetch_node": "done", "analyst_node": "running"},
         },
@@ -310,10 +299,9 @@ def fetch_node(state: FinancialNewsState) -> Command:
 
 def analyst_node(state: FinancialNewsState) -> Command:
     """[Funnel Node 4] Deep analysis per article."""
-    output = state.financial_news.output or {}
-    ticker = output.get("ticker")
     # news_items are now dicts (serialized from fetch_node)
-    news_items: list[dict] = output.get("news_items", [])
+    news_items: list[dict] = state.news_items
+    ticker = state.intent_extraction.resolved_ticker or state.ticker
 
     logger.info(
         f"--- [News Research] Analyzing {len(news_items)} articles for {ticker} ---"
@@ -427,7 +415,7 @@ def analyst_node(state: FinancialNewsState) -> Command:
 
     return Command(
         update={
-            "financial_news": {"output": {**output, "news_items": news_items}},
+            "news_items": news_items,
             "current_node": "analyst_node",
             "internal_progress": {"analyst_node": "done", "aggregator_node": "running"},
         },
@@ -437,12 +425,10 @@ def analyst_node(state: FinancialNewsState) -> Command:
 
 def aggregator_node(state: FinancialNewsState) -> Command:
     """[Funnel Node 5] Aggregate results and update state."""
-    output = state.financial_news.output or {}
-    ticker = output.get("ticker")
     # news_items are now dicts (serialized from previous nodes)
-    news_items: list[dict] = output.get("news_items", [])
+    news_items: list[dict] = state.news_items
 
-    logger.info(f"--- [News Research] Aggregating results for {ticker} ---")
+    logger.info(f"--- [News Research] Aggregating results for {state.ticker} ---")
 
     if not news_items:
         summary_text = "No detailed news analysis available."
@@ -489,7 +475,7 @@ def aggregator_node(state: FinancialNewsState) -> Command:
         all_themes = list(themes)
 
     final_output = NewsResearchOutput(
-        ticker=ticker,
+        ticker=state.ticker,
         news_items=news_items,
         overall_sentiment=overall_sentiment,
         sentiment_score=round(weighted_score, 2),
@@ -498,14 +484,10 @@ def aggregator_node(state: FinancialNewsState) -> Command:
 
     return Command(
         update={
-            # mode='json' ensures HttpUrl, datetime, Enums are serialized as strings for msgpack/checkpoint
-            "financial_news": {
-                "output": final_output.model_dump(mode="json"),
-                "artifact": AgentOutputArtifact(
-                    summary=f"Overall Sentiment: {overall_sentiment.value.upper()} ({final_output.sentiment_score}) from {len(news_items)} articles. Themes: {', '.join(all_themes)}",
-                    data=final_output.model_dump(mode="json"),
-                ),
-            },
+            "artifact": AgentOutputArtifact(
+                summary=f"Overall Sentiment: {overall_sentiment.value.upper()} ({final_output.sentiment_score}) from {len(news_items)} articles. Themes: {', '.join(all_themes)}",
+                data=final_output.model_dump(mode="json"),
+            ),
             "current_node": "aggregator_node",
             "internal_progress": {"aggregator_node": "done"},
             # [BSP Fix] Emit status immediately to bypass LangGraph's sync barrier
@@ -513,7 +495,7 @@ def aggregator_node(state: FinancialNewsState) -> Command:
             "node_statuses": {"financial_news_research": "done"},
             "messages": [
                 AIMessage(
-                    content=f"### News Research: {ticker}\n\n**Overall Sentiment:** {overall_sentiment.value.upper()} ({final_output.sentiment_score})\n\n**Analysis Summaries:**\n{summary_text}\n\n**Themes:** {', '.join(all_themes) or 'N/A'}",
+                    content=f"### News Research: {state.ticker}\n\n**Overall Sentiment:** {overall_sentiment.value.upper()} ({final_output.sentiment_score})\n\n**Analysis Summaries:**\n{summary_text}\n\n**Themes:** {', '.join(all_themes) or 'N/A'}",
                     additional_kwargs={
                         "type": "text",
                         "agent_id": "financial_news_research",

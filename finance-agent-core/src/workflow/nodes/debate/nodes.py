@@ -133,9 +133,30 @@ def _get_last_message_from_role(history: list, role_name: str) -> str:
 
 async def debate_aggregator_node(state: DebateState) -> dict[str, Any]:
     # Compress data before passing to debate state
-    clean_financials = compress_financial_data(state.fundamental.financial_reports)
-    clean_news = compress_news_data(state.financial_news.output)
-    clean_ta = compress_ta_data(state.technical_analysis.output)
+    # Now that we've removed the legacy .output fields, we read from the standardized .artifact.data
+    news_artifact = state.financial_news_research.artifact
+    news_data = (
+        news_artifact.data
+        if hasattr(news_artifact, "data")
+        else news_artifact.get("data")
+        if news_artifact
+        else {}
+    )
+
+    ta_artifact = state.technical_analysis.artifact
+    ta_data = (
+        ta_artifact.data
+        if hasattr(ta_artifact, "data")
+        else ta_artifact.get("data")
+        if ta_artifact
+        else {}
+    )
+
+    clean_financials = compress_financial_data(
+        state.fundamental_analysis.financial_reports
+    )
+    clean_news = compress_news_data(news_data)
+    clean_ta = compress_ta_data(ta_data)
 
     reports = {
         "financials": {
@@ -416,13 +437,10 @@ async def verdict_node(state: DebateState) -> dict[str, Any]:
         conclusion_data["debate_rounds"] = 3
 
         return {
-            "debate": {
-                "conclusion": conclusion_data,
-                "artifact": AgentOutputArtifact(
-                    summary=f"Verdict: {conclusion_data.get('decision', 'PENDING')} (Confidence: {conclusion_data.get('confidence_score', 0)}%)",
-                    data=conclusion_data,
-                ),
-            },
+            "artifact": AgentOutputArtifact(
+                summary=f"Verdict: {conclusion_data.get('decision', 'PENDING')} (Confidence: {conclusion_data.get('confidence_score', 0)}%)",
+                data=conclusion_data,
+            ),
             "internal_progress": {"verdict": "done"},
             # [BSP Fix] Emit status immediately to bypass LangGraph's sync barrier
             "node_statuses": {"debate": "done"},

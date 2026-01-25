@@ -5,7 +5,10 @@ Following LangGraph best practices - does NOT share node_statuses with parent.
 
 from typing import Annotated
 
+from langgraph.graph import add_messages
 from pydantic import BaseModel, Field
+
+from src.interface.schemas import AgentOutputArtifact
 
 from ...state import (
     IntentExtractionContext,
@@ -35,6 +38,8 @@ class IntentExtractionOutput(BaseModel):
 
     intent_extraction: IntentExtractionContext
     ticker: str | None = None
+    artifact: AgentOutputArtifact | None = None
+    messages: list = Field(default_factory=list)
 
 
 class IntentExtractionState(BaseModel):
@@ -45,12 +50,15 @@ class IntentExtractionState(BaseModel):
     # --- From Input ---
     ticker: str | None = None
     user_query: str | None = None
-    messages: list = Field(default_factory=list)
 
     # --- Core State (Reducers applied) ---
     intent_extraction: Annotated[
         IntentExtractionContext, merge_intent_extraction_context
     ] = Field(default_factory=IntentExtractionContext)
+
+    # --- Output (Direct in State layer for Flat Pattern) ---
+    artifact: AgentOutputArtifact | None = None
+    messages: Annotated[list, add_messages] = Field(default_factory=list)
 
     # --- Private State ---
     internal_progress: Annotated[dict[str, str], merge_dict] = Field(

@@ -79,9 +79,6 @@ class DebateContext(BaseModel):
     bear_thesis: str | None = Field(
         None, description="The current strongest argument for SHORT"
     )
-    conclusion: dict[str, Any] | None = Field(
-        None, description="Final structure output: DebateConclusion"
-    )
     current_round: int = 0
     analyst_reports: dict[str, Any] | None = Field(
         None, description="Aggregated ground truth (news + financials) for debate"
@@ -117,13 +114,15 @@ def merge_debate_context(
 
 
 class FundamentalAnalysisContext(BaseModel):
-    analysis_output: dict[str, Any] | None = None
     financial_reports: list[dict[str, Any]] = Field(
         default_factory=list,
         description="Financial Health Reports from edgartools (Multi-year)",
     )
     approved: bool | None = None
     status: str | None = None
+    model_type: str | None = Field(
+        None, description="The skill/model to use for valuation (e.g. saas, bank)"
+    )
     artifact: AgentOutputArtifact | None = None
 
 
@@ -146,9 +145,6 @@ def merge_fundamental_context(
 
 
 class FinancialNewsContext(BaseModel):
-    output: dict[str, Any] | None = Field(
-        None, description="Output from Financial News Research"
-    )
     artifact: AgentOutputArtifact | None = None
 
 
@@ -171,9 +167,6 @@ def merge_financial_news_context(
 
 
 class TechnicalAnalysisContext(BaseModel):
-    output: dict[str, Any] | None = Field(
-        None, description="Output from Technical Analysis"
-    )
     artifact: AgentOutputArtifact | None = None
 
 
@@ -218,12 +211,12 @@ class AgentState(BaseModel):
     intent_extraction: Annotated[
         IntentExtractionContext, merge_intent_extraction_context
     ] = Field(default_factory=IntentExtractionContext)
-    fundamental: Annotated[FundamentalAnalysisContext, merge_fundamental_context] = (
-        Field(default_factory=FundamentalAnalysisContext)
-    )
-    financial_news: Annotated[FinancialNewsContext, merge_financial_news_context] = (
-        Field(default_factory=FinancialNewsContext)
-    )
+    fundamental_analysis: Annotated[
+        FundamentalAnalysisContext, merge_fundamental_context
+    ] = Field(default_factory=FundamentalAnalysisContext)
+    financial_news_research: Annotated[
+        FinancialNewsContext, merge_financial_news_context
+    ] = Field(default_factory=FinancialNewsContext)
     technical_analysis: Annotated[
         TechnicalAnalysisContext, merge_technical_analysis_context
     ] = Field(default_factory=TechnicalAnalysisContext)

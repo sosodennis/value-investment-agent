@@ -15,7 +15,7 @@ from pydantic import BaseModel
 # Add the project root to sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command
 
@@ -223,13 +223,13 @@ async def event_generator(
                 thread_sequences[thread_id] = seq_counter
 
             # Internal housekeeping: save AI messages to history
-            if event["event"] == "on_chat_model_end":
-                output = event["data"]["output"]
-                if isinstance(output, BaseMessage):
-                    try:
-                        await history_service.save_message(thread_id, output)
-                    except Exception as e:
-                        logger.error(f"❌ [Server] history save failed: {e}")
+            # if event["event"] == "on_chat_model_end":
+            #     output = event["data"]["output"]
+            #     if isinstance(output, BaseMessage):
+            #         try:
+            #             await history_service.save_message(thread_id, output)
+            #         except Exception as e:
+            #             logger.error(f"❌ [Server] history save failed: {e}")
 
         # Final flush after the stream ends
         await flush_deltas()

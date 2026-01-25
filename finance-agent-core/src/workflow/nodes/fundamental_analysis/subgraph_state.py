@@ -5,7 +5,10 @@ Following LangGraph best practices - does NOT share node_statuses with parent.
 
 from typing import Annotated
 
+from langgraph.graph import add_messages
 from pydantic import BaseModel, Field
+
+from src.interface.schemas import AgentOutputArtifact
 
 from ...state import (
     FundamentalAnalysisContext,
@@ -34,7 +37,9 @@ class FundamentalAnalysisOutput(BaseModel):
     Defines exactly what fields are returned to the parent state.
     """
 
-    fundamental: FundamentalAnalysisContext
+    fundamental_analysis: FundamentalAnalysisContext
+    artifact: AgentOutputArtifact | None = None
+    messages: list = Field(default_factory=list)
 
 
 class FundamentalAnalysisState(BaseModel):
@@ -50,9 +55,13 @@ class FundamentalAnalysisState(BaseModel):
     )
 
     # --- Core State (Reducers applied) ---
-    fundamental: Annotated[FundamentalAnalysisContext, merge_fundamental_context] = (
-        Field(default_factory=FundamentalAnalysisContext)
-    )
+    fundamental_analysis: Annotated[
+        FundamentalAnalysisContext, merge_fundamental_context
+    ] = Field(default_factory=FundamentalAnalysisContext)
+
+    # --- Output (Direct in State layer for Flat Pattern) ---
+    artifact: AgentOutputArtifact | None = None
+    messages: Annotated[list, add_messages] = Field(default_factory=list)
 
     # --- Private State (Not exposed in FundamentalAnalysisOutput) ---
     internal_progress: Annotated[dict[str, str], merge_dict] = Field(

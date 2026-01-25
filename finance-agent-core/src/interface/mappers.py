@@ -10,14 +10,6 @@ Design Principles:
 3. Mappers bridge the gap without polluting either side
 """
 
-# Mapping from agent_id (from metadata) to state key (in AgentState)
-# This is necessary because some agents use different names for their state vs their ID
-AGENT_STATE_KEY_MAP = {
-    "fundamental_analysis": "fundamental",  # FA uses "fundamental" as state key
-    "financial_news_research": "financial_news",  # News uses "financial_news"
-    # Others use the same name for both
-}
-
 
 class NodeOutputMapper:
     """
@@ -51,27 +43,21 @@ class NodeOutputMapper:
         """
         Extract AgentOutputArtifact from the state update for a specific agent.
 
-        IMPORTANT: We must look for the artifact under the agent's OWN state key,
-        not just return the first artifact we find. LangGraph events contain the
-        entire accumulated state, so we'd otherwise return stale artifacts from
-        previously-run agents.
+        Strategy:
+        1. Flat Pattern: Artifact exists directly in update (Subgraphs)
+        2. Nested Pattern: Artifact is nested under agent's state key (Parent Graph)
         """
         if not isinstance(output, dict):
             return None
 
-        # 1. Primary: Look for artifact under agent's own state key
-        state_key = AGENT_STATE_KEY_MAP.get(
-            agent_id, agent_id
-        )  # e.g. "fundamental" for "fundamental_analysis"
-
-        if state_key in output:
-            result = NodeOutputMapper._extract_artifact(output[state_key])
-            if result:
-                return result
-
-        # 2. Fallback: Also check for top-level artifact (legacy pattern)
+        # 1. Flat Pattern (Direct artifact)
+        # Standard for subgraphs to enable immediate UI updates without sync barriers.
         if "artifact" in output:
-            val = output["artifact"]
-            return val.model_dump() if hasattr(val, "model_dump") else val
+            return NodeOutputMapper._extract_artifact(output)
+
+        # 2. Nested Pattern (Artifact under agent key)
+        # Used by parent graph nodes and final subgraph output adapters.
+        if agent_id in output:
+            return NodeOutputMapper._extract_artifact(output[agent_id])
 
         return None

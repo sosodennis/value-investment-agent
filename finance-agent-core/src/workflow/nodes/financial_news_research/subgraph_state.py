@@ -5,7 +5,10 @@ Following LangGraph best practices - does NOT share node_statuses with parent.
 
 from typing import Annotated
 
+from langgraph.graph import add_messages
 from pydantic import BaseModel, Field
+
+from src.interface.schemas import AgentOutputArtifact
 
 from ...state import (
     FinancialNewsContext,
@@ -33,7 +36,9 @@ class FinancialNewsOutput(BaseModel):
     Output schema for financial news research subgraph.
     """
 
-    financial_news: FinancialNewsContext
+    financial_news_research: FinancialNewsContext
+    artifact: AgentOutputArtifact | None = None
+    messages: list = Field(default_factory=list)
 
 
 class FinancialNewsState(BaseModel):
@@ -48,8 +53,28 @@ class FinancialNewsState(BaseModel):
     )
 
     # --- Core State (Reducers applied) ---
-    financial_news: Annotated[FinancialNewsContext, merge_financial_news_context] = (
-        Field(default_factory=FinancialNewsContext)
+    financial_news_research: Annotated[
+        FinancialNewsContext, merge_financial_news_context
+    ] = Field(default_factory=FinancialNewsContext)
+
+    # --- Output (Direct in State layer for Flat Pattern) ---
+    artifact: AgentOutputArtifact | None = None
+    messages: Annotated[list, add_messages] = Field(default_factory=list)
+
+    # --- Intermediate State (Multi-stage pipeline) ---
+    raw_results: list[dict] = Field(
+        default_factory=list, description="Raw search results from news API"
+    )
+    formatted_results: str = Field(
+        default="", description="Formatted search results for LLM selection"
+    )
+    selected_indices: list[int] = Field(
+        default_factory=list,
+        description="Indices of articles selected by LLM for deep analysis",
+    )
+    news_items: list[dict] = Field(
+        default_factory=list,
+        description="Fetched articles with full content and analysis",
     )
 
     # --- Private State ---

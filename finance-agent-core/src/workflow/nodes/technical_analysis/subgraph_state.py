@@ -3,9 +3,12 @@ Isolated state class for Technical Analysis subgraph.
 Following LangGraph best practices - does NOT share node_statuses with parent.
 """
 
-from typing import Annotated
+from typing import Annotated, Any
 
+from langgraph.graph import add_messages
 from pydantic import BaseModel, Field
+
+from src.interface.schemas import AgentOutputArtifact
 
 from ...state import (
     IntentExtractionContext,
@@ -36,6 +39,8 @@ class TechnicalAnalysisOutput(BaseModel):
     """
 
     technical_analysis: TechnicalAnalysisContext
+    artifact: AgentOutputArtifact | None = None
+    messages: list = Field(default_factory=list)
 
 
 class TechnicalAnalysisState(BaseModel):
@@ -53,6 +58,32 @@ class TechnicalAnalysisState(BaseModel):
     technical_analysis: Annotated[
         TechnicalAnalysisContext, merge_technical_analysis_context
     ] = Field(default_factory=TechnicalAnalysisContext)
+
+    # --- Output (Direct in State layer for Flat Pattern) ---
+    artifact: AgentOutputArtifact | None = None
+    messages: Annotated[list, add_messages] = Field(default_factory=list)
+
+    # --- Intermediate State (Multi-stage pipeline) ---
+    price_series: dict[str, float] = Field(
+        default_factory=dict, description="Historical price data {date: price}"
+    )
+    volume_series: dict[str, float] = Field(
+        default_factory=dict, description="Historical volume data {date: volume}"
+    )
+    fracdiff_series: dict[str, float] = Field(
+        default_factory=dict, description="Fractionally differentiated price series"
+    )
+    z_score_series: dict[str, float] = Field(
+        default_factory=dict, description="Rolling Z-score of fracdiff series"
+    )
+    fracdiff_metrics: dict[str, Any] = Field(
+        default_factory=dict,
+        description="FracDiff parameters: optimal_d, adf_statistic, etc.",
+    )
+    indicators: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Technical indicators: bollinger, macd, obv, etc.",
+    )
 
     # --- Private State ---
     internal_progress: Annotated[dict[str, str], merge_dict] = Field(

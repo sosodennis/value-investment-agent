@@ -15,7 +15,7 @@ def input_adapter(state: AgentState) -> dict[str, Any]:
     return {
         "ticker": state.ticker,
         "intent_extraction": state.intent_extraction,
-        "fundamental": state.fundamental,
+        "fundamental_analysis": state.fundamental_analysis,
         # internal_progress, current_node 會由子圖自己初始化
     }
 
@@ -42,25 +42,25 @@ def output_adapter(sub_output: dict[str, Any]) -> dict[str, Any]:
     """將子圖輸出轉換為父圖更新"""
     logger.info("--- [FA Adapter] Mapping subgraph output back to parent state ---")
 
-    fundamental_ctx = sub_output.get("fundamental")
-    raw_model = None
+    fundamental_ctx = sub_output.get("fundamental_analysis", {})
+    artifact = sub_output.get("artifact")
 
-    # Prepare standard event data for the UI
-    reports = None
+    # [Compatibility] Copy flat artifact back to nested context
+    if artifact:
+        if isinstance(fundamental_ctx, dict):
+            fundamental_ctx["artifact"] = artifact
+        else:
+            fundamental_ctx.artifact = artifact
 
-    if fundamental_ctx:
-        # Try to get reports from top level or nested analysis_output
-        reports = fundamental_ctx.get("financial_reports")
-        if not reports and fundamental_ctx.get("analysis_output"):
-            reports = fundamental_ctx["analysis_output"].get("financial_reports")
-
-        if fundamental_ctx.get("analysis_output"):
-            raw_model = fundamental_ctx["analysis_output"].get("model_type")
+    # Map model_type from Context field if available
+    raw_model = sub_output.get("model_type")
+    if not raw_model and isinstance(fundamental_ctx, dict):
+        raw_model = fundamental_ctx.get("model_type")
 
     model_type = map_model_to_skill(raw_model)
 
     return {
-        "fundamental": fundamental_ctx,
+        "fundamental_analysis": fundamental_ctx,
         "ticker": sub_output.get("ticker"),
         "model_type": model_type,
         "node_statuses": {"fundamental_analysis": "done"},
