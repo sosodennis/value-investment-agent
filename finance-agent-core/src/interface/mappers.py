@@ -10,6 +10,8 @@ Design Principles:
 3. Mappers bridge the gap without polluting either side
 """
 
+from typing import Any
+
 
 class NodeOutputMapper:
     """
@@ -61,3 +63,17 @@ class NodeOutputMapper:
             return NodeOutputMapper._extract_artifact(output[agent_id])
 
         return None
+
+    @staticmethod
+    def map_all_outputs(graph_state: dict[str, Any]) -> dict[str, dict]:
+        """
+        Scan the entire Graph State and extract all Agent Outputs.
+        This is the only method the Server needs to call.
+        """
+        mapped_outputs = {}
+        for key, value in graph_state.items():
+            # Reuse the existing extraction logic
+            artifact_data = NodeOutputMapper._extract_artifact(value)
+            if artifact_data:
+                mapped_outputs[key] = artifact_data
+        return mapped_outputs

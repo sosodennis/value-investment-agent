@@ -59,8 +59,8 @@ def test_adapt_state_update_news():
         },
         "data": {
             "output": {
-                "financial_news": {
-                    "output": {"news_items": [{"id": "1", "title": "market up"}]}
+                "financial_news_research": {
+                    "artifact": {"news_items": [{"id": "1", "title": "market up"}]}
                 }
             }
         },

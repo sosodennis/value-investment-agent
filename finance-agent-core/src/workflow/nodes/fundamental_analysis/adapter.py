@@ -59,9 +59,15 @@ def output_adapter(sub_output: dict[str, Any]) -> dict[str, Any]:
 
     model_type = map_model_to_skill(raw_model)
 
+    # Ensure model_type is in the context
+    if model_type:
+        if isinstance(fundamental_ctx, dict):
+            fundamental_ctx["model_type"] = model_type
+        else:
+            fundamental_ctx.model_type = model_type
+
     return {
         "fundamental_analysis": fundamental_ctx,
         "ticker": sub_output.get("ticker"),
-        "model_type": model_type,
         "node_statuses": {"fundamental_analysis": "done"},
     }

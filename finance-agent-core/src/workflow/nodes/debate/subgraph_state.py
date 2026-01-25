@@ -16,8 +16,8 @@ from ...state import (
     FundamentalAnalysisContext,
     IntentExtractionContext,
     TechnicalAnalysisContext,
+    create_pydantic_reducer,
     last_value,
-    merge_debate_context,
     merge_dict,
 )
 
@@ -76,7 +76,7 @@ class DebateState(BaseModel):
 
     # --- Core State (Reducers applied) ---
     # Use Annotated with reducer to handle concurrent updates from Bull & Bear in Round 1
-    debate: Annotated[DebateContext, merge_debate_context] = Field(
+    debate: Annotated[DebateContext, create_pydantic_reducer(DebateContext)] = Field(
         default_factory=DebateContext
     )
     model_type: Annotated[str | None, last_value] = None

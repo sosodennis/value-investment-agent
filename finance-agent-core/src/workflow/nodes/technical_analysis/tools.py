@@ -148,7 +148,7 @@ def find_optimal_d(
                 optimal_d = d
                 adf_stat = stat
                 adf_pvalue = pval
-                logger.info(f"✅ Found optimal d={d:.2f} (p-value={pval:.4f})")
+                # logger.info(f"✅ Found optimal d={d:.2f} (p-value={pval:.4f})")
                 break
 
         except Exception:

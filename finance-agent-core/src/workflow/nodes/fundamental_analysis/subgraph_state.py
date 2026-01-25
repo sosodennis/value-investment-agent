@@ -13,9 +13,9 @@ from src.interface.schemas import AgentOutputArtifact
 from ...state import (
     FundamentalAnalysisContext,
     IntentExtractionContext,
+    create_pydantic_reducer,
     last_value,
     merge_dict,
-    merge_fundamental_context,
 )
 
 
@@ -56,7 +56,7 @@ class FundamentalAnalysisState(BaseModel):
 
     # --- Core State (Reducers applied) ---
     fundamental_analysis: Annotated[
-        FundamentalAnalysisContext, merge_fundamental_context
+        FundamentalAnalysisContext, create_pydantic_reducer(FundamentalAnalysisContext)
     ] = Field(default_factory=FundamentalAnalysisContext)
 
     # --- Output (Direct in State layer for Flat Pattern) ---

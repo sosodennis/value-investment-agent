@@ -19,7 +19,7 @@ def input_adapter(state: AgentState) -> dict[str, Any]:
         "technical_analysis": state.technical_analysis,
         "debate": state.debate,
         "messages": state.messages,
-        "model_type": state.model_type,
+        "model_type": state.fundamental_analysis.model_type,
     }
 
 
@@ -46,9 +46,15 @@ def output_adapter(sub_output: dict[str, Any]) -> dict[str, Any]:
             if raw_model:
                 model_type = map_model_to_skill(raw_model)
 
+    # Update FundamentalAnalysisContext with the decided model_type
+    # This ensures the Executor knows which model to run
+    fundamental_update = {}
+    if model_type:
+        fundamental_update["model_type"] = model_type
+
     return {
         "debate": debate_ctx,
+        "fundamental_analysis": fundamental_update,  # Update the shared context
         "messages": messages,
-        "model_type": model_type,
         "node_statuses": {"debate": "done"},
     }

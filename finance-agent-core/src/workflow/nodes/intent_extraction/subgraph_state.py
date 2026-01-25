@@ -12,9 +12,9 @@ from src.interface.schemas import AgentOutputArtifact
 
 from ...state import (
     IntentExtractionContext,
+    create_pydantic_reducer,
     last_value,
     merge_dict,
-    merge_intent_extraction_context,
 )
 
 
@@ -53,7 +53,7 @@ class IntentExtractionState(BaseModel):
 
     # --- Core State (Reducers applied) ---
     intent_extraction: Annotated[
-        IntentExtractionContext, merge_intent_extraction_context
+        IntentExtractionContext, create_pydantic_reducer(IntentExtractionContext)
     ] = Field(default_factory=IntentExtractionContext)
 
     # --- Output (Direct in State layer for Flat Pattern) ---

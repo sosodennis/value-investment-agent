@@ -13,9 +13,9 @@ from src.interface.schemas import AgentOutputArtifact
 from ...state import (
     FinancialNewsContext,
     IntentExtractionContext,
+    create_pydantic_reducer,
     last_value,
     merge_dict,
-    merge_financial_news_context,
 )
 
 
@@ -54,7 +54,7 @@ class FinancialNewsState(BaseModel):
 
     # --- Core State (Reducers applied) ---
     financial_news_research: Annotated[
-        FinancialNewsContext, merge_financial_news_context
+        FinancialNewsContext, create_pydantic_reducer(FinancialNewsContext)
     ] = Field(default_factory=FinancialNewsContext)
 
     # --- Output (Direct in State layer for Flat Pattern) ---

@@ -352,23 +352,10 @@ async def get_thread_history(request: Request, thread_id: str):
         fundamental = get_context("fundamental")
 
         # Dynamic Agent Output Discovery (Standardization Phase 1)
-        agent_outputs = {}
+        # Use Mapper instead of raw loop
+        from src.interface.mappers import NodeOutputMapper
 
-        # 1. Dynamic Discovery: Scan all state fields for 'artifact'
-        for key, value in snapshot.values.items():
-            # Handle Pydantic models
-            if hasattr(value, "artifact") and value.artifact:
-                agent_outputs[key] = (
-                    value.artifact.model_dump()
-                    if hasattr(value.artifact, "model_dump")
-                    else value.artifact
-                )
-            # Handle dicts (if logic uses dicts)
-            elif isinstance(value, dict) and value.get("artifact"):
-                val = value["artifact"]
-                agent_outputs[key] = (
-                    val.model_dump() if hasattr(val, "model_dump") else val
-                )
+        agent_outputs = NodeOutputMapper.map_all_outputs(snapshot.values)
 
         res = {
             "thread_id": thread_id,
@@ -405,21 +392,9 @@ async def get_agent_statuses(request: Request, thread_id: str):
 
         fundamental = get_context("fundamental")
 
-        agent_outputs = {}
+        from src.interface.mappers import NodeOutputMapper
 
-        # 1. Dynamic Discovery
-        for key, value in snapshot.values.items():
-            if hasattr(value, "artifact") and value.artifact:
-                agent_outputs[key] = (
-                    value.artifact.model_dump()
-                    if hasattr(value.artifact, "model_dump")
-                    else value.artifact
-                )
-            elif isinstance(value, dict) and value.get("artifact"):
-                val = value["artifact"]
-                agent_outputs[key] = (
-                    val.model_dump() if hasattr(val, "model_dump") else val
-                )
+        agent_outputs = NodeOutputMapper.map_all_outputs(snapshot.values)
         return {
             "node_statuses": snapshot.values.get("node_statuses", {}),
             "financial_reports": fundamental.get("financial_reports", []),

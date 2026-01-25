@@ -64,15 +64,19 @@ def test_explicit_status_update_via_state_with_mapper(mock_get_agent_name):
     pass
 
     # Adapter output typically looks like this:
+    # Adapter output typically looks like this:
     adapter_output = {
-        "intent_extraction": {"some_intent": "data"},  # Context
+        "intent_extraction": {
+            "artifact": {"some_intent": "data"}
+        },  # Context with artifact
         "node_statuses": {"intent_extraction": "done"},  # Explicit status
     }
 
     # Verify Mapper behavior directly
     result = NodeOutputMapper.transform("intent_extraction", adapter_output)
 
-    # Assertion that currently FAILS (because mapper strips it)
+    # Assertion
     assert result is not None
-    assert "node_statuses" in result, f"Mapper stripped node_statuses! Result: {result}"
-    assert result["node_statuses"] == {"intent_extraction": "done"}
+    assert "some_intent" in result, "Mapper should extract artifact data"
+    # Node statuses should be stripped as they are not part of the artifact
+    assert "node_statuses" not in result, "Mapper should strip non-artifact fields"

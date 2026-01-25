@@ -13,9 +13,9 @@ from src.interface.schemas import AgentOutputArtifact
 from ...state import (
     IntentExtractionContext,
     TechnicalAnalysisContext,
+    create_pydantic_reducer,
     last_value,
     merge_dict,
-    merge_technical_analysis_context,
 )
 
 
@@ -56,7 +56,7 @@ class TechnicalAnalysisState(BaseModel):
 
     # --- Core State (Reducers applied) ---
     technical_analysis: Annotated[
-        TechnicalAnalysisContext, merge_technical_analysis_context
+        TechnicalAnalysisContext, create_pydantic_reducer(TechnicalAnalysisContext)
     ] = Field(default_factory=TechnicalAnalysisContext)
 
     # --- Output (Direct in State layer for Flat Pattern) ---

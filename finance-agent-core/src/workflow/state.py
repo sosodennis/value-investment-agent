@@ -2,15 +2,13 @@
 Shared state definitions for the workflow graph.
 """
 
-from typing import Annotated, Any
+from typing import Annotated, Any, TypeVar
 
 from langchain_core.messages import AnyMessage
 from langgraph.graph import add_messages
 from pydantic import BaseModel, Field
 
 from src.interface.schemas import AgentOutputArtifact
-
-from .schemas import AuditOutput, CalculationOutput, ExtractionOutput
 
 
 def merge_dict(a: dict, b: dict) -> dict:
@@ -21,6 +19,42 @@ def merge_dict(a: dict, b: dict) -> dict:
 def last_value(a: str | None, b: str | None) -> str | None:
     """Reducer that keeps the last non-None value. Used for parallel node updates."""
     return b if b is not None else a
+
+
+# --- Generic Reducer ---
+
+T = TypeVar("T", bound=BaseModel)
+
+
+def create_pydantic_reducer(model_class: type[T]):
+    """Factory function: Generates a standard Merge Reducer for any Pydantic Model."""
+
+    def reducer(current: T | None, new: T | dict) -> T:
+        if current is None:
+            current = model_class()
+
+        # Handle new data
+        if isinstance(new, model_class):
+            new_data = new.model_dump(exclude_unset=True)
+        else:
+            new_data = new
+
+        # Special handling for 'history' field (common pattern in LangGraph)
+        # Verify both current and new data have history to avoid errors
+        if (
+            "history" in new_data
+            and hasattr(current, "history")
+            and new_data["history"] is not None
+        ):
+            # Use LangGraph's add_messages to handle message appending/updates correctly
+            current.history = add_messages(current.history, new_data["history"])
+
+        # Pydantic copy & update
+        # Using model_copy with update is robust
+        updated = current.model_copy(update=new_data)
+        return updated
+
+    return reducer
 
 
 # --- Context Models ---
@@ -50,25 +84,6 @@ class IntentExtractionContext(BaseModel):
     )
 
 
-def merge_intent_extraction_context(
-    current: IntentExtractionContext | None, new: IntentExtractionContext | dict
-) -> IntentExtractionContext:
-    """Merge function for IntentExtractionContext."""
-    if current is None:
-        current = IntentExtractionContext()
-
-    if isinstance(new, IntentExtractionContext):
-        new_data = new.model_dump()
-    else:
-        new_data = new
-
-    for k, v in new_data.items():
-        if v is not None and hasattr(current, k):
-            setattr(current, k, v)
-
-    return current
-
-
 class DebateContext(BaseModel):
     history: list[AnyMessage] = Field(
         default_factory=list, description="Adversarial conversation transcript"
@@ -88,31 +103,6 @@ class DebateContext(BaseModel):
     )
 
 
-def merge_debate_context(
-    current: DebateContext | None, new: DebateContext | dict
-) -> DebateContext:
-    if current is None:
-        current = DebateContext()
-
-    if isinstance(new, DebateContext):
-        new_data = new.model_dump()
-    else:
-        new_data = new
-
-    # Handle history merging with add_messages
-    if "history" in new_data and new_data["history"] is not None:
-        current.history = add_messages(current.history, new_data["history"])
-
-    # Handle other fields
-    for k, v in new_data.items():
-        if k == "history":
-            continue
-        if v is not None and hasattr(current, k):
-            setattr(current, k, v)
-
-    return current
-
-
 class FundamentalAnalysisContext(BaseModel):
     financial_reports: list[dict[str, Any]] = Field(
         default_factory=list,
@@ -126,66 +116,12 @@ class FundamentalAnalysisContext(BaseModel):
     artifact: AgentOutputArtifact | None = None
 
 
-def merge_fundamental_context(
-    current: FundamentalAnalysisContext | None, new: FundamentalAnalysisContext | dict
-) -> FundamentalAnalysisContext:
-    if current is None:
-        current = FundamentalAnalysisContext()
-
-    if isinstance(new, FundamentalAnalysisContext):
-        new_data = new.model_dump()
-    else:
-        new_data = new
-
-    for k, v in new_data.items():
-        if v is not None and hasattr(current, k):
-            setattr(current, k, v)
-
-    return current
-
-
 class FinancialNewsContext(BaseModel):
     artifact: AgentOutputArtifact | None = None
 
 
-def merge_financial_news_context(
-    current: FinancialNewsContext | None, new: FinancialNewsContext | dict
-) -> FinancialNewsContext:
-    if current is None:
-        current = FinancialNewsContext()
-
-    if isinstance(new, FinancialNewsContext):
-        new_data = new.model_dump()
-    else:
-        new_data = new
-
-    for k, v in new_data.items():
-        if v is not None and hasattr(current, k):
-            setattr(current, k, v)
-
-    return current
-
-
 class TechnicalAnalysisContext(BaseModel):
     artifact: AgentOutputArtifact | None = None
-
-
-def merge_technical_analysis_context(
-    current: TechnicalAnalysisContext | None, new: TechnicalAnalysisContext | dict
-) -> TechnicalAnalysisContext:
-    if current is None:
-        current = TechnicalAnalysisContext()
-
-    if isinstance(new, TechnicalAnalysisContext):
-        new_data = new.model_dump()
-    else:
-        new_data = new
-
-    for k, v in new_data.items():
-        if v is not None and hasattr(current, k):
-            setattr(current, k, v)
-
-    return current
 
 
 class AgentState(BaseModel):
@@ -194,33 +130,25 @@ class AgentState(BaseModel):
     user_query: Annotated[str | None, last_value] = None
     messages: Annotated[list[AnyMessage], add_messages] = Field(default_factory=list)
     ticker: Annotated[str | None, last_value] = None
-    model_type: Annotated[str | None, last_value] = None
-
-    # Refactored fields with strict schemas
-    extraction_output: Annotated[ExtractionOutput | None, last_value] = Field(
-        None, description="Output from Executor"
-    )
-    audit_output: Annotated[AuditOutput | None, last_value] = Field(
-        None, description="Output from Auditor"
-    )
-    calculation_output: Annotated[CalculationOutput | None, last_value] = Field(
-        None, description="Output from Calculator"
-    )
 
     # Sub-Agent Contexts
     intent_extraction: Annotated[
-        IntentExtractionContext, merge_intent_extraction_context
+        IntentExtractionContext, create_pydantic_reducer(IntentExtractionContext)
     ] = Field(default_factory=IntentExtractionContext)
+
     fundamental_analysis: Annotated[
-        FundamentalAnalysisContext, merge_fundamental_context
+        FundamentalAnalysisContext, create_pydantic_reducer(FundamentalAnalysisContext)
     ] = Field(default_factory=FundamentalAnalysisContext)
+
     financial_news_research: Annotated[
-        FinancialNewsContext, merge_financial_news_context
+        FinancialNewsContext, create_pydantic_reducer(FinancialNewsContext)
     ] = Field(default_factory=FinancialNewsContext)
+
     technical_analysis: Annotated[
-        TechnicalAnalysisContext, merge_technical_analysis_context
+        TechnicalAnalysisContext, create_pydantic_reducer(TechnicalAnalysisContext)
     ] = Field(default_factory=TechnicalAnalysisContext)
-    debate: Annotated[DebateContext, merge_debate_context] = Field(
+
+    debate: Annotated[DebateContext, create_pydantic_reducer(DebateContext)] = Field(
         default_factory=DebateContext
     )
 

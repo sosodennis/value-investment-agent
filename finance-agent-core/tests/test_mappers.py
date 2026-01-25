@@ -16,7 +16,7 @@ def test_technical_analysis_mapping():
     # Simulate nested state from graph
     nested_output = {
         "technical_analysis": {
-            "output": {
+            "artifact": {
                 "ticker": "AAPL",
                 "frac_diff_metrics": {"optimal_d": 0.42, "adf_pvalue": 0.001},
                 "signal_state": {"z_score": 1.5},
@@ -37,8 +37,8 @@ def test_technical_analysis_mapping():
 # Test Financial News mapping
 def test_financial_news_mapping():
     nested_output = {
-        "financial_news": {
-            "output": {
+        "financial_news_research": {
+            "artifact": {
                 "ticker": "AAPL",
                 "news_items": [{"id": "1", "title": "Test News"}],
                 "overall_sentiment": "BULLISH",
@@ -57,8 +57,8 @@ def test_financial_news_mapping():
 # Test Fundamental Analysis mapping
 def test_fundamental_analysis_mapping():
     nested_output = {
-        "fundamental": {
-            "analysis_output": {
+        "fundamental_analysis": {
+            "artifact": {
                 "ticker": "AAPL",
                 "model_type": "DCF",
                 "reasoning": "Test reasoning",
@@ -77,16 +77,14 @@ def test_fundamental_analysis_mapping():
 # Test Debate mapping
 def test_debate_mapping():
     nested_output = {
-        "debate": {"conclusion": {"final_verdict": "LONG", "conviction": 75}}
+        "debate": {"artifact": {"final_verdict": "LONG", "conviction": 75}}
     }
 
     result = NodeOutputMapper.transform("debate", nested_output)
 
     assert result is not None, "Mapper returned None"
-    assert "conclusion" in result, "Missing conclusion"
-    assert (
-        result["conclusion"]["final_verdict"] == "LONG"
-    ), "conclusion not extracted correctly"
+    assert "final_verdict" in result, "Missing final_verdict"
+    assert result["final_verdict"] == "LONG", "final_verdict not extracted correctly"
     print("✅ Debate mapping works")
 
 
