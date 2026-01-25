@@ -5,6 +5,7 @@ from typing import Any
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
+from src.interface.schemas import AgentOutputArtifact
 from src.utils.logger import get_logger
 
 from .prompts import (
@@ -415,7 +416,13 @@ async def verdict_node(state: DebateState) -> dict[str, Any]:
         conclusion_data["debate_rounds"] = 3
 
         return {
-            "debate": {"conclusion": conclusion_data},
+            "debate": {
+                "conclusion": conclusion_data,
+                "artifact": AgentOutputArtifact(
+                    summary=f"Verdict: {conclusion_data.get('decision', 'PENDING')} (Confidence: {conclusion_data.get('confidence_score', 0)}%)",
+                    data=conclusion_data,
+                ),
+            },
             "internal_progress": {"verdict": "done"},
             # [BSP Fix] Emit status immediately to bypass LangGraph's sync barrier
             "node_statuses": {"debate": "done"},

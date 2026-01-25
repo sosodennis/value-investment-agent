@@ -8,6 +8,8 @@ from langchain_core.messages import AnyMessage
 from langgraph.graph import add_messages
 from pydantic import BaseModel, Field
 
+from src.interface.schemas import AgentOutputArtifact
+
 from .schemas import AuditOutput, CalculationOutput, ExtractionOutput
 
 
@@ -42,6 +44,9 @@ class IntentExtractionContext(BaseModel):
     status: str | None = Field(
         None,
         description="Current status: extraction, searching, deciding, clarifying, resolved",
+    )
+    artifact: AgentOutputArtifact | None = Field(
+        None, description="Standardized output artifact for UI"
     )
 
 
@@ -81,6 +86,9 @@ class DebateContext(BaseModel):
     analyst_reports: dict[str, Any] | None = Field(
         None, description="Aggregated ground truth (news + financials) for debate"
     )
+    artifact: AgentOutputArtifact | None = Field(
+        None, description="Standardized output artifact for UI"
+    )
 
 
 def merge_debate_context(
@@ -116,6 +124,7 @@ class FundamentalAnalysisContext(BaseModel):
     )
     approved: bool | None = None
     status: str | None = None
+    artifact: AgentOutputArtifact | None = None
 
 
 def merge_fundamental_context(
@@ -140,6 +149,7 @@ class FinancialNewsContext(BaseModel):
     output: dict[str, Any] | None = Field(
         None, description="Output from Financial News Research"
     )
+    artifact: AgentOutputArtifact | None = None
 
 
 def merge_financial_news_context(
@@ -164,6 +174,7 @@ class TechnicalAnalysisContext(BaseModel):
     output: dict[str, Any] | None = Field(
         None, description="Output from Technical Analysis"
     )
+    artifact: AgentOutputArtifact | None = None
 
 
 def merge_technical_analysis_context(

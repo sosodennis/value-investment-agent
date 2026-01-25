@@ -10,162 +10,68 @@ Design Principles:
 3. Mappers bridge the gap without polluting either side
 """
 
+# Mapping from agent_id (from metadata) to state key (in AgentState)
+# This is necessary because some agents use different names for their state vs their ID
+AGENT_STATE_KEY_MAP = {
+    "fundamental_analysis": "fundamental",  # FA uses "fundamental" as state key
+    "financial_news_research": "financial_news",  # News uses "financial_news"
+    # Others use the same name for both
+}
+
 
 class NodeOutputMapper:
     """
     Centralized mapper for transforming agent outputs to UI payloads.
 
-    Each method corresponds to a high-level agent and knows how to extract
-    the relevant data from that agent's nested state structure.
+    Refactored to be GENERIC and DATA-DRIVEN (Standardization Phase 1).
+    It no longer contains domain specific logic. It simply looks for the
+    standard 'artifact' field in the state updates.
     """
 
     @staticmethod
-    def _merge_standard_fields(payload: dict, output: dict) -> dict:
-        """Helper to merge standard fields (node_statuses, messages) into the payload."""
-        if payload is None:
-            return None
-
-        # Preserve keys if they exist in the raw output
-        for key in ["node_statuses", "messages", "ticker"]:
-            if key in output and output[key] is not None:
-                payload[key] = output[key]
-        return payload
-
-    @staticmethod
-    def map_technical_analysis(output: dict) -> dict | None:
-        """
-        Transform Technical Analysis state to UI payload.
-
-        Input:  {"technical_analysis": {"output": {...}}}
-        Output: {...} (flattened TechnicalSignal)
-        """
-        if not isinstance(output, dict):
-            return None
-
-        # Navigate nested structure
-        ta_context = output.get("technical_analysis", {})
-        if isinstance(ta_context, dict):
-            ta_output = ta_context.get("output")
-            # If output exists, use it. Otherwise use empty dict to allow merging standard fields
-            target_payload = ta_output if isinstance(ta_output, dict) else {}
-
-            # Only return if we have domain data OR standard fields
-            if target_payload or any(
-                k in output for k in ["node_statuses", "messages"]
-            ):
-                return NodeOutputMapper._merge_standard_fields(target_payload, output)
-
-        return None
-
-    @staticmethod
-    def map_fundamental_analysis(output: dict) -> dict | None:
-        """
-        Transform Fundamental Analysis state to UI payload.
-
-        Input:  {"fundamental": {"analysis_output": {...}}}
-        Output: {...} (flattened analysis)
-        """
-        if not isinstance(output, dict):
-            return None
-
-        fundamental_context = output.get("fundamental", {})
-        if isinstance(fundamental_context, dict):
-            analysis_output = fundamental_context.get("analysis_output")
-            target_payload = (
-                analysis_output if isinstance(analysis_output, dict) else {}
+    def _extract_artifact(value) -> dict | None:
+        """Helper to extract artifact from a value (dict or Pydantic model)."""
+        # Check for Pydantic model with artifact
+        if hasattr(value, "artifact") and value.artifact:
+            return (
+                value.artifact.model_dump()
+                if hasattr(value.artifact, "model_dump")
+                else value.artifact
             )
 
-            if target_payload or any(
-                k in output for k in ["node_statuses", "messages"]
-            ):
-                return NodeOutputMapper._merge_standard_fields(target_payload, output)
+        # Check for dict with artifact
+        if isinstance(value, dict) and value.get("artifact"):
+            val = value["artifact"]
+            return val.model_dump() if hasattr(val, "model_dump") else val
 
         return None
 
     @staticmethod
-    def map_financial_news(output: dict) -> dict | None:
+    def transform(agent_id: str, output: dict) -> dict | None:
         """
-        Transform Financial News state to UI payload.
+        Extract AgentOutputArtifact from the state update for a specific agent.
 
-        Input:  {"financial_news": {"output": {...}}}
-        Output: {...} (NewsResearchOutput with news_items)
-        """
-        if not isinstance(output, dict):
-            return None
-
-        news_context = output.get("financial_news", {})
-        if isinstance(news_context, dict):
-            news_output = news_context.get("output")
-            target_payload = news_output if isinstance(news_output, dict) else {}
-
-            if target_payload or any(
-                k in output for k in ["node_statuses", "messages"]
-            ):
-                return NodeOutputMapper._merge_standard_fields(target_payload, output)
-
-        return None
-
-    @staticmethod
-    def map_debate(output: dict) -> dict | None:
-        """
-        Transform Debate state to UI payload.
-
-        Input:  {"debate": {"conclusion": {...}}}
-        Output: {"conclusion": {...}}
+        IMPORTANT: We must look for the artifact under the agent's OWN state key,
+        not just return the first artifact we find. LangGraph events contain the
+        entire accumulated state, so we'd otherwise return stale artifacts from
+        previously-run agents.
         """
         if not isinstance(output, dict):
             return None
 
-        debate_context = output.get("debate", {})
-        if isinstance(debate_context, dict):
-            conclusion = debate_context.get("conclusion")
-            if conclusion:
-                return NodeOutputMapper._merge_standard_fields(
-                    {"conclusion": conclusion}, output
-                )
+        # 1. Primary: Look for artifact under agent's own state key
+        state_key = AGENT_STATE_KEY_MAP.get(
+            agent_id, agent_id
+        )  # e.g. "fundamental" for "fundamental_analysis"
+
+        if state_key in output:
+            result = NodeOutputMapper._extract_artifact(output[state_key])
+            if result:
+                return result
+
+        # 2. Fallback: Also check for top-level artifact (legacy pattern)
+        if "artifact" in output:
+            val = output["artifact"]
+            return val.model_dump() if hasattr(val, "model_dump") else val
 
         return None
-
-    @staticmethod
-    def map_intent_extraction(output: dict) -> dict | None:
-        """
-        Transform Intent Extraction state to UI payload.
-
-        Input:  {"intent_extraction": {...}}
-        Output: {...} (intent context)
-        """
-        if not isinstance(output, dict):
-            return None
-
-        intent_context = output.get("intent_extraction")
-        if isinstance(intent_context, dict):
-            return NodeOutputMapper._merge_standard_fields(intent_context, output)
-
-        return None
-
-    @classmethod
-    def transform(cls, agent_id: str, output: dict) -> dict | None:
-        """
-        Route to appropriate mapper based on agent_id.
-
-        Args:
-            agent_id: The high-level agent identifier
-            output: The raw graph state output (potentially nested)
-
-        Returns:
-            Flattened UI payload or None if no mapping exists
-        """
-        mapper_registry = {
-            "technical_analysis": cls.map_technical_analysis,
-            "fundamental_analysis": cls.map_fundamental_analysis,
-            "financial_news_research": cls.map_financial_news,
-            "debate": cls.map_debate,
-            "intent_extraction": cls.map_intent_extraction,
-        }
-
-        mapper = mapper_registry.get(agent_id)
-        if mapper:
-            return mapper(output)
-
-        # For unmapped agents, return output as-is (backward compatibility)
-        return output if isinstance(output, dict) else None

@@ -5,6 +5,7 @@ Handles extraction, searching, decision, and clarification for ticker resolution
 
 from langgraph.types import Command, interrupt
 
+from src.interface.schemas import AgentOutputArtifact
 from src.utils.logger import get_logger
 
 from ..fundamental_analysis.extraction import (
@@ -208,6 +209,14 @@ def decision_node(state: IntentExtractionState) -> Command:
                 "resolved_ticker": resolved_ticker,
                 "company_profile": profile.model_dump(),
                 "status": "resolved",
+                "artifact": AgentOutputArtifact(
+                    summary=f"Resolved Ticker: {resolved_ticker} ({profile.name})",
+                    data={
+                        "resolved_ticker": resolved_ticker,
+                        "company_profile": profile.model_dump(),
+                        "status": "resolved",
+                    },
+                ),
             },
             "ticker": resolved_ticker,
             "current_node": "deciding",
@@ -276,6 +285,14 @@ def clarification_node(state: IntentExtractionState) -> Command:
                         "resolved_ticker": selected_symbol,
                         "company_profile": profile.model_dump(),
                         "status": "resolved",
+                        "artifact": AgentOutputArtifact(
+                            summary=f"Manually Resolved Ticker: {selected_symbol} ({profile.name})",
+                            data={
+                                "resolved_ticker": selected_symbol,
+                                "company_profile": profile.model_dump(),
+                                "status": "resolved",
+                            },
+                        ),
                     },
                     "ticker": selected_symbol,
                     "messages": new_messages,

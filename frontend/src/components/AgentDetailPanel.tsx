@@ -48,8 +48,12 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
     // Filter messages for this agent
     const agentMessages = messages.filter(m => m.agentId === agent.id);
 
+    // Standardized Data access
+    // We expect agentOutput to follow the { summary, data } schema now.
+    const outputData = agentOutput?.data;
+
     // Get specific reports from agentOutput if available (for Planner)
-    const agentReports = agentOutput?.financial_reports || (agent.id === 'fundamental_analysis' ? financialReports : []);
+    const agentReports = outputData?.financial_reports || (agent.id === 'fundamental_analysis' ? financialReports : []);
     const latestReport = agentReports.length > 0 ? agentReports[0] : null;
 
     const getScore = (val: any, min: number, max: number) => {
@@ -93,9 +97,9 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
         {
             name: 'Risk',
             score: latestBase ? 100 - getScore(debtToEquity, 0, 2) :
-                (agent.id === 'technical_analysis' && agentOutput ?
-                    (agentOutput.signal_state?.risk_level === 'low' ? 90 :
-                        agentOutput.signal_state?.risk_level === 'medium' ? 60 : 20) :
+                (agent.id === 'technical_analysis' && outputData ?
+                    (outputData.signal_state?.risk_level === 'low' ? 90 :
+                        outputData.signal_state?.risk_level === 'medium' ? 60 : 20) :
                     (agent.id === 'auditor' ? 90 : (agent.id === 'fundamental_analysis' ? 72 : 0))),
             color: 'bg-emerald-500'
         },
@@ -108,8 +112,8 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
         {
             name: 'Valuation',
             score: latestBase ? 100 - getScore(peRatio, 10, 40) :
-                (agent.id === 'technical_analysis' && agentOutput ?
-                    (Math.abs(agentOutput.signal_state?.z_score || 0) > 2 ? 80 : 50) : // Z-score anomaly implies actionable valuation gap
+                (agent.id === 'technical_analysis' && outputData ?
+                    (Math.abs(outputData.signal_state?.z_score || 0) > 2 ? 80 : 50) : // Z-score anomaly implies actionable valuation gap
                     (agent.id === 'calculator' ? 88 : (agent.id === 'fundamental_analysis' ? 40 : 0))),
             color: 'bg-rose-500'
         },
@@ -415,25 +419,25 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                         />
                     ) : agent.id === 'financial_news_research' ? (
                         <NewsResearchOutputPanel
-                            output={agentOutput as NewsOutputType | null}
+                            output={outputData as NewsOutputType | null}
                             resolvedTicker={resolvedTicker}
                             status={agent.status}
                         />
                     ) : agent.id === 'debate' ? (
                         <DebateOutput
-                            output={agentOutput}
+                            output={outputData}
                             resolvedTicker={resolvedTicker}
                             status={agent.status}
                         />
                     ) : agent.id === 'technical_analysis' ? (
                         <TechnicalAnalysisOutput
-                            output={agentOutput as TechnicalSignalOutput | null}
+                            output={outputData as TechnicalSignalOutput | null}
                             status={agent.status}
                         />
                     ) : (
                         <GenericAgentOutput
                             agentName={agent.name}
-                            output={agentOutput}
+                            output={outputData}
                             status={agent.status}
                         />
                     )}

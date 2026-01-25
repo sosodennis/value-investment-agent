@@ -1,5 +1,10 @@
 export type AgentStatus = 'idle' | 'running' | 'done' | 'attention' | 'error';
 
+export interface StandardAgentOutput {
+    summary: string;
+    data: any;
+}
+
 export interface AgentInfo {
     id: string;
     name: string;
@@ -7,7 +12,7 @@ export interface AgentInfo {
     avatar: string;
     status: AgentStatus;
     role?: string;
-    output?: any;
+    output?: StandardAgentOutput | any; // Transitional type
 }
 
 export interface DimensionScore {

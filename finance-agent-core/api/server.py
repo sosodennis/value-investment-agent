@@ -350,20 +350,25 @@ async def get_thread_history(request: Request, thread_id: str):
             return val or {}
 
         fundamental = get_context("fundamental")
-        debate = get_context("debate")
 
-        agent_outputs = {
-            "planner": {
-                "financial_reports": fundamental.get("financial_reports", []),
-                "resolved_ticker": fundamental.get("resolved_ticker"),
-                "company_profile": fundamental.get("company_profile"),
-                "approved": fundamental.get("approved"),
-            },
-            "executor": snapshot.values.get("extraction_output"),
-            "auditor": snapshot.values.get("audit_output"),
-            "calculator": snapshot.values.get("calculation_output"),
-            "debate": debate.get("conclusion"),
-        }
+        # Dynamic Agent Output Discovery (Standardization Phase 1)
+        agent_outputs = {}
+
+        # 1. Dynamic Discovery: Scan all state fields for 'artifact'
+        for key, value in snapshot.values.items():
+            # Handle Pydantic models
+            if hasattr(value, "artifact") and value.artifact:
+                agent_outputs[key] = (
+                    value.artifact.model_dump()
+                    if hasattr(value.artifact, "model_dump")
+                    else value.artifact
+                )
+            # Handle dicts (if logic uses dicts)
+            elif isinstance(value, dict) and value.get("artifact"):
+                val = value["artifact"]
+                agent_outputs[key] = (
+                    val.model_dump() if hasattr(val, "model_dump") else val
+                )
 
         res = {
             "thread_id": thread_id,
@@ -399,20 +404,22 @@ async def get_agent_statuses(request: Request, thread_id: str):
             return val or {}
 
         fundamental = get_context("fundamental")
-        debate = get_context("debate")
 
-        agent_outputs = {
-            "planner": {
-                "financial_reports": fundamental.get("financial_reports", []),
-                "resolved_ticker": fundamental.get("resolved_ticker"),
-                "company_profile": fundamental.get("company_profile"),
-                "approved": fundamental.get("approved"),
-            },
-            "executor": snapshot.values.get("extraction_output"),
-            "auditor": snapshot.values.get("audit_output"),
-            "calculator": snapshot.values.get("calculation_output"),
-            "debate": {"conclusion": debate.get("conclusion")},
-        }
+        agent_outputs = {}
+
+        # 1. Dynamic Discovery
+        for key, value in snapshot.values.items():
+            if hasattr(value, "artifact") and value.artifact:
+                agent_outputs[key] = (
+                    value.artifact.model_dump()
+                    if hasattr(value.artifact, "model_dump")
+                    else value.artifact
+                )
+            elif isinstance(value, dict) and value.get("artifact"):
+                val = value["artifact"]
+                agent_outputs[key] = (
+                    val.model_dump() if hasattr(val, "model_dump") else val
+                )
         return {
             "node_statuses": snapshot.values.get("node_statuses", {}),
             "financial_reports": fundamental.get("financial_reports", []),

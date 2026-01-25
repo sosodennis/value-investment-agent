@@ -9,6 +9,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
 
+from src.interface.schemas import AgentOutputArtifact
 from src.utils.logger import get_logger
 
 from .finbert_service import get_finbert_analyzer
@@ -498,7 +499,13 @@ def aggregator_node(state: FinancialNewsState) -> Command:
     return Command(
         update={
             # mode='json' ensures HttpUrl, datetime, Enums are serialized as strings for msgpack/checkpoint
-            "financial_news": {"output": final_output.model_dump(mode="json")},
+            "financial_news": {
+                "output": final_output.model_dump(mode="json"),
+                "artifact": AgentOutputArtifact(
+                    summary=f"Overall Sentiment: {overall_sentiment.value.upper()} ({final_output.sentiment_score}) from {len(news_items)} articles. Themes: {', '.join(all_themes)}",
+                    data=final_output.model_dump(mode="json"),
+                ),
+            },
             "current_node": "aggregator_node",
             "internal_progress": {"aggregator_node": "done"},
             # [BSP Fix] Emit status immediately to bypass LangGraph's sync barrier

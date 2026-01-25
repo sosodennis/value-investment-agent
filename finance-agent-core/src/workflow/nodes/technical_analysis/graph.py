@@ -8,6 +8,7 @@ from langchain_core.runnables import RunnableLambda
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
 
+from src.interface.schemas import AgentOutputArtifact
 from src.utils.logger import get_logger
 
 from .backtester import (
@@ -377,7 +378,13 @@ async def semantic_translate_node(state: TechnicalAnalysisState) -> Command:
 
     return Command(
         update={
-            "technical_analysis": {"output": technical_signal.model_dump()},
+            "technical_analysis": {
+                "output": technical_signal.model_dump(),
+                "artifact": AgentOutputArtifact(
+                    summary=f"Technical Analysis: {technical_signal.signal_state.direction.upper()} (p={technical_signal.frac_diff_metrics.optimal_d:.2f})",
+                    data=technical_signal.model_dump(),
+                ),
+            },
             "current_node": "semantic_translate",
             "internal_progress": {"semantic_translate": "done"},
             # [BSP Fix] Emit status immediately to bypass LangGraph's sync barrier

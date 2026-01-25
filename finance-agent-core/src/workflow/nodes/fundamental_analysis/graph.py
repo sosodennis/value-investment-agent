@@ -7,6 +7,7 @@ Uses Command and interrupt for control flow.
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
 
+from src.interface.schemas import AgentOutputArtifact
 from src.utils.logger import get_logger
 
 from .financial_utils import fetch_financial_data
@@ -409,7 +410,19 @@ def model_selection_node(state: FundamentalAnalysisState) -> Command:
                     "industry": profile.industry,
                     "reasoning": reasoning,
                     "financial_reports": state.fundamental.financial_reports,
-                }
+                },
+                "artifact": AgentOutputArtifact(
+                    summary=f"Selected {model.value} model for {profile.name}",
+                    data={
+                        "ticker": resolved_ticker,
+                        "model_type": model.value,
+                        "company_name": profile.name,
+                        "sector": profile.sector,
+                        "industry": profile.industry,
+                        "reasoning": reasoning,
+                        "financial_reports": state.fundamental.financial_reports,
+                    },
+                ),
             },
             "current_node": "model_selection",
             "internal_progress": {
