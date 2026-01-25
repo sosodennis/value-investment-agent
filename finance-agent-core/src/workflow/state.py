@@ -33,6 +33,12 @@ def create_pydantic_reducer(model_class: type[T]):
         if current is None:
             current = model_class()
 
+        # Capture raw history if available from model instance
+        # This prevents model_dump from stripping message metadata types (role/type)
+        raw_history = None
+        if isinstance(new, model_class) and hasattr(new, "history"):
+            raw_history = new.history
+
         # Handle new data
         if isinstance(new, model_class):
             new_data = new.model_dump(exclude_unset=True)
@@ -41,13 +47,15 @@ def create_pydantic_reducer(model_class: type[T]):
 
         # Special handling for 'history' field (common pattern in LangGraph)
         # Verify both current and new data have history to avoid errors
-        if (
-            "history" in new_data
-            and hasattr(current, "history")
-            and new_data["history"] is not None
-        ):
+
+        # Use raw_history if available (preferred), otherwise fall back to new_data dict
+        history_update = (
+            raw_history if raw_history is not None else new_data.get("history")
+        )
+
+        if history_update is not None and hasattr(current, "history"):
             # Use LangGraph's add_messages to handle message appending/updates correctly
-            current.history = add_messages(current.history, new_data["history"])
+            current.history = add_messages(current.history, history_update)
 
         # Pydantic copy & update
         # Using model_copy with update is robust
