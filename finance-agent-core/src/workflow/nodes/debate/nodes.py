@@ -173,7 +173,7 @@ async def debate_aggregator_node(state: DebateState) -> dict[str, Any]:
         },
         "technical_analysis": {
             "data": clean_ta,
-            "source_weight": "MEDIUM",
+            "source_weight": "HIGH",
             "rationale": "Quantitative source: Fractional differentiation analysis (statistical signals)",
         },
         "ticker": state.intent_extraction.resolved_ticker or state.ticker,
@@ -439,10 +439,12 @@ async def verdict_node(state: DebateState) -> dict[str, Any]:
         conclusion_data["debate_rounds"] = 3
 
         return {
-            "artifact": AgentOutputArtifact(
-                summary=f"Verdict: {conclusion_data.get('decision', 'PENDING')} (Confidence: {conclusion_data.get('confidence_score', 0)}%)",
-                data=conclusion_data,
-            ),
+            "debate": {
+                "artifact": AgentOutputArtifact(
+                    summary=f"Verdict: {conclusion_data.get('decision', 'PENDING')} (Confidence: {conclusion_data.get('confidence_score', 0)}%)",
+                    data=conclusion_data,
+                ),
+            },
             "internal_progress": {"verdict": "done"},
             # [BSP Fix] Emit status immediately to bypass LangGraph's sync barrier
             "node_statuses": {"debate": "done"},

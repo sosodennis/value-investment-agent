@@ -37,8 +37,10 @@ export interface DebateConclusion {
     debate_rounds: number;
 }
 
-export interface DebateAgentOutput {
-    conclusion: DebateConclusion | null;
+// Updated to match backend artifact structure
+// Backend sends the conclusion data directly, not nested
+export interface DebateAgentOutput extends DebateConclusion {
+    // Optional legacy fields
     history?: any[];
     bull_thesis?: string;
     bear_thesis?: string;

@@ -63,8 +63,14 @@ def approval_node(state: AgentState) -> Command:
     audit_passed = False
     audit_messages = []
     if state.fundamental_analysis.audit_output:
-        audit_passed = state.fundamental_analysis.audit_output.passed
-        audit_messages = state.fundamental_analysis.audit_output.messages
+        # Handle both dict and Pydantic object (due to model_validate)
+        audit_output = state.fundamental_analysis.audit_output
+        if isinstance(audit_output, dict):
+            audit_passed = audit_output.get("passed", False)
+            audit_messages = audit_output.get("messages", [])
+        else:
+            audit_passed = audit_output.passed
+            audit_messages = audit_output.messages
 
     # Trigger interrupt. This pauses the graph and returns the user input when resumed.
     interrupt_payload = HumanApprovalRequest(

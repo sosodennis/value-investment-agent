@@ -27,43 +27,42 @@ T = TypeVar("T", bound=BaseModel)
 
 
 def create_pydantic_reducer(model_class: type[T]):
-    """Factory function: Generates a standard Merge Reducer for any Pydantic Model."""
+    """
+    Factory function: Generates a standard Merge Reducer for any Pydantic Model.
+    FIXED: Uses model_validate to ensure dicts are parsed into Pydantic models.
+    """
 
     def reducer(current: T | None, new: T | dict) -> T:
         if current is None:
             current = model_class()
 
-        # Capture raw history if available from model instance
-        # This prevents model_dump from stripping message metadata types (role/type)
-        raw_history = None
-        if isinstance(new, model_class) and hasattr(new, "history"):
-            raw_history = new.history
-
-        # Handle new data
+        # 1. Prepare new data (handle both objects and dicts)
         if isinstance(new, model_class):
             new_data = new.model_dump(exclude_unset=True)
         else:
             new_data = new
 
-        # Special handling for 'history' field (common pattern in LangGraph)
-        # Verify both current and new data have history to avoid errors
-
-        # Use raw_history if available (preferred), otherwise fall back to new_data dict
-        history_update = (
-            raw_history if raw_history is not None else new_data.get("history")
+        # 2. Handle History merging (LangGraph special logic)
+        raw_history_update = (
+            getattr(new, "history", None)
+            if isinstance(new, model_class)
+            else new_data.get("history")
         )
 
-        if history_update is not None and hasattr(current, "history"):
-            # Use LangGraph's add_messages to handle message appending/updates correctly
-            # CRITICAL: Write merged result BACK to new_data to prevent model_copy from overwriting
-            merged_history = add_messages(current.history, history_update)
+        if raw_history_update is not None and hasattr(current, "history"):
+            from langgraph.graph import add_messages
+
+            # Use LangGraph's add_messages to handle message appending correctly
+            merged_history = add_messages(current.history, raw_history_update)
             new_data["history"] = merged_history
 
-        # Pydantic copy & update
-        # Using model_copy with update is robust
-        # Now new_data["history"] contains the fully merged history
-        updated = current.model_copy(update=new_data)
-        return updated
+        # 3. Execution of safe merge and validation (Critical Fix)
+        # Using model_validate instead of model_copy(update=...) forces Pydantic
+        # to parse nested dicts into proper Pydantic instances (e.g. AgentOutputArtifact).
+        merged_data = current.model_dump()
+        merged_data.update(new_data)
+
+        return model_class.model_validate(merged_data)
 
     return reducer
 

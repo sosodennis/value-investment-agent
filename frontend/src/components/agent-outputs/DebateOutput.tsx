@@ -11,7 +11,9 @@ interface DebateOutputProps {
 }
 
 export const DebateOutput: React.FC<DebateOutputProps> = ({ output, resolvedTicker, status }) => {
-    if (status !== 'done' || !output || !output.conclusion) {
+    // Backend sends data directly in output (from agentOutput.data)
+    // The structure is: { final_verdict, scenario_analysis, conviction, ... }
+    if (status !== 'done' || !output || !output.final_verdict) {
         return (
             <div className="flex flex-col items-center justify-center h-full text-slate-500 py-12">
                 <Shield size={48} className="text-slate-800 mb-4 opacity-50 animate-pulse" />
@@ -22,7 +24,8 @@ export const DebateOutput: React.FC<DebateOutputProps> = ({ output, resolvedTick
         );
     }
 
-    const { conclusion } = output;
+    // Data is directly in output, not nested under conclusion
+    const conclusion = output;
     const direction = conclusion.final_verdict;
     const scenarios = conclusion.scenario_analysis;
 
