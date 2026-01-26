@@ -1,9 +1,12 @@
 from typing import Any
 
+from pydantic import TypeAdapter
+
 from src.utils.logger import get_logger
 
 from ...state import AgentState
 from ..fundamental_analysis.adapter import map_model_to_skill
+from .schemas import DebateResult
 
 logger = get_logger(__name__)
 
@@ -27,7 +30,28 @@ def output_adapter(sub_output: dict[str, Any]) -> dict[str, Any]:
     """Maps DebateState output back to parent state updates."""
     logger.info("--- [Debate Adapter] Mapping subgraph output back to parent state ---")
 
+    # 1. Validate with TypeAdapter
+    validator = TypeAdapter(DebateResult)
     debate_ctx = sub_output.get("debate", {})
+
+    # Validate artifact data if present
+    artifact_wrapper = debate_ctx.get("artifact")
+    if artifact_wrapper:
+        raw_data = (
+            artifact_wrapper.data
+            if hasattr(artifact_wrapper, "data")
+            else artifact_wrapper.get("data")
+        )
+        if raw_data:
+            try:
+                model = validator.validate_python(raw_data)
+                logger.info(
+                    f"✅ [Debate Adapter] Output validated as {type(model).__name__}"
+                )
+            except Exception as e:
+                logger.error(f"❌ [Debate Adapter] Output validation failed: {e}")
+                raise e
+
     messages = sub_output.get("messages", [])
     model_type = sub_output.get("model_type")
 

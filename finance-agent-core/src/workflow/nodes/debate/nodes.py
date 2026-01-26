@@ -4,6 +4,8 @@ from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
+from langgraph.graph import END
+from langgraph.types import Command
 
 from src.interface.schemas import AgentOutputArtifact
 from src.utils.logger import get_logger
@@ -131,7 +133,7 @@ def _get_last_message_from_role(history: list, role_name: str) -> str:
     return ""
 
 
-async def debate_aggregator_node(state: DebateState) -> dict[str, Any]:
+async def debate_aggregator_node(state: DebateState) -> Command:
     # Compress data before passing to debate state
     # Now that we've removed the legacy .output fields, we read from the standardized .artifact.data
 
@@ -186,11 +188,14 @@ async def debate_aggregator_node(state: DebateState) -> dict[str, Any]:
         "r1_bear": "running",
     }
 
-    return {
-        "debate": {"analyst_reports": reports},
-        "current_node": "debate_aggregator",
-        "internal_progress": next_progress,
-    }
+    return Command(
+        update={
+            "debate": {"analyst_reports": reports},
+            "current_node": "debate_aggregator",
+            "internal_progress": next_progress,
+        },
+        goto=["r1_bull", "r1_bear"],
+    )
 
 
 # --- Agent Logic Helpers (DRY) ---
@@ -346,77 +351,101 @@ async def _execute_moderator_critique(
 
 
 # --- Round 1 ---
-async def r1_bull_node(state: DebateState) -> dict[str, Any]:
+async def r1_bull_node(state: DebateState) -> Command:
     res = await _execute_bull_agent(state, 1, BULL_R1_ADVERSARIAL)
-    return {
-        "debate": {"history": res["history"], "bull_thesis": res["thesis"]},
-        "internal_progress": {
-            "r1_bull": "done",
-            "r1_bear": "running",
-        },  # Helpful if parallel UI updates
-    }
+    return Command(
+        update={
+            "debate": {"history": res["history"], "bull_thesis": res["thesis"]},
+            "internal_progress": {
+                "r1_bull": "done",
+                "r1_bear": "running",
+            },  # Helpful if parallel UI updates
+        },
+        goto="r1_moderator",
+    )
 
 
-async def r1_bear_node(state: DebateState) -> dict[str, Any]:
+async def r1_bear_node(state: DebateState) -> Command:
     res = await _execute_bear_agent(state, 1, BEAR_R1_ADVERSARIAL)
-    return {
-        "debate": {"history": res["history"], "bear_thesis": res["thesis"]},
-        "internal_progress": {"r1_bear": "done"},
-    }
+    return Command(
+        update={
+            "debate": {"history": res["history"], "bear_thesis": res["thesis"]},
+            "internal_progress": {"r1_bear": "done"},
+        },
+        goto="r1_moderator",
+    )
 
 
-async def r1_moderator_node(state: DebateState) -> dict[str, Any]:
+async def r1_moderator_node(state: DebateState) -> Command:
     res = await _execute_moderator_critique(state, 1)
-    return {
-        "debate": res,
-        "internal_progress": {"r1_moderator": "done", "r2_bull": "running"},
-    }
+    return Command(
+        update={
+            "debate": res,
+            "internal_progress": {"r1_moderator": "done", "r2_bull": "running"},
+        },
+        goto="r2_bull",
+    )
 
 
 # --- Round 2 ---
-async def r2_bull_node(state: DebateState) -> dict[str, Any]:
+async def r2_bull_node(state: DebateState) -> Command:
     res = await _execute_bull_agent(state, 2, BULL_R2_ADVERSARIAL)
-    return {
-        "debate": {"history": res["history"], "bull_thesis": res["thesis"]},
-        "internal_progress": {"r2_bull": "done", "r2_bear": "running"},
-    }
+    return Command(
+        update={
+            "debate": {"history": res["history"], "bull_thesis": res["thesis"]},
+            "internal_progress": {"r2_bull": "done", "r2_bear": "running"},
+        },
+        goto="r2_bear",
+    )
 
 
-async def r2_bear_node(state: DebateState) -> dict[str, Any]:
+async def r2_bear_node(state: DebateState) -> Command:
     res = await _execute_bear_agent(state, 2, BEAR_R2_ADVERSARIAL)
-    return {
-        "debate": {"history": res["history"], "bear_thesis": res["thesis"]},
-        "internal_progress": {"r2_bear": "done", "r2_moderator": "running"},
-    }
+    return Command(
+        update={
+            "debate": {"history": res["history"], "bear_thesis": res["thesis"]},
+            "internal_progress": {"r2_bear": "done", "r2_moderator": "running"},
+        },
+        goto="r2_moderator",
+    )
 
 
-async def r2_moderator_node(state: DebateState) -> dict[str, Any]:
+async def r2_moderator_node(state: DebateState) -> Command:
     res = await _execute_moderator_critique(state, 2)
-    return {
-        "debate": res,
-        "internal_progress": {"r2_moderator": "done", "r3_bear": "running"},
-    }
+    return Command(
+        update={
+            "debate": res,
+            "internal_progress": {"r2_moderator": "done", "r3_bear": "running"},
+        },
+        goto="r3_bear",
+    )
 
 
 # --- Round 3 ---
-async def r3_bear_node(state: DebateState) -> dict[str, Any]:
+async def r3_bear_node(state: DebateState) -> Command:
     res = await _execute_bear_agent(state, 3, BEAR_R2_ADVERSARIAL)
-    return {
-        "debate": {"history": res["history"], "bear_thesis": res["thesis"]},
-        "internal_progress": {"r3_bear": "done", "r3_bull": "running"},
-    }
+    return Command(
+        update={
+            "debate": {"history": res["history"], "bear_thesis": res["thesis"]},
+            "internal_progress": {"r3_bear": "done", "r3_bull": "running"},
+        },
+        goto="r3_bull",
+    )
 
 
-async def r3_bull_node(state: DebateState) -> dict[str, Any]:
+async def r3_bull_node(state: DebateState) -> Command:
     res = await _execute_bull_agent(state, 3, BULL_R2_ADVERSARIAL)
-    return {
-        "debate": {"history": res["history"], "bull_thesis": res["thesis"]},
-        "internal_progress": {"r3_bull": "done", "verdict": "running"},
-    }
+    return Command(
+        update={
+            "debate": {"history": res["history"], "bull_thesis": res["thesis"]},
+            "internal_progress": {"r3_bull": "done", "verdict": "running"},
+        },
+        goto="verdict",
+    )
 
 
 # --- Final Verdict ---
-async def verdict_node(state: DebateState) -> dict[str, Any]:
+async def verdict_node(state: DebateState) -> Command:
     """Final Verdict Node"""
     ticker = state.intent_extraction.resolved_ticker or state.ticker
     try:
@@ -438,17 +467,25 @@ async def verdict_node(state: DebateState) -> dict[str, Any]:
         conclusion_data.update(metrics)
         conclusion_data["debate_rounds"] = 3
 
-        return {
-            "debate": {
-                "artifact": AgentOutputArtifact(
-                    summary=f"Verdict: {conclusion_data.get('decision', 'PENDING')} (Confidence: {conclusion_data.get('confidence_score', 0)}%)",
-                    data=DebateSuccess(**conclusion_data).model_dump(mode="json"),
-                ),
+        return Command(
+            update={
+                "debate": {
+                    "artifact": AgentOutputArtifact(
+                        summary=f"Verdict: {conclusion_data.get('decision', 'PENDING')} (Confidence: {conclusion_data.get('confidence_score', 0)}%)",
+                        data=DebateSuccess(**conclusion_data).model_dump(mode="json"),
+                    ),
+                },
+                "internal_progress": {"verdict": "done"},
+                # [BSP Fix] Emit status immediately to bypass LangGraph's sync barrier
+                # allowing the UI to update without waiting for parallel branches
+                "node_statuses": {"debate": "done"},
             },
-            "internal_progress": {"verdict": "done"},
-            # [BSP Fix] Emit status immediately to bypass LangGraph's sync barrier
-            "node_statuses": {"debate": "done"},
-        }
+            goto=END,
+        )
     except Exception as e:
         logger.error(f"❌ Error in Verdict Node: {str(e)}")
-        return {"internal_progress": {"verdict": "error"}}
+        # In case of error, we must still return a Command
+        return Command(
+            update={"internal_progress": {"verdict": "error"}},
+            goto=END,
+        )

@@ -1,8 +1,11 @@
 from typing import Any
 
+from pydantic import TypeAdapter
+
 from src.utils.logger import get_logger
 
 from ...state import AgentState
+from .schemas import FundamentalAnalysisResult
 
 logger = get_logger(__name__)
 
@@ -42,6 +45,29 @@ def output_adapter(sub_output: dict[str, Any]) -> dict[str, Any]:
     """將子圖輸出轉換為父圖更新"""
     logger.info("--- [FA Adapter] Mapping subgraph output back to parent state ---")
 
+    # 1. Validate with TypeAdapter (Fail Fast)
+    validator = TypeAdapter(FundamentalAnalysisResult)
+    fundamental_data = sub_output.get("fundamental_analysis", {})
+
+    # Validate artifact data if present
+    artifact_wrapper = fundamental_data.get("artifact")
+    if artifact_wrapper:
+        raw_data = (
+            artifact_wrapper.data
+            if hasattr(artifact_wrapper, "data")
+            else artifact_wrapper.get("data")
+        )
+        if raw_data:
+            try:
+                model = validator.validate_python(raw_data)
+                logger.info(
+                    f"✅ [FA Adapter] Output validated as {type(model).__name__}"
+                )
+            except Exception as e:
+                logger.error(f"❌ [FA Adapter] Output validation failed: {e}")
+                raise e
+
+    # Proceed with mapping logic...
     fundamental_ctx = sub_output.get("fundamental_analysis", {})
 
     # Map model_type from Context field if available
