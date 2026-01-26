@@ -259,6 +259,31 @@ async def event_generator(
                             await q.put(msg)
                         seq_counter += 1
                         thread_sequences[thread_id] = seq_counter
+        else:
+            # 3. Workflow Completed Successfully
+            # If there are no next steps, the graph execution has finished.
+            done_event = AgentEvent(
+                thread_id=thread_id,
+                run_id=run_id,
+                seq_id=seq_counter,
+                type="lifecycle.status",
+                source="System",
+                data={"status": "done"},
+            )
+            msg = f"data: {done_event.model_dump_json()}\n\n"
+            logger.info(
+                f"📤 [Server] Dispatching event {seq_counter}: lifecycle.status=done"
+            )
+
+            event_replay_buffers[thread_id].append(msg)
+            if len(event_replay_buffers[thread_id]) > 50:
+                event_replay_buffers[thread_id].pop(0)
+
+            for q in running_queues[thread_id][:]:
+                await q.put(msg)
+
+            seq_counter += 1
+            thread_sequences[thread_id] = seq_counter
 
     except Exception as e:
         logger.error(f"❌ [Server] Error in {thread_id}: {str(e)}")

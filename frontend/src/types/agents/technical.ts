@@ -1,9 +1,3 @@
-/**
- * Technical Analysis Frontend Types
- */
-
-// Mirrors the backend Pydantic models in technical_analysis/structures.py
-
 export enum MemoryStrength {
     STRUCTURALLY_STABLE = "structurally_stable",
     BALANCED = "balanced",
@@ -58,3 +52,14 @@ export interface TechnicalSignalOutput {
         z_score_series?: Record<string, number>;
     };
 }
+
+export interface TechnicalAnalysisSuccess extends TechnicalSignalOutput {
+    kind: 'success';
+}
+
+export interface TechnicalAnalysisError {
+    kind: 'error';
+    message: string;
+}
+
+export type TechnicalAnalysisResult = TechnicalAnalysisSuccess | TechnicalAnalysisError;

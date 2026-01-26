@@ -1,7 +1,5 @@
 export type Direction = 'STRONG_LONG' | 'LONG' | 'NEUTRAL' | 'AVOID' | 'SHORT' | 'STRONG_SHORT';
-
 export type PriceImplication = 'SURGE' | 'MODERATE_UP' | 'FLAT' | 'MODERATE_DOWN' | 'CRASH';
-
 export type RiskProfileType = 'DEFENSIVE_VALUE' | 'GROWTH_TECH' | 'SPECULATIVE_CRYPTO_BIO';
 
 export interface Scenario {
@@ -37,10 +35,19 @@ export interface DebateConclusion {
     debate_rounds: number;
 }
 
-// Updated to match backend artifact structure
-// Backend sends the conclusion data directly, not nested
+export interface DebateSuccess extends DebateConclusion {
+    kind: 'success';
+}
+
+export interface DebateError {
+    kind: 'error';
+    message: string;
+}
+
+export type DebateResult = DebateSuccess | DebateError;
+
+// Legacy support (to be removed once components are updated)
 export interface DebateAgentOutput extends DebateConclusion {
-    // Optional legacy fields
     history?: any[];
     bull_thesis?: string;
     bear_thesis?: string;

@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { AgentStatus } from '../types/agents';
+import { AgentStatus } from '@/types/agents';
 import { AgentEvent, Message } from '../types/protocol';
 import { useAgentReducer } from './useAgentReducer';
 
@@ -182,13 +182,15 @@ export function useAgent(assistantId: string = "agent") {
         isLoading,
         error: state.error,
         threadId: state.threadId,
-        resolvedTicker: state.resolvedTicker,
         hasMore,
-        agentStatuses: state.agentStatuses,
-        financialReports: state.financialReports,
+        agentStatuses: Object.fromEntries(
+            Object.entries(state.agents).map(([id, data]) => [id, data.status])
+        ),
+        agentOutputs: Object.fromEntries(
+            Object.entries(state.agents).map(([id, data]) => [id, data.output])
+        ),
         currentNode: state.currentNode,
         currentStatus: state.currentStatus,
         activityFeed: state.statusHistory,
-        agentOutputs: state.agentOutputs,
     };
 }

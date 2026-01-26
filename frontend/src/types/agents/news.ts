@@ -62,3 +62,14 @@ export interface NewsResearchOutput {
     sentiment_score: number;
     key_themes: string[];
 }
+
+export interface FinancialNewsSuccess extends NewsResearchOutput {
+    kind: 'success';
+}
+
+export interface FinancialNewsError {
+    kind: 'error';
+    message: string;
+}
+
+export type FinancialNewsResult = FinancialNewsSuccess | FinancialNewsError;

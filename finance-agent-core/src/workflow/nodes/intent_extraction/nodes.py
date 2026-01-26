@@ -17,6 +17,7 @@ from ..fundamental_analysis.extraction import (
 from ..fundamental_analysis.logic import should_request_clarification
 from ..fundamental_analysis.structures import TickerCandidate
 from ..fundamental_analysis.tools import get_company_profile, search_ticker, web_search
+from .schemas import IntentExtractionSuccess
 from .subgraph_state import IntentExtractionState
 
 logger = get_logger(__name__)
@@ -212,11 +213,11 @@ def decision_node(state: IntentExtractionState) -> Command:
             },
             "artifact": AgentOutputArtifact(
                 summary=f"Resolved Ticker: {resolved_ticker} ({profile.name})",
-                data={
-                    "resolved_ticker": resolved_ticker,
-                    "company_profile": profile.model_dump(),
-                    "status": "resolved",
-                },
+                data=IntentExtractionSuccess(
+                    resolved_ticker=resolved_ticker,
+                    company_profile=profile.model_dump(),
+                    status="resolved",
+                ).model_dump(),
             ),
             "ticker": resolved_ticker,
             "current_node": "deciding",
@@ -288,11 +289,11 @@ def clarification_node(state: IntentExtractionState) -> Command:
                     },
                     "artifact": AgentOutputArtifact(
                         summary=f"Manually Resolved Ticker: {selected_symbol} ({profile.name})",
-                        data={
-                            "resolved_ticker": selected_symbol,
-                            "company_profile": profile.model_dump(),
-                            "status": "resolved",
-                        },
+                        data=IntentExtractionSuccess(
+                            resolved_ticker=selected_symbol,
+                            company_profile=profile.model_dump(),
+                            status="resolved",
+                        ).model_dump(),
                     ),
                     "ticker": selected_symbol,
                     "messages": new_messages,

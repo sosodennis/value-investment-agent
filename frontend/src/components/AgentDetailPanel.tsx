@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import Image from 'next/image';
-import { AgentInfo, DimensionScore } from '../types/agents';
+import { AgentInfo, DimensionScore } from '@/types/agents';
 import { TrendingUp, BarChart3, FileText, Zap, MessageSquare, ListFilter, Activity, LayoutPanelTop, CheckCircle2, Clock } from 'lucide-react';
 import { Message } from '../types/protocol';
-import { NewsResearchOutput as NewsOutputType } from '../types/news';
+import { NewsResearchOutput as NewsOutputType } from '@/types/agents/news';
 import { FundamentalAnalysisOutput, NewsResearchOutput as NewsResearchOutputPanel, GenericAgentOutput, DebateOutput, TechnicalAnalysisOutput } from './agent-outputs';
-import { TechnicalSignalOutput } from '../types/technical';
+import { TechnicalSignalOutput } from '@/types/agents/technical';
 import { DynamicInterruptForm } from './DynamicInterruptForm';
 
 interface AgentDetailPanelProps {
@@ -13,8 +13,7 @@ interface AgentDetailPanelProps {
     agentOutput?: any;
     messages: Message[];
     onSubmitCommand?: (payload: any) => Promise<void>;
-    financialReports?: any[];
-    resolvedTicker?: string | null;
+    allAgentOutputs?: Record<string, any>;
     currentNode?: string | null;
     currentStatus?: string | null;
     activityFeed?: { id: string, node: string, agentId?: string, status: string, timestamp: number }[];
@@ -25,8 +24,7 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
     agentOutput,
     messages,
     onSubmitCommand,
-    financialReports = [],
-    resolvedTicker,
+    allAgentOutputs = {},
     currentNode,
     currentStatus,
     activityFeed = []
@@ -52,8 +50,11 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
     // We expect agentOutput to follow the { summary, data } schema now.
     const outputData = agentOutput?.data;
 
-    // Get specific reports from agentOutput if available (for Planner)
-    const agentReports = outputData?.financial_reports || (agent.id === 'fundamental_analysis' ? financialReports : []);
+    // Unified Ticker Resolution (prefer Intent, fallback to current agent)
+    const resolvedTicker = allAgentOutputs['intent_extraction']?.data?.resolved_ticker || outputData?.ticker;
+
+    // Get specific reports from agentOutput exclusively
+    const agentReports = outputData?.financial_reports || [];
     const latestReport = agentReports.length > 0 ? agentReports[0] : null;
 
     const getScore = (val: any, min: number, max: number) => {

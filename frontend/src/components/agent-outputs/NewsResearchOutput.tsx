@@ -2,9 +2,9 @@ import React, { memo } from 'react';
 import { Zap, TrendingUp } from 'lucide-react';
 import { NewsResearchCard } from '../NewsResearchCard';
 import { AINewsSummary } from '../AINewsSummary';
-import { NewsResearchOutput as NewsResearchOutputType } from '../../types/news';
+import { NewsResearchOutput as NewsResearchOutputType } from '@/types/agents/news';
 
-import { AgentStatus } from '../../types/agents';
+import { AgentStatus } from '@/types/agents';
 
 interface NewsResearchOutputProps {
     output: NewsResearchOutputType | null;

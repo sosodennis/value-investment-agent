@@ -1,15 +1,17 @@
 import { useReducer, useCallback } from 'react';
 import { AgentEvent, Message } from '../types/protocol';
-import { AgentStatus } from '../types/agents';
+import { AgentStatus } from '@/types/agents';
+
+export interface AgentData {
+    status: AgentStatus;
+    output: any | null;
+}
 
 export interface AgentState {
     status: 'idle' | 'running' | 'paused' | 'error' | 'done';
     messages: Message[];
     threadId: string | null;
-    resolvedTicker: string | null;
-    financialReports: any[];
-    agentStatuses: Record<string, AgentStatus>;
-    agentOutputs: Record<string, any>;
+    agents: Record<string, AgentData>;
     lastSeqId: number;
     error: string | null;
     currentNode: string | null;
@@ -29,19 +31,7 @@ const initialState: AgentState = {
     status: 'idle',
     messages: [],
     threadId: null,
-    resolvedTicker: null,
-    financialReports: [],
-    agentStatuses: {
-        intent_extraction: 'idle',
-        fundamental_analysis: 'idle',
-        financial_news_research: 'idle',
-        executor: 'idle',
-        auditor: 'idle',
-        approval: 'idle',
-        calculator: 'idle',
-        debate: 'idle',
-    },
-    agentOutputs: {},
+    agents: {},
     lastSeqId: 0,
     error: null,
     currentNode: null,
@@ -70,10 +60,24 @@ function agentReducer(state: AgentState, action: AgentAction): AgentState {
             };
 
             if (stateData) {
-                // Sync business data if available in snapshot
-                newState.resolvedTicker = stateData.intent_extraction?.resolved_ticker || stateData.resolvedTicker;
-                newState.financialReports = stateData.fundamental?.financial_reports || stateData.financialReports;
-                newState.agentStatuses = { ...state.agentStatuses, ...(stateData.node_statuses || {}) };
+                // Generic Sync: Load all mapped outputs into the agents map
+                const agents: Record<string, AgentData> = { ...state.agents };
+
+                // 1. Sync Statuses
+                if (stateData.node_statuses) {
+                    Object.entries(stateData.node_statuses).forEach(([id, status]) => {
+                        agents[id] = { ...agents[id], status: status as AgentStatus };
+                    });
+                }
+
+                // 2. Sync Outputs (Artifacts)
+                if (stateData.agent_outputs) {
+                    Object.entries(stateData.agent_outputs).forEach(([id, output]) => {
+                        agents[id] = { ...agents[id], output };
+                    });
+                }
+
+                newState.agents = agents;
             }
 
             return newState;
@@ -152,9 +156,12 @@ function agentReducer(state: AgentState, action: AgentAction): AgentState {
 
                     return {
                         ...newState,
-                        agentStatuses: {
-                            ...state.agentStatuses,
-                            [agentId]: status as AgentStatus,
+                        agents: {
+                            ...state.agents,
+                            [agentId]: {
+                                ...state.agents[agentId],
+                                status: status as AgentStatus
+                            }
                         },
                         currentNode: node || state.currentNode,
                         currentStatus: status,
@@ -163,45 +170,29 @@ function agentReducer(state: AgentState, action: AgentAction): AgentState {
                 }
 
                 case 'state.update': {
-                    const data = event.data;
-                    const updatedOutputs = { ...state.agentOutputs };
+                    const { source, data } = event;
 
-
-
-                    // Use event.source to determine where to store data if not specified
-                    if (event.source) {
-                        updatedOutputs[event.source] = {
-                            ...(updatedOutputs[event.source] || {}),
-                            ...data
-                        };
-
-
-                    }
+                    if (!source) return newState;
 
                     return {
                         ...newState,
-                        resolvedTicker: data.resolved_ticker || state.resolvedTicker,
-                        financialReports: data.financial_reports || state.financialReports,
-                        agentOutputs: updatedOutputs,
+                        agents: {
+                            ...state.agents,
+                            [source]: {
+                                ...state.agents[source],
+                                output: { ...(state.agents[source]?.output || {}), ...data }
+                            }
+                        }
                     };
                 }
 
                 case 'interrupt.request': {
-                    const interruptData = event.data;
-                    let msgType: Message['type'] = 'interrupt.request';
-
-                    // Fallback for legacy interrupt payloads without schemas
-                    if (!interruptData.schema) {
-                        if (interruptData.type === 'ticker_selection') msgType = 'interrupt_ticker';
-                        if (interruptData.type === 'approval_request') msgType = 'interrupt_approval';
-                    }
-
                     const interruptMsg: Message = {
                         id: `interrupt_${event.id}`,
                         role: 'assistant',
                         content: '',
-                        type: msgType,
-                        data: interruptData,
+                        type: 'interrupt.request',
+                        data: event.data,
                         isInteractive: true,
                         agentId: event.source || 'approval',
                     };

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { AgentStatus } from '../../types/agents';
+import { AgentStatus } from '@/types/agents';
 import {
     ResponsiveContainer,
     AreaChart,
@@ -27,7 +27,7 @@ import {
     Maximize2,
     Minimize2
 } from 'lucide-react';
-import { TechnicalSignalOutput } from '../../types/technical';
+import { TechnicalSignalOutput } from '@/types/agents/technical';
 
 interface TechnicalAnalysisOutputProps {
     output: TechnicalSignalOutput | null;

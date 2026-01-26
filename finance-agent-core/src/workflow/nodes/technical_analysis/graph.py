@@ -18,6 +18,7 @@ from .backtester import (
     format_backtest_for_llm,
     format_wfa_for_llm,
 )
+from .schemas import TechnicalAnalysisSuccess
 from .semantic_layer import assembler, generate_interpretation
 from .structures import (
     FracDiffMetrics,
@@ -363,7 +364,9 @@ async def semantic_translate_node(state: TechnicalAnalysisState) -> Command:
             "technical_analysis": {
                 "artifact": AgentOutputArtifact(
                     summary=f"Technical Analysis: {technical_signal.signal_state.direction.upper()} (p={technical_signal.frac_diff_metrics.optimal_d:.2f})",
-                    data=technical_signal.model_dump(),
+                    data=TechnicalAnalysisSuccess(
+                        **technical_signal.model_dump()
+                    ).model_dump(),
                 ),
             },
             "current_node": "semantic_translate",

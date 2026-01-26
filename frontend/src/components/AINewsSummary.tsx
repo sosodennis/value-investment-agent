@@ -1,6 +1,6 @@
 import React, { memo, useMemo } from 'react';
 import { PieChart, List, TrendingUp, TrendingDown, Minus, Zap, BarChart3, Database, ShieldCheck, AlertCircle, MessageSquare } from 'lucide-react';
-import { NewsResearchOutput, SentimentLabel, SearchCategory } from '../types/news';
+import { NewsResearchOutput, SentimentLabel, SearchCategory } from '@/types/agents/news';
 
 interface AINewsSummaryProps {
     output: NewsResearchOutput;

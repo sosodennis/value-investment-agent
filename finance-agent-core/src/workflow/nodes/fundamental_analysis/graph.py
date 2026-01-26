@@ -12,6 +12,7 @@ from src.utils.logger import get_logger
 
 from .financial_utils import fetch_financial_data
 from .logic import select_valuation_model
+from .schemas import FundamentalAnalysisSuccess
 from .structures import ValuationModel
 from .subgraph_state import (
     FundamentalAnalysisInput,
@@ -403,15 +404,16 @@ def model_selection_node(state: FundamentalAnalysisState) -> Command:
                 "model_type": model_type,
                 "artifact": AgentOutputArtifact(
                     summary=f"Selected {model.value} model for {profile.name}",
-                    data={
-                        "ticker": resolved_ticker,
-                        "model_type": model.value,
-                        "company_name": profile.name,
-                        "sector": profile.sector,
-                        "industry": profile.industry,
-                        "reasoning": reasoning,
-                        "financial_reports": state.fundamental_analysis.financial_reports,
-                    },
+                    data=FundamentalAnalysisSuccess(
+                        ticker=resolved_ticker,
+                        model_type=model.value,
+                        company_name=profile.name,
+                        sector=profile.sector,
+                        industry=profile.industry,
+                        reasoning=reasoning,
+                        financial_reports=state.fundamental_analysis.financial_reports,
+                        status="done",
+                    ).model_dump(),
                 ),
             },
             "ticker": resolved_ticker,  # Keep ticker at top level for global state

@@ -5,7 +5,7 @@ import {
     IndustrialExtension,
     FinancialServicesExtension,
     RealEstateExtension
-} from '../types/financials';
+} from '@/types/agents/fundamental';
 import { Info } from 'lucide-react';
 
 interface FinancialTableProps {

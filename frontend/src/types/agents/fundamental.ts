@@ -60,3 +60,22 @@ export interface FinancialReport {
     extension?: IndustrialExtension | FinancialServicesExtension | RealEstateExtension | null;
     extension_type?: 'Industrial' | 'FinancialServices' | 'RealEstate' | null;
 }
+
+export interface FundamentalAnalysisSuccess {
+    kind: 'success';
+    ticker: string;
+    model_type: string;
+    company_name: string;
+    sector: string;
+    industry: string;
+    reasoning: string;
+    financial_reports: FinancialReport[];
+    status: 'done';
+}
+
+export interface FundamentalAnalysisError {
+    kind: 'error';
+    message: string;
+}
+
+export type FundamentalAnalysisResult = FundamentalAnalysisSuccess | FundamentalAnalysisError;

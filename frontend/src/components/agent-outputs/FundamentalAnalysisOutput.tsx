@@ -2,7 +2,7 @@ import React, { memo } from 'react';
 import { LayoutPanelTop, BarChart3 } from 'lucide-react';
 import { FinancialTable } from '../FinancialTable';
 
-import { AgentStatus } from '../../types/agents';
+import { AgentStatus } from '@/types/agents';
 
 interface FundamentalAnalysisOutputProps {
     reports: any[];

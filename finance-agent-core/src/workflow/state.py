@@ -10,6 +10,8 @@ from pydantic import BaseModel, Field
 
 from src.interface.schemas import AgentOutputArtifact
 
+from .schemas import AuditOutput, CalculationOutput, ExtractionOutput
+
 
 def merge_dict(a: dict, b: dict) -> dict:
     """Simple dict merge reducer."""
@@ -125,11 +127,14 @@ class FundamentalAnalysisContext(BaseModel):
     )
     # TODO: Refactor executor, auditor, and calculator into their own sub-agent with dedicated context
     # These fields should move to a new ExecutorContext/AuditorContext in the future
-    extraction_output: Any | None = Field(
+    extraction_output: ExtractionOutput | None = Field(
         None, description="Extracted parameters from executor node"
     )
-    audit_output: Any | None = Field(
+    audit_output: AuditOutput | None = Field(
         None, description="Audit results from auditor node"
+    )
+    calculation_output: CalculationOutput | None = Field(
+        None, description="Final results from calculator node"
     )
     artifact: AgentOutputArtifact | None = None
 

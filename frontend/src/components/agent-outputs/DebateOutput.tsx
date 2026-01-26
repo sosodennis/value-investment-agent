@@ -1,8 +1,8 @@
 import React from 'react';
 import { Shield, Target, AlertTriangle, TrendingUp, TrendingDown, Minus, Info, CheckCircle2, Zap } from 'lucide-react';
-import { DebateAgentOutput } from '../../types/debate';
+import { DebateAgentOutput } from '@/types/agents/debate';
 
-import { AgentStatus } from '../../types/agents';
+import { AgentStatus } from '@/types/agents';
 
 interface DebateOutputProps {
     output: DebateAgentOutput | null;

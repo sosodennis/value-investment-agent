@@ -7,11 +7,13 @@ This is a simple wrapper around the SkillRegistry auditor functions.
 from langchain_core.messages import AIMessage
 from langgraph.types import Command
 
+from src.interface.schemas import AgentOutputArtifact
 from src.utils.logger import get_logger
 
 from ...manager import SkillRegistry
 from ...schemas import AuditOutput
 from ...state import AgentState
+from .schemas import AuditorSuccess
 
 logger = get_logger(__name__)
 
@@ -53,17 +55,17 @@ def auditor_node(state: AgentState) -> Command:
 
         return Command(
             update={
-                "messages": [
-                    AIMessage(
-                        content=f"Audit completed. Result: {'PASSED' if result.passed else 'FAILED'}. {len(result.messages)} findings identified.",
-                        additional_kwargs={"agent_id": "auditor"},
-                    )
-                ],
                 "fundamental_analysis": {
                     "audit_output": AuditOutput(
                         passed=result.passed, messages=result.messages
                     )
                 },
+                "artifact": AgentOutputArtifact(
+                    summary=f"Audit completed. Result: {'PASSED' if result.passed else 'FAILED'}. {len(result.messages)} findings identified.",
+                    data=AuditorSuccess(
+                        passed=result.passed, messages=result.messages
+                    ).model_dump(),
+                ),
                 "node_statuses": {"auditor": "done", "approval": "running"},
             },
             goto="approval",

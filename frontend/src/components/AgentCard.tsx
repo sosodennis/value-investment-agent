@@ -1,6 +1,6 @@
 import React from 'react';
 import Image from 'next/image';
-import { AgentStatus } from '../types/agents';
+import { AgentStatus } from '@/types/agents';
 import { CheckCircle2, Circle, Loader2, AlertCircle } from 'lucide-react';
 
 interface AgentCardProps {

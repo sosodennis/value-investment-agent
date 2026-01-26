@@ -4,7 +4,7 @@
  * Node mapping logic has been moved to the Backend.
  */
 
-import { AgentStatus } from '../types/agents';
+import { AgentStatus } from '@/types/agents';
 
 /**
  * Agent metadata and configuration

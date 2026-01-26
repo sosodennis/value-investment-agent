@@ -20,6 +20,7 @@ from .prompts import (
     SELECTOR_SYSTEM_PROMPT,
     SELECTOR_USER_PROMPT,
 )
+from .schemas import FinancialNewsSuccess
 from .structures import (
     AIAnalysis,
     FinancialNewsItem,
@@ -487,7 +488,9 @@ def aggregator_node(state: FinancialNewsState) -> Command:
             "financial_news_research": {
                 "artifact": AgentOutputArtifact(
                     summary=f"Overall Sentiment: {overall_sentiment.value.upper()} ({final_output.sentiment_score}) from {len(news_items)} articles. Themes: {', '.join(all_themes)}",
-                    data=final_output.model_dump(mode="json"),
+                    data=FinancialNewsSuccess(
+                        **final_output.model_dump(mode="json")
+                    ).model_dump(mode="json"),
                 ),
             },
             "current_node": "aggregator_node",

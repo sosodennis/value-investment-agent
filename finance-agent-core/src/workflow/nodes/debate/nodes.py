@@ -18,7 +18,7 @@ from .prompts import (
     MODERATOR_SYSTEM_PROMPT,
     VERDICT_PROMPT,
 )
-from .schemas import DebateConclusion
+from .schemas import DebateConclusion, DebateSuccess
 from .subgraph_state import DebateState
 from .utils import (
     calculate_pragmatic_verdict,
@@ -442,7 +442,7 @@ async def verdict_node(state: DebateState) -> dict[str, Any]:
             "debate": {
                 "artifact": AgentOutputArtifact(
                     summary=f"Verdict: {conclusion_data.get('decision', 'PENDING')} (Confidence: {conclusion_data.get('confidence_score', 0)}%)",
-                    data=conclusion_data,
+                    data=DebateSuccess(**conclusion_data).model_dump(mode="json"),
                 ),
             },
             "internal_progress": {"verdict": "done"},

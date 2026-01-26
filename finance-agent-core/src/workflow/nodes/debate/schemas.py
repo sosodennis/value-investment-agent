@@ -75,3 +75,19 @@ class DebateConclusion(BaseModel):
     debate_rounds: int = Field(
         default=0, description="Number of debate rounds performed"
     )
+
+
+class DebateSuccess(DebateConclusion):
+    """Successful debate conclusion result with discriminator."""
+
+    kind: Literal["success"] = "success"
+
+
+class DebateError(BaseModel):
+    """Failure schema for debate."""
+
+    kind: Literal["error"] = "error"
+    message: str
+
+
+DebateResult = DebateSuccess | DebateError

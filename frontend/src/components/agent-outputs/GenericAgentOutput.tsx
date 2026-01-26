@@ -1,7 +1,7 @@
 import React from 'react';
 import { FileText, Clock } from 'lucide-react';
 
-import { AgentStatus } from '../../types/agents';
+import { AgentStatus } from '@/types/agents';
 
 interface GenericAgentOutputProps {
     agentName: string;

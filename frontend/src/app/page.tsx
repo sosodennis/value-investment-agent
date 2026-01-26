@@ -5,7 +5,7 @@ import { useAgent } from '../hooks/useAgent';
 import { HeaderBar } from '../components/HeaderBar';
 import { AgentsRoster } from '../components/AgentsRoster';
 import { AgentDetailPanel } from '../components/AgentDetailPanel';
-import { AgentInfo, AgentStatus } from '../types/agents';
+import { AgentInfo, AgentStatus } from '@/types/agents';
 
 export default function Home({ assistantId = "agent" }: { assistantId?: string }) {
   const {
@@ -15,9 +15,7 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
     loadHistory,
     isLoading,
     threadId,
-    resolvedTicker,
     agentStatuses,
-    financialReports,
     currentNode,
     currentStatus,
     activityFeed,
@@ -27,8 +25,11 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
   const [ticker, setTicker] = useState('');
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
 
-  // Sync ticker state with resolvedTicker from hook
+  // Sync ticker state with resolvedTicker from agent outputs
+  const intentOutput = agentOutputs['intent_extraction']?.data;
+  const resolvedTicker = intentOutput?.resolved_ticker;
   const lastResolvedTickerRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (resolvedTicker && resolvedTicker !== lastResolvedTickerRef.current) {
       setTicker(resolvedTicker);
@@ -66,16 +67,19 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
     // Import agent configs
     const { AGENT_CONFIGS } = require('../config/agents');
 
-    return AGENT_CONFIGS.map((config: any) => ({
-      id: config.id,
-      name: config.name,
-      role: config.role,
-      description: config.description,
-      avatar: config.avatar,
-      status: config.getStatus
-        ? config.getStatus(agentStatuses[config.id], hasTickerInterrupt, hasApprovalInterrupt)
-        : agentStatuses[config.id],
-    }));
+    return AGENT_CONFIGS.map((config: any) => {
+      const baseStatus = agentStatuses[config.id] || 'idle';
+      return {
+        id: config.id,
+        name: config.name,
+        role: config.role,
+        description: config.description,
+        avatar: config.avatar,
+        status: config.getStatus
+          ? config.getStatus(baseStatus, hasTickerInterrupt, hasApprovalInterrupt)
+          : baseStatus,
+      };
+    });
   }, [agentStatuses, hasTickerInterrupt, hasApprovalInterrupt]);
 
   const handleStartAnalysis = () => {
@@ -121,8 +125,7 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
             agentOutput={selectedAgentOutput}
             messages={messages}
             onSubmitCommand={submitCommand}
-            financialReports={financialReports}
-            resolvedTicker={resolvedTicker}
+            allAgentOutputs={agentOutputs}
             currentNode={currentNode}
             currentStatus={currentStatus}
             activityFeed={activityFeed}

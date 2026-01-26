@@ -1,6 +1,6 @@
 import React, { useState, memo } from 'react';
 import { ExternalLink, Calendar, Tag, AlertCircle, Info, TrendingUp, TrendingDown, Minus, Star, BarChart3, MessageSquare, ShieldCheck, ChevronDown, ChevronUp } from 'lucide-react';
-import { FinancialNewsItem, SentimentLabel, ImpactLevel, SearchCategory, KeyFact } from '../types/news';
+import { FinancialNewsItem, SentimentLabel, ImpactLevel, SearchCategory, KeyFact } from '@/types/agents/news';
 
 interface NewsResearchCardProps {
     item: FinancialNewsItem;
