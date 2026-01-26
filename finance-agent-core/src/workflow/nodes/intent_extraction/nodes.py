@@ -210,15 +210,15 @@ def decision_node(state: IntentExtractionState) -> Command:
                 "resolved_ticker": resolved_ticker,
                 "company_profile": profile.model_dump(),
                 "status": "resolved",
+                "artifact": AgentOutputArtifact(
+                    summary=f"Resolved Ticker: {resolved_ticker} ({profile.name})",
+                    data=IntentExtractionSuccess(
+                        resolved_ticker=resolved_ticker,
+                        company_profile=profile.model_dump(),
+                        status="resolved",
+                    ).model_dump(),
+                ),
             },
-            "artifact": AgentOutputArtifact(
-                summary=f"Resolved Ticker: {resolved_ticker} ({profile.name})",
-                data=IntentExtractionSuccess(
-                    resolved_ticker=resolved_ticker,
-                    company_profile=profile.model_dump(),
-                    status="resolved",
-                ).model_dump(),
-            ),
             "ticker": resolved_ticker,
             "current_node": "deciding",
             "internal_progress": {"deciding": "done"},
@@ -286,15 +286,15 @@ def clarification_node(state: IntentExtractionState) -> Command:
                         "resolved_ticker": selected_symbol,
                         "company_profile": profile.model_dump(),
                         "status": "resolved",
+                        "artifact": AgentOutputArtifact(
+                            summary=f"Manually Resolved Ticker: {selected_symbol} ({profile.name})",
+                            data=IntentExtractionSuccess(
+                                resolved_ticker=selected_symbol,
+                                company_profile=profile.model_dump(),
+                                status="resolved",
+                            ).model_dump(),
+                        ),
                     },
-                    "artifact": AgentOutputArtifact(
-                        summary=f"Manually Resolved Ticker: {selected_symbol} ({profile.name})",
-                        data=IntentExtractionSuccess(
-                            resolved_ticker=selected_symbol,
-                            company_profile=profile.model_dump(),
-                            status="resolved",
-                        ).model_dump(),
-                    ),
                     "ticker": selected_symbol,
                     "messages": new_messages,
                     "current_node": "clarifying",
