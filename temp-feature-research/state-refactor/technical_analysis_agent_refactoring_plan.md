@@ -54,32 +54,42 @@
 ### Phase 1: Artifact Store 整合
 
 - [ ] **1.1** 修改 `data_fetch_node`：將原始價格序列存入 Artifact Store
+
+  > [!CAUTION]
+  > **審閱修正**: LangGraph 不支持 `_private` 機制。節點間數據傳遞需通過 State 或 Artifact Store。
+
   ```python
   async def data_fetch_node(state):
       ohlcv = await fetch_daily_ohlcv(state["ticker"])
 
-      # 存入 Artifact Store
+      # 存入 Artifact Store (重型數據)
       price_artifact_id = await save_artifact(
           data={"prices": ohlcv.to_dict()},
           type="price_series",
           key_prefix=f"ta_price_{state['ticker']}"
       )
 
-      # State 只存最新指標
+      # State 存指標 + ID（下一節點從 Artifact 讀取）
       return Command(update={
           "technical_analysis": {
-              "latest_price": ohlcv[-1],
+              "latest_price": float(ohlcv['close'].iloc[-1]),
               "price_artifact_id": price_artifact_id
-          },
-          "_private": {"price_df": ohlcv}  # 傳遞給下一節點
+          }
       })
   ```
 
-- [ ] **1.2** 修改 `fracdiff_compute_node`：將 FracDiff 結果存入 Artifact Store
+- [ ] **1.2** 修改 `fracdiff_compute_node`：從 Artifact 讀取價格，計算後再存回
   ```python
   async def fracdiff_compute_node(state):
-      fracdiff_result = compute_fracdiff(state["_private"]["price_df"])
+      # 從 Artifact Store 讀取價格數據
+      price_artifact_id = state["technical_analysis"]["price_artifact_id"]
+      price_data = await get_artifact(price_artifact_id)
+      price_df = pd.DataFrame(price_data["prices"])
 
+      # 計算 FracDiff
+      fracdiff_result = compute_fracdiff(price_df)
+
+      # 存入圖表數據
       chart_artifact_id = await save_artifact(
           data={
               "fracdiff_series": fracdiff_result["series"],
@@ -192,3 +202,4 @@
 2. **前端圖表渲染**：前端需異步拉取 `chart_data_id` 對應的序列數據來渲染圖表
 3. **Debate 依賴**：Debate Agent 需讀取 `signal` 和 `z_score_latest` 作為輸入
 4. **回測引擎**：`backtester.py` 邏輯不變，僅改變數據存儲位置
+5. **前端 HTTP 緩存** (審閱建議)：歷史數據不常變，API 應設置 `Cache-Control: public, max-age=3600`，避免前端切換 Tab 時重複下載

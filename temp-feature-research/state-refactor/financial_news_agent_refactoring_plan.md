@@ -55,16 +55,43 @@
 
 ## ✅ 重構 TODO 清單
 
-### Phase 1: 中間數據隔離
+### Phase 1: 中間數據處理策略
 
-- [ ] **1.1** 將 `raw_results`, `formatted_results`, `selected_indices` 移出 State，改為節點內部變量或使用 `private=True`
+> [!CAUTION]
+> **審閱修正**: LangGraph **不支持** `_private` 不持久化機制。所有 State update 都會被序列化並存入 Postgres Checkpointer。
+
+- [ ] **1.1** 選擇中間數據處理策略：
+
+  **方案 A (推薦 - 適用於 < 50KB 數據)**:
   ```python
-  # BEFORE: 存入 State
-  "raw_results": search_results
-
-  # AFTER: 使用 return 傳遞或存入 private state
+  # 直接存入 State，接受小幅膨脹
+  # Postgres 處理 50KB 沒問題，且方便 Debug
   return Command(update={
-      "_private": {"raw_results": search_results},  # 不持久化
+      "raw_results": search_results,  # 約 10-30KB
+      ...
+  })
+  ```
+
+  **方案 B (大數據 - > 50KB)**:
+  ```python
+  # 存入 Artifact Store，State 只存 ID
+  raw_id = await save_artifact(
+      data={"results": search_results},
+      type="news_raw_search",
+      key_prefix=f"news_raw_{state['ticker']}"
+  )
+  return Command(update={
+      "raw_results_id": raw_id,  # 只存 ID
+      ...
+  })
+  ```
+
+  **方案 C (精簡 - 推薦)**:
+  ```python
+  # 在 Search Node 內部直接清洗，只傳精簡版
+  cleaned = [{"title": r["title"], "url": r["url"]} for r in search_results]
+  return Command(update={
+      "raw_results": cleaned,  # 只有標題+URL，約 2KB
       ...
   })
   ```
