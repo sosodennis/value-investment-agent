@@ -3,7 +3,7 @@ Isolated state class for Technical Analysis subgraph.
 Following LangGraph best practices - does NOT share node_statuses with parent.
 """
 
-from typing import Annotated, Any, NotRequired, TypedDict
+from typing import Annotated, NotRequired, TypedDict
 
 from langgraph.graph import add_messages
 from pydantic import BaseModel, Field
@@ -48,14 +48,6 @@ class TechnicalAnalysisState(TypedDict):
     # --- Core State (Reducers applied) ---
     technical_analysis: Annotated[TechnicalAnalysisContext, merge_dict]
     messages: Annotated[list, add_messages]
-
-    # --- Intermediate State (Multi-stage pipeline) ---
-    price_series: NotRequired[dict[str, float]]
-    volume_series: NotRequired[dict[str, float]]
-    fracdiff_series: NotRequired[dict[str, float]]
-    z_score_series: NotRequired[dict[str, float]]
-    fracdiff_metrics: NotRequired[dict[str, Any]]
-    indicators: NotRequired[dict[str, Any]]
 
     # --- Private State ---
     internal_progress: Annotated[dict[str, str], merge_dict]

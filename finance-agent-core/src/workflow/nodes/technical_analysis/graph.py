@@ -9,7 +9,7 @@ from langchain_core.runnables import RunnableLambda
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
 
-from src.interface.schemas import AgentOutputArtifact
+from src.services.artifact_manager import artifact_manager
 from src.utils.logger import get_logger
 
 from .backtester import (
@@ -18,13 +18,7 @@ from .backtester import (
     format_backtest_for_llm,
     format_wfa_for_llm,
 )
-from .schemas import TechnicalAnalysisSuccess
 from .semantic_layer import assembler, generate_interpretation
-from .structures import (
-    FracDiffMetrics,
-    SignalState,
-    TechnicalSignal,
-)
 from .subgraph_state import (
     TechnicalAnalysisInput,
     TechnicalAnalysisOutput,
@@ -40,7 +34,6 @@ from .tools import (
     compute_z_score,
     fetch_daily_ohlcv,
     fetch_risk_free_series,
-    get_timestamp,
 )
 
 logger = get_logger(__name__)
@@ -80,17 +73,27 @@ def data_fetch_node(state: TechnicalAnalysisState) -> Command:
             goto=END,
         )
 
-    # Store raw data in state
+    # [Refactor] Store raw data in Artifact Store instead of State
+    price_data = {
+        "price_series": df["price"]
+        .rename(index=lambda x: x.strftime("%Y-%m-%d"))
+        .map(float)
+        .to_dict(),
+        "volume_series": df["volume"]
+        .rename(index=lambda x: x.strftime("%Y-%m-%d"))
+        .map(float)
+        .to_dict(),
+    }
+
+    price_artifact_id = await artifact_manager.save_artifact(
+        data=price_data, artifact_type="price_series", key_prefix=resolved_ticker
+    )
+
     return Command(
         update={
-            "price_series": df["price"]
-            .rename(index=lambda x: x.strftime("%Y-%m-%d"))
-            .map(float)
-            .to_dict(),
-            "volume_series": df["volume"]
-            .rename(index=lambda x: x.strftime("%Y-%m-%d"))
-            .map(float)
-            .to_dict(),
+            "technical_analysis": {
+                "price_artifact_id": price_artifact_id,
+            },
             "current_node": "data_fetch",
             "internal_progress": {
                 "data_fetch": "done",
@@ -101,19 +104,21 @@ def data_fetch_node(state: TechnicalAnalysisState) -> Command:
     )
 
 
-def fracdiff_compute_node(state: TechnicalAnalysisState) -> Command:
+async def fracdiff_compute_node(state: TechnicalAnalysisState) -> Command:
     """
     [Node 2] Compute optimal d and apply FracDiff transformation using ROLLING window.
     Eliminates look-ahead bias for enterprise-grade backtesting.
     """
     logger.info("--- TA: Computing Rolling FracDiff ---")
 
-    # Extract price series from state
-    price_dict = state.price_series
-    volume_dict = state.volume_series
+    # [Refactor] Extract price series from Artifact Store instead of State
+    price_ctx = state.get("technical_analysis", {})
+    price_artifact_id = price_ctx.get("price_artifact_id")
 
-    if not price_dict or not volume_dict:
-        logger.error("--- TA: No raw data available for FracDiff computation ---")
+    if not price_artifact_id:
+        logger.error(
+            "--- TA: No price artifact ID available for FracDiff computation ---"
+        )
         return Command(
             update={
                 "current_node": "fracdiff_compute",
@@ -121,6 +126,20 @@ def fracdiff_compute_node(state: TechnicalAnalysisState) -> Command:
             },
             goto=END,
         )
+
+    price_artifact = await artifact_manager.get_artifact(price_artifact_id)
+    if not price_artifact:
+        logger.error(f"--- TA: Price artifact {price_artifact_id} not found ---")
+        return Command(
+            update={
+                "current_node": "fracdiff_compute",
+                "internal_progress": {"fracdiff_compute": "error"},
+            },
+            goto=END,
+        )
+
+    price_dict = price_artifact.data.get("price_series")
+    volume_dict = price_artifact.data.get("volume_series")
 
     prices = pd.Series(price_dict)
     prices.index = pd.to_datetime(prices.index)
@@ -174,30 +193,48 @@ def fracdiff_compute_node(state: TechnicalAnalysisState) -> Command:
         "state": obv_data["state"],
     }
 
-    # Update state with FracDiff metrics and indicators
+    # [Refactor] Store chart data in Artifact Store
+    # Reformat indices to strings for JSON serialization
+    fd_dict = {
+        k.strftime("%Y-%m-%d") if hasattr(k, "strftime") else k: float(v)
+        for k, v in fd_series.to_dict().items()
+    }
+    z_dict = {
+        k.strftime("%Y-%m-%d") if hasattr(k, "strftime") else k: float(v)
+        for k, v in z_score_series.to_dict().items()
+    }
+
+    chart_data = {
+        "fracdiff_series": fd_dict,
+        "z_score_series": z_dict,
+        "indicators": {
+            "bollinger": calculate_fd_bollinger(fd_series),
+            "obv": calculate_fd_obv(prices, volumes),
+        },
+    }
+
+    chart_data_id = await artifact_manager.save_artifact(
+        data=chart_data,
+        artifact_type="ta_chart_data",
+        key_prefix=state.get("ticker"),
+    )
+
+    # Update state with FracDiff metrics and indicators in context
     return Command(
         update={
-            "fracdiff_metrics": {
+            "technical_analysis": {
+                "latest_price": float(prices.iloc[-1]),
                 "optimal_d": float(optimal_d),
+                "z_score_latest": float(z_score),
+                "chart_data_id": chart_data_id,
                 "window_length": int(window_length),
                 "adf_statistic": float(adf_stat),
                 "adf_pvalue": float(adf_pvalue),
-                "z_score": float(z_score),
-            },
-            "indicators": {
                 "bollinger": bollinger_serializable,
-                "statistical_strength": stat_strength_serializable,
+                "statistical_strength_val": stat_strength_serializable["value"],
                 "macd": macd_data,
                 "obv": obv_serializable,
             },
-            "fracdiff_series": fd_series.rename(index=lambda x: x.strftime("%Y-%m-%d"))
-            .map(float)
-            .to_dict(),
-            "z_score_series": z_score_series.rename(
-                index=lambda x: x.strftime("%Y-%m-%d")
-            )
-            .map(float)
-            .to_dict(),
             "current_node": "fracdiff_compute",
             "internal_progress": {
                 "fracdiff_compute": "done",
@@ -214,9 +251,13 @@ async def semantic_translate_node(state: TechnicalAnalysisState) -> Command:
     """
     logger.info("--- TA: Generating semantic interpretation ---")
 
-    metrics = state.fracdiff_metrics
-    indicators = state.indicators
-    if not metrics:
+    ctx = state.get("technical_analysis", {})
+    ticker = state.intent_extraction.resolved_ticker or state.ticker
+
+    optimal_d = ctx.get("optimal_d")
+    z_score = ctx.get("z_score_latest")
+
+    if optimal_d is None or z_score is None:
         logger.error("--- TA: No FracDiff metrics available for translation ---")
         return Command(
             update={
@@ -226,83 +267,78 @@ async def semantic_translate_node(state: TechnicalAnalysisState) -> Command:
             goto=END,
         )
 
-    ticker = state.intent_extraction.resolved_ticker or state.ticker
-    optimal_d = metrics["optimal_d"]
-    z_score = metrics["z_score"]
-
     # Use SemanticAssembler for multi-dimensional analysis
     tags_dict = assembler.assemble(
         z_score=z_score,
         optimal_d=optimal_d,
-        bollinger_data=indicators.get("bollinger", {"state": "INSIDE"}),
-        stat_strength_data=indicators.get(
-            "statistical_strength", {"value": 50.0}
-        ),  # [Change] Use CDF
-        macd_data=indicators.get("macd", {"momentum_state": "NEUTRAL"}),
-        obv_data=indicators.get("obv", {"state": "NEUTRAL", "fd_obv_z": 0.0}),
+        bollinger_data=ctx.get("bollinger", {"state": "INSIDE"}),
+        stat_strength_data={
+            "value": ctx.get("statistical_strength_val", 50.0)
+        },  # [Change] Use CDF
+        macd_data=ctx.get("macd", {"momentum_state": "NEUTRAL"}),
+        obv_data=ctx.get("obv", {"state": "NEUTRAL", "fd_obv_z": 0.0}),
     )
 
     # [NEW] Run Backtesting for Statistical Verification
     try:
-        # Reconstruct price series from state fields
-        price_dict = state.price_series
+        # Fetch from Artifact Store
+        price_artifact_id = ctx.get("price_artifact_id")
+        chart_artifact_id = ctx.get("chart_data_id")
+
+        price_artifact = await artifact_manager.get_artifact(price_artifact_id)
+        chart_artifact = await artifact_manager.get_artifact(chart_artifact_id)
+
+        if not price_artifact or not chart_artifact:
+            raise ValueError("Artifacts not found")
+
+        # Price reconstruction
+        price_dict = price_artifact.data.get("price_series")
         prices = pd.Series(price_dict)
         prices.index = pd.to_datetime(prices.index)
 
-        # Reconstruct FracDiff series from state
-        fd_dict = state.fracdiff_series
-        fd_series = pd.Series(fd_dict)
-        fd_series.index = pd.to_datetime(fd_series.index)
-
-        # [Fix] Transform Raw FracDiff into rolling Z-Scores for Backtesting
-        # This fixes the "Unit Discrepancy" where strategies received raw values (0.2)
-        # instead of standard deviations (1.5, -2.0, etc.)
-        z_score_series = calculate_rolling_z_score(fd_series, lookback=252)
-
-        # [Fix] Re-calculate full indicator series for Backtester (Amnesia Bug Fix)
-        # State only stores scalar values for serialization. We must rebuild historical series
-        # on-the-fly since we have prices and fd_series available.
-
-        # 1. Reconstruct Volume series (needed for OBV)
-        vol_dict = state.volume_series
+        vol_dict = price_artifact.data.get("volume_series")
         volumes = pd.Series(vol_dict)
         volumes.index = pd.to_datetime(volumes.index)
 
-        # 2. Re-calculate indicators with full historical series
-        stat_strength_full = calculate_statistical_strength(z_score_series)
-        bb_full = calculate_fd_bollinger(fd_series)
-        obv_full = calculate_fd_obv(prices, volumes)
+        # Chart data reconstruction
+        fd_dict = chart_artifact.data.get("fracdiff_series")
+        fd_series = pd.Series(fd_dict)
+        fd_series.index = pd.to_datetime(fd_series.index)
 
-        # [Enterprise] 3. Fetch Risk-Free Rate for accurate Sharpe calculation
+        z_score_series = pd.Series(chart_artifact.data.get("z_score_series"))
+        z_score_series.index = pd.to_datetime(z_score_series.index)
+
+        # Full indicator reconstruction from chart artifact or recalculate
+        stat_strength_full = calculate_statistical_strength(z_score_series)
+        indicators_artifact = chart_artifact.data.get("indicators", {})
+        bb_full = indicators_artifact.get("bollinger") or calculate_fd_bollinger(
+            fd_series
+        )
+        obv_full = indicators_artifact.get("obv") or calculate_fd_obv(prices, volumes)
+
+        # Fetch Risk-Free Rate
         rf_series = fetch_risk_free_series(period="5y")
 
-        # Initialize backtester with complete indicator data
+        # Initialize backtester
         backtester = CombinedBacktester(
             price_series=prices,
             z_score_series=z_score_series,
-            stat_strength_dict=stat_strength_full,  # [Change] Correct argument name
-            obv_dict=obv_full,  # ✅ Now contains series_z
-            bollinger_dict=bb_full,  # ✅ Now contains series_upper/lower
-            rf_series=rf_series,  # ✅ Risk-free rate for Sharpe calculation
+            stat_strength_dict=stat_strength_full,
+            obv_dict=obv_full,
+            bollinger_dict=bb_full,
+            rf_series=rf_series,
         )
 
-        # Run backtest with 0.05% transaction cost
+        # Run backtest
         bt_results = backtester.run(transaction_cost=0.0005)
-
-        # Format for LLM
         backtest_context = format_backtest_for_llm(bt_results)
-        logger.info(f"Backtest Context Generated: {backtest_context}")
 
-        # [NEW] Run Walk-Forward Analysis for Robustness Validation
+        # WFA
         try:
             wfa_optimizer = WalkForwardOptimizer(backtester)
             wfa_results = wfa_optimizer.run(train_window=252, test_window=63)
             wfa_context = format_wfa_for_llm(wfa_results)
-            logger.info("WFA Context Generated")
-        except Exception as e:
-            logger.warning(
-                f"Walk-Forward Analysis failed: {e}. Proceeding without WFA."
-            )
+        except Exception:
             wfa_context = ""
 
     except Exception as e:
@@ -312,69 +348,37 @@ async def semantic_translate_node(state: TechnicalAnalysisState) -> Command:
         backtest_context = ""
         wfa_context = ""
 
-    # Generate LLM interpretation with backtest and WFA context
+    # Generate LLM interpretation
     llm_interpretation = await generate_interpretation(
         tags_dict, ticker, backtest_context, wfa_context
     )
 
-    # Build final TechnicalSignal structure
-    frac_diff_metrics = FracDiffMetrics(
-        optimal_d=optimal_d,
-        window_length=metrics["window_length"],
-        adf_statistic=metrics["adf_statistic"],
-        adf_pvalue=metrics["adf_pvalue"],
-        memory_strength=tags_dict["memory_strength"],
-    )
-
-    signal_state = SignalState(
-        z_score=z_score,
-        statistical_state=tags_dict["statistical_state"],
-        direction=tags_dict["direction"],
-        risk_level=tags_dict["risk_level"],
-        confluence=tags_dict["confluence"],
-    )
-
-    technical_signal = TechnicalSignal(
-        ticker=ticker,
-        timestamp=get_timestamp(),
-        frac_diff_metrics=frac_diff_metrics,
-        signal_state=signal_state,
-        semantic_tags=tags_dict["tags"],
-        llm_interpretation=llm_interpretation,
-        raw_data={
-            "price_series": state.price_series,
-            "volume_series": state.volume_series,
-            "fracdiff_series": state.fracdiff_series,
-            "z_score_series": state.z_score_series,
-        },
-    )
-
-    # Create AI message for frontend
-    message = AIMessage(
-        content="",
-        additional_kwargs={
-            "type": "technical_analysis",
-            "data": technical_signal.model_dump(),
-            "agent_id": "technical_analysis",
-        },
-    )
+    # Note: We NO LONGER create AgentOutputArtifact here.
+    # We update the context with final fields for the adapter to use.
 
     return Command(
         update={
             "technical_analysis": {
-                "artifact": AgentOutputArtifact(
-                    summary=f"Technical Analysis: {technical_signal.signal_state.direction.upper()} (p={technical_signal.frac_diff_metrics.optimal_d:.2f})",
-                    data=TechnicalAnalysisSuccess(
-                        **technical_signal.model_dump()
-                    ).model_dump(),
-                ),
+                "signal": tags_dict["direction"],
+                "statistical_strength": tags_dict["statistical_state"],
+                "risk_level": tags_dict["risk_level"],
+                "llm_interpretation": llm_interpretation,
+                "semantic_tags": tags_dict["tags"],
+                "memory_strength": tags_dict["memory_strength"],
             },
             "current_node": "semantic_translate",
             "internal_progress": {"semantic_translate": "done"},
-            # [BSP Fix] Emit status immediately to bypass LangGraph's sync barrier
-            # allowing the UI to update without waiting for parallel branches (FA/News)
             "node_statuses": {"technical_analysis": "done"},
-            "messages": [message],
+            "messages": [
+                AIMessage(
+                    content="",
+                    additional_kwargs={
+                        "type": "technical_analysis",
+                        "agent_id": "technical_analysis",
+                        "status": "done",
+                    },
+                )
+            ],
         },
         goto=END,
     )

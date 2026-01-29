@@ -194,16 +194,18 @@
 
 📄 [technical_analysis_agent_refactoring_plan.md](file:///Users/denniswong/Desktop/Project/value-investment-agent/temp-feature-research/state-refactor/technical_analysis_agent_refactoring_plan.md)
 
-- [ ] 價格序列存入 Artifact Store
-- [ ] 節點間通過 Artifact ID 傳遞數據（非 `_private`）
-- [ ] State/Adapter/Mapper 重構
-- [ ] **強制要求**: Mapper 單元測試
+- [x] 價格序列存入 Artifact Store
+- [x] 節點間通過 Artifact ID 傳遞數據（非 `_private`）
+- [x] State/Adapter/Mapper 重構
+- [x] **強制要求**: Mapper 單元測試 (通過)
 - [ ] **用戶提供 server log** 驗證流程執行
 
 **⚠️ 關鍵注意事項**:
-- API 設置 `Cache-Control` 避免前端重複下載圖表數據
-- Input/Output 保持 Pydantic，State 使用 TypedDict
-- 移除 `create_pydantic_reducer` from TypedDict state
+- ✅ 已修正：API 設置 `Cache-Control` 避免前端重複下載圖表數據
+- ✅ 已修正：Input/Output 保持 Pydantic，State 使用 TypedDict
+- ✅ 已修正：移除 `create_pydantic_reducer` from TypedDict state
+
+**狀態**: ✅ 完成 (等待用戶驗證)
 
 ---
 

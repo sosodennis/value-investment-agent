@@ -8,6 +8,8 @@ from typing import Annotated, Any, NotRequired, TypedDict
 from langchain_core.messages import AnyMessage
 from langgraph.graph import add_messages
 
+from src.interface.schemas import AgentOutputArtifact
+
 # 注意：我們不再需要從 pydantic 導入 BaseModel 用於 State
 # 也不再需要 AgentOutputArtifact，因為它只存在於 Adapter 層
 
@@ -38,6 +40,7 @@ class IntentExtractionContext(TypedDict):
     resolved_ticker: NotRequired[str | None]
     company_profile: NotRequired[dict[str, Any] | None]
     status: NotRequired[str | None]  # extraction, searching, deciding, resolved
+    artifact: NotRequired[AgentOutputArtifact | None]
 
 
 class DebateContext(TypedDict):
@@ -72,6 +75,7 @@ class FundamentalAnalysisContext(TypedDict):
     extraction_output: NotRequired[dict | None]
     audit_output: NotRequired[dict | None]
     calculation_output: NotRequired[dict | None]
+    artifact: NotRequired[AgentOutputArtifact | None]
 
 
 class FinancialNewsContext(TypedDict):
@@ -91,6 +95,7 @@ class FinancialNewsContext(TypedDict):
     report_id: NotRequired[str]
 
     error_message: NotRequired[str]
+    artifact: NotRequired[AgentOutputArtifact | None]
 
 
 class TechnicalAnalysisContext(TypedDict):
@@ -100,10 +105,16 @@ class TechnicalAnalysisContext(TypedDict):
 
     # [L2 Data]
     latest_price: NotRequired[float | None]
+    optimal_d: NotRequired[float | None]
+    z_score_latest: NotRequired[float | None]
+    signal: NotRequired[str | None]  # "BUY", "SELL", "HOLD"
+    statistical_strength: NotRequired[str | None]
     signals: NotRequired[dict[str, str] | None]  # e.g. {"rsi": "buy"}
 
     # [L3 Pointer] 指向圖表數據或回測報告
-    chart_artifact_id: NotRequired[str | None]
+    price_artifact_id: NotRequired[str | None]
+    chart_data_id: NotRequired[str | None]
+    artifact: NotRequired[AgentOutputArtifact | None]
 
 
 # --- Root State ---
