@@ -22,6 +22,7 @@ from langgraph.types import Command
 from src.infrastructure.database import init_db
 from src.interface.adapters import adapt_langgraph_event, create_interrupt_event
 from src.interface.protocol import AgentEvent
+from src.services.artifact_manager import artifact_manager
 from src.services.history import history_service
 from src.utils.logger import get_logger
 from src.workflow.graph import get_graph
@@ -428,6 +429,24 @@ async def get_agent_statuses(request: Request, thread_id: str):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get("/api/artifacts/{artifact_id}")
+async def get_artifact(artifact_id: str):
+    """Retrieve artifact data with HTTP caching."""
+    from fastapi.responses import JSONResponse
+
+    artifact = await artifact_manager.get_artifact(artifact_id)
+    if not artifact:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+
+    return JSONResponse(
+        content=artifact.data,
+        headers={
+            "Cache-Control": "public, max-age=3600",
+            "ETag": f'"{artifact_id}"',
+        },
+    )
 
 
 @app.get("/stream/{thread_id}")

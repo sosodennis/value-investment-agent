@@ -29,3 +29,31 @@ class ChatMessage(Base):
             "data": self.metadata_.get("data") if self.metadata_ else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
+
+
+class Artifact(Base):
+    """
+    Stores large JSON artifacts (e.g., news items, financial statements, price data).
+    Supports reference-based state management to avoid duplicating large data in checkpoints.
+    """
+
+    __tablename__ = "artifacts"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    key = Column(
+        String, nullable=True, index=True
+    )  # Optional semantic key for debugging
+    thread_id = Column(String, nullable=True, index=True)  # Optional thread association
+    type = Column(String, nullable=False)  # e.g., "news_items", "financial_statements"
+    data = Column(JSON, nullable=False)  # The actual artifact payload
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "key": self.key,
+            "thread_id": self.thread_id,
+            "type": self.type,
+            "data": self.data,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
