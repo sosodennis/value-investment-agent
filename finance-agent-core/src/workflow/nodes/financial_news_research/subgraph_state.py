@@ -3,7 +3,7 @@ Isolated state class for Financial News Research subgraph.
 Following LangGraph best practices - does NOT share node_statuses with parent.
 """
 
-from typing import Annotated
+from typing import Annotated, NotRequired, TypedDict
 
 from langgraph.graph import add_messages
 from pydantic import BaseModel, Field
@@ -11,7 +11,6 @@ from pydantic import BaseModel, Field
 from ...state import (
     FinancialNewsContext,
     IntentExtractionContext,
-    create_pydantic_reducer,
     last_value,
     merge_dict,
 )
@@ -20,60 +19,49 @@ from ...state import (
 class FinancialNewsInput(BaseModel):
     """
     Input schema for financial news research subgraph.
+    Kept as Pydantic for boundary validation (Charter §3.1).
     """
 
     ticker: str | None = None
-    intent_extraction: IntentExtractionContext = Field(
-        default_factory=IntentExtractionContext
-    )
-    financial_news: FinancialNewsContext = Field(default_factory=FinancialNewsContext)
+    intent_extraction: IntentExtractionContext = Field(default_factory=dict)
+    financial_news_research: FinancialNewsContext = Field(default_factory=dict)
 
 
 class FinancialNewsOutput(BaseModel):
     """
     Output schema for financial news research subgraph.
+    Kept as Pydantic for boundary validation (Charter §3.1).
     """
 
     financial_news_research: FinancialNewsContext
     messages: list = Field(default_factory=list)
 
 
-class FinancialNewsState(BaseModel):
+class FinancialNewsState(TypedDict):
     """
     Internal state for financial news research subgraph.
+    Converted to TypedDict per Engineering Charter v3.1 §3.1.
+
+    NOTE: Intermediate pipeline data (raw_results, formatted_results, etc.)
+    is temporarily kept for backward compatibility with existing graph nodes.
+    These will be removed when graph nodes are refactored to use Artifact Store.
     """
 
     # --- From Input ---
-    ticker: str | None = None
-    intent_extraction: IntentExtractionContext = Field(
-        default_factory=IntentExtractionContext
-    )
+    ticker: NotRequired[str | None]
+    intent_extraction: NotRequired[IntentExtractionContext]
 
-    # --- Core State (Reducers applied) ---
-    financial_news_research: Annotated[
-        FinancialNewsContext, create_pydantic_reducer(FinancialNewsContext)
-    ] = Field(default_factory=FinancialNewsContext)
+    # --- Core State (Using TypedDict reducers) ---
+    financial_news_research: Annotated[FinancialNewsContext, merge_dict]
 
-    messages: Annotated[list, add_messages] = Field(default_factory=list)
+    messages: Annotated[list, add_messages]
 
-    # --- Intermediate State (Multi-stage pipeline) ---
-    raw_results: list[dict] = Field(
-        default_factory=list, description="Raw search results from news API"
-    )
-    formatted_results: str = Field(
-        default="", description="Formatted search results for LLM selection"
-    )
-    selected_indices: list[int] = Field(
-        default_factory=list,
-        description="Indices of articles selected by LLM for deep analysis",
-    )
-    news_items: list[dict] = Field(
-        default_factory=list,
-        description="Fetched articles with full content and analysis",
-    )
+    # --- Intermediate State (TODO: Remove when graph uses Artifact Store) ---
+    raw_results: NotRequired[list[dict]]
+    formatted_results: NotRequired[str]
+    selected_indices: NotRequired[list[int]]
+    news_items: NotRequired[list[dict]]
 
-    # --- Private State ---
-    internal_progress: Annotated[dict[str, str], merge_dict] = Field(
-        default_factory=dict
-    )
-    current_node: Annotated[str, last_value] = ""
+    # --- Private State (for node coordination) ---
+    internal_progress: Annotated[dict[str, str], merge_dict]
+    current_node: Annotated[str, last_value]

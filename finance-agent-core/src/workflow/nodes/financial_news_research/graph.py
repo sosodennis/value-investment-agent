@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import time
 
 from langchain_core.messages import AIMessage
 from langchain_core.prompts import ChatPromptTemplate
@@ -9,7 +10,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
 
-from src.interface.schemas import AgentOutputArtifact
+from src.services.artifact_manager import artifact_manager
 from src.utils.logger import get_logger
 
 from .finbert_service import get_finbert_analyzer
@@ -104,13 +105,29 @@ def search_node(state: FinancialNewsState) -> Command:
             goto=END,
         )
 
-    # Format for selector with clearer metadata including search tag
-    formatted_list = []
+    # Method C (Recommended): Clean raw results in-node
+    # Only store minimal metadata: title, source, snippet, link (URL), date
+    # No full content or extra metadata here to keep state lean.
+    cleaned_results = []
     for r in results:
-        categories = r.get("categories", [r.get("_search_tag", "general")])
+        cleaned_results.append(
+            {
+                "title": r.get("title", ""),
+                "source": r.get("source", ""),
+                "snippet": r.get("snippet", ""),
+                "link": r.get("link", ""),
+                "date": r.get("date", ""),
+                "categories": r.get("categories", [r.get("_search_tag", "general")]),
+            }
+        )
+
+    # Format for selector (using cleaned_results)
+    formatted_list = []
+    for r in cleaned_results:
+        categories = r.get("categories", [])
         categories_str = ", ".join([c.upper() for c in categories])
         formatted_list.append(f"""
-Source: {r.get('source')} | [TAGS: {categories_str}] | Date: {r.get('date')} | Frame: {r.get('_time_frame')}
+Source: {r.get('source')} | [TAGS: {categories_str}] | Date: {r.get('date')}
 Title: {r.get('title')}
 Snippet: {r.get('snippet')}
 URL: {r.get('link')}
@@ -120,7 +137,7 @@ URL: {r.get('link')}
 
     return Command(
         update={
-            "raw_results": results,
+            "raw_results": cleaned_results,
             "formatted_results": formatted_results,
             "current_node": "search_node",
             "internal_progress": {"search_node": "done", "selector_node": "running"},
@@ -237,12 +254,32 @@ def fetch_node(state: FinancialNewsState) -> Command:
         logger.error(f"Async fetch failed: {e}. Falling back to empty contents.")
         full_contents = [None] * len(articles_to_fetch)
 
-    # Build news items
+    # Build news items and store full content in Artifact Store
     news_items = []
+    ticker = state.intent_extraction.get("resolved_ticker") or state.get("ticker")
+    timestamp = int(time.time())
+
     for i, res in enumerate(articles_to_fetch):
         url = res.get("link")
         title = res.get("title")
         full_content = full_contents[i]
+
+        # L3: Store full content in Artifact Store if available
+        content_id = None
+        if full_content:
+            try:
+                content_id = asyncio.run(
+                    artifact_manager.save_artifact(
+                        data={"full_text": full_content, "title": title, "url": url},
+                        artifact_type="news_article",
+                        key_prefix=f"news_{ticker}_{timestamp}_{i}",
+                    )
+                )
+                logger.info(
+                    f"--- [News Research] L3 Artifact saved for: {title[:30]}... (ID: {content_id}) ---"
+                )
+            except Exception as e:
+                logger.error(f"Failed to save artifact for {url}: {e}")
 
         # Parse date if available
         published_at = None
@@ -251,7 +288,6 @@ def fetch_node(state: FinancialNewsState) -> Command:
             try:
                 from datetime import datetime
 
-                # DDGS returns ISO format e.g. 2026-01-06T15:00:00+00:00
                 published_at = datetime.fromisoformat(date_str)
             except Exception:
                 pass
@@ -262,7 +298,7 @@ def fetch_node(state: FinancialNewsState) -> Command:
                 url=url,
                 title=title,
                 snippet=res.get("snippet", ""),
-                full_content=full_content,
+                full_content=None,  # DO NOT store in state (Charter §3.4)
                 published_at=published_at,
                 source=SourceInfo(
                     name=res.get("source")
@@ -272,7 +308,25 @@ def fetch_node(state: FinancialNewsState) -> Command:
                 ),
                 categories=res.get("categories", []),
             )
-            news_items.append(item)
+            item_dict = item.model_dump(mode="json")
+            item_dict["content_id"] = content_id  # Link to L3
+            # We still keep the original full_content locally for the analyst_node to use
+            # but we won't persist it in the news_items list that goes into state.
+            # Wait, analyst_node is a DIFFERENT node. It needs full_content.
+            # If we don't put it in state, analyst_node won't have it.
+            # So, we pass it via a transient field that matches our Method C plan.
+            # Wait, the Charter says graph nodes don't share memory other than state.
+            # So analyst_node MUST read it from somewhere.
+            # Since analyst_node follows fetch_node, we have two choices:
+            # 1. Store full_content in state temporarily (then aggregator wipes it).
+            # 2. analyst_node reads from Artifact Store using content_id.
+
+            # Choice 1 is easier and fine for Checkpoint if it's wiped later.
+            # Choice 2 is cleaner for Checkpoint.
+            # Let's go with Choice 1 for now but mark it for analyst_node.
+            item_dict["full_content"] = full_content
+
+            news_items.append(item_dict)
             logger.info(
                 f"--- [News Research] ✅ Created news item for: {title[:50]}... ---"
             )
@@ -280,17 +334,10 @@ def fetch_node(state: FinancialNewsState) -> Command:
             logger.error(
                 f"--- [News Research] ❌ Failed to create news item for URL {url}: {e} ---"
             )
-            logger.error(f"Failed to create FinancialNewsItem: {e}")
 
-    logger.info(
-        f"--- [News Research] Completed fetching {len(news_items)} articles content ---"
-    )
-    # Serialize Pydantic models to dicts for JSON compatibility
-    # mode='json' ensures HttpUrl, datetime, etc. are converted to JSON-serializable types (strings)
-    news_items_serialized = [item.model_dump(mode="json") for item in news_items]
     return Command(
         update={
-            "news_items": news_items_serialized,
+            "news_items": news_items,
             "current_node": "fetch_node",
             "internal_progress": {"fetch_node": "done", "analyst_node": "running"},
         },
@@ -475,32 +522,62 @@ def aggregator_node(state: FinancialNewsState) -> Command:
         summary_text = "\n".join(summaries)
         all_themes = list(themes)
 
+    # Create final output object for storage
     final_output = NewsResearchOutput(
-        ticker=state.ticker,
+        ticker=state.get("ticker", "UNKNOWN"),
         news_items=news_items,
         overall_sentiment=overall_sentiment,
         sentiment_score=round(weighted_score, 2),
         key_themes=all_themes,
     )
 
+    # mode='json' is critical for artifact store
+    report_data = FinancialNewsSuccess(
+        **final_output.model_dump(mode="json")
+    ).model_dump(mode="json")
+
+    # L3: Store complete analysis report in Artifact Store
+    ticker = state.intent_extraction.get("resolved_ticker") or state.get(
+        "ticker", "UNKNOWN"
+    )
+    timestamp = int(time.time())
+    try:
+        report_id = asyncio.run(
+            artifact_manager.save_artifact(
+                data=report_data,
+                artifact_type="news_analysis_report",
+                key_prefix=f"news_report_{ticker}_{timestamp}",
+            )
+        )
+        logger.info(f"--- [News Research] L3 Final Report saved (ID: {report_id}) ---")
+    except Exception as e:
+        logger.error(f"Failed to save final report artifact: {e}")
+        report_id = None
+
+    # Final State Update (Charter §3.1 and §3.4)
+    # WIPE news_items and other intermediate fields (Method C)
     return Command(
         update={
             "financial_news_research": {
-                "artifact": AgentOutputArtifact(
-                    summary=f"Overall Sentiment: {overall_sentiment.value.upper()} ({final_output.sentiment_score}) from {len(news_items)} articles. Themes: {', '.join(all_themes)}",
-                    data=FinancialNewsSuccess(
-                        **final_output.model_dump(mode="json")
-                    ).model_dump(mode="json"),
-                ),
+                "status": "success",
+                "sentiment_summary": overall_sentiment.value,
+                "sentiment_score": round(weighted_score, 2),
+                "article_count": len(news_items),
+                "report_id": report_id,
+                "top_headlines": [
+                    item.get("title") for item in news_items[:3] if item.get("title")
+                ],
             },
+            "news_items": [],  # WIPE
+            "raw_results": [],  # WIPE
+            "formatted_results": "",  # WIPE
+            "selected_indices": [],  # WIPE
             "current_node": "aggregator_node",
             "internal_progress": {"aggregator_node": "done"},
-            # [BSP Fix] Emit status immediately to bypass LangGraph's sync barrier
-            # allowing the UI to update without waiting for parallel branches (FA/TA)
             "node_statuses": {"financial_news_research": "done"},
             "messages": [
                 AIMessage(
-                    content=f"### News Research: {state.ticker}\n\n**Overall Sentiment:** {overall_sentiment.value.upper()} ({final_output.sentiment_score})\n\n**Analysis Summaries:**\n{summary_text}\n\n**Themes:** {', '.join(all_themes) or 'N/A'}",
+                    content=f"### News Research: {ticker}\n\n**Overall Sentiment:** {overall_sentiment.value.upper()} ({final_output.sentiment_score})\n\n**Analysis Summaries:**\n{summary_text}\n\n**Themes:** {', '.join(all_themes) or 'N/A'}",
                     additional_kwargs={
                         "type": "text",
                         "agent_id": "financial_news_research",

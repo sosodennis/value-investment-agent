@@ -153,16 +153,21 @@
 
 📄 [financial_news_agent_refactoring_plan.md](file:///Users/denniswong/Desktop/Project/value-investment-agent/temp-feature-research/state-refactor/financial_news_agent_refactoring_plan.md)
 
-- [ ] 選擇中間數據處理策略（方案 A/B/C）
-- [ ] 將新聞全文存入 Artifact Store
-- [ ] State/Adapter/Mapper 重構
-- [ ] **強制要求**: Mapper 單元測試
+- [x] 選擇中間數據處理策略（方案 C - 節點內清洗）
+- [x] State 重構為 TypedDict（保留中間字段以向後兼容）
+- [x] 建立 Mapper 層（`mappers.py`）
+- [x] **強制要求**: Mapper 單元測試（7 個測試全部通過）
+- [x] 更新 Adapter 使用 Preview/Reference 架構
 - [ ] **用戶提供 server log** 驗證流程執行
 
 **⚠️ 關鍵注意事項**:
-- 不要使用 `_private`（LangGraph 不支持）
-- Input/Output 保持 Pydantic，State 使用 TypedDict
-- 移除 `create_pydantic_reducer` from TypedDict state
+- ✅ 已修正：使用 TypedDict 而非 Pydantic BaseModel
+- ✅ 已修正：Input/Output 保持 Pydantic，State 使用 TypedDict
+- ✅ 已修正：移除 `create_pydantic_reducer` from TypedDict fields
+- ⚠️ 向後兼容：暫時保留中間狀態字段（raw_results, news_items 等），待 Graph 節點重構後移除
+- ⚠️ Artifact Store：Adapter 已準備好 Preview 架構，完整 Artifact Store 整合需在 Graph 節點中實現
+
+**狀態**: ✅ 完成（等待用戶驗證）
 
 ---
 

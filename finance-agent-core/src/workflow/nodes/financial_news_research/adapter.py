@@ -1,11 +1,10 @@
 from typing import Any
 
-from pydantic import TypeAdapter
-
+from src.interface.schemas import AgentOutputArtifact, ArtifactReference
 from src.utils.logger import get_logger
 
 from ...state import AgentState
-from .schemas import FinancialNewsResult
+from .mappers import summarize_news_for_preview
 
 logger = get_logger(__name__)
 
@@ -23,38 +22,52 @@ def input_adapter(state: AgentState) -> dict[str, Any]:
 
 
 def output_adapter(sub_output: dict[str, Any]) -> dict[str, Any]:
-    """Maps FinancialNewsState output back to parent state updates."""
+    """
+    Maps FinancialNewsState output back to parent state updates.
+    Uses mapper to generate preview data per Engineering Charter v3.1.
+    """
     logger.info("--- [News Adapter] Mapping subgraph output back to parent state ---")
 
-    # 1. Validate with TypeAdapter
-    validator = TypeAdapter(FinancialNewsResult)
-    financial_news = sub_output.get("financial_news_research", {})
+    # Get the context from subgraph output
+    # Since it's a TypedDict, sub_output is a root state dict
+    financial_news_ctx = sub_output.get("financial_news_research", {})
 
-    # Validate artifact data if present
-    artifact_wrapper = financial_news.get("artifact")
-    if artifact_wrapper:
-        raw_data = (
-            artifact_wrapper.data
-            if hasattr(artifact_wrapper, "data")
-            else artifact_wrapper.get("data")
+    # 1. Generate preview using mapper from metadata in context
+    try:
+        # Mapper will use top_headlines from context if news_items is empty (which it is)
+        preview = summarize_news_for_preview(financial_news_ctx)
+
+        # 2. Construct L3 Reference if report_id exists
+        report_id = financial_news_ctx.get("report_id")
+        reference = None
+        if report_id:
+            reference = ArtifactReference(
+                artifact_id=report_id,
+                download_url=f"/api/artifacts/{report_id}",
+                type="news_analysis_report",
+            )
+
+        # 3. Construct AgentOutputArtifact (L1, L2, L3)
+        artifact = AgentOutputArtifact(
+            summary=f"新聞分析: {preview['sentiment_display']}",
+            preview=preview,
+            reference=reference,
         )
-        if raw_data:
-            try:
-                model = validator.validate_python(raw_data)
-                logger.info(
-                    f"✅ [News Adapter] Output validated as {type(model).__name__}"
-                )
-            except Exception as e:
-                logger.error(f"❌ [News Adapter] Output validation failed: {e}")
-                raise e
 
-    # The artifact should be in the financial_news_research context
-    # but we don't need to extract it here anymore as it's passed via financial_news dict/model
+        # 4. Attach artifact to context
+        # Note: Even if 'artifact' is not in the TypedDict schema,
+        # NodeOutputMapper looks for it, and LangGraph allows it.
+        financial_news_ctx["artifact"] = artifact
+
+        logger.info(f"✅ [News Adapter] Created preview and reference for {report_id}")
+
+    except Exception as e:
+        logger.error(f"❌ [News Adapter] Failed to generate preview: {e}")
 
     messages = sub_output.get("messages", [])
 
     return {
-        "financial_news_research": financial_news,
+        "financial_news_research": financial_news_ctx,
         "messages": messages,
         "node_statuses": {"financial_news_research": "done"},
     }

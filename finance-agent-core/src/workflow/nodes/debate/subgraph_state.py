@@ -3,7 +3,7 @@ Isolated state class for Debate subgraph.
 Following LangGraph best practices - does NOT share node_statuses with parent.
 """
 
-from typing import Annotated
+from typing import Annotated, NotRequired, TypedDict
 
 from langgraph.graph import add_messages
 from pydantic import BaseModel, Field
@@ -14,7 +14,6 @@ from ...state import (
     FundamentalAnalysisContext,
     IntentExtractionContext,
     TechnicalAnalysisContext,
-    create_pydantic_reducer,
     last_value,
     merge_dict,
 )
@@ -26,19 +25,11 @@ class DebateInput(BaseModel):
     """
 
     ticker: str | None = None
-    intent_extraction: IntentExtractionContext = Field(
-        default_factory=IntentExtractionContext
-    )
-    debate: DebateContext = Field(default_factory=DebateContext)
-    fundamental_analysis: FundamentalAnalysisContext = Field(
-        default_factory=FundamentalAnalysisContext
-    )
-    financial_news_research: FinancialNewsContext = Field(
-        default_factory=FinancialNewsContext
-    )
-    technical_analysis: TechnicalAnalysisContext = Field(
-        default_factory=TechnicalAnalysisContext
-    )
+    intent_extraction: IntentExtractionContext = Field(default_factory=dict)
+    debate: DebateContext = Field(default_factory=dict)
+    fundamental_analysis: FundamentalAnalysisContext = Field(default_factory=dict)
+    financial_news_research: FinancialNewsContext = Field(default_factory=dict)
+    technical_analysis: TechnicalAnalysisContext = Field(default_factory=dict)
 
 
 class DebateOutput(BaseModel):
@@ -51,36 +42,25 @@ class DebateOutput(BaseModel):
     messages: list = Field(default_factory=list)
 
 
-class DebateState(BaseModel):
+class DebateState(TypedDict):
     """
     Internal state for debate subgraph.
+    Converted to TypedDict per Engineering Charter v3.1.
     """
 
     # --- From Input ---
-    ticker: str | None = None
-    intent_extraction: IntentExtractionContext = Field(
-        default_factory=IntentExtractionContext
-    )
-    fundamental_analysis: FundamentalAnalysisContext = Field(
-        default_factory=FundamentalAnalysisContext
-    )
-    financial_news_research: FinancialNewsContext = Field(
-        default_factory=FinancialNewsContext
-    )
-    technical_analysis: TechnicalAnalysisContext = Field(
-        default_factory=TechnicalAnalysisContext
-    )
+    ticker: NotRequired[str | None]
+    intent_extraction: NotRequired[IntentExtractionContext]
+    fundamental_analysis: NotRequired[FundamentalAnalysisContext]
+    financial_news_research: NotRequired[FinancialNewsContext]
+    technical_analysis: NotRequired[TechnicalAnalysisContext]
 
     # --- Core State (Reducers applied) ---
     # Use Annotated with reducer to handle concurrent updates from Bull & Bear in Round 1
-    debate: Annotated[DebateContext, create_pydantic_reducer(DebateContext)] = Field(
-        default_factory=DebateContext
-    )
-    model_type: Annotated[str | None, last_value] = None
-    messages: Annotated[list, add_messages] = Field(default_factory=list)
+    debate: Annotated[DebateContext, merge_dict]
+    model_type: Annotated[str | None, last_value]
+    messages: Annotated[list, add_messages]
 
     # --- Private State ---
-    internal_progress: Annotated[dict[str, str], merge_dict] = Field(
-        default_factory=dict
-    )
-    current_node: Annotated[str, last_value] = ""
+    internal_progress: Annotated[dict[str, str], merge_dict]
+    current_node: Annotated[str, last_value]

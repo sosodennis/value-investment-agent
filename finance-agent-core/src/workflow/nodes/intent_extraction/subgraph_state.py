@@ -15,9 +15,7 @@ class IntentExtractionInput(BaseModel):
     ticker: str | None = None
     user_query: str | None = None
     messages: list = Field(default_factory=list)
-    intent_extraction: IntentExtractionContext = Field(
-        default_factory=IntentExtractionContext
-    )
+    intent_extraction: IntentExtractionContext = Field(default_factory=dict)
 
 
 class IntentExtractionOutput(BaseModel):

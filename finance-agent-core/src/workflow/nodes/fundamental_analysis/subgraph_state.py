@@ -3,7 +3,7 @@ Isolated state class for Fundamental Analysis subgraph.
 Following LangGraph best practices - does NOT share node_statuses with parent.
 """
 
-from typing import Annotated
+from typing import Annotated, NotRequired, TypedDict
 
 from langgraph.graph import add_messages
 from pydantic import BaseModel, Field
@@ -11,7 +11,6 @@ from pydantic import BaseModel, Field
 from ...state import (
     FundamentalAnalysisContext,
     IntentExtractionContext,
-    create_pydantic_reducer,
     last_value,
     merge_dict,
 )
@@ -24,9 +23,8 @@ class FundamentalAnalysisInput(BaseModel):
     """
 
     ticker: str | None = None
-    intent_extraction: IntentExtractionContext = Field(
-        default_factory=IntentExtractionContext
-    )
+    intent_extraction: IntentExtractionContext = Field(default_factory=dict)
+    fundamental_analysis: FundamentalAnalysisContext = Field(default_factory=dict)
 
 
 class FundamentalAnalysisOutput(BaseModel):
@@ -39,27 +37,22 @@ class FundamentalAnalysisOutput(BaseModel):
     messages: list = Field(default_factory=list)
 
 
-class FundamentalAnalysisState(BaseModel):
+class FundamentalAnalysisState(TypedDict):
     """
     Internal state for fundamental analysis subgraph.
     Combines input fields, output fields, and private state.
+    Refactored to TypedDict per Engineering Charter v3.1.
     """
 
     # --- From Input ---
-    ticker: str | None = None
-    intent_extraction: IntentExtractionContext = Field(
-        default_factory=IntentExtractionContext
-    )
+    ticker: NotRequired[str | None]
+    intent_extraction: NotRequired[IntentExtractionContext]
 
     # --- Core State (Reducers applied) ---
-    fundamental_analysis: Annotated[
-        FundamentalAnalysisContext, create_pydantic_reducer(FundamentalAnalysisContext)
-    ] = Field(default_factory=FundamentalAnalysisContext)
-    messages: Annotated[list, add_messages] = Field(default_factory=list)
+    fundamental_analysis: Annotated[FundamentalAnalysisContext, merge_dict]
+    messages: Annotated[list, add_messages]
 
     # --- Private State (Not exposed in FundamentalAnalysisOutput) ---
-    internal_progress: Annotated[dict[str, str], merge_dict] = Field(
-        default_factory=dict
-    )
-    current_node: Annotated[str, last_value] = ""
-    model_type: Annotated[str, last_value] = "saas"
+    internal_progress: Annotated[dict[str, str], merge_dict]
+    current_node: Annotated[str, last_value]
+    model_type: Annotated[str, last_value]

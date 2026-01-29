@@ -1,184 +1,139 @@
 """
 Shared state definitions for the workflow graph.
+Refactored to comply with Engineering Charter v3.1 (TypedDict + Artifact Store).
 """
 
-from typing import Annotated, Any, TypeVar
+from typing import Annotated, Any, NotRequired, TypedDict
 
 from langchain_core.messages import AnyMessage
 from langgraph.graph import add_messages
-from pydantic import BaseModel, Field
 
-from src.interface.schemas import AgentOutputArtifact
-
-from .schemas import AuditOutput, CalculationOutput, ExtractionOutput
+# 注意：我們不再需要從 pydantic 導入 BaseModel 用於 State
+# 也不再需要 AgentOutputArtifact，因為它只存在於 Adapter 層
 
 
 def merge_dict(a: dict, b: dict) -> dict:
     """Simple dict merge reducer."""
+    if a is None:
+        return b
+    if b is None:
+        return a
     return {**a, **b}
 
 
-def last_value(a: str | None, b: str | None) -> str | None:
-    """Reducer that keeps the last non-None value. Used for parallel node updates."""
+def last_value(a: Any | None, b: Any | None) -> Any | None:
+    """Reducer that keeps the last non-None value."""
     return b if b is not None else a
 
 
-# --- Generic Reducer ---
-
-T = TypeVar("T", bound=BaseModel)
+# --- Context Definitions (TypedDict) ---
 
 
-def create_pydantic_reducer(model_class: type[T]):
-    """
-    Factory function: Generates a standard Merge Reducer for any Pydantic Model.
-    FIXED: Uses model_validate to ensure dicts are parsed into Pydantic models.
-    """
-
-    def reducer(current: T | None, new: T | dict) -> T:
-        if current is None:
-            current = model_class()
-
-        # 1. Prepare new data (handle both objects and dicts)
-        if isinstance(new, model_class):
-            new_data = new.model_dump(exclude_unset=True)
-        else:
-            new_data = new
-
-        # 2. Handle History merging (LangGraph special logic)
-        raw_history_update = (
-            getattr(new, "history", None)
-            if isinstance(new, model_class)
-            else new_data.get("history")
-        )
-
-        if raw_history_update is not None and hasattr(current, "history"):
-            from langgraph.graph import add_messages
-
-            # Use LangGraph's add_messages to handle message appending correctly
-            merged_history = add_messages(current.history, raw_history_update)
-            new_data["history"] = merged_history
-
-        # 3. Execution of safe merge and validation (Critical Fix)
-        # Using model_validate instead of model_copy(update=...) forces Pydantic
-        # to parse nested dicts into proper Pydantic instances (e.g. AgentOutputArtifact).
-        merged_data = current.model_dump()
-        merged_data.update(new_data)
-
-        return model_class.model_validate(merged_data)
-
-    return reducer
-
-
-# --- Context Models ---
-
-
-class IntentExtractionContext(BaseModel):
+class IntentExtractionContext(TypedDict):
     """Context for intent extraction workflow."""
 
-    extracted_intent: dict[str, Any] | None = Field(
-        None, description="Parsed intent from user query (ticker, company_name, etc.)"
-    )
-    ticker_candidates: list[Any] | None = Field(
-        None, description="List of possible ticker matches from search"
-    )
-    resolved_ticker: str | None = Field(
-        None, description="Final resolved ticker symbol"
-    )
-    company_profile: dict[str, Any] | None = Field(
-        None, description="Company profile information for resolved ticker"
-    )
-    status: str | None = Field(
-        None,
-        description="Current status: extraction, searching, deciding, clarifying, resolved",
-    )
-    artifact: AgentOutputArtifact | None = Field(
-        None, description="Standardized output artifact for UI"
-    )
+    # 使用 NotRequired 標記可選字段
+    extracted_intent: NotRequired[dict[str, Any] | None]
+    ticker_candidates: NotRequired[list[Any] | None]
+    resolved_ticker: NotRequired[str | None]
+    company_profile: NotRequired[dict[str, Any] | None]
+    status: NotRequired[str | None]  # extraction, searching, deciding, resolved
 
 
-class DebateContext(BaseModel):
-    history: list[AnyMessage] = Field(
-        default_factory=list, description="Adversarial conversation transcript"
-    )
-    bull_thesis: str | None = Field(
-        None, description="The current strongest argument for LONG"
-    )
-    bear_thesis: str | None = Field(
-        None, description="The current strongest argument for SHORT"
-    )
-    current_round: int = 0
-    analyst_reports: dict[str, Any] | None = Field(
-        None, description="Aggregated ground truth (news + financials) for debate"
-    )
-    artifact: AgentOutputArtifact | None = Field(
-        None, description="Standardized output artifact for UI"
-    )
+class DebateContext(TypedDict):
+    """Context for debate workflow."""
+
+    # 使用 add_messages reducer 處理歷史消息追加
+    history: Annotated[list[AnyMessage], add_messages]
+
+    bull_thesis: NotRequired[str | None]
+    bear_thesis: NotRequired[str | None]
+    current_round: NotRequired[int]
+
+    # 這裡只存摘要或 ID，不存大量文本
+    analyst_reports: NotRequired[dict[str, Any] | None]
 
 
-class FundamentalAnalysisContext(BaseModel):
-    financial_reports: list[dict[str, Any]] = Field(
-        default_factory=list,
-        description="Financial Health Reports from edgartools (Multi-year)",
-    )
-    approved: bool | None = None
-    status: str | None = None
-    model_type: str | None = Field(
-        None, description="The skill/model to use for valuation (e.g. saas, bank)"
-    )
-    # TODO: Refactor executor, auditor, and calculator into their own sub-agent with dedicated context
-    # These fields should move to a new ExecutorContext/AuditorContext in the future
-    extraction_output: ExtractionOutput | None = Field(
-        None, description="Extracted parameters from executor node"
-    )
-    audit_output: AuditOutput | None = Field(
-        None, description="Audit results from auditor node"
-    )
-    calculation_output: CalculationOutput | None = Field(
-        None, description="Final results from calculator node"
-    )
-    artifact: AgentOutputArtifact | None = None
+class FundamentalAnalysisContext(TypedDict):
+    """Context for fundamental analysis workflow."""
+
+    status: NotRequired[str | None]
+    approved: NotRequired[bool | None]
+    model_type: NotRequired[str | None]  # e.g., saas, bank
+
+    # [L2 Data] 關鍵業務指標 (Source of Truth)
+    valuation_score: NotRequired[float | None]
+    valuation_summary: NotRequired[str | None]
+
+    # [L3 Pointer] 指向 Artifact Store 的 ID
+    latest_report_id: NotRequired[str | None]
+
+    # 下面這些複雜對象建議未來也轉為 Artifact ID 或精簡字典
+    extraction_output: NotRequired[dict | None]
+    audit_output: NotRequired[dict | None]
+    calculation_output: NotRequired[dict | None]
 
 
-class FinancialNewsContext(BaseModel):
-    artifact: AgentOutputArtifact | None = None
+class FinancialNewsContext(TypedDict):
+    """
+    Context for financial news workflow.
+    Refactored per Engineering Charter v3.1 - Metadata Only.
+    """
+
+    status: NotRequired[str]  # "success" | "error" | "processing"
+
+    # [L2 Data] 用於 Adapter 生成 Preview
+    sentiment_summary: NotRequired[str]  # "bullish" | "bearish" | "neutral"
+    sentiment_score: NotRequired[float]  # -1.0 to 1.0
+    article_count: NotRequired[int]
+
+    # [L3 Pointer] 指向完整報告的 Artifact ID
+    report_id: NotRequired[str]
+
+    error_message: NotRequired[str]
 
 
-class TechnicalAnalysisContext(BaseModel):
-    artifact: AgentOutputArtifact | None = None
+class TechnicalAnalysisContext(TypedDict):
+    """Context for technical analysis workflow."""
+
+    status: NotRequired[str | None]
+
+    # [L2 Data]
+    latest_price: NotRequired[float | None]
+    signals: NotRequired[dict[str, str] | None]  # e.g. {"rsi": "buy"}
+
+    # [L3 Pointer] 指向圖表數據或回測報告
+    chart_artifact_id: NotRequired[str | None]
 
 
-class AgentState(BaseModel):
-    """Agent state defined as a Pydantic model."""
+# --- Root State ---
 
-    user_query: Annotated[str | None, last_value] = None
-    messages: Annotated[list[AnyMessage], add_messages] = Field(default_factory=list)
-    ticker: Annotated[str | None, last_value] = None
+
+class AgentState(TypedDict):
+    """
+    Root Agent State.
+    Fully converted to TypedDict.
+    """
+
+    # Global Shared State
+    user_query: Annotated[str | None, last_value]
+    ticker: Annotated[str | None, last_value]
+
+    # Global Conversation History
+    messages: Annotated[list[AnyMessage], add_messages]
 
     # Sub-Agent Contexts
-    intent_extraction: Annotated[
-        IntentExtractionContext, create_pydantic_reducer(IntentExtractionContext)
-    ] = Field(default_factory=IntentExtractionContext)
+    # 使用 merge_dict 允許子圖進行部分更新 (Partial Updates)
+    intent_extraction: Annotated[IntentExtractionContext, merge_dict]
 
-    fundamental_analysis: Annotated[
-        FundamentalAnalysisContext, create_pydantic_reducer(FundamentalAnalysisContext)
-    ] = Field(default_factory=FundamentalAnalysisContext)
+    fundamental_analysis: Annotated[FundamentalAnalysisContext, merge_dict]
 
-    financial_news_research: Annotated[
-        FinancialNewsContext, create_pydantic_reducer(FinancialNewsContext)
-    ] = Field(default_factory=FinancialNewsContext)
+    financial_news_research: Annotated[FinancialNewsContext, merge_dict]
 
-    technical_analysis: Annotated[
-        TechnicalAnalysisContext, create_pydantic_reducer(TechnicalAnalysisContext)
-    ] = Field(default_factory=TechnicalAnalysisContext)
+    technical_analysis: Annotated[TechnicalAnalysisContext, merge_dict]
 
-    debate: Annotated[DebateContext, create_pydantic_reducer(DebateContext)] = Field(
-        default_factory=DebateContext
-    )
+    debate: Annotated[DebateContext, merge_dict]
 
     # Dashboard tracking
-    node_statuses: Annotated[dict[str, str], merge_dict] = Field(
-        default_factory=dict,
-        description="Status of each node: idle, running, done, error",
-    )
-
-    current_node: Annotated[str | None, last_value] = None
+    node_statuses: Annotated[dict[str, str], merge_dict]
+    current_node: Annotated[str | None, last_value]
