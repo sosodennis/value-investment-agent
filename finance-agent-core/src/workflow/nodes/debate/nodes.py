@@ -198,6 +198,7 @@ async def debate_aggregator_node(state: DebateState) -> Command:
         update={
             "current_node": "debate_aggregator",
             "internal_progress": next_progress,
+            "node_statuses": {"debate": "running"},
         },
         goto=["r1_bull", "r1_bear"],
     )

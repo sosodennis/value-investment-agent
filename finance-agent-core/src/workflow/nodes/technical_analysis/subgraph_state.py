@@ -6,7 +6,7 @@ Following LangGraph best practices - does NOT share node_statuses with parent.
 from typing import Annotated, NotRequired
 
 from langgraph.graph import add_messages
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing_extensions import TypedDict
 
 from ...state import (
@@ -22,6 +22,8 @@ class TechnicalAnalysisInput(BaseModel):
     Input schema for technical analysis subgraph.
     """
 
+    model_config = ConfigDict(extra="ignore")
+
     ticker: str | None = None
     intent_extraction: IntentExtractionContext = Field(default_factory=dict)
     technical_analysis: TechnicalAnalysisContext = Field(default_factory=dict)
@@ -34,6 +36,7 @@ class TechnicalAnalysisOutput(BaseModel):
 
     technical_analysis: TechnicalAnalysisContext
     messages: list = Field(default_factory=list)
+    node_statuses: dict[str, str] = Field(default_factory=dict)
 
 
 class TechnicalAnalysisState(TypedDict):

@@ -5,6 +5,7 @@ Handles extraction, searching, decision, and clarification for ticker resolution
 
 from langgraph.types import Command, interrupt
 
+from src.interface.schemas import AgentOutputArtifact
 from src.utils.logger import get_logger
 
 from ..fundamental_analysis.extraction import (
@@ -16,6 +17,7 @@ from ..fundamental_analysis.extraction import (
 from ..fundamental_analysis.logic import should_request_clarification
 from ..fundamental_analysis.structures import TickerCandidate
 from ..fundamental_analysis.tools import get_company_profile, search_ticker, web_search
+from .mappers import summarize_intent_for_preview
 from .subgraph_state import IntentExtractionState
 
 logger = get_logger(__name__)
@@ -49,6 +51,7 @@ def extraction_node(state: IntentExtractionState) -> Command:
             },
             "current_node": "extraction",
             "internal_progress": {"extraction": "done", "searching": "running"},
+            "node_statuses": {"intent_extraction": "running"},
         },
         goto="searching",
     )
@@ -203,16 +206,32 @@ def decision_node(state: IntentExtractionState) -> Command:
 
     from langgraph.graph import END
 
+    # --- Adapter Logic Integration ---
+    # Prepare context for artifact generation
+    intent_ctx = {
+        "status": "resolved",
+        "resolved_ticker": resolved_ticker,
+        "company_profile": profile.model_dump(),
+        # Other fields might be merged by the graph automatically, but we rely on what we are returning
+    }
+
+    # 1. Generate local preview
+    preview = summarize_intent_for_preview(intent_ctx)
+
+    # 2. Construct Artifact
+    summary = f"已確認分析標的: {resolved_ticker}"
+    artifact = AgentOutputArtifact(summary=summary, preview=preview, reference=None)
+
+    # 3. Inject artifact
+    intent_ctx["artifact"] = artifact
+
     return Command(
         update={
-            "intent_extraction": {
-                "resolved_ticker": resolved_ticker,
-                "company_profile": profile.model_dump(),
-                "status": "resolved",
-            },
+            "intent_extraction": intent_ctx,
             "ticker": resolved_ticker,
             "current_node": "deciding",
             "internal_progress": {"deciding": "done"},
+            "node_statuses": {"intent_extraction": "done"},
         },
         goto=END,
     )
@@ -275,17 +294,27 @@ def clarification_node(state: IntentExtractionState) -> Command:
                 HumanMessage(content=f"Selected Ticker: {selected_symbol}"),
             ]
 
+            # --- Adapter Logic Integration ---
+            intent_ctx = {
+                "status": "resolved",
+                "resolved_ticker": selected_symbol,
+                "company_profile": profile.model_dump(),
+            }
+            preview = summarize_intent_for_preview(intent_ctx)
+            summary = f"已確認分析標的: {selected_symbol}"
+            artifact = AgentOutputArtifact(
+                summary=summary, preview=preview, reference=None
+            )
+            intent_ctx["artifact"] = artifact
+
             return Command(
                 update={
-                    "intent_extraction": {
-                        "resolved_ticker": selected_symbol,
-                        "company_profile": profile.model_dump(),
-                        "status": "resolved",
-                    },
+                    "intent_extraction": intent_ctx,
                     "ticker": selected_symbol,
                     "messages": new_messages,
                     "current_node": "clarifying",
                     "internal_progress": {"clarifying": "done"},
+                    "node_statuses": {"intent_extraction": "done"},
                 },
                 goto=END,
             )

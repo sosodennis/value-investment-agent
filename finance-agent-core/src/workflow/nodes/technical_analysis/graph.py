@@ -118,6 +118,7 @@ async def data_fetch_node(state: TechnicalAnalysisState) -> Command:
                 "data_fetch": "done",
                 "fracdiff_compute": "running",
             },
+            "node_statuses": {"technical_analysis": "running"},
         },
         goto="fracdiff_compute",
     )

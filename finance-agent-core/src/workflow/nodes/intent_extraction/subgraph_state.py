@@ -1,7 +1,7 @@
 from typing import Annotated
 
 from langgraph.graph import add_messages
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing_extensions import TypedDict
 
 from ...state import IntentExtractionContext, merge_dict
@@ -12,6 +12,8 @@ class IntentExtractionInput(BaseModel):
     Input schema for Intent Extraction subgraph.
     Boundary validation remains Pydantic.
     """
+
+    model_config = ConfigDict(extra="ignore")
 
     ticker: str | None = None
     user_query: str | None = None
@@ -28,6 +30,7 @@ class IntentExtractionOutput(BaseModel):
     intent_extraction: IntentExtractionContext
     ticker: str | None = None
     messages: list = Field(default_factory=list)
+    node_statuses: dict[str, str] = Field(default_factory=dict)
 
 
 class IntentExtractionState(TypedDict):

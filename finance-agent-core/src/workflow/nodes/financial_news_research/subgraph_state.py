@@ -6,7 +6,7 @@ Following LangGraph best practices - does NOT share node_statuses with parent.
 from typing import Annotated, NotRequired
 
 from langgraph.graph import add_messages
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing_extensions import TypedDict
 
 from ...state import (
@@ -23,6 +23,8 @@ class FinancialNewsInput(BaseModel):
     Kept as Pydantic for boundary validation (Charter §3.1).
     """
 
+    model_config = ConfigDict(extra="ignore")
+
     ticker: str | None = None
     intent_extraction: IntentExtractionContext = Field(default_factory=dict)
     financial_news_research: FinancialNewsContext = Field(default_factory=dict)
@@ -36,6 +38,7 @@ class FinancialNewsOutput(BaseModel):
 
     financial_news_research: FinancialNewsContext
     messages: list = Field(default_factory=list)
+    node_statuses: dict[str, str] = Field(default_factory=dict)
 
 
 class FinancialNewsState(TypedDict):

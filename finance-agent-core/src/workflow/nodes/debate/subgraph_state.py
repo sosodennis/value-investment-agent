@@ -6,7 +6,7 @@ Following LangGraph best practices - does NOT share node_statuses with parent.
 from typing import Annotated, NotRequired
 
 from langgraph.graph import add_messages
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing_extensions import TypedDict
 
 from ...state import (
@@ -25,6 +25,8 @@ class DebateInput(BaseModel):
     Input schema for debate subgraph.
     """
 
+    model_config = ConfigDict(extra="ignore")
+
     ticker: str | None = None
     intent_extraction: IntentExtractionContext = Field(default_factory=dict)
     debate: DebateContext = Field(default_factory=dict)
@@ -41,6 +43,7 @@ class DebateOutput(BaseModel):
     debate: DebateContext
     model_type: str | None = None
     messages: list = Field(default_factory=list)
+    node_statuses: dict[str, str] = Field(default_factory=dict)
 
 
 class DebateState(TypedDict):

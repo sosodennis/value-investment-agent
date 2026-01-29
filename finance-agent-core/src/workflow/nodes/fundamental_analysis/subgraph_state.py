@@ -6,7 +6,7 @@ Following LangGraph best practices - does NOT share node_statuses with parent.
 from typing import Annotated, NotRequired
 
 from langgraph.graph import add_messages
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing_extensions import TypedDict
 
 from ...state import (
@@ -23,6 +23,8 @@ class FundamentalAnalysisInput(BaseModel):
     Defines the contract for what the parent graph must provide.
     """
 
+    model_config = ConfigDict(extra="ignore")
+
     ticker: str | None = None
     intent_extraction: IntentExtractionContext = Field(default_factory=dict)
     fundamental_analysis: FundamentalAnalysisContext = Field(default_factory=dict)
@@ -36,6 +38,7 @@ class FundamentalAnalysisOutput(BaseModel):
 
     fundamental_analysis: FundamentalAnalysisContext
     messages: list = Field(default_factory=list)
+    node_statuses: dict[str, str] = Field(default_factory=dict)
 
 
 class FundamentalAnalysisState(TypedDict):

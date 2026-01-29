@@ -163,6 +163,7 @@ URL: {r.get('link')}
             },
             "current_node": "search_node",
             "internal_progress": {"search_node": "done", "selector_node": "running"},
+            "node_statuses": {"financial_news_research": "running"},
         },
         goto="selector_node",
     )

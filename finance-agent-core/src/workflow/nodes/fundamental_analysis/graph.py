@@ -315,6 +315,7 @@ def financial_health_node(state: FundamentalAnalysisState) -> Command:
                 "financial_health": "done",
                 "model_selection": "running",
             },
+            "node_statuses": {"fundamental_analysis": "running"},
             "messages": [
                 AIMessage(
                     content="",
