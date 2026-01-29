@@ -1,8 +1,14 @@
 export type AgentStatus = 'idle' | 'running' | 'done' | 'attention' | 'error';
 
+export interface ArtifactReference {
+    artifact_id: string;
+    key: string;
+    type: string;
+}
+
 export interface StandardAgentOutput {
-    summary: string;
-    data: any;
+    preview?: any;
+    reference?: ArtifactReference;
 }
 
 export interface AgentInfo {
@@ -12,7 +18,7 @@ export interface AgentInfo {
     avatar: string;
     status: AgentStatus;
     role?: string;
-    output?: StandardAgentOutput | any; // Transitional type
+    output?: StandardAgentOutput;
 }
 
 export interface DimensionScore {

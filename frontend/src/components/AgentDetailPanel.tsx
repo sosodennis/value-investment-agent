@@ -46,14 +46,15 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
     // Filter messages for this agent
     const agentMessages = messages.filter(m => m.agentId === agent.id);
 
-    // Standardized Data access
-    // We expect agentOutput to follow the { summary, data } schema now.
-    const outputData = agentOutput?.data;
+    // Unified Output Resolution: Artifact Preview Only
+    // Strictly following the new Preview/Reference pattern.
+    const outputData = agentOutput?.preview;
 
     // Unified Ticker Resolution (prefer Intent, fallback to current agent)
-    const resolvedTicker = allAgentOutputs['intent_extraction']?.data?.resolved_ticker || outputData?.ticker;
+    const resolvedTicker = allAgentOutputs['intent_extraction']?.preview?.resolved_ticker ||
+        outputData?.ticker;
 
-    // Get specific reports from agentOutput exclusively
+    // Get specific reports from resolved outputData
     const agentReports = outputData?.financial_reports || [];
     const latestReport = agentReports.length > 0 ? agentReports[0] : null;
 
@@ -414,31 +415,31 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                 <div className={`p-8 h-full ${activeTab === 'Output' ? 'block animate-in slide-in-from-bottom-2 duration-300' : 'hidden'}`}>
                     {agent.id === 'fundamental_analysis' ? (
                         <FundamentalAnalysisOutput
-                            reports={agentReports}
+                            output={agentOutput}
                             resolvedTicker={resolvedTicker}
                             status={agent.status}
                         />
                     ) : agent.id === 'financial_news_research' ? (
                         <NewsResearchOutputPanel
-                            output={outputData as NewsOutputType | null}
+                            output={agentOutput}
                             resolvedTicker={resolvedTicker}
                             status={agent.status}
                         />
                     ) : agent.id === 'debate' ? (
                         <DebateOutput
-                            output={outputData}
+                            output={agentOutput}
                             resolvedTicker={resolvedTicker}
                             status={agent.status}
                         />
                     ) : agent.id === 'technical_analysis' ? (
                         <TechnicalAnalysisOutput
-                            output={outputData as TechnicalSignalOutput | null}
+                            output={agentOutput}
                             status={agent.status}
                         />
                     ) : (
                         <GenericAgentOutput
                             agentName={agent.name}
-                            output={outputData}
+                            output={agentOutput}
                             status={agent.status}
                         />
                     )}

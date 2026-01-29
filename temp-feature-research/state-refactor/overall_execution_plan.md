@@ -15,7 +15,7 @@
 | Phase 2: Intent (Pilot) | ✅ 完成 | 1 天 | AI | 2026-01-29 |
 | Phase 3: 核心 Agents | ✅ 完成 | 3-4 天 | AI | 2026-01-29 |
 | Phase 4: 複雜 Agents | ✅ 完成 | 2-3 天 | AI | 2026-01-29 |
-| Phase 5: 前端適配 | ⬜ 待開始 | 2 天 | | |
+| Phase 5: 前端適配 | ✅ 完成 | 2 天 | AI | 2026-01-29 |
 
 **狀態圖例**: ⬜ 待開始 | 🔄 進行中 | ✅ 完成 | ⚠️ 阻塞
 
@@ -250,22 +250,10 @@
 
 ### 待辦事項
 
-- [ ] **5.1** 建立 `useArtifact` Hook
-  ```typescript
-  export function useArtifact<T>(artifactId?: string) {
-    return useSWR<T>(
-      artifactId ? `/api/artifacts/${artifactId}` : null,
-      fetcher
-    );
-  }
-  ```
-
-- [ ] **5.2** 更新各 Agent Output 組件
-  - 立即渲染 `preview`
-  - 異步加載 `reference`
-
-- [ ] **5.3** 更新 TypeScript 類型定義
-  - `AgentOutputArtifact` 類型
+- [x] **5.1** 建立 `useArtifact` Hook (已實作)
+- [x] **5.2** 更新各 Agent Output 組件 (已完成，並移除 Legacy Fallbacks)
+- [x] **5.3** 更新 TypeScript 類型定義 (已移除 `data`, `summary`)
+- [x] **5.4** 移除所有 Legacy 向後兼容邏輯 (全局清理完成)
 
 ### 參考
 
@@ -405,4 +393,4 @@ class {Agent}Preview(BaseModel):
 |------|----------|------|
 | 2026-01-29 | 初始版本 | AI |
 | 2026-01-29 | Phase 1 完成，Phase 2 開始 | AI |
-| 2026-01-29 | 新增技術最佳實踐章節，修正所有 Phase 的 State/Reducer 規則 | AI |
+| 2026-01-29 | Phase 5 完成，整體架構升級及 Legacy 移除工作全部結束 | AI |

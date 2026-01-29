@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, memo } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { AgentStatus } from '@/types/agents';
+import { AgentStatus, StandardAgentOutput } from '@/types/agents';
 import {
     ResponsiveContainer,
     AreaChart,
@@ -25,18 +25,20 @@ import {
     Zap,
     AlertTriangle,
     Maximize2,
-    Minimize2
+    Minimize2,
+    Loader2
 } from 'lucide-react';
-import { TechnicalSignalOutput } from '@/types/agents/technical';
+import { TechnicalSignalOutput, TechnicalAnalysisSuccess } from '@/types/agents/technical';
+import { useArtifact } from '../../hooks/useArtifact';
 
 interface TechnicalAnalysisOutputProps {
-    output: TechnicalSignalOutput | null;
+    output: StandardAgentOutput | null;
     status: AgentStatus;
 }
 
 type Timeframe = '1W' | '2W' | '1M' | '3M' | '1Y' | 'ALL';
 
-// --- 1. Semantic Helpers (語意轉譯層) ---
+// --- 1. Semantic Helpers ---
 
 const getSignalStrengthLabel = (d: number, pValue: number) => {
     if (pValue > 0.05) return { label: "High Noise (Unreliable)", color: "text-slate-500", icon: Activity, description: "The signal is indistinguishable from random market noise." };
@@ -51,7 +53,6 @@ const MarketStatusBadge = ({ zScore }: { zScore: number }) => {
     let advice = "Wait & Observe";
     let icon = Activity;
 
-    // 根據 Z-Score 定義市場狀態
     if (zScore > 2.0) {
         status = "Extreme Overheating";
         color = "bg-rose-500/20 border-rose-500/40 text-rose-300";
@@ -94,11 +95,6 @@ const MarketStatusBadge = ({ zScore }: { zScore: number }) => {
 // --- 2. Visual Components ---
 
 const ProbabilityGauge = ({ value }: { value: number }) => {
-    // Value is 0-100% Probability
-    // 0-16%: Extreme Low (Oversold) - Emerald
-    // 16-84%: Noise / Trend - Slate/Blue
-    // 84-100%: Extreme High (Overbought) - Rose
-
     let colorClass = 'bg-slate-600';
     let label = 'Neutral';
     let labelColor = 'text-slate-400';
@@ -131,22 +127,18 @@ const ProbabilityGauge = ({ value }: { value: number }) => {
                 </div>
             </div>
 
-            {/* Gauge Track */}
             <div className="h-3 bg-slate-900 rounded-full relative overflow-hidden border border-slate-800">
-                {/* Zones Background */}
                 <div className="absolute inset-0 flex opacity-20">
                     <div className="w-[16%] bg-emerald-500/50 h-full border-r border-slate-900/50"></div>
                     <div className="w-[68%] bg-slate-500/10 h-full"></div>
                     <div className="w-[16%] bg-rose-500/50 h-full border-l border-slate-900/50"></div>
                 </div>
 
-                {/* Marker */}
                 <div
                     className="absolute h-full w-1.5 bg-white shadow-[0_0_10px_white] z-10 transition-all duration-700 ease-out"
                     style={{ left: `calc(${value}% - 3px)` }}
                 />
 
-                {/* Fill Bar (Optional, simpler to just show marker for probability) */}
                 <div
                     className={`h-full opacity-60 transition-all duration-700 ease-out ${colorClass}`}
                     style={{ width: `${value}%` }}
@@ -164,7 +156,7 @@ const ProbabilityGauge = ({ value }: { value: number }) => {
 
 // --- 3. Main Component ---
 
-export const TechnicalAnalysisOutput: React.FC<TechnicalAnalysisOutputProps> = ({
+const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> = ({
     output,
     status
 }) => {
@@ -172,21 +164,28 @@ export const TechnicalAnalysisOutput: React.FC<TechnicalAnalysisOutputProps> = (
     const [isAutoFit, setIsAutoFit] = useState(false);
     const [timeframe, setTimeframe] = useState<Timeframe>('ALL');
 
-    // Data Processing & Outlier Filtering
-    // [CRITICAL FIX] Use z_score_series instead of fracdiff_series for chart
-    // This ensures the data mathematically aligns with +/- 2.0 thresholds
-    const chartData = React.useMemo(() => {
-        if (!output?.raw_data?.z_score_series) return [];
+    // 1. Determine if we have a reference to fetch
+    const reference = (output as StandardAgentOutput)?.reference;
+    const preview = (output as StandardAgentOutput)?.preview as TechnicalSignalOutput | undefined;
 
-        return Object.entries(output.raw_data.z_score_series)
+    // 2. Fetch artifact if reference exists
+    const { data: artifactData, isLoading: isArtifactLoading } = useArtifact<TechnicalAnalysisSuccess>(
+        reference?.artifact_id
+    );
+
+    // 3. Resolve the actual data to display (Artifact > Preview)
+    const effectiveOutput = artifactData || preview;
+
+    // Data Processing & Outlier Filtering
+    const chartData = useMemo(() => {
+        if (!effectiveOutput?.raw_data?.z_score_series) return [];
+
+        return Object.entries(effectiveOutput.raw_data.z_score_series)
             .filter(([_, value]) => {
-                // [CRITICAL FIX] 2. 過濾掉 "暖身期" 的 0.0 數據
-                // FracDiff 算法前 100+ 天因為數據不足會填 0，畫出來會像一條死魚，必須藏起來
                 if (Math.abs(value) < 0.0001) return false;
                 return true;
             })
             .map(([date, value]) => {
-                // [FIX] Clamp extreme outliers to +/- 10.0 for visualization
                 let displayValue = value;
                 if (value > 10) displayValue = 10;
                 if (value < -10) displayValue = -10;
@@ -194,15 +193,15 @@ export const TechnicalAnalysisOutput: React.FC<TechnicalAnalysisOutputProps> = (
                 return {
                     date: new Date(date).toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' }),
                     value: displayValue,
-                    originalValue: value, // Keep original for tooltip
+                    originalValue: value,
                     timestamp: new Date(date).getTime()
                 };
             })
             .sort((a, b) => a.timestamp - b.timestamp);
-    }, [output]);
+    }, [effectiveOutput]);
 
     // Filter chart data by timeframe
-    const filteredChartData = React.useMemo(() => {
+    const filteredChartData = useMemo(() => {
         if (timeframe === 'ALL' || chartData.length === 0) return chartData;
 
         const latestTimestamp = chartData[chartData.length - 1].timestamp;
@@ -232,10 +231,12 @@ export const TechnicalAnalysisOutput: React.FC<TechnicalAnalysisOutputProps> = (
         return chartData.filter(d => d.timestamp >= cutoffTime);
     }, [chartData, timeframe]);
 
-    // Wait for completion before showing data
-    if (status !== 'done' || !output || !output.frac_diff_metrics) {
+    // Wait for completion before showing data, unless we have preview data
+    const hasData = effectiveOutput && (effectiveOutput.frac_diff_metrics || effectiveOutput.signal_state);
+
+    if ((status !== 'done' && !hasData) || !effectiveOutput) {
         return (
-            <div className="flex flex-col items-center justify-center p-12 text-slate-500">
+            <div className="flex flex-col items-center justify-center p-12 text-slate-500 min-h-[400px]">
                 <Activity className="w-12 h-12 mb-4 animate-pulse opacity-50" />
                 <p className="font-bold uppercase tracking-widest text-[10px]">Processing Statistical Framework...</p>
                 <p className="text-[10px] text-slate-600 mt-2">Status: {status}</p>
@@ -243,28 +244,33 @@ export const TechnicalAnalysisOutput: React.FC<TechnicalAnalysisOutputProps> = (
         );
     }
 
-    const { frac_diff_metrics, signal_state, llm_interpretation, semantic_tags } = output;
+    const { frac_diff_metrics, signal_state, llm_interpretation, semantic_tags } = effectiveOutput;
+
+    if (!frac_diff_metrics || !signal_state) {
+        return (
+            <div className="flex flex-col items-center justify-center p-12 text-slate-500">
+                <Loader2 className="w-8 h-8 mb-4 animate-spin opacity-50 text-cyan-400" />
+                <p className="font-bold uppercase tracking-widest text-[10px]">Loading Preview Data...</p>
+            </div>
+        );
+    }
+
     const strength = getSignalStrengthLabel(frac_diff_metrics.optimal_d, frac_diff_metrics.adf_pvalue);
     const StrengthIcon = strength.icon;
 
-    // [CRITICAL FIX] Pre-calculate Y-Axis Domain
-    // 我們在這裡直接算出數值，並排除無效數據 (NaN/null)，確保穩定性
     const dataValues = filteredChartData
         .map(d => d.value)
         .filter(v => typeof v === 'number' && !isNaN(v) && isFinite(v));
 
-    // 1. Fixed Range Mode: Strictly defined to visualize the standard deviation context
-    // We clip outliers here to force a consistent visual scale for risk verification
     const fixedDomain: [number, number] = [-3, 3];
-
-    // 2. Auto-Fit Mode: Fits the visible data range (including outliers up to clamp limit)
     const autoMax = dataValues.length > 0 ? Math.max(...dataValues) + 0.1 : 'auto';
     const autoMin = dataValues.length > 0 ? Math.min(...dataValues) - 0.1 : 'auto';
 
-    // 決定當前使用哪個 Domain (Explicitly cast to [any, any] for Recharts compatibility)
     const currentDomain: [any, any] = isAutoFit
         ? [autoMin, autoMax]
         : fixedDomain;
+
+    const isReferenceLoading = reference && isArtifactLoading && !artifactData;
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-700">
@@ -279,7 +285,7 @@ export const TechnicalAnalysisOutput: React.FC<TechnicalAnalysisOutputProps> = (
                         <div>
                             <h3 className="text-xl font-bold text-white tracking-tight">Technical Intelligence</h3>
                             <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                                <span className="text-cyan-400">{output.ticker}</span>
+                                <span className="text-cyan-400">{effectiveOutput.ticker}</span>
                                 <span className="opacity-30">|</span>
                                 <span>Advanced FracDiff Analysis</span>
                             </div>
@@ -313,7 +319,7 @@ export const TechnicalAnalysisOutput: React.FC<TechnicalAnalysisOutputProps> = (
                     )}
                 </div>
                 <div className="flex flex-wrap gap-2 mt-6">
-                    {semantic_tags.map(tag => (
+                    {semantic_tags?.map(tag => (
                         <span key={tag} className="px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-[10px] font-bold text-indigo-300 uppercase tracking-wider">
                             #{tag.replace('_', ' ')}
                         </span>
@@ -321,7 +327,7 @@ export const TechnicalAnalysisOutput: React.FC<TechnicalAnalysisOutputProps> = (
                 </div>
             </section>
 
-            {/* Confluence Dashboard (Requires 'confluence' field in backend) */}
+            {/* Confluence Dashboard --- */}
             {signal_state.confluence && (
                 <section className="bg-slate-900/30 border border-slate-800 rounded-2xl p-6 shadow-inner">
                     <div className="flex items-center gap-2 mb-6">
@@ -342,8 +348,8 @@ export const TechnicalAnalysisOutput: React.FC<TechnicalAnalysisOutputProps> = (
                         <div className="flex flex-col justify-center border-l border-slate-800 pl-8">
                             <span className="text-[10px] text-slate-400 font-black uppercase mb-3">Volatility Structure</span>
                             <div className="flex items-center gap-3">
-                                <div className={`w-3 h-3 rounded-full shadow-[0_0_15px_rgba(0,0,0,0.5)] ${signal_state.confluence.bollinger_state.includes('BREAKOUT') ? 'bg-amber-400 animate-pulse' : 'bg-slate-700'}`} />
-                                <span className="text-sm font-bold text-slate-100 tracking-tight">{signal_state.confluence.bollinger_state.replace('_', ' ')}</span>
+                                <div className={`w-3 h-3 rounded-full shadow-[0_0_15px_rgba(0,0,0,0.5)] ${signal_state.confluence.bollinger_state?.includes('BREAKOUT') ? 'bg-amber-400 animate-pulse' : 'bg-slate-700'}`} />
+                                <span className="text-sm font-bold text-slate-100 tracking-tight">{signal_state.confluence.bollinger_state?.replace('_', ' ')}</span>
                             </div>
                         </div>
                         <div className="flex flex-col justify-center gap-3 border-l border-slate-800 pl-8">
@@ -353,14 +359,14 @@ export const TechnicalAnalysisOutput: React.FC<TechnicalAnalysisOutputProps> = (
                             </div>
                             <div className="flex justify-between items-center bg-slate-950/50 px-3 py-2 rounded-lg border border-slate-800/50">
                                 <span className="text-[10px] text-slate-500 font-bold">VOLUME</span>
-                                <span className="text-xs font-mono font-bold text-cyan-400">{signal_state.confluence.obv_state.replace('_', ' ')}</span>
+                                <span className="text-xs font-mono font-bold text-cyan-400">{signal_state.confluence.obv_state?.replace('_', ' ')}</span>
                             </div>
                         </div>
                     </div>
                 </section>
             )}
 
-            {/* Technical Charts (Progressive Disclosure) */}
+            {/* Technical Charts --- */}
             <section className="border border-slate-800 rounded-2xl overflow-hidden transition-all duration-300">
                 <button
                     onClick={() => setShowAdvanced(!showAdvanced)}
@@ -370,12 +376,19 @@ export const TechnicalAnalysisOutput: React.FC<TechnicalAnalysisOutputProps> = (
                         <Activity size={14} className="text-slate-500" />
                         <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Statistical Evidence & Charts</span>
                     </div>
-                    {showAdvanced ? <ChevronUp size={16} className="text-slate-500" /> : <ChevronDown size={16} className="text-slate-500" />}
+                    <div className="flex items-center gap-4">
+                        {isReferenceLoading && (
+                            <div className="flex items-center gap-2 text-[9px] text-cyan-400 font-bold uppercase tracking-widest animate-pulse">
+                                <Loader2 size={10} className="animate-spin" />
+                                <span>Loading Series...</span>
+                            </div>
+                        )}
+                        {showAdvanced ? <ChevronUp size={16} className="text-slate-500" /> : <ChevronDown size={16} className="text-slate-500" />}
+                    </div>
                 </button>
 
                 {showAdvanced && (
                     <div className="p-6 space-y-8 animate-in slide-in-from-top-2 duration-300">
-                        {/* Metrics Cards */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                             <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800 relative group overflow-hidden">
                                 <div className="text-[9px] font-black text-slate-500 uppercase mb-2">Signal Quality</div>
@@ -400,7 +413,6 @@ export const TechnicalAnalysisOutput: React.FC<TechnicalAnalysisOutputProps> = (
                             </div>
                         </div>
 
-                        {/* Chart with Stable Domain & Zoom Controls */}
                         <div className="bg-slate-950/40 border border-slate-800 rounded-xl p-6 relative">
                             <div className="flex items-center justify-between mb-6">
                                 <div className="flex items-center gap-2">
@@ -408,7 +420,6 @@ export const TechnicalAnalysisOutput: React.FC<TechnicalAnalysisOutputProps> = (
                                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">FracDiff Stream</span>
                                 </div>
                                 <div className="flex items-center gap-4">
-                                    {/* Timeframe Selectors */}
                                     <div className="flex items-center bg-slate-800/50 rounded-lg p-0.5 border border-slate-700/50">
                                         {(['1W', '2W', '1M', '3M', '1Y', 'ALL'] as Timeframe[]).map((tf) => (
                                             <button
@@ -424,14 +435,12 @@ export const TechnicalAnalysisOutput: React.FC<TechnicalAnalysisOutputProps> = (
                                         ))}
                                     </div>
 
-                                    {/* Legend (Only in fixed mode) */}
                                     {!isAutoFit && (
                                         <div className="flex items-center gap-2 text-[8px] font-bold text-slate-500 uppercase">
                                             <div className="w-2 h-[2px] bg-rose-500 opacity-50" /> Anomaly Threshold (±2)
                                         </div>
                                     )}
 
-                                    {/* Zoom Toggle Button */}
                                     <button
                                         onClick={() => setIsAutoFit(!isAutoFit)}
                                         className={`flex items-center gap-1.5 px-2 py-1 rounded border text-[9px] font-bold uppercase transition-all
@@ -448,53 +457,52 @@ export const TechnicalAnalysisOutput: React.FC<TechnicalAnalysisOutputProps> = (
                             </div>
 
                             <div className="h-64 w-full">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <AreaChart
-                                        data={filteredChartData}
-                                        margin={{ top: 10, right: 40, left: 0, bottom: 0 }}
-                                    >
-                                        <defs>
-                                            <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="5%" stopColor="#22d3ee" stopOpacity={0.15} />
-                                                <stop offset="95%" stopColor="#22d3ee" stopOpacity={0} />
-                                            </linearGradient>
-                                        </defs>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                                        <XAxis
-                                            dataKey="date"
-                                            stroke="#334155"
-                                            tick={{ fontSize: 9, fontWeight: 700 }}
-                                            minTickGap={40}
-                                            axisLine={false}
-                                        />
-                                        <YAxis
-                                            stroke="#334155"
-                                            tick={{ fontSize: 9, fontWeight: 700 }}
-                                            domain={currentDomain}
-                                            axisLine={false}
-                                            tickFormatter={(val) => (typeof val === 'number' ? val.toFixed(1) : val)}
-                                        />
-                                        <RechartsTooltip
-                                            contentStyle={{ backgroundColor: '#020617', borderColor: '#1e293b', borderRadius: '8px', padding: '12px' }}
-                                            labelStyle={{ color: '#64748b', fontSize: '10px', fontWeight: 800, marginBottom: '4px', textTransform: 'uppercase' }}
-                                            itemStyle={{ color: '#22d3ee', fontSize: '12px', fontWeight: 700 }}
-                                            formatter={(value: number, name: string, props: any) => {
-                                                const original = props.payload.originalValue;
-                                                return [original ? original.toFixed(4) : value.toFixed(4), "Z-Score"];
-                                            }}
-                                        />
-                                        <Area
-                                            type="monotone"
-                                            dataKey="value"
-                                            stroke="#22d3ee"
-                                            strokeWidth={2.5}
-                                            fill="url(#colorValue)"
-                                            animationDuration={500}
-                                        />
+                                {chartData.length > 0 ? (
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <AreaChart
+                                            data={filteredChartData}
+                                            margin={{ top: 10, right: 40, left: 0, bottom: 0 }}
+                                        >
+                                            <defs>
+                                                <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor="#22d3ee" stopOpacity={0.15} />
+                                                    <stop offset="95%" stopColor="#22d3ee" stopOpacity={0} />
+                                                </linearGradient>
+                                            </defs>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                                            <XAxis
+                                                dataKey="date"
+                                                stroke="#334155"
+                                                tick={{ fontSize: 9, fontWeight: 700 }}
+                                                minTickGap={40}
+                                                axisLine={false}
+                                            />
+                                            <YAxis
+                                                stroke="#334155"
+                                                tick={{ fontSize: 9, fontWeight: 700 }}
+                                                domain={currentDomain}
+                                                axisLine={false}
+                                                tickFormatter={(val) => (typeof val === 'number' ? val.toFixed(1) : val)}
+                                            />
+                                            <RechartsTooltip
+                                                contentStyle={{ backgroundColor: '#020617', borderColor: '#1e293b', borderRadius: '8px', padding: '12px' }}
+                                                labelStyle={{ color: '#64748b', fontSize: '10px', fontWeight: 800, marginBottom: '4px', textTransform: 'uppercase' }}
+                                                itemStyle={{ color: '#22d3ee', fontSize: '12px', fontWeight: 700 }}
+                                                formatter={(value: number, name: string, props: any) => {
+                                                    const original = props.payload.originalValue;
+                                                    return [original ? original.toFixed(4) : value.toFixed(4), "Z-Score"];
+                                                }}
+                                            />
+                                            <Area
+                                                type="monotone"
+                                                dataKey="value"
+                                                stroke="#22d3ee"
+                                                strokeWidth={2.5}
+                                                fill="url(#colorValue)"
+                                                animationDuration={500}
+                                            />
 
-                                        {/* Benchmark Lines: In Auto Mode, only show if they are relevant to the visible range */
-                                            /* This prevents the chart from "zooming out" just to show empty space */
-                                            (!isAutoFit || (autoMax as number) > 1.8) && (
+                                            {(!isAutoFit || (autoMax as number) > 1.8) && (
                                                 <ReferenceLine
                                                     y={2}
                                                     stroke="#f43f5e"
@@ -504,19 +512,27 @@ export const TechnicalAnalysisOutput: React.FC<TechnicalAnalysisOutputProps> = (
                                                 />
                                             )}
 
-                                        {(!isAutoFit || (autoMin as number) < -1.8) && (
-                                            <ReferenceLine
-                                                y={-2}
-                                                stroke="#f43f5e"
-                                                strokeDasharray="4 4"
-                                                opacity={0.8}
-                                                label={{ value: 'Oversold', position: 'insideBottomRight', fill: '#f43f5e', fontSize: 10, fontWeight: 'bold' }}
-                                            />
-                                        )}
+                                            {(!isAutoFit || (autoMin as number) < -1.8) && (
+                                                <ReferenceLine
+                                                    y={-2}
+                                                    stroke="#f43f5e"
+                                                    strokeDasharray="4 4"
+                                                    opacity={0.8}
+                                                    label={{ value: 'Oversold', position: 'insideBottomRight', fill: '#f43f5e', fontSize: 10, fontWeight: 'bold' }}
+                                                />
+                                            )}
 
-                                        <ReferenceLine y={0} stroke="#475569" strokeOpacity={0.2} />
-                                    </AreaChart>
-                                </ResponsiveContainer>
+                                            <ReferenceLine y={0} stroke="#475569" strokeOpacity={0.2} />
+                                        </AreaChart>
+                                    </ResponsiveContainer>
+                                ) : (
+                                    <div className="h-full w-full flex flex-col items-center justify-center border border-dashed border-slate-800 rounded-xl bg-slate-900/20">
+                                        <Activity size={32} className="text-slate-800 mb-2" />
+                                        <p className="text-[10px] text-slate-600 font-bold uppercase tracking-widest">
+                                            {isReferenceLoading ? "Fetching time-series data..." : "No chart data available"}
+                                        </p>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -525,3 +541,5 @@ export const TechnicalAnalysisOutput: React.FC<TechnicalAnalysisOutputProps> = (
         </div>
     );
 };
+
+export const TechnicalAnalysisOutput = memo(TechnicalAnalysisOutputComponent);
