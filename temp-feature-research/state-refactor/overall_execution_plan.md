@@ -175,16 +175,18 @@
 
 📄 [fundamental_analysis_agent_refactoring_plan.md](file:///Users/denniswong/Desktop/Project/value-investment-agent/temp-feature-research/state-refactor/fundamental_analysis_agent_refactoring_plan.md)
 
-- [ ] 財務報表存入 Artifact Store
-- [ ] State 只存 `valuation_score` + `latest_report_id`
-- [ ] 建立 `summarize_fundamental_for_preview()`
-- [ ] **強制要求**: Mapper 單元測試
+- [x] 財務報表存入 Artifact Store
+- [x] State 只存 `valuation_score` + `latest_report_id`
+- [x] 建立 `summarize_fundamental_for_preview()`
+- [x] **強制要求**: Mapper 單元測試（通過）
 - [ ] **用戶提供 server log** 驗證流程執行
 
 **⚠️ 關鍵注意事項**:
-- 確保 Preview 包含 5-10 個關鍵財務指標供 UI 摘要顯示
-- Input/Output 保持 Pydantic，State 使用 TypedDict
-- 移除 `create_pydantic_reducer` from TypedDict state
+- ✅ 已修正：使用 TypedDict 而非 Pydantic BaseModel
+- ✅ 已修正：Input/Output 保持 Pydantic，State 使用 TypedDict
+- ✅ 已修正：移除 `create_pydantic_reducer` from TypedDict state
+
+**狀態**: ✅ 完成（等待用戶驗證）
 
 ---
 

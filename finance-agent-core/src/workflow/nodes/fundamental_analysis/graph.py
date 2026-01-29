@@ -4,15 +4,17 @@ Handles the flow: Extract Intent -> Search/Verify -> Clarify (if needed).
 Uses Command and interrupt for control flow.
 """
 
+import asyncio
+import time
+
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
 
-from src.interface.schemas import AgentOutputArtifact
+from src.services.artifact_manager import artifact_manager
 from src.utils.logger import get_logger
 
 from .financial_utils import fetch_financial_data
 from .logic import select_valuation_model
-from .schemas import FundamentalAnalysisSuccess
 from .structures import ValuationModel
 from .subgraph_state import (
     FundamentalAnalysisInput,
@@ -398,31 +400,36 @@ def model_selection_node(state: FundamentalAnalysisState) -> Command:
     }
     model_type = model_type_map.get(model, "saas")
 
+    # L3: Store full reports in Artifact Store
+    timestamp = int(time.time())
+    try:
+        report_id = asyncio.run(
+            artifact_manager.save_artifact(
+                data=state.fundamental_analysis.financial_reports,
+                artifact_type="financial_reports",
+                key_prefix=f"fa_{resolved_ticker}_{timestamp}",
+            )
+        )
+        logger.info(
+            f"--- [Fundamental Analysis] L3 reports saved (ID: {report_id}) ---"
+        )
+    except Exception as e:
+        logger.error(f"Failed to save final report artifact: {e}")
+        report_id = None
+
     return Command(
         update={
             "fundamental_analysis": {
                 "model_type": model_type,
-                "artifact": AgentOutputArtifact(
-                    summary=f"Selected {model.value} model for {profile.name}",
-                    data=FundamentalAnalysisSuccess(
-                        ticker=resolved_ticker,
-                        model_type=model.value,
-                        company_name=profile.name,
-                        sector=profile.sector,
-                        industry=profile.industry,
-                        reasoning=reasoning,
-                        financial_reports=state.fundamental_analysis.financial_reports,
-                        status="done",
-                    ).model_dump(),
-                ),
+                "valuation_summary": reasoning,
+                "latest_report_id": report_id,
+                # Note: financial_reports will be wiped in the aggregator/final node if needed
             },
             "ticker": resolved_ticker,  # Keep ticker at top level for global state
             "current_node": "model_selection",
             "internal_progress": {
                 "model_selection": "done",
             },
-            # [BSP Fix] Emit status immediately to bypass LangGraph's sync barrier
-            # allowing the UI to update without waiting for parallel branches (TA/News)
             "node_statuses": {"fundamental_analysis": "done"},
         },
         goto=END,
