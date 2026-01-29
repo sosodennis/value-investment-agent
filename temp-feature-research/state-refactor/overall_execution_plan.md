@@ -213,20 +213,18 @@
 
 > **目的**: 重構有跨 Agent 依賴或複雜邏輯的 Agent
 
-### 4.1 Debate Agent
-
-📄 [debate_agent_refactoring_plan.md](file:///Users/denniswong/Desktop/Project/value-investment-agent/temp-feature-research/state-refactor/debate_agent_refactoring_plan.md)
-
-- [ ] 移除 `analyst_reports` 數據複製，改用引用
-- [ ] 辯論歷史存入 Artifact Store
-- [ ] State/Adapter/Mapper 重構
-- [ ] **強制要求**: Mapper 單元測試
+- [x] 移除 `analyst_reports` 數據複製，改用引用
+- [x] 辯論歷史存入 Artifact Store
+- [x] State/Adapter/Mapper 重構
+- [x] **強制要求**: Mapper 單元測試 (通過)
 - [ ] **用戶提供 server log** 驗證流程執行
 
 **⚠️ 關鍵注意事項**:
-- 確保能正確讀取 FA/TA/News 的關鍵指標
-- Input/Output 保持 Pydantic，State 使用 TypedDict
-- 移除 `create_pydantic_reducer` from TypedDict state
+- ✅ 已修正：確保能正確讀取 FA/TA/News 的關鍵指標
+- ✅ 已修正：Input/Output 保持 Pydantic，State 使用 TypedDict
+- ✅ 已修正：移除 `create_pydantic_reducer` from TypedDict state
+
+**狀態**: ✅ 完成 (等待用戶驗證)
 
 ---
 

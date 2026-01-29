@@ -44,17 +44,25 @@ class IntentExtractionContext(TypedDict):
 
 
 class DebateContext(TypedDict):
-    """Context for debate workflow."""
+    """
+    Context for debate workflow.
+    Refactored per Engineering Charter v3.1 - Metadata & References only.
+    """
 
-    # 使用 add_messages reducer 處理歷史消息追加
-    history: Annotated[list[AnyMessage], add_messages]
-
-    bull_thesis: NotRequired[str | None]
-    bear_thesis: NotRequired[str | None]
+    status: NotRequired[str | None]
     current_round: NotRequired[int]
 
-    # 這裡只存摘要或 ID，不存大量文本
-    analyst_reports: NotRequired[dict[str, Any] | None]
+    # [L2 Data] Key conclusions for UI and next nodes
+    final_verdict: NotRequired[str | None]  # "LONG", "SHORT", etc.
+    kelly_confidence: NotRequired[float | None]
+    winning_thesis: NotRequired[str | None]
+    primary_catalyst: NotRequired[str | None]
+    primary_risk: NotRequired[str | None]
+
+    # [L3 Pointer] Pointer to full debate transcript in Artifact Store
+    transcript_id: NotRequired[str | None]
+
+    artifact: NotRequired[AgentOutputArtifact | None]
 
 
 class FundamentalAnalysisContext(TypedDict):

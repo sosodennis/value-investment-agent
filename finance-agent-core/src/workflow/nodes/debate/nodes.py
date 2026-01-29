@@ -7,7 +7,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import END
 from langgraph.types import Command
 
-from src.interface.schemas import AgentOutputArtifact
+from src.services.artifact_manager import artifact_manager
 from src.utils.logger import get_logger
 
 from .prompts import (
@@ -20,7 +20,7 @@ from .prompts import (
     MODERATOR_SYSTEM_PROMPT,
     VERDICT_PROMPT,
 )
-from .schemas import DebateConclusion, DebateSuccess
+from .schemas import DebateConclusion
 from .subgraph_state import DebateState
 from .utils import (
     calculate_pragmatic_verdict,
@@ -133,12 +133,13 @@ def _get_last_message_from_role(history: list, role_name: str) -> str:
     return ""
 
 
-async def debate_aggregator_node(state: DebateState) -> Command:
-    # Compress data before passing to debate state
-    # Now that we've removed the legacy .output fields, we read from the standardized .artifact.data
-
+def _prepare_debate_reports(state: DebateState) -> dict:
+    """
+    Prepare compressed reports for the LLM prompt on the fly.
+    This avoids mirroring large data in the state (Engineering Charter §3.4).
+    """
     # News Data
-    news_artifact = state.financial_news_research.artifact
+    news_artifact = state.get("financial_news_research", {}).get("artifact")
     news_data = {}
     if news_artifact:
         if hasattr(news_artifact, "data"):
@@ -147,7 +148,7 @@ async def debate_aggregator_node(state: DebateState) -> Command:
             news_data = news_artifact.get("data", {})
 
     # Technical Analysis Data
-    ta_artifact = state.technical_analysis.artifact
+    ta_artifact = state.get("technical_analysis", {}).get("artifact")
     ta_data = {}
     if ta_artifact:
         if hasattr(ta_artifact, "data"):
@@ -155,32 +156,35 @@ async def debate_aggregator_node(state: DebateState) -> Command:
         elif isinstance(ta_artifact, dict):
             ta_data = ta_artifact.get("data", {})
 
-    # === Compress Data ===
-    clean_financials = compress_financial_data(
-        state.fundamental_analysis.financial_reports
-    )
-    clean_news = compress_news_data(news_data)
-    clean_ta = compress_ta_data(ta_data)
+    # Fundamental Analysis Data
+    fa_reports = state.get("fundamental_analysis", {}).get("financial_reports", [])
 
-    reports = {
+    return {
         "financials": {
-            "data": clean_financials,
+            "data": compress_financial_data(fa_reports),
             "source_weight": "HIGH",
             "rationale": "Primary source: SEC XBRL filings (audited, regulatory-grade data)",
         },
         "news": {
-            "data": clean_news,
+            "data": compress_news_data(news_data),
             "source_weight": "MEDIUM",
             "rationale": "Secondary source: Curated financial news (editorial bias possible)",
         },
         "technical_analysis": {
-            "data": clean_ta,
+            "data": compress_ta_data(ta_data),
             "source_weight": "HIGH",
             "rationale": "Quantitative source: Fractional differentiation analysis (statistical signals)",
         },
-        "ticker": state.intent_extraction.resolved_ticker or state.ticker,
+        "ticker": state.get("intent_extraction", {}).get("resolved_ticker")
+        or state.get("ticker"),
     }
 
+
+async def debate_aggregator_node(state: DebateState) -> Command:
+    """
+    Initializes debate progress.
+    Data compression is now done on-the-fly in agent nodes to reduce state bloat.
+    """
     # In the linear DAG, aggregator always leads to Round 1 (Parallel)
     next_progress = {
         "debate_aggregator": "done",
@@ -190,7 +194,6 @@ async def debate_aggregator_node(state: DebateState) -> Command:
 
     return Command(
         update={
-            "debate": {"analyst_reports": reports},
             "current_node": "debate_aggregator",
             "internal_progress": next_progress,
         },
@@ -205,10 +208,13 @@ async def _execute_bull_agent(
     state: DebateState, round_num: int, adversarial_rule: str
 ) -> dict[str, Any]:
     """Internal helper for Bull logic across rounds."""
-    ticker = state.intent_extraction.resolved_ticker or state.ticker
+    ticker = state.get("intent_extraction", {}).get("resolved_ticker") or state.get(
+        "ticker"
+    )
     try:
         llm = get_llm()
-        compressed_reports = _compress_reports(state.debate.analyst_reports)
+        reports = _prepare_debate_reports(state)
+        compressed_reports = _compress_reports(reports)
 
         system_content = BULL_AGENT_SYSTEM_PROMPT.format(
             ticker=ticker,
@@ -247,7 +253,7 @@ async def _execute_bull_agent(
 
         return {
             "history": [AIMessage(content=response.content, name="GrowthHunter")],
-            "thesis": response.content,
+            "bull_thesis": response.content,
         }
     except Exception as e:
         logger.error(f"❌ Error in Bull Logic (R{round_num}): {str(e)}")
@@ -258,10 +264,13 @@ async def _execute_bear_agent(
     state: DebateState, round_num: int, adversarial_rule: str
 ) -> dict[str, Any]:
     """Internal helper for Bear logic across rounds."""
-    ticker = state.intent_extraction.resolved_ticker or state.ticker
+    ticker = state.get("intent_extraction", {}).get("resolved_ticker") or state.get(
+        "ticker"
+    )
     try:
         llm = get_llm()
-        compressed_reports = _compress_reports(state.debate.analyst_reports)
+        reports = _prepare_debate_reports(state)
+        compressed_reports = _compress_reports(reports)
 
         system_content = BEAR_AGENT_SYSTEM_PROMPT.format(
             ticker=ticker,
@@ -300,7 +309,7 @@ async def _execute_bear_agent(
 
         return {
             "history": [AIMessage(content=response.content, name="ForensicAccountant")],
-            "thesis": response.content,
+            "bear_thesis": response.content,
         }
     except Exception as e:
         logger.error(f"❌ Error in Bear Logic (R{round_num}): {str(e)}")
@@ -311,17 +320,21 @@ async def _execute_moderator_critique(
     state: DebateState, round_num: int
 ) -> dict[str, Any]:
     """Internal helper for Moderator Critique across rounds."""
-    ticker = state.intent_extraction.resolved_ticker or state.ticker
+    ticker = state.get("intent_extraction", {}).get("resolved_ticker") or state.get(
+        "ticker"
+    )
     try:
         llm = get_llm()
         from .utils import get_sycophancy_detector
 
         detector = get_sycophancy_detector()
         similarity, is_sycophantic = detector.check_consensus(
-            state.debate.bull_thesis or "", state.debate.bear_thesis or ""
+            state.get("debate", {}).get("bull_thesis") or "",
+            state.get("debate", {}).get("bear_thesis") or "",
         )
 
-        compressed_reports = _compress_reports(state.debate.analyst_reports)
+        reports = _prepare_debate_reports(state)
+        compressed_reports = _compress_reports(reports)
         trimmed_history = _get_trimmed_history(state.debate.history)
         system_content = MODERATOR_SYSTEM_PROMPT.format(
             ticker=ticker, reports=compressed_reports
@@ -355,11 +368,12 @@ async def r1_bull_node(state: DebateState) -> Command:
     res = await _execute_bull_agent(state, 1, BULL_R1_ADVERSARIAL)
     return Command(
         update={
-            "debate": {"history": res["history"], "bull_thesis": res["thesis"]},
+            "history": res["history"],
+            "bull_thesis": res["bull_thesis"],
             "internal_progress": {
                 "r1_bull": "done",
                 "r1_bear": "running",
-            },  # Helpful if parallel UI updates
+            },
         },
         goto="r1_moderator",
     )
@@ -369,7 +383,8 @@ async def r1_bear_node(state: DebateState) -> Command:
     res = await _execute_bear_agent(state, 1, BEAR_R1_ADVERSARIAL)
     return Command(
         update={
-            "debate": {"history": res["history"], "bear_thesis": res["thesis"]},
+            "history": res["history"],
+            "bear_thesis": res["bear_thesis"],
             "internal_progress": {"r1_bear": "done"},
         },
         goto="r1_moderator",
@@ -380,7 +395,8 @@ async def r1_moderator_node(state: DebateState) -> Command:
     res = await _execute_moderator_critique(state, 1)
     return Command(
         update={
-            "debate": res,
+            "history": res["history"],
+            "debate": {"current_round": res["current_round"]},
             "internal_progress": {"r1_moderator": "done", "r2_bull": "running"},
         },
         goto="r2_bull",
@@ -392,7 +408,8 @@ async def r2_bull_node(state: DebateState) -> Command:
     res = await _execute_bull_agent(state, 2, BULL_R2_ADVERSARIAL)
     return Command(
         update={
-            "debate": {"history": res["history"], "bull_thesis": res["thesis"]},
+            "history": res["history"],
+            "bull_thesis": res["bull_thesis"],
             "internal_progress": {"r2_bull": "done", "r2_bear": "running"},
         },
         goto="r2_bear",
@@ -403,7 +420,8 @@ async def r2_bear_node(state: DebateState) -> Command:
     res = await _execute_bear_agent(state, 2, BEAR_R2_ADVERSARIAL)
     return Command(
         update={
-            "debate": {"history": res["history"], "bear_thesis": res["thesis"]},
+            "history": res["history"],
+            "bear_thesis": res["bear_thesis"],
             "internal_progress": {"r2_bear": "done", "r2_moderator": "running"},
         },
         goto="r2_moderator",
@@ -414,7 +432,8 @@ async def r2_moderator_node(state: DebateState) -> Command:
     res = await _execute_moderator_critique(state, 2)
     return Command(
         update={
-            "debate": res,
+            "history": res["history"],
+            "debate": {"current_round": res["current_round"]},
             "internal_progress": {"r2_moderator": "done", "r3_bear": "running"},
         },
         goto="r3_bear",
@@ -426,7 +445,8 @@ async def r3_bear_node(state: DebateState) -> Command:
     res = await _execute_bear_agent(state, 3, BEAR_R2_ADVERSARIAL)
     return Command(
         update={
-            "debate": {"history": res["history"], "bear_thesis": res["thesis"]},
+            "history": res["history"],
+            "bear_thesis": res["bear_thesis"],
             "internal_progress": {"r3_bear": "done", "r3_bull": "running"},
         },
         goto="r3_bull",
@@ -437,7 +457,8 @@ async def r3_bull_node(state: DebateState) -> Command:
     res = await _execute_bull_agent(state, 3, BULL_R2_ADVERSARIAL)
     return Command(
         update={
-            "debate": {"history": res["history"], "bull_thesis": res["thesis"]},
+            "history": res["history"],
+            "bull_thesis": res["bull_thesis"],
             "internal_progress": {"r3_bull": "done", "verdict": "running"},
         },
         goto="verdict",
@@ -447,11 +468,14 @@ async def r3_bull_node(state: DebateState) -> Command:
 # --- Final Verdict ---
 async def verdict_node(state: DebateState) -> Command:
     """Final Verdict Node"""
-    ticker = state.intent_extraction.resolved_ticker or state.ticker
+    ticker = state.get("intent_extraction", {}).get("resolved_ticker") or state.get(
+        "ticker"
+    )
     try:
         llm = get_llm()
+        history = state.get("debate", {}).get("history", [])
         trimmed_history = _get_trimmed_history(
-            state.debate.history, max_chars=MAX_CHAR_HISTORY * 1.5
+            history, max_chars=MAX_CHAR_HISTORY * 1.5
         )
         history_text = "\n\n".join(
             [f"{msg.name or 'Agent'}: {msg.content}" for msg in trimmed_history]
@@ -467,17 +491,30 @@ async def verdict_node(state: DebateState) -> Command:
         conclusion_data.update(metrics)
         conclusion_data["debate_rounds"] = 3
 
+        # Save artifact (L3)
+        transcript_id = await artifact_manager.save_artifact(
+            data={
+                "history": [
+                    msg.dict() if hasattr(msg, "dict") else msg for msg in history
+                ]
+            },
+            artifact_type="debate_transcript",
+            key_prefix=ticker,
+        )
+
         return Command(
             update={
                 "debate": {
-                    "artifact": AgentOutputArtifact(
-                        summary=f"Verdict: {conclusion_data.get('decision', 'PENDING')} (Confidence: {conclusion_data.get('confidence_score', 0)}%)",
-                        data=DebateSuccess(**conclusion_data).model_dump(mode="json"),
-                    ),
+                    "status": "success",
+                    "final_verdict": conclusion_data.get("decision")
+                    or conclusion_data.get("final_verdict"),
+                    "kelly_confidence": conclusion_data.get("kelly_confidence"),
+                    "winning_thesis": conclusion_data.get("winning_thesis"),
+                    "primary_catalyst": conclusion_data.get("primary_catalyst"),
+                    "primary_risk": conclusion_data.get("primary_risk"),
+                    "transcript_id": transcript_id,
                 },
                 "internal_progress": {"verdict": "done"},
-                # [BSP Fix] Emit status immediately to bypass LangGraph's sync barrier
-                # allowing the UI to update without waiting for parallel branches
                 "node_statuses": {"debate": "done"},
             },
             goto=END,

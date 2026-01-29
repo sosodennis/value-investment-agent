@@ -61,6 +61,11 @@ class DebateState(TypedDict):
     model_type: Annotated[str | None, last_value]
     messages: Annotated[list, add_messages]
 
+    # Internal-only state during execution (removed from shared DebateContext)
+    history: Annotated[list, add_messages]
+    bull_thesis: Annotated[str | None, last_value]
+    bear_thesis: Annotated[str | None, last_value]
+
     # --- Private State ---
     internal_progress: Annotated[dict[str, str], merge_dict]
     current_node: Annotated[str, last_value]
