@@ -13,7 +13,7 @@ from src.interface.schemas import AgentOutputArtifact
 from ...manager import SkillRegistry
 from ...schemas import CalculationOutput
 from ...state import AgentState
-from .schemas import CalculatorSuccess
+from .schemas import CalculatorPreview
 
 
 def calculation_node(state: AgentState) -> Command:
@@ -43,23 +43,23 @@ def calculation_node(state: AgentState) -> Command:
 
         print("✅ Valuation Logic Complete. Returning result to Conversation.")
 
-        # Prepare artifact
-        artifact = AgentOutputArtifact(
-            summary=f"Valuation Complete. Model: {model_type}",
-            data=CalculatorSuccess(metrics=result, model_type=model_type).model_dump(),
-        )
-
         return Command(
             update={
                 "fundamental_analysis": {
                     "calculation_output": CalculationOutput(metrics=result),
-                    # Persist artifact so it shows up on page reload
-                    "artifact": artifact,
+                    # Remove redundant artifact persistence here
                 },
-                # Fix: Update node_statuses at the top level, not inside fundamental_analysis
                 "node_statuses": {"calculator": "done"},
-                # Keep artifact at top level for immediate event emission (Flat Pattern)
-                "artifact": artifact,
+                "artifact": AgentOutputArtifact(
+                    summary=f"Valuation Complete. Model: {model_type}",
+                    preview=CalculatorPreview(
+                        model_type=model_type,
+                        intrinsic_value_display=f"${result.get('intrinsic_value', 0):,.2f}",
+                        upside_display=f"{result.get('upside_potential', 0):+.1%}",
+                        confidence_display="Medium",
+                    ).model_dump(),
+                    reference=None,
+                ),
             },
             goto=END,
         )

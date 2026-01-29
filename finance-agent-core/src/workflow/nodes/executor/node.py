@@ -15,7 +15,7 @@ from src.utils.logger import get_logger
 from ...manager import SkillRegistry
 from ...schemas import ExtractionOutput
 from ...state import AgentState
-from .schemas import ExecutorSuccess
+from .schemas import ExecutorPreview
 from .tools import generate_mock_bank_data, generate_mock_saas_data
 
 logger = get_logger(__name__)
@@ -52,9 +52,12 @@ def executor_node(state: AgentState) -> Command:
                 "fundamental_analysis": {"extraction_output": output},
                 "artifact": AgentOutputArtifact(
                     summary=f"Extracted parameters for {model_type} analysis.",
-                    data=ExecutorSuccess(
-                        params=output.params, model_type=model_type
+                    preview=ExecutorPreview(
+                        model_type=model_type,
+                        param_count=len(output.params),
+                        status="extracted",
                     ).model_dump(),
+                    reference=None,  # No heavy data to reference
                 ),
                 "node_statuses": {"executor": "done", "auditor": "running"},
             },

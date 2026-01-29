@@ -13,8 +13,8 @@
 | Phase 0: 基礎建設 | ✅ 完成 | 2 天 | AI | 2026-01-29 |
 | Phase 1: Interface Layer | ✅ 完成 | 1 天 | AI | 2026-01-29 |
 | Phase 2: Intent (Pilot) | ✅ 完成 | 1 天 | AI | 2026-01-29 |
-| Phase 3: 核心 Agents | 🔄 進行中 | 3-4 天 | | |
-| Phase 4: 複雜 Agents | ⬜ 待開始 | 2-3 天 | | |
+| Phase 3: 核心 Agents | ✅ 完成 | 3-4 天 | AI | 2026-01-29 |
+| Phase 4: 複雜 Agents | ✅ 完成 | 2-3 天 | AI | 2026-01-29 |
 | Phase 5: 前端適配 | ⬜ 待開始 | 2 天 | | |
 
 **狀態圖例**: ⬜ 待開始 | 🔄 進行中 | ✅ 完成 | ⚠️ 阻塞
@@ -234,11 +234,13 @@
 📄 [auditor_agent_refactoring_plan.md](file:///Users/denniswong/Desktop/Project/value-investment-agent/temp-feature-research/state-refactor/auditor_agent_refactoring_plan.md)
 📄 [calculator_agent_refactoring_plan.md](file:///Users/denniswong/Desktop/Project/value-investment-agent/temp-feature-research/state-refactor/calculator_agent_refactoring_plan.md)
 
-- [ ] Protocol 修正（移除 `data`）
-- [ ] 移除 Calculator 重複存儲
+- [x] Protocol 修正（移除 `data`）
+- [x] 移除 Calculator 重複存儲
+- [x] Schema/Mapper/Adapter 重構 (Preview/Reference)
+- [x] **強制要求**: Mapper 單元測試 (通過)
 - [ ] **用戶提供 server log** 驗證流程執行
 
-**優先級較低**: 這些節點的 State 體積較小
+**狀態**: ✅ 完成 (等待用戶驗證)
 
 ---
 

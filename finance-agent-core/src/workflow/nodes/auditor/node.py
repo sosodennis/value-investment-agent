@@ -13,7 +13,7 @@ from src.utils.logger import get_logger
 from ...manager import SkillRegistry
 from ...schemas import AuditOutput
 from ...state import AgentState
-from .schemas import AuditorSuccess
+from .schemas import AuditorPreview
 
 logger = get_logger(__name__)
 
@@ -62,9 +62,12 @@ def auditor_node(state: AgentState) -> Command:
                 },
                 "artifact": AgentOutputArtifact(
                     summary=f"Audit completed. Result: {'PASSED' if result.passed else 'FAILED'}. {len(result.messages)} findings identified.",
-                    data=AuditorSuccess(
-                        passed=result.passed, messages=result.messages
+                    preview=AuditorPreview(
+                        passed=result.passed,
+                        finding_count=len(result.messages),
+                        status="completed",
                     ).model_dump(),
+                    reference=None,
                 ),
                 "node_statuses": {"auditor": "done", "approval": "running"},
             },
