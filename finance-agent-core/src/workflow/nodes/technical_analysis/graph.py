@@ -42,12 +42,12 @@ logger = get_logger(__name__)
 # --- Nodes ---
 
 
-def data_fetch_node(state: TechnicalAnalysisState) -> Command:
+async def data_fetch_node(state: TechnicalAnalysisState) -> Command:
     """
     [Node 1] Fetch historical daily OHLCV data via yfinance.
     """
-    # Get resolved ticker from intent_extraction context
-    resolved_ticker = state.intent_extraction.resolved_ticker or state.ticker
+    intent_ctx = state.get("intent_extraction", {})
+    resolved_ticker = intent_ctx.get("resolved_ticker") or state.get("ticker")
     if not resolved_ticker:
         logger.error("--- TA: No resolved ticker available, cannot proceed ---")
         return Command(
@@ -208,8 +208,8 @@ async def fracdiff_compute_node(state: TechnicalAnalysisState) -> Command:
         "fracdiff_series": fd_dict,
         "z_score_series": z_dict,
         "indicators": {
-            "bollinger": calculate_fd_bollinger(fd_series),
-            "obv": calculate_fd_obv(prices, volumes),
+            "bollinger": bollinger_serializable,
+            "obv": obv_serializable,
         },
     }
 
@@ -252,7 +252,8 @@ async def semantic_translate_node(state: TechnicalAnalysisState) -> Command:
     logger.info("--- TA: Generating semantic interpretation ---")
 
     ctx = state.get("technical_analysis", {})
-    ticker = state.intent_extraction.resolved_ticker or state.ticker
+    intent_ctx = state.get("intent_extraction", {})
+    ticker = intent_ctx.get("resolved_ticker") or state.get("ticker")
 
     optimal_d = ctx.get("optimal_d")
     z_score = ctx.get("z_score_latest")
@@ -308,13 +309,10 @@ async def semantic_translate_node(state: TechnicalAnalysisState) -> Command:
         z_score_series = pd.Series(chart_artifact.data.get("z_score_series"))
         z_score_series.index = pd.to_datetime(z_score_series.index)
 
-        # Full indicator reconstruction from chart artifact or recalculate
+        # Full indicator reconstruction (Recalculate to ensure series are present for backtester)
         stat_strength_full = calculate_statistical_strength(z_score_series)
-        indicators_artifact = chart_artifact.data.get("indicators", {})
-        bb_full = indicators_artifact.get("bollinger") or calculate_fd_bollinger(
-            fd_series
-        )
-        obv_full = indicators_artifact.get("obv") or calculate_fd_obv(prices, volumes)
+        bb_full = calculate_fd_bollinger(fd_series)
+        obv_full = calculate_fd_obv(prices, volumes)
 
         # Fetch Risk-Free Rate
         rf_series = fetch_risk_free_series(period="5y")

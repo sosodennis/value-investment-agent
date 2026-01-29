@@ -27,7 +27,6 @@ from src.services.history import history_service
 from src.utils.logger import get_logger
 from src.workflow.graph import get_graph
 from src.workflow.interrupts import InterruptValue
-from src.workflow.state import AgentState
 
 logger = get_logger(__name__)
 
@@ -502,9 +501,7 @@ async def stream_agent(request: Request, body: RequestSchema):
 
         user_msg = HumanMessage(content=body.message)
         await history_service.save_message(thread_id, user_msg)
-        input_data = AgentState(
-            messages=[user_msg], user_query=body.message
-        ).model_dump()
+        input_data = {"messages": [user_msg], "user_query": body.message}
     elif body.resume_payload:
         # RESUME: Keep existing sequence
         input_data = Command(resume=body.resume_payload)

@@ -25,7 +25,9 @@ def executor_node(state: AgentState) -> Command:
     """
     Extracts valuation parameters for the selected model type.
     """
-    model_type = state.fundamental_analysis.model_type
+    fundamental = state.get("fundamental_analysis", {})
+    model_type = fundamental.get("model_type")
+    ticker = state.get("ticker")
     logger.info(f"--- Executor: Extracting parameters for {model_type} ---")
 
     skill = SkillRegistry.get_skill(model_type)
@@ -36,9 +38,9 @@ def executor_node(state: AgentState) -> Command:
 
     # MOCK DATA GENERATION
     if model_type == "saas":
-        mock_data = generate_mock_saas_data(state.ticker)
+        mock_data = generate_mock_saas_data(ticker)
     elif model_type == "bank":
-        mock_data = generate_mock_bank_data(state.ticker)
+        mock_data = generate_mock_bank_data(ticker)
     else:
         raise ValueError(f"Unsupported model type: {model_type}")
 

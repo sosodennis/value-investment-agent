@@ -43,7 +43,7 @@ from .tools import (
 logger = get_logger(__name__)
 
 # --- LLM Shared Config ---
-DEFAULT_MODEL = "mistralai/devstral-2512:free"
+DEFAULT_MODEL = "z-ai/glm-4.5-air:free"
 
 
 def get_llm(model: str = DEFAULT_MODEL, temperature: float = 0):
@@ -60,10 +60,11 @@ def get_llm(model: str = DEFAULT_MODEL, temperature: float = 0):
 # --- Nodes ---
 
 
-def search_node(state: FinancialNewsState) -> Command:
+async def search_node(state: FinancialNewsState) -> Command:
     """[Funnel Node 1] Search for recent news snippets."""
     # Get ticker from intent_extraction context (primary) or fallback to state.ticker
-    ticker = state.intent_extraction.resolved_ticker or state.ticker
+    intent_ctx = state.get("intent_extraction", {})
+    ticker = intent_ctx.get("resolved_ticker") or state.get("ticker")
     if not ticker:
         logger.warning("Financial News Research: No ticker resolved, skipping.")
         return Command(
@@ -78,11 +79,12 @@ def search_node(state: FinancialNewsState) -> Command:
     try:
         # Extract company_name from intent_extraction context if available
         company_name = None
-        if state.intent_extraction.company_profile:
-            company_name = state.intent_extraction.company_profile.get("name")
+        profile = intent_ctx.get("company_profile")
+        if profile:
+            company_name = profile.get("name")
 
         # Run async search in sync node
-        results = asyncio.run(news_search_multi_timeframe(ticker, company_name))
+        results = await news_search_multi_timeframe(ticker, company_name)
     except Exception as e:
         logger.error(f"--- [News Research] news_search CRASHED: {e} ---")
         return Command(
@@ -148,9 +150,10 @@ URL: {r.get('link')}
 
 def selector_node(state: FinancialNewsState) -> Command:
     """[Funnel Node 2] Filter top relevant articles using URL-based selection."""
-    formatted_results = state.formatted_results
-    raw_results = state.raw_results
-    ticker = state.intent_extraction.resolved_ticker or state.ticker
+    formatted_results = state.get("formatted_results")
+    raw_results = state.get("raw_results")
+    intent_ctx = state.get("intent_extraction", {})
+    ticker = intent_ctx.get("resolved_ticker") or state.get("ticker")
 
     logger.info(f"--- [News Research] Selecting top articles for {ticker} ---")
 
@@ -219,10 +222,10 @@ def selector_node(state: FinancialNewsState) -> Command:
     )
 
 
-def fetch_node(state: FinancialNewsState) -> Command:
+async def fetch_node(state: FinancialNewsState) -> Command:
     """[Funnel Node 3] Fetch and clean full text for selected articles (async parallel)."""
-    raw_results = state.raw_results
-    selected_indices = state.selected_indices
+    raw_results = state.get("raw_results", [])
+    selected_indices = state.get("selected_indices", [])
 
     logger.info(
         f"--- [News Research] Fetching {len(selected_indices)} articles content ---"
@@ -249,14 +252,15 @@ def fetch_node(state: FinancialNewsState) -> Command:
         return await asyncio.gather(*tasks)
 
     try:
-        full_contents = asyncio.run(fetch_all())
+        full_contents = await fetch_all()
     except Exception as e:
         logger.error(f"Async fetch failed: {e}. Falling back to empty contents.")
         full_contents = [None] * len(articles_to_fetch)
 
     # Build news items and store full content in Artifact Store
     news_items = []
-    ticker = state.intent_extraction.get("resolved_ticker") or state.get("ticker")
+    intent_ctx = state.get("intent_extraction", {})
+    ticker = intent_ctx.get("resolved_ticker") or state.get("ticker")
     timestamp = int(time.time())
 
     for i, res in enumerate(articles_to_fetch):
@@ -268,12 +272,10 @@ def fetch_node(state: FinancialNewsState) -> Command:
         content_id = None
         if full_content:
             try:
-                content_id = asyncio.run(
-                    artifact_manager.save_artifact(
-                        data={"full_text": full_content, "title": title, "url": url},
-                        artifact_type="news_article",
-                        key_prefix=f"news_{ticker}_{timestamp}_{i}",
-                    )
+                content_id = await artifact_manager.save_artifact(
+                    data={"full_text": full_content, "title": title, "url": url},
+                    artifact_type="news_article",
+                    key_prefix=f"news_{ticker}_{timestamp}_{i}",
                 )
                 logger.info(
                     f"--- [News Research] L3 Artifact saved for: {title[:30]}... (ID: {content_id}) ---"
@@ -348,8 +350,9 @@ def fetch_node(state: FinancialNewsState) -> Command:
 def analyst_node(state: FinancialNewsState) -> Command:
     """[Funnel Node 4] Deep analysis per article."""
     # news_items are now dicts (serialized from fetch_node)
-    news_items: list[dict] = state.news_items
-    ticker = state.intent_extraction.resolved_ticker or state.ticker
+    news_items: list[dict] = state.get("news_items", [])
+    intent_ctx = state.get("intent_extraction", {})
+    ticker = intent_ctx.get("resolved_ticker") or state.get("ticker")
 
     logger.info(
         f"--- [News Research] Analyzing {len(news_items)} articles for {ticker} ---"
@@ -471,12 +474,14 @@ def analyst_node(state: FinancialNewsState) -> Command:
     )
 
 
-def aggregator_node(state: FinancialNewsState) -> Command:
+async def aggregator_node(state: FinancialNewsState) -> Command:
     """[Funnel Node 5] Aggregate results and update state."""
     # news_items are now dicts (serialized from previous nodes)
-    news_items: list[dict] = state.news_items
+    news_items: list[dict] = state.get("news_items", [])
 
-    logger.info(f"--- [News Research] Aggregating results for {state.ticker} ---")
+    logger.info(
+        f"--- [News Research] Aggregating results for {state.get('ticker')} ---"
+    )
 
     if not news_items:
         summary_text = "No detailed news analysis available."
@@ -537,17 +542,14 @@ def aggregator_node(state: FinancialNewsState) -> Command:
     ).model_dump(mode="json")
 
     # L3: Store complete analysis report in Artifact Store
-    ticker = state.intent_extraction.get("resolved_ticker") or state.get(
-        "ticker", "UNKNOWN"
-    )
+    intent_ctx = state.get("intent_extraction", {})
+    ticker = intent_ctx.get("resolved_ticker") or state.get("ticker", "UNKNOWN")
     timestamp = int(time.time())
     try:
-        report_id = asyncio.run(
-            artifact_manager.save_artifact(
-                data=report_data,
-                artifact_type="news_analysis_report",
-                key_prefix=f"news_report_{ticker}_{timestamp}",
-            )
+        report_id = await artifact_manager.save_artifact(
+            data=report_data,
+            artifact_type="news_analysis_report",
+            key_prefix=f"news_report_{ticker}_{timestamp}",
         )
         logger.info(f"--- [News Research] L3 Final Report saved (ID: {report_id}) ---")
     except Exception as e:

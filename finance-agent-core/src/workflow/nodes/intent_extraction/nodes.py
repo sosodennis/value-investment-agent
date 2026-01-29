@@ -23,7 +23,7 @@ logger = get_logger(__name__)
 
 def extraction_node(state: IntentExtractionState) -> Command:
     """Extract company and model from user query."""
-    user_query = state.user_query
+    user_query = state.get("user_query")
     if not user_query:
         logger.warning(
             "--- Intent Extraction: No query provided, requesting clarification ---"
@@ -56,7 +56,8 @@ def extraction_node(state: IntentExtractionState) -> Command:
 
 def searching_node(state: IntentExtractionState) -> Command:
     """Search for the ticker based on extracted intent."""
-    intent = state.intent_extraction.extracted_intent or {}
+    intent_ctx = state.get("intent_extraction", {})
+    intent = intent_ctx.get("extracted_intent") or {}
 
     # Extract explicit fields
     extracted_ticker = intent.get("ticker")
@@ -75,11 +76,10 @@ def searching_node(state: IntentExtractionState) -> Command:
 
     # If explicit extraction failed, fallback to the raw query (heuristic)
     if not search_queries:
-        if state.user_query:
+        user_query = state.get("user_query")
+        if user_query:
             # Basic heuristic cleanup
-            clean_query = (
-                state.user_query.replace("Valuate", "").replace("Value", "").strip()
-            )
+            clean_query = user_query.replace("Valuate", "").replace("Value", "").strip()
             search_queries.append(clean_query)
         else:
             logger.warning(
@@ -151,7 +151,8 @@ def searching_node(state: IntentExtractionState) -> Command:
 
 def decision_node(state: IntentExtractionState) -> Command:
     """Decide if ticker is resolved or needs clarification."""
-    candidates = state.intent_extraction.ticker_candidates or []
+    intent_ctx = state.get("intent_extraction", {})
+    candidates = intent_ctx.get("ticker_candidates") or []
 
     if not candidates:
         logger.warning(
@@ -228,11 +229,12 @@ def clarification_node(state: IntentExtractionState) -> Command:
     from ...interrupts import HumanTickerSelection
 
     # Trigger interrupt with candidates
+    intent_ctx = state.get("intent_extraction", {})
+    extracted_intent = intent_ctx.get("extracted_intent")
+
     interrupt_payload = HumanTickerSelection(
-        candidates=state.intent_extraction.ticker_candidates or [],
-        intent=IntentExtraction(**state.intent_extraction.extracted_intent)
-        if state.intent_extraction.extracted_intent
-        else None,
+        candidates=intent_ctx.get("ticker_candidates") or [],
+        intent=IntentExtraction(**extracted_intent) if extracted_intent else None,
         reason="Multiple tickers found or ambiguity detected.",
     )
     user_input = interrupt(interrupt_payload.model_dump())
@@ -243,7 +245,8 @@ def clarification_node(state: IntentExtractionState) -> Command:
 
     if not selected_symbol:
         # Fallback to top candidate if resumed without choice
-        candidates = state.intent_extraction.ticker_candidates or []
+        intent_ctx = state.get("intent_extraction", {})
+        candidates = intent_ctx.get("ticker_candidates") or []
         if candidates:
             top = candidates[0]
             selected_symbol = top.get("symbol") if isinstance(top, dict) else top.symbol

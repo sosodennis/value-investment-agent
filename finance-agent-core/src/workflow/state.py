@@ -3,10 +3,11 @@ Shared state definitions for the workflow graph.
 Refactored to comply with Engineering Charter v3.1 (TypedDict + Artifact Store).
 """
 
-from typing import Annotated, Any, NotRequired, TypedDict
+from typing import Annotated, Any, NotRequired
 
 from langchain_core.messages import AnyMessage
 from langgraph.graph import add_messages
+from typing_extensions import TypedDict
 
 from src.interface.schemas import AgentOutputArtifact
 

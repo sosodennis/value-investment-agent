@@ -3,10 +3,11 @@ Isolated state class for Financial News Research subgraph.
 Following LangGraph best practices - does NOT share node_statuses with parent.
 """
 
-from typing import Annotated, NotRequired, TypedDict
+from typing import Annotated, NotRequired
 
 from langgraph.graph import add_messages
 from pydantic import BaseModel, Field
+from typing_extensions import TypedDict
 
 from ...state import (
     FinancialNewsContext,

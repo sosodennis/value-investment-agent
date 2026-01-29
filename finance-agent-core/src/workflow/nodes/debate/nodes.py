@@ -32,7 +32,7 @@ from .utils import (
 logger = get_logger(__name__)
 
 # --- LLM Shared Config ---
-DEFAULT_MODEL = "mistralai/devstral-2512:free"
+DEFAULT_MODEL = "z-ai/glm-4.5-air:free"
 MAX_CHAR_REPORTS = 50000
 MAX_CHAR_HISTORY = 32000
 
@@ -225,13 +225,11 @@ async def _execute_bull_agent(
 
         # Context Sandwich for R2+
         if round_num > 1:
-            my_last_arg = _get_last_message_from_role(
-                state.debate.history, "GrowthHunter"
-            )
-            bear_last_arg = _get_last_message_from_role(
-                state.debate.history, "ForensicAccountant"
-            )
-            judge_feedback = _get_last_message_from_role(state.debate.history, "Judge")
+            debate_ctx = state.get("debate", {})
+            history = debate_ctx.get("history", [])
+            my_last_arg = _get_last_message_from_role(history, "GrowthHunter")
+            bear_last_arg = _get_last_message_from_role(history, "ForensicAccountant")
+            judge_feedback = _get_last_message_from_role(history, "Judge")
 
             if my_last_arg:
                 messages.append(
@@ -281,13 +279,11 @@ async def _execute_bear_agent(
 
         # Context Sandwich for R2+
         if round_num > 1:
-            my_last_arg = _get_last_message_from_role(
-                state.debate.history, "ForensicAccountant"
-            )
-            bull_last_arg = _get_last_message_from_role(
-                state.debate.history, "GrowthHunter"
-            )
-            judge_feedback = _get_last_message_from_role(state.debate.history, "Judge")
+            debate_ctx = state.get("debate", {})
+            history = debate_ctx.get("history", [])
+            my_last_arg = _get_last_message_from_role(history, "ForensicAccountant")
+            bull_last_arg = _get_last_message_from_role(history, "GrowthHunter")
+            judge_feedback = _get_last_message_from_role(history, "Judge")
 
             if my_last_arg:
                 messages.append(
@@ -335,7 +331,8 @@ async def _execute_moderator_critique(
 
         reports = _prepare_debate_reports(state)
         compressed_reports = _compress_reports(reports)
-        trimmed_history = _get_trimmed_history(state.debate.history)
+        debate_ctx = state.get("debate", {})
+        trimmed_history = _get_trimmed_history(debate_ctx.get("history", []))
         system_content = MODERATOR_SYSTEM_PROMPT.format(
             ticker=ticker, reports=compressed_reports
         )

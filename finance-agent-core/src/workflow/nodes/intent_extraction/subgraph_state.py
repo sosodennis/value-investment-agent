@@ -1,7 +1,8 @@
-from typing import Annotated, TypedDict
+from typing import Annotated
 
 from langgraph.graph import add_messages
 from pydantic import BaseModel, Field
+from typing_extensions import TypedDict
 
 from ...state import IntentExtractionContext, merge_dict
 

@@ -23,13 +23,16 @@ def calculation_node(state: AgentState) -> Command:
     print("--- Calculator: Running Deterministic Engine ---")
 
     try:
-        extraction_output = state.fundamental_analysis.extraction_output
+        fundamental = state.get("fundamental_analysis", {})
+        extraction_output = fundamental.get("extraction_output")
         if isinstance(extraction_output, dict):
             params_dict = extraction_output.get("params", {})
-        else:
+        elif extraction_output:
             params_dict = extraction_output.params
+        else:
+            params_dict = {}
 
-        model_type = state.fundamental_analysis.model_type
+        model_type = fundamental.get("model_type")
         skill = SkillRegistry.get_skill(model_type)
 
         if not skill:

@@ -12,12 +12,12 @@ logger = get_logger(__name__)
 def input_adapter(state: AgentState) -> dict[str, Any]:
     """Maps parent AgentState to FinancialNewsState input."""
     logger.info(
-        f"--- [News Adapter] Mapping parent state to subgraph input for {state.ticker} ---"
+        f"--- [News Adapter] Mapping parent state to subgraph input for {state.get('ticker')} ---"
     )
     return {
-        "ticker": state.ticker,
-        "intent_extraction": state.intent_extraction,
-        "financial_news_research": state.financial_news_research,
+        "ticker": state.get("ticker"),
+        "intent_extraction": state.get("intent_extraction"),
+        "financial_news_research": state.get("financial_news_research"),
     }
 
 

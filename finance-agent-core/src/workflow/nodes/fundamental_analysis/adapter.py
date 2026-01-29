@@ -12,12 +12,12 @@ logger = get_logger(__name__)
 def input_adapter(state: AgentState) -> dict[str, Any]:
     """將父圖狀態轉換為子圖輸入"""
     logger.info(
-        f"--- [FA Adapter] Mapping parent state to subgraph input for {state.ticker} ---"
+        f"--- [FA Adapter] Mapping parent state to subgraph input for {state['ticker']} ---"
     )
     return {
-        "ticker": state.ticker,
-        "intent_extraction": state.intent_extraction,
-        "fundamental_analysis": state.fundamental_analysis,
+        "ticker": state["ticker"],
+        "intent_extraction": state["intent_extraction"],
+        "fundamental_analysis": state["fundamental_analysis"],
     }
 
 
@@ -44,10 +44,7 @@ def output_adapter(sub_output: dict[str, Any]) -> dict[str, Any]:
         raw_model = fundamental_ctx.get("model_type")
 
     model_type = map_model_to_skill(raw_model)
-    if isinstance(fundamental_ctx, dict):
-        fundamental_ctx["model_type"] = model_type
-    else:
-        fundamental_ctx.model_type = model_type
+    fundamental_ctx["model_type"] = model_type
 
     # 3. Generate Preview and Reference (Charter v3.1)
     try:

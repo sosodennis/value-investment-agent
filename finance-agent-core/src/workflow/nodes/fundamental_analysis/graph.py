@@ -4,7 +4,6 @@ Handles the flow: Extract Intent -> Search/Verify -> Clarify (if needed).
 Uses Command and interrupt for control flow.
 """
 
-import asyncio
 import time
 
 from langgraph.graph import END, START, StateGraph
@@ -35,10 +34,11 @@ def financial_health_node(state: FundamentalAnalysisState) -> Command:
     Fetch financial data from SEC EDGAR and generate Financial Health Report.
     """
     logger.info(
-        f"DEBUG: [Fundamental Analysis] financial_health_node called with ticker={state.ticker}"
+        f"DEBUG: [Fundamental Analysis] financial_health_node called with ticker={state.get('ticker')}"
     )
     # Get resolved ticker from intent_extraction context
-    resolved_ticker = state.intent_extraction.resolved_ticker or state.ticker
+    intent_ctx = state.get("intent_extraction", {})
+    resolved_ticker = intent_ctx.get("resolved_ticker") or state.get("ticker")
     if not resolved_ticker:
         logger.error(
             "--- Fundamental Analysis: No resolved ticker available, cannot proceed ---"
@@ -308,7 +308,7 @@ def financial_health_node(state: FundamentalAnalysisState) -> Command:
     )
 
 
-def model_selection_node(state: FundamentalAnalysisState) -> Command:
+async def model_selection_node(state: FundamentalAnalysisState) -> Command:
     """
     Select appropriate valuation model based on company profile and financial health.
     """
@@ -316,12 +316,10 @@ def model_selection_node(state: FundamentalAnalysisState) -> Command:
     from .structures import CompanyProfile
 
     # Get company profile from intent_extraction context
-    profile = (
-        CompanyProfile(**state.intent_extraction.company_profile)
-        if state.intent_extraction.company_profile
-        else None
-    )
-    resolved_ticker = state.intent_extraction.resolved_ticker or state.ticker
+    intent_ctx = state.get("intent_extraction", {})
+    profile_data = intent_ctx.get("company_profile")
+    profile = CompanyProfile(**profile_data) if profile_data else None
+    resolved_ticker = intent_ctx.get("resolved_ticker") or state.get("ticker")
 
     if not profile:
         logger.warning(
@@ -340,12 +338,14 @@ def model_selection_node(state: FundamentalAnalysisState) -> Command:
     model, reasoning = select_valuation_model(profile)
 
     # Enhance reasoning with financial health insights (using latest report)
-    if state.fundamental_analysis.financial_reports:
+    fa_ctx = state.get("fundamental_analysis", {})
+    financial_reports = fa_ctx.get("financial_reports")
+    if financial_reports:
         try:
             from .financial_models import FinancialReport
 
             # Use most recent year (index 0)
-            latest_report_data = state.fundamental_analysis.financial_reports[0]
+            latest_report_data = financial_reports[0]
             # FinancialReport is a Pydantic model, so we can parse it
             report = FinancialReport(**latest_report_data)
             base = report.base
@@ -403,12 +403,10 @@ def model_selection_node(state: FundamentalAnalysisState) -> Command:
     # L3: Store full reports in Artifact Store
     timestamp = int(time.time())
     try:
-        report_id = asyncio.run(
-            artifact_manager.save_artifact(
-                data=state.fundamental_analysis.financial_reports,
-                artifact_type="financial_reports",
-                key_prefix=f"fa_{resolved_ticker}_{timestamp}",
-            )
+        report_id = await artifact_manager.save_artifact(
+            data=fa_ctx.get("financial_reports", []),
+            artifact_type="financial_reports",
+            key_prefix=f"fa_{resolved_ticker}_{timestamp}",
         )
         logger.info(
             f"--- [Fundamental Analysis] L3 reports saved (ID: {report_id}) ---"

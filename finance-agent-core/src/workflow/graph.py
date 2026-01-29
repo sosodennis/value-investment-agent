@@ -57,14 +57,15 @@ def approval_node(state: AgentState) -> Command:
     logger.info("--- Approval: Requesting human approval ---")
 
     # Access Pydantic fields
-    if state.fundamental_analysis.approved:
+    fundamental = state.get("fundamental_analysis", {})
+    if fundamental.get("approved"):
         return Command(goto="calculator")
 
     audit_passed = False
     audit_messages = []
-    if state.fundamental_analysis.audit_output:
+    audit_output = fundamental.get("audit_output")
+    if audit_output:
         # Handle both dict and Pydantic object (due to model_validate)
-        audit_output = state.fundamental_analysis.audit_output
         if isinstance(audit_output, dict):
             audit_passed = audit_output.get("passed", False)
             audit_messages = audit_output.get("messages", [])
@@ -75,8 +76,8 @@ def approval_node(state: AgentState) -> Command:
     # Trigger interrupt. This pauses the graph and returns the user input when resumed.
     interrupt_payload = HumanApprovalRequest(
         details=ApprovalDetails(
-            ticker=state.ticker,
-            model=state.fundamental_analysis.model_type,
+            ticker=state.get("ticker"),
+            model=fundamental.get("model_type"),
             audit_passed=audit_passed,
             audit_messages=audit_messages,
         )
@@ -135,7 +136,7 @@ async def prepare_debate_node(state: AgentState) -> dict:
 async def process_debate_node(state: Any) -> dict:
     """Process output from debate subgraph."""
     logger.info("--- [Debate Agent] Processing Debate output ---")
-    data = state.model_dump() if hasattr(state, "model_dump") else state
+    data = dict(state)
     return debate_output_adapter(data)
 
 
@@ -150,14 +151,14 @@ async def prepare_fundamental_node(state: AgentState) -> dict:
 async def process_fundamental_node(state: Any) -> dict:
     """Process output from fundamental analysis subgraph."""
     logger.info("--- [FA Agent] Processing Fundamental Analysis output ---")
-    data = state.model_dump() if hasattr(state, "model_dump") else state
+    data = dict(state)
     return fa_output_adapter(data)
 
 
 async def prepare_news_node(state: AgentState) -> dict:
     """Prepare input for financial news research subgraph."""
     logger.info(
-        f"--- [News Agent] Preparing News Research for ticker={state.ticker} ---"
+        f"--- [News Agent] Preparing News Research for ticker={state.get('ticker')} ---"
     )
     data = news_input_adapter(state)
     logger.info(
@@ -170,7 +171,7 @@ async def prepare_news_node(state: AgentState) -> dict:
 async def process_news_node(state: Any) -> dict:
     """Process output from financial news research subgraph."""
     logger.info("--- [News Agent] Processing News Research output ---")
-    data = state.model_dump() if hasattr(state, "model_dump") else state
+    data = dict(state)
     result = news_output_adapter(data)
     logger.info(
         f"--- [News Agent] Output mapping complete. Status will be set to: {result.get('node_statuses')} ---"
@@ -189,7 +190,7 @@ async def prepare_intent_node(state: AgentState) -> dict:
 async def process_intent_node(state: Any) -> dict:
     """Process output from intent extraction subgraph."""
     logger.info("--- [Intent Agent] Processing Intent Extraction output ---")
-    data = state.model_dump() if hasattr(state, "model_dump") else state
+    data = dict(state)
     return intent_output_adapter(data)
 
 
@@ -204,7 +205,7 @@ async def prepare_technical_node(state: AgentState) -> dict:
 async def process_technical_node(state: Any) -> dict:
     """Process output from technical analysis subgraph."""
     logger.info("--- [TA Agent] Processing Technical Analysis output ---")
-    data = state.model_dump() if hasattr(state, "model_dump") else state
+    data = dict(state)
     return ta_output_adapter(data)
 
 

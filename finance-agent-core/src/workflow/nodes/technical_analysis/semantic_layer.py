@@ -21,7 +21,7 @@ from .structures import (
 logger = get_logger(__name__)
 
 # LLM Configuration
-DEFAULT_MODEL = "mistralai/devstral-2512:free"
+DEFAULT_MODEL = "z-ai/glm-4.5-air:free"
 
 
 def get_llm(model: str = DEFAULT_MODEL, temperature: float = 0):

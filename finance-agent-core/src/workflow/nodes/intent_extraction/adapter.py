@@ -13,10 +13,10 @@ def input_adapter(state: AgentState) -> dict[str, Any]:
     """Maps parent AgentState to IntentExtractionState input."""
     logger.info("--- [Intent Adapter] Mapping parent state to subgraph input ---")
     return {
-        "ticker": state.ticker,
-        "user_query": state.user_query,
-        "messages": state.messages,
-        "intent_extraction": state.intent_extraction,
+        "ticker": state.get("ticker"),
+        "user_query": state.get("user_query"),
+        "messages": state.get("messages", []),
+        "intent_extraction": state.get("intent_extraction"),
     }
 
 
