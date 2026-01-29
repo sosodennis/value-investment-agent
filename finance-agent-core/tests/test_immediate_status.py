@@ -46,14 +46,15 @@ async def test_immediate_status_emission():
         mock_llm.ainvoke.side_effect = async_return_conclusion
 
         # Call node (it's async)
-        # Note: verdict_node returns a DICT, not a Command?
-        # Check source: async def verdict_node(state: DebateState) -> dict[str, Any]:
         result = await verdict_node(mock_debate_state)
 
-        if "node_statuses" in result and result["node_statuses"] == {"debate": "done"}:
+        # Handle Command object if returned
+        update = result.update if hasattr(result, "update") else result
+
+        if "node_statuses" in update and update["node_statuses"] == {"debate": "done"}:
             print("✅ Debate Verdict emits immediate status")
         else:
-            print(f"❌ Debate Verdict FAILED to emit status. Got: {result.keys()}")
+            print(f"❌ Debate Verdict FAILED to emit status. Got: {update.keys()}")
 
     # 2. Test FA Model Selection Node
     print("\n--- Testing FA Model Selection Node ---")

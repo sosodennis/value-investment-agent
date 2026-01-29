@@ -44,7 +44,12 @@ class AgentEvent(BaseModel):
 
     # Event Data Payload
     data: dict[str, Any] = Field(
-        default_factory=dict, description="Payload containing event-specific data"
+        default_factory=dict,
+        description=(
+            "Payload containing event-specific data. "
+            "For 'state.update' events, contains AgentOutputArtifact fields: "
+            "{summary: str, preview: dict | None, reference: ArtifactReference | None}"
+        ),
     )
 
     # Optional metadata

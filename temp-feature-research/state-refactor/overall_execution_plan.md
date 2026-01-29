@@ -11,9 +11,9 @@
 | 階段 | 狀態 | 預計天數 | 負責人 | 完成日期 |
 |------|------|----------|--------|----------|
 | Phase 0: 基礎建設 | ✅ 完成 | 2 天 | AI | 2026-01-29 |
-| Phase 1: Interface Layer | ⬜ 待開始 | 1 天 | | |
-| Phase 2: Intent (Pilot) | ⬜ 待開始 | 1 天 | | |
-| Phase 3: 核心 Agents | ⬜ 待開始 | 3-4 天 | | |
+| Phase 1: Interface Layer | ✅ 完成 | 1 天 | AI | 2026-01-29 |
+| Phase 2: Intent (Pilot) | ✅ 完成 | 1 天 | AI | 2026-01-29 |
+| Phase 3: 核心 Agents | 🔄 進行中 | 3-4 天 | | |
 | Phase 4: 複雜 Agents | ⬜ 待開始 | 2-3 天 | | |
 | Phase 5: 前端適配 | ⬜ 待開始 | 2 天 | | |
 
@@ -103,25 +103,45 @@
 
 ### 待辦事項
 
-- [ ] **2.1** State 重構
-  - `subgraph_state.py`: BaseModel → TypedDict
+- [ ] **2.1** Schema 定義
+  - 新增 `IntentExtractionPreview` (必需，非可選)
 
-- [ ] **2.2** 建立 Mapper
+- [ ] **2.2** State 重構 ⚠️ **關鍵修正**
+  - `Input`/`Output`: **保持 Pydantic** (邊界驗證)
+  - `State`: BaseModel → TypedDict (內部狀態)
+  - **移除** `create_pydantic_reducer` (TypedDict 不需要)
+
+- [ ] **2.3** 建立 Mapper
   - 創建 `nodes/intent_extraction/mappers.py`
   - 實作 `summarize_intent_for_preview()`
+  - **強制要求**: 編寫單元測試 `test_intent_mapper.py`
 
-- [ ] **2.3** 重構 Adapter
+- [ ] **2.4** 重構 Adapter
   - 調用 Mapper 生成 Preview
   - 移除 `data` 字段使用
 
-- [ ] **2.4** 更新 Node
-  - 移除所有 `data=...` 的使用
+- [ ] **2.5** 更新 Node
+  - 移除所有 `AgentOutputArtifact` 創建
+  - Node 只更新業務狀態
+
+### ⚠️ 關鍵注意事項
+
+> [!IMPORTANT]
+> **Reducer 使用規則**:
+> - `create_pydantic_reducer`: **僅用於 Pydantic 模型**
+> - TypedDict: 使用原生 dict update (默認覆蓋)
+> - 列表: 使用 `add_messages`
+> - 字典: 使用 `merge_dict`
+
+> [!WARNING]
+> **Input/Output 必須保持 Pydantic**: 這是邊界驗證層，不可改為 TypedDict
 
 ### 驗證方式
 
+- [ ] **單元測試** (強制): `uv run pytest tests/test_intent_mapper.py -v`
 - [ ] **用戶提供 server log** 確認 Intent Extraction 流程執行無錯誤
 - [ ] 從 log 驗證 WebSocket 推送的 `state.update` 包含 `preview` 字段
-- [ ] 前端能正確渲染 Intent 結果（如前端未適配可先跳過）
+- [ ] 前端能正確渲染 Intent 結果（如前端未適配可先跳過)
 
 ---
 
@@ -136,9 +156,13 @@
 - [ ] 選擇中間數據處理策略（方案 A/B/C）
 - [ ] 將新聞全文存入 Artifact Store
 - [ ] State/Adapter/Mapper 重構
+- [ ] **強制要求**: Mapper 單元測試
 - [ ] **用戶提供 server log** 驗證流程執行
 
-**⚠️ 關鍵**: 不要使用 `_private`（LangGraph 不支持）
+**⚠️ 關鍵注意事項**:
+- 不要使用 `_private`（LangGraph 不支持）
+- Input/Output 保持 Pydantic，State 使用 TypedDict
+- 移除 `create_pydantic_reducer` from TypedDict state
 
 ---
 
@@ -149,9 +173,13 @@
 - [ ] 財務報表存入 Artifact Store
 - [ ] State 只存 `valuation_score` + `latest_report_id`
 - [ ] 建立 `summarize_fundamental_for_preview()`
+- [ ] **強制要求**: Mapper 單元測試
 - [ ] **用戶提供 server log** 驗證流程執行
 
-**⚠️ 關鍵**: 確保 Preview 包含 5-10 個關鍵財務指標供 UI 摘要顯示
+**⚠️ 關鍵注意事項**:
+- 確保 Preview 包含 5-10 個關鍵財務指標供 UI 摘要顯示
+- Input/Output 保持 Pydantic，State 使用 TypedDict
+- 移除 `create_pydantic_reducer` from TypedDict state
 
 ---
 
@@ -162,9 +190,13 @@
 - [ ] 價格序列存入 Artifact Store
 - [ ] 節點間通過 Artifact ID 傳遞數據（非 `_private`）
 - [ ] State/Adapter/Mapper 重構
+- [ ] **強制要求**: Mapper 單元測試
 - [ ] **用戶提供 server log** 驗證流程執行
 
-**⚠️ 關鍵**: API 設置 `Cache-Control` 避免前端重複下載圖表數據
+**⚠️ 關鍵注意事項**:
+- API 設置 `Cache-Control` 避免前端重複下載圖表數據
+- Input/Output 保持 Pydantic，State 使用 TypedDict
+- 移除 `create_pydantic_reducer` from TypedDict state
 
 ---
 
@@ -179,9 +211,13 @@
 - [ ] 移除 `analyst_reports` 數據複製，改用引用
 - [ ] 辯論歷史存入 Artifact Store
 - [ ] State/Adapter/Mapper 重構
+- [ ] **強制要求**: Mapper 單元測試
 - [ ] **用戶提供 server log** 驗證流程執行
 
-**⚠️ 關鍵**: 確保能正確讀取 FA/TA/News 的關鍵指標
+**⚠️ 關鍵注意事項**:
+- 確保能正確讀取 FA/TA/News 的關鍵指標
+- Input/Output 保持 Pydantic，State 使用 TypedDict
+- 移除 `create_pydantic_reducer` from TypedDict state
 
 ---
 
@@ -228,7 +264,115 @@
 
 ---
 
+## 📚 技術最佳實踐 (Best Practices)
+
+> 基於 Phase 2 (Intent Extraction) 規劃過程中發現的關鍵技術問題，以下規則適用於**所有後續 Agent 重構**。
+
+### 1️⃣ State 類型規則 (Charter §3.1)
+
+| 組件 | 類型 | 原因 |
+|------|------|------|
+| **Input Schema** | ✅ Pydantic `BaseModel` | 邊界驗證，確保外部輸入合法 |
+| **Output Schema** | ✅ Pydantic `BaseModel` | 邊界驗證，確保輸出契約 |
+| **Internal State** | ✅ TypedDict | 性能與靈活性，LangGraph 原生支持 |
+
+**錯誤示例** ❌:
+```python
+# 錯誤：將 Input/Output 改為 TypedDict 會失去運行時驗證
+class IntentExtractionInput(TypedDict):  # ❌ 錯誤
+    ticker: str | None
+```
+
+**正確示例** ✅:
+```python
+# Input/Output: 保持 Pydantic
+class IntentExtractionInput(BaseModel):  # ✅ 正確
+    ticker: str | None = None
+
+# Internal State: 使用 TypedDict
+class IntentExtractionState(TypedDict):  # ✅ 正確
+    ticker: NotRequired[str | None]
+```
+
+---
+
+### 2️⃣ Reducer 使用規則
+
+| Reducer | 適用對象 | 說明 |
+|---------|----------|------|
+| `create_pydantic_reducer` | **僅 Pydantic 模型** | 用於父圖中的 Context (如 `IntentExtractionContext`) |
+| 默認覆蓋 (無 Reducer) | TypedDict 簡單字段 | `ticker`, `user_query`, `current_node` 等 |
+| `add_messages` | 列表字段 | LangGraph 內建，用於 `messages` |
+| `merge_dict` | 字典字段 | 自定義，用於 `internal_progress`, `node_statuses` |
+
+**關鍵錯誤** ❌:
+```python
+# 錯誤：在 TypedDict 上使用 create_pydantic_reducer
+class IntentExtractionState(TypedDict):
+    intent_extraction: Annotated[
+        dict,  # 這是 dict，不是 Pydantic
+        create_pydantic_reducer(IntentExtractionContext)  # ❌ 運行時錯誤
+    ]
+```
+
+**正確做法** ✅:
+```python
+# TypedDict State 中，Context 仍是 Pydantic，可以使用 reducer
+class IntentExtractionState(TypedDict):
+    intent_extraction: Annotated[
+        IntentExtractionContext,  # ✅ Pydantic 模型
+        create_pydantic_reducer(IntentExtractionContext)
+    ]
+    ticker: NotRequired[str | None]  # ✅ 默認覆蓋，無需 reducer
+```
+
+---
+
+### 3️⃣ Mapper 測試規則 (Charter §4.2)
+
+**強制要求**: 每個 Agent 的 Mapper 必須有單元測試
+
+**原因**:
+- Mapper 是純函數，無需 Mock 或 DB
+- 5 分鐘即可完成，風險極低
+- 比依賴「查看 Server Log」更可靠
+
+**測試模板**:
+```python
+# tests/test_{agent}_mapper.py
+def test_summarize_{agent}_for_preview():
+    ctx = {...}  # 模擬 Context
+    preview = summarize_{agent}_for_preview(ctx)
+
+    assert preview["key_field"] == expected_value
+    assert len(json.dumps(preview)) < 1024  # Preview < 1KB
+```
+
+---
+
+### 4️⃣ Preview Schema 定義規則
+
+**強制要求**: 每個 Agent 必須定義 Preview Schema (非可選)
+
+**位置**: `nodes/{agent}/schemas.py`
+
+**範例**:
+```python
+class {Agent}Preview(BaseModel):
+    """Preview data for {Agent} UI (<1KB)"""
+    key_field_1: str | None = Field(None, description="...")
+    key_field_2: str = Field(..., description="...")
+```
+
+**好處**:
+- 前端工程師清楚知道 `artifact.preview` 的結構
+- 啟用 Mapper 的類型檢查
+- 文檔化 UI 契約
+
+---
+
 ## 🎯 風險管理
+
 
 | 風險 | 機率 | 影響 | 緩解措施 |
 |------|------|------|----------|
@@ -251,4 +395,5 @@
 | 日期 | 變更內容 | 作者 |
 |------|----------|------|
 | 2026-01-29 | 初始版本 | AI |
-| | | |
+| 2026-01-29 | Phase 1 完成，Phase 2 開始 | AI |
+| 2026-01-29 | 新增技術最佳實踐章節，修正所有 Phase 的 State/Reducer 規則 | AI |

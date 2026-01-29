@@ -1,24 +1,15 @@
-"""
-Isolated state class for Intent Extraction subgraph.
-Following LangGraph best practices - does NOT share node_statuses with parent.
-"""
-
-from typing import Annotated
+from typing import Annotated, TypedDict
 
 from langgraph.graph import add_messages
 from pydantic import BaseModel, Field
 
-from ...state import (
-    IntentExtractionContext,
-    create_pydantic_reducer,
-    last_value,
-    merge_dict,
-)
+from ...state import IntentExtractionContext, merge_dict
 
 
 class IntentExtractionInput(BaseModel):
     """
     Input schema for Intent Extraction subgraph.
+    Boundary validation remains Pydantic.
     """
 
     ticker: str | None = None
@@ -32,6 +23,7 @@ class IntentExtractionInput(BaseModel):
 class IntentExtractionOutput(BaseModel):
     """
     Output schema for Intent Extraction subgraph.
+    Boundary validation remains Pydantic.
     """
 
     intent_extraction: IntentExtractionContext
@@ -39,23 +31,22 @@ class IntentExtractionOutput(BaseModel):
     messages: list = Field(default_factory=list)
 
 
-class IntentExtractionState(BaseModel):
+class IntentExtractionState(TypedDict):
     """
     Internal state for intent extraction subgraph.
+    Uses TypedDict for performance and LangGraph native compatibility.
     """
 
     # --- From Input ---
-    ticker: str | None = None
-    user_query: str | None = None
+    ticker: str | None
+    user_query: str | None
 
     # --- Core State (Reducers applied) ---
-    intent_extraction: Annotated[
-        IntentExtractionContext, create_pydantic_reducer(IntentExtractionContext)
-    ] = Field(default_factory=IntentExtractionContext)
-    messages: Annotated[list, add_messages] = Field(default_factory=list)
+    # Note: Using default overwrite for intent_extraction context.
+    # Individual fields within the context are managed by nodes.
+    intent_extraction: IntentExtractionContext
+    messages: Annotated[list, add_messages]
 
     # --- Private State ---
-    internal_progress: Annotated[dict[str, str], merge_dict] = Field(
-        default_factory=dict
-    )
-    current_node: Annotated[str, last_value] = ""
+    internal_progress: Annotated[dict[str, str], merge_dict]
+    current_node: str
