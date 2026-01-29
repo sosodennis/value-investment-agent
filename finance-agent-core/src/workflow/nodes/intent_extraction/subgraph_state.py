@@ -40,10 +40,9 @@ class IntentExtractionState(TypedDict):
     ticker: str | None
     user_query: str | None
 
-    # --- Core State (Reducers applied) ---
-    # Note: Using default overwrite for intent_extraction context.
-    # Individual fields within the context are managed by nodes.
-    intent_extraction: IntentExtractionContext
+    # Core State (Reducers applied)
+    # Using merge_dict to prevent overwriting of context during partial updates
+    intent_extraction: Annotated[IntentExtractionContext, merge_dict]
     messages: Annotated[list, add_messages]
 
     # --- Private State ---

@@ -18,15 +18,25 @@ interface DynamicInterruptFormProps {
  * Renders options as premium cards instead of standard radio buttons.
  */
 const TickerCardRadioWidget = (props: WidgetProps) => {
-    const { options, value, onChange } = props;
+    const { options, value, onChange, schema } = props;
     const { enumOptions, enumNames } = options;
+
+    // Fallback logic: RJSF sometimes fails to populate enumOptions in custom widgets
+    let finalEnumOptions = (enumOptions as any[]) || [];
+
+    if (finalEnumOptions.length === 0 && schema.enum) {
+        finalEnumOptions = schema.enum.map((val: any, idx: number) => ({
+            value: val,
+            label: (schema as any).enumNames?.[idx] || val
+        }));
+    }
 
     return (
         <div className="space-y-4">
             <div className="grid grid-cols-1 gap-4">
-                {(enumOptions as any[]).map((option, index) => {
+                {finalEnumOptions.map((option, index) => {
                     const isSelected = value === option.value;
-                    const fullLabel = enumNames ? enumNames[index] : option.label;
+                    const fullLabel = option.label;
 
                     // Parse: "SYMBOL - NAME (CONFIDENCE% match)"
                     const parts = fullLabel.split(' - ');

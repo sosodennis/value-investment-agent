@@ -26,8 +26,12 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
 
   // Sync ticker state with resolvedTicker from agent outputs
-  const intentOutput = agentOutputs['intent_extraction']?.data;
-  const resolvedTicker = intentOutput?.resolved_ticker;
+  // Sync ticker state with resolvedTicker from agent outputs
+  const intentState = agentOutputs['intent_extraction'];
+  const intentCtx = intentState?.['intent_extraction'] || intentState;
+
+  const resolvedTicker = intentCtx?.artifact?.preview?.resolved_ticker ||
+    intentCtx?.resolved_ticker;
   const lastResolvedTickerRef = useRef<string | null>(null);
 
   useEffect(() => {

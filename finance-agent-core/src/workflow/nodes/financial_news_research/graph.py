@@ -43,7 +43,7 @@ from .tools import (
 logger = get_logger(__name__)
 
 # --- LLM Shared Config ---
-DEFAULT_MODEL = "z-ai/glm-4.5-air:free"
+DEFAULT_MODEL = "arcee-ai/trinity-large-preview:free"
 
 
 def get_llm(model: str = DEFAULT_MODEL, temperature: float = 0):

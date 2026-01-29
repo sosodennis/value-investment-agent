@@ -32,7 +32,7 @@ from .utils import (
 logger = get_logger(__name__)
 
 # --- LLM Shared Config ---
-DEFAULT_MODEL = "z-ai/glm-4.5-air:free"
+DEFAULT_MODEL = "arcee-ai/trinity-large-preview:free"
 MAX_CHAR_REPORTS = 50000
 MAX_CHAR_HISTORY = 32000
 

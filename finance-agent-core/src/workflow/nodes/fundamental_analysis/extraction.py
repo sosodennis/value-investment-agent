@@ -131,7 +131,7 @@ def extract_candidates_from_search(
     """
     try:
         llm = ChatOpenAI(
-            model="z-ai/glm-4.5-air:free",
+            model="arcee-ai/trinity-large-preview:free",
             temperature=0,
             base_url="https://openrouter.ai/api/v1",
             api_key=os.getenv("OPENROUTER_API_KEY"),
@@ -176,7 +176,7 @@ def extract_intent(query: str) -> IntentExtraction:
     """
     try:
         llm = ChatOpenAI(
-            model="z-ai/glm-4.5-air:free",
+            model="arcee-ai/trinity-large-preview:free",
             temperature=0,
             base_url="https://openrouter.ai/api/v1",
             api_key=os.getenv("OPENROUTER_API_KEY"),

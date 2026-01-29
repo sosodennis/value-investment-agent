@@ -232,8 +232,10 @@ def clarification_node(state: IntentExtractionState) -> Command:
     intent_ctx = state.get("intent_extraction", {})
     extracted_intent = intent_ctx.get("extracted_intent")
 
+    candidates_raw = intent_ctx.get("ticker_candidates") or []
+
     interrupt_payload = HumanTickerSelection(
-        candidates=intent_ctx.get("ticker_candidates") or [],
+        candidates=candidates_raw,
         intent=IntentExtraction(**extracted_intent) if extracted_intent else None,
         reason="Multiple tickers found or ambiguity detected.",
     )
