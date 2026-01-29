@@ -43,6 +43,7 @@ def summarize_ta_for_preview(ctx: dict[str, Any]) -> dict[str, Any]:
             z_score_display += " (Equilibrium)"
 
     return {
+        "ticker": ctx.get("ticker", "N/A"),
         "latest_price_display": price_display,
         "signal_display": signal_emoji,
         "z_score_display": z_score_display,

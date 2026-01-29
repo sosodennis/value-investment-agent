@@ -15,8 +15,8 @@ const GenericAgentOutputComponent: React.FC<GenericAgentOutputProps> = ({
     status
 }) => {
     // 1. Determine if we have a reference to fetch
-    const reference = (output as StandardAgentOutput)?.reference;
-    const preview = (output as StandardAgentOutput)?.preview;
+    const reference = (output as any)?.reference || (output as any)?.artifact?.reference;
+    const preview = (output as any)?.preview || (output as any)?.artifact?.preview || (output as any);
 
     // 2. Fetch artifact if reference exists
     const { data: artifactData, isLoading: isArtifactLoading } = useArtifact<any>(

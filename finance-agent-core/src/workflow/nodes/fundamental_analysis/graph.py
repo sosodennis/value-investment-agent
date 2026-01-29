@@ -9,11 +9,13 @@ import time
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
 
+from src.interface.schemas import AgentOutputArtifact, ArtifactReference
 from src.services.artifact_manager import artifact_manager
 from src.utils.logger import get_logger
 
 from .financial_utils import fetch_financial_data
 from .logic import select_valuation_model
+from .mappers import summarize_fundamental_for_preview
 from .structures import ValuationModel
 from .subgraph_state import (
     FundamentalAnalysisInput,
@@ -33,9 +35,6 @@ def financial_health_node(state: FundamentalAnalysisState) -> Command:
     """
     Fetch financial data from SEC EDGAR and generate Financial Health Report.
     """
-    logger.info(
-        f"DEBUG: [Fundamental Analysis] financial_health_node called with ticker={state.get('ticker')}"
-    )
     # Get resolved ticker from intent_extraction context
     intent_ctx = state.get("intent_extraction", {})
     resolved_ticker = intent_ctx.get("resolved_ticker") or state.get("ticker")
@@ -272,20 +271,45 @@ def financial_health_node(state: FundamentalAnalysisState) -> Command:
             # print(tabulate(ext_rows, headers=headers, tablefmt="grid"))
 
         reports_data = [r.model_dump() for r in financial_reports]
+
+        # [NEW] Emit preliminary artifact for real-time UI
+        mapper_ctx = {
+            "ticker": resolved_ticker,
+            "status": "fetching_complete",
+            "company_name": resolved_ticker,  # Fallback
+        }
+        # Try to get company name from intent_extraction if available
+        if intent_ctx and "company_profile" in intent_ctx:
+            profile = intent_ctx["company_profile"]
+            mapper_ctx["company_name"] = profile.get("name")
+            mapper_ctx["sector"] = profile.get("sector")
+            mapper_ctx["industry"] = profile.get("industry")
+
+        preview = summarize_fundamental_for_preview(mapper_ctx, reports_data)
+        artifact = AgentOutputArtifact(
+            summary=f"Fundamental Analysis: Data fetched for {resolved_ticker}",
+            preview=preview,
+            reference=None,
+        )
     else:
         logger.warning(
             f"⚠️  Could not fetch financial data for {resolved_ticker}, proceeding without it"
         )
         reports_data = []
+        artifact = None
 
     from langchain_core.messages import AIMessage
 
+    fa_update = {
+        "financial_reports": reports_data,
+        "status": "model_selection",
+    }
+    if artifact:
+        fa_update["artifact"] = artifact
+
     return Command(
         update={
-            "fundamental_analysis": {
-                "financial_reports": reports_data,
-                "status": "model_selection",
-            },
+            "fundamental_analysis": fa_update,
             "current_node": "financial_health",
             "internal_progress": {
                 "financial_health": "done",
@@ -312,7 +336,6 @@ async def model_selection_node(state: FundamentalAnalysisState) -> Command:
     """
     Select appropriate valuation model based on company profile and financial health.
     """
-    logger.info("DEBUG: [Fundamental Analysis] model_selection_node called")
     from .structures import CompanyProfile
 
     # Get company profile from intent_extraction context
@@ -415,14 +438,53 @@ async def model_selection_node(state: FundamentalAnalysisState) -> Command:
         logger.error(f"Failed to save final report artifact: {e}")
         report_id = None
 
+    # [NEW] Generate final artifact
+    # We use similar logic to the adapter to ensure consistency
+    try:
+        mapper_ctx = {
+            "ticker": resolved_ticker,
+            "status": "done",
+            "model_type": model_type,
+            "valuation_summary": reasoning,
+        }
+        if intent_ctx and "company_profile" in intent_ctx:
+            profile_data = intent_ctx["company_profile"]
+            mapper_ctx["company_name"] = profile_data.get("name")
+            mapper_ctx["sector"] = profile_data.get("sector")
+            mapper_ctx["industry"] = profile_data.get("industry")
+
+        preview = summarize_fundamental_for_preview(
+            mapper_ctx, fa_ctx.get("financial_reports", [])
+        )
+
+        reference = None
+        if report_id:
+            reference = ArtifactReference(
+                artifact_id=report_id,
+                download_url=f"/api/artifacts/{report_id}",
+                type="financial_reports",
+            )
+
+        artifact = AgentOutputArtifact(
+            summary=f"基本面分析: {preview.get('company_name', resolved_ticker)} ({preview.get('selected_model')})",
+            preview=preview,
+            reference=reference,
+        )
+    except Exception as e:
+        logger.error(f"Failed to generate artifact in node: {e}")
+        artifact = None
+
+    fa_update = {
+        "model_type": model_type,
+        "valuation_summary": reasoning,
+        "latest_report_id": report_id,
+    }
+    if artifact:
+        fa_update["artifact"] = artifact
+
     return Command(
         update={
-            "fundamental_analysis": {
-                "model_type": model_type,
-                "valuation_summary": reasoning,
-                "latest_report_id": report_id,
-                # Note: financial_reports will be wiped in the aggregator/final node if needed
-            },
+            "fundamental_analysis": fa_update,
             "ticker": resolved_ticker,  # Keep ticker at top level for global state
             "current_node": "model_selection",
             "internal_progress": {

@@ -10,10 +10,12 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
 
+from src.interface.schemas import AgentOutputArtifact, ArtifactReference
 from src.services.artifact_manager import artifact_manager
 from src.utils.logger import get_logger
 
 from .finbert_service import get_finbert_analyzer
+from .mappers import summarize_news_for_preview
 from .prompts import (
     ANALYST_SYSTEM_PROMPT,
     ANALYST_USER_PROMPT_BASIC,
@@ -137,10 +139,28 @@ URL: {r.get('link')}
 """)
     formatted_results = "".join(formatted_list)
 
+    # [NEW] Emit preliminary artifact
+    ticker = ticker or state.get("ticker", "UNKNOWN")
+    preview = {
+        "status_label": "搜尋完成",
+        "sentiment_display": "⚖️ PENDING ANALYSIS",
+        "article_count_display": f"找到 {len(cleaned_results)} 篇新聞",
+        "top_headlines": [r.get("title") for r in cleaned_results[:3]],
+    }
+    artifact = AgentOutputArtifact(
+        summary=f"News Research: Found {len(cleaned_results)} articles for {ticker}",
+        preview=preview,
+        reference=None,
+    )
+
     return Command(
         update={
             "raw_results": cleaned_results,
             "formatted_results": formatted_results,
+            "financial_news_research": {
+                "artifact": artifact,
+                "article_count": len(cleaned_results),
+            },
             "current_node": "search_node",
             "internal_progress": {"search_node": "done", "selector_node": "running"},
         },
@@ -558,18 +578,44 @@ async def aggregator_node(state: FinancialNewsState) -> Command:
 
     # Final State Update (Charter §3.1 and §3.4)
     # WIPE news_items and other intermediate fields (Method C)
+    # [NEW] Generate final artifact
+    try:
+        preview = summarize_news_for_preview(final_output.model_dump(), news_items)
+        reference = None
+        if report_id:
+            reference = ArtifactReference(
+                artifact_id=report_id,
+                download_url=f"/api/artifacts/{report_id}",
+                type="news_analysis_report",
+            )
+
+        artifact = AgentOutputArtifact(
+            summary=f"News Research: {overall_sentiment.value.upper()} ({weighted_score:.2f})",
+            preview=preview,
+            reference=reference,
+        )
+    except Exception as e:
+        logger.error(f"Failed to generate news artifact: {e}")
+        artifact = None
+
+    news_update = {
+        "status": "success",
+        "sentiment_summary": overall_sentiment.value,
+        "sentiment_score": round(weighted_score, 2),
+        "article_count": len(news_items),
+        "report_id": report_id,
+        "top_headlines": [
+            item.get("title") for item in news_items[:3] if item.get("title")
+        ],
+    }
+    if artifact:
+        news_update["artifact"] = artifact
+
+    # Final State Update (Charter §3.1 and §3.4)
+    # WIPE news_items and other intermediate fields (Method C)
     return Command(
         update={
-            "financial_news_research": {
-                "status": "success",
-                "sentiment_summary": overall_sentiment.value,
-                "sentiment_score": round(weighted_score, 2),
-                "article_count": len(news_items),
-                "report_id": report_id,
-                "top_headlines": [
-                    item.get("title") for item in news_items[:3] if item.get("title")
-                ],
-            },
+            "financial_news_research": news_update,
             "news_items": [],  # WIPE
             "raw_results": [],  # WIPE
             "formatted_results": "",  # WIPE

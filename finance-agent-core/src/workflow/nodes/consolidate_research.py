@@ -31,10 +31,8 @@ def consolidate_research_node(state: AgentState) -> Command:
 
     except Exception as e:
         logger.error(
-            f"❌ [DEBUG] consolidate_research_node: ERROR - {type(e).__name__}: {str(e)}"
+            f"❌ consolidate_research_node: ERROR - {type(e).__name__}: {str(e)}"
         )
 
-        logger.error(
-            f"[DEBUG] consolidate_research_node: Traceback:\n{traceback.format_exc()}"
-        )
+        logger.error(f"consolidate_research_node: Traceback:\n{traceback.format_exc()}")
         raise

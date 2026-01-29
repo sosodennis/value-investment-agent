@@ -105,14 +105,14 @@ class SECReportExtractor:
         if self.df is None:
             return []
 
-        print(
-            f"\n>>> 搜尋執行: '{config.concept_regex}' | 模式: {config.type_name}"
-            + (
-                f" | 維度過濾: '{config.dimension_regex}'"
-                if config.dimension_regex
-                else ""
-            )
-        )
+        # print(
+        #     f"\n>>> 搜尋執行: '{config.concept_regex}' | 模式: {config.type_name}"
+        #     + (
+        #         f" | 維度過濾: '{config.dimension_regex}'"
+        #         if config.dimension_regex
+        #         else ""
+        #     )
+        # )
 
         # 1. 標籤與日期初步過濾
         processed_regex = (
@@ -202,9 +202,9 @@ class SECReportExtractor:
         return self.standard_industrial_classification_code
 
     def debug_asset_issue(self, tag: str):
-        print(
-            f"\n>>> [DEBUG] 正在診斷 {self.ticker} {self.fiscal_year} 的 us-gaap:Assets..."
-        )
+        # print(
+        #     f"\n>>> [DEBUG] 正在診斷 {self.ticker} {self.fiscal_year} 的 us-gaap:Assets..."
+        # )
 
         # 1. 寬鬆搜尋：只找 Tag，不管維度
         processed_regex = tag if ":" in tag else f".*:{tag}$"

@@ -165,8 +165,8 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
     const [timeframe, setTimeframe] = useState<Timeframe>('ALL');
 
     // 1. Determine if we have a reference to fetch
-    const reference = (output as StandardAgentOutput)?.reference;
-    const preview = (output as StandardAgentOutput)?.preview as TechnicalSignalOutput | undefined;
+    const reference = (output as any)?.reference || (output as any)?.artifact?.reference;
+    const preview = (output as any)?.preview || (output as any)?.artifact?.preview || (output as any);
 
     console.log('[TechnicalAnalysisOutput] Render:', { output, reference, preview });
 
@@ -177,6 +177,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
 
     // 3. Resolve the actual data to display (Artifact > Preview)
     const effectiveOutput = artifactData || preview;
+    const ticker = (effectiveOutput as any)?.ticker || (output as any)?.ticker || 'N/A';
     console.log('[TechnicalAnalysisOutput] Effective Output:', effectiveOutput);
 
     // Data Processing & Outlier Filtering
@@ -185,18 +186,19 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
 
         return Object.entries(effectiveOutput.raw_data.z_score_series)
             .filter(([_, value]) => {
-                if (Math.abs(value) < 0.0001) return false;
+                if (typeof value !== 'number' || Math.abs(value) < 0.0001) return false;
                 return true;
             })
             .map(([date, value]) => {
-                let displayValue = value;
-                if (value > 10) displayValue = 10;
-                if (value < -10) displayValue = -10;
+                const val = value as number;
+                let displayValue = val;
+                if (val > 10) displayValue = 10;
+                if (val < -10) displayValue = -10;
 
                 return {
                     date: new Date(date).toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' }),
                     value: displayValue,
-                    originalValue: value,
+                    originalValue: val,
                     timestamp: new Date(date).getTime()
                 };
             })
@@ -322,8 +324,8 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         .filter(v => typeof v === 'number' && !isNaN(v) && isFinite(v));
 
     const fixedDomain: [number, number] = [-3, 3];
-    const autoMax = dataValues.length > 0 ? Math.max(...dataValues) + 0.1 : 'auto';
-    const autoMin = dataValues.length > 0 ? Math.min(...dataValues) - 0.1 : 'auto';
+    const autoMax = dataValues.length > 0 ? Math.max(...(dataValues as number[])) + 0.1 : 'auto';
+    const autoMin = dataValues.length > 0 ? Math.min(...(dataValues as number[])) - 0.1 : 'auto';
 
     const currentDomain: [any, any] = isAutoFit
         ? [autoMin, autoMax]
@@ -378,7 +380,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                     )}
                 </div>
                 <div className="flex flex-wrap gap-2 mt-6">
-                    {semantic_tags?.map(tag => (
+                    {semantic_tags?.map((tag: string) => (
                         <span key={tag} className="px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-[10px] font-bold text-indigo-300 uppercase tracking-wider">
                             #{tag.replace('_', ' ')}
                         </span>

@@ -171,6 +171,7 @@ async def event_generator(
         async for event in graph.astream_events(
             input_data, config=config, version="v2"
         ):
+            # logger.debug(f"🔍 [Server] Raw Event: {event['event']} | Name: {event.get('name')} | Metadata: {event.get('metadata')}")
             # Check for batching/flushing BEFORE adapting the next event
             # to ensure we don't use a duplicate seq_id
 

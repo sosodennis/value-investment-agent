@@ -12,8 +12,8 @@ interface DebateOutputProps {
 
 const DebateOutputComponent: React.FC<DebateOutputProps> = ({ output, resolvedTicker, status }) => {
     // 1. Determine if we have a reference to fetch
-    const reference = (output as StandardAgentOutput)?.reference;
-    const preview = (output as StandardAgentOutput)?.preview as DebateAgentOutput | undefined;
+    const reference = (output as any)?.reference || (output as any)?.artifact?.reference;
+    const preview = (output as any)?.preview || (output as any)?.artifact?.preview || (output as any);
 
     // 2. Fetch artifact if reference exists
     const { data: artifactData, isLoading: isArtifactLoading } = useArtifact<DebateSuccess>(
@@ -23,9 +23,13 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({ output, resolvedTi
     // 3. Resolve the actual data to display (Artifact > Preview)
     const effectiveOutput = artifactData || preview;
 
-    const hasData = effectiveOutput && effectiveOutput.final_verdict && effectiveOutput.scenario_analysis;
+    const isPreviewOnly = !artifactData && !!preview;
+    const hasData = effectiveOutput && (
+        (effectiveOutput.final_verdict && effectiveOutput.scenario_analysis) ||
+        isPreviewOnly
+    );
 
-    if ((status !== 'done' && !hasData) || !effectiveOutput || !effectiveOutput.final_verdict) {
+    if ((status !== 'done' && !hasData) || !effectiveOutput || (!artifactData && !isPreviewOnly)) {
         return (
             <div className="flex flex-col items-center justify-center h-full text-slate-500 py-12 min-h-[400px]">
                 <Shield size={48} className="text-slate-800 mb-4 opacity-50 animate-pulse" />
@@ -38,7 +42,7 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({ output, resolvedTi
 
     const conclusion = effectiveOutput;
     const direction = conclusion.final_verdict;
-    const scenarios = conclusion.scenario_analysis;
+    const scenarios = conclusion.scenario_analysis || {};
 
     const getDirectionStyles = () => {
         switch (direction) {
@@ -140,11 +144,11 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({ output, resolvedTi
                             <div className="flex items-center justify-between">
                                 <span className="text-white font-bold uppercase tracking-tighter text-[10px]">Reward/Risk Ratio:</span>
                                 <span className="text-amber-400 font-black text-lg">
-                                    {conclusion.rr_ratio?.toFixed(2)}x
+                                    {conclusion.rr_ratio ? conclusion.rr_ratio.toFixed(2) + 'x' : 'N/A'}
                                 </span>
                             </div>
                             <p className="text-[8px] text-slate-500 uppercase tracking-widest mt-1">
-                                weighted upside vs downside
+                                {isPreviewOnly ? 'L3 DATA LOADING...' : 'weighted upside vs downside'}
                             </p>
                         </div>
 
@@ -153,64 +157,79 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({ output, resolvedTi
                             <div className="flex items-center justify-between">
                                 <span className="text-white font-bold uppercase tracking-tighter text-[10px]">Edge (Alpha):</span>
                                 <span className={`${(conclusion.alpha ?? 0) > 0 ? 'text-emerald-400' : 'text-rose-400'} font-black text-lg`}>
-                                    {((conclusion.alpha ?? 0) * 100).toFixed(1)}%
+                                    {conclusion.alpha !== undefined ? (conclusion.alpha * 100).toFixed(1) + '%' : 'N/A'}
                                 </span>
                             </div>
                             <p className="text-[8px] text-slate-500 uppercase tracking-widest mt-1">
-                                vs {((conclusion.risk_free_benchmark ?? 0) * 400).toFixed(1)}% risk-free rate
+                                {isPreviewOnly ? 'L3 DATA LOADING...' : `vs ${((conclusion.risk_free_benchmark ?? 0) * 400).toFixed(1)}% risk-free rate`}
                             </p>
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-3 mt-4">
-                        <div className="space-y-1.5">
-                            <div className="flex justify-between text-[10px] uppercase font-bold tracking-tight">
-                                <span className="text-emerald-400">Bull Case ({scenarios.bull_case?.price_implication})</span>
-                                <span className="text-emerald-500">
-                                    {scenarios.bull_case?.probability}%
-                                </span>
+                    {isPreviewOnly ? (
+                        <div className="py-4 border-y border-white/5 my-4">
+                            <div className="flex items-center gap-3 mb-2">
+                                <Zap size={14} className="text-amber-400" />
+                                <span className="text-[11px] font-bold text-white uppercase tracking-widest">Verdict Summary (Preview)</span>
                             </div>
-                            <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                                <div
-                                    className="h-full bg-emerald-500 transition-all duration-1000"
-                                    style={{ width: `${scenarios.bull_case?.probability}%` }}
-                                />
-                            </div>
-                            <p className="text-[9px] text-slate-500 leading-tight italic">{scenarios.bull_case?.outcome_description}</p>
+                            <p className="text-xs text-slate-300 italic leading-relaxed">
+                                {(preview as any).verdict_display || 'Calculating probability cases...'}
+                            </p>
+                            <p className="text-[10px] text-slate-500 mt-2">
+                                {(preview as any).debate_rounds_display}
+                            </p>
                         </div>
+                    ) : (
+                        <div className="grid grid-cols-1 gap-3 mt-4">
+                            <div className="space-y-1.5">
+                                <div className="flex justify-between text-[10px] uppercase font-bold tracking-tight">
+                                    <span className="text-emerald-400">Bull Case ({scenarios.bull_case?.price_implication})</span>
+                                    <span className="text-emerald-500">
+                                        {scenarios.bull_case?.probability}%
+                                    </span>
+                                </div>
+                                <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                                    <div
+                                        className="h-full bg-emerald-500 transition-all duration-1000"
+                                        style={{ width: `${scenarios.bull_case?.probability}%` }}
+                                    />
+                                </div>
+                                <p className="text-[9px] text-slate-500 leading-tight italic">{scenarios.bull_case?.outcome_description}</p>
+                            </div>
 
-                        <div className="space-y-1.5">
-                            <div className="flex justify-between text-[10px] uppercase font-bold tracking-tight">
-                                <span className="text-slate-400">Base Case (Neutral)</span>
-                                <span className="text-slate-400">
-                                    {scenarios.base_case?.probability}%
-                                </span>
+                            <div className="space-y-1.5">
+                                <div className="flex justify-between text-[10px] uppercase font-bold tracking-tight">
+                                    <span className="text-slate-400">Base Case (Neutral)</span>
+                                    <span className="text-slate-400">
+                                        {scenarios.base_case?.probability}%
+                                    </span>
+                                </div>
+                                <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                                    <div
+                                        className="h-full bg-slate-500 transition-all duration-1000"
+                                        style={{ width: `${scenarios.base_case?.probability}%` }}
+                                    />
+                                </div>
+                                <p className="text-[9px] text-slate-500 leading-tight italic">{scenarios.base_case?.outcome_description}</p>
                             </div>
-                            <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                                <div
-                                    className="h-full bg-slate-500 transition-all duration-1000"
-                                    style={{ width: `${scenarios.base_case?.probability}%` }}
-                                />
-                            </div>
-                            <p className="text-[9px] text-slate-500 leading-tight italic">{scenarios.base_case?.outcome_description}</p>
-                        </div>
 
-                        <div className="space-y-1.5">
-                            <div className="flex justify-between text-[10px] uppercase font-bold tracking-tight">
-                                <span className="text-rose-400">Bear Case ({scenarios.bear_case?.price_implication})</span>
-                                <span className="text-rose-500">
-                                    {scenarios.bear_case?.probability}%
-                                </span>
+                            <div className="space-y-1.5">
+                                <div className="flex justify-between text-[10px] uppercase font-bold tracking-tight">
+                                    <span className="text-rose-400">Bear Case ({scenarios.bear_case?.price_implication})</span>
+                                    <span className="text-rose-500">
+                                        {scenarios.bear_case?.probability}%
+                                    </span>
+                                </div>
+                                <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                                    <div
+                                        className="h-full bg-rose-500 transition-all duration-1000"
+                                        style={{ width: `${scenarios.bear_case?.probability}%` }}
+                                    />
+                                </div>
+                                <p className="text-[9px] text-slate-500 leading-tight italic">{scenarios.bear_case?.outcome_description}</p>
                             </div>
-                            <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                                <div
-                                    className="h-full bg-rose-500 transition-all duration-1000"
-                                    style={{ width: `${scenarios.bear_case?.probability}%` }}
-                                />
-                            </div>
-                            <p className="text-[9px] text-slate-500 leading-tight italic">{scenarios.bear_case?.outcome_description}</p>
                         </div>
-                    </div>
+                    )}
                 </div>
 
                 <div className="h-px bg-white/5 mb-4" />
@@ -238,7 +257,7 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({ output, resolvedTi
                         <h4 className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">Winning Investment Thesis</h4>
                     </div>
                     <p className="text-sm text-slate-200 leading-relaxed font-medium relative z-10 italic">
-                        &quot;{conclusion.winning_thesis}&quot;
+                        &quot;{isPreviewOnly ? (preview as any).thesis_display : conclusion.winning_thesis}&quot;
                     </p>
                 </div>
 
@@ -251,7 +270,7 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({ output, resolvedTi
                             <h4 className="text-[10px] font-bold text-cyan-400 uppercase tracking-widest">Primary Catalyst</h4>
                         </div>
                         <p className="text-xs text-slate-300 leading-relaxed group-hover:text-white transition-colors">
-                            {conclusion.primary_catalyst}
+                            {isPreviewOnly ? (preview as any).catalyst_display : conclusion.primary_catalyst}
                         </p>
                     </div>
 
@@ -263,7 +282,7 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({ output, resolvedTi
                             <h4 className="text-[10px] font-bold text-rose-400 uppercase tracking-widest">Critical Failure Mode</h4>
                         </div>
                         <p className="text-xs text-rose-200/80 leading-relaxed group-hover:text-rose-100 transition-colors font-medium">
-                            {conclusion.primary_risk}
+                            {isPreviewOnly ? (preview as any).risk_display : conclusion.primary_risk}
                         </p>
                     </div>
                 </div>
@@ -275,7 +294,7 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({ output, resolvedTi
                     <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Supporting Audit Factors</h4>
                 </div>
                 <div className="space-y-3">
-                    {conclusion.supporting_factors?.map((factor, i) => (
+                    {conclusion.supporting_factors?.map((factor: string, i: number) => (
                         <div key={i} className="flex gap-3 text-xs text-slate-400 hover:text-slate-300 transition-colors p-3 bg-slate-900/20 rounded-xl border border-slate-800/30">
                             <div className="w-1.5 h-1.5 rounded-full bg-slate-700 mt-1.5 shrink-0" />
                             <p className="leading-relaxed">{factor}</p>

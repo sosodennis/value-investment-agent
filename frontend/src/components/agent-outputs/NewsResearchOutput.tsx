@@ -18,8 +18,8 @@ const NewsResearchOutputComponent: React.FC<NewsResearchOutputProps> = ({
     status
 }) => {
     // 1. Determine if we have a reference to fetch
-    const reference = (output as StandardAgentOutput)?.reference;
-    const preview = (output as StandardAgentOutput)?.preview as NewsResearchOutputType | undefined;
+    const reference = (output as any)?.reference || (output as any)?.artifact?.reference;
+    const preview = (output as any)?.preview || (output as any)?.artifact?.preview || (output as any);
 
     // 2. Fetch artifact if reference exists
     const { data: artifactData, isLoading: isArtifactLoading } = useArtifact<NewsResearchOutputType>(
@@ -31,9 +31,11 @@ const NewsResearchOutputComponent: React.FC<NewsResearchOutputProps> = ({
     const effectiveOutput = artifactData || preview;
 
     // 4. Check if we have valid data to show
+    const isPreviewOnly = !artifactData && !!preview;
     const hasData = effectiveOutput && (
         (effectiveOutput.news_items && effectiveOutput.news_items.length > 0) ||
-        typeof effectiveOutput.sentiment_score === 'number'
+        typeof effectiveOutput.sentiment_score === 'number' ||
+        isPreviewOnly
     );
 
     // Wait for completion before showing data, unless we have preview data
@@ -79,9 +81,23 @@ const NewsResearchOutputComponent: React.FC<NewsResearchOutputProps> = ({
 
                 {effectiveOutput.news_items && effectiveOutput.news_items.length > 0 ? (
                     <div className="grid grid-cols-1 gap-6">
-                        {effectiveOutput.news_items.map((item) => (
+                        {effectiveOutput.news_items.map((item: any) => (
                             <NewsResearchCard key={item.id} item={item} />
                         ))}
+                    </div>
+                ) : isPreviewOnly && (preview as any).top_headlines ? (
+                    <div className="space-y-4">
+                        <div className="p-4 bg-slate-900/40 border border-slate-800 rounded-xl">
+                            <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Recent Headlines (Preview)</h4>
+                            <div className="space-y-2">
+                                {(preview as any).top_headlines.map((headline: string, i: number) => (
+                                    <div key={i} className="flex gap-2 text-xs text-slate-300">
+                                        <div className="w-1 h-1 bg-cyan-500 rounded-full mt-1.5 shrink-0" />
+                                        <span>{headline}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
                     </div>
                 ) : (
                     <div className="p-8 border border-slate-800 rounded-xl bg-slate-900/30 text-center">

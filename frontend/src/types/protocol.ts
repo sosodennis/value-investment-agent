@@ -1,3 +1,5 @@
+import { ArtifactReference } from './agents';
+
 export interface Message {
     id: string;
     role: 'user' | 'assistant' | 'system' | 'tool';
@@ -44,10 +46,22 @@ export interface AgentStatusData {
     node?: string;
 }
 
+/**
+ * Standard container for all Sub-Agent outputs (L1/L2/L3)
+ */
+export interface AgentOutputArtifact {
+    summary: string;
+    preview?: any;
+    reference?: ArtifactReference;
+    /** @deprecated Backend no longer pushes full data. Use reference + useArtifact */
+    data?: any;
+}
+
 export interface StateUpdateData {
     financial_reports?: any[];
     news_research?: any;
     technical_analysis?: any;
     resolved_ticker?: string;
+    artifact?: AgentOutputArtifact;
     [key: string]: any;
 }

@@ -135,18 +135,19 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
         {
             name: 'Valuation',
             score: latestBase ? 100 - getScore(peRatio, 10, 40) :
-                (agent.id === 'technical_analysis' && outputData ?
-                    (Math.abs(outputData.signal_state?.z_score || 0) > 2 ? 80 : 50) : // Z-score anomaly implies actionable valuation gap
-                    (agent.id === 'calculator' ? 88 : (agent.id === 'fundamental_analysis' ? 40 : 0))),
+                (outputData?.valuation_score !== undefined ? outputData.valuation_score :
+                    (agent.id === 'technical_analysis' && outputData ?
+                        (Math.abs(outputData.signal_state?.z_score || 0) > 2 ? 80 : 50) : // Z-score anomaly implies actionable valuation gap
+                        (agent.id === 'calculator' ? 88 : (agent.id === 'fundamental_analysis' ? 40 : 0)))),
             color: 'bg-rose-500'
         },
     ];
 
     const financialMetrics = [
-        { label: 'ROE', value: latestBase ? `${(roe * 100).toFixed(1)}%` : 'N/A' },
+        { label: 'ROE', value: latestBase ? `${(roe * 100).toFixed(1)}%` : (outputData?.key_metrics?.ROE || 'N/A') },
         { label: 'P/E Ratio', value: latestBase && peRatio ? peRatio.toFixed(1) : 'N/A' },
         { label: 'Debt/Equity', value: latestBase ? debtToEquity.toFixed(2) : 'N/A' },
-        { label: 'Rev Growth', value: latestBase && revenueGrowth ? `${(revenueGrowth * 100).toFixed(1)}%` : 'N/A' },
+        { label: 'Revenue', value: latestBase ? `$${(currentRev / 1e9).toFixed(1)}B` : (outputData?.key_metrics?.Revenue || 'N/A') },
     ];
 
     return (

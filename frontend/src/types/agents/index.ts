@@ -2,7 +2,7 @@ export type AgentStatus = 'idle' | 'running' | 'done' | 'attention' | 'error';
 
 export interface ArtifactReference {
     artifact_id: string;
-    key: string;
+    download_url: string;
     type: string;
 }
 

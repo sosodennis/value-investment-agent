@@ -17,8 +17,8 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
     status
 }) => {
     // 1. Determine if we have a reference to fetch
-    const reference = (output as StandardAgentOutput)?.reference;
-    const preview = (output as StandardAgentOutput)?.preview;
+    const reference = (output as any)?.reference || (output as any)?.artifact?.reference;
+    const preview = (output as any)?.preview || (output as any)?.artifact?.preview || (output as any);
 
     // 2. Fetch artifact if reference exists
     const { data: artifactData, isLoading: isArtifactLoading } = useArtifact<FundamentalAnalysisSuccess>(
@@ -26,7 +26,6 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
     );
 
     // 3. Resolve the actual data (Artifact > Preview)
-    // Legacy fallbacks removed.
     const effectiveData = artifactData || preview;
 
     const reports = effectiveData?.financial_reports || [];
@@ -65,13 +64,28 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                 )}
             </div>
 
-            {/* Preview Section - Valuation Score */}
-            {hasPreview && valuationScore !== undefined && (
-                <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4 mb-4 flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Preliminary Valuation Score</span>
-                    <span className={`text-sm font-bold ${valuationScore > 70 ? 'text-emerald-400' : valuationScore < 40 ? 'text-rose-400' : 'text-amber-400'}`}>
-                        {Math.round(valuationScore)}/100
-                    </span>
+            {/* Preview Section - Valuation & Metrics */}
+            {hasPreview && (
+                <div className="space-y-4">
+                    <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Preliminary Valuation Score</span>
+                        {valuationScore !== undefined && (
+                            <span className={`text-sm font-bold ${valuationScore > 70 ? 'text-emerald-400' : valuationScore < 40 ? 'text-rose-400' : 'text-amber-400'}`}>
+                                {Math.round(valuationScore)}/100
+                            </span>
+                        )}
+                    </div>
+
+                    {preview.key_metrics && Object.keys(preview.key_metrics).length > 0 && (
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                            {Object.entries(preview.key_metrics).map(([label, value]) => (
+                                <div key={label} className="bg-slate-900/40 border border-slate-800 rounded-xl p-3 text-center">
+                                    <div className="text-[9px] font-black text-slate-500 uppercase mb-1">{label}</div>
+                                    <div className="text-xs font-bold text-white">{(value as string)}</div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             )}
 

@@ -1,5 +1,4 @@
 import os
-import traceback
 from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage
@@ -219,14 +218,9 @@ async def get_graph():
     global _compiled_graph, _saver
     if _compiled_graph is None:
         try:
-            logger.info("=== [DEBUG] get_graph: Starting graph compilation ===")
-
             # 1. All subgraphs now use wrapper nodes with isolated state
             # (Wrappers handle subgraph initialization internally)
-            logger.info("[DEBUG] get_graph: Using wrapper nodes for all subgraphs")
-
             # 2. Build Parent Graph
-            logger.info("[DEBUG] get_graph: Building parent graph...")
             builder = StateGraph(AgentState)
 
             # --- Subgraph Setup ---
@@ -337,10 +331,7 @@ async def get_graph():
             builder.add_node(
                 "calculator", calculation_node, metadata={"agent_id": "calculator"}
             )
-            logger.info("[DEBUG] get_graph: All nodes added successfully")
-
             # 3. Define edges for parallel execution
-            logger.info("[DEBUG] get_graph: Adding edges...")
             builder.add_edge(START, "prepare_intent")
             builder.add_edge("prepare_intent", "intent_agent")
             builder.add_edge("intent_agent", "process_intent")
@@ -372,11 +363,7 @@ async def get_graph():
             builder.add_edge("auditor", "approval")
             builder.add_edge("approval", "calculator")
             builder.add_edge("calculator", END)
-            logger.info("[DEBUG] get_graph: All edges added successfully")
-
             # 3. Initialize Checkpointer
-            logger.info("[DEBUG] get_graph: Initializing checkpointer...")
-
             # Construct DB URI from environment variables
             pg_user = os.environ.get("POSTGRES_USER", "postgres")
             pg_pass = os.environ.get("POSTGRES_PASSWORD", "postgres")
@@ -399,20 +386,9 @@ async def get_graph():
 
             # Ensure tables are created
             await _saver.setup()
-            logger.info("[DEBUG] get_graph: Checkpointer initialized successfully")
-
             # 4. Compile
-            logger.info("[DEBUG] get_graph: Compiling graph...")
             _compiled_graph = builder.compile(checkpointer=_saver)
-            logger.info(
-                "=== [DEBUG] get_graph: Graph compilation completed successfully ==="
-            )
-
-        except Exception as e:
-            logger.error(
-                f"❌ [DEBUG] get_graph: ERROR during compilation - {type(e).__name__}: {str(e)}"
-            )
-            logger.error(f"[DEBUG] get_graph: Traceback:\n{traceback.format_exc()}")
+        except Exception:
             raise
 
     return _compiled_graph

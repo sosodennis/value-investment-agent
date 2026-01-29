@@ -7,9 +7,11 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import END
 from langgraph.types import Command
 
+from src.interface.schemas import AgentOutputArtifact, ArtifactReference
 from src.services.artifact_manager import artifact_manager
 from src.utils.logger import get_logger
 
+from .mappers import summarize_debate_for_preview
 from .prompts import (
     BEAR_AGENT_SYSTEM_PROMPT,
     BEAR_R1_ADVERSARIAL,
@@ -95,7 +97,7 @@ def get_llm(model: str = DEFAULT_MODEL, temperature: float = 0):
 
 def _log_messages(messages: list, agent_name: str, round_num: int = 0):
     """Log full message content for audit/debugging."""
-    log_header = f"DEBUG - PROMPT SENT TO {agent_name}"
+    log_header = f"PROMPT SENT TO {agent_name}"
     if round_num:
         log_header += f" (Round {round_num})"
 
@@ -390,10 +392,26 @@ async def r1_bear_node(state: DebateState) -> Command:
 
 async def r1_moderator_node(state: DebateState) -> Command:
     res = await _execute_moderator_critique(state, 1)
+    # [NEW] Emit progress artifact
+    try:
+        preview = summarize_debate_for_preview(
+            {
+                "current_round": 1,
+                "winning_thesis": "Round 1 complete, synthesizing arguments...",
+            }
+        )
+        artifact = AgentOutputArtifact(
+            summary="Cognitive Debate: Round 1 moderator critique complete",
+            preview=preview,
+            reference=None,
+        )
+    except Exception:
+        artifact = None
+
     return Command(
         update={
             "history": res["history"],
-            "debate": {"current_round": res["current_round"]},
+            "debate": {"current_round": res["current_round"], "artifact": artifact},
             "internal_progress": {"r1_moderator": "done", "r2_bull": "running"},
         },
         goto="r2_bull",
@@ -427,10 +445,26 @@ async def r2_bear_node(state: DebateState) -> Command:
 
 async def r2_moderator_node(state: DebateState) -> Command:
     res = await _execute_moderator_critique(state, 2)
+    # [NEW] Emit progress artifact
+    try:
+        preview = summarize_debate_for_preview(
+            {
+                "current_round": 2,
+                "winning_thesis": "Round 2 cross-review complete, assessing vulnerabilities...",
+            }
+        )
+        artifact = AgentOutputArtifact(
+            summary="Cognitive Debate: Round 2 adversarial analysis complete",
+            preview=preview,
+            reference=None,
+        )
+    except Exception:
+        artifact = None
+
     return Command(
         update={
             "history": res["history"],
-            "debate": {"current_round": res["current_round"]},
+            "debate": {"current_round": res["current_round"], "artifact": artifact},
             "internal_progress": {"r2_moderator": "done", "r3_bear": "running"},
         },
         goto="r3_bear",
@@ -499,18 +533,43 @@ async def verdict_node(state: DebateState) -> Command:
             key_prefix=ticker,
         )
 
+        # [NEW] Generate final artifact
+        try:
+            preview = summarize_debate_for_preview(conclusion_data)
+            reference = None
+            if transcript_id:
+                reference = ArtifactReference(
+                    artifact_id=transcript_id,
+                    download_url=f"/api/artifacts/{transcript_id}",
+                    type="debate_transcript",
+                )
+
+            artifact = AgentOutputArtifact(
+                summary=f"Debate: {preview.get('verdict_display')}",
+                preview=preview,
+                reference=reference,
+            )
+        except Exception as e:
+            logger.error(f"Failed to generate debate artifact: {e}")
+            artifact = None
+
+        debate_update = {
+            "status": "success",
+            "final_verdict": conclusion_data.get("decision")
+            or conclusion_data.get("final_verdict"),
+            "kelly_confidence": conclusion_data.get("kelly_confidence"),
+            "winning_thesis": conclusion_data.get("winning_thesis"),
+            "primary_catalyst": conclusion_data.get("primary_catalyst"),
+            "primary_risk": conclusion_data.get("primary_risk"),
+            "transcript_id": transcript_id,
+            "current_round": 3,
+        }
+        if artifact:
+            debate_update["artifact"] = artifact
+
         return Command(
             update={
-                "debate": {
-                    "status": "success",
-                    "final_verdict": conclusion_data.get("decision")
-                    or conclusion_data.get("final_verdict"),
-                    "kelly_confidence": conclusion_data.get("kelly_confidence"),
-                    "winning_thesis": conclusion_data.get("winning_thesis"),
-                    "primary_catalyst": conclusion_data.get("primary_catalyst"),
-                    "primary_risk": conclusion_data.get("primary_risk"),
-                    "transcript_id": transcript_id,
-                },
+                "debate": debate_update,
                 "internal_progress": {"verdict": "done"},
                 "node_statuses": {"debate": "done"},
             },

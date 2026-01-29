@@ -8,7 +8,9 @@ interface AINewsSummaryProps {
 
 const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
     // Defensive check: ensure critical fields exist before rendering
-    if (!output.news_items || output.news_items.length === 0 || typeof output.sentiment_score !== 'number') {
+    const isPreview = (output as any).sentiment_display !== undefined;
+
+    if (!isPreview && (!output.news_items || output.news_items.length === 0 || typeof output.sentiment_score !== 'number')) {
         return (
             <div className="flex flex-col items-center justify-center p-12 text-slate-500">
                 <Zap className="w-12 h-12 mb-4 animate-pulse opacity-50" />
@@ -43,7 +45,8 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
 
     // Memoize expensive calculations
     const { allFacts, bullFactsCount, bearFactsCount, neutralFactsCount, quantFactsCount } = useMemo(() => {
-        const facts = output.news_items.flatMap(item => item.analysis?.key_facts || []);
+        const items = output.news_items || [];
+        const facts = items.flatMap(item => item.analysis?.key_facts || []);
         return {
             allFacts: facts,
             bullFactsCount: facts.filter(f => f.sentiment === 'bullish').length,
@@ -53,7 +56,7 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
         };
     }, [output.news_items]);
 
-    const categoryStats = useMemo(() => output.news_items.reduce((acc, item) => {
+    const categoryStats = useMemo(() => (output.news_items || []).reduce((acc, item) => {
         item.categories.forEach(cat => {
             acc[cat] = (acc[cat] || 0) + 1;
         });
@@ -61,14 +64,15 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
     }, {} as Record<string, number>), [output.news_items]);
 
     // Calculate score percentage (mapping -1 to 1 into 0 to 100)
-    const scorePercentage = Math.round(((output.sentiment_score + 1) / 2) * 100);
+    const sentimentScore = typeof output.sentiment_score === 'number' ? output.sentiment_score : 0;
+    const scorePercentage = Math.round(((sentimentScore + 1) / 2) * 100);
 
     // Calculate bullish consensus (% of decided articles that are bullish)
     const decidedCount = bullFactsCount + bearFactsCount;
     const bullishConsensus = decidedCount > 0 ? Math.round((bullFactsCount / decidedCount) * 100) : 50;
 
     // Signal confidence based on sample size
-    const totalSources = output.news_items.length;
+    const totalSources = output.news_items?.length || 0;
     const getSignalConfidence = () => {
         if (totalSources >= 8) return { level: 'High', color: 'text-emerald-400', icon: '🔥' };
         if (totalSources >= 5) return { level: 'Medium', color: 'text-amber-400', icon: '⚡' };
@@ -78,6 +82,7 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
 
     // Consensus label
     const getConsensusLabel = () => {
+        if (isPreview) return (output as any).sentiment_display;
         if (decidedCount === 0) return 'No Clear Signal';
         if (bullishConsensus >= 80) return 'Strong Bull Consensus';
         if (bullishConsensus >= 60) return 'Bullish Leaning';
@@ -97,7 +102,7 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
                             <Zap size={18} className="text-amber-400" />
                             <h3 className="text-sm font-bold text-white uppercase tracking-widest">Market Consensus</h3>
                         </div>
-                        <div className={`px-4 py-1.5 rounded-full border text-xs font-bold uppercase tracking-widest bg-slate-950/40 ${getSentimentColor(output.overall_sentiment)}`}>
+                        <div className={`px-4 py-1.5 rounded-full border text-xs font-bold uppercase tracking-widest bg-slate-950/40 ${getSentimentColor(output.overall_sentiment || 'neutral')}`}>
                             {getConsensusLabel()}
                         </div>
                     </div>
@@ -105,18 +110,27 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
                     {/* Signal Confidence Indicator */}
                     <div className="flex items-center gap-2 mb-6 text-[10px] font-bold uppercase tracking-widest">
                         <span className="text-slate-500">Signal Confidence:</span>
-                        <span className={signalConfidence.color}>{signalConfidence.icon} {signalConfidence.level}</span>
-                        <span className="text-slate-600">(Based on {totalSources} sources, {allFacts.length} evidence points)</span>
+                        {isPreview ? (
+                            <span className="text-cyan-400">PREVIEW MODE</span>
+                        ) : (
+                            <>
+                                <span className={signalConfidence.color}>{signalConfidence.icon} {signalConfidence.level}</span>
+                                <span className="text-slate-600">(Based on {totalSources} sources, {allFacts.length} evidence points)</span>
+                            </>
+                        )}
                     </div>
 
                     {/* HERO: Evidence Distribution - Main Visual */}
                     <div className="space-y-3 mb-6">
                         <div className="flex justify-between items-center text-xs font-bold uppercase tracking-widest">
                             <span className="text-white">Evidence Distribution</span>
-                            {decidedCount > 0 && bearFactsCount === 0 && (
+                            {isPreview && (
+                                <span className="text-cyan-400 text-[10px]">{(output as any).article_count_display}</span>
+                            )}
+                            {!isPreview && decidedCount > 0 && bearFactsCount === 0 && (
                                 <span className="text-emerald-400 text-[10px]">⚠️ No bearish evidence found</span>
                             )}
-                            {decidedCount > 0 && bullFactsCount === 0 && (
+                            {!isPreview && decidedCount > 0 && bullFactsCount === 0 && (
                                 <span className="text-rose-400 text-[10px]">⚠️ No bullish evidence found</span>
                             )}
                         </div>
@@ -126,7 +140,7 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
                             {bullFactsCount > 0 && (
                                 <div
                                     className="bg-gradient-to-r from-emerald-600 to-emerald-500 transition-all duration-1000 flex items-center justify-center relative group"
-                                    style={{ width: `${(bullFactsCount / (allFacts.length || 1)) * 100}%` }}
+                                    style={{ width: `${isPreview ? 0 : (bullFactsCount / (allFacts.length || 1)) * 100}%` }}
                                 >
                                     <div className="flex items-center gap-1.5 text-white font-bold">
                                         <TrendingUp size={14} />
@@ -134,18 +148,18 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
                                     </div>
                                 </div>
                             )}
-                            {neutralFactsCount > 0 && (
+                            {(neutralFactsCount > 0 || isPreview) && (
                                 <div
                                     className="bg-gradient-to-r from-slate-600 to-slate-500 transition-all duration-1000 flex items-center justify-center"
-                                    style={{ width: `${(neutralFactsCount / (allFacts.length || 1)) * 100}%` }}
+                                    style={{ width: `${isPreview ? 100 : (neutralFactsCount / (allFacts.length || 1)) * 100}%` }}
                                 >
                                     <div className="flex items-center gap-1.5 text-slate-300 font-bold">
                                         <Minus size={14} />
-                                        <span className="text-sm">{neutralFactsCount}</span>
+                                        <span className="text-sm">{isPreview ? 'LOADING EVIDENCE...' : neutralFactsCount}</span>
                                     </div>
                                 </div>
                             )}
-                            {bearFactsCount > 0 && (
+                            {bearFactsCount > 0 && !isPreview && (
                                 <div
                                     className="bg-gradient-to-r from-rose-600 to-rose-500 transition-all duration-1000 flex items-center justify-center"
                                     style={{ width: `${(bearFactsCount / (allFacts.length || 1)) * 100}%` }}
@@ -179,11 +193,17 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
                     <div className="pt-4 border-t border-slate-800/50 space-y-2">
                         <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-widest text-slate-500">
                             <span>Average Intensity</span>
-                            <span className="text-slate-300">{output.sentiment_score > 0 ? '+' : ''}{output.sentiment_score.toFixed(2)} ({output.sentiment_score > 0.3 ? 'Strong' : output.sentiment_score > 0 ? 'Moderate' : output.sentiment_score < -0.3 ? 'Strong' : output.sentiment_score < 0 ? 'Moderate' : 'Neutral'})</span>
+                            <span className="text-slate-300">
+                                {isPreview ? (output as any).sentiment_display : (
+                                    <>
+                                        {sentimentScore > 0 ? '+' : ''}{sentimentScore.toFixed(2)} ({sentimentScore > 0.3 ? 'Strong' : sentimentScore > 0 ? 'Moderate' : sentimentScore < -0.3 ? 'Strong' : sentimentScore < 0 ? 'Moderate' : 'Neutral'})
+                                    </>
+                                )}
+                            </span>
                         </div>
                         <div className="h-2 w-full bg-slate-950/50 rounded-full overflow-hidden border border-slate-800">
                             <div
-                                className={`h-full transition-all duration-1000 ease-out ${output.sentiment_score > 0 ? 'bg-emerald-500/60' : output.sentiment_score < 0 ? 'bg-rose-500/60' : 'bg-slate-500/60'}`}
+                                className={`h-full transition-all duration-1000 ease-out ${sentimentScore > 0 ? 'bg-emerald-500/60' : sentimentScore < 0 ? 'bg-rose-500/60' : 'bg-slate-500/60'}`}
                                 style={{ width: `${scorePercentage}%` }}
                             />
                         </div>
@@ -237,12 +257,12 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
                     </div>
 
                     <div className="flex flex-wrap gap-2">
-                        {output.key_themes.map(theme => (
+                        {(output.key_themes || []).map(theme => (
                             <div key={theme} className="px-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-medium text-slate-300 hover:border-indigo-500/50 hover:text-white transition-all cursor-default">
                                 {theme}
                             </div>
                         ))}
-                        {output.key_themes.length === 0 && (
+                        {(!output.key_themes || output.key_themes.length === 0) && (
                             <div className="text-xs text-slate-600 italic">No specific themes identified.</div>
                         )}
                     </div>

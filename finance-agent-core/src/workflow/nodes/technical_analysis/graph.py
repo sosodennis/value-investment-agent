@@ -9,6 +9,7 @@ from langchain_core.runnables import RunnableLambda
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
 
+from src.interface.schemas import AgentOutputArtifact, ArtifactReference
 from src.services.artifact_manager import artifact_manager
 from src.utils.logger import get_logger
 
@@ -18,6 +19,7 @@ from .backtester import (
     format_backtest_for_llm,
     format_wfa_for_llm,
 )
+from .mappers import summarize_ta_for_preview
 from .semantic_layer import assembler, generate_interpretation
 from .subgraph_state import (
     TechnicalAnalysisInput,
@@ -89,10 +91,27 @@ async def data_fetch_node(state: TechnicalAnalysisState) -> Command:
         data=price_data, artifact_type="price_series", key_prefix=resolved_ticker
     )
 
+    # [NEW] Emit preliminary artifact for real-time UI
+    preview = {
+        "ticker": resolved_ticker,
+        "latest_price_display": f"${df['price'].iloc[-1]:,.2f}",
+        "signal_display": "📊 FETCHING DATA...",
+        "z_score_display": "Z: N/A",
+        "optimal_d_display": "d=N/A",
+        "strength_display": "Strength: N/A",
+    }
+    artifact = AgentOutputArtifact(
+        summary=f"Technical Analysis: Data fetched for {resolved_ticker}",
+        preview=preview,
+        reference=None,
+    )
+
     return Command(
         update={
             "technical_analysis": {
                 "price_artifact_id": price_artifact_id,
+                "ticker": resolved_ticker,
+                "artifact": artifact,
             },
             "current_node": "data_fetch",
             "internal_progress": {
@@ -219,6 +238,21 @@ async def fracdiff_compute_node(state: TechnicalAnalysisState) -> Command:
         key_prefix=state.get("ticker"),
     )
 
+    # [NEW] Emit progress artifact
+    preview = {
+        "ticker": state.get("ticker", "N/A"),
+        "latest_price_display": f"${float(prices.iloc[-1]):,.2f}",
+        "signal_display": "🧬 COMPUTING...",
+        "z_score_display": f"Z: {float(z_score):+.2f}",
+        "optimal_d_display": f"d={float(optimal_d):.2f}",
+        "strength_display": f"Strength: {float(stat_strength_data['value']):.1f}",
+    }
+    artifact = AgentOutputArtifact(
+        summary=f"Technical Analysis: Patterns computed for {state.get('ticker')}",
+        preview=preview,
+        reference=None,
+    )
+
     # Update state with FracDiff metrics and indicators in context
     return Command(
         update={
@@ -234,6 +268,7 @@ async def fracdiff_compute_node(state: TechnicalAnalysisState) -> Command:
                 "statistical_strength_val": stat_strength_serializable["value"],
                 "macd": macd_data,
                 "obv": obv_serializable,
+                "artifact": artifact,
             },
             "current_node": "fracdiff_compute",
             "internal_progress": {
@@ -351,19 +386,44 @@ async def semantic_translate_node(state: TechnicalAnalysisState) -> Command:
         tags_dict, ticker, backtest_context, wfa_context
     )
 
-    # Note: We NO LONGER create AgentOutputArtifact here.
-    # We update the context with final fields for the adapter to use.
+    # [NEW] Generate final artifact
+    try:
+        preview = summarize_ta_for_preview(ctx)
+        # Add interpretation to summary
+        direction = str(tags_dict["direction"]).upper()
+        optimal_d = ctx.get("optimal_d", 0.0)
+
+        reference = None
+        if chart_artifact_id:
+            reference = ArtifactReference(
+                artifact_id=chart_artifact_id,
+                download_url=f"/api/artifacts/{chart_artifact_id}",
+                type="ta_chart_data",
+            )
+
+        artifact = AgentOutputArtifact(
+            summary=f"Technical Analysis: {direction} (d={optimal_d:.2f})",
+            preview=preview,
+            reference=reference,
+        )
+    except Exception as e:
+        logger.error(f"Failed to generate artifact in node: {e}")
+        artifact = None
+
+    ta_update = {
+        "signal": tags_dict["direction"],
+        "statistical_strength": tags_dict["statistical_state"],
+        "risk_level": tags_dict["risk_level"],
+        "llm_interpretation": llm_interpretation,
+        "semantic_tags": tags_dict["tags"],
+        "memory_strength": tags_dict["memory_strength"],
+    }
+    if artifact:
+        ta_update["artifact"] = artifact
 
     return Command(
         update={
-            "technical_analysis": {
-                "signal": tags_dict["direction"],
-                "statistical_strength": tags_dict["statistical_state"],
-                "risk_level": tags_dict["risk_level"],
-                "llm_interpretation": llm_interpretation,
-                "semantic_tags": tags_dict["tags"],
-                "memory_strength": tags_dict["memory_strength"],
-            },
+            "technical_analysis": ta_update,
             "current_node": "semantic_translate",
             "internal_progress": {"semantic_translate": "done"},
             "node_statuses": {"technical_analysis": "done"},
