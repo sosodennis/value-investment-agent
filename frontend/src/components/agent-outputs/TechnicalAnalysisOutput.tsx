@@ -168,6 +168,8 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
     const reference = (output as StandardAgentOutput)?.reference;
     const preview = (output as StandardAgentOutput)?.preview as TechnicalSignalOutput | undefined;
 
+    console.log('[TechnicalAnalysisOutput] Render:', { output, reference, preview });
+
     // 2. Fetch artifact if reference exists
     const { data: artifactData, isLoading: isArtifactLoading } = useArtifact<TechnicalAnalysisSuccess>(
         reference?.artifact_id
@@ -175,6 +177,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
 
     // 3. Resolve the actual data to display (Artifact > Preview)
     const effectiveOutput = artifactData || preview;
+    console.log('[TechnicalAnalysisOutput] Effective Output:', effectiveOutput);
 
     // Data Processing & Outlier Filtering
     const chartData = useMemo(() => {
@@ -244,7 +247,63 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         );
     }
 
+    if (!effectiveOutput) {
+        return (
+            <div className="flex flex-col items-center justify-center p-12 text-slate-500 min-h-[400px]">
+                <Activity className="w-12 h-12 mb-4 animate-pulse opacity-50" />
+                <p className="font-bold uppercase tracking-widest text-[10px]">Initializing Analysis Module...</p>
+                <p className="text-[10px] text-slate-600 mt-2">Status: {status}</p>
+            </div>
+        );
+    }
+
     const { frac_diff_metrics, signal_state, llm_interpretation, semantic_tags } = effectiveOutput;
+
+    // Lightweight Preview Mode
+    if ((!frac_diff_metrics || !signal_state) && (effectiveOutput as any).signal_display) {
+        const previewFn = effectiveOutput as any;
+        return (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-700">
+                <header className="space-y-4">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-600/20 border border-cyan-500/30 flex items-center justify-center shadow-inner">
+                            <LineChart className="text-cyan-400" size={20} />
+                        </div>
+                        <div>
+                            <h3 className="text-xl font-bold text-white tracking-tight">Technical Intelligence (Preview)</h3>
+                            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                                <span className="text-cyan-400">{(effectiveOutput as any)?.ticker || 'UNKNOWN'}</span>
+                            </div>
+                        </div>
+                    </div>
+                </header>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4 text-center">
+                        <div className="text-[9px] font-black text-slate-500 uppercase mb-1">Signal</div>
+                        <div className="text-lg font-bold text-white">{previewFn.signal_display}</div>
+                    </div>
+                    <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4 text-center">
+                        <div className="text-[9px] font-black text-slate-500 uppercase mb-1">Price</div>
+                        <div className="text-lg font-bold text-white">{previewFn.latest_price_display}</div>
+                    </div>
+                    <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4 text-center">
+                        <div className="text-[9px] font-black text-slate-500 uppercase mb-1">Z-Score</div>
+                        <div className="text-lg font-bold text-white">{previewFn.z_score_display}</div>
+                    </div>
+                    <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4 text-center">
+                        <div className="text-[9px] font-black text-slate-500 uppercase mb-1">Opt. d</div>
+                        <div className="text-lg font-bold text-white">{previewFn.optimal_d_display}</div>
+                    </div>
+                </div>
+
+                <div className="flex flex-col items-center justify-center p-8 text-slate-500 border border-dashed border-slate-800 rounded-xl bg-slate-900/20">
+                    <Loader2 className="w-6 h-6 mb-3 animate-spin opacity-50 text-cyan-400" />
+                    <p className="font-bold uppercase tracking-widest text-[10px]">Loading Full Statistical Analysis...</p>
+                </div>
+            </div>
+        );
+    }
 
     if (!frac_diff_metrics || !signal_state) {
         return (

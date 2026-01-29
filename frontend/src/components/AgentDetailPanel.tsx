@@ -50,8 +50,21 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
     // Strictly following the new Preview/Reference pattern.
     // NOTE: Backend adapters nest the artifact inside the state (e.g., state.technical_analysis.artifact)
     // AND the output might be nested under the agent ID key (e.g., output.technical_analysis)
+    // Unified Output Resolution: Artifact Preview Only
+    // Strictly following the new Preview/Reference pattern.
+    // NOTE: Backend adapters nest the artifact inside the state (e.g., state.technical_analysis.artifact)
+    // AND the output might be nested under the agent ID key (e.g., output.technical_analysis)
     const rawOutput = agentOutput?.[agent.id] || agentOutput;
     const outputData = rawOutput?.artifact?.preview || rawOutput?.preview;
+
+    console.log(`[AgentDetailPanel] DEBUG ${agent.id}:`, {
+        agentId: agent.id,
+        hasRawOutput: !!rawOutput,
+        rawOutputKeys: rawOutput ? Object.keys(rawOutput) : [],
+        previewFound: !!outputData,
+        previewKeys: outputData ? Object.keys(outputData) : [],
+        fullArtifact: rawOutput?.artifact
+    });
 
     // Unified Ticker Resolution (prefer Intent, fallback to current agent)
     // Check both nested artifact path (new standard) and direct path (legacy/fallback)

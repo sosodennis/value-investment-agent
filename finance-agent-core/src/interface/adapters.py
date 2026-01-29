@@ -89,9 +89,31 @@ def adapt_langgraph_event(
 
         # Step 2: Transform nested state to UI payload using mapper
         if agent_id and agent_id != "System":
+            # --- DEBUG LOGGING ---
+            if agent_id in ["fundamental_analysis", "technical_analysis"]:
+                from src.utils.logger import get_logger
+
+                debug_logger = get_logger(__name__)
+                debug_logger.info(
+                    f"🔍 [Adapter DEBUG] Processing {agent_id} event: {kind}"
+                )
+                debug_logger.info(
+                    f"   Output Keys: {list(output.keys()) if isinstance(output, dict) else type(output)}"
+                )
+                if isinstance(output, dict) and agent_id in output:
+                    debug_logger.info(
+                        f"   Found nested {agent_id}: {list(output[agent_id].keys())}"
+                    )
+            # ---------------------
+
             ui_payload = NodeOutputMapper.transform(agent_id, output)
 
             if ui_payload:
+                if agent_id in ["fundamental_analysis", "technical_analysis"]:
+                    debug_logger.info(
+                        f"✅ [Adapter DEBUG] Payload generated for {agent_id}: {list(ui_payload.keys())}"
+                    )
+
                 events.append(
                     AgentEvent(
                         thread_id=thread_id,
