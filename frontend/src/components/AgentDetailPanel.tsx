@@ -437,31 +437,31 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                 <div className={`p-8 h-full ${activeTab === 'Output' ? 'block animate-in slide-in-from-bottom-2 duration-300' : 'hidden'}`}>
                     {agent.id === 'fundamental_analysis' ? (
                         <FundamentalAnalysisOutput
-                            output={agentOutput}
+                            output={rawOutput}
                             resolvedTicker={resolvedTicker}
                             status={agent.status}
                         />
                     ) : agent.id === 'financial_news_research' ? (
                         <NewsResearchOutputPanel
-                            output={agentOutput}
+                            output={rawOutput}
                             resolvedTicker={resolvedTicker}
                             status={agent.status}
                         />
                     ) : agent.id === 'debate' ? (
                         <DebateOutput
-                            output={agentOutput}
+                            output={rawOutput}
                             resolvedTicker={resolvedTicker}
                             status={agent.status}
                         />
                     ) : agent.id === 'technical_analysis' ? (
                         <TechnicalAnalysisOutput
-                            output={agentOutput}
+                            output={rawOutput}
                             status={agent.status}
                         />
                     ) : (
                         <GenericAgentOutput
                             agentName={agent.name}
-                            output={agentOutput}
+                            output={rawOutput}
                             status={agent.status}
                         />
                     )}

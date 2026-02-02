@@ -3,6 +3,8 @@ Technical Analysis Sub-graph implementation.
 Handles the flow: Data Fetch -> FracDiff Compute -> Semantic Translate.
 """
 
+import time
+
 import pandas as pd
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableLambda
@@ -390,25 +392,99 @@ async def semantic_translate_node(state: TechnicalAnalysisState) -> Command:
     # [NEW] Generate final artifact
     try:
         preview = summarize_ta_for_preview(ctx)
-        # Add interpretation to summary
         direction = str(tags_dict["direction"]).upper()
-        optimal_d = ctx.get("optimal_d", 0.0)
+
+        # Determine statistical state
+        statistical_state = "EQUILIBRIUM"
+        z_abs = abs(ctx.get("z_score_latest", 0))
+        if z_abs >= 2.0:
+            statistical_state = "STATISTICAL_ANOMALY"
+        elif z_abs >= 1.0:
+            statistical_state = "DEVIATING"
+
+        # Determine memory strength
+        memory_strength = "BALANCED"
+        opt_d = ctx.get("optimal_d", 0.5)
+        if opt_d < 0.3:
+            memory_strength = "STRUCTURALLY_STABLE"
+        elif opt_d > 0.6:
+            memory_strength = "FRAGILE"
+
+        # Fetch chart data to include in full report if needed
+        # (Though we can also just point to it, Frontend types suggest raw_data is embedded)
+        raw_data = {}
+        if chart_artifact_id:
+            chart_artifact = await artifact_manager.get_artifact(chart_artifact_id)
+            if chart_artifact:
+                raw_data = {
+                    "price_series": price_artifact.data.get("price_series")
+                    if "price_artifact" in locals()
+                    else {},
+                    "fracdiff_series": chart_artifact.data.get("fracdiff_series"),
+                    "z_score_series": chart_artifact.data.get("z_score_series"),
+                }
+
+        from datetime import datetime
+
+        full_report_data = {
+            "kind": "success",
+            "ticker": ticker,
+            "timestamp": datetime.now().isoformat(),
+            "frac_diff_metrics": {
+                "optimal_d": ctx.get("optimal_d"),
+                "window_length": ctx.get("window_length"),
+                "adf_statistic": ctx.get("adf_statistic"),
+                "adf_pvalue": ctx.get("adf_pvalue"),
+                "memory_strength": memory_strength,
+            },
+            "signal_state": {
+                "z_score": ctx.get("z_score_latest"),
+                "statistical_state": statistical_state,
+                "direction": direction,
+                "risk_level": tags_dict.get("risk_level", "MEDIUM").lower(),
+                "confluence": {
+                    "bollinger_state": ctx.get("bollinger", {}).get("state", "INSIDE"),
+                    "macd_momentum": ctx.get("macd", {}).get(
+                        "momentum_state", "NEUTRAL"
+                    ),
+                    "obv_state": ctx.get("obv", {}).get("state", "NEUTRAL"),
+                    "statistical_strength": ctx.get("statistical_strength_val", 50.0),
+                },
+            },
+            "semantic_tags": tags_dict.get("tags", []),
+            "llm_interpretation": llm_interpretation,
+            "raw_data": raw_data,
+        }
+
+        # Save FULL TA report
+        timestamp_int = int(time.time())
+        report_id = await artifact_manager.save_artifact(
+            data=full_report_data,
+            artifact_type="ta_full_report",
+            key_prefix=f"ta_{ticker}_{timestamp_int}",
+        )
+        logger.info(
+            f"--- [Technical Analysis] L3 complete report saved (ID: {report_id}) ---"
+        )
 
         reference = None
-        if chart_artifact_id:
+        if report_id:
             reference = ArtifactReference(
-                artifact_id=chart_artifact_id,
-                download_url=f"/api/artifacts/{chart_artifact_id}",
-                type="ta_chart_data",
+                artifact_id=report_id,
+                download_url=f"/api/artifacts/{report_id}",
+                type="ta_full_report",
             )
 
         artifact = AgentOutputArtifact(
-            summary=f"Technical Analysis: {direction} (d={optimal_d:.2f})",
+            summary=f"Technical Analysis: {direction} (d={opt_d:.2f})",
             preview=preview,
             reference=reference,
         )
     except Exception as e:
         logger.error(f"Failed to generate artifact in node: {e}")
+        import traceback
+
+        logger.error(traceback.format_exc())
         artifact = None
 
     ta_update = {

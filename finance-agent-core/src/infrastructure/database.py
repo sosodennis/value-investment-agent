@@ -10,8 +10,8 @@ pg_host = os.environ.get("POSTGRES_HOST", "localhost")
 pg_port = os.environ.get("POSTGRES_PORT", "5432")
 pg_db = os.environ.get("POSTGRES_DB", "langgraph")
 
-# Using psycopg (v3) async driver
-DATABASE_URL = f"postgresql+psycopg://{pg_user}:{pg_pass}@{pg_host}:{pg_port}/{pg_db}"
+# Using asyncpg (native asyncio) for stability
+DATABASE_URL = f"postgresql+asyncpg://{pg_user}:{pg_pass}@{pg_host}:{pg_port}/{pg_db}"
 
 engine = create_async_engine(DATABASE_URL, echo=False)
 AsyncSessionLocal = async_sessionmaker(

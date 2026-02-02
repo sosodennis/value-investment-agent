@@ -182,6 +182,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
 
     // Data Processing & Outlier Filtering
     const chartData = useMemo(() => {
+        // Strict check: only use raw_data from reference artifact
         if (!effectiveOutput?.raw_data?.z_score_series) return [];
 
         return Object.entries(effectiveOutput.raw_data.z_score_series)

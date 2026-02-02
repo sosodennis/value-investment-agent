@@ -135,28 +135,67 @@ def _get_last_message_from_role(history: list, role_name: str) -> str:
     return ""
 
 
-def _prepare_debate_reports(state: DebateState) -> dict:
+async def _prepare_debate_reports(state: DebateState) -> dict:
     """
     Prepare compressed reports for the LLM prompt on the fly.
     This avoids mirroring large data in the state (Engineering Charter §3.4).
     """
     # News Data
-    news_artifact = state.get("financial_news_research", {}).get("artifact")
+    news_ctx = state.get("financial_news_research", {})
+    news_artifact = news_ctx.get("artifact")
     news_data = {}
+
+    # Try getting from artifact reference (L3)
+    artifact_id = None
     if news_artifact:
-        if hasattr(news_artifact, "data"):
-            news_data = news_artifact.data
-        elif isinstance(news_artifact, dict):
-            news_data = news_artifact.get("data", {})
+        # Check if it's an object or dict
+        if hasattr(news_artifact, "reference") and news_artifact.reference:
+            artifact_id = news_artifact.reference.artifact_id
+        elif isinstance(news_artifact, dict) and news_artifact.get("reference"):
+            ref = news_artifact.get("reference")
+            if isinstance(ref, dict):
+                artifact_id = ref.get("artifact_id")
+            elif hasattr(ref, "artifact_id"):
+                artifact_id = ref.artifact_id
+
+    # Fallback to news_items_artifact_id
+    if not artifact_id:
+        artifact_id = news_ctx.get("news_items_artifact_id")
+
+    if artifact_id:
+        artifact_obj = await artifact_manager.get_artifact(artifact_id)
+        if artifact_obj and hasattr(artifact_obj, "data"):
+            raw_data = artifact_obj.data
+            # News data compression expects a dict with "news_items" key
+            if isinstance(raw_data, list):
+                news_data = {"news_items": raw_data}
+            elif isinstance(raw_data, dict):
+                news_data = raw_data
 
     # Technical Analysis Data
-    ta_artifact = state.get("technical_analysis", {}).get("artifact")
+    ta_ctx = state.get("technical_analysis", {})
+    ta_artifact = ta_ctx.get("artifact")
     ta_data = {}
+
+    artifact_id = None
     if ta_artifact:
-        if hasattr(ta_artifact, "data"):
-            ta_data = ta_artifact.data
-        elif isinstance(ta_artifact, dict):
-            ta_data = ta_artifact.get("data", {})
+        if hasattr(ta_artifact, "reference") and ta_artifact.reference:
+            artifact_id = ta_artifact.reference.artifact_id
+        elif isinstance(ta_artifact, dict) and ta_artifact.get("reference"):
+            ref = ta_artifact.get("reference")
+            if isinstance(ref, dict):
+                artifact_id = ref.get("artifact_id")
+            elif hasattr(ref, "artifact_id"):
+                artifact_id = ref.artifact_id
+
+    # Fallback to chart_data_id or price_artifact_id
+    if not artifact_id:
+        artifact_id = ta_ctx.get("chart_data_id") or ta_ctx.get("price_artifact_id")
+
+    if artifact_id:
+        artifact_obj = await artifact_manager.get_artifact(artifact_id)
+        if artifact_obj and hasattr(artifact_obj, "data"):
+            ta_data = artifact_obj.data
 
     # Fundamental Analysis Data
     fa_reports = state.get("fundamental_analysis", {}).get("financial_reports", [])
@@ -216,7 +255,7 @@ async def _execute_bull_agent(
     )
     try:
         llm = get_llm()
-        reports = _prepare_debate_reports(state)
+        reports = await _prepare_debate_reports(state)
         compressed_reports = _compress_reports(reports)
 
         system_content = BULL_AGENT_SYSTEM_PROMPT.format(
@@ -270,7 +309,7 @@ async def _execute_bear_agent(
     )
     try:
         llm = get_llm()
-        reports = _prepare_debate_reports(state)
+        reports = await _prepare_debate_reports(state)
         compressed_reports = _compress_reports(reports)
 
         system_content = BEAR_AGENT_SYSTEM_PROMPT.format(
@@ -332,7 +371,7 @@ async def _execute_moderator_critique(
             state.get("debate", {}).get("bear_thesis") or "",
         )
 
-        reports = _prepare_debate_reports(state)
+        reports = await _prepare_debate_reports(state)
         compressed_reports = _compress_reports(reports)
         debate_ctx = state.get("debate", {})
         trimmed_history = _get_trimmed_history(debate_ctx.get("history", []))
@@ -523,14 +562,17 @@ async def verdict_node(state: DebateState) -> Command:
         conclusion_data.update(metrics)
         conclusion_data["debate_rounds"] = 3
 
-        # Save artifact (L3)
-        transcript_id = await artifact_manager.save_artifact(
-            data={
-                "history": [
-                    msg.dict() if hasattr(msg, "dict") else msg for msg in history
-                ]
-            },
-            artifact_type="debate_transcript",
+        # Prepare full report data (Conclusion + History)
+        full_report_data = {
+            **conclusion_data,
+            "kind": "success",  # Align with DebateSuccess frontend type
+            "history": [msg.dict() if hasattr(msg, "dict") else msg for msg in history],
+        }
+
+        # Save artifact (L3) - Now full report, not just transcript
+        report_id = await artifact_manager.save_artifact(
+            data=full_report_data,
+            artifact_type="debate_final_report",
             key_prefix=ticker,
         )
 
@@ -538,11 +580,11 @@ async def verdict_node(state: DebateState) -> Command:
         try:
             preview = summarize_debate_for_preview(conclusion_data)
             reference = None
-            if transcript_id:
+            if report_id:
                 reference = ArtifactReference(
-                    artifact_id=transcript_id,
-                    download_url=f"/api/artifacts/{transcript_id}",
-                    type="debate_transcript",
+                    artifact_id=report_id,
+                    download_url=f"/api/artifacts/{report_id}",
+                    type="debate_final_report",
                 )
 
             artifact = AgentOutputArtifact(
@@ -562,7 +604,7 @@ async def verdict_node(state: DebateState) -> Command:
             "winning_thesis": conclusion_data.get("winning_thesis"),
             "primary_catalyst": conclusion_data.get("primary_catalyst"),
             "primary_risk": conclusion_data.get("primary_risk"),
-            "transcript_id": transcript_id,
+            "report_id": report_id,
             "current_round": 3,
         }
         if artifact:
