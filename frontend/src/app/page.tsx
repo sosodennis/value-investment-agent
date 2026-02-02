@@ -5,7 +5,8 @@ import { useAgent } from '../hooks/useAgent';
 import { HeaderBar } from '../components/HeaderBar';
 import { AgentsRoster } from '../components/AgentsRoster';
 import { AgentDetailPanel } from '../components/AgentDetailPanel';
-import { AgentInfo, AgentStatus } from '@/types/agents';
+import { AgentInfo } from '@/types/agents';
+import { AGENT_CONFIGS } from '../config/agents';
 
 export default function Home({ assistantId = "agent" }: { assistantId?: string }) {
   const {
@@ -25,7 +26,6 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
   const [ticker, setTicker] = useState('');
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
 
-  // Sync ticker state with resolvedTicker from agent outputs
   // Sync ticker state with resolvedTicker from agent outputs
   const intentState = agentOutputs['intent_extraction'];
   const intentCtx = intentState?.['intent_extraction'] || intentState;
@@ -48,16 +48,20 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
   useEffect(() => {
     if (hasLoadedRef.current) return;
     hasLoadedRef.current = true;
-    const savedThreadId = localStorage.getItem('agent_thread_id');
-    if (savedThreadId) {
-      loadHistory(savedThreadId);
+
+    // Explicitly safe access to localStorage inside useEffect
+    if (typeof window !== 'undefined') {
+      const savedThreadId = localStorage.getItem('agent_thread_id');
+      if (savedThreadId) {
+        loadHistory(savedThreadId);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Save threadId
   useEffect(() => {
-    if (threadId) {
+    if (threadId && typeof window !== 'undefined') {
       localStorage.setItem('agent_thread_id', threadId);
     }
   }, [threadId]);
@@ -68,9 +72,6 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
   const hasApprovalInterrupt = messages.some(m => m.isInteractive && (m.type === 'interrupt_approval' || m.agentId === 'approval'));
 
   const agents: AgentInfo[] = useMemo(() => {
-    // Import agent configs
-    const { AGENT_CONFIGS } = require('../config/agents');
-
     return AGENT_CONFIGS.map((config: any) => {
       const baseStatus = agentStatuses[config.id] || 'idle';
       return {
