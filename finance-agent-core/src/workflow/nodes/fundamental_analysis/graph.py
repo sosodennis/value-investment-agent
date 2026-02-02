@@ -424,21 +424,6 @@ async def model_selection_node(state: FundamentalAnalysisState) -> Command:
     }
     model_type = model_type_map.get(model, "saas")
 
-    # L3: Store full reports in Artifact Store
-    timestamp = int(time.time())
-    try:
-        report_id = await artifact_manager.save_artifact(
-            data=fa_ctx.get("financial_reports", []),
-            artifact_type="financial_reports",
-            key_prefix=f"fa_{resolved_ticker}_{timestamp}",
-        )
-        logger.info(
-            f"--- [Fundamental Analysis] L3 reports saved (ID: {report_id}) ---"
-        )
-    except Exception as e:
-        logger.error(f"Failed to save final report artifact: {e}")
-        report_id = None
-
     # [NEW] Generate final artifact
     # We use similar logic to the adapter to ensure consistency
     try:
@@ -458,6 +443,30 @@ async def model_selection_node(state: FundamentalAnalysisState) -> Command:
             mapper_ctx, fa_ctx.get("financial_reports", [])
         )
 
+        # L3: Store full reports in Artifact Store
+        # Construct full report data matching FundamentalAnalysisSuccess schema
+        full_report_data = {
+            "kind": "success",
+            "ticker": resolved_ticker,
+            "model_type": model_type,
+            "company_name": mapper_ctx.get("company_name", resolved_ticker),
+            "sector": mapper_ctx.get("sector", "Unknown"),
+            "industry": mapper_ctx.get("industry", "Unknown"),
+            "reasoning": reasoning,
+            "financial_reports": fa_ctx.get("financial_reports", []),
+            "status": "done",
+        }
+
+        timestamp = int(time.time())
+        report_id = await artifact_manager.save_artifact(
+            data=full_report_data,
+            artifact_type="financial_reports",
+            key_prefix=f"fa_{resolved_ticker}_{timestamp}",
+        )
+        logger.info(
+            f"--- [Fundamental Analysis] L3 reports saved (ID: {report_id}) ---"
+        )
+
         reference = None
         if report_id:
             reference = ArtifactReference(
@@ -474,6 +483,7 @@ async def model_selection_node(state: FundamentalAnalysisState) -> Command:
     except Exception as e:
         logger.error(f"Failed to generate artifact in node: {e}")
         artifact = None
+        report_id = None
 
     fa_update = {
         "model_type": model_type,
