@@ -275,8 +275,7 @@ async def _execute_bull_agent(
 
         # Context Sandwich for R2+
         if round_num > 1:
-            debate_ctx = state.get("debate", {})
-            history = debate_ctx.get("history", [])
+            history = state.get("history", [])
             my_last_arg = _get_last_message_from_role(history, "GrowthHunter")
             bear_last_arg = _get_last_message_from_role(history, "ForensicAccountant")
             judge_feedback = _get_last_message_from_role(history, "Judge")
@@ -333,8 +332,7 @@ async def _execute_bear_agent(
 
         # Context Sandwich for R2+
         if round_num > 1:
-            debate_ctx = state.get("debate", {})
-            history = debate_ctx.get("history", [])
+            history = state.get("history", [])
             my_last_arg = _get_last_message_from_role(history, "ForensicAccountant")
             bull_last_arg = _get_last_message_from_role(history, "GrowthHunter")
             judge_feedback = _get_last_message_from_role(history, "Judge")
@@ -385,8 +383,7 @@ async def _execute_moderator_critique(
 
         reports = await _prepare_debate_reports(state)
         compressed_reports = _compress_reports(reports)
-        debate_ctx = state.get("debate", {})
-        trimmed_history = _get_trimmed_history(debate_ctx.get("history", []))
+        trimmed_history = _get_trimmed_history(state.get("history", []))
 
         # Use cached reports if available, fallback to on-the-fly computation
         cached_reports = state.get("compressed_reports")
@@ -562,7 +559,7 @@ async def verdict_node(state: DebateState) -> Command:
     )
     try:
         llm = get_llm()
-        history = state.get("debate", {}).get("history", [])
+        history = state.get("history", [])
         trimmed_history = _get_trimmed_history(
             history, max_chars=MAX_CHAR_HISTORY * 1.5
         )
