@@ -517,7 +517,10 @@ async def analyst_node(state: FinancialNewsState) -> Command:
             # Step 1: Local FinBERT Pre-Analysis
             finbert_result = None
             if finbert_analyzer.is_available():
-                finbert_result = finbert_analyzer.analyze(content_to_analyze)
+                # [Fix] Run CPU-bound inference in a separate thread to avoid blocking the event loop
+                finbert_result = await asyncio.to_thread(
+                    finbert_analyzer.analyze, content_to_analyze
+                )
                 if finbert_result:
                     item["finbert_analysis"] = finbert_result.to_dict()
                     logger.debug(

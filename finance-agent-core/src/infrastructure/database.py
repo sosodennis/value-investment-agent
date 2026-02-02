@@ -13,10 +13,18 @@ pg_db = os.environ.get("POSTGRES_DB", "langgraph")
 # Using asyncpg (native asyncio) for stability
 DATABASE_URL = f"postgresql+asyncpg://{pg_user}:{pg_pass}@{pg_host}:{pg_port}/{pg_db}"
 
-engine = create_async_engine(DATABASE_URL, echo=False)
+engine = create_async_engine(
+    DATABASE_URL,
+    echo=False,
+    pool_size=20,  # Increased from default 5
+    max_overflow=20,  # Increased from default 10
+    pool_timeout=360,  # Wait up to 60s for a connection
+    pool_pre_ping=True,  # Check connection health before checking out
+)
 AsyncSessionLocal = async_sessionmaker(
     bind=engine, class_=AsyncSession, expire_on_commit=False
 )
+
 
 Base = declarative_base()
 

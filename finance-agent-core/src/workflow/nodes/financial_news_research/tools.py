@@ -440,7 +440,8 @@ async def fetch_clean_text_async(url: str, max_chars: int = 6000) -> str | None:
 
         # 2. Sync parse (in-memory, CPU bound but typically < 50ms)
         parse_start = time.perf_counter()
-        text = trafilatura.extract(
+        text = await asyncio.to_thread(
+            trafilatura.extract,
             html_content,
             include_comments=False,
             include_tables=False,

@@ -223,10 +223,13 @@ async def _prepare_debate_reports(state: DebateState) -> dict:
 
 async def debate_aggregator_node(state: DebateState) -> Command:
     """
-    Initializes debate progress.
-    Data compression is now done on-the-fly in agent nodes to reduce state bloat.
+    Initializes debate progress and pre-computes compressed reports.
+    Data compression is cached in the state to prevent redundant processing.
     """
-    # In the linear DAG, aggregator always leads to Round 1 (Parallel)
+    # Pre-compute and cache reports
+    reports = await _prepare_debate_reports(state)
+    compressed_reports = _compress_reports(reports)
+
     next_progress = {
         "debate_aggregator": "done",
         "r1_bull": "running",
@@ -238,6 +241,7 @@ async def debate_aggregator_node(state: DebateState) -> Command:
             "current_node": "debate_aggregator",
             "internal_progress": next_progress,
             "node_statuses": {"debate": "running"},
+            "compressed_reports": compressed_reports,
         },
         goto=["r1_bull", "r1_bear"],
     )
@@ -255,8 +259,12 @@ async def _execute_bull_agent(
     )
     try:
         llm = get_llm()
-        reports = await _prepare_debate_reports(state)
-        compressed_reports = _compress_reports(reports)
+
+        # Use cached reports if available, fallback to on-the-fly computation
+        compressed_reports = state.get("compressed_reports")
+        if not compressed_reports:
+            reports = await _prepare_debate_reports(state)
+            compressed_reports = _compress_reports(reports)
 
         system_content = BULL_AGENT_SYSTEM_PROMPT.format(
             ticker=ticker,
@@ -309,8 +317,12 @@ async def _execute_bear_agent(
     )
     try:
         llm = get_llm()
-        reports = await _prepare_debate_reports(state)
-        compressed_reports = _compress_reports(reports)
+
+        # Use cached reports if available, fallback to on-the-fly computation
+        compressed_reports = state.get("compressed_reports")
+        if not compressed_reports:
+            reports = await _prepare_debate_reports(state)
+            compressed_reports = _compress_reports(reports)
 
         system_content = BEAR_AGENT_SYSTEM_PROMPT.format(
             ticker=ticker,
@@ -375,6 +387,12 @@ async def _execute_moderator_critique(
         compressed_reports = _compress_reports(reports)
         debate_ctx = state.get("debate", {})
         trimmed_history = _get_trimmed_history(debate_ctx.get("history", []))
+
+        # Use cached reports if available, fallback to on-the-fly computation
+        cached_reports = state.get("compressed_reports")
+        if cached_reports:
+            compressed_reports = cached_reports
+
         system_content = MODERATOR_SYSTEM_PROMPT.format(
             ticker=ticker, reports=compressed_reports
         )

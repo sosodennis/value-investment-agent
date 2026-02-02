@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import Form from '@rjsf/core';
 import { RJSFSchema, UiSchema, WidgetProps } from '@rjsf/utils';
 import validator from '@rjsf/validator-ajv8';
-import { Zap, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Zap, AlertTriangle } from 'lucide-react';
 
 interface DynamicInterruptFormProps {
     schema: RJSFSchema;
@@ -16,71 +16,78 @@ interface DynamicInterruptFormProps {
 /**
  * Custom Radio Widget for Ticker Selection
  * Renders options as premium cards instead of standard radio buttons.
+ * Style: Compact / Dense for professional look.
  */
 const TickerCardRadioWidget = (props: WidgetProps) => {
     const { options, value, onChange, schema } = props;
-    const { enumOptions, enumNames } = options;
+    const { enumOptions } = options;
 
     // Fallback logic: RJSF sometimes fails to populate enumOptions in custom widgets
-    let finalEnumOptions = (enumOptions as any[]) || [];
-
-    if (finalEnumOptions.length === 0 && schema.enum) {
-        finalEnumOptions = schema.enum.map((val: any, idx: number) => ({
-            value: val,
-            label: (schema as any).enumNames?.[idx] || val
-        }));
-    }
+    const finalEnumOptions = useMemo(() => {
+        let opts = (enumOptions as any[]) || [];
+        if (opts.length === 0 && schema.enum) {
+            opts = schema.enum.map((val: any, idx: number) => ({
+                value: val,
+                label: (schema as any).enumNames?.[idx] || val
+            }));
+        }
+        return opts;
+    }, [enumOptions, schema]);
 
     return (
-        <div className="space-y-4">
-            <div className="grid grid-cols-1 gap-4">
-                {finalEnumOptions.map((option, index) => {
+        <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-3">
+                {finalEnumOptions.map((option) => {
                     const isSelected = value === option.value;
-                    const fullLabel = option.label;
+                    const fullLabel = String(option.label || '');
 
-                    // Parse: "SYMBOL - NAME (CONFIDENCE% match)"
+                    // Safe Parsing: "SYMBOL - NAME (CONFIDENCE% match)"
+                    // Handles scenarios where " - " might be missing or formatting is slightly off
                     const parts = fullLabel.split(' - ');
-                    const symbol = parts[0];
-                    const rest = parts[1] || '';
+                    const symbol = parts[0] || 'Unknown';
+                    const rest = parts.length > 1 ? parts.slice(1).join(' - ') : '';
+
                     const matchIdx = rest.lastIndexOf(' (');
-                    const name = matchIdx !== -1 ? rest.substring(0, matchIdx) : rest;
-                    const matchStr = matchIdx !== -1 ? rest.substring(matchIdx + 2).replace(')', '') : '';
+                    const name = matchIdx !== -1 ? rest.substring(0, matchIdx) : rest || symbol;
+                    const matchStr = matchIdx !== -1
+                        ? rest.substring(matchIdx + 2).replace(')', '').trim()
+                        : '';
 
                     return (
                         <div
                             key={option.value}
                             onClick={() => onChange(option.value)}
                             className={`
-                                relative p-4 rounded-xl border-2 transition-all cursor-pointer group flex justify-between items-center
+                                relative px-3 py-2.5 rounded-lg border transition-all cursor-pointer group flex justify-between items-center
                                 ${isSelected
-                                    ? 'bg-slate-900 border-slate-700 shadow-[0_0_20px_rgba(34,211,238,0.05)]'
+                                    ? 'bg-slate-900 border-slate-700 shadow-[0_0_15px_rgba(var(--primary-rgb),0.05)]'
                                     : 'bg-slate-950/40 border-slate-900/30 hover:bg-slate-900/40 hover:border-slate-800'}
                             `}
                         >
-                            <div className="flex flex-col gap-1">
-                                <span className={`text-base font-bold leading-none tracking-tight ${isSelected ? 'text-white' : 'text-slate-200'}`}>
+                            <div className="flex flex-col gap-0.5">
+                                <span className={`text-sm font-bold leading-none tracking-tight ${isSelected ? 'text-white' : 'text-slate-200'}`}>
                                     {symbol}
                                 </span>
-                                <span className="text-[10px] text-slate-800 font-bold uppercase tracking-widest">
+                                <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">
                                     {name}
                                 </span>
                             </div>
 
-                            <div className="flex items-center gap-8">
+                            <div className="flex items-center gap-6">
                                 {matchStr && (
-                                    <div className="bg-slate-900/60 px-2.5 py-1 rounded-md border border-slate-900">
-                                        <span className="text-[9px] font-mono font-bold text-slate-800 tracking-tight whitespace-nowrap">
+                                    <div className="bg-slate-900/60 px-2 py-0.5 rounded border border-slate-900">
+                                        <span className="text-[8px] font-mono font-bold text-slate-600 tracking-tight whitespace-nowrap">
                                             {matchStr.includes('Match') ? matchStr.toUpperCase() : `${matchStr.toUpperCase()} MATCH`}
                                         </span>
                                     </div>
                                 )}
 
                                 <div className={`
-                                    w-4.5 h-4.5 rounded-full border-2 flex items-center justify-center transition-all bg-slate-950/60
-                                    ${isSelected ? 'border-cyan-500 bg-cyan-500/10 shadow-[0_0_8px_rgba(34,211,238,0.2)]' : 'border-slate-800 bg-transparent group-hover:border-slate-700'}
+                                    w-4 h-4 rounded-full border flex items-center justify-center transition-all bg-slate-950/60
+                                    ${isSelected ? 'border-primary bg-primary/10 shadow-[0_0_8px_rgba(var(--primary-rgb),0.2)]' : 'border-slate-800 bg-transparent group-hover:border-slate-700'}
                                 `}>
                                     {isSelected && (
-                                        <div className="w-1.5 h-1.5 bg-cyan-400 rounded-full shadow-[0_0_10px_rgba(34,211,238,1)]" />
+                                        <div className="w-1.5 h-1.5 bg-primary rounded-full shadow-[0_0_10px_rgba(var(--primary-rgb),1)]" />
                                     )}
                                 </div>
                             </div>
@@ -105,8 +112,22 @@ export const DynamicInterruptForm: React.FC<DynamicInterruptFormProps> = ({
     title,
     description
 }) => {
-    // Determine if this is a Ticker Resolution form to apply specific header
-    const isTickerForm = title?.toLowerCase().includes('ticker') || schema.title?.toLowerCase().includes('ticker');
+    // 1. Determine form type
+    const isTickerForm = useMemo(() =>
+        title?.toLowerCase().includes('ticker') ||
+        schema.title?.toLowerCase().includes('ticker'),
+        [title, schema.title]);
+
+    // 2. Memoize UI Schema to prevent unnecessary Form re-renders
+    const combinedUiSchema = useMemo(() => ({
+        ...uiSchema,
+        "ui:submitButtonOptions": {
+            "props": {
+                "className": "w-full mt-3 bg-cyan-600 hover:bg-cyan-500 text-white text-[10px] font-bold py-2.5 rounded-lg transition-all uppercase tracking-[0.15em] shadow-xl shadow-cyan-500/10 border-none cursor-pointer flex items-center justify-center gap-2"
+            },
+            "submitText": isTickerForm ? "Confirm Selection" : "Submit Decision"
+        }
+    }), [uiSchema, isTickerForm]);
 
     return (
         <div className={`
@@ -115,13 +136,13 @@ export const DynamicInterruptForm: React.FC<DynamicInterruptFormProps> = ({
                 ? 'bg-amber-500/[0.025] border-amber-500/20 shadow-amber-500/[0.01]'
                 : 'bg-slate-950/20 border-slate-900'}
         `}>
-            {/* Header section with accent color */}
-            <div className={`px-5 py-4 flex items-center gap-4 border-b ${isTickerForm ? 'border-amber-500/10' : 'border-slate-800/50'}`}>
-                <div className={`p-2 rounded-lg shrink-0 ${isTickerForm ? 'bg-amber-500/10 shadow-[0_0_10px_rgba(245,158,11,0.05)]' : 'bg-cyan-500/10'}`}>
+            {/* Header section */}
+            <div className={`px-4 py-3 flex items-center gap-3 border-b ${isTickerForm ? 'border-amber-500/10' : 'border-slate-800/50'}`}>
+                <div className={`p-1.5 rounded-md shrink-0 ${isTickerForm ? 'bg-amber-500/10 shadow-[0_0_10px_rgba(245,158,11,0.05)]' : 'bg-cyan-500/10'}`}>
                     {isTickerForm ? (
-                        <Zap size={16} className="text-amber-500" />
+                        <Zap size={14} className="text-amber-500" />
                     ) : (
-                        <AlertTriangle size={16} className="text-cyan-400" />
+                        <AlertTriangle size={14} className="text-cyan-400" />
                     )}
                 </div>
                 <div>
@@ -129,88 +150,80 @@ export const DynamicInterruptForm: React.FC<DynamicInterruptFormProps> = ({
                         {isTickerForm ? 'Ticker Resolution Required' : (title || schema.title || 'Action Required')}
                     </h3>
                     {(description || schema.description) && (
-                        <p className="text-[10px] text-slate-800 font-bold mt-1 uppercase tracking-tight opacity-80">
-                            {description || schema.description || 'Please select the correct company to proceed.'}
+                        <p className="text-[9px] text-slate-500 font-bold mt-0.5 uppercase tracking-tight opacity-80">
+                            {description || schema.description || 'Please complete the requested action to proceed.'}
                         </p>
                     )}
                 </div>
             </div>
 
-            <div className="p-6">
-                <div className="rjsf-container">
+            <div className="p-4">
+                <div className="interrupt-form-container">
                     <Form
                         schema={schema}
-                        uiSchema={{
-                            ...uiSchema,
-                            "ui:submitButtonOptions": {
-                                "props": {
-                                    "className": "w-full mt-4 bg-cyan-600 hover:bg-cyan-500 text-white text-[10px] font-bold py-3.5 rounded-lg transition-all uppercase tracking-[0.15em] shadow-xl shadow-cyan-500/10 border-none cursor-pointer flex items-center justify-center gap-2"
-                                },
-                                "submitText": "Confirm Selection"
-                            }
-                        }}
+                        uiSchema={combinedUiSchema}
                         formData={formData}
                         widgets={widgets}
                         validator={validator}
-                        onSubmit={({ formData }) => onSubmit(formData)}
+                        onSubmit={({ formData: data }) => onSubmit(data)}
                         className="space-y-4"
                     />
                 </div>
             </div>
 
             <style jsx global>{`
-                .rjsf-container .form-group {
+                .interrupt-form-container .form-group {
                     margin-bottom: 0px;
                 }
-                .rjsf-container .field-object > label,
-                .rjsf-container .field-string > label {
+                .interrupt-form-container .field-object > label,
+                .interrupt-form-container .field-string > label {
                     display: none;
                 }
-                .rjsf-container fieldset {
+                .interrupt-form-container fieldset {
                     border: none;
                     padding: 0;
                     margin: 0;
                 }
-                .rjsf-container legend {
+                .interrupt-form-container legend {
                     display: none;
                 }
-                .rjsf-container label {
+                .interrupt-form-container label {
                     display: block;
                     font-size: 10px;
                     font-weight: 700;
                     text-transform: uppercase;
                     letter-spacing: 0.1em;
                     color: #64748b; /* slate-500 */
-                    margin-bottom: 0.75rem;
+                    margin-bottom: 0.5rem;
                 }
-                .rjsf-container input[type="text"],
-                .rjsf-container textarea,
-                .rjsf-container select {
+                .interrupt-form-container input[type="text"],
+                .interrupt-form-container textarea,
+                .interrupt-form-container select {
                     width: 100%;
-                    background: rgba(15, 23, 42, 0.6); /* slate-950/60 */
-                    border: 1px solid #1e293b; /* slate-800 */
-                    border-radius: 0.75rem;
-                    padding: 0.875rem 1rem;
+                    background: rgba(15, 23, 42, 0.6);
+                    border: 1px solid #1e293b;
+                    border-radius: 0.5rem;
+                    padding: 0.625rem 0.75rem;
                     color: white;
                     font-size: 0.875rem;
                     transition: all 0.2s;
                     box-sizing: border-box;
                 }
-                .rjsf-container input:focus,
-                .rjsf-container textarea:focus,
-                .rjsf-container select:focus {
+                .interrupt-form-container input:focus,
+                .interrupt-form-container textarea:focus,
+                .interrupt-form-container select:focus {
                     outline: none;
                     border-color: #06b6d4; /* cyan-500 */
                     background: rgba(15, 23, 42, 0.9);
                     box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.05);
                 }
-                .rjsf-container .field-description {
+                .interrupt-form-container .field-description {
                     font-size: 10px;
                     color: #475569; /* slate-600 */
                     margin-top: 0.5rem;
                     font-weight: 500;
                 }
-                .rjsf-container .error-detail {
+                .interrupt-form-container .error-detail {
                     color: #f43f5e; /* rose-500 */
                     font-size: 10px;
                     font-weight: 600;

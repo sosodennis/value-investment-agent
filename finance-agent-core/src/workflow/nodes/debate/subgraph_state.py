@@ -73,3 +73,4 @@ class DebateState(TypedDict):
     # --- Private State ---
     internal_progress: Annotated[dict[str, str], merge_dict]
     current_node: Annotated[str, last_value]
+    compressed_reports: Annotated[str | None, last_value]
