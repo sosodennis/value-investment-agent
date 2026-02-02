@@ -22,7 +22,7 @@ export const AgentOutputTab: React.FC<AgentOutputTabProps> = ({
     status
 }) => {
     return (
-        <div className="p-8 h-full animate-in slide-in-from-bottom-2 duration-300">
+        <div className="p-8 h-full animate-in slide-in-from-bottom-2 duration-300 overflow-y-auto custom-scrollbar">
             {agent.id === 'fundamental_analysis' ? (
                 <FundamentalAnalysisOutput
                     output={rawOutput}
@@ -35,7 +35,7 @@ export const AgentOutputTab: React.FC<AgentOutputTabProps> = ({
                     resolvedTicker={resolvedTicker}
                     status={status}
                 />
-            ) : agent.id === 'debate' ? ( // Fixed: Use explicit ID check
+            ) : agent.id === 'debate' ? (
                 <DebateOutput
                     output={rawOutput}
                     resolvedTicker={resolvedTicker}
