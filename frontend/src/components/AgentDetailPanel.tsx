@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import Image from 'next/image';
-import { AgentInfo, DimensionScore } from '@/types/agents';
+import { AgentInfo } from '@/types/agents';
 import { Zap, Activity } from 'lucide-react';
 import { Message } from '../types/protocol';
+import { useFinancialData } from '../hooks/useFinancialData';
 import { AgentWorkspaceTab } from './agent-detail/AgentWorkspaceTab';
 import { AgentScoreTab } from './agent-detail/AgentScoreTab';
 import { AgentHistoryTab } from './agent-detail/AgentHistoryTab';
@@ -31,6 +32,15 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
 }) => {
     const [activeTab, setActiveTab] = useState<'Workspace' | 'Score' | 'History' | 'Output' | 'Logs'>('Workspace');
 
+    // Use our new hook to derive all financial data
+    const {
+        resolvedTicker,
+        dimensionScores,
+        financialMetrics,
+        latestReport,
+        rawOutput
+    } = useFinancialData(agent?.id || '', allAgentOutputs);
+
     if (!agent) {
         return (
             <div className="flex-1 h-full flex flex-col items-center justify-center bg-bg-main/10">
@@ -45,93 +55,6 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
 
     // Filter messages for this agent
     const agentMessages = messages.filter(m => m.agentId === agent.id);
-
-    // Unified Output Resolution
-    const rawOutput = agentOutput?.[agent.id] || agentOutput;
-    const outputData = rawOutput?.artifact?.preview || rawOutput?.preview;
-
-    // Unified Ticker Resolution
-    const intentOutput = allAgentOutputs['intent_extraction'];
-    const intentRaw = intentOutput?.['intent_extraction'] || intentOutput;
-
-    const resolvedTicker = intentRaw?.artifact?.preview?.resolved_ticker ||
-        intentRaw?.preview?.resolved_ticker ||
-        outputData?.ticker;
-
-    // Get specific reports from resolved outputData
-    const agentReports = outputData?.financial_reports || [];
-    const latestReport = agentReports.length > 0 ? agentReports[0] : null;
-
-    const getScore = (val: any, min: number, max: number) => {
-        if (val === null || val === undefined) return 50;
-        const score = ((val - min) / (max - min)) * 100;
-        return Math.min(Math.max(Math.round(score), 0), 100);
-    };
-
-    const getFieldValue = (field: any) => {
-        if (!field) return 0;
-        return typeof field.value === 'number' ? field.value : parseFloat(String(field.value)) || 0;
-    };
-
-    const latestBase = latestReport?.base;
-    const previousBase = agentReports.length > 1 ? agentReports[1].base : null;
-
-    const roe = latestBase ? (getFieldValue(latestBase.net_income) / (getFieldValue(latestBase.total_equity) || 1)) : 0;
-    const debtToEquity = latestBase ? (getFieldValue(latestBase.total_liabilities) / (getFieldValue(latestBase.total_equity) || 1)) : 0;
-
-    // Calculate growth
-    const currentRev = latestBase ? getFieldValue(latestBase.total_revenue) : 0;
-    const prevRev = previousBase ? getFieldValue(previousBase.total_revenue) : 0;
-    const revenueGrowth = (currentRev && prevRev) ? (currentRev - prevRev) / prevRev : 0.05;
-
-    const peRatio = latestBase ? getFieldValue(latestBase.pe_ratio) : 20;
-
-    // Dimension Scores
-    const dimensionScores: DimensionScore[] = [
-        {
-            name: 'Fundamental',
-            score: latestBase ? getScore(roe, 0, 0.3) :
-                (agent.id === 'fundamental_analysis' ? 85 : 0),
-            color: 'bg- emerald-500' // Success color
-        },
-        {
-            name: 'Efficiency',
-            score: latestBase ? getScore(roe > 0.15 ? 0.8 : 0.5, 0, 1) :
-                (agent.id === 'fundamental_analysis' ? 65 : 0),
-            color: 'bg-cyan-500' // Primary color
-        },
-        {
-            name: 'Risk',
-            score: latestBase ? 100 - getScore(debtToEquity, 0, 2) :
-                (agent.id === 'technical_analysis' && outputData ?
-                    (outputData.signal_state?.risk_level === 'low' ? 90 :
-                        outputData.signal_state?.risk_level === 'medium' ? 60 : 20) :
-                    (agent.id === 'auditor' ? 90 : (agent.id === 'fundamental_analysis' ? 72 : 0))),
-            color: 'bg-emerald-500' // Success color
-        },
-        {
-            name: 'Growth',
-            score: latestBase ? getScore(revenueGrowth, -0.1, 0.3) :
-                (agent.id === 'fundamental_analysis' ? 60 : 0),
-            color: 'bg-cyan-500' // Primary color
-        },
-        {
-            name: 'Valuation',
-            score: latestBase ? 100 - getScore(peRatio, 10, 40) :
-                (outputData?.valuation_score !== undefined ? outputData.valuation_score :
-                    (agent.id === 'technical_analysis' && outputData ?
-                        (Math.abs(outputData.signal_state?.z_score || 0) > 2 ? 80 : 50) :
-                        (agent.id === 'calculator' ? 88 : (agent.id === 'fundamental_analysis' ? 40 : 0)))),
-            color: 'bg-rose-500' // Error/Warning color
-        },
-    ];
-
-    const financialMetrics = [
-        { label: 'ROE', value: latestBase ? `${(roe * 100).toFixed(1)}%` : (outputData?.key_metrics?.ROE || 'N/A') },
-        { label: 'P/E Ratio', value: latestBase && peRatio ? peRatio.toFixed(1) : 'N/A' },
-        { label: 'Debt/Equity', value: latestBase ? debtToEquity.toFixed(2) : 'N/A' },
-        { label: 'Revenue', value: latestBase ? `$${(currentRev / 1e9).toFixed(1)}B` : (outputData?.key_metrics?.Revenue || 'N/A') },
-    ];
 
     return (
         <div className="flex-1 h-full flex flex-col overflow-hidden animate-in fade-in duration-500 bg-bg-main/40">

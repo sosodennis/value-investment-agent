@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useAgent } from '../hooks/useAgent';
+import { useFinancialData } from '../hooks/useFinancialData';
 import { HeaderBar } from '../components/HeaderBar';
 import { AgentsRoster } from '../components/AgentsRoster';
 import { AgentDetailPanel } from '../components/AgentDetailPanel';
@@ -18,7 +19,7 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
     threadId,
     agentStatuses,
     currentNode,
-    currentStatus,
+    currentStatus: globalStatus,
     activityFeed,
     agentOutputs
   } = useAgent(assistantId);
@@ -26,12 +27,11 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
   const [ticker, setTicker] = useState('');
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
 
-  // Sync ticker state with resolvedTicker from agent outputs
-  const intentState = agentOutputs['intent_extraction'];
-  const intentCtx = intentState?.['intent_extraction'] || intentState;
-
-  const resolvedTicker = intentCtx?.artifact?.preview?.resolved_ticker ||
-    intentCtx?.resolved_ticker;
+  // Hook 1: Extract Ticker & Financial Logic
+  // We use 'intent_extraction' as the primary source for the ticker.
+  // We could pass selectedAgentId if we wanted agent-specific financial contexts,
+  // but for the global ticker, intent extraction is the source of truth.
+  const { resolvedTicker } = useFinancialData('intent_extraction', agentOutputs);
   const lastResolvedTickerRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -97,7 +97,6 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
 
   return (
     <main className="flex flex-col h-screen w-full bg-slate-950 overflow-hidden font-sans selection:bg-cyan-500/30">
-      {/* ... HeaderBar ... */}
       <HeaderBar
         systemStatus="online"
         activeAgents={agents.filter(a => a.status !== 'idle').length}
@@ -109,22 +108,17 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
         isLoading={isLoading}
       />
 
-      {/* Main Layout Body */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Left Sidebar: Agents Roster */}
         <AgentsRoster
           agents={agents}
           selectedAgentId={selectedAgentId}
           onAgentSelect={setSelectedAgentId}
         />
 
-        {/* Main Workspace Area */}
         <div className="flex-1 flex flex-col relative">
-          {/* Glass background decorative elements */}
           <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-cyan-600/5 rounded-full blur-[120px] pointer-events-none" />
           <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-emerald-600/5 rounded-full blur-[120px] pointer-events-none" />
 
-          {/* Scrolling content or Scoped Panel */}
           <AgentDetailPanel
             agent={selectedAgent}
             agentOutput={selectedAgentOutput}
@@ -132,13 +126,12 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
             onSubmitCommand={submitCommand}
             allAgentOutputs={agentOutputs}
             currentNode={currentNode}
-            currentStatus={currentStatus}
+            currentStatus={globalStatus}
             activityFeed={activityFeed}
           />
         </div>
       </div>
 
-      {/* Global Status Footer */}
       <footer className="h-8 w-full bg-slate-900/50 border-t border-slate-900 px-8 flex items-center justify-between z-10">
         <div className="flex items-center gap-4">
           <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
