@@ -5,7 +5,6 @@ import time
 
 from langchain_core.messages import AIMessage
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnableLambda
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
@@ -139,6 +138,25 @@ URL: {r.get('link')}
 """)
     formatted_results = "".join(formatted_list)
 
+    # Save search results to Artifact Store
+    search_data = {
+        "raw_results": cleaned_results,
+        "formatted_results": formatted_results,
+    }
+    timestamp = int(time.time())
+    try:
+        search_artifact_id = await artifact_manager.save_artifact(
+            data=search_data,
+            artifact_type="search_results",
+            key_prefix=f"search_{ticker}_{timestamp}",
+        )
+        logger.info(
+            f"--- [News Research] Saved search artifact (ID: {search_artifact_id}) ---"
+        )
+    except Exception as e:
+        logger.error(f"Failed to save search artifact: {e}")
+        search_artifact_id = None
+
     # [NEW] Emit preliminary artifact
     ticker = ticker or state.get("ticker", "UNKNOWN")
     preview = {
@@ -155,11 +173,10 @@ URL: {r.get('link')}
 
     return Command(
         update={
-            "raw_results": cleaned_results,
-            "formatted_results": formatted_results,
             "financial_news_research": {
                 "artifact": artifact,
                 "article_count": len(cleaned_results),
+                "search_artifact_id": search_artifact_id,
             },
             "current_node": "search_node",
             "internal_progress": {"search_node": "done", "selector_node": "running"},
@@ -169,10 +186,25 @@ URL: {r.get('link')}
     )
 
 
-def selector_node(state: FinancialNewsState) -> Command:
+async def selector_node(state: FinancialNewsState) -> Command:
     """[Funnel Node 2] Filter top relevant articles using URL-based selection."""
-    formatted_results = state.get("formatted_results")
-    raw_results = state.get("raw_results")
+    # Retrieve search results from Artifact Store
+    ctx = state.get("financial_news_research", {})
+    search_artifact_id = ctx.get("search_artifact_id")
+
+    formatted_results = ""
+    raw_results = []
+
+    if search_artifact_id:
+        try:
+            artifact = await artifact_manager.get_artifact(search_artifact_id)
+            if artifact:
+                search_data = artifact.data
+                formatted_results = search_data.get("formatted_results", "")
+                raw_results = search_data.get("raw_results", [])
+        except Exception as e:
+            logger.error(f"Failed to retrieve search artifact: {e}")
+
     intent_ctx = state.get("intent_extraction", {})
     ticker = intent_ctx.get("resolved_ticker") or state.get("ticker")
 
@@ -233,9 +265,23 @@ def selector_node(state: FinancialNewsState) -> Command:
     logger.info(
         f"--- [News Research] Completed selection. Selected indices: {selected_indices} ---"
     )
+
+    # Save selection to Artifact Store
+    timestamp = int(time.time())
+    try:
+        selection_data = {"selected_indices": selected_indices}
+        selection_artifact_id = await artifact_manager.save_artifact(
+            data=selection_data,
+            artifact_type="news_selection",
+            key_prefix=f"selection_{ticker}_{timestamp}",
+        )
+    except Exception as e:
+        logger.error(f"Failed to save selection artifact: {e}")
+        selection_artifact_id = None
+
     return Command(
         update={
-            "selected_indices": selected_indices,
+            "financial_news_research": {"selection_artifact_id": selection_artifact_id},
             "current_node": "selector_node",
             "internal_progress": {"selector_node": "done", "fetch_node": "running"},
         },
@@ -245,8 +291,23 @@ def selector_node(state: FinancialNewsState) -> Command:
 
 async def fetch_node(state: FinancialNewsState) -> Command:
     """[Funnel Node 3] Fetch and clean full text for selected articles (async parallel)."""
-    raw_results = state.get("raw_results", [])
-    selected_indices = state.get("selected_indices", [])
+    ctx = state.get("financial_news_research", {})
+    search_id = ctx.get("search_artifact_id")
+    selection_id = ctx.get("selection_artifact_id")
+
+    raw_results = []
+    selected_indices = []
+
+    if search_id and selection_id:
+        try:
+            s_art = await artifact_manager.get_artifact(search_id)
+            sel_art = await artifact_manager.get_artifact(selection_id)
+            if s_art:
+                raw_results = s_art.data.get("raw_results", [])
+            if sel_art:
+                selected_indices = sel_art.data.get("selected_indices", [])
+        except Exception as e:
+            logger.error(f"Failed to retrieve fetch artifacts: {e}")
 
     logger.info(
         f"--- [News Research] Fetching {len(selected_indices)} articles content ---"
@@ -358,9 +419,20 @@ async def fetch_node(state: FinancialNewsState) -> Command:
                 f"--- [News Research] ❌ Failed to create news item for URL {url}: {e} ---"
             )
 
+    # Save news_items list to Artifact Store
+    news_items_id = None
+    try:
+        news_items_id = await artifact_manager.save_artifact(
+            data={"news_items": news_items},
+            artifact_type="news_items_list",
+            key_prefix=f"news_items_{ticker}_{timestamp}",
+        )
+    except Exception as e:
+        logger.error(f"Failed to save news items list artifact: {e}")
+
     return Command(
         update={
-            "news_items": news_items,
+            "financial_news_research": {"news_items_artifact_id": news_items_id},
             "current_node": "fetch_node",
             "internal_progress": {"fetch_node": "done", "analyst_node": "running"},
         },
@@ -368,10 +440,20 @@ async def fetch_node(state: FinancialNewsState) -> Command:
     )
 
 
-def analyst_node(state: FinancialNewsState) -> Command:
+async def analyst_node(state: FinancialNewsState) -> Command:
     """[Funnel Node 4] Deep analysis per article."""
-    # news_items are now dicts (serialized from fetch_node)
-    news_items: list[dict] = state.get("news_items", [])
+    ctx = state.get("financial_news_research", {})
+    news_items_id = ctx.get("news_items_artifact_id")
+
+    news_items: list[dict] = []
+    if news_items_id:
+        try:
+            art = await artifact_manager.get_artifact(news_items_id)
+            if art:
+                news_items = art.data.get("news_items", [])
+        except Exception as e:
+            logger.error(f"Failed to retrieve news items: {e}")
+
     intent_ctx = state.get("intent_extraction", {})
     ticker = intent_ctx.get("resolved_ticker") or state.get("ticker")
 
@@ -418,7 +500,18 @@ def analyst_node(state: FinancialNewsState) -> Command:
                 f"--- [News Research] Analyzing article {idx+1}/{len(news_items)}: {title[:50]}... ---"
             )
             # Analyze using full content if available, else fallback to snippet
-            content_to_analyze = item.get("full_content") or item.get("snippet", "")
+            content_to_analyze = item.get("snippet", "")
+
+            # [Refactor] Load full content from Artifact Store if content_id exists
+            content_id = item.get("content_id")
+            if content_id:
+                try:
+                    full_art = await artifact_manager.get_artifact(content_id)
+                    if full_art and full_art.data.get("full_text"):
+                        content_to_analyze = full_art.data.get("full_text")
+                except Exception as ex:
+                    logger.warning(f"Could not load full content for analysis: {ex}")
+
             source_info = item.get("source", {})
 
             # Step 1: Local FinBERT Pre-Analysis
@@ -485,9 +578,21 @@ def analyst_node(state: FinancialNewsState) -> Command:
         f"--- [News Research] Completed analysis for {analyzed_count} articles ---"
     )
 
+    # Save updated news_items to Artifact Store
+    timestamp = int(time.time())
+    try:
+        news_items_id = await artifact_manager.save_artifact(
+            data={"news_items": news_items},
+            artifact_type="news_items_list",
+            key_prefix=f"news_items_analyzed_{ticker}_{timestamp}",
+        )
+    except Exception as e:
+        logger.error(f"Failed to save analyzed news items artifact: {e}")
+        news_items_id = None
+
     return Command(
         update={
-            "news_items": news_items,
+            "financial_news_research": {"news_items_artifact_id": news_items_id},
             "current_node": "analyst_node",
             "internal_progress": {"analyst_node": "done", "aggregator_node": "running"},
         },
@@ -497,8 +602,18 @@ def analyst_node(state: FinancialNewsState) -> Command:
 
 async def aggregator_node(state: FinancialNewsState) -> Command:
     """[Funnel Node 5] Aggregate results and update state."""
-    # news_items are now dicts (serialized from previous nodes)
-    news_items: list[dict] = state.get("news_items", [])
+    # Retrieve news items from Artifact Store
+    ctx = state.get("financial_news_research", {})
+    news_items_id = ctx.get("news_items_artifact_id")
+
+    news_items: list[dict] = []
+    if news_items_id:
+        try:
+            art = await artifact_manager.get_artifact(news_items_id)
+            if art:
+                news_items = art.data.get("news_items", [])
+        except Exception as e:
+            logger.error(f"Failed to retrieve news items for aggregation: {e}")
 
     logger.info(
         f"--- [News Research] Aggregating results for {state.get('ticker')} ---"
@@ -613,14 +728,10 @@ async def aggregator_node(state: FinancialNewsState) -> Command:
         news_update["artifact"] = artifact
 
     # Final State Update (Charter §3.1 and §3.4)
-    # WIPE news_items and other intermediate fields (Method C)
     return Command(
         update={
             "financial_news_research": news_update,
-            "news_items": [],  # WIPE
-            "raw_results": [],  # WIPE
-            "formatted_results": "",  # WIPE
-            "selected_indices": [],  # WIPE
+            # Intermediate fields removed from state, so no need to wipe
             "current_node": "aggregator_node",
             "internal_progress": {"aggregator_node": "done"},
             "node_statuses": {"financial_news_research": "done"},
@@ -648,7 +759,7 @@ def build_financial_news_subgraph():
     )
     builder.add_node(
         "selector_node",
-        RunnableLambda(selector_node).with_config(tags=["hide_stream"]),
+        selector_node,  # Now async
         metadata={"agent_id": "financial_news_research"},
     )
     builder.add_node(
@@ -656,7 +767,7 @@ def build_financial_news_subgraph():
     )
     builder.add_node(
         "analyst_node",
-        RunnableLambda(analyst_node).with_config(tags=["hide_stream"]),
+        analyst_node,
         metadata={"agent_id": "financial_news_research"},
     )
     builder.add_node(

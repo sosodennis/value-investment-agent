@@ -100,7 +100,12 @@ class FinancialNewsContext(TypedDict):
     sentiment_score: NotRequired[float]  # -1.0 to 1.0
     article_count: NotRequired[int]
 
-    # [L3 Pointer] 指向完整報告的 Artifact ID
+    # [L3 Pointer] 指向 Artifact Store 的 ID
+    search_artifact_id: NotRequired[str]  # Pointer to raw/formatted search results
+    selection_artifact_id: NotRequired[str]  # Pointer to selected indices/items
+    news_items_artifact_id: NotRequired[
+        str
+    ]  # Pointer to list of news items (dictionaries)
     report_id: NotRequired[str]
 
     error_message: NotRequired[str]

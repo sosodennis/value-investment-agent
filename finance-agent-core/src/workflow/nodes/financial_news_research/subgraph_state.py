@@ -60,11 +60,11 @@ class FinancialNewsState(TypedDict):
 
     messages: Annotated[list, add_messages]
 
-    # --- Intermediate State (TODO: Remove when graph uses Artifact Store) ---
-    raw_results: NotRequired[list[dict]]
-    formatted_results: NotRequired[str]
-    selected_indices: NotRequired[list[int]]
-    news_items: NotRequired[list[dict]]
+    # --- Intermediate State (Replaced by Artifact Store) ---
+    # raw_results: Removed (Use search_artifact_id)
+    # formatted_results: Removed (Use search_artifact_id)
+    # selected_indices: Removed (Use selection_artifact_id)
+    # news_items: Removed (Use news_items_artifact_id)
 
     # --- Private State (for node coordination) ---
     internal_progress: Annotated[dict[str, str], merge_dict]
