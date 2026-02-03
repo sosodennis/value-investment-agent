@@ -59,6 +59,56 @@ function agentReducer(state: AgentState, action: AgentAction): AgentState {
                 status: (stateData?.is_running ? 'running' : 'idle') as AgentState['status'],
             };
 
+            // Inject pending interrupts from stateData into messages
+            if (stateData?.interrupts && Array.isArray(stateData.interrupts)) {
+                const interruptMessages = stateData.interrupts.map((interrupt: any, idx: number) => {
+                    // Check if schema exists, if not, synthesize one for known types like 'approval_request'
+                    let data = interrupt.details || interrupt.data || {};
+
+                    if (interrupt.type === 'approval_request' && !data.schema) {
+                        data = {
+                            ...data,
+                            schema: {
+                                type: "object",
+                                title: "Audit Approval",
+                                description: `Review valuation plan for ${data.ticker || 'ticker'}. Audit Status: ${data.audit_passed ? 'PASSED' : 'FAILED'}`,
+                                properties: {
+                                    approved: {
+                                        type: "boolean",
+                                        title: "Approve Execution",
+                                        default: true,
+                                        description: "Authorize the agent to proceed with this valuation plan."
+                                    }
+                                }
+                            },
+                            ui_schema: {
+                                approved: {
+                                    "ui:widget": "radio",
+                                    "ui:options": {
+                                        inline: true
+                                    }
+                                }
+                            }
+                        };
+                    }
+
+                    return {
+                        id: `pending_interrupt_${Date.now()}_${idx}`,
+                        role: 'assistant',
+                        content: '',
+                        type: 'interrupt.request', // Normalize to interrupt.request for UI
+                        data: data,
+                        isInteractive: true,
+                        agentId: 'approval', // Default to approval agent for approval_requests
+                    } as Message;
+                });
+
+                // Filter out any existing matching interrupts to facilitate idempotency if needed
+                // But for now, just append them as they are "pending" state interrupts
+                newState.messages = [...newState.messages, ...interruptMessages];
+                newState.status = 'paused'; // Force status to paused if interrupts exist
+            }
+
             if (stateData) {
                 // Generic Sync: Load all mapped outputs into the agents map
                 const agents: Record<string, AgentData> = { ...state.agents };
