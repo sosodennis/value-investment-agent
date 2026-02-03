@@ -66,22 +66,32 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
 
             {/* Preview Section - Valuation & Metrics */}
             {hasPreview && (
-                <div className="space-y-4">
-                    <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Preliminary Valuation Score</span>
+                <div className="space-y-4 animate-slide-up">
+                    <div className="tech-card p-4 flex items-center justify-between bg-gradient-to-r from-slate-900/40 to-slate-900/10">
+                        <span className="text-label">Analyst Valuation Score</span>
                         {valuationScore !== undefined && (
-                            <span className={`text-sm font-bold ${valuationScore > 70 ? 'text-emerald-400' : valuationScore < 40 ? 'text-rose-400' : 'text-amber-400'}`}>
-                                {Math.round(valuationScore)}/100
-                            </span>
+                            <div className="flex items-center gap-3">
+                                <div className="h-1 w-24 bg-slate-800 rounded-full overflow-hidden">
+                                    <div
+                                        className={`h-full transition-all duration-1000 ${valuationScore > 70 ? 'bg-emerald-500' : valuationScore < 40 ? 'bg-rose-500' : 'bg-amber-500'}`}
+                                        style={{ width: `${valuationScore}%` }}
+                                    />
+                                </div>
+                                <span className={`text-base font-black ${valuationScore > 70 ? 'text-emerald-400' : valuationScore < 40 ? 'text-rose-400' : 'text-amber-400'}`}>
+                                    {Math.round(valuationScore)}/100
+                                </span>
+                            </div>
                         )}
                     </div>
 
                     {preview.key_metrics && Object.keys(preview.key_metrics).length > 0 && (
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                             {Object.entries(preview.key_metrics).map(([label, value]) => (
-                                <div key={label} className="bg-slate-900/40 border border-slate-800 rounded-xl p-3 text-center">
-                                    <div className="text-[9px] font-black text-slate-500 uppercase mb-1">{label}</div>
-                                    <div className="text-xs font-bold text-white">{(value as string)}</div>
+                                <div key={label} className="tech-card p-4 group hover:bg-slate-900/40">
+                                    <div className="text-label mb-1 text-slate-600 group-hover:text-slate-400 transition-colors">{label}</div>
+                                    <div className="text-sm font-black text-white">
+                                        {typeof value === 'string' ? value : String(value)}
+                                    </div>
                                 </div>
                             ))}
                         </div>

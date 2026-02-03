@@ -94,7 +94,7 @@ const NewsResearchCardComponent: React.FC<NewsResearchCardProps> = ({ item }) =>
     };
 
     return (
-        <div className="bg-slate-900/20 border border-slate-800/50 rounded-2xl p-6 backdrop-blur-sm hover:border-slate-700/50 transition-all group">
+        <div className="tech-card p-6 hover:border-slate-700/50 group">
             <div className="flex justify-between items-start mb-4">
                 <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-2">

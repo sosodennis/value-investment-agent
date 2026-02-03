@@ -13,13 +13,20 @@
 
   --color-bg-main: #020617;
   /* slate-950 */
+  --color-bg-secondary: #0f172a;
+  /* slate-900 */
   --color-border-main: #0f172a;
   /* slate-900 */
   --color-border-subtle: #1e293b;
   /* slate-800 */
+  --color-glass-white: rgba(255, 255, 255, 0.03);
+  --color-glass-primary: rgba(6, 182, 212, 0.05);
 
   /* Animations */
   --animate-shimmer: shimmer 2s infinite linear;
+  --animate-fade-in: fade-in 0.5s ease-out forwards;
+  --animate-slide-up: slide-up 0.5s ease-out forwards;
+  --animate-glow: glow 2s ease-in-out infinite alternate;
 
   @keyframes shimmer {
     from {
@@ -28,6 +35,38 @@
 
     to {
       transform: translateX(300%);
+    }
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes slide-up {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes glow {
+    from {
+      box-shadow: 0 0 5px rgba(6, 182, 212, 0.2);
+    }
+
+    to {
+      box-shadow: 0 0 15px rgba(6, 182, 212, 0.5);
     }
   }
 }
@@ -51,11 +90,21 @@
   * {
     @apply border-slate-900;
   }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply tracking-tight font-bold text-slate-100;
+  }
 }
 
 @layer utilities {
   .custom-scrollbar::-webkit-scrollbar {
-    width: 6px;
+    width: 4px;
+    height: 4px;
   }
 
   .custom-scrollbar::-webkit-scrollbar-track {
@@ -63,14 +112,26 @@
   }
 
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    @apply bg-slate-800 rounded-full hover:bg-slate-700;
+    @apply bg-slate-800 rounded-full hover:bg-slate-700 transition-colors;
   }
 
   .text-label {
-    @apply text-[10px] font-bold uppercase tracking-widest text-slate-500;
+    @apply text-[9px] font-black uppercase tracking-[0.2em] text-slate-500;
   }
 
   .glass-panel {
-    @apply bg-slate-950/20 backdrop-blur-md border border-slate-900;
+    @apply bg-slate-950/40 backdrop-blur-xl border border-white/5;
+  }
+
+  .tech-card {
+    @apply relative overflow-hidden rounded-xl border border-white/5 bg-slate-900/20 backdrop-blur-sm transition-all duration-300;
+  }
+
+  .terminal-text {
+    @apply font-mono text-sm leading-relaxed;
+  }
+
+  .glow-cyan {
+    box-shadow: 0 0 20px -5px rgba(6, 182, 212, 0.3);
   }
 }

@@ -74,7 +74,7 @@ const MarketStatusBadge = ({ zScore }: { zScore: number }) => {
     const Icon = icon;
 
     return (
-        <div className={`rounded-xl border p-4 flex items-center justify-between transition-all duration-300 shadow-lg ${color}`}>
+        <div className={`tech-card p-4 flex items-center justify-between transition-all duration-300 shadow-lg ${color}`}>
             <div className="flex items-center gap-4">
                 <div className="p-2 rounded-lg bg-white/5 backdrop-blur-md">
                     <Icon size={24} />
@@ -282,21 +282,21 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                 </header>
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4 text-center">
-                        <div className="text-[9px] font-black text-slate-500 uppercase mb-1">Signal</div>
-                        <div className="text-lg font-bold text-white">{previewFn.signal_display}</div>
+                    <div className="tech-card p-4 text-center group hover:bg-slate-900/40">
+                        <div className="text-label mb-1 text-slate-600 group-hover:text-slate-400 transition-colors">Signal</div>
+                        <div className="text-lg font-black text-white">{previewFn.signal_display}</div>
                     </div>
-                    <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4 text-center">
-                        <div className="text-[9px] font-black text-slate-500 uppercase mb-1">Price</div>
-                        <div className="text-lg font-bold text-white">{previewFn.latest_price_display}</div>
+                    <div className="tech-card p-4 text-center group hover:bg-slate-900/40">
+                        <div className="text-label mb-1 text-slate-600 group-hover:text-slate-400 transition-colors">Price</div>
+                        <div className="text-lg font-black text-white">{previewFn.latest_price_display}</div>
                     </div>
-                    <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4 text-center">
-                        <div className="text-[9px] font-black text-slate-500 uppercase mb-1">Z-Score</div>
-                        <div className="text-lg font-bold text-white">{previewFn.z_score_display}</div>
+                    <div className="tech-card p-4 text-center group hover:bg-slate-900/40">
+                        <div className="text-label mb-1 text-slate-600 group-hover:text-slate-400 transition-colors">Z-Score</div>
+                        <div className="text-lg font-black text-white">{previewFn.z_score_display}</div>
                     </div>
-                    <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4 text-center">
-                        <div className="text-[9px] font-black text-slate-500 uppercase mb-1">Opt. d</div>
-                        <div className="text-lg font-bold text-white">{previewFn.optimal_d_display}</div>
+                    <div className="tech-card p-4 text-center group hover:bg-slate-900/40">
+                        <div className="text-label mb-1 text-slate-600 group-hover:text-slate-400 transition-colors">Opt. d</div>
+                        <div className="text-lg font-black text-white">{previewFn.optimal_d_display}</div>
                     </div>
                 </div>
 
@@ -358,7 +358,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
             </header>
 
             {/* AI Interpretation */}
-            <section className="bg-slate-900/60 border border-indigo-500/20 rounded-2xl p-6 relative overflow-hidden group shadow-2xl backdrop-blur-xl">
+            <section className="tech-card p-6 relative overflow-hidden group shadow-2xl bg-indigo-500/[0.03] border-indigo-500/20">
                 <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
                     <BrainCircuit size={80} className="text-indigo-400" />
                 </div>
@@ -391,7 +391,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
 
             {/* Confluence Dashboard --- */}
             {signal_state.confluence && (
-                <section className="bg-slate-900/30 border border-slate-800 rounded-2xl p-6 shadow-inner">
+                <section className="tech-card p-6 shadow-inner bg-slate-900/40">
                     <div className="flex items-center gap-2 mb-6">
                         <Layers size={16} className="text-purple-400" />
                         <span className="text-xs font-black text-white uppercase tracking-[0.2em]">Confluence Dashboard</span>
@@ -429,7 +429,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
             )}
 
             {/* Technical Charts --- */}
-            <section className="border border-slate-800 rounded-2xl overflow-hidden transition-all duration-300">
+            <section className="tech-card overflow-hidden transition-all duration-300">
                 <button
                     onClick={() => setShowAdvanced(!showAdvanced)}
                     className="w-full flex items-center justify-between p-4 bg-slate-900/20 hover:bg-slate-900/40 transition-colors"
