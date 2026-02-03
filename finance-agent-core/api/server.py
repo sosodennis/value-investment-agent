@@ -392,7 +392,6 @@ async def get_thread_history(request: Request, thread_id: str):
             "next": snapshot.next,
             "is_running": thread_id in active_tasks,
             "node_statuses": snapshot.values.get("node_statuses", {}),
-            "financial_reports": fundamental.get("financial_reports", []),
             "agent_outputs": agent_outputs,
         }
         return res
@@ -408,22 +407,11 @@ async def get_agent_statuses(request: Request, thread_id: str):
     try:
         graph = request.app.state.graph
         snapshot = await graph.aget_state(config)
-
-        # Helper to safely extract nested context
-        def get_context(name: str) -> dict:
-            val = snapshot.values.get(name)
-            if val and hasattr(val, "model_dump"):
-                return val.model_dump()
-            return val or {}
-
-        fundamental = get_context("fundamental")
-
         from src.interface.mappers import NodeOutputMapper
 
         agent_outputs = NodeOutputMapper.map_all_outputs(snapshot.values)
         return {
             "node_statuses": snapshot.values.get("node_statuses", {}),
-            "financial_reports": fundamental.get("financial_reports", []),
             "current_node": snapshot.values.get("current_node"),
             "agent_outputs": agent_outputs,
         }

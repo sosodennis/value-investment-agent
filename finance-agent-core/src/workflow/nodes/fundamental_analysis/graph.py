@@ -298,8 +298,6 @@ def financial_health_node(state: FundamentalAnalysisState) -> Command:
         reports_data = []
         artifact = None
 
-    from langchain_core.messages import AIMessage
-
     fa_update = {
         "financial_reports": reports_data,
         "status": "model_selection",
@@ -316,18 +314,6 @@ def financial_health_node(state: FundamentalAnalysisState) -> Command:
                 "model_selection": "running",
             },
             "node_statuses": {"fundamental_analysis": "running"},
-            "messages": [
-                AIMessage(
-                    content="",
-                    additional_kwargs={
-                        "type": "financial_report",
-                        "data": reports_data,
-                        "agent_id": "fundamental_analysis",
-                    },
-                )
-            ]
-            if reports_data
-            else [],
         },
         goto="model_selection",
     )
