@@ -1,6 +1,7 @@
 import React, { memo } from 'react';
 import { Shield, Target, AlertTriangle, TrendingUp, TrendingDown, Minus, Info, CheckCircle2, Zap, Loader2 } from 'lucide-react';
 import { DebateAgentOutput, DebateSuccess } from '@/types/agents/debate';
+import { DebateTranscript } from './DebateTranscript';
 import { StandardAgentOutput, AgentStatus } from '@/types/agents';
 import { useArtifact } from '../../hooks/useArtifact';
 
@@ -313,6 +314,11 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({ output, resolvedTi
                     <span>Pragmatic V2.0 Engine Active</span>
                 </div>
             </div>
+
+            {/* Debate Transcript (History) */}
+            {(effectiveOutput as any).history && (effectiveOutput as any).history.length > 0 && (
+                <DebateTranscript history={(effectiveOutput as any).history} />
+            )}
         </div>
     );
 };
