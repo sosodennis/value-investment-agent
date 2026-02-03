@@ -5,6 +5,7 @@ import { AINewsSummary } from '../AINewsSummary';
 import { NewsResearchOutput as NewsResearchOutputType } from '@/types/agents/news';
 import { StandardAgentOutput, AgentStatus } from '@/types/agents';
 import { useArtifact } from '../../hooks/useArtifact';
+import { AgentLoadingState } from './AgentLoadingState';
 
 interface NewsResearchOutputProps {
     output: StandardAgentOutput | null;
@@ -41,14 +42,14 @@ const NewsResearchOutputComponent: React.FC<NewsResearchOutputProps> = ({
     // Wait for completion before showing data, unless we have preview data
     if ((status !== 'done' && !hasData) || !effectiveOutput) {
         return (
-            <div className="flex-1 flex flex-col items-center justify-center p-12 text-center h-full">
-                <TrendingUp size={48} className="text-slate-900 mb-4" />
-                <h4 className="text-slate-500 font-bold text-xs uppercase tracking-widest">Searching News...</h4>
-                <p className="text-slate-700 text-[10px] mt-2 max-w-[240px]">
-                    Our agents are scanning global financial news for {resolvedTicker || 'the target company'}. Results will appear here shortly.
-                </p>
-                <p className="text-[10px] text-slate-500 mt-2">Status: {status}</p>
-            </div>
+            <AgentLoadingState
+                type="full"
+                icon={TrendingUp}
+                title="Searching News..."
+                description={`Our agents are scanning global financial news for ${resolvedTicker || 'the target company'}. Results will appear here shortly.`}
+                status={status}
+                colorClass="text-cyan-400"
+            />
         );
     }
 
@@ -63,10 +64,11 @@ const NewsResearchOutputComponent: React.FC<NewsResearchOutputProps> = ({
                     <h3 className="text-sm font-bold text-white uppercase tracking-widest">News Research Intelligence</h3>
                 </div>
                 {isReferenceLoading && (
-                    <div className="flex items-center gap-2 text-[10px] text-amber-400 font-bold uppercase tracking-widest animate-pulse">
-                        <Loader2 size={12} className="animate-spin" />
-                        <span>Loading Full Report...</span>
-                    </div>
+                    <AgentLoadingState
+                        type="header"
+                        title="Loading Full Report..."
+                        colorClass="text-amber-400"
+                    />
                 )}
             </div>
 
@@ -100,11 +102,11 @@ const NewsResearchOutputComponent: React.FC<NewsResearchOutputProps> = ({
                         </div>
                     </div>
                 ) : (
-                    <div className="p-8 border border-slate-800 rounded-xl bg-slate-900/30 text-center">
-                        <p className="text-slate-500 text-xs italic">
-                            {isReferenceLoading ? "Loading articles..." : "No articles found."}
-                        </p>
-                    </div>
+                    <AgentLoadingState
+                        type="block"
+                        title={isReferenceLoading ? "Loading articles..." : "No articles found."}
+                        colorClass="text-cyan-400"
+                    />
                 )}
 
             </div>

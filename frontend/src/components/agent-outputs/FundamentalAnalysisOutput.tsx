@@ -4,6 +4,7 @@ import { FinancialTable } from '../FinancialTable';
 import { AgentStatus, StandardAgentOutput } from '@/types/agents';
 import { FundamentalAnalysisSuccess } from '@/types/agents/fundamental';
 import { useArtifact } from '../../hooks/useArtifact';
+import { AgentLoadingState } from './AgentLoadingState';
 
 interface FundamentalAnalysisOutputProps {
     output: StandardAgentOutput | null;
@@ -36,14 +37,13 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
 
     if (status !== 'done' && reports.length === 0 && !hasPreview) {
         return (
-            <div className="flex-1 flex flex-col items-center justify-center p-12 text-center h-full">
-                <BarChart3 size={48} className="text-slate-900 mb-4 animate-pulse opacity-50" />
-                <h4 className="text-slate-500 font-bold text-xs uppercase tracking-widest">Processing Financials...</h4>
-                <p className="text-slate-700 text-[10px] mt-2 max-w-[240px]">
-                    Extracting and analyzing financial data from 10-K/10-Q reports.
-                </p>
-                <p className="text-[10px] text-slate-500 mt-2">Status: {status}</p>
-            </div>
+            <AgentLoadingState
+                type="full"
+                icon={BarChart3}
+                title="Processing Financials..."
+                description="Extracting and analyzing financial data from 10-K/10-Q reports."
+                status={status}
+            />
         );
     }
 
@@ -57,10 +57,11 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                     <h3 className="text-sm font-bold text-white uppercase tracking-widest">Financial Data Matrix</h3>
                 </div>
                 {isReferenceLoading && (
-                    <div className="flex items-center gap-2 text-[10px] text-indigo-400 font-bold uppercase tracking-widest animate-pulse">
-                        <Loader2 size={12} className="animate-spin" />
-                        <span>Loading Reports...</span>
-                    </div>
+                    <AgentLoadingState
+                        type="header"
+                        title="Loading Reports..."
+                        colorClass="text-indigo-400"
+                    />
                 )}
             </div>
 
@@ -105,11 +106,11 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                     ticker={resolvedTicker || 'N/A'}
                 />
             ) : (
-                <div className="p-8 border border-slate-800 rounded-xl bg-slate-900/30 text-center">
-                    <p className="text-slate-500 text-xs italic">
-                        {isReferenceLoading ? "Loading financial reports..." : "No financial reports generated."}
-                    </p>
-                </div>
+                <AgentLoadingState
+                    type="block"
+                    title={isReferenceLoading ? "Loading financial reports..." : "No financial reports generated."}
+                    colorClass="text-indigo-400"
+                />
             )}
         </div>
     );

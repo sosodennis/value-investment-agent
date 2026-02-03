@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { TechnicalSignalOutput, TechnicalAnalysisSuccess } from '@/types/agents/technical';
 import { useArtifact } from '../../hooks/useArtifact';
+import { AgentLoadingState } from './AgentLoadingState';
 
 interface TechnicalAnalysisOutputProps {
     output: StandardAgentOutput | null;
@@ -242,21 +243,14 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
 
     if ((status !== 'done' && !hasData) || !effectiveOutput) {
         return (
-            <div className="flex flex-col items-center justify-center p-12 text-slate-500 min-h-[400px]">
-                <Activity className="w-12 h-12 mb-4 animate-pulse opacity-50" />
-                <p className="font-bold uppercase tracking-widest text-[10px]">Processing Statistical Framework...</p>
-                <p className="text-[10px] text-slate-600 mt-2">Status: {status}</p>
-            </div>
-        );
-    }
-
-    if (!effectiveOutput) {
-        return (
-            <div className="flex flex-col items-center justify-center p-12 text-slate-500 min-h-[400px]">
-                <Activity className="w-12 h-12 mb-4 animate-pulse opacity-50" />
-                <p className="font-bold uppercase tracking-widest text-[10px]">Initializing Analysis Module...</p>
-                <p className="text-[10px] text-slate-600 mt-2">Status: {status}</p>
-            </div>
+            <AgentLoadingState
+                type="full"
+                icon={Activity}
+                title="Processing Statistical Framework..."
+                description="Initializing Analysis Module and computing fractal differences."
+                status={status}
+                colorClass="text-cyan-400"
+            />
         );
     }
 
@@ -300,20 +294,23 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                     </div>
                 </div>
 
-                <div className="flex flex-col items-center justify-center p-8 text-slate-500 border border-dashed border-slate-800 rounded-xl bg-slate-900/20">
-                    <Loader2 className="w-6 h-6 mb-3 animate-spin opacity-50 text-cyan-400" />
-                    <p className="font-bold uppercase tracking-widest text-[10px]">Loading Full Statistical Analysis...</p>
-                </div>
+                <AgentLoadingState
+                    type="block"
+                    title="Loading Full Statistical Analysis..."
+                    colorClass="text-cyan-400"
+                />
             </div>
         );
     }
 
     if (!frac_diff_metrics || !signal_state) {
         return (
-            <div className="flex flex-col items-center justify-center p-12 text-slate-500">
-                <Loader2 className="w-8 h-8 mb-4 animate-spin opacity-50 text-cyan-400" />
-                <p className="font-bold uppercase tracking-widest text-[10px]">Loading Preview Data...</p>
-            </div>
+            <AgentLoadingState
+                type="full"
+                title="Loading Preview Data..."
+                colorClass="text-cyan-400"
+                status={status}
+            />
         );
     }
 
@@ -440,10 +437,11 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                     </div>
                     <div className="flex items-center gap-4">
                         {isReferenceLoading && (
-                            <div className="flex items-center gap-2 text-[9px] text-cyan-400 font-bold uppercase tracking-widest animate-pulse">
-                                <Loader2 size={10} className="animate-spin" />
-                                <span>Loading Series...</span>
-                            </div>
+                            <AgentLoadingState
+                                type="header"
+                                title="Loading Series..."
+                                colorClass="text-cyan-400"
+                            />
                         )}
                         {showAdvanced ? <ChevronUp size={16} className="text-slate-500" /> : <ChevronDown size={16} className="text-slate-500" />}
                     </div>
@@ -589,10 +587,12 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                     </ResponsiveContainer>
                                 ) : (
                                     <div className="h-full w-full flex flex-col items-center justify-center border border-dashed border-slate-800 rounded-xl bg-slate-900/20">
-                                        <Activity size={32} className="text-slate-800 mb-2" />
-                                        <p className="text-[10px] text-slate-600 font-bold uppercase tracking-widest">
-                                            {isReferenceLoading ? "Fetching time-series data..." : "No chart data available"}
-                                        </p>
+                                        <AgentLoadingState
+                                            type="block"
+                                            title={isReferenceLoading ? "Fetching time-series data..." : "No chart data available"}
+                                            colorClass="text-cyan-400"
+                                            className="border-none bg-transparent"
+                                        />
                                     </div>
                                 )}
                             </div>
