@@ -24,11 +24,14 @@ Based on the review of `finance-agent-core/src/workflow/nodes/financial_news_res
 ### Phase 2: Resilience Implementation
 1.  **Add RetryPolicy**:
     -   In `build_financial_news_subgraph`, attach `RetryPolicy` to `search_node` and `fetch_node`.
+    -   Configuration: `max_attempts=3`, `initial_interval=0.5`, `backoff_factor=2.0`, `jitter=True`.
     -   Configure retries to handle `ClientError`, `TimeoutError`, and `RateLimitError`.
 2.  **Safety Wrappers**:
     -   `selector_node`: Wrap the LLM selection logic to handle JSON parsing failures specifically (already partially done, but can be standardized).
     -   `analyst_node`: Ensure `finbert_analyzer` failures don't crash the entire node (already has try-except, but should log to `error_logs`).
-3.  **Circuit Breaker**: If `search_node` returns 0 results after retries, the agent should probably skip the rest of the funnel and return a specific "No Data" status rather than running `selector_node` on empty lists.
+3.  **Circuit Breaker**: If `search_node` returns 0 results after retries:
+    -   Use `Command(update={"status": "no_data"}, goto="end_node")` to short-circuit the flow.
+    -   This prevents the "silent failure" anti-pattern and avoids wasting LLM tokens in `selector_node`.
 
 ### Phase 3: Code Clean-up
 1.  **Extract Mappers**: Move `preview` construction logic to `mappers.py`.

@@ -30,7 +30,14 @@ To bring the Fundamental Analysis agent to full compliance, we propose the follo
 ### Phase 2: Resilience Implementation
 1.  **Add RetryPolicy**: In `build_fundamental_subgraph` (graph.py), attach a standard `RetryPolicy` to `financial_health_node`.
     ```python
-    retry=RetryPolicy(max_attempts=3, backoff_factor=2, exceptions=(NetworkError, TimeoutError))
+    ```python
+    retry=RetryPolicy(
+        max_attempts=3,
+        backoff_factor=2.0,
+        initial_interval=0.5,
+        jitter=True,
+        retry_on=(NetworkError, TimeoutError, ConnectionError)
+    )
     ```
 2.  **Safety Wrapper**: Wrap the node logic in a try-except block that:
     -   Catches unexpected exceptions.

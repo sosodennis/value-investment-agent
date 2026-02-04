@@ -25,9 +25,10 @@ Based on the review of `finance-agent-core/src/workflow/nodes/technical_analysis
     ```
 
 ### Phase 2: Resilience Implementation
-1.  **Add RetryPolicy**: In `build_technical_subgraph` (graph.py), attach `RetryPolicy` to `data_fetch_node` (for yfinance calls).
+1.  **Add RetryPolicy**: In `build_technical_subgraph` (graph.py), attach `RetryPolicy` to `data_fetch_node`.
+    -   Configuration: `max_attempts=3`, `initial_interval=0.5`, `backoff_factor=2.0`, `jitter=True`.
 2.  **Safety Wrappers**:
-    -   Wrap `fracdiff_compute_node` to catch mathematical errors (e.g., during `calculate_rolling_fracdiff`) and degrade gracefully (e.g., return "Insufficient Data" instead of crashing).
+    -   Wrap `fracdiff_compute_node` using the **Command Pattern** for graceful degradation: catch mathematical errors and return `Command(update={"status": "degraded"}, goto="next_node")` instead of crashing.
     -   Wrap `semantic_translate_node` to ensure LLM generation failures don't halt the pipeline (use fallback heuristics if LLM fails).
 
 ### Phase 3: Code Clean-up

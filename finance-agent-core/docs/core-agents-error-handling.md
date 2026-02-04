@@ -34,9 +34,15 @@ Based on the review of `executor/node.py`, `auditor/node.py`, and `calculator/no
 3.  **Specific Exception Handling**:
     -   Catch `ValidationError` (Pydantic) explicitly in `auditor` and `executor` to return a "Validation Failed" status rather than a generic system error.
 
+### Phase 3: Secure Persistence & Precision (New)
+1.  **Implement `FinancialSafeSerializer`**:
+    -   Create `src/infrastructure/serialization.py` to handle `Decimal` serialization without precision loss (converting to string in JSON), as recommended in the research paper.
+    -   Configure the `PostgresSaver` to use `JsonPlusSerializer(pickle_fallback=False)` to prevent RCE vulnerabilities (CVE-2025-64439).
+2.  **Update Calculator**: Ensure `calculator_node` uses `Decimal` for all internal money logic and relies on the new serializer for state persistence.
+
 ### Estimated Effort
 -   **Complexity**: Low
--   **Files to Modify**: `executor/node.py`, `auditor/node.py`, `calculator/node.py`, `state.py`
+-   **Files to Modify**: `executor/node.py`, `auditor/node.py`, `calculator/node.py`, `state.py`, `src/infrastructure/serialization.py`
 
 ## 3. Verification Plan
 1.  **Unit Test**: Inject malformed data into `executor_node` input and verify it logs to `error_logs` without crashing or sending a raw traceback to the user chat.

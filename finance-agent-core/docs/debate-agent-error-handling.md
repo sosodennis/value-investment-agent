@@ -19,10 +19,13 @@ Based on the review of `finance-agent-core/src/workflow/nodes/debate/` against t
 ## 2. Refactoring Plan
 
 ### Phase 1: State & Schema Enhancement
-1.  **Add Error Logs**: Update `DebateState` in `subgraph_state.py` to include `error_logs`.
+1.  **Add Error Logs**: Update `DebateState` to include `error_logs`.
+2.  **Recursion Control**: Add `loop_count` or `round_count` to the state to explicitly track debate depth and prevent `GraphRecursionError`, as recommended in the research paper.
 
 ### Phase 2: Resilience Implementation
-1.  **Graceful Failure in Helpers**:
+1.  **Sub-Agent Isolation**:
+    -   Wrap `_execute_bull/bear_agent` calls in a `safe_subgraph_invocation` pattern.
+    -   Ensure exceptions in these helpers return a "Degraded" status rather than crashing the parent graph.
     -   Modify `_execute_bull_agent` and peers to catch exceptions and return a "fallback" response (e.g., "Analyst is silent due to technical difficulties") instead of raising.
     -   This allows the debate to continue even if one side drops out for a round.
 2.  **Add RetryPolicy**:
