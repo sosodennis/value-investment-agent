@@ -9,8 +9,8 @@ from src.common.tools.logger import get_logger
 from src.interface.schemas import AgentOutputArtifact
 
 from ...manager import SkillRegistry
-from ...schemas import AuditOutput
 from .mappers import summarize_auditor_for_preview
+from .structures import AuditOutput
 from .subgraph_state import AuditorState
 
 logger = get_logger(__name__)

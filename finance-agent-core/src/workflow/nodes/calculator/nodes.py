@@ -9,8 +9,8 @@ from src.common.tools.logger import get_logger
 from src.interface.schemas import AgentOutputArtifact
 
 from ...manager import SkillRegistry
-from ...schemas import CalculationOutput
 from .mappers import summarize_calculator_for_preview
+from .structures import CalculationOutput
 from .subgraph_state import CalculatorState
 
 logger = get_logger(__name__)

@@ -21,7 +21,7 @@ from .prompts import (
     MODERATOR_SYSTEM_PROMPT,
     VERDICT_PROMPT,
 )
-from .schemas import DebateConclusion
+from .structures import DebateConclusion
 from .subgraph_state import DebateState
 from .tools import (
     calculate_pragmatic_verdict,

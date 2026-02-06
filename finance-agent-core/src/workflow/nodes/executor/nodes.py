@@ -9,8 +9,8 @@ from src.common.tools.logger import get_logger
 from src.interface.schemas import AgentOutputArtifact
 
 from ...manager import SkillRegistry
-from ...schemas import ExtractionOutput
 from .mappers import summarize_executor_for_preview
+from .structures import ExtractionOutput
 from .subgraph_state import ExecutorState
 from .tools import generate_mock_bank_data, generate_mock_saas_data
 

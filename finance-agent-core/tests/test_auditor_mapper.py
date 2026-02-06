@@ -1,5 +1,5 @@
 from src.workflow.nodes.auditor.mappers import summarize_auditor_for_preview
-from src.workflow.schemas import AuditOutput
+from src.workflow.nodes.auditor.structures import AuditOutput
 
 
 def test_summarize_auditor_for_preview_passed():
