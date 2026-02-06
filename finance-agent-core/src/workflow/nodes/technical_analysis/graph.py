@@ -3,6 +3,7 @@ Technical Analysis Sub-graph implementation.
 Handles the flow: Data Fetch -> FracDiff Compute -> Semantic Translate.
 """
 
+import math
 import time
 
 import pandas as pd
@@ -112,14 +113,16 @@ async def data_fetch_node(state: TechnicalAnalysisState) -> Command:
         )
 
     # [Refactor] Store raw data in Artifact Store instead of State
+    # Use object dtype + where replacement to ensure NaNs become None (null in JSON)
+    price_series = df["price"].rename(index=lambda x: x.strftime("%Y-%m-%d"))
+    volume_series = df["volume"].rename(index=lambda x: x.strftime("%Y-%m-%d"))
+
     price_data = {
-        "price_series": df["price"]
-        .rename(index=lambda x: x.strftime("%Y-%m-%d"))
-        .map(float)
+        "price_series": price_series.astype(object)
+        .where(pd.notnull(price_series), None)
         .to_dict(),
-        "volume_series": df["volume"]
-        .rename(index=lambda x: x.strftime("%Y-%m-%d"))
-        .map(float)
+        "volume_series": volume_series.astype(object)
+        .where(pd.notnull(volume_series), None)
         .to_dict(),
     }
 
@@ -245,35 +248,44 @@ async def fracdiff_compute_node(state: TechnicalAnalysisState) -> Command:
         obv_data = calculate_fd_obv(prices, volumes)
 
         # [Fix] Remove pandas Series from indicators for msgpack serialization
-        # Keep only scalar values for state storage
+        # Keep only scalar values for state storage, replacing NaN with None
+        def safe_float(val):
+            try:
+                f_val = float(val)
+                if math.isnan(f_val):
+                    return None
+                return f_val
+            except (ValueError, TypeError):
+                return None
+
         bollinger_serializable = {
-            "upper": bollinger_data["upper"],
-            "middle": bollinger_data["middle"],
-            "lower": bollinger_data["lower"],
+            "upper": safe_float(bollinger_data["upper"]),
+            "middle": safe_float(bollinger_data["middle"]),
+            "lower": safe_float(bollinger_data["lower"]),
             "state": bollinger_data["state"],
-            "bandwidth": bollinger_data["bandwidth"],
+            "bandwidth": safe_float(bollinger_data["bandwidth"]),
         }
 
         stat_strength_serializable = {
-            "value": stat_strength_data["value"],
+            "value": safe_float(stat_strength_data["value"]),
             # Thresholds are irrelevant for CDF (fixed constants)
         }
 
         obv_serializable = {
-            "raw_obv_val": obv_data["raw_obv_val"],
-            "fd_obv_z": obv_data["fd_obv_z"],
-            "optimal_d": obv_data["optimal_d"],
+            "raw_obv_val": safe_float(obv_data["raw_obv_val"]),
+            "fd_obv_z": safe_float(obv_data["fd_obv_z"]),
+            "optimal_d": safe_float(obv_data["optimal_d"]),
             "state": obv_data["state"],
         }
 
         # [Refactor] Store chart data in Artifact Store
         # Reformat indices to strings for JSON serialization
         fd_dict = {
-            k.strftime("%Y-%m-%d") if hasattr(k, "strftime") else k: float(v)
+            k.strftime("%Y-%m-%d") if hasattr(k, "strftime") else k: safe_float(v)
             for k, v in fd_series.to_dict().items()
         }
         z_dict = {
-            k.strftime("%Y-%m-%d") if hasattr(k, "strftime") else k: float(v)
+            k.strftime("%Y-%m-%d") if hasattr(k, "strftime") else k: safe_float(v)
             for k, v in z_score_series.to_dict().items()
         }
 
@@ -328,13 +340,13 @@ async def fracdiff_compute_node(state: TechnicalAnalysisState) -> Command:
     return Command(
         update={
             "technical_analysis": {
-                "latest_price": float(prices.iloc[-1]),
-                "optimal_d": float(optimal_d),
-                "z_score_latest": float(z_score),
+                "latest_price": safe_float(prices.iloc[-1]),
+                "optimal_d": safe_float(optimal_d),
+                "z_score_latest": safe_float(z_score),
                 "chart_data_id": chart_data_id,
                 "window_length": int(window_length),
-                "adf_statistic": float(adf_stat),
-                "adf_pvalue": float(adf_pvalue),
+                "adf_statistic": safe_float(adf_stat),
+                "adf_pvalue": safe_float(adf_pvalue),
                 "bollinger": bollinger_serializable,
                 "statistical_strength_val": stat_strength_serializable["value"],
                 "macd": macd_data,
