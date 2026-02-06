@@ -19,7 +19,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command
 
-from src.common.utils.logger import get_logger
+from src.common.tools.logger import get_logger
 from src.infrastructure.database import init_db
 from src.interface.adapters import adapt_langgraph_event, create_interrupt_event
 from src.interface.protocol import AgentEvent

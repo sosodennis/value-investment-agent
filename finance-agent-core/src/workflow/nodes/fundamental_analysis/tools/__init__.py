@@ -7,7 +7,7 @@ Provides wrapper functions for entity resolution, company profile retrieval, and
 import yfinance as yf
 from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
 
-from src.common.utils.logger import get_logger
+from src.common.tools.logger import get_logger
 
 from ..structures import CompanyProfile, TickerCandidate
 

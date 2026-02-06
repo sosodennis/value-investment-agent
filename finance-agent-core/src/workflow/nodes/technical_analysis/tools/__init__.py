@@ -13,7 +13,7 @@ import yfinance as yf
 from scipy.stats import norm
 from statsmodels.tsa.stattools import adfuller
 
-from src.common.utils.logger import get_logger
+from src.common.tools.logger import get_logger
 
 logger = get_logger(__name__)
 

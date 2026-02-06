@@ -15,7 +15,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from src.common.utils.logger import get_logger
+from src.common.tools.logger import get_logger
 
 from .strategies import ALL_STRATEGIES, StrategyContext
 

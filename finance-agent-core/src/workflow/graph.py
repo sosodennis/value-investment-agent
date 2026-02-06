@@ -6,7 +6,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 from psycopg_pool import AsyncConnectionPool
 
-from src.common.utils.logger import get_logger
+from src.common.tools.logger import get_logger
 
 from .interrupts import ApprovalDetails, HumanApprovalRequest
 from .nodes.auditor import build_auditor_subgraph

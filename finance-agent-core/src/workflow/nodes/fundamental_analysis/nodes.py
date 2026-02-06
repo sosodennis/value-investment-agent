@@ -4,7 +4,7 @@ import time
 from langgraph.graph import END
 from langgraph.types import Command
 
-from src.common.utils.logger import get_logger
+from src.common.tools.logger import get_logger
 from src.interface.schemas import AgentOutputArtifact, ArtifactReference
 from src.services.artifact_manager import artifact_manager
 

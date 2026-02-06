@@ -171,7 +171,7 @@ def create_interrupt_event(
                 ).to_ui_payload()
         except Exception as e:
             # Fallback to raw payload
-            from src.common.utils.logger import get_logger
+            from src.common.tools.logger import get_logger
 
             get_logger(__name__).warning(
                 f"⚠️ [Adapter] Failed to hydrate interrupt schema: {e}"

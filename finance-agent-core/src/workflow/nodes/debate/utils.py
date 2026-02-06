@@ -6,7 +6,7 @@ Includes sycophancy detection using FastEmbed and CAPM-based hurdle rate calcula
 import numpy as np
 from fastembed import TextEmbedding
 
-from src.common.utils.logger import get_logger
+from src.common.tools.logger import get_logger
 
 from .market_data import (
     get_current_risk_free_rate,

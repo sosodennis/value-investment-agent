@@ -2,7 +2,7 @@ import re
 from dataclasses import asdict, dataclass
 from typing import Any, Optional
 
-from src.common.utils.logger import get_logger
+from src.common.tools.logger import get_logger
 
 logger = get_logger(__name__)
 
