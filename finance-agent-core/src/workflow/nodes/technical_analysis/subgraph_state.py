@@ -59,3 +59,4 @@ class TechnicalAnalysisState(TypedDict):
     # --- Private State ---
     internal_progress: Annotated[dict[str, str], merge_dict]
     current_node: Annotated[str, last_value]
+    node_statuses: Annotated[dict[str, str], merge_dict]

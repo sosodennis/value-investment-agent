@@ -3,13 +3,13 @@ Extraction logic for the Planner Node.
 Uses LLM to extract intent (Company, Model Preference) from user query.
 """
 
-import os
 import re
 
 from dotenv import find_dotenv, load_dotenv
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
+
+from src.common.tools.llm import get_llm
 
 from .structures import TickerCandidate
 
@@ -130,14 +130,7 @@ def extract_candidates_from_search(
     Extract potential ticker symbols and company names from search results using LLM.
     """
     try:
-        llm = ChatOpenAI(
-            model="arcee-ai/trinity-large-preview:free",
-            temperature=0,
-            base_url="https://openrouter.ai/api/v1",
-            api_key=os.getenv("OPENROUTER_API_KEY"),
-            timeout=30,
-            max_retries=2,
-        )
+        llm = get_llm(timeout=30)
 
         prompt = ChatPromptTemplate.from_messages(
             [
@@ -163,7 +156,7 @@ def extract_candidates_from_search(
 
         return response.candidates
     except Exception as e:
-        from src.utils.logger import get_logger
+        from src.common.utils.logger import get_logger
 
         logger = get_logger(__name__)
         logger.warning(f"LLM Search Extraction failed: {e}. Returning empty list.")
@@ -175,14 +168,7 @@ def extract_intent(query: str) -> IntentExtraction:
     Extract intent from user query using LLM with heuristic fallback.
     """
     try:
-        llm = ChatOpenAI(
-            model="arcee-ai/trinity-large-preview:free",
-            temperature=0,
-            base_url="https://openrouter.ai/api/v1",
-            api_key=os.getenv("OPENROUTER_API_KEY"),
-            timeout=30,
-            max_retries=2,
-        )
+        llm = get_llm(timeout=30)
 
         prompt = ChatPromptTemplate.from_messages(
             [
@@ -209,7 +195,7 @@ Return the IntentExtraction object.
         response = chain.invoke({"query": query})
         return response
     except Exception as e:
-        from src.utils.logger import get_logger
+        from src.common.utils.logger import get_logger
 
         logger = get_logger(__name__)
         logger.warning(f"LLM Extraction failed: {e}. Using fallback.")

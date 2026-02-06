@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.workflow.nodes.financial_news_research.graph import (
+from src.workflow.nodes.financial_news_research.nodes import (
     analyst_node,
     fetch_node,
     search_node,
@@ -20,7 +20,7 @@ async def test_search_node_error_log():
     }
 
     with patch(
-        "src.workflow.nodes.financial_news_research.graph.news_search_multi_timeframe"
+        "src.workflow.nodes.financial_news_research.nodes.news_search_multi_timeframe"
     ) as mock_search:
         mock_search.side_effect = Exception("Search API Error")
 
@@ -48,7 +48,7 @@ async def test_selector_node_error_log():
         )
 
         with patch(
-            "src.workflow.nodes.financial_news_research.graph.get_llm"
+            "src.workflow.nodes.financial_news_research.nodes.get_llm"
         ) as mock_llm:
             # Simulate LLM failure
             mock_chain = MagicMock()
@@ -107,10 +107,10 @@ async def test_analyst_node_error_log():
         side_effect=mock_get_artifact,
     ):
         with patch(
-            "src.workflow.nodes.financial_news_research.graph.get_llm"
+            "src.workflow.nodes.financial_news_research.nodes.get_llm"
         ) as mock_llm:
             with patch(
-                "src.workflow.nodes.financial_news_research.graph.get_finbert_analyzer"
+                "src.workflow.nodes.financial_news_research.nodes.get_finbert_analyzer"
             ) as mock_finbert:
                 # Ensure finbert doesn't crash test
                 mock_finbert.return_value.is_available.return_value = False

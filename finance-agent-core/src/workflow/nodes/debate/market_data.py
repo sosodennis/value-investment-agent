@@ -13,7 +13,7 @@ import pandas as pd
 import yfinance as yf
 
 # Use the project's custom logger
-from src.utils.logger import get_logger
+from src.common.utils.logger import get_logger
 
 logger = get_logger(__name__)
 

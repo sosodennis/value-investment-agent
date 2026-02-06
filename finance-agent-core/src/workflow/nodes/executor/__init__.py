@@ -1,5 +1,3 @@
-"""Executor node package - extracts valuation parameters from financial data."""
+from .graph import build_executor_subgraph
 
-from .node import executor_node
-
-__all__ = ["executor_node"]
+__all__ = ["build_executor_subgraph"]

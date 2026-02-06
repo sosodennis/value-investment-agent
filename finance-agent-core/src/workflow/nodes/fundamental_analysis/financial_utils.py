@@ -2,7 +2,7 @@ from datetime import date
 
 from edgar import set_identity
 
-from src.utils.logger import get_logger
+from src.common.utils.logger import get_logger
 
 from .factories import FinancialReportFactory
 from .financial_models import FinancialReport

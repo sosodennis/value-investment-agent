@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.workflow.nodes.technical_analysis.graph import (
+from src.workflow.nodes.technical_analysis.nodes import (
     data_fetch_node,
     fracdiff_compute_node,
     semantic_translate_node,
@@ -17,7 +17,7 @@ async def test_data_fetch_node_error():
     }
 
     with patch(
-        "src.workflow.nodes.technical_analysis.graph.fetch_daily_ohlcv"
+        "src.workflow.nodes.technical_analysis.nodes.fetch_daily_ohlcv"
     ) as mock_fetch:
         mock_fetch.side_effect = Exception("YF API Error")
 
@@ -60,7 +60,7 @@ async def test_fracdiff_compute_node_crash():
         )
 
         with patch(
-            "src.workflow.nodes.technical_analysis.graph.calculate_rolling_fracdiff"
+            "src.workflow.nodes.technical_analysis.nodes.calculate_rolling_fracdiff"
         ) as mock_calc:
             mock_calc.side_effect = Exception("Math Error")
 
@@ -84,7 +84,7 @@ async def test_semantic_translate_node_error():
 
     # Simulate Assembler Crash
     with patch(
-        "src.workflow.nodes.technical_analysis.graph.assembler.assemble"
+        "src.workflow.nodes.technical_analysis.nodes.assembler.assemble"
     ) as mock_assemble:
         mock_assemble.side_effect = Exception("Assembler Crash")
 

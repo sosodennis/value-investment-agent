@@ -1,6 +1,3 @@
-"""Fundamental Analysis node package - determines which valuation model to use."""
+from .graph import build_fundamental_subgraph
 
-# planner_node is legacy, we now use the subgraph directly in graph.py
-# from .node import planner_node
-
-__all__ = []
+__all__ = ["build_fundamental_subgraph"]

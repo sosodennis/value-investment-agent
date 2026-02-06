@@ -16,7 +16,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from src.utils.logger import get_logger
+from src.common.utils.logger import get_logger
 
 logger = get_logger(__name__)
 

@@ -4,12 +4,10 @@ Semantic translation layer: deterministic tags + LLM interpretation.
 Converts numerical FracDiff metrics into semantic tags and natural language.
 """
 
-import os
-
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
 
-from src.utils.logger import get_logger
+from src.common.tools.llm import get_llm
+from src.common.utils.logger import get_logger
 
 from .structures import (
     ConfluenceEvidence,
@@ -22,19 +20,6 @@ logger = get_logger(__name__)
 
 # LLM Configuration
 DEFAULT_MODEL = "arcee-ai/trinity-large-preview:free"
-
-
-def get_llm(model: str = DEFAULT_MODEL, temperature: float = 0):
-    """Get configured LLM instance."""
-    return ChatOpenAI(
-        model=model,
-        temperature=temperature,
-        base_url="https://openrouter.ai/api/v1",
-        api_key=os.getenv("OPENROUTER_API_KEY"),
-        timeout=60,
-        max_retries=2,
-        streaming=False,
-    )
 
 
 class SemanticAssembler:

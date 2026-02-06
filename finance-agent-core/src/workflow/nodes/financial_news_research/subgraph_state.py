@@ -71,4 +71,5 @@ class FinancialNewsState(TypedDict):
     # --- Private State (for node coordination) ---
     internal_progress: Annotated[dict[str, str], merge_dict]
     current_node: Annotated[str, last_value]
+    node_statuses: Annotated[dict[str, str], merge_dict]
     error_logs: Annotated[list[dict], append_logs]

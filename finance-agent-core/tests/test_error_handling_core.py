@@ -1,9 +1,9 @@
 from decimal import Decimal
 
 from src.infrastructure.serialization import FinancialSafeSerializer
-from src.workflow.nodes.auditor.node import auditor_node
-from src.workflow.nodes.calculator.node import calculation_node
-from src.workflow.nodes.executor.node import executor_node
+from src.workflow.nodes.auditor.nodes import auditor_node
+from src.workflow.nodes.calculator.nodes import calculation_node
+from src.workflow.nodes.executor.nodes import executor_node
 
 
 def test_financial_safe_serializer_decimal():

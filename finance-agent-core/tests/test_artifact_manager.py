@@ -72,7 +72,7 @@ async def test_large_artifact_5mb():
     large_data = {
         "price_history": [
             {"date": f"2024-{i:04d}", "open": 100 + i * 0.1, "close": 101 + i * 0.1}
-            for i in range(50000)  # ~5MB of data
+            for i in range(100000)  # ~10MB of data
         ]
     }
 
@@ -90,7 +90,7 @@ async def test_large_artifact_5mb():
     artifact = await artifact_manager.get_artifact(artifact_id)
     assert artifact is not None
     assert artifact.type == "price_data"
-    assert len(artifact.data["price_history"]) == 50000
+    assert len(artifact.data["price_history"]) == 100000
 
 
 @pytest.mark.anyio

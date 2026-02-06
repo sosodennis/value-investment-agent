@@ -1,6 +1,6 @@
 from unittest.mock import patch
 
-from src.workflow.nodes.fundamental_analysis.graph import (
+from src.workflow.nodes.fundamental_analysis.nodes import (
     financial_health_node,
     model_selection_node,
 )
@@ -14,7 +14,7 @@ def test_financial_health_node_error_log():
     }
 
     with patch(
-        "src.workflow.nodes.fundamental_analysis.graph.fetch_financial_data"
+        "src.workflow.nodes.fundamental_analysis.nodes.fetch_financial_data"
     ) as mock_fetch:
         mock_fetch.side_effect = Exception("Network Timeout")
 
@@ -43,7 +43,7 @@ def test_model_selection_node_error_log():
     }
 
     with patch(
-        "src.workflow.nodes.fundamental_analysis.graph.select_valuation_model"
+        "src.workflow.nodes.fundamental_analysis.nodes.select_valuation_model"
     ) as mock_select:
         mock_select.side_effect = Exception("Selection Logic Error")
 

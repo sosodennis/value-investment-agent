@@ -1,5 +1,3 @@
-"""Auditor node package - validates extracted parameters against business rules."""
+from .graph import build_auditor_subgraph
 
-from .node import auditor_node
-
-__all__ = ["auditor_node"]
+__all__ = ["build_auditor_subgraph"]

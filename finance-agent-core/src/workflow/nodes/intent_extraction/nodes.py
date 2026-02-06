@@ -5,8 +5,8 @@ Handles extraction, searching, decision, and clarification for ticker resolution
 
 from langgraph.types import Command, interrupt
 
+from src.common.utils.logger import get_logger
 from src.interface.schemas import AgentOutputArtifact
-from src.utils.logger import get_logger
 
 from ..fundamental_analysis.extraction import (
     IntentExtraction,

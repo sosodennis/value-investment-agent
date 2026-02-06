@@ -1,24 +1,22 @@
 """
 Calculator Node - Executes deterministic valuation calculations.
-
-This is a simple wrapper around the SkillRegistry calculator functions.
 """
 
 from langgraph.graph import END
 from langgraph.types import Command
 
+from src.common.utils.logger import get_logger
 from src.interface.schemas import AgentOutputArtifact
-from src.utils.logger import get_logger
 
 from ...manager import SkillRegistry
 from ...schemas import CalculationOutput
-from ...state import AgentState
-from .schemas import CalculatorPreview
+from .mappers import summarize_calculator_for_preview
+from .subgraph_state import CalculatorState
 
 logger = get_logger(__name__)
 
 
-def calculation_node(state: AgentState) -> Command:
+def calculation_node(state: CalculatorState) -> Command:
     """
     Executes the deterministic valuation calculation.
     """
@@ -48,23 +46,23 @@ def calculation_node(state: AgentState) -> Command:
 
         logger.info("✅ Valuation Logic Complete. Returning result to Conversation.")
 
+        calc_output = CalculationOutput(metrics=result)
+        preview = summarize_calculator_for_preview(result, model_type)
+        artifact = AgentOutputArtifact(
+            summary=f"Valuation Complete. Model: {model_type}",
+            preview=preview,
+            reference=None,
+        )
+
+        fa_update = fundamental.copy()
+        fa_update["calculation_output"] = calc_output
+        fa_update["artifact"] = artifact
+
         return Command(
             update={
-                "fundamental_analysis": {
-                    "calculation_output": CalculationOutput(metrics=result),
-                    # Remove redundant artifact persistence here
-                },
+                "fundamental_analysis": fa_update,
+                "current_node": "calculator",
                 "node_statuses": {"calculator": "done"},
-                "artifact": AgentOutputArtifact(
-                    summary=f"Valuation Complete. Model: {model_type}",
-                    preview=CalculatorPreview(
-                        model_type=model_type,
-                        intrinsic_value_display=f"${result.get('intrinsic_value', 0):,.2f}",
-                        upside_display=f"{result.get('upside_potential', 0):+.1%}",
-                        confidence_display="Medium",
-                    ).model_dump(),
-                    reference=None,
-                ),
             },
             goto=END,
         )

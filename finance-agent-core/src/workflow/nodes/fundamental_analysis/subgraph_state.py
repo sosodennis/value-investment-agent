@@ -62,4 +62,4 @@ class FundamentalAnalysisState(TypedDict):
     # --- Private State (Not exposed in FundamentalAnalysisOutput) ---
     internal_progress: Annotated[dict[str, str], merge_dict]
     current_node: Annotated[str, last_value]
-    model_type: Annotated[str, last_value]
+    node_statuses: Annotated[dict[str, str], merge_dict]

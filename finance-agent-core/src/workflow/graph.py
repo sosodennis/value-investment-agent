@@ -6,12 +6,14 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 from psycopg_pool import AsyncConnectionPool
 
-from src.utils.logger import get_logger
+from src.common.utils.logger import get_logger
 
 from .interrupts import ApprovalDetails, HumanApprovalRequest
-from .nodes import auditor_node, calculation_node, executor_node
+from .nodes.auditor import build_auditor_subgraph
+from .nodes.calculator import build_calculator_subgraph
 from .nodes.consolidate_research import consolidate_research_node
 from .nodes.debate.graph import build_debate_subgraph
+from .nodes.executor import build_executor_subgraph
 from .nodes.financial_news_research.graph import build_financial_news_subgraph
 from .nodes.fundamental_analysis.graph import build_fundamental_subgraph
 from .nodes.intent_extraction.graph import build_intent_extraction_subgraph
@@ -146,18 +148,22 @@ async def get_graph():
 
             # Core Execution Nodes
             builder.add_node(
-                "executor", executor_node, metadata={"agent_id": "executor"}
+                "executor",
+                build_executor_subgraph(),
+                metadata={"agent_id": "executor"},
             )
             builder.add_node(
                 "auditor",
-                auditor_node,  # Was wrapped in RunnableLambda with hide_stream, but usually fine without if generic
+                build_auditor_subgraph(),
                 metadata={"agent_id": "auditor"},
             )
             builder.add_node(
                 "approval", approval_node, metadata={"agent_id": "approval"}
             )
             builder.add_node(
-                "calculator", calculation_node, metadata={"agent_id": "calculator"}
+                "calculator",
+                build_calculator_subgraph(),
+                metadata={"agent_id": "calculator"},
             )
 
             # --- Edge Definitions ---

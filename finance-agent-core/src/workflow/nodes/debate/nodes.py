@@ -1,15 +1,14 @@
 import json
-import os
 from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
 from langgraph.graph import END
 from langgraph.types import Command
 
+from src.common.tools.llm import get_llm
+from src.common.utils.logger import get_logger
 from src.interface.schemas import AgentOutputArtifact, ArtifactReference
 from src.services.artifact_manager import artifact_manager
-from src.utils.logger import get_logger
 
 from .mappers import summarize_debate_for_preview
 from .prompts import (
@@ -76,23 +75,6 @@ def _get_trimmed_history(history: list, max_chars: int = MAX_CHAR_HISTORY) -> li
         current_chars += len(msg_content)
 
     return trimmed
-
-
-def get_llm(model: str = DEFAULT_MODEL, temperature: float = 0):
-    """Factory for ChatOpenAI instance with OpenRouter support."""
-    api_key = os.environ.get("OPENROUTER_API_KEY")
-    base_url = "https://openrouter.ai/api/v1"
-
-    if not api_key:
-        api_key = os.environ.get("OPENAI_API_KEY")
-        base_url = "https://api.openai.com/v1"
-
-    return ChatOpenAI(
-        model=model,
-        temperature=temperature,
-        openai_api_key=api_key,
-        base_url=base_url,
-    )
 
 
 def _log_messages(messages: list, agent_name: str, round_num: int = 0):
