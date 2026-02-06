@@ -10,7 +10,9 @@ from ...config.llm_config import (
 )
 
 
-def get_llm(model: str = DEFAULT_MODEL, temperature: float = 0):
+def get_llm(
+    model: str = DEFAULT_MODEL, temperature: float = 0, timeout: float = LLM_TIMEOUT
+):
     """
     Standardize LLM configuration across all agents.
     If OPENROUTER_API_KEY is missing, falls back to default provider (OpenAI).
@@ -24,7 +26,7 @@ def get_llm(model: str = DEFAULT_MODEL, temperature: float = 0):
             temperature=temperature,
             base_url=OPENROUTER_BASE_URL,
             api_key=or_key,
-            timeout=LLM_TIMEOUT,
+            timeout=timeout,
             max_retries=LLM_MAX_RETRIES,
         )
 
@@ -33,6 +35,6 @@ def get_llm(model: str = DEFAULT_MODEL, temperature: float = 0):
         model=model,
         temperature=temperature,
         api_key=oa_key,
-        timeout=LLM_TIMEOUT,
+        timeout=timeout,
         max_retries=LLM_MAX_RETRIES,
     )
