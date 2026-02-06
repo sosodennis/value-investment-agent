@@ -7,7 +7,7 @@ from langchain_core.messages import AIMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
-from langgraph.types import Command
+from langgraph.types import Command, RetryPolicy
 
 from src.interface.schemas import AgentOutputArtifact, ArtifactReference
 from src.services.artifact_manager import artifact_manager
@@ -70,8 +70,8 @@ async def search_node(state: FinancialNewsState) -> Command:
         logger.warning("Financial News Research: No ticker resolved, skipping.")
         return Command(
             update={
-                "current_node": "searching",
-                "internal_progress": {"searching": "done"},
+                "current_node": "search_node",
+                "internal_progress": {"search_node": "done"},
             },
             goto=END,
         )
@@ -87,11 +87,19 @@ async def search_node(state: FinancialNewsState) -> Command:
         # Run async search in sync node
         results = await news_search_multi_timeframe(ticker, company_name)
     except Exception as e:
-        logger.error(f"--- [News Research] news_search CRASHED: {e} ---")
+        logger.error(f"--- [News Research] news_search CRASHED: {e} ---", exc_info=True)
         return Command(
             update={
-                "current_node": "searching",
-                "internal_progress": {"searching": "error"},
+                "current_node": "search_node",
+                "internal_progress": {"search_node": "error"},
+                "node_statuses": {"financial_news_research": "error"},
+                "error_logs": [
+                    {
+                        "node": "search_node",
+                        "error": f"Search failed: {str(e)}",
+                        "severity": "error",
+                    }
+                ],
             },
             goto=END,
         )
@@ -102,8 +110,8 @@ async def search_node(state: FinancialNewsState) -> Command:
         return Command(
             update={
                 "news_items": [],
-                "current_node": "searching",
-                "internal_progress": {"searching": "done"},
+                "current_node": "search_node",
+                "internal_progress": {"search_node": "done"},
             },
             goto=END,
         )
@@ -195,6 +203,10 @@ async def selector_node(state: FinancialNewsState) -> Command:
     formatted_results = ""
     raw_results = []
 
+    # Initialize error flags early to prevent UnboundLocalError
+    is_degraded = False
+    error_msg = ""
+
     if search_artifact_id:
         try:
             artifact = await artifact_manager.get_artifact(search_artifact_id)
@@ -232,12 +244,12 @@ async def selector_node(state: FinancialNewsState) -> Command:
         selection_data = json.loads(content)
         selected_articles = selection_data.get("selected_articles")
 
+        selected_indices = []
         if selected_articles is not None:
             # Match URLs back to raw_results indices
             selected_urls = [a.get("url") for a in selected_articles if a.get("url")]
 
             # Pre-compute URL to index map for O(1) lookup
-            # We want the FIRST occurrence index, just like the original loop with 'break'
             url_to_idx = {}
             for idx, r in enumerate(raw_results):
                 url = r.get("link")
@@ -256,10 +268,18 @@ async def selector_node(state: FinancialNewsState) -> Command:
                 selected_indices = [0, 1, 2][: len(raw_results)]
 
     except Exception as e:
-        logger.error(f"Selector node failed for {ticker}: {e}. Falling back to top 3.")
+        logger.error(
+            f"Selector node failed for {ticker}: {e}. Falling back to top 3.",
+            exc_info=True,
+        )
         selected_indices = [0, 1, 2][: len(raw_results)]
+        is_degraded = True
+        error_msg = str(e)
+        # We don't return early anymore; we proceed to save the fallback selection artifact
+        # but mark as degraded.
+        pass
 
-    # Limit to top 5 for funnel safety
+    # Limit to top 10 for funnel safety
     selected_indices = list(dict.fromkeys(selected_indices))[:10]
 
     logger.info(
@@ -268,6 +288,7 @@ async def selector_node(state: FinancialNewsState) -> Command:
 
     # Save selection to Artifact Store
     timestamp = int(time.time())
+    selection_artifact_id = None
     try:
         selection_data = {"selected_indices": selected_indices}
         selection_artifact_id = await artifact_manager.save_artifact(
@@ -278,13 +299,35 @@ async def selector_node(state: FinancialNewsState) -> Command:
     except Exception as e:
         logger.error(f"Failed to save selection artifact: {e}")
         selection_artifact_id = None
+        is_degraded = True
+        if not error_msg:  # Only set if no prior error message
+            error_msg = f"Failed to save selection artifact: {str(e)}"
+
+    update_payload = {
+        "financial_news_research": {"selection_artifact_id": selection_artifact_id},
+        "current_node": "selector_node",
+        "internal_progress": {"selector_node": "done", "fetch_node": "running"},
+    }
+
+    # If we reached here via exception, add degraded status and error logs
+    # Note: selection_artifact_id might be None if save failed, but fetch handles that.
+    if is_degraded:
+        update_payload["node_statuses"] = {"financial_news_research": "degraded"}
+        update_payload["error_logs"] = [
+            {
+                "node": "selector_node",
+                "error": f"Selection failed: {error_msg}. Falling back to top articles."
+                if error_msg and "Selection failed" not in error_msg
+                else (
+                    error_msg
+                    or "Selection failed due to an unknown error. Falling back to top articles."
+                ),
+                "severity": "warning",
+            }
+        ]
 
     return Command(
-        update={
-            "financial_news_research": {"selection_artifact_id": selection_artifact_id},
-            "current_node": "selector_node",
-            "internal_progress": {"selector_node": "done", "fetch_node": "running"},
-        },
+        update=update_payload,
         goto="fetch_node",
     )
 
@@ -297,6 +340,8 @@ async def fetch_node(state: FinancialNewsState) -> Command:
 
     raw_results = []
     selected_indices = []
+    news_items_id = None
+    article_errors = []
 
     if search_id and selection_id:
         try:
@@ -308,6 +353,9 @@ async def fetch_node(state: FinancialNewsState) -> Command:
                 selected_indices = sel_art.data.get("selected_indices", [])
         except Exception as e:
             logger.error(f"Failed to retrieve fetch artifacts: {e}")
+            article_errors.append(
+                f"Failed to retrieve search/selection artifacts: {str(e)}"
+            )
 
     logger.info(
         f"--- [News Research] Fetching {len(selected_indices)} articles content ---"
@@ -336,8 +384,11 @@ async def fetch_node(state: FinancialNewsState) -> Command:
     try:
         full_contents = await fetch_all()
     except Exception as e:
-        logger.error(f"Async fetch failed: {e}. Falling back to empty contents.")
+        logger.error(
+            f"Async fetch failed: {e}. Falling back to empty contents.", exc_info=True
+        )
         full_contents = [None] * len(articles_to_fetch)
+        article_errors.append(f"Content fetch partially failed: {str(e)}")
 
     # Build news items and store full content in Artifact Store
     news_items = []
@@ -420,6 +471,7 @@ async def fetch_node(state: FinancialNewsState) -> Command:
             )
 
     # Save news_items list to Artifact Store
+    # Save news_items list to Artifact Store
     news_items_id = None
     try:
         news_items_id = await artifact_manager.save_artifact(
@@ -430,14 +482,28 @@ async def fetch_node(state: FinancialNewsState) -> Command:
     except Exception as e:
         logger.error(f"Failed to save news items list artifact: {e}")
 
-    return Command(
-        update={
-            "financial_news_research": {"news_items_artifact_id": news_items_id},
-            "current_node": "fetch_node",
-            "internal_progress": {"fetch_node": "done", "analyst_node": "running"},
-        },
-        goto="analyst_node",
-    )
+    # Determine final node status
+    final_status = "running"
+    if article_errors:
+        final_status = "degraded"
+
+    update_payload = {
+        "financial_news_research": {"news_items_artifact_id": news_items_id},
+        "current_node": "fetch_node",
+        "internal_progress": {"fetch_node": "done", "analyst_node": "running"},
+        "node_statuses": {"financial_news_research": final_status},
+    }
+
+    if article_errors:
+        update_payload["error_logs"] = [
+            {
+                "node": "fetch_node",
+                "error": article_errors[0],
+                "severity": "warning",
+            }
+        ]
+
+    return Command(update=update_payload, goto="analyst_node")
 
 
 async def analyst_node(state: FinancialNewsState) -> Command:
@@ -446,16 +512,29 @@ async def analyst_node(state: FinancialNewsState) -> Command:
     news_items_id = ctx.get("news_items_artifact_id")
 
     news_items: list[dict] = []
+    # Initialize article_errors early
+    article_errors = []
+
     if news_items_id:
         try:
             art = await artifact_manager.get_artifact(news_items_id)
             if art:
+                # print(f"DEBUG: Retrieved artifact data: {art.data}")
                 news_items = art.data.get("news_items", [])
         except Exception as e:
             logger.error(f"Failed to retrieve news items: {e}")
+            article_errors.append(f"Failed to retrieve news items: {str(e)}")
 
     intent_ctx = state.get("intent_extraction", {})
     ticker = intent_ctx.get("resolved_ticker") or state.get("ticker")
+
+    if news_items_id and not news_items:
+        # If ID existed but items empty, likely a retrieval failure we logged above.
+        # We can add a generic error if we want, or rely on the logger.
+        # But to match the "degraded" expectation if retrieval failed:
+        # We need to know IF it failed.
+        # Let's adjust the try-except above to populate article_errors.
+        pass
 
     logger.info(
         f"--- [News Research] Analyzing {len(news_items)} articles for {ticker} ---"
@@ -489,6 +568,14 @@ async def analyst_node(state: FinancialNewsState) -> Command:
             update={
                 "current_node": "analyst_node",
                 "internal_progress": {"analyst_node": "error"},
+                "node_statuses": {"financial_news_research": "error"},
+                "error_logs": [
+                    {
+                        "node": "analyst_node",
+                        "error": f"Failed to create analysis chains: {str(e)}",
+                        "severity": "error",
+                    }
+                ],
             },
             goto=END,
         )
@@ -572,9 +659,20 @@ async def analyst_node(state: FinancialNewsState) -> Command:
             )
         except Exception as e:
             logger.error(
-                f"--- [News Research] ❌ Analysis FAILED for article {idx+1}: {e} ---"
+                f"--- [News Research] ❌ Analysis FAILED for article {idx+1}: {e} ---",
+                exc_info=True,
             )
-            logger.error(f"Analysis failed for {item.get('title', 'Unknown')}: {e}")
+            # Log individual article analysis failures as warnings
+            # We use Command here to update state immediately if we want,
+            # but since we are in a loop, we'll just log to logger and
+            # maybe collect them at the end or use a more robust approach.
+            # Actually, standard LangGraph nodes return ONE update.
+            # Let's collect errors in a local list and return them once at the end of the node.
+            # Actually, standard LangGraph nodes return ONE update.
+            # Let's collect errors in a local list and return them once at the end of the node.
+            article_errors.append(
+                f"Analysis failed for {item.get('title', 'Unknown')}: {str(e)}"
+            )
 
     analyzed_count = len([i for i in news_items if i.get("analysis")])
     logger.info(
@@ -593,14 +691,28 @@ async def analyst_node(state: FinancialNewsState) -> Command:
         logger.error(f"Failed to save analyzed news items artifact: {e}")
         news_items_id = None
 
-    return Command(
-        update={
-            "financial_news_research": {"news_items_artifact_id": news_items_id},
-            "current_node": "analyst_node",
-            "internal_progress": {"analyst_node": "done", "aggregator_node": "running"},
-        },
-        goto="aggregator_node",
-    )
+    # Determine final node status
+    final_status = "running"
+    if article_errors:
+        final_status = "degraded"
+
+    update_payload = {
+        "financial_news_research": {"news_items_artifact_id": news_items_id},
+        "current_node": "analyst_node",
+        "internal_progress": {"analyst_node": "done", "aggregator_node": "running"},
+        "node_statuses": {"financial_news_research": final_status},
+    }
+
+    if article_errors:
+        update_payload["error_logs"] = [
+            {
+                "node": "analyst_node",
+                "error": f"Failed to analyze {len(article_errors)} articles.",
+                "severity": "warning",
+            }
+        ]
+
+    return Command(update=update_payload, goto="aggregator_node")
 
 
 async def aggregator_node(state: FinancialNewsState) -> Command:
@@ -764,6 +876,7 @@ def build_financial_news_subgraph():
         "selector_node",
         selector_node,  # Now async
         metadata={"agent_id": "financial_news_research"},
+        retry=RetryPolicy(max_attempts=3),
     )
     builder.add_node(
         "fetch_node", fetch_node, metadata={"agent_id": "financial_news_research"}
@@ -772,6 +885,7 @@ def build_financial_news_subgraph():
         "analyst_node",
         analyst_node,
         metadata={"agent_id": "financial_news_research"},
+        retry=RetryPolicy(max_attempts=3),
     )
     builder.add_node(
         "aggregator_node",

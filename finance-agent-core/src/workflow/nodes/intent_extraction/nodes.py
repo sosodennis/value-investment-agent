@@ -42,19 +42,38 @@ def extraction_node(state: IntentExtractionState) -> Command:
         )
 
     logger.info(f"--- Intent Extraction: Extracting intent from: {user_query} ---")
-    intent = extract_intent(user_query)
-    return Command(
-        update={
-            "intent_extraction": {
-                "extracted_intent": intent.model_dump(),
-                "status": "searching",
+    try:
+        intent = extract_intent(user_query)
+        return Command(
+            update={
+                "intent_extraction": {
+                    "extracted_intent": intent.model_dump(),
+                    "status": "searching",
+                },
+                "current_node": "extraction",
+                "internal_progress": {"extraction": "done", "searching": "running"},
+                "node_statuses": {"intent_extraction": "running"},
             },
-            "current_node": "extraction",
-            "internal_progress": {"extraction": "done", "searching": "running"},
-            "node_statuses": {"intent_extraction": "running"},
-        },
-        goto="searching",
-    )
+            goto="searching",
+        )
+    except Exception as e:
+        logger.error(f"Intent extraction failed: {e}")
+        return Command(
+            update={
+                "intent_extraction": {"status": "clarifying"},
+                "current_node": "extraction",
+                "internal_progress": {"extraction": "error", "clarifying": "running"},
+                "node_statuses": {"intent_extraction": "degraded"},
+                "error_logs": [
+                    {
+                        "node": "extraction",
+                        "error": f"Model failed to extract intent: {str(e)}",
+                        "severity": "error",
+                    }
+                ],
+            },
+            goto="clarifying",
+        )
 
 
 def searching_node(state: IntentExtractionState) -> Command:
@@ -100,56 +119,77 @@ def searching_node(state: IntentExtractionState) -> Command:
     logger.info(f"--- Intent Extraction: Searching for queries: {search_queries} ---")
     candidate_map = {}
 
-    # === Execute Search on All Queries ===
-    for query in search_queries:
-        # 1. Try Yahoo Finance Search
-        yf_candidates = search_ticker(query)
+    try:
+        # === Execute Search on All Queries ===
+        for query in search_queries:
+            # 1. Try Yahoo Finance Search
+            yf_candidates = search_ticker(query)
 
-        # Check for high confidence matches
-        high_confidence_candidates = [c for c in yf_candidates if c.confidence >= 0.9]
-        if high_confidence_candidates:
-            logger.info(
-                f"--- Intent Extraction: High confidence match found via Yahoo for '{query}': {[c.symbol for c in high_confidence_candidates]} ---"
-            )
+            # Check for high confidence matches
+            high_confidence_candidates = [
+                c for c in yf_candidates if c.confidence >= 0.9
+            ]
+            if high_confidence_candidates:
+                logger.info(
+                    f"--- Intent Extraction: High confidence match found via Yahoo for '{query}': {[c.symbol for c in high_confidence_candidates]} ---"
+                )
 
-        for c in yf_candidates:
-            # Deduplicate by symbol
-            if c.symbol not in candidate_map:
-                candidate_map[c.symbol] = c
-            else:
-                # Merge: Keep the one with higher confidence
+            for c in yf_candidates:
+                # Deduplicate by symbol
+                if c.symbol not in candidate_map:
+                    candidate_map[c.symbol] = c
+                else:
+                    # Merge: Keep the one with higher confidence
+                    if c.confidence > candidate_map[c.symbol].confidence:
+                        candidate_map[c.symbol] = c
+
+        # 2. Web Search fallback (Always run to ensure coverage)
+        # Use the primary query (Name or Ticker) for web search
+        primary_query = search_queries[0]
+        # Use quotes to force exact match and reduce noise
+        search_results = web_search(f'"{primary_query}" stock ticker symbol official')
+
+        web_candidates = extract_candidates_from_search(primary_query, search_results)
+
+        for c in web_candidates:
+            if c.symbol in candidate_map:
                 if c.confidence > candidate_map[c.symbol].confidence:
                     candidate_map[c.symbol] = c
-
-    # 2. Web Search fallback (Always run to ensure coverage)
-    # Use the primary query (Name or Ticker) for web search
-    primary_query = search_queries[0]
-    # Use quotes to force exact match and reduce noise
-    search_results = web_search(f'"{primary_query}" stock ticker symbol official')
-
-    web_candidates = extract_candidates_from_search(primary_query, search_results)
-
-    for c in web_candidates:
-        if c.symbol in candidate_map:
-            if c.confidence > candidate_map[c.symbol].confidence:
+            else:
                 candidate_map[c.symbol] = c
-        else:
-            candidate_map[c.symbol] = c
 
-    final_candidates = deduplicate_candidates(list(candidate_map.values()))
-    logger.info(f"Final candidates: {[c.symbol for c in final_candidates]}")
+        final_candidates = deduplicate_candidates(list(candidate_map.values()))
+        logger.info(f"Final candidates: {[c.symbol for c in final_candidates]}")
 
-    return Command(
-        update={
-            "intent_extraction": {
-                "ticker_candidates": [c.model_dump() for c in final_candidates],
-                "status": "deciding",
+        return Command(
+            update={
+                "intent_extraction": {
+                    "ticker_candidates": [c.model_dump() for c in final_candidates],
+                    "status": "deciding",
+                },
+                "current_node": "searching",
+                "internal_progress": {"searching": "done", "deciding": "running"},
             },
-            "current_node": "searching",
-            "internal_progress": {"searching": "done", "deciding": "running"},
-        },
-        goto="deciding",
-    )
+            goto="deciding",
+        )
+    except Exception as e:
+        logger.error(f"Ticker search failed: {e}")
+        return Command(
+            update={
+                "intent_extraction": {"status": "clarifying"},
+                "current_node": "searching",
+                "internal_progress": {"searching": "error", "clarifying": "running"},
+                "node_statuses": {"intent_extraction": "degraded"},
+                "error_logs": [
+                    {
+                        "node": "searching",
+                        "error": f"Search tool failed: {str(e)}. Switching to manual selection.",
+                        "severity": "error",
+                    }
+                ],
+            },
+            goto="clarifying",
+        )
 
 
 def decision_node(state: IntentExtractionState) -> Command:
@@ -170,71 +210,90 @@ def decision_node(state: IntentExtractionState) -> Command:
             goto="clarifying",
         )
 
-    # Check for ambiguity
-    candidate_objs = [TickerCandidate(**c) for c in candidates]
+    try:
+        # Check for ambiguity
+        candidate_objs = [TickerCandidate(**c) for c in candidates]
 
-    if should_request_clarification(candidate_objs):
-        logger.warning(
-            "--- Intent Extraction: Ambiguity detected, requesting clarification ---"
+        if should_request_clarification(candidate_objs):
+            logger.warning(
+                "--- Intent Extraction: Ambiguity detected, requesting clarification ---"
+            )
+            return Command(
+                update={
+                    "intent_extraction": {"status": "clarifying"},
+                    "current_node": "deciding",
+                    "internal_progress": {"deciding": "done", "clarifying": "running"},
+                },
+                goto="clarifying",
+            )
+
+        # Resolved - proceed to set resolved ticker
+        resolved_ticker = candidate_objs[0].symbol
+        logger.info(f"--- Intent Extraction: Ticker resolved to {resolved_ticker} ---")
+        profile = get_company_profile(resolved_ticker)
+
+        if not profile:
+            logger.warning(
+                f"--- Intent Extraction: Could not fetch profile for {resolved_ticker}, requesting clarification ---"
+            )
+            return Command(
+                update={
+                    "intent_extraction": {"status": "clarifying"},
+                    "current_node": "deciding",
+                    "internal_progress": {"deciding": "done", "clarifying": "running"},
+                },
+                goto="clarifying",
+            )
+
+        from langgraph.graph import END
+
+        # --- Adapter Logic Integration ---
+        # Prepare context for artifact generation
+        intent_ctx = {
+            "status": "resolved",
+            "resolved_ticker": resolved_ticker,
+            "company_profile": profile.model_dump(),
+            # Other fields might be merged by the graph automatically, but we rely on what we are returning
+        }
+
+        # 1. Generate local preview
+        preview = summarize_intent_for_preview(intent_ctx)
+
+        # 2. Construct Artifact
+        summary = f"已確認分析標的: {resolved_ticker}"
+        artifact = AgentOutputArtifact(summary=summary, preview=preview, reference=None)
+
+        # 3. Inject artifact
+        intent_ctx["artifact"] = artifact
+
+        return Command(
+            update={
+                "intent_extraction": intent_ctx,
+                "ticker": resolved_ticker,
+                "current_node": "deciding",
+                "internal_progress": {"deciding": "done"},
+                "node_statuses": {"intent_extraction": "done"},
+            },
+            goto=END,
         )
+    except Exception as e:
+        logger.error(f"Decision logic failed: {e}")
         return Command(
             update={
                 "intent_extraction": {"status": "clarifying"},
                 "current_node": "deciding",
-                "internal_progress": {"deciding": "done", "clarifying": "running"},
+                "internal_progress": {"deciding": "error", "clarifying": "running"},
+                "node_statuses": {"intent_extraction": "degraded"},
+                "error_logs": [
+                    {
+                        "node": "deciding",
+                        "error": f"Decision logic crashed: {str(e)}. Switching to manual selection.",
+                        "severity": "error",
+                    }
+                ],
             },
             goto="clarifying",
         )
-
-    # Resolved - proceed to set resolved ticker
-    resolved_ticker = candidate_objs[0].symbol
-    logger.info(f"--- Intent Extraction: Ticker resolved to {resolved_ticker} ---")
-    profile = get_company_profile(resolved_ticker)
-
-    if not profile:
-        logger.warning(
-            f"--- Intent Extraction: Could not fetch profile for {resolved_ticker}, requesting clarification ---"
-        )
-        return Command(
-            update={
-                "intent_extraction": {"status": "clarifying"},
-                "current_node": "deciding",
-                "internal_progress": {"deciding": "done", "clarifying": "running"},
-            },
-            goto="clarifying",
-        )
-
-    from langgraph.graph import END
-
-    # --- Adapter Logic Integration ---
-    # Prepare context for artifact generation
-    intent_ctx = {
-        "status": "resolved",
-        "resolved_ticker": resolved_ticker,
-        "company_profile": profile.model_dump(),
-        # Other fields might be merged by the graph automatically, but we rely on what we are returning
-    }
-
-    # 1. Generate local preview
-    preview = summarize_intent_for_preview(intent_ctx)
-
-    # 2. Construct Artifact
-    summary = f"已確認分析標的: {resolved_ticker}"
-    artifact = AgentOutputArtifact(summary=summary, preview=preview, reference=None)
-
-    # 3. Inject artifact
-    intent_ctx["artifact"] = artifact
-
-    return Command(
-        update={
-            "intent_extraction": intent_ctx,
-            "ticker": resolved_ticker,
-            "current_node": "deciding",
-            "internal_progress": {"deciding": "done"},
-            "node_statuses": {"intent_extraction": "done"},
-        },
-        goto=END,
-    )
 
 
 def clarification_node(state: IntentExtractionState) -> Command:

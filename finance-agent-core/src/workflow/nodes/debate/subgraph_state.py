@@ -15,6 +15,7 @@ from ...state import (
     FundamentalAnalysisContext,
     IntentExtractionContext,
     TechnicalAnalysisContext,
+    append_logs,
     last_value,
     merge_dict,
 )
@@ -44,6 +45,7 @@ class DebateOutput(BaseModel):
     model_type: str | None = None
     messages: list = Field(default_factory=list)
     node_statuses: dict[str, str] = Field(default_factory=dict)
+    error_logs: list[dict] = Field(default_factory=list)
 
 
 class DebateState(TypedDict):
@@ -64,6 +66,7 @@ class DebateState(TypedDict):
     debate: Annotated[DebateContext, merge_dict]
     model_type: Annotated[str | None, last_value]
     messages: Annotated[list, add_messages]
+    error_logs: Annotated[list[dict], append_logs]
 
     # Internal-only state during execution (removed from shared DebateContext)
     history: Annotated[list, add_messages]

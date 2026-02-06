@@ -4,7 +4,7 @@ from langgraph.graph import add_messages
 from pydantic import BaseModel, ConfigDict, Field
 from typing_extensions import TypedDict
 
-from ...state import IntentExtractionContext, merge_dict
+from ...state import IntentExtractionContext, append_logs, merge_dict
 
 
 class IntentExtractionInput(BaseModel):
@@ -31,6 +31,7 @@ class IntentExtractionOutput(BaseModel):
     ticker: str | None = None
     messages: list = Field(default_factory=list)
     node_statuses: dict[str, str] = Field(default_factory=dict)
+    error_logs: list[dict] = Field(default_factory=list)
 
 
 class IntentExtractionState(TypedDict):
@@ -51,3 +52,4 @@ class IntentExtractionState(TypedDict):
     # --- Private State ---
     internal_progress: Annotated[dict[str, str], merge_dict]
     current_node: str
+    error_logs: Annotated[list[dict], append_logs]

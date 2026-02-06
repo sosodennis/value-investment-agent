@@ -12,6 +12,7 @@ from typing_extensions import TypedDict
 from ...state import (
     IntentExtractionContext,
     TechnicalAnalysisContext,
+    append_logs,
     last_value,
     merge_dict,
 )
@@ -37,6 +38,7 @@ class TechnicalAnalysisOutput(BaseModel):
     technical_analysis: TechnicalAnalysisContext
     messages: list = Field(default_factory=list)
     node_statuses: dict[str, str] = Field(default_factory=dict)
+    error_logs: list[dict] = Field(default_factory=list)
 
 
 class TechnicalAnalysisState(TypedDict):
@@ -52,6 +54,7 @@ class TechnicalAnalysisState(TypedDict):
     # --- Core State (Reducers applied) ---
     technical_analysis: Annotated[TechnicalAnalysisContext, merge_dict]
     messages: Annotated[list, add_messages]
+    error_logs: Annotated[list[dict], append_logs]
 
     # --- Private State ---
     internal_progress: Annotated[dict[str, str], merge_dict]

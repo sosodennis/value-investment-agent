@@ -419,136 +419,283 @@ async def _execute_moderator_critique(
 
 # --- Round 1 ---
 async def r1_bull_node(state: DebateState) -> Command:
-    res = await _execute_bull_agent(state, 1, BULL_R1_ADVERSARIAL)
-    return Command(
-        update={
-            "history": res["history"],
-            "bull_thesis": res["bull_thesis"],
-            "internal_progress": {
-                "r1_bull": "done",
-                "r1_bear": "running",
+    try:
+        res = await _execute_bull_agent(state, 1, BULL_R1_ADVERSARIAL)
+        return Command(
+            update={
+                "history": res["history"],
+                "bull_thesis": res["bull_thesis"],
+                "internal_progress": {
+                    "r1_bull": "done",
+                    "r1_bear": "running",
+                },
             },
-        },
-        goto="r1_moderator",
-    )
+            goto="r1_moderator",
+        )
+    except Exception as e:
+        logger.error(f"r1_bull failed: {e}")
+        error_msg = f"Bull Agent failed in Round 1: {str(e)}"
+        return Command(
+            update={
+                "history": [
+                    AIMessage(content=f"[SYSTEM] {error_msg}", name="GrowthHunter")
+                ],
+                "bull_thesis": "[ARGUMENT MISSING]",
+                "internal_progress": {"r1_bull": "error", "r1_bear": "running"},
+                "node_statuses": {"debate": "degraded"},
+                "error_logs": [
+                    {"node": "r1_bull", "error": str(e), "severity": "error"}
+                ],
+            },
+            goto="r1_moderator",
+        )
 
 
 async def r1_bear_node(state: DebateState) -> Command:
-    res = await _execute_bear_agent(state, 1, BEAR_R1_ADVERSARIAL)
-    return Command(
-        update={
-            "history": res["history"],
-            "bear_thesis": res["bear_thesis"],
-            "internal_progress": {"r1_bear": "done"},
-        },
-        goto="r1_moderator",
-    )
+    try:
+        res = await _execute_bear_agent(state, 1, BEAR_R1_ADVERSARIAL)
+        return Command(
+            update={
+                "history": res["history"],
+                "bear_thesis": res["bear_thesis"],
+                "internal_progress": {"r1_bear": "done"},
+            },
+            goto="r1_moderator",
+        )
+    except Exception as e:
+        logger.error(f"r1_bear failed: {e}")
+        error_msg = f"Bear Agent failed in Round 1: {str(e)}"
+        return Command(
+            update={
+                "history": [
+                    AIMessage(
+                        content=f"[SYSTEM] {error_msg}", name="ForensicAccountant"
+                    )
+                ],
+                "bear_thesis": "[ARGUMENT MISSING]",
+                "internal_progress": {"r1_bear": "error"},
+                "node_statuses": {"debate": "degraded"},
+                "error_logs": [
+                    {"node": "r1_bear", "error": str(e), "severity": "error"}
+                ],
+            },
+            goto="r1_moderator",
+        )
 
 
 async def r1_moderator_node(state: DebateState) -> Command:
-    res = await _execute_moderator_critique(state, 1)
-    # [NEW] Emit progress artifact
     try:
-        preview = summarize_debate_for_preview(
-            {
-                "current_round": 1,
-                "winning_thesis": "Round 1 complete, synthesizing arguments...",
-            }
-        )
-        artifact = AgentOutputArtifact(
-            summary="Cognitive Debate: Round 1 moderator critique complete",
-            preview=preview,
-            reference=None,
-        )
-    except Exception:
-        artifact = None
+        res = await _execute_moderator_critique(state, 1)
+        # [NEW] Emit progress artifact
+        try:
+            preview = summarize_debate_for_preview(
+                {
+                    "current_round": 1,
+                    "winning_thesis": "Round 1 complete, synthesizing arguments...",
+                }
+            )
+            artifact = AgentOutputArtifact(
+                summary="Cognitive Debate: Round 1 moderator critique complete",
+                preview=preview,
+                reference=None,
+            )
+        except Exception:
+            artifact = None
 
-    return Command(
-        update={
-            "history": res["history"],
-            "debate": {"current_round": res["current_round"], "artifact": artifact},
-            "internal_progress": {"r1_moderator": "done", "r2_bull": "running"},
-        },
-        goto="r2_bull",
-    )
+        return Command(
+            update={
+                "history": res["history"],
+                "debate": {"current_round": res["current_round"], "artifact": artifact},
+                "internal_progress": {"r1_moderator": "done", "r2_bull": "running"},
+            },
+            goto="r2_bull",
+        )
+    except Exception as e:
+        logger.error(f"r1_moderator failed: {e}")
+        error_msg = f"Moderator failed in Round 1: {str(e)}"
+        # Inject dummy moderator msg so history is not broken
+        return Command(
+            update={
+                "history": [AIMessage(content=f"[SYSTEM] {error_msg}", name="Judge")],
+                "debate": {"current_round": 1},
+                "internal_progress": {"r1_moderator": "error", "r2_bull": "running"},
+                "node_statuses": {"debate": "degraded"},
+                "error_logs": [
+                    {"node": "r1_moderator", "error": str(e), "severity": "error"}
+                ],
+            },
+            goto="r2_bull",
+        )
 
 
 # --- Round 2 ---
 async def r2_bull_node(state: DebateState) -> Command:
-    res = await _execute_bull_agent(state, 2, BULL_R2_ADVERSARIAL)
-    return Command(
-        update={
-            "history": res["history"],
-            "bull_thesis": res["bull_thesis"],
-            "internal_progress": {"r2_bull": "done", "r2_bear": "running"},
-        },
-        goto="r2_bear",
-    )
+    try:
+        res = await _execute_bull_agent(state, 2, BULL_R2_ADVERSARIAL)
+        return Command(
+            update={
+                "history": res["history"],
+                "bull_thesis": res["bull_thesis"],
+                "internal_progress": {"r2_bull": "done", "r2_bear": "running"},
+            },
+            goto="r2_bear",
+        )
+    except Exception as e:
+        logger.error(f"r2_bull failed: {e}")
+        error_msg = f"Bull Agent failed in Round 2: {str(e)}"
+        return Command(
+            update={
+                "history": [
+                    AIMessage(content=f"[SYSTEM] {error_msg}", name="GrowthHunter")
+                ],
+                "bull_thesis": "[ARGUMENT MISSING]",
+                "internal_progress": {"r2_bull": "error", "r2_bear": "running"},
+                "node_statuses": {"debate": "degraded"},
+                "error_logs": [
+                    {"node": "r2_bull", "error": str(e), "severity": "error"}
+                ],
+            },
+            goto="r2_bear",
+        )
 
 
 async def r2_bear_node(state: DebateState) -> Command:
-    res = await _execute_bear_agent(state, 2, BEAR_R2_ADVERSARIAL)
-    return Command(
-        update={
-            "history": res["history"],
-            "bear_thesis": res["bear_thesis"],
-            "internal_progress": {"r2_bear": "done", "r2_moderator": "running"},
-        },
-        goto="r2_moderator",
-    )
+    try:
+        res = await _execute_bear_agent(state, 2, BEAR_R2_ADVERSARIAL)
+        return Command(
+            update={
+                "history": res["history"],
+                "bear_thesis": res["bear_thesis"],
+                "internal_progress": {"r2_bear": "done", "r2_moderator": "running"},
+            },
+            goto="r2_moderator",
+        )
+    except Exception as e:
+        logger.error(f"r2_bear failed: {e}")
+        error_msg = f"Bear Agent failed in Round 2: {str(e)}"
+        return Command(
+            update={
+                "history": [
+                    AIMessage(
+                        content=f"[SYSTEM] {error_msg}", name="ForensicAccountant"
+                    )
+                ],
+                "bear_thesis": "[ARGUMENT MISSING]",
+                "internal_progress": {"r2_bear": "error", "r2_moderator": "running"},
+                "node_statuses": {"debate": "degraded"},
+                "error_logs": [
+                    {"node": "r2_bear", "error": str(e), "severity": "error"}
+                ],
+            },
+            goto="r2_moderator",
+        )
 
 
 async def r2_moderator_node(state: DebateState) -> Command:
-    res = await _execute_moderator_critique(state, 2)
-    # [NEW] Emit progress artifact
     try:
-        preview = summarize_debate_for_preview(
-            {
-                "current_round": 2,
-                "winning_thesis": "Round 2 cross-review complete, assessing vulnerabilities...",
-            }
-        )
-        artifact = AgentOutputArtifact(
-            summary="Cognitive Debate: Round 2 adversarial analysis complete",
-            preview=preview,
-            reference=None,
-        )
-    except Exception:
-        artifact = None
+        res = await _execute_moderator_critique(state, 2)
+        # [NEW] Emit progress artifact
+        try:
+            preview = summarize_debate_for_preview(
+                {
+                    "current_round": 2,
+                    "winning_thesis": "Round 2 cross-review complete, assessing vulnerabilities...",
+                }
+            )
+            artifact = AgentOutputArtifact(
+                summary="Cognitive Debate: Round 2 adversarial analysis complete",
+                preview=preview,
+                reference=None,
+            )
+        except Exception:
+            artifact = None
 
-    return Command(
-        update={
-            "history": res["history"],
-            "debate": {"current_round": res["current_round"], "artifact": artifact},
-            "internal_progress": {"r2_moderator": "done", "r3_bear": "running"},
-        },
-        goto="r3_bear",
-    )
+        return Command(
+            update={
+                "history": res["history"],
+                "debate": {"current_round": res["current_round"], "artifact": artifact},
+                "internal_progress": {"r2_moderator": "done", "r3_bear": "running"},
+            },
+            goto="r3_bear",
+        )
+    except Exception as e:
+        logger.error(f"r2_moderator failed: {e}")
+        error_msg = f"Moderator failed in Round 2: {str(e)}"
+        return Command(
+            update={
+                "history": [AIMessage(content=f"[SYSTEM] {error_msg}", name="Judge")],
+                "debate": {"current_round": 2},
+                "internal_progress": {"r2_moderator": "error", "r3_bear": "running"},
+                "node_statuses": {"debate": "degraded"},
+                "error_logs": [
+                    {"node": "r2_moderator", "error": str(e), "severity": "error"}
+                ],
+            },
+            goto="r3_bear",
+        )
 
 
 # --- Round 3 ---
 async def r3_bear_node(state: DebateState) -> Command:
-    res = await _execute_bear_agent(state, 3, BEAR_R2_ADVERSARIAL)
-    return Command(
-        update={
-            "history": res["history"],
-            "bear_thesis": res["bear_thesis"],
-            "internal_progress": {"r3_bear": "done", "r3_bull": "running"},
-        },
-        goto="r3_bull",
-    )
+    try:
+        res = await _execute_bear_agent(state, 3, BEAR_R2_ADVERSARIAL)
+        return Command(
+            update={
+                "history": res["history"],
+                "bear_thesis": res["bear_thesis"],
+                "internal_progress": {"r3_bear": "done", "r3_bull": "running"},
+            },
+            goto="r3_bull",
+        )
+    except Exception as e:
+        logger.error(f"r3_bear failed: {e}")
+        error_msg = f"Bear Agent failed in Round 3: {str(e)}"
+        return Command(
+            update={
+                "history": [
+                    AIMessage(
+                        content=f"[SYSTEM] {error_msg}", name="ForensicAccountant"
+                    )
+                ],
+                "bear_thesis": "[ARGUMENT MISSING]",
+                "internal_progress": {"r3_bear": "error", "r3_bull": "running"},
+                "node_statuses": {"debate": "degraded"},
+                "error_logs": [
+                    {"node": "r3_bear", "error": str(e), "severity": "error"}
+                ],
+            },
+            goto="r3_bull",
+        )
 
 
 async def r3_bull_node(state: DebateState) -> Command:
-    res = await _execute_bull_agent(state, 3, BULL_R2_ADVERSARIAL)
-    return Command(
-        update={
-            "history": res["history"],
-            "bull_thesis": res["bull_thesis"],
-            "internal_progress": {"r3_bull": "done", "verdict": "running"},
-        },
-        goto="verdict",
-    )
+    try:
+        res = await _execute_bull_agent(state, 3, BULL_R2_ADVERSARIAL)
+        return Command(
+            update={
+                "history": res["history"],
+                "bull_thesis": res["bull_thesis"],
+                "internal_progress": {"r3_bull": "done", "verdict": "running"},
+            },
+            goto="verdict",
+        )
+    except Exception as e:
+        logger.error(f"r3_bull failed: {e}")
+        error_msg = f"Bull Agent failed in Round 3: {str(e)}"
+        return Command(
+            update={
+                "history": [
+                    AIMessage(content=f"[SYSTEM] {error_msg}", name="GrowthHunter")
+                ],
+                "bull_thesis": "[ARGUMENT MISSING]",
+                "internal_progress": {"r3_bull": "error", "verdict": "running"},
+                "node_statuses": {"debate": "degraded"},
+                "error_logs": [
+                    {"node": "r3_bull", "error": str(e), "severity": "error"}
+                ],
+            },
+            goto="verdict",
+        )
 
 
 # --- Final Verdict ---
@@ -637,6 +784,16 @@ async def verdict_node(state: DebateState) -> Command:
         logger.error(f"❌ Error in Verdict Node: {str(e)}")
         # In case of error, we must still return a Command
         return Command(
-            update={"internal_progress": {"verdict": "error"}},
+            update={
+                "internal_progress": {"verdict": "error"},
+                "node_statuses": {"debate": "error"},
+                "error_logs": [
+                    {
+                        "node": "verdict",
+                        "error": f"Verdict generation failed: {str(e)}",
+                        "severity": "error",
+                    }
+                ],
+            },
             goto=END,
         )

@@ -9,7 +9,7 @@ import pandas as pd
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableLambda
 from langgraph.graph import END, START, StateGraph
-from langgraph.types import Command
+from langgraph.types import Command, RetryPolicy
 
 from src.interface.schemas import AgentOutputArtifact, ArtifactReference
 from src.services.artifact_manager import artifact_manager
@@ -58,14 +58,40 @@ async def data_fetch_node(state: TechnicalAnalysisState) -> Command:
             update={
                 "current_node": "data_fetch",
                 "internal_progress": {"data_fetch": "error"},
+                "node_statuses": {"technical_analysis": "error"},
+                "error_logs": [
+                    {
+                        "node": "data_fetch",
+                        "error": "No resolved ticker available",
+                        "severity": "error",
+                    }
+                ],
             },
             goto=END,
         )
 
     logger.info(f"--- TA: Fetching data for {resolved_ticker} ---")
 
-    # Fetch daily data (5 years for sufficient FracDiff window)
-    df = fetch_daily_ohlcv(resolved_ticker, period="5y")
+    try:
+        # Fetch daily data (5 years for sufficient FracDiff window)
+        df = fetch_daily_ohlcv(resolved_ticker, period="5y")
+    except Exception as e:
+        logger.error(f"--- TA: Data fetch failed for {resolved_ticker}: {e} ---")
+        return Command(
+            update={
+                "current_node": "data_fetch",
+                "internal_progress": {"data_fetch": "error"},
+                "node_statuses": {"technical_analysis": "error"},
+                "error_logs": [
+                    {
+                        "node": "data_fetch",
+                        "error": f"Data fetch failed: {str(e)}",
+                        "severity": "error",
+                    }
+                ],
+            },
+            goto=END,
+        )
 
     if df is None or df.empty:
         logger.warning(f"⚠️  Could not fetch data for {resolved_ticker}")
@@ -73,6 +99,14 @@ async def data_fetch_node(state: TechnicalAnalysisState) -> Command:
             update={
                 "current_node": "data_fetch",
                 "internal_progress": {"data_fetch": "error"},
+                "node_statuses": {"technical_analysis": "error"},
+                "error_logs": [
+                    {
+                        "node": "data_fetch",
+                        "error": "Empty data returned from provider",
+                        "severity": "error",
+                    }
+                ],
             },
             goto=END,
         )
@@ -145,101 +179,135 @@ async def fracdiff_compute_node(state: TechnicalAnalysisState) -> Command:
             update={
                 "current_node": "fracdiff_compute",
                 "internal_progress": {"fracdiff_compute": "error"},
+                "node_statuses": {"technical_analysis": "error"},
+                "error_logs": [
+                    {
+                        "node": "fracdiff_compute",
+                        "error": "Missing price artifact ID",
+                        "severity": "error",
+                    }
+                ],
             },
             goto=END,
         )
 
-    price_artifact = await artifact_manager.get_artifact(price_artifact_id)
-    if not price_artifact:
-        logger.error(f"--- TA: Price artifact {price_artifact_id} not found ---")
+    try:
+        price_artifact = await artifact_manager.get_artifact(price_artifact_id)
+        if not price_artifact:
+            logger.error(f"--- TA: Price artifact {price_artifact_id} not found ---")
+            return Command(
+                update={
+                    "current_node": "fracdiff_compute",
+                    "internal_progress": {"fracdiff_compute": "error"},
+                    "node_statuses": {"technical_analysis": "error"},
+                    "error_logs": [
+                        {
+                            "node": "fracdiff_compute",
+                            "error": "Price artifact not found in store",
+                            "severity": "error",
+                        }
+                    ],
+                },
+                goto=END,
+            )
+
+        price_dict = price_artifact.data.get("price_series")
+        volume_dict = price_artifact.data.get("volume_series")
+
+        prices = pd.Series(price_dict)
+        prices.index = pd.to_datetime(prices.index)
+
+        volumes = pd.Series(volume_dict)
+        volumes.index = pd.to_datetime(volumes.index)
+
+        # [EVOLUTION] Use ROLLING FracDiff instead of static global d
+        # This simulates a "Live" environment where we only know past data.
+        # We use a 252-day (1 year) lookback window for the ADF test.
+        fd_series, optimal_d, window_length, adf_stat, adf_pvalue = (
+            calculate_rolling_fracdiff(prices, lookback_window=252, recalc_step=5)
+        )
+
+        # Compute Z-score (current value)
+        z_score = compute_z_score(fd_series, lookback=252)
+
+        # [CRITICAL FIX] Calculate rolling Z-score series for frontend chart
+        # This ensures the chart data mathematically aligns with +/- 2.0 thresholds
+        z_score_series = calculate_rolling_z_score(fd_series, lookback=252)
+
+        # Calculate confluence indicators
+        bollinger_data = calculate_fd_bollinger(fd_series)
+        stat_strength_data = calculate_statistical_strength(
+            z_score_series
+        )  # [Change] Use CDF
+        macd_data = calculate_fd_macd(fd_series)
+
+        # Calculate FD-OBV (volume analysis)
+        obv_data = calculate_fd_obv(prices, volumes)
+
+        # [Fix] Remove pandas Series from indicators for msgpack serialization
+        # Keep only scalar values for state storage
+        bollinger_serializable = {
+            "upper": bollinger_data["upper"],
+            "middle": bollinger_data["middle"],
+            "lower": bollinger_data["lower"],
+            "state": bollinger_data["state"],
+            "bandwidth": bollinger_data["bandwidth"],
+        }
+
+        stat_strength_serializable = {
+            "value": stat_strength_data["value"],
+            # Thresholds are irrelevant for CDF (fixed constants)
+        }
+
+        obv_serializable = {
+            "raw_obv_val": obv_data["raw_obv_val"],
+            "fd_obv_z": obv_data["fd_obv_z"],
+            "optimal_d": obv_data["optimal_d"],
+            "state": obv_data["state"],
+        }
+
+        # [Refactor] Store chart data in Artifact Store
+        # Reformat indices to strings for JSON serialization
+        fd_dict = {
+            k.strftime("%Y-%m-%d") if hasattr(k, "strftime") else k: float(v)
+            for k, v in fd_series.to_dict().items()
+        }
+        z_dict = {
+            k.strftime("%Y-%m-%d") if hasattr(k, "strftime") else k: float(v)
+            for k, v in z_score_series.to_dict().items()
+        }
+
+        chart_data = {
+            "fracdiff_series": fd_dict,
+            "z_score_series": z_dict,
+            "indicators": {
+                "bollinger": bollinger_serializable,
+                "obv": obv_serializable,
+            },
+        }
+
+        chart_data_id = await artifact_manager.save_artifact(
+            data=chart_data,
+            artifact_type="ta_chart_data",
+            key_prefix=state.get("ticker"),
+        )
+    except Exception as e:
+        logger.error(f"--- TA: FracDiff computation crash: {e} ---", exc_info=True)
         return Command(
             update={
                 "current_node": "fracdiff_compute",
                 "internal_progress": {"fracdiff_compute": "error"},
+                "node_statuses": {"technical_analysis": "error"},
+                "error_logs": [
+                    {
+                        "node": "fracdiff_compute",
+                        "error": f"Computation crashed: {str(e)}",
+                        "severity": "error",
+                    }
+                ],
             },
             goto=END,
         )
-
-    price_dict = price_artifact.data.get("price_series")
-    volume_dict = price_artifact.data.get("volume_series")
-
-    prices = pd.Series(price_dict)
-    prices.index = pd.to_datetime(prices.index)
-
-    volumes = pd.Series(volume_dict)
-    volumes.index = pd.to_datetime(volumes.index)
-
-    # [EVOLUTION] Use ROLLING FracDiff instead of static global d
-    # This simulates a "Live" environment where we only know past data.
-    # We use a 252-day (1 year) lookback window for the ADF test.
-    fd_series, optimal_d, window_length, adf_stat, adf_pvalue = (
-        calculate_rolling_fracdiff(prices, lookback_window=252, recalc_step=5)
-    )
-
-    # Compute Z-score (current value)
-    z_score = compute_z_score(fd_series, lookback=252)
-
-    # [CRITICAL FIX] Calculate rolling Z-score series for frontend chart
-    # This ensures the chart data mathematically aligns with +/- 2.0 thresholds
-    z_score_series = calculate_rolling_z_score(fd_series, lookback=252)
-
-    # Calculate confluence indicators
-    bollinger_data = calculate_fd_bollinger(fd_series)
-    stat_strength_data = calculate_statistical_strength(
-        z_score_series
-    )  # [Change] Use CDF
-    macd_data = calculate_fd_macd(fd_series)
-
-    # Calculate FD-OBV (volume analysis)
-    obv_data = calculate_fd_obv(prices, volumes)
-
-    # [Fix] Remove pandas Series from indicators for msgpack serialization
-    # Keep only scalar values for state storage
-    bollinger_serializable = {
-        "upper": bollinger_data["upper"],
-        "middle": bollinger_data["middle"],
-        "lower": bollinger_data["lower"],
-        "state": bollinger_data["state"],
-        "bandwidth": bollinger_data["bandwidth"],
-    }
-
-    stat_strength_serializable = {
-        "value": stat_strength_data["value"],
-        # Thresholds are irrelevant for CDF (fixed constants)
-    }
-
-    obv_serializable = {
-        "raw_obv_val": obv_data["raw_obv_val"],
-        "fd_obv_z": obv_data["fd_obv_z"],
-        "optimal_d": obv_data["optimal_d"],
-        "state": obv_data["state"],
-    }
-
-    # [Refactor] Store chart data in Artifact Store
-    # Reformat indices to strings for JSON serialization
-    fd_dict = {
-        k.strftime("%Y-%m-%d") if hasattr(k, "strftime") else k: float(v)
-        for k, v in fd_series.to_dict().items()
-    }
-    z_dict = {
-        k.strftime("%Y-%m-%d") if hasattr(k, "strftime") else k: float(v)
-        for k, v in z_score_series.to_dict().items()
-    }
-
-    chart_data = {
-        "fracdiff_series": fd_dict,
-        "z_score_series": z_dict,
-        "indicators": {
-            "bollinger": bollinger_serializable,
-            "obv": obv_serializable,
-        },
-    }
-
-    chart_data_id = await artifact_manager.save_artifact(
-        data=chart_data,
-        artifact_type="ta_chart_data",
-        key_prefix=state.get("ticker"),
-    )
 
     # [NEW] Emit progress artifact
     preview = {
@@ -302,221 +370,252 @@ async def semantic_translate_node(state: TechnicalAnalysisState) -> Command:
             update={
                 "current_node": "semantic_translate",
                 "internal_progress": {"semantic_translate": "error"},
+                "node_statuses": {"technical_analysis": "error"},
+                "error_logs": [
+                    {
+                        "node": "semantic_translate",
+                        "error": "No FracDiff metrics available for translation",
+                        "severity": "error",
+                    }
+                ],
             },
             goto=END,
         )
 
-    # Use SemanticAssembler for multi-dimensional analysis
-    tags_dict = assembler.assemble(
-        z_score=z_score,
-        optimal_d=optimal_d,
-        bollinger_data=ctx.get("bollinger", {"state": "INSIDE"}),
-        stat_strength_data={
-            "value": ctx.get("statistical_strength_val", 50.0)
-        },  # [Change] Use CDF
-        macd_data=ctx.get("macd", {"momentum_state": "NEUTRAL"}),
-        obv_data=ctx.get("obv", {"state": "NEUTRAL", "fd_obv_z": 0.0}),
-    )
-
-    # [NEW] Run Backtesting for Statistical Verification
     try:
-        # Fetch from Artifact Store
-        price_artifact_id = ctx.get("price_artifact_id")
-        chart_artifact_id = ctx.get("chart_data_id")
-
-        price_artifact = await artifact_manager.get_artifact(price_artifact_id)
-        chart_artifact = await artifact_manager.get_artifact(chart_artifact_id)
-
-        if not price_artifact or not chart_artifact:
-            raise ValueError("Artifacts not found")
-
-        # Price reconstruction
-        price_dict = price_artifact.data.get("price_series")
-        prices = pd.Series(price_dict)
-        prices.index = pd.to_datetime(prices.index)
-
-        vol_dict = price_artifact.data.get("volume_series")
-        volumes = pd.Series(vol_dict)
-        volumes.index = pd.to_datetime(volumes.index)
-
-        # Chart data reconstruction
-        fd_dict = chart_artifact.data.get("fracdiff_series")
-        fd_series = pd.Series(fd_dict)
-        fd_series.index = pd.to_datetime(fd_series.index)
-
-        z_score_series = pd.Series(chart_artifact.data.get("z_score_series"))
-        z_score_series.index = pd.to_datetime(z_score_series.index)
-
-        # Full indicator reconstruction (Recalculate to ensure series are present for backtester)
-        stat_strength_full = calculate_statistical_strength(z_score_series)
-        bb_full = calculate_fd_bollinger(fd_series)
-        obv_full = calculate_fd_obv(prices, volumes)
-
-        # Fetch Risk-Free Rate
-        rf_series = fetch_risk_free_series(period="5y")
-
-        # Initialize backtester
-        backtester = CombinedBacktester(
-            price_series=prices,
-            z_score_series=z_score_series,
-            stat_strength_dict=stat_strength_full,
-            obv_dict=obv_full,
-            bollinger_dict=bb_full,
-            rf_series=rf_series,
+        # Use SemanticAssembler for multi-dimensional analysis
+        tags_dict = assembler.assemble(
+            z_score=z_score,
+            optimal_d=optimal_d,
+            bollinger_data=ctx.get("bollinger", {"state": "INSIDE"}),
+            stat_strength_data={
+                "value": ctx.get("statistical_strength_val", 50.0)
+            },  # [Change] Use CDF
+            macd_data=ctx.get("macd", {"momentum_state": "NEUTRAL"}),
+            obv_data=ctx.get("obv", {"state": "NEUTRAL", "fd_obv_z": 0.0}),
         )
 
-        # Run backtest
-        bt_results = backtester.run(transaction_cost=0.0005)
-        backtest_context = format_backtest_for_llm(bt_results)
-
-        # WFA
+        # [NEW] Run Backtesting for Statistical Verification
         try:
-            wfa_optimizer = WalkForwardOptimizer(backtester)
-            wfa_results = wfa_optimizer.run(train_window=252, test_window=63)
-            wfa_context = format_wfa_for_llm(wfa_results)
-        except Exception:
-            wfa_context = ""
+            # Fetch from Artifact Store
+            price_artifact_id = ctx.get("price_artifact_id")
+            chart_artifact_id = ctx.get("chart_data_id")
 
-    except Exception as e:
-        logger.warning(
-            f"Backtesting failed: {e}. Proceeding without statistical verification."
-        )
-        backtest_context = ""
-        wfa_context = ""
-
-    # Generate LLM interpretation
-    llm_interpretation = await generate_interpretation(
-        tags_dict, ticker, backtest_context, wfa_context
-    )
-
-    # [NEW] Generate final artifact
-    try:
-        preview = summarize_ta_for_preview(ctx)
-        direction = str(tags_dict["direction"]).upper()
-
-        # Determine statistical state
-        statistical_state = "EQUILIBRIUM"
-        z_abs = abs(ctx.get("z_score_latest", 0))
-        if z_abs >= 2.0:
-            statistical_state = "STATISTICAL_ANOMALY"
-        elif z_abs >= 1.0:
-            statistical_state = "DEVIATING"
-
-        # Determine memory strength
-        memory_strength = "BALANCED"
-        opt_d = ctx.get("optimal_d", 0.5)
-        if opt_d < 0.3:
-            memory_strength = "STRUCTURALLY_STABLE"
-        elif opt_d > 0.6:
-            memory_strength = "FRAGILE"
-
-        # Fetch chart data to include in full report if needed
-        # (Though we can also just point to it, Frontend types suggest raw_data is embedded)
-        raw_data = {}
-        if chart_artifact_id:
+            price_artifact = await artifact_manager.get_artifact(price_artifact_id)
             chart_artifact = await artifact_manager.get_artifact(chart_artifact_id)
-            if chart_artifact:
-                raw_data = {
-                    "price_series": price_artifact.data.get("price_series")
-                    if "price_artifact" in locals()
-                    else {},
-                    "fracdiff_series": chart_artifact.data.get("fracdiff_series"),
-                    "z_score_series": chart_artifact.data.get("z_score_series"),
-                }
 
-        from datetime import datetime
+            if not price_artifact or not chart_artifact:
+                raise ValueError("Artifacts not found")
 
-        full_report_data = {
-            "kind": "success",
-            "ticker": ticker,
-            "timestamp": datetime.now().isoformat(),
-            "frac_diff_metrics": {
-                "optimal_d": ctx.get("optimal_d"),
-                "window_length": ctx.get("window_length"),
-                "adf_statistic": ctx.get("adf_statistic"),
-                "adf_pvalue": ctx.get("adf_pvalue"),
-                "memory_strength": memory_strength,
-            },
-            "signal_state": {
-                "z_score": ctx.get("z_score_latest"),
-                "statistical_state": statistical_state,
-                "direction": direction,
-                "risk_level": tags_dict.get("risk_level", "MEDIUM").lower(),
-                "confluence": {
-                    "bollinger_state": ctx.get("bollinger", {}).get("state", "INSIDE"),
-                    "macd_momentum": ctx.get("macd", {}).get(
-                        "momentum_state", "NEUTRAL"
-                    ),
-                    "obv_state": ctx.get("obv", {}).get("state", "NEUTRAL"),
-                    "statistical_strength": ctx.get("statistical_strength_val", 50.0),
-                },
-            },
-            "semantic_tags": tags_dict.get("tags", []),
-            "llm_interpretation": llm_interpretation,
-            "raw_data": raw_data,
-        }
+            # Price reconstruction
+            price_dict = price_artifact.data.get("price_series")
+            prices = pd.Series(price_dict)
+            prices.index = pd.to_datetime(prices.index)
 
-        # Save FULL TA report
-        timestamp_int = int(time.time())
-        report_id = await artifact_manager.save_artifact(
-            data=full_report_data,
-            artifact_type="ta_full_report",
-            key_prefix=f"ta_{ticker}_{timestamp_int}",
-        )
-        logger.info(
-            f"--- [Technical Analysis] L3 complete report saved (ID: {report_id}) ---"
-        )
+            vol_dict = price_artifact.data.get("volume_series")
+            volumes = pd.Series(vol_dict)
+            volumes.index = pd.to_datetime(volumes.index)
 
-        reference = None
-        if report_id:
-            reference = ArtifactReference(
-                artifact_id=report_id,
-                download_url=f"/api/artifacts/{report_id}",
-                type="ta_full_report",
+            # Chart data reconstruction
+            fd_dict = chart_artifact.data.get("fracdiff_series")
+            fd_series = pd.Series(fd_dict)
+            fd_series.index = pd.to_datetime(fd_series.index)
+
+            z_score_series = pd.Series(chart_artifact.data.get("z_score_series"))
+            z_score_series.index = pd.to_datetime(z_score_series.index)
+
+            # Full indicator reconstruction (Recalculate to ensure series are present for backtester)
+            stat_strength_full = calculate_statistical_strength(z_score_series)
+            bb_full = calculate_fd_bollinger(fd_series)
+            obv_full = calculate_fd_obv(prices, volumes)
+
+            # Fetch Risk-Free Rate
+            rf_series = fetch_risk_free_series(period="5y")
+
+            # Initialize backtester
+            backtester = CombinedBacktester(
+                price_series=prices,
+                z_score_series=z_score_series,
+                stat_strength_dict=stat_strength_full,
+                obv_dict=obv_full,
+                bollinger_dict=bb_full,
+                rf_series=rf_series,
             )
 
-        artifact = AgentOutputArtifact(
-            summary=f"Technical Analysis: {direction} (d={opt_d:.2f})",
-            preview=preview,
-            reference=reference,
+            # Run backtest
+            bt_results = backtester.run(transaction_cost=0.0005)
+            backtest_context = format_backtest_for_llm(bt_results)
+
+            # WFA
+            try:
+                wfa_optimizer = WalkForwardOptimizer(backtester)
+                wfa_results = wfa_optimizer.run(train_window=252, test_window=63)
+                wfa_context = format_wfa_for_llm(wfa_results)
+            except Exception:
+                wfa_context = ""
+
+        except Exception as e:
+            logger.warning(
+                f"Backtesting failed: {e}. Proceeding without statistical verification."
+            )
+            backtest_context = ""
+            wfa_context = ""
+
+        # Generate LLM interpretation
+        llm_interpretation = await generate_interpretation(
+            tags_dict, ticker, backtest_context, wfa_context
         )
-    except Exception as e:
-        logger.error(f"Failed to generate artifact in node: {e}")
-        import traceback
 
-        logger.error(traceback.format_exc())
-        artifact = None
+        # [NEW] Generate final artifact
+        try:
+            preview = summarize_ta_for_preview(ctx)
+            direction = str(tags_dict["direction"]).upper()
 
-    ta_update = {
-        "signal": tags_dict["direction"],
-        "statistical_strength": tags_dict["statistical_state"],
-        "risk_level": tags_dict["risk_level"],
-        "llm_interpretation": llm_interpretation,
-        "semantic_tags": tags_dict["tags"],
-        "memory_strength": tags_dict["memory_strength"],
-    }
-    if artifact:
-        ta_update["artifact"] = artifact
+            # Determine statistical state
+            statistical_state = "EQUILIBRIUM"
+            z_abs = abs(ctx.get("z_score_latest", 0))
+            if z_abs >= 2.0:
+                statistical_state = "STATISTICAL_ANOMALY"
+            elif z_abs >= 1.0:
+                statistical_state = "DEVIATING"
 
-    return Command(
-        update={
-            "technical_analysis": ta_update,
-            "current_node": "semantic_translate",
-            "internal_progress": {"semantic_translate": "done"},
-            "node_statuses": {"technical_analysis": "done"},
-            "messages": [
-                AIMessage(
-                    content="",
-                    additional_kwargs={
-                        "type": "technical_analysis",
-                        "agent_id": "technical_analysis",
-                        "status": "done",
+            # Determine memory strength
+            memory_strength = "BALANCED"
+            opt_d = ctx.get("optimal_d", 0.5)
+            if opt_d < 0.3:
+                memory_strength = "STRUCTURALLY_STABLE"
+            elif opt_d > 0.6:
+                memory_strength = "FRAGILE"
+
+            # Fetch chart data to include in full report if needed
+            # (Though we can also just point to it, Frontend types suggest raw_data is embedded)
+            raw_data = {}
+            if chart_artifact_id:
+                chart_artifact = await artifact_manager.get_artifact(chart_artifact_id)
+                if chart_artifact:
+                    raw_data = {
+                        "price_series": price_artifact.data.get("price_series")
+                        if "price_artifact" in locals()
+                        else {},
+                        "fracdiff_series": chart_artifact.data.get("fracdiff_series"),
+                        "z_score_series": chart_artifact.data.get("z_score_series"),
+                    }
+
+            from datetime import datetime
+
+            full_report_data = {
+                "kind": "success",
+                "ticker": ticker,
+                "timestamp": datetime.now().isoformat(),
+                "frac_diff_metrics": {
+                    "optimal_d": ctx.get("optimal_d"),
+                    "window_length": ctx.get("window_length"),
+                    "adf_statistic": ctx.get("adf_statistic"),
+                    "adf_pvalue": ctx.get("adf_pvalue"),
+                    "memory_strength": memory_strength,
+                },
+                "signal_state": {
+                    "z_score": ctx.get("z_score_latest"),
+                    "statistical_state": statistical_state,
+                    "direction": direction,
+                    "risk_level": tags_dict.get("risk_level", "MEDIUM").lower(),
+                    "confluence": {
+                        "bollinger_state": ctx.get("bollinger", {}).get(
+                            "state", "INSIDE"
+                        ),
+                        "macd_momentum": ctx.get("macd", {}).get(
+                            "momentum_state", "NEUTRAL"
+                        ),
+                        "obv_state": ctx.get("obv", {}).get("state", "NEUTRAL"),
+                        "statistical_strength": ctx.get(
+                            "statistical_strength_val", 50.0
+                        ),
                     },
+                },
+                "semantic_tags": tags_dict.get("tags", []),
+                "llm_interpretation": llm_interpretation,
+                "raw_data": raw_data,
+            }
+
+            # Save FULL TA report
+            timestamp_int = int(time.time())
+            report_id = await artifact_manager.save_artifact(
+                data=full_report_data,
+                artifact_type="ta_full_report",
+                key_prefix=f"ta_{ticker}_{timestamp_int}",
+            )
+            logger.info(
+                f"--- [Technical Analysis] L3 complete report saved (ID: {report_id}) ---"
+            )
+
+            reference = None
+            if report_id:
+                reference = ArtifactReference(
+                    artifact_id=report_id,
+                    download_url=f"/api/artifacts/{report_id}",
+                    type="ta_full_report",
                 )
-            ],
-        },
-        goto=END,
-    )
+
+            artifact = AgentOutputArtifact(
+                summary=f"Technical Analysis: {direction} (d={opt_d:.2f})",
+                preview=preview,
+                reference=reference,
+            )
+        except Exception as e:
+            logger.error(f"Failed to generate artifact in node: {e}")
+            import traceback
+
+            logger.error(traceback.format_exc())
+            artifact = None
+
+        ta_update = {
+            "signal": tags_dict["direction"],
+            "statistical_strength": tags_dict["statistical_state"],
+            "risk_level": tags_dict["risk_level"],
+            "llm_interpretation": llm_interpretation,
+            "semantic_tags": tags_dict["tags"],
+            "memory_strength": tags_dict["memory_strength"],
+        }
+        if artifact:
+            ta_update["artifact"] = artifact
+
+        return Command(
+            update={
+                "technical_analysis": ta_update,
+                "current_node": "semantic_translate",
+                "internal_progress": {"semantic_translate": "done"},
+                "node_statuses": {"technical_analysis": "done"},
+                "messages": [
+                    AIMessage(
+                        content="",
+                        additional_kwargs={
+                            "type": "technical_analysis",
+                            "agent_id": "technical_analysis",
+                            "status": "done",
+                        },
+                    )
+                ],
+            },
+            goto=END,
+        )
+
+    except Exception as e:
+        logger.error(f"--- TA: Semantic translation failed: {e} ---", exc_info=True)
+        return Command(
+            update={
+                "current_node": "semantic_translate",
+                "internal_progress": {"semantic_translate": "error"},
+                "node_statuses": {"technical_analysis": "error"},
+                "error_logs": [
+                    {
+                        "node": "semantic_translate",
+                        "error": f"Semantic translation failed: {str(e)}",
+                        "severity": "error",
+                    }
+                ],
+            },
+            goto=END,
+        )
 
 
 def build_technical_subgraph():
@@ -540,6 +639,7 @@ def build_technical_subgraph():
         "semantic_translate",
         semantic_translate_node,
         metadata={"agent_id": "technical_analysis"},
+        retry=RetryPolicy(max_attempts=3),
     )
 
     builder.add_edge(START, "data_fetch")

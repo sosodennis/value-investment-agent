@@ -12,6 +12,7 @@ from typing_extensions import TypedDict
 from ...state import (
     FinancialNewsContext,
     IntentExtractionContext,
+    append_logs,
     last_value,
     merge_dict,
 )
@@ -39,6 +40,7 @@ class FinancialNewsOutput(BaseModel):
     financial_news_research: FinancialNewsContext
     messages: list = Field(default_factory=list)
     node_statuses: dict[str, str] = Field(default_factory=dict)
+    error_logs: list[dict] = Field(default_factory=list)
 
 
 class FinancialNewsState(TypedDict):
@@ -69,3 +71,4 @@ class FinancialNewsState(TypedDict):
     # --- Private State (for node coordination) ---
     internal_progress: Annotated[dict[str, str], merge_dict]
     current_node: Annotated[str, last_value]
+    error_logs: Annotated[list[dict], append_logs]
