@@ -77,22 +77,6 @@ class DebateConclusion(BaseModel):
     )
 
 
-class DebateSuccess(DebateConclusion):
-    """Successful debate conclusion result with discriminator."""
-
-    kind: Literal["success"] = "success"
-
-
-class DebateError(BaseModel):
-    """Failure schema for debate."""
-
-    kind: Literal["error"] = "error"
-    message: str
-
-
-DebateResult = DebateSuccess | DebateError
-
-
 class DebatePreview(BaseModel):
     """Preview data for Debate UI (<1KB)"""
 

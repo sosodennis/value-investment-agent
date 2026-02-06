@@ -423,7 +423,6 @@ async def model_selection_node(state: FundamentalAnalysisState) -> Command:
 
             # L3: Store full reports in Artifact Store
             full_report_data = {
-                "kind": "success",
                 "ticker": resolved_ticker,
                 "model_type": model_type,
                 "company_name": mapper_ctx.get("company_name", resolved_ticker),

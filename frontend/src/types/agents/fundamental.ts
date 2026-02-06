@@ -62,7 +62,6 @@ export interface FinancialReport {
 }
 
 export interface FundamentalAnalysisSuccess {
-    kind: 'success';
     ticker: string;
     model_type: string;
     company_name: string;
@@ -74,7 +73,6 @@ export interface FundamentalAnalysisSuccess {
 }
 
 export interface FundamentalAnalysisError {
-    kind: 'error';
     message: string;
 }
 

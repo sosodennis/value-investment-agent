@@ -1,7 +1,3 @@
-import { AgentStatus } from './index';
-
-export type IntentExtractionKind = 'success' | 'error';
-
 export interface CompanyProfile {
     symbol: string;
     name: string;
@@ -12,14 +8,12 @@ export interface CompanyProfile {
 }
 
 export interface IntentExtractionSuccess {
-    kind: 'success';
     resolved_ticker: string;
     company_profile: CompanyProfile;
     status: 'resolved';
 }
 
 export interface IntentExtractionError {
-    kind: 'error';
     message: string;
 }
 

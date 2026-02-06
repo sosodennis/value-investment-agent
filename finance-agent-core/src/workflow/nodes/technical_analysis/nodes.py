@@ -462,7 +462,6 @@ async def semantic_translate_node(state: TechnicalAnalysisState) -> Command:
             from datetime import datetime
 
             full_report_data = {
-                "kind": "success",
                 "ticker": ticker,
                 "timestamp": datetime.now().isoformat(),
                 "frac_diff_metrics": {

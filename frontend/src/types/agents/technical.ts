@@ -54,11 +54,9 @@ export interface TechnicalSignalOutput {
 }
 
 export interface TechnicalAnalysisSuccess extends TechnicalSignalOutput {
-    kind: 'success';
 }
 
 export interface TechnicalAnalysisError {
-    kind: 'error';
     message: string;
 }
 

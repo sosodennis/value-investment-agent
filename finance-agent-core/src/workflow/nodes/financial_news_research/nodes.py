@@ -20,7 +20,6 @@ from .prompts import (
     SELECTOR_SYSTEM_PROMPT,
     SELECTOR_USER_PROMPT,
 )
-from .schemas import FinancialNewsSuccess
 from .structures import (
     AIAnalysis,
     FinancialNewsItem,
@@ -656,9 +655,7 @@ async def aggregator_node(state: FinancialNewsState) -> Command:
         key_themes=all_themes,
     )
 
-    report_data = FinancialNewsSuccess(
-        **final_output.model_dump(mode="json")
-    ).model_dump(mode="json")
+    report_data = final_output.model_dump(mode="json")
 
     timestamp = int(time.time())
     try:

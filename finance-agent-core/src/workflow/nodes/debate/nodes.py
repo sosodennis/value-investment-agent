@@ -709,7 +709,6 @@ async def verdict_node(state: DebateState) -> Command:
         # Prepare full report data (Conclusion + History)
         full_report_data = {
             **conclusion_data,
-            "kind": "success",  # Align with DebateSuccess frontend type
             "history": [msg.dict() if hasattr(msg, "dict") else msg for msg in history],
         }
 

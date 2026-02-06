@@ -36,12 +36,10 @@ export interface DebateConclusion {
 }
 
 export interface DebateSuccess extends DebateConclusion {
-    kind: 'success';
     history?: any[];
 }
 
 export interface DebateError {
-    kind: 'error';
     message: string;
 }
 

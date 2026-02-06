@@ -64,11 +64,9 @@ export interface NewsResearchOutput {
 }
 
 export interface FinancialNewsSuccess extends NewsResearchOutput {
-    kind: 'success';
 }
 
 export interface FinancialNewsError {
-    kind: 'error';
     message: string;
 }
 
