@@ -63,6 +63,7 @@ def calculation_node(state: CalculatorState) -> Command:
                 "fundamental_analysis": fa_update,
                 "current_node": "calculator",
                 "node_statuses": {"calculator": "done"},
+                "artifact": artifact,
             },
             goto=END,
         )

@@ -1,6 +1,6 @@
 """
 Isolated state class for Debate subgraph.
-Following LangGraph best practices - does NOT share node_statuses with parent.
+Shared node_statuses with parent.
 """
 
 from typing import Annotated, NotRequired

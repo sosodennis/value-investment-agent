@@ -1,7 +1,10 @@
 from typing import Annotated
 
 from langgraph.graph import add_messages
+from pydantic import BaseModel, ConfigDict, Field
 from typing_extensions import NotRequired, TypedDict
+
+from src.interface.schemas import AgentOutputArtifact
 
 from ...state import (
     FundamentalAnalysisContext,
@@ -12,18 +15,27 @@ from ...state import (
 )
 
 
-class AuditorInput(TypedDict):
+class AuditorInput(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     fundamental_analysis: FundamentalAnalysisContext
-    intent_extraction: NotRequired[IntentExtractionContext]
+    intent_extraction: IntentExtractionContext | None = None
 
 
-class AuditorOutput(TypedDict):
+class AuditorOutput(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     fundamental_analysis: FundamentalAnalysisContext
+    messages: list = Field(default_factory=list)
     node_statuses: dict[str, str]
     error_logs: list[dict]
+    artifact: AgentOutputArtifact | None = None
 
 
 class AuditorState(TypedDict):
+    """
+    Auditor Node - Validates extracted parameters against business rules.
+    Shared node_statuses with parent.
+    """
+
     ticker: NotRequired[str]
     intent_extraction: NotRequired[IntentExtractionContext]
     fundamental_analysis: Annotated[FundamentalAnalysisContext, merge_dict]

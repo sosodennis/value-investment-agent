@@ -60,6 +60,7 @@ def auditor_node(state: AuditorState) -> Command:
                 "fundamental_analysis": fa_update,
                 "current_node": "auditor",
                 "node_statuses": {"auditor": "done"},
+                "artifact": artifact,
             },
             goto=END,
         )

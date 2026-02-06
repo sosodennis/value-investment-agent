@@ -61,6 +61,7 @@ def executor_node(state: ExecutorState) -> Command:
                 "fundamental_analysis": fa_update,
                 "current_node": "executor",
                 "node_statuses": {"executor": "done"},
+                "artifact": artifact,
             },
             goto=END,
         )

@@ -1,7 +1,10 @@
 from typing import Annotated
 
 from langgraph.graph import add_messages
+from pydantic import BaseModel, ConfigDict, Field
 from typing_extensions import NotRequired, TypedDict
+
+from src.interface.schemas import AgentOutputArtifact
 
 from ...state import (
     FundamentalAnalysisContext,
@@ -12,15 +15,19 @@ from ...state import (
 )
 
 
-class CalculatorInput(TypedDict):
+class CalculatorInput(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     fundamental_analysis: FundamentalAnalysisContext
-    intent_extraction: NotRequired[IntentExtractionContext]
+    intent_extraction: IntentExtractionContext | None = None
 
 
-class CalculatorOutput(TypedDict):
+class CalculatorOutput(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     fundamental_analysis: FundamentalAnalysisContext
+    messages: list = Field(default_factory=list)
     node_statuses: dict[str, str]
     error_logs: list[dict]
+    artifact: AgentOutputArtifact | None = None
 
 
 class CalculatorState(TypedDict):
