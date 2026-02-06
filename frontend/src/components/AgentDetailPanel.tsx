@@ -158,24 +158,37 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                                 <span className="text-cyan-500/80">[INIT]</span>
                                 <span className="text-slate-300">Deploying context for {agent.id}...</span>
                             </div>
-                            <div className="flex gap-4">
-                                <span className="text-slate-600 shrink-0">10:48:02</span>
-                                <span className="text-emerald-500/80">[INFO]</span>
-                                <span className="text-slate-300">Instance state: <span className="text-white font-bold">{agent.status}</span></span>
-                            </div>
-                            {agent.status === 'running' ? (
-                                <div className="flex gap-4 animate-pulse">
+
+                            {/* Dynamic Activity Feed mapping */}
+                            {activityFeed
+                                .filter(step => step.agentId === agent.id)
+                                .map((step) => (
+                                    <div key={step.id} className="flex gap-4">
+                                        <span className="text-slate-600 shrink-0">
+                                            {new Date(step.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                        </span>
+                                        <span className={`uppercase tracking-tighter ${step.status === 'running' ? 'text-primary animate-pulse' : 'text-emerald-500/80'}`}>
+                                            [{step.status === 'running' ? 'WAIT' : 'DONE'}]
+                                        </span>
+                                        <span className="text-slate-300">
+                                            {step.node.replace(/_/g, ' ')}: {step.status}
+                                        </span>
+                                    </div>
+                                ))}
+
+                            {/* Fallback Current Status if no feed yet */}
+                            {activityFeed.filter(step => step.agentId === agent.id).length === 0 && (
+                                <div key="current-status" className="flex gap-4">
                                     <span className="text-slate-600 shrink-0">--:--:--</span>
-                                    <span className="text-amber-500/80">[WAIT]</span>
-                                    <span className="text-amber-400">Awaiting job stream from LangGraph...</span>
-                                </div>
-                            ) : (
-                                <div className="flex gap-4">
-                                    <span className="text-slate-600 shrink-0">10:48:21</span>
-                                    <span className="text-slate-500">[DONE]</span>
-                                    <span className="text-slate-500">Stream detached, artifacts persistent.</span>
+                                    <span className={`font-bold uppercase tracking-widest ${agent.status === 'running' ? 'text-primary animate-pulse' : 'text-slate-500'}`}>
+                                        [{agent.status === 'running' ? 'WAIT' : 'DONE'}]
+                                    </span>
+                                    <span className="text-slate-300">
+                                        {agent.status === 'running' ? 'Awaiting job stream from LangGraph...' : 'Stream detached, artifacts persistent.'}
+                                    </span>
                                 </div>
                             )}
+
                             {agentOutput && (
                                 <div className="flex gap-4">
                                     <span className="text-slate-600 shrink-0">10:48:21</span>
