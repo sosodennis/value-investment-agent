@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { FileText, Clock, Loader2, Database } from 'lucide-react';
+import { FileText, Clock, Loader2, Database, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { AgentStatus, StandardAgentOutput } from '@/types/agents';
 import { useArtifact } from '../../hooks/useArtifact';
 
@@ -14,8 +14,14 @@ const GenericAgentOutputComponent: React.FC<GenericAgentOutputProps> = ({
     output,
     status
 }) => {
-    const reference = (output as any)?.reference || (output as any)?.artifact?.reference;
-    const preview = (output as any)?.preview || (output as any)?.artifact?.preview || (output as any);
+    const artifact = (output as any)?.artifact;
+    const reference = artifact?.reference;
+    // Prefer artifact.preview, fallback to output (context) if artifact is missing (debug/early state),
+    // but do NOT fallback to output if artifact exists (strict mode).
+    const preview = artifact?.preview || (!artifact ? output : null);
+    const errorLogs = output?.error_logs || artifact?.error_logs;
+
+    const [isLogsExpanded, setIsLogsExpanded] = React.useState(false);
 
     const { data: artifactData, isLoading: isArtifactLoading } = useArtifact<any>(
         reference?.artifact_id
@@ -76,6 +82,42 @@ const GenericAgentOutputComponent: React.FC<GenericAgentOutputProps> = ({
                     <p className="text-[10px] text-primary/80 font-medium italic">
                         Showing lightweight preview. Full artifact data is being retrieved from the secure vault...
                     </p>
+                </div>
+            )}
+
+            {errorLogs && errorLogs.length > 0 && (
+                <div className="mt-6 border border-border-main/50 rounded-xl overflow-hidden bg-bg-main/20">
+                    <button
+                        onClick={() => setIsLogsExpanded(!isLogsExpanded)}
+                        className="w-full flex items-center justify-between p-4 hover:bg-slate-800/30 transition-colors"
+                    >
+                        <div className="flex items-center gap-2">
+                            <AlertCircle size={14} className={status === 'error' ? 'text-error' : 'text-warning'} />
+                            <span className="text-[10px] font-bold text-white uppercase tracking-widest">
+                                System Logs ({errorLogs.length})
+                            </span>
+                        </div>
+                        {isLogsExpanded ? <ChevronUp size={14} className="text-slate-500" /> : <ChevronDown size={14} className="text-slate-500" />}
+                    </button>
+
+                    {isLogsExpanded && (
+                        <div className="border-t border-border-main/50 p-1 space-y-1">
+                            {errorLogs.map((log: any, idx: number) => (
+                                <div key={idx} className="p-3 bg-slate-900/40 rounded-lg flex gap-3">
+                                    <div className="mt-0.5">
+                                        <div className={`w-1.5 h-1.5 rounded-full mt-1 ${log.severity === 'error' ? 'bg-error' : 'bg-warning'}`} />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between mb-1">
+                                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Node: {log.node}</span>
+                                            {log.timestamp && <span className="text-[8px] text-slate-600 font-mono">{log.timestamp}</span>}
+                                        </div>
+                                        <p className="text-[10px] text-slate-300 leading-relaxed break-words">{log.error}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             )}
         </div>

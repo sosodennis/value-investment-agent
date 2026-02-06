@@ -41,6 +41,11 @@ export const AgentCard: React.FC<AgentCardProps> = ({
                 text: 'text-error',
                 bg: 'bg-error/5'
             };
+            case 'degraded': return {
+                border: 'border-warning/50',
+                text: 'text-warning',
+                bg: 'bg-warning/5'
+            };
             default: return {
                 border: 'border-border-main',
                 text: 'text-slate-500',
@@ -87,7 +92,10 @@ export const AgentCard: React.FC<AgentCardProps> = ({
                     {role}
                 </p>
                 <p className={`text-[10px] font-bold mt-1 capitalize ${styles.text}`}>
-                    {status === 'running' ? 'Processing...' : status === 'attention' ? 'Human Assist' : status}
+                    {status === 'running' ? 'Processing...' :
+                        status === 'attention' ? 'Human Assist' :
+                            status === 'degraded' ? 'Degraded Performance' :
+                                status}
                 </p>
             </div>
 

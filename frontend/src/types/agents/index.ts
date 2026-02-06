@@ -1,4 +1,11 @@
-export type AgentStatus = 'idle' | 'running' | 'done' | 'attention' | 'error';
+export type AgentStatus = 'idle' | 'running' | 'done' | 'attention' | 'error' | 'degraded';
+
+export interface AgentErrorLog {
+    node: string;
+    error: string;
+    timestamp?: string;
+    severity: 'warning' | 'error';
+}
 
 export interface ArtifactReference {
     artifact_id: string;
@@ -9,6 +16,7 @@ export interface ArtifactReference {
 export interface StandardAgentOutput {
     preview?: any;
     reference?: ArtifactReference;
+    error_logs?: AgentErrorLog[];
 }
 
 export interface AgentInfo {
