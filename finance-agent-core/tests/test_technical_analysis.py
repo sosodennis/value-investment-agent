@@ -54,12 +54,12 @@ def test_compute_z_score():
 
 def test_semantic_tags_mapping():
     """Test that semantic tags are correctly mapped based on thresholds."""
-    from src.workflow.nodes.technical_analysis.semantic_layer import assembler
     from src.workflow.nodes.technical_analysis.structures import (
         MemoryStrength,
         RiskLevel,
         StatisticalState,
     )
+    from src.workflow.nodes.technical_analysis.tools.semantic_layer import assembler
 
     # Dummy data for confluence
     dummy_bb = {"state": "INSIDE"}
@@ -109,7 +109,7 @@ def test_semantic_tags_mapping():
 
 def test_compress_ta_data():
     """Test TA data compression for debate."""
-    from src.workflow.nodes.debate.utils import compress_ta_data
+    from src.workflow.nodes.debate.tools import compress_ta_data
 
     # Mock TA output
     ta_output = {
@@ -142,7 +142,7 @@ def test_compress_ta_data():
 
 def test_compress_ta_data_handles_none():
     """Test that compress_ta_data handles None input."""
-    from src.workflow.nodes.debate.utils import compress_ta_data
+    from src.workflow.nodes.debate.tools import compress_ta_data
 
     result = compress_ta_data(None)
     assert result is None

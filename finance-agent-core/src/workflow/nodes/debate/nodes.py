@@ -23,7 +23,7 @@ from .prompts import (
 )
 from .schemas import DebateConclusion
 from .subgraph_state import DebateState
-from .utils import (
+from .tools import (
     calculate_pragmatic_verdict,
     compress_financial_data,
     compress_news_data,
@@ -355,7 +355,7 @@ async def _execute_moderator_critique(
     )
     try:
         llm = get_llm()
-        from .utils import get_sycophancy_detector
+        from .tools import get_sycophancy_detector
 
         detector = get_sycophancy_detector()
         similarity, is_sycophantic = detector.check_consensus(

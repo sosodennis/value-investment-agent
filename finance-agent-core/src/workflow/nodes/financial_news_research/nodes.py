@@ -12,7 +12,6 @@ from src.common.tools.logger import get_logger
 from src.interface.schemas import AgentOutputArtifact, ArtifactReference
 from src.services.artifact_manager import artifact_manager
 
-from .finbert_service import get_finbert_analyzer
 from .mappers import summarize_news_for_preview
 from .prompts import (
     ANALYST_SYSTEM_PROMPT,
@@ -34,6 +33,7 @@ from .subgraph_state import (
 )
 from .tools import (
     generate_news_id,
+    get_finbert_analyzer,
     get_source_reliability,
     news_search_multi_timeframe,
 )

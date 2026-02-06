@@ -105,15 +105,6 @@ class SECReportExtractor:
         if self.df is None:
             return []
 
-        # print(
-        #     f"\n>>> 搜尋執行: '{config.concept_regex}' | 模式: {config.type_name}"
-        #     + (
-        #         f" | 維度過濾: '{config.dimension_regex}'"
-        #         if config.dimension_regex
-        #         else ""
-        #     )
-        # )
-
         # 1. 標籤與日期初步過濾
         processed_regex = (
             config.concept_regex
@@ -187,25 +178,12 @@ class SECReportExtractor:
                 )
             )
 
-        # 4. 打印結果
-        # if final_rows:
-        # table_display = pd.DataFrame([r.model_dump() for r in final_rows])
-        # Drop complex dict col for tabulate
-        # simple_display = table_display.drop(
-        #     columns=["dimension_detail", "dimensions"], errors="ignore"
-        # )
-        # print(tabulate(simple_display, headers='keys', tablefmt='fancy_grid', showindex=False))
-
         return final_rows
 
     def sic_code(self):
         return self.standard_industrial_classification_code
 
     def debug_asset_issue(self, tag: str):
-        # print(
-        #     f"\n>>> [DEBUG] 正在診斷 {self.ticker} {self.fiscal_year} 的 us-gaap:Assets..."
-        # )
-
         # 1. 寬鬆搜尋：只找 Tag，不管維度
         processed_regex = tag if ":" in tag else f".*:{tag}$"
         mask = self.df["concept"].str.contains(
@@ -220,7 +198,6 @@ class SECReportExtractor:
             return
 
         # 2. 找出所有非空的維度欄位
-        # 過濾掉全是 NaN 的列，只保留有值的維度列
         active_dim_cols = (
             matches[self.real_dim_cols].dropna(axis=1, how="all").columns.tolist()
         )

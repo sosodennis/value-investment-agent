@@ -8,13 +8,13 @@ from src.common.tools.logger import get_logger
 from src.interface.schemas import AgentOutputArtifact, ArtifactReference
 from src.services.artifact_manager import artifact_manager
 
-from .financial_utils import fetch_financial_data
 from .logic import select_valuation_model
 from .mappers import summarize_fundamental_for_preview
 from .structures import CompanyProfile, ValuationModel
 from .subgraph_state import (
     FundamentalAnalysisState,
 )
+from .tools import fetch_financial_data
 
 logger = get_logger(__name__)
 

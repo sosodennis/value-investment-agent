@@ -9,7 +9,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from src.common.tools.llm import get_llm
 from src.common.tools.logger import get_logger
 
-from .structures import (
+from ..structures import (
     ConfluenceEvidence,
     MemoryStrength,
     RiskLevel,

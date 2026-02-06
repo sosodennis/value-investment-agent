@@ -1,4 +1,4 @@
-from typing import TypeVar, Optional
+from typing import TypeVar
 
 from .financial_models import (
     BaseFinancialModel,
@@ -11,7 +11,7 @@ from .financial_models import (
     TraceableField,
     XBRLProvenance,
 )
-from .sec_extractor import SearchConfig, SearchType, SECReportExtractor
+from .tools.sec_extractor import SearchConfig, SearchType, SECReportExtractor
 
 T = TypeVar("T")
 
@@ -245,26 +245,35 @@ class FinancialReportFactory:
                 sic = int(sic_code)
                 if 6000 <= sic <= 6999:  # Banking / Finance
                     industry_type = "Financial Services"
-                    extension = FinancialReportFactory._create_financial_services_extension(extractor)
+                    extension = (
+                        FinancialReportFactory._create_financial_services_extension(
+                            extractor
+                        )
+                    )
                 elif 2000 <= sic <= 3999:  # Manufacturing / Industrial
                     industry_type = "Industrial"
-                    extension = FinancialReportFactory._create_industrial_extension(extractor)
+                    extension = FinancialReportFactory._create_industrial_extension(
+                        extractor
+                    )
                 elif sic == 6798:  # REITs
                     industry_type = "Real Estate"
-                    extension = FinancialReportFactory._create_real_estate_extension(extractor, base_model)
+                    extension = FinancialReportFactory._create_real_estate_extension(
+                        extractor, base_model
+                    )
                 else:
                     industry_type = "Industrial"  # Default fallback
-                    extension = FinancialReportFactory._create_industrial_extension(extractor)
+                    extension = FinancialReportFactory._create_industrial_extension(
+                        extractor
+                    )
             except ValueError:
                 pass
 
         # Default if something failed or no SIC code found, though logic above covers most
         if extension is None and industry_type == "General":
-             # Fallback to Industrial if we can't determine, or keep as None?
-             # Original code defaulted to IndustrialExtension if unknown.
-             industry_type = "Industrial"
-             extension = FinancialReportFactory._create_industrial_extension(extractor)
-
+            # Fallback to Industrial if we can't determine, or keep as None?
+            # Original code defaulted to IndustrialExtension if unknown.
+            industry_type = "Industrial"
+            extension = FinancialReportFactory._create_industrial_extension(extractor)
 
         # 4. Return Report
         return FinancialReport(
@@ -293,7 +302,7 @@ class FinancialReportFactory:
                 all_none = False
 
         if all_none:
-             return TraceableField(
+            return TraceableField(
                 name=name,
                 value=None,
                 provenance=ManualProvenance(
@@ -305,14 +314,14 @@ class FinancialReportFactory:
             name=name,
             value=total,
             provenance=ComputedProvenance(
-                op_code="SUM",
-                expression=" + ".join(field_names),
-                inputs=inputs_map
-            )
+                op_code="SUM", expression=" + ".join(field_names), inputs=inputs_map
+            ),
         )
 
     @staticmethod
-    def _create_industrial_extension(extractor: SECReportExtractor) -> IndustrialExtension:
+    def _create_industrial_extension(
+        extractor: SECReportExtractor,
+    ) -> IndustrialExtension:
         def C(regex: str) -> SearchConfig:
             return SearchType.CONSOLIDATED(regex)
 
@@ -321,7 +330,7 @@ class FinancialReportFactory:
             extractor,
             [C("us-gaap:InventoryNet"), C("us-gaap:InventoryGross")],
             "Inventory",
-            target_type=float
+            target_type=float,
         )
 
         # Accounts Receivable: Net Current
@@ -329,7 +338,7 @@ class FinancialReportFactory:
             extractor,
             [C("us-gaap:AccountsReceivableNetCurrent")],
             "Accounts Receivable",
-            target_type=float
+            target_type=float,
         )
 
         # COGS: GoodsAndServices -> CostOfRevenue
@@ -337,7 +346,7 @@ class FinancialReportFactory:
             extractor,
             [C("us-gaap:CostOfGoodsAndServicesSold"), C("us-gaap:CostOfRevenue")],
             "Cost of Goods Sold (COGS)",
-            target_type=float
+            target_type=float,
         )
 
         # R&D
@@ -345,7 +354,7 @@ class FinancialReportFactory:
             extractor,
             [C("us-gaap:ResearchAndDevelopmentExpense")],
             "R&D Expense",
-            target_type=float
+            target_type=float,
         )
 
         # SG&A: Aggregate -> Sum(Selling + G&A)
@@ -353,7 +362,7 @@ class FinancialReportFactory:
             extractor,
             [C("us-gaap:SellingGeneralAndAdministrativeExpense")],
             "SG&A Expense",
-            target_type=float
+            target_type=float,
         )
 
         if tf_sga_aggregate.value is not None:
@@ -364,16 +373,17 @@ class FinancialReportFactory:
                 extractor,
                 [C("us-gaap:SellingExpense"), C("us-gaap:SellingAndMarketingExpense")],
                 "Selling Expense",
-                target_type=float
+                target_type=float,
             )
             tf_ga = BaseFinancialModelFactory._extract_field(
                 extractor,
                 [C("us-gaap:GeneralAndAdministrativeExpense")],
                 "G&A Expense",
-                target_type=float
+                target_type=float,
             )
-            tf_sga = FinancialReportFactory._sum_fields("SG&A Expense (Calculated)", [tf_selling, tf_ga])
-
+            tf_sga = FinancialReportFactory._sum_fields(
+                "SG&A Expense (Calculated)", [tf_selling, tf_ga]
+            )
 
         # CapEx: PaymentsToAcquirePropertyPlantAndEquipment
         # TODO: Add filtering by Statement Type to avoid "IncurredButNotYetPaid" issues.
@@ -381,7 +391,7 @@ class FinancialReportFactory:
             extractor,
             [C("us-gaap:PaymentsToAcquirePropertyPlantAndEquipment")],
             "Capital Expenditures (CapEx)",
-            target_type=float
+            target_type=float,
         )
 
         return IndustrialExtension(
@@ -390,11 +400,13 @@ class FinancialReportFactory:
             cogs=tf_cogs,
             rd_expense=tf_rd,
             sga_expense=tf_sga,
-            capex=tf_capex
+            capex=tf_capex,
         )
 
     @staticmethod
-    def _create_financial_services_extension(extractor: SECReportExtractor) -> FinancialServicesExtension:
+    def _create_financial_services_extension(
+        extractor: SECReportExtractor,
+    ) -> FinancialServicesExtension:
         def C(regex: str) -> SearchConfig:
             return SearchType.CONSOLIDATED(regex)
 
@@ -403,26 +415,23 @@ class FinancialReportFactory:
             extractor,
             [C("us-gaap:LoansAndLeasesReceivableNetReportedAmount")],
             "Loans and Leases",
-            target_type=float
+            target_type=float,
         )
 
         # Deposits
         tf_deposits = BaseFinancialModelFactory._extract_field(
-            extractor,
-            [C("us-gaap:Deposits")],
-            "Deposits",
-            target_type=float
+            extractor, [C("us-gaap:Deposits")], "Deposits", target_type=float
         )
 
         # Allowance for Credit Losses: CECL -> Pre-CECL
         tf_allowance = BaseFinancialModelFactory._extract_field(
             extractor,
             [
-                C("us-gaap:FinancingReceivableAllowanceForCreditLosses"), # CECL
-                C("us-gaap:AllowanceForLoanAndLeaseLosses") # Pre-CECL
+                C("us-gaap:FinancingReceivableAllowanceForCreditLosses"),  # CECL
+                C("us-gaap:AllowanceForLoanAndLeaseLosses"),  # Pre-CECL
             ],
             "Allowance for Credit Losses",
-            target_type=float
+            target_type=float,
         )
 
         # Interest Income
@@ -430,7 +439,7 @@ class FinancialReportFactory:
             extractor,
             [C("us-gaap:InterestIncome")],
             "Interest Income",
-            target_type=float
+            target_type=float,
         )
 
         # Interest Expense
@@ -438,7 +447,7 @@ class FinancialReportFactory:
             extractor,
             [C("us-gaap:InterestExpense")],
             "Interest Expense",
-            target_type=float
+            target_type=float,
         )
 
         # Provision for Loan Losses
@@ -446,10 +455,10 @@ class FinancialReportFactory:
             extractor,
             [
                 C("us-gaap:ProvisionForCreditLosses"),
-                C("us-gaap:ProvisionForLoanLeaseAndOtherLosses")
+                C("us-gaap:ProvisionForLoanLeaseAndOtherLosses"),
             ],
             "Provision for Loan Losses",
-            target_type=float
+            target_type=float,
         )
 
         return FinancialServicesExtension(
@@ -458,11 +467,13 @@ class FinancialReportFactory:
             allowance_for_credit_losses=tf_allowance,
             interest_income=tf_int_income,
             interest_expense=tf_int_expense,
-            provision_for_loan_losses=tf_provision
+            provision_for_loan_losses=tf_provision,
         )
 
     @staticmethod
-    def _create_real_estate_extension(extractor: SECReportExtractor, base_model: BaseFinancialModel) -> RealEstateExtension:
+    def _create_real_estate_extension(
+        extractor: SECReportExtractor, base_model: BaseFinancialModel
+    ) -> RealEstateExtension:
         def C(regex: str) -> SearchConfig:
             return SearchType.CONSOLIDATED(regex)
 
@@ -471,7 +482,7 @@ class FinancialReportFactory:
             extractor,
             [C("us-gaap:RealEstateInvestmentPropertyNet")],
             "Real Estate Assets (at cost)",
-            target_type=float
+            target_type=float,
         )
 
         # Accumulated Depreciation
@@ -479,7 +490,7 @@ class FinancialReportFactory:
             extractor,
             [C("us-gaap:RealEstateInvestmentPropertyAccumulatedDepreciation")],
             "Accumulated Depreciation",
-            target_type=float
+            target_type=float,
         )
 
         # For FFO Calculation:
@@ -488,10 +499,10 @@ class FinancialReportFactory:
             extractor,
             [
                 C("us-gaap:DepreciationAndAmortizationInRealEstate"),
-                C("us-gaap:DepreciationAndAmortization")
+                C("us-gaap:DepreciationAndAmortization"),
             ],
             "Depreciation & Amortization",
-            target_type=float
+            target_type=float,
         )
 
         # 2. Gain on Sale
@@ -499,10 +510,10 @@ class FinancialReportFactory:
             extractor,
             [
                 C("us-gaap:GainLossOnSaleOfRealEstateInvestmentProperty"),
-                C("us-gaap:GainLossOnSaleOfProperties")
+                C("us-gaap:GainLossOnSaleOfProperties"),
             ],
             "Gain on Sale of Properties",
-            target_type=float
+            target_type=float,
         )
 
         # 3. Net Income (From Base Model)
@@ -530,14 +541,14 @@ class FinancialReportFactory:
                 inputs={
                     "Net Income": tf_net_income,
                     "Depreciation": tf_dep,
-                    "Gain on Sale": tf_gain
-                }
-            )
+                    "Gain on Sale": tf_gain,
+                },
+            ),
         )
 
         return RealEstateExtension(
             real_estate_assets=tf_re_assets,
             accumulated_depreciation=tf_acc_dep,
             depreciation_and_amortization=tf_dep,
-            ffo=tf_ffo
+            ffo=tf_ffo,
         )
