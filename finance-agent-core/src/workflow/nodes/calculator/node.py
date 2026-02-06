@@ -4,23 +4,25 @@ Calculator Node - Executes deterministic valuation calculations.
 This is a simple wrapper around the SkillRegistry calculator functions.
 """
 
-from langchain_core.messages import AIMessage
 from langgraph.graph import END
 from langgraph.types import Command
 
 from src.interface.schemas import AgentOutputArtifact
+from src.utils.logger import get_logger
 
 from ...manager import SkillRegistry
 from ...schemas import CalculationOutput
 from ...state import AgentState
 from .schemas import CalculatorPreview
 
+logger = get_logger(__name__)
+
 
 def calculation_node(state: AgentState) -> Command:
     """
     Executes the deterministic valuation calculation.
     """
-    print("--- Calculator: Running Deterministic Engine ---")
+    logger.info("--- Calculator: Running Deterministic Engine ---")
 
     try:
         fundamental = state.get("fundamental_analysis", {})
@@ -44,7 +46,7 @@ def calculation_node(state: AgentState) -> Command:
         params_obj = schema(**params_dict)
         result = calc_func(params_obj)
 
-        print("✅ Valuation Logic Complete. Returning result to Conversation.")
+        logger.info("✅ Valuation Logic Complete. Returning result to Conversation.")
 
         return Command(
             update={
@@ -67,14 +69,15 @@ def calculation_node(state: AgentState) -> Command:
             goto=END,
         )
     except Exception as e:
-        print(f"Calculation Failed: {e}")
+        logger.error(f"Calculation Failed: {e}", exc_info=True)
         return Command(
             update={
-                "messages": [
-                    AIMessage(
-                        content=f"Calculation failed: {e}",
-                        additional_kwargs={"agent_id": "calculator"},
-                    )
+                "error_logs": [
+                    {
+                        "node": "calculator",
+                        "error": str(e),
+                        "severity": "error",
+                    }
                 ],
                 "node_statuses": {"calculator": "error"},
             },

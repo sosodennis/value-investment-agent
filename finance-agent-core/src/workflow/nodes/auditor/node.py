@@ -4,7 +4,6 @@ Auditor Node - Validates extracted parameters against business rules.
 This is a simple wrapper around the SkillRegistry auditor functions.
 """
 
-from langchain_core.messages import AIMessage
 from langgraph.types import Command
 
 from src.interface.schemas import AgentOutputArtifact
@@ -76,16 +75,17 @@ def auditor_node(state: AgentState) -> Command:
             goto="approval",
         )
     except Exception as e:
-        logger.error(f"Audit Failed: {e}")
+        logger.error(f"Audit Failed: {e}", exc_info=True)
         from langgraph.graph import END
 
         return Command(
             update={
-                "messages": [
-                    AIMessage(
-                        content=f"Audit failed: {e}",
-                        additional_kwargs={"agent_id": "auditor"},
-                    )
+                "error_logs": [
+                    {
+                        "node": "auditor",
+                        "error": str(e),
+                        "severity": "error",
+                    }
                 ],
                 "node_statuses": {"auditor": "error"},
             },

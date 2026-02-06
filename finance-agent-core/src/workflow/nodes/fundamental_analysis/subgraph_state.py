@@ -12,6 +12,7 @@ from typing_extensions import TypedDict
 from ...state import (
     FundamentalAnalysisContext,
     IntentExtractionContext,
+    append_logs,
     last_value,
     merge_dict,
 )
@@ -39,6 +40,7 @@ class FundamentalAnalysisOutput(BaseModel):
     fundamental_analysis: FundamentalAnalysisContext
     messages: list = Field(default_factory=list)
     node_statuses: dict[str, str] = Field(default_factory=dict)
+    error_logs: list[dict] = Field(default_factory=list)
 
 
 class FundamentalAnalysisState(TypedDict):
@@ -55,6 +57,7 @@ class FundamentalAnalysisState(TypedDict):
     # --- Core State (Reducers applied) ---
     fundamental_analysis: Annotated[FundamentalAnalysisContext, merge_dict]
     messages: Annotated[list, add_messages]
+    error_logs: Annotated[list[dict], append_logs]
 
     # --- Private State (Not exposed in FundamentalAnalysisOutput) ---
     internal_progress: Annotated[dict[str, str], merge_dict]

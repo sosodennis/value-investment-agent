@@ -5,7 +5,6 @@ In production, this would use LLM to extract parameters from 10-K filings,
 financial statements, and other sources.
 """
 
-from langchain_core.messages import AIMessage
 from langgraph.graph import END
 from langgraph.types import Command
 
@@ -30,22 +29,22 @@ def executor_node(state: AgentState) -> Command:
     ticker = state.get("ticker")
     logger.info(f"--- Executor: Extracting parameters for {model_type} ---")
 
-    skill = SkillRegistry.get_skill(model_type)
-    if not skill:
-        raise ValueError(f"Unknown model type: {model_type}")
-
-    schema = skill["schema"]
-
-    # MOCK DATA GENERATION
-    if model_type == "saas":
-        mock_data = generate_mock_saas_data(ticker)
-    elif model_type == "bank":
-        mock_data = generate_mock_bank_data(ticker)
-    else:
-        raise ValueError(f"Unsupported model type: {model_type}")
-
     # Validate structure via Pydantic
     try:
+        skill = SkillRegistry.get_skill(model_type)
+        if not skill:
+            raise ValueError(f"Unknown model type: {model_type}")
+
+        schema = skill["schema"]
+
+        # MOCK DATA GENERATION
+        if model_type == "saas":
+            mock_data = generate_mock_saas_data(ticker)
+        elif model_type == "bank":
+            mock_data = generate_mock_bank_data(ticker)
+        else:
+            raise ValueError(f"Unsupported model type: {model_type}")
+
         validated = schema(**mock_data)
         # Wrap in ExtractionOutput
         output = ExtractionOutput(params=validated.model_dump())
@@ -66,16 +65,17 @@ def executor_node(state: AgentState) -> Command:
             goto="auditor",
         )
     except Exception as e:
-        logger.error(f"Extraction Failed: {e}")
+        logger.error(f"Extraction Failed: {e}", exc_info=True)
         return Command(
             update={
-                "messages": [
-                    AIMessage(
-                        content=f"Extraction failed for {model_type}: {e}",
-                        additional_kwargs={"agent_id": "executor"},
-                    )
+                "error_logs": [
+                    {
+                        "node": "executor",
+                        "error": str(e),
+                        "severity": "error",
+                    }
                 ],
                 "node_statuses": {"executor": "error"},
             },
             goto=END,
-        )  # Fallback if extraction fails completely
+        )

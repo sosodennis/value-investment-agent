@@ -29,6 +29,11 @@ def last_value(a: Any | None, b: Any | None) -> Any | None:
     return b if b is not None else a
 
 
+def append_logs(a: list[dict], b: list[dict]) -> list[dict]:
+    """Simple list-append reducer for logs."""
+    return (a or []) + (b or [])
+
+
 # --- Context Definitions (TypedDict) ---
 
 
@@ -162,3 +167,6 @@ class AgentState(TypedDict):
     # Dashboard tracking
     node_statuses: Annotated[dict[str, str], merge_dict]
     current_node: Annotated[str | None, last_value]
+
+    # Error logging
+    error_logs: Annotated[list[dict], append_logs]
