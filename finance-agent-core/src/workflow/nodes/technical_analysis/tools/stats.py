@@ -32,8 +32,8 @@ def calculate_rolling_z_score(fd_series: pd.Series, lookback: int = 126) -> pd.S
     """
     Generate the full historical Z-Score series from Raw FracDiff data.
     """
-    rolling_mean = fd_series.rolling(window=lookback).mean()
-    rolling_std = fd_series.rolling(window=lookback).std()
+    rolling_mean = fd_series.rolling(window=lookback, min_periods=2).mean()
+    rolling_std = fd_series.rolling(window=lookback, min_periods=2).std()
 
     z_score_series = (fd_series - rolling_mean) / rolling_std
     z_score_series = z_score_series.fillna(0.0).replace([np.inf, -np.inf], 0.0)
