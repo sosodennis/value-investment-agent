@@ -1,8 +1,13 @@
+import os
+
 from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
 
 from src.common.tools.logger import get_logger
 
 logger = get_logger(__name__)
+
+DEFAULT_DDGS_REGION = os.getenv("DDGS_REGION", "us-en")
+DEFAULT_DDGS_BACKEND = os.getenv("DDGS_BACKEND", "duckduckgo")
 
 
 def web_search(query: str) -> str:
@@ -19,7 +24,14 @@ def web_search(query: str) -> str:
         logger.info(f"Executing optimized search query: {query}")
 
         # 2. Init Wrapper with more results
-        search = DuckDuckGoSearchAPIWrapper(max_results=7, time="y")
+        # NOTE: Force a valid region and a stable backend to avoid
+        # wikipedia/grokipedia DNS failures (e.g., wt.wikipedia.org).
+        search = DuckDuckGoSearchAPIWrapper(
+            max_results=7,
+            time="y",
+            region=DEFAULT_DDGS_REGION,
+            backend=DEFAULT_DDGS_BACKEND,
+        )
 
         # 3. Execute search
         results = search.results(query, max_results=7)
