@@ -1,8 +1,18 @@
 import asyncio
 import logging
+from dataclasses import dataclass, field
 
 # Use the same logger setup as in the original __init__.py
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class SearchTask:
+    time_param: str
+    query: str
+    limit: int
+    tag: str
+    fallbacks: tuple[str, ...] = field(default_factory=tuple)
 
 
 async def news_search_multi_timeframe(
@@ -46,68 +56,123 @@ async def news_search_multi_timeframe(
     else:
         base_term = ticker
 
+    def build_fallbacks(tag: str) -> tuple[str, ...]:
+        # Keep fallbacks simple and broader to avoid zero-result hard failures.
+        if tag in ("bullish", "bearish"):
+            return (f"{base_term} stock news", f"{base_term} stock")
+        if tag == "corporate_event":
+            return (
+                f"{base_term} (merger OR acquisition OR investment OR CEO OR CFO)",
+                f"{base_term} news",
+            )
+        if tag == "financials":
+            return (f"{base_term} earnings", f"{base_term} 10-K 10-Q")
+        if tag == "trusted_news":
+            return (f"{base_term} stock news",)
+        if tag == "analyst_opinion":
+            return (f"{base_term} analyst rating",)
+        return ()
+
     # --- Strategic Search Task Configuration ---
     # Increased fetch counts to fill quota buckets
     tasks_config = [
         # [BULLISH_SIGNAL] Growth catalysts & Valuation (For Bull Agent)
-        (
+        SearchTask(
             "m",
             f'{base_term} stock ("price target raised" OR "buy rating" OR upgrade OR outperform OR undervalued OR record OR partnership)',
             10,
             "bullish",
+            build_fallbacks("bullish"),
         ),
-        (
+        SearchTask(
             "m",
             f"{base_term} stock bullish news",
             10,
             "bullish",
+            build_fallbacks("bullish"),
         ),
         # [BEARISH_SIGNAL] Risks, downgrades, & headwinds (For Bear Agent)
-        (
+        SearchTask(
             "m",
             f'{base_term} stock (downgrade OR "sell rating" OR underperform OR overvalued OR "short seller" OR lawsuit OR investigation OR headwinds)',
             10,
             "bearish",
+            build_fallbacks("bearish"),
         ),
-        (
+        SearchTask(
             "m",
             f"{base_term} stock bearish news",
             10,
             "bearish",
+            build_fallbacks("bearish"),
         ),
         # === [TRUSTED_NEWS] 拆分為 Tier 1 和 Tier 2 執行 ===
         # Avoids overly long queries while increasing coverage
-        ("w", f"{base_term} stock news ({q_tier1})", 4, "trusted_news"),
-        ("m", f"{base_term} stock news ({q_tier1})", 4, "trusted_news"),
-        ("w", f"{base_term} stock news ({q_tier2})", 4, "trusted_news"),
-        ("m", f"{base_term} stock news ({q_tier2})", 4, "trusted_news"),
+        SearchTask(
+            "w",
+            f"{base_term} stock news ({q_tier1})",
+            4,
+            "trusted_news",
+            build_fallbacks("trusted_news"),
+        ),
+        SearchTask(
+            "m",
+            f"{base_term} stock news ({q_tier1})",
+            4,
+            "trusted_news",
+            build_fallbacks("trusted_news"),
+        ),
+        SearchTask(
+            "w",
+            f"{base_term} stock news ({q_tier2})",
+            4,
+            "trusted_news",
+            build_fallbacks("trusted_news"),
+        ),
+        SearchTask(
+            "m",
+            f"{base_term} stock news ({q_tier2})",
+            4,
+            "trusted_news",
+            build_fallbacks("trusted_news"),
+        ),
         # [CORPORATE_EVENT] M&A, Capex, Management changes
-        (
+        SearchTask(
             "w",
             f'{base_term} (merger OR acquisition OR investment OR "capital expenditure" OR CEO OR CFO)',
             10,
             "corporate_event",
+            build_fallbacks("corporate_event"),
         ),
-        (
+        SearchTask(
             "m",
             f'{base_term} (merger OR acquisition OR investment OR "capital expenditure" OR CEO OR CFO)',
             10,
             "corporate_event",
+            build_fallbacks("corporate_event"),
         ),
         # [FINANCIALS] Earnings reports, SEC filings, Guidance
-        (
+        SearchTask(
             "m",
             f'{base_term} earnings ("SEC filing" OR 10-K OR 10-Q OR guidance OR revenue)',
             10,
             "financials",
+            build_fallbacks("financials"),
         ),
         # [ANALYST_OPINION] General analyst sentiment
-        ("w", f'{base_term} analyst rating "price target"', 4, "analyst_opinion"),
-        (
+        SearchTask(
+            "w",
+            f'{base_term} analyst rating "price target"',
+            4,
+            "analyst_opinion",
+            build_fallbacks("analyst_opinion"),
+        ),
+        SearchTask(
             "m",
             f'{base_term} ("upcoming" OR "launch date" OR "roadmap" OR "revenue forecast" OR "outlook" OR "catalyst" OR "next quarter")',
             8,
             "financials",
+            build_fallbacks("financials"),
         ),
     ]
 
@@ -120,63 +185,87 @@ async def news_search_multi_timeframe(
     MAX_CONCURRENT_REQUESTS = 2
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
-    def fetch_one_sync(time_param: str, query: str, limit: int, tag: str):
-        """Synchronous fetch with retry logic."""
+    def _is_no_results_error(err: Exception) -> bool:
+        return "No results found" in str(err)
+
+    def _run_query(ddgs, query: str, time_param: str, limit: int) -> list[dict]:
+        results = ddgs.news(
+            query,
+            region="wt-wt",
+            safesearch="off",
+            time=time_param,
+            max_results=limit,
+        )
+        return list(results)
+
+    def fetch_one_sync(task: SearchTask) -> list[dict]:
+        """Synchronous fetch with retry logic and fallbacks."""
         import time
 
         from ddgs import DDGS
 
         max_retries = 2
-        for attempt in range(max_retries):
-            try:
-                if attempt == 0:
-                    print(
-                        f"--- [Search] Querying: {query[:60]}... ({time_param}) ---",
-                        flush=True,
-                    )
+        queries = (task.query,) + task.fallbacks
+        last_error: Exception | None = None
 
-                with DDGS() as ddgs:
-                    search_start = time.perf_counter()
-                    results = ddgs.news(
-                        query,
-                        region="wt-wt",
-                        safesearch="off",
-                        time=time_param,
-                        max_results=limit,
-                    )
-                    results_list = list(results)
-                    search_end = time.perf_counter()
+        for query in queries:
+            for attempt in range(max_retries):
+                try:
+                    if attempt == 0:
+                        print(
+                            f"--- [Search] Querying: {query[:60]}... ({task.time_param}) ---",
+                            flush=True,
+                        )
 
-                    print(
-                        f"--- [Search Latency] {search_end - search_start:.2f}s for query: {query[:50]}... ({time_param}) ---",
-                        flush=True,
-                    )
+                    with DDGS() as ddgs:
+                        search_start = time.perf_counter()
+                        results_list = _run_query(
+                            ddgs, query, task.time_param, task.limit
+                        )
+                        search_end = time.perf_counter()
 
-                    for r in results_list:
-                        r["_time_frame"] = time_param
-                        r["_search_tag"] = tag
-                    return results_list
+                        print(
+                            f"--- [Search Latency] {search_end - search_start:.2f}s for query: {query[:50]}... ({task.time_param}) ---",
+                            flush=True,
+                        )
 
-            except Exception as e:
-                if attempt == max_retries - 1:
-                    logger.warning(f"Search failed for tag='{tag}' after retries: {e}")
-                else:
+                        if not results_list:
+                            break
+
+                        for r in results_list:
+                            r["_time_frame"] = task.time_param
+                            r["_search_tag"] = task.tag
+                        return results_list
+
+                except Exception as e:
+                    if _is_no_results_error(e):
+                        logger.info(
+                            f"Search returned no results for tag='{task.tag}' query='{query[:80]}'"
+                        )
+                        break
+
+                    last_error = e
+                    if attempt == max_retries - 1:
+                        break
                     time.sleep(1)  # Brief pause before retry
+
+        if last_error is not None:
+            logger.warning(
+                f"Search failed for tag='{task.tag}' after retries: {last_error}"
+            )
         return []
 
-    async def fetch_one_managed(time_param: str, query: str, limit: int, tag: str):
+    async def fetch_one_managed(task: SearchTask):
         """Async wrapper with semaphore control and jitter."""
         import random
 
         async with semaphore:
             # Random jitter (0.5-2.0s) to avoid burst patterns
             await asyncio.sleep(random.uniform(3.0, 5.0))
-            return await asyncio.to_thread(
-                fetch_one_sync, time_param, query, limit, tag
-            )
+            return await asyncio.to_thread(fetch_one_sync, task)
 
     # Execute with managed concurrency
-    tasks = [fetch_one_managed(t, q, limit, tag) for t, q, limit, tag in tasks_config]
+    tasks = [fetch_one_managed(task) for task in tasks_config]
     results_lists = await asyncio.gather(*tasks)
 
     # --- Orthogonal Deduplication (Stacking Tags) ---
@@ -285,9 +374,9 @@ async def news_search_multi_timeframe(
     # Debug: Print final distribution
     final_counts = {}
     for r in formatted_results:
-        # Note: _search_tag might not exist in final formatted results, using categories[0] for debug print
-        tag = r["categories"][0] if r.get("categories") else "general"
-        final_counts[tag] = final_counts.get(tag, 0) + 1
+        cats = r.get("categories") or ["general"]
+        for tag in cats:
+            final_counts[tag] = final_counts.get(tag, 0) + 1
     logger.info(f"--- [Search] Final Balanced Distribution: {final_counts} ---")
 
     return formatted_results
