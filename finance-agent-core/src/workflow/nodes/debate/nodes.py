@@ -1,7 +1,7 @@
+import hashlib
 import json
-from typing import Any
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph import END
 from langgraph.types import Command
 
@@ -58,6 +58,10 @@ def _compress_reports(reports: dict, max_chars: int = MAX_CHAR_REPORTS) -> str:
     return compressed[:max_chars] + "\n\n[... TRUNCATED DUE TO TOKEN LIMITS ...]"
 
 
+def _hash_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+
+
 def _get_trimmed_history(history: list, max_chars: int = MAX_CHAR_HISTORY) -> list:
     """Get the most recent messages that fit within the character budget."""
     if not history:
@@ -74,10 +78,20 @@ def _get_trimmed_history(history: list, max_chars: int = MAX_CHAR_HISTORY) -> li
         trimmed.insert(0, msg)
         current_chars += len(msg_content)
 
+    total_chars = sum(len(str(msg.content)) for msg in history)
+    trimmed_chars = sum(len(str(msg.content)) for msg in trimmed)
+    logger.info(
+        "DEBATE_HISTORY_TRIM total_messages=%d total_chars=%d trimmed_messages=%d trimmed_chars=%d max_chars=%d",
+        len(history),
+        total_chars,
+        len(trimmed),
+        trimmed_chars,
+        max_chars,
+    )
     return trimmed
 
 
-def _log_messages(messages: list, agent_name: str, round_num: int = 0):
+def _log_messages(messages: list[BaseMessage], agent_name: str, round_num: int = 0):
     """Log full message content for audit/debugging."""
     log_header = f"PROMPT SENT TO {agent_name}"
     if round_num:
@@ -117,15 +131,81 @@ def _get_last_message_from_role(history: list, role_name: str) -> str:
     return ""
 
 
+def _log_llm_config(agent_name: str, round_num: int, llm: object) -> None:
+    model = getattr(llm, "model_name", None) or getattr(llm, "model", None) or "unknown"
+    temperature = getattr(llm, "temperature", None)
+    timeout = getattr(llm, "timeout", None)
+    logger.info(
+        "DEBATE_LLM_CONFIG agent=%s round=%d model=%s temperature=%s timeout=%s",
+        agent_name,
+        round_num,
+        model,
+        temperature,
+        timeout,
+    )
+
+
+def _log_compressed_reports(
+    stage: str, ticker: str | None, compressed_reports: str, source: str
+) -> None:
+    logger.info(
+        "DEBATE_REPORTS stage=%s ticker=%s source=%s chars=%d hash=%s",
+        stage,
+        ticker or "unknown",
+        source,
+        len(compressed_reports),
+        _hash_text(compressed_reports),
+    )
+
+
+def _log_debate_context(
+    agent_name: str,
+    round_num: int,
+    history: list,
+    my_last_arg: str,
+    opponent_last_arg: str,
+    judge_feedback: str,
+) -> None:
+    logger.info(
+        "DEBATE_CONTEXT agent=%s round=%d history_messages=%d my_last_arg_chars=%d opponent_last_arg_chars=%d judge_feedback_chars=%d",
+        agent_name,
+        round_num,
+        len(history),
+        len(my_last_arg or ""),
+        len(opponent_last_arg or ""),
+        len(judge_feedback or ""),
+    )
+
+
+def _log_llm_response(agent_name: str, round_num: int, response_text: str) -> None:
+    logger.info(
+        "DEBATE_OUTPUT agent=%s round=%d chars=%d hash=%s",
+        agent_name,
+        round_num,
+        len(response_text),
+        _hash_text(response_text),
+    )
+    logger.info(
+        "DEBATE_OUTPUT_TEXT agent=%s round=%d\n%s",
+        agent_name,
+        round_num,
+        response_text,
+    )
+
+
 async def _prepare_debate_reports(state: DebateState) -> dict:
     """
     Prepare compressed reports for the LLM prompt on the fly.
     This avoids mirroring large data in the state (Engineering Charter §3.4).
     """
+    ticker = state.get("intent_extraction", {}).get("resolved_ticker") or state.get(
+        "ticker"
+    )
     # News Data
     news_ctx = state.get("financial_news_research", {})
     news_artifact = news_ctx.get("artifact")
     news_data = {}
+    news_artifact_id = None
 
     # Try getting from artifact reference (L3)
     artifact_id = None
@@ -143,6 +223,7 @@ async def _prepare_debate_reports(state: DebateState) -> dict:
     # Fallback to news_items_artifact_id
     if not artifact_id:
         artifact_id = news_ctx.get("news_items_artifact_id")
+    news_artifact_id = artifact_id
 
     if artifact_id:
         artifact_obj = await artifact_manager.get_artifact(artifact_id)
@@ -158,6 +239,7 @@ async def _prepare_debate_reports(state: DebateState) -> dict:
     ta_ctx = state.get("technical_analysis", {})
     ta_artifact = ta_ctx.get("artifact")
     ta_data = {}
+    ta_artifact_id = None
 
     artifact_id = None
     if ta_artifact:
@@ -173,6 +255,7 @@ async def _prepare_debate_reports(state: DebateState) -> dict:
     # Fallback to chart_data_id or price_artifact_id
     if not artifact_id:
         artifact_id = ta_ctx.get("chart_data_id") or ta_ctx.get("price_artifact_id")
+    ta_artifact_id = artifact_id
 
     if artifact_id:
         artifact_obj = await artifact_manager.get_artifact(artifact_id)
@@ -181,6 +264,16 @@ async def _prepare_debate_reports(state: DebateState) -> dict:
 
     # Fundamental Analysis Data
     fa_reports = state.get("fundamental_analysis", {}).get("financial_reports", [])
+
+    logger.info(
+        "DEBATE_REPORT_INPUT ticker=%s financials=%d news_items=%d ta_present=%s news_artifact_id=%s ta_artifact_id=%s",
+        ticker or "unknown",
+        len(fa_reports),
+        len(news_data.get("news_items", [])),
+        bool(ta_data),
+        news_artifact_id or "none",
+        ta_artifact_id or "none",
+    )
 
     return {
         "financials": {
@@ -211,6 +304,10 @@ async def debate_aggregator_node(state: DebateState) -> Command:
     # Pre-compute and cache reports
     reports = await _prepare_debate_reports(state)
     compressed_reports = _compress_reports(reports)
+    ticker = state.get("intent_extraction", {}).get("resolved_ticker") or state.get(
+        "ticker"
+    )
+    _log_compressed_reports("debate_aggregator", ticker, compressed_reports, "computed")
 
     next_progress = {
         "debate_aggregator": "done",
@@ -234,19 +331,25 @@ async def debate_aggregator_node(state: DebateState) -> Command:
 
 async def _execute_bull_agent(
     state: DebateState, round_num: int, adversarial_rule: str
-) -> dict[str, Any]:
+) -> dict[str, object]:
     """Internal helper for Bull logic across rounds."""
     ticker = state.get("intent_extraction", {}).get("resolved_ticker") or state.get(
         "ticker"
     )
     try:
         llm = get_llm()
+        _log_llm_config("BULL_AGENT", round_num, llm)
 
         # Use cached reports if available, fallback to on-the-fly computation
         compressed_reports = state.get("compressed_reports")
+        reports_source = "cached"
         if not compressed_reports:
             reports = await _prepare_debate_reports(state)
             compressed_reports = _compress_reports(reports)
+            reports_source = "computed"
+        _log_compressed_reports(
+            f"bull_r{round_num}", ticker, compressed_reports, reports_source
+        )
 
         system_content = BULL_AGENT_SYSTEM_PROMPT.format(
             ticker=ticker,
@@ -277,8 +380,18 @@ async def _execute_bull_agent(
                     HumanMessage(content=f"DESTROY this argument:\n\n{bear_last_arg}")
                 )
 
+            _log_debate_context(
+                "BULL_AGENT",
+                round_num,
+                history,
+                my_last_arg,
+                bear_last_arg,
+                judge_feedback,
+            )
+
         _log_messages(messages, "BULL_AGENT", round_num)
         response = await llm.ainvoke(messages)
+        _log_llm_response("BULL_AGENT", round_num, response.content)
 
         return {
             "history": [AIMessage(content=response.content, name="GrowthHunter")],
@@ -291,19 +404,25 @@ async def _execute_bull_agent(
 
 async def _execute_bear_agent(
     state: DebateState, round_num: int, adversarial_rule: str
-) -> dict[str, Any]:
+) -> dict[str, object]:
     """Internal helper for Bear logic across rounds."""
     ticker = state.get("intent_extraction", {}).get("resolved_ticker") or state.get(
         "ticker"
     )
     try:
         llm = get_llm()
+        _log_llm_config("BEAR_AGENT", round_num, llm)
 
         # Use cached reports if available, fallback to on-the-fly computation
         compressed_reports = state.get("compressed_reports")
+        reports_source = "cached"
         if not compressed_reports:
             reports = await _prepare_debate_reports(state)
             compressed_reports = _compress_reports(reports)
+            reports_source = "computed"
+        _log_compressed_reports(
+            f"bear_r{round_num}", ticker, compressed_reports, reports_source
+        )
 
         system_content = BEAR_AGENT_SYSTEM_PROMPT.format(
             ticker=ticker,
@@ -334,8 +453,18 @@ async def _execute_bear_agent(
                     HumanMessage(content=f"DESTROY this argument:\n\n{bull_last_arg}")
                 )
 
+            _log_debate_context(
+                "BEAR_AGENT",
+                round_num,
+                history,
+                my_last_arg,
+                bull_last_arg,
+                judge_feedback,
+            )
+
         _log_messages(messages, "BEAR_AGENT", round_num)
         response = await llm.ainvoke(messages)
+        _log_llm_response("BEAR_AGENT", round_num, response.content)
 
         return {
             "history": [AIMessage(content=response.content, name="ForensicAccountant")],
@@ -348,19 +477,26 @@ async def _execute_bear_agent(
 
 async def _execute_moderator_critique(
     state: DebateState, round_num: int
-) -> dict[str, Any]:
+) -> dict[str, object]:
     """Internal helper for Moderator Critique across rounds."""
     ticker = state.get("intent_extraction", {}).get("resolved_ticker") or state.get(
         "ticker"
     )
     try:
         llm = get_llm()
+        _log_llm_config("MODERATOR", round_num, llm)
         from .tools import get_sycophancy_detector
 
         detector = get_sycophancy_detector()
         similarity, is_sycophantic = detector.check_consensus(
             state.get("debate", {}).get("bull_thesis") or "",
             state.get("debate", {}).get("bear_thesis") or "",
+        )
+        logger.info(
+            "DEBATE_SYCOPHANCY_CHECK round=%d similarity=%.4f threshold=0.8 flagged=%s",
+            round_num,
+            similarity,
+            is_sycophantic,
         )
 
         reports = await _prepare_debate_reports(state)
@@ -371,6 +507,13 @@ async def _execute_moderator_critique(
         cached_reports = state.get("compressed_reports")
         if cached_reports:
             compressed_reports = cached_reports
+            _log_compressed_reports(
+                f"moderator_r{round_num}", ticker, compressed_reports, "cached"
+            )
+        else:
+            _log_compressed_reports(
+                f"moderator_r{round_num}", ticker, compressed_reports, "computed"
+            )
 
         system_content = MODERATOR_SYSTEM_PROMPT.format(
             ticker=ticker, reports=compressed_reports
@@ -386,6 +529,7 @@ async def _execute_moderator_critique(
 
         _log_messages(messages, "MODERATOR_CRITIQUE", round_num)
         response = await llm.ainvoke(messages)
+        _log_llm_response("MODERATOR_CRITIQUE", round_num, response.content)
 
         return {
             "history": [AIMessage(content=response.content, name="Judge")],
@@ -688,6 +832,7 @@ async def verdict_node(state: DebateState) -> Command:
     )
     try:
         llm = get_llm()
+        _log_llm_config("VERDICT", 3, llm)
         history = state.get("history", [])
         trimmed_history = _get_trimmed_history(
             history, max_chars=MAX_CHAR_HISTORY * 1.5
@@ -701,6 +846,11 @@ async def verdict_node(state: DebateState) -> Command:
         structured_llm = llm.with_structured_output(DebateConclusion)
         conclusion = await structured_llm.ainvoke(verdict_system)
         conclusion_data = conclusion.model_dump(mode="json")
+        _log_llm_response(
+            "VERDICT_JSON",
+            3,
+            json.dumps(conclusion_data, ensure_ascii=True, indent=2),
+        )
 
         metrics = calculate_pragmatic_verdict(conclusion_data, ticker=ticker)
         conclusion_data.update(metrics)
