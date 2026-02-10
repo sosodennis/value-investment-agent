@@ -3,6 +3,7 @@ from langgraph.types import RetryPolicy
 
 from .nodes import (
     debate_aggregator_node,
+    fact_extractor_node,
     r1_bear_node,
     r1_bull_node,
     r1_moderator_node,
@@ -34,6 +35,9 @@ def build_debate_subgraph():
     # 1. Add Nodes
     builder.add_node(
         "debate_aggregator", debate_aggregator_node, metadata={"agent_id": "debate"}
+    )
+    builder.add_node(
+        "fact_extractor", fact_extractor_node, metadata={"agent_id": "debate"}
     )
 
     # Round 1 Agents (Parallel)
@@ -101,9 +105,10 @@ def build_debate_subgraph():
     # 2. Define Edges (Strict Linear DAG)
     builder.add_edge(START, "debate_aggregator")
 
-    # Fan-out to Round 1
-    builder.add_edge("debate_aggregator", "r1_bull")
-    builder.add_edge("debate_aggregator", "r1_bear")
+    # Fan-out to Round 1 via Fact Extractor
+    builder.add_edge("debate_aggregator", "fact_extractor")
+    builder.add_edge("fact_extractor", "r1_bull")
+    builder.add_edge("fact_extractor", "r1_bear")
 
     # Sync Round 1 at Moderator
     builder.add_edge(["r1_bull", "r1_bear"], "r1_moderator")

@@ -1,5 +1,6 @@
 import hashlib
 import json
+from datetime import datetime
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph import END
@@ -9,6 +10,10 @@ from src.common.tools.llm import get_llm
 from src.common.tools.logger import get_logger
 from src.interface.schemas import AgentOutputArtifact, ArtifactReference
 from src.services.artifact_manager import artifact_manager
+from src.workflow.nodes.fundamental_analysis.financial_models import (
+    ManualProvenance,
+    XBRLProvenance,
+)
 
 from .mappers import summarize_debate_for_preview
 from .prompts import (
@@ -21,7 +26,7 @@ from .prompts import (
     MODERATOR_SYSTEM_PROMPT,
     VERDICT_PROMPT,
 )
-from .structures import DebateConclusion
+from .structures import DebateConclusion, EvidenceFact, FactBundle
 from .subgraph_state import DebateState
 from .tools import (
     calculate_pragmatic_verdict,
@@ -29,6 +34,7 @@ from .tools import (
     compress_news_data,
     compress_ta_data,
 )
+from .tools.validators import FactValidator
 
 logger = get_logger(__name__)
 
@@ -321,6 +327,193 @@ async def debate_aggregator_node(state: DebateState) -> Command:
             "internal_progress": next_progress,
             "node_statuses": {"debate": "running"},
             "compressed_reports": compressed_reports,
+        },
+        goto=["fact_extractor"],
+    )
+
+
+def _safe_get_data(artifact_res: object) -> object:
+    """Helper to extract data from potential Pydantic model or dict."""
+    if hasattr(artifact_res, "data"):
+        return artifact_res.data
+    if isinstance(artifact_res, dict):
+        return artifact_res.get("data")
+    return artifact_res
+
+
+async def fact_extractor_node(state: DebateState) -> Command:
+    """
+    Extracts deterministic facts from financials, news, and technicals.
+    Grounds the debate by providing stable IDs for evidence citation.
+    """
+    ticker = state.get("intent_extraction", {}).get("resolved_ticker") or state.get(
+        "ticker"
+    )
+    logger.info("FACT_EXTRACTION_START ticker=%s", ticker)
+
+    facts: list[EvidenceFact] = []
+
+    # --- 1. Financial Facts (F001...) ---
+    fa_reports = state.get("fundamental_analysis", {}).get("financial_reports", [])
+    for report in fa_reports:
+        fiscal_year = report.get("base", {}).get("fiscal_year", {}).get("value", "N/A")
+        metrics = compress_financial_data([report])[0].get("metrics", {})
+
+        for metric_name, value in metrics.items():
+            fact_id = f"F{len(facts) + 1:03d}"
+            # Extract provenance if available
+            prov_raw = report.get("base", {}).get(metric_name, {}).get("provenance")
+            if not prov_raw:
+                prov_raw = (
+                    report.get("extension", {}).get(metric_name, {}).get("provenance")
+                )
+
+            # Simple mapping to XBRLProvenance object
+            provenance = (
+                XBRLProvenance(
+                    concept=prov_raw.concept
+                    if hasattr(prov_raw, "concept")
+                    else str(metric_name),
+                    period=prov_raw.period
+                    if hasattr(prov_raw, "period")
+                    else str(fiscal_year),
+                )
+                if prov_raw
+                else ManualProvenance(
+                    description=f"Extracted from {fiscal_year} report"
+                )
+            )
+
+            facts.append(
+                EvidenceFact(
+                    fact_id=fact_id,
+                    source_type="financials",
+                    source_weight="HIGH",
+                    summary=f"[{fiscal_year}] {metric_name.replace('_', ' ').title()}: {value}",
+                    value=value,
+                    period=str(fiscal_year),
+                    provenance=provenance,
+                )
+            )
+
+    # --- 2. News Facts (N001...) ---
+    news_items = []
+    news_ctx = state.get("financial_news_research", {})
+    # Similar logic to _prepare_debate_reports to get news items
+    news_artifact_id = news_ctx.get("news_items_artifact_id")
+    if not news_artifact_id and isinstance(news_ctx.get("artifact"), dict):
+        news_artifact_id = (
+            news_ctx.get("artifact").get("reference", {}).get("artifact_id")
+        )
+    elif not news_artifact_id and hasattr(news_ctx.get("artifact"), "reference"):
+        ref = getattr(news_ctx.get("artifact"), "reference", None)
+        news_artifact_id = getattr(ref, "artifact_id", None)
+
+    if news_artifact_id:
+        art = await artifact_manager.get_artifact(news_artifact_id)
+        if art:
+            data = _safe_get_data(art) or {}
+            news_items = data if isinstance(data, list) else data.get("news_items", [])
+
+    for item in news_items:
+        analysis = item.get("analysis", {})
+        key_facts = analysis.get("key_facts", []) or [
+            {"content": analysis.get("summary")}
+        ]
+        source_name = item.get("source", {}).get("name", "Unknown")
+        pub_date = item.get("published_at", "N/A")[:10]
+
+        for fact_item in key_facts:
+            content = (
+                fact_item.get("content")
+                if isinstance(fact_item, dict)
+                else str(fact_item)
+            )
+            if not content:
+                continue
+
+            fact_id = f"N{len(facts) + 1:03d}"
+            facts.append(
+                EvidenceFact(
+                    fact_id=fact_id,
+                    source_type="news",
+                    source_weight="MEDIUM",
+                    summary=f"({pub_date}) {source_name}: {content}",
+                    provenance=ManualProvenance(
+                        description=f"News: {item.get('title')}"
+                    ),
+                )
+            )
+
+    # --- 3. Technical Facts (T001...) ---
+    ta_ctx = state.get("technical_analysis", {})
+    ta_artifact_id = ta_ctx.get("chart_data_id") or ta_ctx.get("price_artifact_id")
+    if not ta_artifact_id and isinstance(ta_ctx.get("artifact"), dict):
+        ta_artifact_id = ta_ctx.get("artifact").get("reference", {}).get("artifact_id")
+    elif not ta_artifact_id and hasattr(ta_ctx.get("artifact"), "reference"):
+        ref = getattr(ta_ctx.get("artifact"), "reference", None)
+        ta_artifact_id = getattr(ref, "artifact_id", None)
+
+    if ta_artifact_id:
+        art = await artifact_manager.get_artifact(ta_artifact_id)
+        if art:
+            ta_data = _safe_get_data(art) or {}
+            signal = ta_data.get("signal_state", {})
+
+            if signal:
+                fact_id = f"T{len(facts) + 1:03d}"
+                facts.append(
+                    EvidenceFact(
+                        fact_id=fact_id,
+                        source_type="technicals",
+                        source_weight="HIGH",
+                        summary=f"Technical Signal: {signal.get('direction')} (Z-Score: {signal.get('z_score')})",
+                        value=signal.get("z_score"),
+                        provenance=ManualProvenance(
+                            description=f"Technical Signal (Z-Score Analysis) from Artifact {ta_artifact_id}",
+                            author="TechnicalAnalyst",
+                        ),
+                    )
+                )
+
+    # --- Save FactBundle Artifact ---
+    facts_raw = [f.model_dump() for f in facts]
+    # Use default=str to handle Enums in JSON serialization for hashing
+    facts_hash = hashlib.sha256(
+        json.dumps(facts_raw, sort_keys=True, default=str).encode()
+    ).hexdigest()
+
+    bundle = FactBundle(
+        ticker=ticker,
+        facts=facts,
+        facts_hash=facts_hash,
+        generated_at=datetime.utcnow().isoformat(),
+    )
+
+    artifact_id = await artifact_manager.save_artifact(
+        data=bundle.model_dump(mode="json"),
+        artifact_type="debate_facts",
+        key_prefix=ticker,
+    )
+
+    summary = {
+        "financials": len([f for f in facts if f.source_type == "financials"]),
+        "news": len([f for f in facts if f.source_type == "news"]),
+        "technicals": len([f for f in facts if f.source_type == "technicals"]),
+    }
+
+    logger.info("FACT_EXTRACTION_DONE ticker=%s facts=%d", ticker, len(facts))
+
+    return Command(
+        update={
+            "facts_artifact_id": artifact_id,
+            "facts_hash": facts_hash,
+            "facts_summary": summary,
+            "fact_extraction_status": "done",
+            # [P2 Fix] STRICT GROUNDING: Overwrite reports with ONLY the facts registry.
+            # This prevents hallucination from raw text.
+            "compressed_reports": "FACTS_REGISTRY (STRICT CITATION REQUIRED):\n"
+            + "\n".join([f"[{f.fact_id}] {f.summary}" for f in facts]),
         },
         goto=["r1_bull", "r1_bear"],
     )
@@ -856,9 +1049,39 @@ async def verdict_node(state: DebateState) -> Command:
         conclusion_data.update(metrics)
         conclusion_data["debate_rounds"] = 3
 
-        # Prepare full report data (Conclusion + History)
+        # Citation Audit
+        bull_history = [m.content for m in history if m.name == "GrowthHunter"]
+        bear_history = [m.content for m in history if m.name == "ForensicAccountant"]
+
+        # [P1 Fix] Fetch facts from artifact (Single Source of Truth)
+        valid_facts = []
+        facts_artifact_id = state.get("facts_artifact_id")
+        if facts_artifact_id:
+            art = await artifact_manager.get_artifact(facts_artifact_id)
+            if art:
+                data = _safe_get_data(art) or {}
+                # Handle both list (v1) and dict with facts key (v2)
+                facts_data = data if isinstance(data, list) else data.get("facts", [])
+                valid_facts = [
+                    EvidenceFact(**f) if isinstance(f, dict) else f for f in facts_data
+                ]
+
+        audit_results = {
+            "bull": FactValidator.validate_citations(
+                "\n".join(bull_history), valid_facts
+            ),
+            "bear": FactValidator.validate_citations(
+                "\n".join(bear_history), valid_facts
+            ),
+        }
+        conclusion_data["citation_audit"] = audit_results
+
+        # Prepare full report data (Conclusion + History + Facts)
         full_report_data = {
             **conclusion_data,
+            "facts": [
+                f.model_dump() if hasattr(f, "model_dump") else f for f in valid_facts
+            ],
             "history": [msg.dict() if hasattr(msg, "dict") else msg for msg in history],
         }
 

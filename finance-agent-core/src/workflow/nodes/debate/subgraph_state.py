@@ -78,3 +78,9 @@ class DebateState(TypedDict):
     current_node: Annotated[str, last_value]
     node_statuses: Annotated[dict[str, str], merge_dict]
     compressed_reports: Annotated[str | None, last_value]
+
+    # Fact Registry (Grounding)
+    facts_artifact_id: Annotated[str | None, last_value]
+    facts_hash: Annotated[str | None, last_value]
+    facts_summary: Annotated[dict | None, last_value]
+    fact_extraction_status: Annotated[str | None, last_value]

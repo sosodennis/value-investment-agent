@@ -37,6 +37,7 @@ export interface DebateConclusion {
 
 export interface DebateSuccess extends DebateConclusion {
     history?: any[];
+    facts?: any[]; // registry of evidence facts
 }
 
 export interface DebateError {
@@ -44,10 +45,3 @@ export interface DebateError {
 }
 
 export type DebateResult = DebateSuccess | DebateError;
-
-// Legacy support (to be removed once components are updated)
-export interface DebateAgentOutput extends DebateConclusion {
-    history?: any[];
-    bull_thesis?: string;
-    bear_thesis?: string;
-}

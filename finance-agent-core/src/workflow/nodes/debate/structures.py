@@ -2,6 +2,12 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from src.workflow.nodes.fundamental_analysis.financial_models import (
+    ComputedProvenance,
+    ManualProvenance,
+    XBRLProvenance,
+)
+
 Direction = Literal["STRONG_LONG", "LONG", "NEUTRAL", "AVOID", "SHORT", "STRONG_SHORT"]
 
 # 定義風險屬性枚舉
@@ -74,3 +80,39 @@ class DebateConclusion(BaseModel):
     debate_rounds: int = Field(
         default=0, description="Number of debate rounds performed"
     )
+
+
+# --- Ground Truth Facts ---
+
+SourceType = Literal["financials", "news", "technicals"]
+SourceWeight = Literal["HIGH", "MEDIUM", "LOW"]
+
+
+class EvidenceFact(BaseModel):
+    """
+    Ground truth fact used in the debate.
+    Every fact is traceable back to its source provenance.
+    """
+
+    fact_id: str = Field(..., description="Stable ID, e.g. F001, N001, T001")
+    source_type: SourceType
+    source_weight: SourceWeight
+
+    summary: str = Field(..., description="Short factual statement")
+    value: float | str | None = None
+    units: str | None = None
+    period: str | None = None
+
+    # Link to the original provenance from the analysis nodes
+    provenance: XBRLProvenance | ComputedProvenance | ManualProvenance
+
+
+class FactBundle(BaseModel):
+    """
+    A collection of facts extracted for a specific debate session.
+    """
+
+    ticker: str
+    facts: list[EvidenceFact]
+    facts_hash: str
+    generated_at: str

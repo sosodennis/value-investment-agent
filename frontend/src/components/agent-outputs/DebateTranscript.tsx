@@ -1,7 +1,7 @@
 
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
-import { TrendingUp, TrendingDown, Gavel } from 'lucide-react';
+import { TrendingUp, TrendingDown, Gavel, Database, Newspaper, BarChart4, ShieldCheck } from 'lucide-react';
 
 interface Message {
     name?: string;
@@ -13,19 +13,56 @@ interface DebateTranscriptProps {
     history: Message[];
 }
 
-const SourceBadge = ({ source }: { source: string }) => {
+const SourceBadge = ({
+    source,
+    type = 'source',
+    onClick,
+}: {
+    source: string;
+    type?: 'source' | 'fact';
+    onClick?: () => void;
+}) => {
     let color = "bg-slate-500/10 text-slate-400 border-slate-500/20"; // Default
+    let icon = <ShieldCheck className="w-2.5 h-2.5" />;
+
+    if (type === 'fact') {
+        if (source.startsWith('F')) {
+            color = "bg-emerald-500/10 text-emerald-400 border-emerald-500/25 shadow-[0_0_10px_rgba(16,185,129,0.1)]";
+            icon = <Database className="w-2.5 h-2.5" />;
+        } else if (source.startsWith('N')) {
+            color = "bg-cyan-500/10 text-cyan-400 border-cyan-500/25 shadow-[0_0_10px_rgba(6,182,212,0.1)]";
+            icon = <Newspaper className="w-2.5 h-2.5" />;
+        } else if (source.startsWith('T')) {
+            color = "bg-amber-500/10 text-amber-400 border-amber-500/25 shadow-[0_0_10px_rgba(245,158,11,0.1)]";
+            icon = <BarChart4 className="w-2.5 h-2.5" />;
+        }
+
+        return (
+            <span
+                onClick={onClick}
+                role={onClick ? "button" : undefined}
+                className={`inline-flex items-center px-2 py-0.5 rounded border text-[9px] font-black tracking-widest mx-1 cursor-pointer transition-all duration-200 align-middle shadow-sm hover:scale-105 active:scale-95 ${color}`}
+            >
+                <span className="mr-1.5 opacity-80">{icon}</span>
+                {source}
+            </span>
+        );
+    }
+
     if (source.includes("Financials") || source.includes("SEC")) {
-        color = "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20 hover:text-emerald-300 hover:border-emerald-500/40";
+        color = "bg-emerald-500/10 text-emerald-400 border-emerald-500/25 hover:bg-emerald-500/20 hover:text-emerald-300 hover:border-emerald-500/40";
+        icon = <Database className="w-2.5 h-2.5" />;
     } else if (source.includes("News")) {
-        color = "bg-cyan-500/10 text-cyan-400 border-cyan-500/20 hover:bg-cyan-500/20 hover:text-cyan-300 hover:border-cyan-500/40";
+        color = "bg-cyan-500/10 text-cyan-400 border-cyan-500/25 hover:bg-cyan-500/20 hover:text-cyan-300 hover:border-cyan-500/40";
+        icon = <Newspaper className="w-2.5 h-2.5" />;
     } else if (source.includes("Technicals")) {
-        color = "bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20 hover:text-amber-300 hover:border-amber-500/40";
+        color = "bg-amber-500/10 text-amber-400 border-amber-500/25 hover:bg-amber-500/20 hover:text-amber-300 hover:border-amber-500/40";
+        icon = <BarChart4 className="w-2.5 h-2.5" />;
     }
 
     return (
         <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[9px] font-black uppercase tracking-widest mx-1 cursor-pointer transition-all duration-200 align-middle shadow-sm ${color}`}>
-            <span className="w-1 h-1 rounded-full bg-current opacity-40 mr-1.5 animate-pulse"></span>
+            <span className="mr-1.5 opacity-80">{icon}</span>
             {source}
         </span>
     );
@@ -35,13 +72,30 @@ const SourceBadge = ({ source }: { source: string }) => {
 // This allows ReactMarkdown to parse them as images, which we then intercept
 const preprocessMarkdown = (content: string) => {
     // Regex matches [Source: X] possibly wrapped in backticks
-    return content.replace(/[`]?\[Source: ([^\]]+)\][`]?/g, (_, source) => {
+    let processed = content.replace(/[`]?\[Source:\s*([^\]]+)\][`]?/g, (_, source) => {
         return `![SOURCE:${source}](badge)`;
     });
+
+    // Regex matches [Fact: X] possibly wrapped in backticks
+    processed = processed.replace(/[`]?\[Fact:\s*([^\]]+)\][`]?/g, (_, factId) => {
+        return `![FACT:${factId}](badge)`;
+    });
+
+    return processed;
 };
 
 export const DebateTranscript: React.FC<DebateTranscriptProps> = ({ history }) => {
     if (!history || history.length === 0) return null;
+
+    const scrollToFact = (factId: string) => {
+        const el = document.getElementById(`fact-${factId}`);
+        if (!el) return;
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.add("ring-1", "ring-cyan-400/60", "shadow-[0_0_20px_rgba(6,182,212,0.2)]");
+        window.setTimeout(() => {
+            el.classList.remove("ring-1", "ring-cyan-400/60", "shadow-[0_0_20px_rgba(6,182,212,0.2)]");
+        }, 1400);
+    };
 
     return (
         <div className="tech-card mt-8 animate-fade-in">
@@ -142,9 +196,15 @@ export const DebateTranscript: React.FC<DebateTranscriptProps> = ({ history }) =
                                                     ),
                                                     // Intercept images to render badges
                                                     img: ({ src, alt }) => {
-                                                        if (src === 'badge' && alt?.startsWith('SOURCE:')) {
-                                                            const sourceName = alt.replace('SOURCE:', '');
-                                                            return <SourceBadge source={sourceName} />;
+                                                        if (src === 'badge') {
+                                                            if (alt?.startsWith('SOURCE:')) {
+                                                                const sourceName = alt.replace('SOURCE:', '');
+                                                                return <SourceBadge source={sourceName} />;
+                                                            }
+                                                            if (alt?.startsWith('FACT:')) {
+                                                                const factId = alt.replace('FACT:', '');
+                                                                return <SourceBadge source={factId} type="fact" onClick={() => scrollToFact(factId)} />;
+                                                            }
                                                         }
                                                         return null;
                                                     }

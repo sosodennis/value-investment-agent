@@ -68,6 +68,11 @@ class DebateContext(TypedDict):
     # [L3 Pointer] Pointer to full debate transcript in Artifact Store
     transcript_id: NotRequired[str | None]
 
+    # [L3 Pointer] Pointer to extracted facts in Artifact Store
+    facts_artifact_id: NotRequired[str | None]
+    facts_hash: NotRequired[str | None]
+    facts_summary: NotRequired[dict[str, int] | None]
+
     artifact: NotRequired[AgentOutputArtifact | None]
 
 
