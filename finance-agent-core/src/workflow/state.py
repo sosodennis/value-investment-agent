@@ -82,13 +82,15 @@ class FundamentalAnalysisContext(TypedDict):
     status: NotRequired[str | None]
     approved: NotRequired[bool | None]
     model_type: NotRequired[str | None]  # e.g., saas, bank
+    selected_model: NotRequired[str | None]  # e.g., dcf_standard, ddm
+    model_selection_details: NotRequired[dict | None]
 
     # [L2 Data] 關鍵業務指標 (Source of Truth)
     valuation_score: NotRequired[float | None]
     valuation_summary: NotRequired[str | None]
 
     # [L3 Pointer] 指向 Artifact Store 的 ID
-    latest_report_id: NotRequired[str | None]
+    financial_reports_artifact_id: NotRequired[str | None]
 
     # 下面這些複雜對象建議未來也轉為 Artifact ID 或精簡字典
     extraction_output: NotRequired[dict | None]

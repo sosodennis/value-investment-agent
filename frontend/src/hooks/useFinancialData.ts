@@ -61,7 +61,7 @@ export const useFinancialData = (agentId: string, allAgentOutputs: Record<string
                     (agentId === 'technical_analysis' && outputData ?
                         (outputData.signal_state?.risk_level === 'low' ? 90 :
                             outputData.signal_state?.risk_level === 'medium' ? 60 : 20) :
-                        (agentId === 'auditor' ? 90 : (agentId === 'fundamental_analysis' ? 72 : 0))),
+                        (agentId === 'fundamental_analysis' ? 72 : 0)),
                 color: 'bg-emerald-500'
             },
             {
@@ -76,7 +76,7 @@ export const useFinancialData = (agentId: string, allAgentOutputs: Record<string
                     (outputData?.valuation_score !== undefined ? outputData.valuation_score :
                         (agentId === 'technical_analysis' && outputData ?
                             (Math.abs(outputData.signal_state?.z_score || 0) > 2 ? 80 : 50) :
-                            (agentId === 'calculator' ? 88 : (agentId === 'fundamental_analysis' ? 40 : 0)))),
+                            (agentId === 'fundamental_analysis' ? 40 : 0))),
                 color: 'bg-rose-500'
             },
         ];

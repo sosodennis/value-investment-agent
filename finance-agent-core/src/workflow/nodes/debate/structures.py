@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from src.workflow.nodes.fundamental_analysis.financial_models import (
+from src.workflow.nodes.fundamental_analysis.tools.sec_xbrl.models import (
     ComputedProvenance,
     ManualProvenance,
     XBRLProvenance,

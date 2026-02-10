@@ -14,9 +14,9 @@ from ..fundamental_analysis.extraction import (
     extract_candidates_from_search,
     extract_intent,
 )
-from ..fundamental_analysis.logic import should_request_clarification
 from ..fundamental_analysis.structures import TickerCandidate
 from ..fundamental_analysis.tools import get_company_profile, search_ticker, web_search
+from ..fundamental_analysis.tools.model_selection import should_request_clarification
 from .mappers import summarize_intent_for_preview
 from .subgraph_state import IntentExtractionState
 

@@ -62,20 +62,6 @@ export const AGENT_CONFIGS: AgentConfig[] = [
         avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Arena',
     },
     {
-        id: 'executor',
-        name: 'Data Executor',
-        role: 'MARKET DATA RETRIEVAL',
-        description: 'Executes tools to fetch real-time financial data.',
-        avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Aneka',
-    },
-    {
-        id: 'auditor',
-        name: 'Risk Auditor',
-        role: 'COMPLIANCE & VALIDATION',
-        description: 'Audits data integrity and checks for anomalies.',
-        avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Liam',
-    },
-    {
         id: 'approval',
         name: 'Chief Auditor',
         role: 'FINAL DECISION AUTHORITY',
@@ -83,13 +69,6 @@ export const AGENT_CONFIGS: AgentConfig[] = [
         avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sasha',
         getStatus: (baseStatus, _, hasApprovalInterrupt) =>
             hasApprovalInterrupt ? 'attention' : baseStatus,
-    },
-    {
-        id: 'calculator',
-        name: 'Valuation Engine',
-        role: 'DCF & MODEL EXECUTION',
-        description: 'Performs finalized financial calculations.',
-        avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Coco',
     },
 ];
 

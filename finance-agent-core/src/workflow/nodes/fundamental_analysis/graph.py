@@ -7,7 +7,7 @@ Uses Command and interrupt for control flow.
 from langgraph.graph import START, StateGraph
 from langgraph.types import RetryPolicy
 
-from .nodes import financial_health_node, model_selection_node
+from .nodes import financial_health_node, model_selection_node, valuation_node
 from .subgraph_state import (
     FundamentalAnalysisInput,
     FundamentalAnalysisOutput,
@@ -40,8 +40,14 @@ def build_fundamental_subgraph():
         model_selection_node,
         metadata={"agent_id": "fundamental_analysis"},
     )
+    builder.add_node(
+        "calculation",
+        valuation_node,
+        metadata={"agent_id": "fundamental_analysis"},
+    )
     builder.add_edge(START, "financial_health")
     builder.add_edge("financial_health", "model_selection")
+    builder.add_edge("model_selection", "calculation")
 
     # 注意：這裡不需要傳入 checkpointer，因為它會繼承父圖的
     return builder.compile()

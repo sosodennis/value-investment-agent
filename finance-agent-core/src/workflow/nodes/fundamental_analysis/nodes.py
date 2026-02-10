@@ -1,4 +1,3 @@
-import textwrap
 import time
 
 from langgraph.graph import END
@@ -8,18 +7,25 @@ from src.common.tools.logger import get_logger
 from src.interface.schemas import AgentOutputArtifact, ArtifactReference
 from src.services.artifact_manager import artifact_manager
 
-from .logic import select_valuation_model
 from .mappers import summarize_fundamental_for_preview
 from .structures import CompanyProfile, ValuationModel
-from .subgraph_state import (
-    FundamentalAnalysisState,
+from .subgraph_state import FundamentalAnalysisState
+from .tools.model_selection import select_valuation_model
+from .tools.report_helpers import fmt_currency, fmt_num, fmt_str, ratio
+from .tools.sec_xbrl.models import (
+    FinancialReport,
+    FinancialServicesExtension,
+    IndustrialExtension,
+    RealEstateExtension,
 )
-from .tools import fetch_financial_data
+from .tools.sec_xbrl.utils import fetch_financial_data
+from .tools.valuation.param_builder import build_params
+from .tools.valuation.registry import SkillRegistry
 
 logger = get_logger(__name__)
 
 
-def financial_health_node(state: FundamentalAnalysisState) -> Command:
+async def financial_health_node(state: FundamentalAnalysisState) -> Command:
     """
     Fetch financial data from SEC EDGAR and generate Financial Health Report.
     """
@@ -56,102 +62,6 @@ def financial_health_node(state: FundamentalAnalysisState) -> Command:
         reports_data = []
 
         if financial_reports:
-            from .financial_models import (
-                ComputedProvenance,
-                FinancialServicesExtension,
-                IndustrialExtension,
-                ManualProvenance,
-                RealEstateExtension,
-                XBRLProvenance,
-            )
-
-            # Helper logging functions - handle TraceableField objects with new Provenance
-            def wrap_text(text: str, width: int = 40) -> str:
-                """Wrap text to a specified width."""
-                return "\n".join(textwrap.wrap(text, width=width))
-
-            def src(v):
-                """Extract source metadata from TraceableField"""
-                if v is None or not hasattr(v, "provenance"):
-                    return ""
-                p = v.provenance
-                if isinstance(p, XBRLProvenance):
-                    return f" | [XBRL: {p.concept}]"
-                elif isinstance(p, ComputedProvenance):
-                    return f" | [Calc: {p.expression}]"
-                elif isinstance(p, ManualProvenance):
-                    return f" | [Manual: {p.description}]"
-                return ""
-
-            def fmt_currency(v):
-                """Format currency values"""
-                if v is None:
-                    return "None"
-                val = v.value if hasattr(v, "value") else v
-                if val is None:
-                    return "None"
-                try:
-                    fval = float(val)
-                    res = f"${fval:,.0f}{src(v)}"
-                except (ValueError, TypeError):
-                    res = f"{val}{src(v)}"
-                return wrap_text(res)
-
-            def fmt_num(v):
-                """Format numeric values (non-currency)"""
-                if v is None:
-                    return "None"
-                val = v.value if hasattr(v, "value") else v
-                if val is None:
-                    return "None"
-                try:
-                    fval = float(val)
-                    res = f"{fval:,.0f}{src(v)}"
-                except (ValueError, TypeError):
-                    res = f"{val}{src(v)}"
-                return wrap_text(res)
-
-            def fmt_str(v):
-                """Format string values"""
-                if v is None:
-                    return "None"
-                val = v.value if hasattr(v, "value") else v
-                if val is None:
-                    return "None"
-                res = f"{val}{src(v)}"
-                return wrap_text(res)
-
-            def pct(v):
-                """Format percentage values"""
-                if v is None:
-                    return "None"
-                val = v.value if hasattr(v, "value") else v
-                if val is None:
-                    return "None"
-                try:
-                    fval = float(val)
-                    res = f"{fval:.2%}{src(v)}"
-                except (ValueError, TypeError):
-                    res = f"{val}{src(v)}"
-                return wrap_text(res)
-
-            def ratio(num, den):
-                """Safe ratio calculation"""
-                n_val = num.value if hasattr(num, "value") else num
-                d_val = den.value if hasattr(den, "value") else den
-
-                if n_val is None or d_val is None:
-                    return "None"
-                try:
-                    n = float(n_val)
-                    d = float(d_val)
-                    if d == 0:
-                        return "None (Div0)"
-                    res = f"{n / d:.2f}"
-                    return wrap_text(res)
-                except (ValueError, TypeError):
-                    return "None"
-
             logger.info(
                 f"✅ Generated {len(financial_reports)} Financial Health Reports for {resolved_ticker}"
             )
@@ -246,6 +156,11 @@ def financial_health_node(state: FundamentalAnalysisState) -> Command:
                     ext_rows.append(row)
 
             reports_data = [r.model_dump() for r in financial_reports]
+            reports_artifact_id = await artifact_manager.save_artifact(
+                data=reports_data,
+                artifact_type="financial_reports",
+                key_prefix=f"fa_reports_{resolved_ticker}",
+            )
 
             # [NEW] Emit preliminary artifact for real-time UI
             mapper_ctx = {
@@ -270,10 +185,11 @@ def financial_health_node(state: FundamentalAnalysisState) -> Command:
                 f"⚠️  Could not fetch financial data for {resolved_ticker}, proceeding without it"
             )
             reports_data = []
+            reports_artifact_id = None
             artifact = None
 
         fa_update = {
-            "financial_reports": reports_data,
+            "financial_reports_artifact_id": reports_artifact_id,
             "status": "model_selection",
         }
         if artifact:
@@ -334,16 +250,26 @@ async def model_selection_node(state: FundamentalAnalysisState) -> Command:
                 goto="clarifying",
             )
 
-        # Select model based on profile
-        model, reasoning = select_valuation_model(profile)
+        # Select model based on profile and available financial reports
+        fa_ctx = state.get("fundamental_analysis", {})
+        reports_artifact_id = fa_ctx.get("financial_reports_artifact_id")
+        financial_reports: list[dict] = []
+        if reports_artifact_id:
+            artifact = await artifact_manager.get_artifact(reports_artifact_id)
+            if artifact and artifact.data:
+                if isinstance(artifact.data, list):
+                    financial_reports = artifact.data
+                elif isinstance(artifact.data, dict):
+                    financial_reports = artifact.data.get("financial_reports", [])
+
+        selection = select_valuation_model(profile, financial_reports)
+        model = selection.model
+        reasoning = selection.reasoning
 
         # Enhance reasoning with financial health insights (using latest report)
         fa_ctx = state.get("fundamental_analysis", {})
-        financial_reports = fa_ctx.get("financial_reports")
         if financial_reports:
             try:
-                from .financial_models import FinancialReport
-
                 # Use most recent year (index 0)
                 latest_report_data = financial_reports[0]
                 report = FinancialReport(**latest_report_data)
@@ -392,14 +318,40 @@ async def model_selection_node(state: FundamentalAnalysisState) -> Command:
             except Exception as e:
                 logger.warning(f"⚠️  Could not parse financial report for insights: {e}")
 
+        # Capture model selection details for auditability
+        selection_details = {
+            "signals": {
+                "sector": selection.signals.sector,
+                "industry": selection.signals.industry,
+                "sic": selection.signals.sic,
+                "revenue_cagr": selection.signals.revenue_cagr,
+                "is_profitable": selection.signals.is_profitable,
+                "net_income": selection.signals.net_income,
+                "operating_cash_flow": selection.signals.operating_cash_flow,
+                "total_equity": selection.signals.total_equity,
+                "data_coverage": selection.signals.data_coverage,
+            },
+            "candidates": [
+                {
+                    "model": c.model.value,
+                    "score": c.score,
+                    "reasons": list(c.reasons),
+                    "missing_fields": list(c.missing_fields),
+                }
+                for c in selection.candidates
+            ],
+        }
+
         # Map model_type for calculation node compatibility
         model_type_map = {
             ValuationModel.DCF_GROWTH: "saas",
             ValuationModel.DCF_STANDARD: "saas",
             ValuationModel.DDM: "bank",
-            ValuationModel.FFO: "saas",
-            ValuationModel.EV_REVENUE: "saas",
-            ValuationModel.EV_EBITDA: "saas",
+            ValuationModel.FFO: "reit_ffo",
+            ValuationModel.EV_REVENUE: "ev_revenue",
+            ValuationModel.EV_EBITDA: "ev_ebitda",
+            ValuationModel.RESIDUAL_INCOME: "residual_income",
+            ValuationModel.EVA: "eva",
         }
         model_type = model_type_map.get(model, "saas")
 
@@ -417,9 +369,7 @@ async def model_selection_node(state: FundamentalAnalysisState) -> Command:
                 mapper_ctx["sector"] = profile_data.get("sector")
                 mapper_ctx["industry"] = profile_data.get("industry")
 
-            preview = summarize_fundamental_for_preview(
-                mapper_ctx, fa_ctx.get("financial_reports", [])
-            )
+            preview = summarize_fundamental_for_preview(mapper_ctx, financial_reports)
 
             # L3: Store full reports in Artifact Store
             full_report_data = {
@@ -429,7 +379,7 @@ async def model_selection_node(state: FundamentalAnalysisState) -> Command:
                 "sector": mapper_ctx.get("sector", "Unknown"),
                 "industry": mapper_ctx.get("industry", "Unknown"),
                 "reasoning": reasoning,
-                "financial_reports": fa_ctx.get("financial_reports", []),
+                "financial_reports": financial_reports,
                 "status": "done",
             }
 
@@ -463,8 +413,10 @@ async def model_selection_node(state: FundamentalAnalysisState) -> Command:
 
         fa_update = {
             "model_type": model_type,
+            "selected_model": model.value,
             "valuation_summary": reasoning,
-            "latest_report_id": report_id,
+            "financial_reports_artifact_id": report_id or reports_artifact_id,
+            "model_selection_details": selection_details,
         }
         if artifact:
             fa_update["artifact"] = artifact
@@ -493,8 +445,157 @@ async def model_selection_node(state: FundamentalAnalysisState) -> Command:
             "current_node": "model_selection",
             "internal_progress": {
                 "model_selection": "done",
+                "calculation": "running",
             },
-            "node_statuses": {"fundamental_analysis": "done"},
+            "node_statuses": {"fundamental_analysis": "running"},
         },
-        goto=END,
+        goto="calculation",
     )
+
+
+async def valuation_node(state: FundamentalAnalysisState) -> Command:
+    """
+    Executes deterministic valuation calculations inside Fundamental Analysis.
+    Bypasses approval/calculator subgraph.
+    """
+    logger.info("--- Fundamental Analysis: Running valuation calculation ---")
+
+    try:
+        fundamental = state.get("fundamental_analysis", {})
+        model_type = fundamental.get("model_type")
+        intent_ctx = state.get("intent_extraction", {})
+        ticker = intent_ctx.get("resolved_ticker") or state.get("ticker")
+
+        if not model_type:
+            raise ValueError("Missing model_type for valuation calculation")
+
+        skill = SkillRegistry.get_skill(model_type)
+        if not skill:
+            raise ValueError(f"Skill not found for model type: {model_type}")
+
+        schema = skill["schema"]
+        calc_func = skill["calculator"]
+
+        reports_raw: list[dict] = []
+        reports_artifact_id = fundamental.get("financial_reports_artifact_id")
+        if not reports_artifact_id:
+            raise ValueError("Missing financial_reports_artifact_id for valuation")
+        artifact = await artifact_manager.get_artifact(reports_artifact_id)
+        if not artifact or not artifact.data:
+            raise ValueError("Missing financial reports artifact data for valuation")
+        if isinstance(artifact.data, list):
+            reports_raw = artifact.data
+        elif isinstance(artifact.data, dict):
+            reports_raw = artifact.data.get("financial_reports", [])
+        if not reports_raw:
+            raise ValueError("Empty financial reports data for valuation")
+        build_result = build_params(model_type, ticker, reports_raw)
+
+        if build_result.assumptions:
+            logger.warning(
+                "Controlled assumptions applied for %s: %s",
+                model_type,
+                "; ".join(build_result.assumptions),
+            )
+
+        if build_result.missing:
+            fa_update = fundamental.copy()
+            fa_update["missing_inputs"] = build_result.missing
+            if build_result.assumptions:
+                fa_update["assumptions"] = build_result.assumptions
+            logger.error(
+                f"Missing SEC XBRL inputs for {model_type}: {', '.join(build_result.missing)}"
+            )
+            return Command(
+                update={
+                    "fundamental_analysis": fa_update,
+                    "current_node": "calculation",
+                    "internal_progress": {"calculation": "error"},
+                    "node_statuses": {"fundamental_analysis": "error"},
+                    "error_logs": [
+                        {
+                            "node": "calculation",
+                            "error": f"Missing SEC XBRL inputs: {', '.join(build_result.missing)}",
+                            "severity": "error",
+                        }
+                    ],
+                },
+                goto=END,
+            )
+
+        params_dict = build_result.params
+        params_dict["trace_inputs"] = build_result.trace_inputs
+
+        params_obj = schema(**params_dict)
+        result = calc_func(params_obj)
+
+        # Store calculation output in FA context
+        fa_update = fundamental.copy()
+        fa_update["extraction_output"] = {"params": params_obj.model_dump()}
+        fa_update["calculation_output"] = {"metrics": result}
+        if build_result.assumptions:
+            fa_update["assumptions"] = build_result.assumptions
+
+        # Optional lightweight artifact for UI
+        equity_value = None
+        if isinstance(result, dict):
+            equity_value = result.get("intrinsic_value") or result.get("equity_value")
+
+        mapper_ctx = {
+            "ticker": ticker,
+            "status": "calculated",
+            "model_type": model_type,
+        }
+        if intent_ctx and "company_profile" in intent_ctx:
+            profile_data = intent_ctx["company_profile"]
+            mapper_ctx["company_name"] = profile_data.get("name")
+            mapper_ctx["sector"] = profile_data.get("sector")
+            mapper_ctx["industry"] = profile_data.get("industry")
+
+        preview = summarize_fundamental_for_preview(mapper_ctx, reports_raw)
+        preview.update(
+            {
+                "model_type": model_type,
+                "equity_value": equity_value,
+                "status": "calculated",
+            }
+        )
+
+        reference = ArtifactReference(
+            artifact_id=reports_artifact_id,
+            download_url=f"/api/artifacts/{reports_artifact_id}",
+            type="financial_reports",
+        )
+        artifact = AgentOutputArtifact(
+            summary=f"估值完成: {ticker or 'UNKNOWN'} ({model_type})",
+            preview=preview,
+            reference=reference,
+        )
+        fa_update["artifact"] = artifact
+
+        return Command(
+            update={
+                "fundamental_analysis": fa_update,
+                "current_node": "calculation",
+                "internal_progress": {"calculation": "done"},
+                "node_statuses": {"fundamental_analysis": "done"},
+                "artifact": artifact,
+            },
+            goto=END,
+        )
+    except Exception as e:
+        logger.error(f"Valuation Node Failed: {e}", exc_info=True)
+        return Command(
+            update={
+                "error_logs": [
+                    {
+                        "node": "calculation",
+                        "error": str(e),
+                        "severity": "error",
+                    }
+                ],
+                "internal_progress": {"calculation": "error"},
+                "node_statuses": {"fundamental_analysis": "error"},
+            },
+            goto=END,
+        )

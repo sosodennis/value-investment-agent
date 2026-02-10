@@ -18,6 +18,8 @@ class ValuationModel(str, Enum):
     FFO = "ffo"  # REITs (Funds From Operations)
     EV_REVENUE = "ev_revenue"  # Pre-profit tech companies
     EV_EBITDA = "ev_ebitda"  # General purpose multiple
+    RESIDUAL_INCOME = "residual_income"  # Residual Income Model
+    EVA = "eva"  # Economic Value Added
 
 
 class TickerCandidate(BaseModel):

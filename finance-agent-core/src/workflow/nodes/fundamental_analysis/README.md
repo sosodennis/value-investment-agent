@@ -1,110 +1,37 @@
-# Planner Node - README
+# Fundamental Analysis Node
 
 ## Overview
-The Planner Node is the first stage in the Value Investment Agent workflow. It resolves user queries to stock tickers and automatically selects the appropriate valuation model based on company sector and industry.
+The Fundamental Analysis subgraph retrieves SEC XBRL financials, selects an
+appropriate valuation model, and runs deterministic valuation calculations.
 
-## Quick Start
+## Flow
+1. **financial_health**: Fetch SEC XBRL reports and store them in the artifact
+   store. Emits a lightweight preview artifact.
+2. **model_selection**: Loads reports from the artifact id, selects a valuation
+   model, and saves a full report artifact (includes reasoning + reports).
+3. **calculation**: Builds model parameters from reports and runs the
+   deterministic valuation engine.
 
-### Installation
-```bash
-cd finance-agent-core
-pip install -e .
+## State Contract
+The subgraph does **not** store raw financial reports in state. It only stores
+the artifact pointer:
+- `financial_reports_artifact_id`: Artifact id pointing to stored financial
+  reports (either raw list or full report payload).
+
+## Controlled Assumptions (Temporary)
+Some valuation inputs (e.g., WACC, terminal growth, missing D&A rate) may use
+controlled defaults to keep preview flows unblocked. **This is a temporary
+measure and is planned to be refactored** into a stricter, enterprise-grade
+assumption workflow with explicit approval and audit controls.
+
+## Tools Layout
 ```
-
-### Optional: Install OpenBB
-```bash
-pip install openbb
+fundamental_analysis/tools/
+  sec_xbrl/        # SEC XBRL extraction + mapping + models + factory + utils
+  valuation/       # Skill registry, param builder, engine, skills
+  model_selection.py
+  report_helpers.py
+  tickers.py
+  profiles.py
+  web_search.py
 ```
-*Note: The planner works without OpenBB using mock data for testing.*
-
-### Basic Usage
-
-```python
-from workflow.graph import graph
-
-# Initialize state
-state = {
-    "ticker": "TSLA",  # or "Tesla" for search
-    "model_type": None
-}
-
-# Run the planner
-result = graph.invoke(state)
-
-print(result["planner_output"])
-# Output:
-# {
-#   "company_name": "Tesla Inc",
-#   "sector": "Consumer Cyclical",
-#   "industry": "Auto Manufacturers",
-#   "selected_model": "dcf_growth",
-#   "reasoning": "Automotive/EV manufacturer: Capital-intensive..."
-# }
-```
-
-## Model Selection Rules
-
-The planner automatically selects models based on GICS sectors:
-
-| Company Type | Model | Example |
-|--------------|-------|---------|
-| Banks | DDM (Dividend Discount) | JPMorgan (JPM) |
-| REITs | FFO (Funds From Operations) | American Tower (AMT) |
-| Utilities | DDM | NextEra Energy (NEE) |
-| High-Growth Tech | DCF Growth | Tesla (TSLA) |
-| Mature Tech | DCF Standard | Apple (AAPL) |
-
-## Testing
-
-### Run Verification Tests
-```bash
-python finance-agent-core/tests/verify_planner_logic.py
-```
-
-### Run Full Test Suite (requires pytest)
-```bash
-pytest finance-agent-core/tests/test_planner_node.py -v
-```
-
-## Architecture
-
-```
-planner/
-├── structures.py   # Data models (Pydantic)
-├── tools.py        # OpenBB integration
-├── logic.py        # Model selection rules
-└── node.py         # Main orchestration
-```
-
-## Configuration
-
-### OpenBB API Keys
-Create a `.env` file:
-```bash
-# Optional: For premium data providers
-FMP_API_KEY=your_key_here
-POLYGON_API_KEY=your_key_here
-```
-
-### Supported Providers
-- **Free**: Yahoo Finance (yfinance)
-- **Paid**: Financial Modeling Prep (FMP), Polygon.io, Intrinio
-
-## Next Steps
-
-1. **Install OpenBB**: `pip install openbb`
-2. **Configure API Keys**: Add to `.env` file
-3. **Test with Real Data**: Run with actual tickers
-4. **Integrate HITL**: Add LangGraph interruption for ambiguous queries
-
-## Documentation
-
-- [Implementation Plan](../../../.gemini/antigravity/brain/cd70a55e-fa9b-4747-b587-43ec08b61d3f/implementation_plan.md)
-- [Walkthrough](../../../.gemini/antigravity/brain/cd70a55e-fa9b-4747-b587-43ec08b61d3f/walkthrough.md)
-- [Research Documents](../../../research-planner-0.md)
-
-## Support
-
-For issues or questions, refer to:
-- OpenBB Documentation: https://docs.openbb.co
-- Project AGENTS.md for agent responsibilities

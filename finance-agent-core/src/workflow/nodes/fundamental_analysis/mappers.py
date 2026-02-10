@@ -18,7 +18,7 @@ def summarize_fundamental_for_preview(
         Dictionary with preview data for immediate UI rendering
     """
     ticker = ctx.get("ticker", "UNKNOWN")
-    model_type = ctx.get("model_type", "Standard DCF")
+    model_type = ctx.get("selected_model") or ctx.get("model_type") or "Standard DCF"
 
     # Extract basics from context
     preview = {

@@ -10,7 +10,7 @@ from src.common.tools.llm import get_llm
 from src.common.tools.logger import get_logger
 from src.interface.schemas import AgentOutputArtifact, ArtifactReference
 from src.services.artifact_manager import artifact_manager
-from src.workflow.nodes.fundamental_analysis.financial_models import (
+from src.workflow.nodes.fundamental_analysis.tools.sec_xbrl.models import (
     ManualProvenance,
     XBRLProvenance,
 )
@@ -269,7 +269,16 @@ async def _prepare_debate_reports(state: DebateState) -> dict:
             ta_data = artifact_obj.data
 
     # Fundamental Analysis Data
-    fa_reports = state.get("fundamental_analysis", {}).get("financial_reports", [])
+    fa_ctx = state.get("fundamental_analysis", {})
+    fa_reports: list[dict] = []
+    fa_artifact_id = fa_ctx.get("financial_reports_artifact_id")
+    if fa_artifact_id:
+        artifact_obj = await artifact_manager.get_artifact(fa_artifact_id)
+        if artifact_obj and hasattr(artifact_obj, "data"):
+            if isinstance(artifact_obj.data, list):
+                fa_reports = artifact_obj.data
+            elif isinstance(artifact_obj.data, dict):
+                fa_reports = artifact_obj.data.get("financial_reports", [])
 
     logger.info(
         "DEBATE_REPORT_INPUT ticker=%s financials=%d news_items=%d ta_present=%s news_artifact_id=%s ta_artifact_id=%s",
@@ -354,7 +363,16 @@ async def fact_extractor_node(state: DebateState) -> Command:
     facts: list[EvidenceFact] = []
 
     # --- 1. Financial Facts (F001...) ---
-    fa_reports = state.get("fundamental_analysis", {}).get("financial_reports", [])
+    fa_ctx = state.get("fundamental_analysis", {})
+    fa_reports: list[dict] = []
+    fa_artifact_id = fa_ctx.get("financial_reports_artifact_id")
+    if fa_artifact_id:
+        artifact_obj = await artifact_manager.get_artifact(fa_artifact_id)
+        if artifact_obj and hasattr(artifact_obj, "data"):
+            if isinstance(artifact_obj.data, list):
+                fa_reports = artifact_obj.data
+            elif isinstance(artifact_obj.data, dict):
+                fa_reports = artifact_obj.data.get("financial_reports", [])
     for report in fa_reports:
         fiscal_year = report.get("base", {}).get("fiscal_year", {}).get("value", "N/A")
         metrics = compress_financial_data([report])[0].get("metrics", {})
