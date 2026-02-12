@@ -62,32 +62,39 @@ function agentReducer(state: AgentState, action: AgentAction): AgentState {
             // Inject pending interrupts from stateData into messages
             if (stateData?.interrupts && Array.isArray(stateData.interrupts)) {
                 const interruptMessages = stateData.interrupts.map((interrupt: any, idx: number) => {
-                    // Check if schema exists, if not, synthesize one for known types like 'approval_request'
+                    // Check if schema exists, if not, synthesize one for known types like 'ticker_selection'
                     let data = interrupt.details || interrupt.data || {};
 
-                    if (interrupt.type === 'approval_request' && !data.schema) {
+                    if (interrupt.type === 'ticker_selection' && !data.schema) {
+                        const candidates = interrupt.candidates || data.candidates || [];
+                        const tickerOptions = candidates.map((c: any) => c.symbol);
+                        const tickerTitles = candidates.map((c: any) => {
+                            const confidence = typeof c.confidence === 'number'
+                                ? `${(c.confidence * 100).toFixed(0)}% match`
+                                : 'match';
+                            return `${c.symbol} - ${c.name} (${confidence})`;
+                        });
+
                         data = {
-                            ...data,
+                            type: 'ticker_selection',
+                            title: 'Ticker Resolution',
+                            description: interrupt.reason || data.reason || 'Multiple tickers found or ambiguity detected.',
+                            data: {},
                             schema: {
                                 type: "object",
-                                title: "Audit Approval",
-                                description: `Review valuation plan for ${data.ticker || 'ticker'}. Audit Status: ${data.audit_passed ? 'PASSED' : 'FAILED'}`,
+                                title: "Select Correct Ticker",
                                 properties: {
-                                    approved: {
-                                        type: "boolean",
-                                        title: "Approve Execution",
-                                        default: true,
-                                        description: "Authorize the agent to proceed with this valuation plan."
+                                    selected_symbol: {
+                                        type: "string",
+                                        title: "Target Company",
+                                        enum: tickerOptions,
+                                        enumNames: tickerTitles
                                     }
-                                }
+                                },
+                                required: ["selected_symbol"]
                             },
                             ui_schema: {
-                                approved: {
-                                    "ui:widget": "radio",
-                                    "ui:options": {
-                                        inline: true
-                                    }
-                                }
+                                selected_symbol: { "ui:widget": "radio" }
                             }
                         };
                     }
@@ -99,7 +106,7 @@ function agentReducer(state: AgentState, action: AgentAction): AgentState {
                         type: 'interrupt.request', // Normalize to interrupt.request for UI
                         data: data,
                         isInteractive: true,
-                        agentId: 'approval', // Default to approval agent for approval_requests
+                        agentId: 'intent_extraction',
                     } as Message;
                 });
 
@@ -237,6 +244,9 @@ function agentReducer(state: AgentState, action: AgentAction): AgentState {
                 }
 
                 case 'interrupt.request': {
+                    const interruptAgent = event.source && event.source !== 'system.interrupt'
+                        ? event.source
+                        : 'intent_extraction';
                     const interruptMsg: Message = {
                         id: `interrupt_${event.id}`,
                         role: 'assistant',
@@ -244,7 +254,7 @@ function agentReducer(state: AgentState, action: AgentAction): AgentState {
                         type: 'interrupt.request',
                         data: event.data,
                         isInteractive: true,
-                        agentId: event.source || 'approval',
+                        agentId: interruptAgent,
                     };
 
                     return {

@@ -456,7 +456,7 @@ async def model_selection_node(state: FundamentalAnalysisState) -> Command:
 async def valuation_node(state: FundamentalAnalysisState) -> Command:
     """
     Executes deterministic valuation calculations inside Fundamental Analysis.
-    Bypasses approval/calculator subgraph.
+    Bypasses legacy calculator subgraph.
     """
     logger.info("--- Fundamental Analysis: Running valuation calculation ---")
 

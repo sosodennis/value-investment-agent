@@ -149,7 +149,7 @@ def create_interrupt_event(
     source: str = "system.interrupt",
 ) -> AgentEvent:
     """Creates a standardized interrupt request event with UI schema if possible."""
-    from src.workflow.interrupts import HumanApprovalRequest, HumanTickerSelection
+    from src.workflow.interrupts import HumanTickerSelection
 
     data = interrupt_payload
 
@@ -161,11 +161,7 @@ def create_interrupt_event(
         itype = interrupt_payload.get("type")
         try:
             # Fallback for raw dicts if they match known types
-            if itype == "approval_request":
-                data = HumanApprovalRequest.model_validate(
-                    interrupt_payload
-                ).to_ui_payload()
-            elif itype == "ticker_selection":
+            if itype == "ticker_selection":
                 data = HumanTickerSelection.model_validate(
                     interrupt_payload
                 ).to_ui_payload()

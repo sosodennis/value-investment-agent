@@ -14,19 +14,6 @@ export interface IntentExtraction {
     reasoning: string;
 }
 
-export interface ApprovalDetails {
-    ticker?: string;
-    model?: string;
-    audit_passed: boolean;
-    audit_messages: string[];
-}
-
-export interface HumanApprovalRequest {
-    type: 'approval_request';
-    action: string;
-    details: ApprovalDetails;
-}
-
 export interface HumanTickerSelection {
     type: 'ticker_selection';
     candidates: TickerCandidate[];
@@ -34,4 +21,4 @@ export interface HumanTickerSelection {
     reason: string;
 }
 
-export type Interrupt = HumanApprovalRequest | HumanTickerSelection;
+export type Interrupt = HumanTickerSelection;

@@ -22,7 +22,7 @@ the artifact pointer:
 Some valuation inputs (e.g., WACC, terminal growth, missing D&A rate) may use
 controlled defaults to keep preview flows unblocked. **This is a temporary
 measure and is planned to be refactored** into a stricter, enterprise-grade
-assumption workflow with explicit approval and audit controls.
+assumption workflow with explicit audit controls.
 
 ## Tools Layout
 ```

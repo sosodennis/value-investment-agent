@@ -4,7 +4,7 @@ export interface Message {
     id: string;
     role: 'user' | 'assistant' | 'system' | 'tool';
     content: string;
-    type?: 'text' | 'financial_report' | 'interrupt_ticker' | 'interrupt_approval' | 'interrupt.request';
+    type?: 'text' | 'financial_report' | 'interrupt_ticker' | 'interrupt.request';
     data?: any;
     isInteractive?: boolean;
     created_at?: string;

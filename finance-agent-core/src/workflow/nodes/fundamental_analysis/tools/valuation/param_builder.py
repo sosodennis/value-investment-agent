@@ -355,7 +355,7 @@ def _build_saas_params(
     if sbc_rates_tf.value is None:
         missing.append("sbc_rates")
 
-    # Enterprise-grade note: defaults are only for preview; require analyst approval in production.
+    # Enterprise-grade note: defaults are only for preview; require analyst review in production.
     wacc_tf = assume_rate(
         "WACC",
         DEFAULT_WACC,

@@ -149,7 +149,6 @@ export function useAgent(assistantId: string = "agent") {
             // Transform history if needed (e.g. mapping old types to new ones)
             historyData = historyData.map(msg => {
                 if ((msg.type as any) === 'ticker_selection') return { ...msg, type: 'interrupt_ticker' };
-                if ((msg.type as any) === 'approval_request') return { ...msg, type: 'interrupt_approval' };
                 return msg;
             });
 

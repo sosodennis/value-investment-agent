@@ -69,7 +69,6 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
   // Define Agents Roster Data (Linking to current workflow nodes)
   // Derive 'attention' status from active interrupts
   const hasTickerInterrupt = messages.some(m => m.isInteractive && (m.type === 'interrupt_ticker' || m.agentId === 'intent_extraction'));
-  const hasApprovalInterrupt = messages.some(m => m.isInteractive && (m.type === 'interrupt_approval' || m.agentId === 'approval'));
 
   const agents: AgentInfo[] = useMemo(() => {
     return AGENT_CONFIGS.map((config: any) => {
@@ -81,11 +80,11 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
         description: config.description,
         avatar: config.avatar,
         status: config.getStatus
-          ? config.getStatus(baseStatus, hasTickerInterrupt, hasApprovalInterrupt)
+          ? config.getStatus(baseStatus, hasTickerInterrupt)
           : baseStatus,
       };
     });
-  }, [agentStatuses, hasTickerInterrupt, hasApprovalInterrupt]);
+  }, [agentStatuses, hasTickerInterrupt]);
 
   const handleStartAnalysis = () => {
     if (!ticker || isLoading) return;

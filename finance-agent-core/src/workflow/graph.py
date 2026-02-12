@@ -2,7 +2,6 @@ import os
 
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.graph import END, START, StateGraph
-from langgraph.types import Command
 from psycopg_pool import AsyncConnectionPool
 
 from src.common.tools.logger import get_logger
@@ -16,21 +15,6 @@ from .nodes.technical_analysis.graph import build_technical_subgraph
 from .state import AgentState
 
 logger = get_logger(__name__)
-
-
-def approval_node(state: AgentState) -> Command:
-    """
-    Waits for human approval using the interrupt() function.
-    """
-    logger.info("--- Approval: Skipping human approval (auto-end) ---")
-
-    return Command(
-        update={
-            "fundamental_analysis": {"approved": True},
-            "node_statuses": {"approval": "done"},
-        },
-        goto=END,
-    )
 
 
 # Helper for initialization

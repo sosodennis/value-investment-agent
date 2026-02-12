@@ -1,29 +1,9 @@
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
-from src.workflow.interrupts import (
-    ApprovalDetails,
-    HumanApprovalRequest,
-    HumanTickerSelection,
-    InterruptValue,
-)
+from src.workflow.interrupts import HumanTickerSelection, InterruptValue
 from src.workflow.nodes.fundamental_analysis.extraction import IntentExtraction
 from src.workflow.nodes.fundamental_analysis.structures import TickerCandidate
-
-
-def test_approval_request_serialization():
-    details = ApprovalDetails(
-        ticker="TSLA",
-        model="saas",
-        audit_passed=True,
-        audit_messages=["Check 1 passed"],
-    )
-    request = HumanApprovalRequest(details=details)
-
-    dump = request.model_dump()
-    assert dump["type"] == "approval_request"
-    assert dump["details"]["ticker"] == "TSLA"
-    assert dump["details"]["audit_passed"] is True
 
 
 def test_ticker_selection_serialization():
@@ -46,15 +26,6 @@ def test_ticker_selection_serialization():
 
 def test_interrupt_value_validation():
     adapter = TypeAdapter(InterruptValue)
-    # Valid approval request
-    data = {
-        "type": "approval_request",
-        "action": "calculate_valuation",
-        "details": {"ticker": "MSFT", "model": "bank", "audit_passed": False},
-    }
-    val = adapter.validate_python(data)
-    assert isinstance(val, HumanApprovalRequest)
-
     # Valid ticker selection
     data = {
         "type": "ticker_selection",

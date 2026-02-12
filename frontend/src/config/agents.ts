@@ -17,7 +17,7 @@ export interface AgentConfig {
     avatar: string;
     // [Removed] nodes list is no longer needed
     /** Optional: Custom status derivation logic */
-    getStatus?: (baseStatus: AgentStatus, hasTickerInterrupt?: boolean, hasApprovalInterrupt?: boolean) => AgentStatus;
+    getStatus?: (baseStatus: AgentStatus, hasTickerInterrupt?: boolean) => AgentStatus;
 }
 
 /**
@@ -60,15 +60,6 @@ export const AGENT_CONFIGS: AgentConfig[] = [
         role: 'ADVERSARIAL REASONING',
         description: 'Bull vs Bear debate to scrutinize the investment thesis.',
         avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Arena',
-    },
-    {
-        id: 'approval',
-        name: 'Chief Auditor',
-        role: 'FINAL DECISION AUTHORITY',
-        description: 'Manages human-in-the-loop approvals.',
-        avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sasha',
-        getStatus: (baseStatus, _, hasApprovalInterrupt) =>
-            hasApprovalInterrupt ? 'attention' : baseStatus,
     },
 ];
 
