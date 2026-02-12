@@ -1,16 +1,7 @@
 
 import React from 'react';
 import { Database, Newspaper, BarChart4, ExternalLink, ShieldCheck } from 'lucide-react';
-
-interface EvidenceFact {
-    fact_id: string;
-    source_type: 'financials' | 'news' | 'technicals';
-    source_weight: 'HIGH' | 'MEDIUM' | 'LOW';
-    summary: string;
-    value?: string | number;
-    period?: string;
-    provenance?: any;
-}
+import { EvidenceFact } from '@/types/agents/debate';
 
 interface DebateFactSheetProps {
     facts: EvidenceFact[];

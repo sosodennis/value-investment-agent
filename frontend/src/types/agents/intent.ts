@@ -4,7 +4,7 @@ export interface CompanyProfile {
     sector?: string;
     industry?: string;
     description?: string;
-    [key: string]: any;
+    [key: string]: unknown;
 }
 
 export interface IntentExtractionSuccess {

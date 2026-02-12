@@ -1,3 +1,6 @@
+import { UnknownRecord, isRecord } from './preview';
+import { RJSFSchema, UiSchema } from '@rjsf/utils';
+
 export interface TickerCandidate {
     symbol: string;
     name: string;
@@ -22,3 +25,38 @@ export interface HumanTickerSelection {
 }
 
 export type Interrupt = HumanTickerSelection;
+
+export interface InterruptRequestData extends UnknownRecord {
+    type: 'ticker_selection';
+    title: string;
+    description: string;
+    data: Record<string, unknown>;
+    schema: RJSFSchema;
+    ui_schema?: UiSchema;
+}
+
+export interface TickerSelectionResumePayload {
+    selected_symbol: string;
+}
+
+export interface AuditApprovalResumePayload {
+    approved: boolean;
+}
+
+export type InterruptResumePayload =
+    | TickerSelectionResumePayload
+    | AuditApprovalResumePayload
+    | Record<string, unknown>;
+
+export const isInterruptRequestData = (
+    value: unknown
+): value is InterruptRequestData => {
+    if (!isRecord(value)) return false;
+    return (
+        value.type === 'ticker_selection' &&
+        typeof value.title === 'string' &&
+        typeof value.description === 'string' &&
+        isRecord(value.data) &&
+        isRecord(value.schema)
+    );
+};

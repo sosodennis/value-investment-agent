@@ -53,8 +53,7 @@ export interface TechnicalSignalOutput {
     };
 }
 
-export interface TechnicalAnalysisSuccess extends TechnicalSignalOutput {
-}
+export type TechnicalAnalysisSuccess = TechnicalSignalOutput;
 
 export interface TechnicalAnalysisError {
     message: string;

@@ -5,6 +5,7 @@ import { DebateTranscript } from './DebateTranscript';
 import { DebateFactSheet } from './DebateFactSheet';
 import { StandardAgentOutput, AgentStatus } from '@/types/agents';
 import { useArtifact } from '../../hooks/useArtifact';
+import { DebatePreview, isDebatePreview } from '@/types/preview';
 
 interface DebateOutputProps {
     output: StandardAgentOutput | null;
@@ -13,25 +14,18 @@ interface DebateOutputProps {
 }
 
 const DebateOutputComponent: React.FC<DebateOutputProps> = ({ output, resolvedTicker, status }) => {
-    // 1. Determine if we have a reference to fetch
-    const reference = (output as any)?.reference || (output as any)?.artifact?.reference;
-    const preview = (output as any)?.preview || (output as any)?.artifact?.preview || (output as any);
+    const reference = output?.reference;
+    const preview = output?.preview;
+    const previewData: DebatePreview | null = isDebatePreview(preview) ? preview : null;
 
-    // 2. Fetch artifact if reference exists
     const { data: artifactData, isLoading: isArtifactLoading } = useArtifact<DebateSuccess>(
         reference?.artifact_id
     );
 
-    // 3. Resolve the actual data to display (Artifact > Preview)
-    const effectiveOutput = artifactData || preview;
+    const isPreviewOnly = !artifactData && !!previewData;
+    const hasData = !!artifactData || isPreviewOnly;
 
-    const isPreviewOnly = !artifactData && !!preview;
-    const hasData = effectiveOutput && (
-        (effectiveOutput.final_verdict && effectiveOutput.scenario_analysis) ||
-        isPreviewOnly
-    );
-
-    if ((status !== 'done' && !hasData) || !effectiveOutput || (!artifactData && !isPreviewOnly)) {
+    if ((status !== 'done' && !hasData) || (!artifactData && !isPreviewOnly)) {
         return (
             <div className="flex flex-col items-center justify-center h-full text-slate-500 py-12 min-h-[400px]">
                 <Shield size={48} className="text-slate-800 mb-4 opacity-50 animate-pulse" />
@@ -42,9 +36,9 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({ output, resolvedTi
         );
     }
 
-    const conclusion = effectiveOutput;
-    const direction = conclusion.final_verdict;
-    const scenarios = conclusion.scenario_analysis || {};
+    const conclusion = artifactData;
+    const direction = artifactData?.final_verdict || 'NEUTRAL';
+    const scenarios = artifactData?.scenario_analysis;
 
     const getDirectionStyles = () => {
         switch (direction) {
@@ -107,7 +101,7 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({ output, resolvedTi
             <div className={`tech-card p-6 ${styles.bg} ${styles.border} relative overflow-hidden animate-slide-up`}>
                 <div className="absolute top-0 right-0 p-4">
                     <div className="px-2 py-0.5 rounded-full border border-white/10 bg-white/5 text-[8px] font-black text-slate-400 uppercase tracking-widest">
-                        {conclusion.risk_profile?.replace('_', ' ')}
+                        {conclusion?.risk_profile?.replace('_', ' ')}
                     </div>
                 </div>
 
@@ -125,7 +119,7 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({ output, resolvedTi
                         <div className={`px-4 py-1.5 rounded-full border text-[10px] font-black uppercase tracking-[0.2em] bg-slate-950/40 ${styles.border} ${styles.color} shadow-lg shadow-black/20`}>
                             {direction}
                         </div>
-                        {conclusion.data_quality_warning && (
+                        {conclusion?.data_quality_warning && (
                             <div className="px-2 py-1 rounded border border-amber-500/40 bg-amber-500/10 text-[9px] font-black text-amber-400 uppercase tracking-widest flex items-center gap-1">
                                 <AlertTriangle size={10} /> Data Alert
                             </div>
@@ -140,7 +134,7 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({ output, resolvedTi
                             <div className="flex items-center justify-between mb-1">
                                 <span className="text-label text-slate-400">Reward/Risk Ratio</span>
                                 <span className="text-amber-400 font-black text-xl">
-                                    {conclusion.rr_ratio ? conclusion.rr_ratio.toFixed(2) + 'x' : 'N/A'}
+                                    {conclusion?.rr_ratio ? conclusion.rr_ratio.toFixed(2) + 'x' : 'N/A'}
                                 </span>
                             </div>
                             <div className="text-[8px] text-slate-600 uppercase tracking-widest font-mono">
@@ -152,12 +146,12 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({ output, resolvedTi
                             <div className="absolute inset-y-0 left-0 w-0.5 bg-cyan-500 shadow-[2px_0_10px_rgba(6,182,212,0.4)]" />
                             <div className="flex items-center justify-between mb-1">
                                 <span className="text-label text-slate-400">Edge (Alpha)</span>
-                                <span className={`${(conclusion.alpha ?? 0) > 0 ? 'text-emerald-400' : 'text-rose-400'} font-black text-xl`}>
-                                    {conclusion.alpha !== undefined ? (conclusion.alpha * 100).toFixed(1) + '%' : 'N/A'}
+                                <span className={`${(conclusion?.alpha ?? 0) > 0 ? 'text-emerald-400' : 'text-rose-400'} font-black text-xl`}>
+                                    {conclusion?.alpha !== undefined ? (conclusion.alpha * 100).toFixed(1) + '%' : 'N/A'}
                                 </span>
                             </div>
                             <div className="text-[8px] text-slate-600 uppercase tracking-widest font-mono">
-                                {isPreviewOnly ? 'MARKET_EDGE_ESTIMATING' : `vs ${((conclusion.risk_free_benchmark ?? 0) * 400).toFixed(1)}% RF_RATE`}
+                                {isPreviewOnly ? 'MARKET_EDGE_ESTIMATING' : `vs ${((conclusion?.risk_free_benchmark ?? 0) * 400).toFixed(1)}% RF_RATE`}
                             </div>
                         </div>
                     </div>
@@ -169,10 +163,10 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({ output, resolvedTi
                                 <span className="text-label text-white">Verdict Summary (Simulation)</span>
                             </div>
                             <p className="text-sm text-slate-300 italic leading-relaxed font-serif">
-                                &quot;{(preview as any).verdict_display || 'Calculating probability cases...'}&quot;
+                                &quot;{previewData?.verdict_display || 'Calculating probability cases...'}&quot;
                             </p>
                             <p className="text-[9px] text-slate-500 mt-3 font-mono">
-                                {(preview as any).debate_rounds_display}
+                                {previewData?.debate_rounds_display}
                             </p>
                         </div>
                     ) : (
@@ -181,14 +175,14 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({ output, resolvedTi
                                 <div className="flex justify-between text-[10px] font-black uppercase tracking-widest">
                                     <span className="text-emerald-400 flex items-center gap-1.5">
                                         <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                                        Bull Case ({scenarios.bull_case?.price_implication})
+                                        Bull Case ({scenarios?.bull_case?.price_implication})
                                     </span>
-                                    <span className="text-emerald-400">{scenarios.bull_case?.probability}%</span>
+                                    <span className="text-emerald-400">{scenarios?.bull_case?.probability}%</span>
                                 </div>
                                 <div className="h-1.5 w-full bg-slate-900/60 rounded-full overflow-hidden border border-white/5">
-                                    <div className="h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.4)]" style={{ width: `${scenarios.bull_case?.probability}%` }} />
+                                    <div className="h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.4)]" style={{ width: `${scenarios?.bull_case?.probability}%` }} />
                                 </div>
-                                <p className="text-[10px] text-slate-400 leading-relaxed italic">&quot;{scenarios.bull_case?.outcome_description}&quot;</p>
+                                <p className="text-[10px] text-slate-400 leading-relaxed italic">&quot;{scenarios?.bull_case?.outcome_description}&quot;</p>
                             </div>
 
                             <div className="space-y-2 opacity-80">
@@ -197,26 +191,26 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({ output, resolvedTi
                                         <div className="w-1.5 h-1.5 rounded-full bg-slate-500" />
                                         Base Case (Neutral)
                                     </span>
-                                    <span className="text-slate-400">{scenarios.base_case?.probability}%</span>
+                                    <span className="text-slate-400">{scenarios?.base_case?.probability}%</span>
                                 </div>
                                 <div className="h-1 w-full bg-slate-900/60 rounded-full overflow-hidden border border-white/5">
-                                    <div className="h-full bg-slate-500" style={{ width: `${scenarios.base_case?.probability}%` }} />
+                                    <div className="h-full bg-slate-500" style={{ width: `${scenarios?.base_case?.probability}%` }} />
                                 </div>
-                                <p className="text-[10px] text-slate-500 leading-relaxed italic">&quot;{scenarios.base_case?.outcome_description}&quot;</p>
+                                <p className="text-[10px] text-slate-500 leading-relaxed italic">&quot;{scenarios?.base_case?.outcome_description}&quot;</p>
                             </div>
 
                             <div className="space-y-2">
                                 <div className="flex justify-between text-[10px] font-black uppercase tracking-widest">
                                     <span className="text-rose-400 flex items-center gap-1.5">
                                         <div className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                                        Bear Case ({scenarios.bear_case?.price_implication})
+                                        Bear Case ({scenarios?.bear_case?.price_implication})
                                     </span>
-                                    <span className="text-rose-400">{scenarios.bear_case?.probability}%</span>
+                                    <span className="text-rose-400">{scenarios?.bear_case?.probability}%</span>
                                 </div>
                                 <div className="h-1.5 w-full bg-slate-900/60 rounded-full overflow-hidden border border-white/5">
-                                    <div className="h-full bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.4)]" style={{ width: `${scenarios.bear_case?.probability}%` }} />
+                                    <div className="h-full bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.4)]" style={{ width: `${scenarios?.bear_case?.probability}%` }} />
                                 </div>
-                                <p className="text-[10px] text-rose-300/60 leading-relaxed italic">&quot;{scenarios.bear_case?.outcome_description}&quot;</p>
+                                <p className="text-[10px] text-rose-300/60 leading-relaxed italic">&quot;{scenarios?.bear_case?.outcome_description}&quot;</p>
                             </div>
                         </div>
                     )}
@@ -227,11 +221,11 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({ output, resolvedTi
                 <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-[0.2em]">
                     <div className="flex items-center gap-3">
                         <span className="text-slate-600">Conf_Level:</span>
-                        <span className={`${styles.color} text-sm`}>{conclusion.conviction ?? 50}%</span>
+                        <span className={`${styles.color} text-sm`}>{conclusion?.conviction ?? 50}%</span>
                     </div>
                     <div className="flex items-center gap-3">
                         <span className="text-slate-600">Sys_Model:</span>
-                        <span className="text-slate-400 font-mono tracking-normal">{conclusion.model_summary || `PRAGMATIC V2.0 (ROUND ${conclusion.debate_rounds})`}</span>
+                        <span className="text-slate-400 font-mono tracking-normal">{conclusion?.model_summary || `PRAGMATIC V2.0 (ROUND ${conclusion?.debate_rounds ?? 0})`}</span>
                     </div>
                 </div>
             </div>
@@ -248,7 +242,7 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({ output, resolvedTi
                         <h4 className="text-label text-emerald-400">Dominant Thesis</h4>
                     </div>
                     <p className="text-base text-white leading-relaxed font-black tracking-tight relative z-10 italic">
-                        &quot;{isPreviewOnly ? (preview as any).thesis_display : conclusion.winning_thesis}&quot;
+                        &quot;{isPreviewOnly ? previewData?.thesis_display : artifactData?.winning_thesis}&quot;
                     </p>
                 </div>
 
@@ -261,7 +255,7 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({ output, resolvedTi
                             <h4 className="text-label text-cyan-400">Primary Catalyst</h4>
                         </div>
                         <p className="text-sm text-slate-300 leading-relaxed group-hover:text-white transition-colors duration-300">
-                            {isPreviewOnly ? (preview as any).catalyst_display : conclusion.primary_catalyst}
+                            {isPreviewOnly ? previewData?.catalyst_display : artifactData?.primary_catalyst}
                         </p>
                     </div>
 
@@ -273,7 +267,7 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({ output, resolvedTi
                             <h4 className="text-label text-rose-400">Risk Vectors</h4>
                         </div>
                         <p className="text-sm text-rose-100/70 leading-relaxed group-hover:text-rose-100 transition-colors duration-300 font-medium">
-                            {isPreviewOnly ? (preview as any).risk_display : conclusion.primary_risk}
+                            {isPreviewOnly ? previewData?.risk_display : artifactData?.primary_risk}
                         </p>
                     </div>
                 </div>
@@ -285,13 +279,13 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({ output, resolvedTi
                     <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Supporting Audit Factors</h4>
                 </div>
                 <div className="space-y-3">
-                    {conclusion.supporting_factors?.map((factor: string, i: number) => (
+                    {conclusion?.supporting_factors?.map((factor: string, i: number) => (
                         <div key={i} className="flex gap-3 text-xs text-slate-400 hover:text-slate-300 transition-colors p-3 bg-slate-900/20 rounded-xl border border-slate-800/30">
                             <div className="w-1.5 h-1.5 rounded-full bg-slate-700 mt-1.5 shrink-0" />
                             <p className="leading-relaxed">{factor}</p>
                         </div>
                     ))}
-                    {(!conclusion.supporting_factors || conclusion.supporting_factors.length === 0) && (
+                    {(!conclusion?.supporting_factors || conclusion.supporting_factors.length === 0) && (
                         <p className="text-[10px] text-slate-600 italic">No secondary factors recorded.</p>
                     )}
                 </div>
@@ -306,13 +300,13 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({ output, resolvedTi
             </div>
 
             {/* Debate Transcript (History) */}
-            {(effectiveOutput as any).history && (effectiveOutput as any).history.length > 0 && (
-                <DebateTranscript history={(effectiveOutput as any).history} />
+            {artifactData?.history && artifactData.history.length > 0 && (
+                <DebateTranscript history={artifactData.history} />
             )}
 
             {/* Fact Registry */}
-            {effectiveOutput.facts && effectiveOutput.facts.length > 0 && (
-                <DebateFactSheet facts={effectiveOutput.facts} />
+            {artifactData?.facts && artifactData.facts.length > 0 && (
+                <DebateFactSheet facts={artifactData.facts} />
             )}
         </div>
     );

@@ -135,7 +135,7 @@ export const DebateTranscript: React.FC<DebateTranscriptProps> = ({ history }) =
                         const isJudge = msg.name === 'Judge';
 
                         let avatarIcon = <div className="w-full h-full bg-slate-700" />;
-                        let nameDisplay = msg.name || 'Agent';
+                        const nameDisplay = msg.name || 'Agent';
                         let roleColor = "text-slate-400";
                         let ringColor = "border-slate-800";
                         let bgColor = "from-slate-900/40 to-slate-900/10";
@@ -179,19 +179,19 @@ export const DebateTranscript: React.FC<DebateTranscriptProps> = ({ history }) =
                                         <div className="text-[15px] leading-relaxed text-slate-300 font-sans tracking-tight">
                                             <ReactMarkdown
                                                 components={{
-                                                    p: ({ node, ...props }) => <p className="mb-4 last:mb-0" {...props} />,
-                                                    strong: ({ node, ...props }) => <strong className="font-bold text-white tracking-tight" {...props} />,
-                                                    em: ({ node, ...props }) => <em className="italic text-slate-400 border-b border-white/5 pb-0.5" {...props} />,
-                                                    h1: ({ node, ...props }) => <h1 className="text-lg font-black text-white mt-6 mb-3 uppercase tracking-wider flex items-center gap-2 before:content-[''] before:w-1 before:h-4 before:bg-cyan-500" {...props} />,
-                                                    h2: ({ node, ...props }) => <h2 className="text-base font-bold text-white mt-5 mb-2 border-b border-white/5 pb-1" {...props} />,
-                                                    ul: ({ node, ...props }) => <ul className="space-y-2 mb-4 list-none pl-1" {...props} />,
-                                                    li: ({ node, ...props }) => (
+                                                    p: (props) => <p className="mb-4 last:mb-0" {...props} />,
+                                                    strong: (props) => <strong className="font-bold text-white tracking-tight" {...props} />,
+                                                    em: (props) => <em className="italic text-slate-400 border-b border-white/5 pb-0.5" {...props} />,
+                                                    h1: (props) => <h1 className="text-lg font-black text-white mt-6 mb-3 uppercase tracking-wider flex items-center gap-2 before:content-[''] before:w-1 before:h-4 before:bg-cyan-500" {...props} />,
+                                                    h2: (props) => <h2 className="text-base font-bold text-white mt-5 mb-2 border-b border-white/5 pb-1" {...props} />,
+                                                    ul: (props) => <ul className="space-y-2 mb-4 list-none pl-1" {...props} />,
+                                                    li: (props) => (
                                                         <li className="relative pl-5 mb-3 leading-relaxed before:content-['›'] before:absolute before:left-0 before:top-0 before:text-cyan-500 before:font-bold before:text-lg before:leading-none" {...props} />
                                                     ),
-                                                    blockquote: ({ node, ...props }) => (
+                                                    blockquote: (props) => (
                                                         <blockquote className="border-l-2 border-slate-700 pl-4 py-1 my-4 italic text-slate-400 bg-white/2 rounded-r" {...props} />
                                                     ),
-                                                    code: ({ node, ...props }) => (
+                                                    code: (props) => (
                                                         <code className="bg-slate-950 px-1.5 py-0.5 rounded font-mono text-[13px] text-cyan-400 border border-white/5" {...props} />
                                                     ),
                                                     // Intercept images to render badges

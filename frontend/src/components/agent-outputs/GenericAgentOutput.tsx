@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 import { FileText, Clock, Loader2, Database, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
-import { AgentStatus, StandardAgentOutput } from '@/types/agents';
+import { AgentErrorLog, AgentStatus, StandardAgentOutput } from '@/types/agents';
 import { useArtifact } from '../../hooks/useArtifact';
 
 interface GenericAgentOutputProps {
@@ -14,16 +14,13 @@ const GenericAgentOutputComponent: React.FC<GenericAgentOutputProps> = ({
     output,
     status
 }) => {
-    const artifact = (output as any)?.artifact;
-    const reference = artifact?.reference;
-    // Prefer artifact.preview, fallback to output (context) if artifact is missing (debug/early state),
-    // but do NOT fallback to output if artifact exists (strict mode).
-    const preview = artifact?.preview || (!artifact ? output : null);
-    const errorLogs = output?.error_logs || artifact?.error_logs;
+    const reference = output?.reference;
+    const preview = output?.preview ?? null;
+    const errorLogs: AgentErrorLog[] = output?.error_logs || [];
 
     const [isLogsExpanded, setIsLogsExpanded] = React.useState(false);
 
-    const { data: artifactData, isLoading: isArtifactLoading } = useArtifact<any>(
+    const { data: artifactData, isLoading: isArtifactLoading } = useArtifact<Record<string, unknown>>(
         reference?.artifact_id
     );
 
@@ -85,7 +82,7 @@ const GenericAgentOutputComponent: React.FC<GenericAgentOutputProps> = ({
                 </div>
             )}
 
-            {errorLogs && errorLogs.length > 0 && (
+            {errorLogs.length > 0 && (
                 <div className="mt-6 border border-border-main/50 rounded-xl overflow-hidden bg-bg-main/20">
                     <button
                         onClick={() => setIsLogsExpanded(!isLogsExpanded)}
@@ -102,7 +99,7 @@ const GenericAgentOutputComponent: React.FC<GenericAgentOutputProps> = ({
 
                     {isLogsExpanded && (
                         <div className="border-t border-border-main/50 p-1 space-y-1">
-                            {errorLogs.map((log: any, idx: number) => (
+                            {errorLogs.map((log, idx: number) => (
                                 <div key={idx} className="p-3 bg-slate-900/40 rounded-lg flex gap-3">
                                     <div className="mt-0.5">
                                         <div className={`w-1.5 h-1.5 rounded-full mt-1 ${log.severity === 'error' ? 'bg-error' : 'bg-warning'}`} />

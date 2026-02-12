@@ -1,11 +1,12 @@
 import React from 'react';
 import { MessageSquare, BarChart3 } from 'lucide-react';
 import { Message } from '@/types/protocol';
+import { InterruptResumePayload, isInterruptRequestData } from '@/types/interrupts';
 import { DynamicInterruptForm } from '../DynamicInterruptForm';
 
 interface AgentHistoryTabProps {
     agentMessages: Message[];
-    onSubmitCommand?: (payload: any) => Promise<void>;
+    onSubmitCommand?: (payload: InterruptResumePayload) => Promise<void>;
 }
 
 export const AgentHistoryTab: React.FC<AgentHistoryTabProps> = ({
@@ -41,7 +42,7 @@ export const AgentHistoryTab: React.FC<AgentHistoryTabProps> = ({
                                 )}
 
                                 {/* Dynamic Interrupt Forms (SDUI) */}
-                                {msg.isInteractive && msg.data?.schema && (
+                                {msg.isInteractive && isInterruptRequestData(msg.data) && (
                                     <div className="mt-6">
                                         <DynamicInterruptForm
                                             schema={msg.data.schema}

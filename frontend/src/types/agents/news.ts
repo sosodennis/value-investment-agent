@@ -63,8 +63,7 @@ export interface NewsResearchOutput {
     key_themes: string[];
 }
 
-export interface FinancialNewsSuccess extends NewsResearchOutput {
-}
+export type FinancialNewsSuccess = NewsResearchOutput;
 
 export interface FinancialNewsError {
     message: string;

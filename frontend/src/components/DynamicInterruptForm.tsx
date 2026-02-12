@@ -3,12 +3,21 @@ import Form from '@rjsf/core';
 import { RJSFSchema, UiSchema, WidgetProps } from '@rjsf/utils';
 import validator from '@rjsf/validator-ajv8';
 import { Zap, AlertTriangle } from 'lucide-react';
+import { InterruptResumePayload } from '@/types/interrupts';
+
+interface EnumOption {
+    value: string;
+    label?: string;
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null;
 
 interface DynamicInterruptFormProps {
     schema: RJSFSchema;
     uiSchema?: UiSchema;
-    formData?: any;
-    onSubmit: (data: any) => void;
+    formData?: Record<string, unknown>;
+    onSubmit: (data: InterruptResumePayload) => void;
     title?: string;
     description?: string;
 }
@@ -24,11 +33,43 @@ const TickerCardRadioWidget = (props: WidgetProps) => {
 
     // Fallback logic: RJSF sometimes fails to populate enumOptions in custom widgets
     const finalEnumOptions = useMemo(() => {
-        let opts = (enumOptions as any[]) || [];
+        const opts: EnumOption[] = [];
+        if (Array.isArray(enumOptions)) {
+            enumOptions.forEach((option) => {
+                if (
+                    option &&
+                    typeof option === 'object' &&
+                    'value' in option &&
+                    typeof option.value === 'string'
+                ) {
+                    opts.push({
+                        value: option.value,
+                        label: typeof option.label === 'string' ? option.label : undefined,
+                    });
+                }
+            });
+        }
         if (opts.length === 0 && schema.enum) {
-            opts = schema.enum.map((val: any, idx: number) => ({
-                value: val,
-                label: (schema as any).enumNames?.[idx] || val
+            const labelsByValue = new Map<string, string>();
+            if (Array.isArray(schema.oneOf)) {
+                schema.oneOf.forEach((entry) => {
+                    if (!isRecord(entry)) return;
+                    const optionValue = entry.const;
+                    const optionLabel = entry.title;
+                    if (
+                        typeof optionValue === 'string' &&
+                        typeof optionLabel === 'string'
+                    ) {
+                        labelsByValue.set(optionValue, optionLabel);
+                    }
+                });
+            }
+            const enumValues = schema.enum.filter(
+                (entry): entry is string => typeof entry === 'string'
+            );
+            return enumValues.map((entry) => ({
+                value: entry,
+                label: labelsByValue.get(entry) ?? entry,
             }));
         }
         return opts;
@@ -39,7 +80,7 @@ const TickerCardRadioWidget = (props: WidgetProps) => {
             <div className="grid grid-cols-1 gap-3">
                 {finalEnumOptions.map((option) => {
                     const isSelected = value === option.value;
-                    const fullLabel = String(option.label || '');
+                    const fullLabel = option.label ?? option.value;
 
                     // Safe Parsing: "SYMBOL - NAME (CONFIDENCE% match)"
                     // Handles scenarios where " - " might be missing or formatting is slightly off
@@ -165,7 +206,11 @@ export const DynamicInterruptForm: React.FC<DynamicInterruptFormProps> = ({
                         formData={formData}
                         widgets={widgets}
                         validator={validator}
-                        onSubmit={({ formData: data }) => onSubmit(data)}
+                        onSubmit={({ formData: data }) => {
+                            if (data && typeof data === 'object') {
+                                onSubmit(data as InterruptResumePayload);
+                            }
+                        }}
                         className="space-y-4"
                     />
                 </div>

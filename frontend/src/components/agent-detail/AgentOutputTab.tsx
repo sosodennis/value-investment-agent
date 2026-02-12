@@ -1,5 +1,5 @@
 import React from 'react';
-import { AgentInfo, AgentStatus } from '@/types/agents';
+import { AgentInfo, AgentStatus, StandardAgentOutput } from '@/types/agents';
 import {
     FundamentalAnalysisOutput,
     NewsResearchOutput as NewsResearchOutputPanel,
@@ -10,8 +10,8 @@ import {
 
 interface AgentOutputTabProps {
     agent: AgentInfo;
-    rawOutput: any;
-    resolvedTicker?: string;
+    rawOutput: StandardAgentOutput | null;
+    resolvedTicker?: string | null;
     status: AgentStatus;
 }
 

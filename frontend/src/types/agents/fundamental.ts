@@ -5,7 +5,7 @@ export interface Provenance {
 }
 
 export interface TraceableField {
-    value: any;
+    value: string | number | null;
     provenance?: Provenance | null;
     timestamp?: string;
 }

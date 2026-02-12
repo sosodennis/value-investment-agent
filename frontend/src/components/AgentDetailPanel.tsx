@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import Image from 'next/image';
-import { AgentInfo } from '@/types/agents';
+import { AgentInfo, StandardAgentOutput } from '@/types/agents';
+import { InterruptResumePayload } from '@/types/interrupts';
 import { Zap, Activity } from 'lucide-react';
 import { Message } from '../types/protocol';
 import { useFinancialData } from '../hooks/useFinancialData';
@@ -11,10 +12,10 @@ import { AgentOutputTab } from './agent-detail/AgentOutputTab';
 
 interface AgentDetailPanelProps {
     agent: AgentInfo | null;
-    agentOutput?: any;
+    agentOutput?: StandardAgentOutput | null;
     messages: Message[];
-    onSubmitCommand?: (payload: any) => Promise<void>;
-    allAgentOutputs?: Record<string, any>;
+    onSubmitCommand?: (payload: InterruptResumePayload) => Promise<void>;
+    allAgentOutputs?: Record<string, StandardAgentOutput | null>;
     currentNode?: string | null;
     currentStatus?: string | null;
     activityFeed?: { id: string, node: string, agentId?: string, status: string, timestamp: number }[];

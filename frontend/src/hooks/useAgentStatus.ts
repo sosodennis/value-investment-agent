@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { AgentStatus, AgentInfo } from '@/types/agents';
+import { AgentStatus } from '@/types/agents';
 import { Message } from '@/types/protocol';
 
 export const useAgentStatus = (
@@ -11,7 +11,9 @@ export const useAgentStatus = (
         // 1. Check for Ticker Interrupt (Intent Planner)
         if (agentId === 'intent_extraction') {
             const hasTickerInterrupt = messages.some(m =>
-                m.isInteractive && (m.type === 'interrupt_ticker' || m.agentId === 'intent_extraction')
+                m.isInteractive &&
+                m.type === 'interrupt.request' &&
+                m.agentId === 'intent_extraction'
             );
             if (hasTickerInterrupt) return 'attention';
         }

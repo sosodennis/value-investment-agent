@@ -1,10 +1,11 @@
 import React, { memo } from 'react';
-import { LayoutPanelTop, BarChart3, Loader2 } from 'lucide-react';
+import { LayoutPanelTop, BarChart3 } from 'lucide-react';
 import { FinancialTable } from '../FinancialTable';
 import { AgentStatus, StandardAgentOutput } from '@/types/agents';
-import { FundamentalAnalysisSuccess } from '@/types/agents/fundamental';
+import { FinancialReport, FundamentalAnalysisSuccess } from '@/types/agents/fundamental';
 import { useArtifact } from '../../hooks/useArtifact';
 import { AgentLoadingState } from './AgentLoadingState';
+import { isRecord } from '@/types/preview';
 
 interface FundamentalAnalysisOutputProps {
     output: StandardAgentOutput | null;
@@ -17,23 +18,30 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
     resolvedTicker,
     status
 }) => {
-    // 1. Determine if we have a reference to fetch
-    const reference = (output as any)?.reference || (output as any)?.artifact?.reference;
-    const preview = (output as any)?.preview || (output as any)?.artifact?.preview || (output as any);
+    const reference = output?.reference;
+    const preview = output?.preview;
+    const previewData = isRecord(preview) ? preview : null;
 
-    // 2. Fetch artifact if reference exists
     const { data: artifactData, isLoading: isArtifactLoading } = useArtifact<FundamentalAnalysisSuccess>(
         reference?.artifact_id
     );
 
-    // 3. Resolve the actual data (Artifact > Preview)
-    const effectiveData = artifactData || preview;
+    const effectiveData = artifactData || previewData;
+    const reportsRaw = isRecord(effectiveData)
+        ? effectiveData.financial_reports
+        : undefined;
+    const reports: FinancialReport[] = Array.isArray(reportsRaw)
+        ? (reportsRaw as FinancialReport[])
+        : [];
 
-    const reports = effectiveData?.financial_reports || [];
-
-    // Preview Logic: If we only have preview, show a summary
-    const hasPreview = !!preview;
-    const valuationScore = preview?.valuation_score;
+    const hasPreview = !!previewData;
+    const valuationScore =
+        typeof previewData?.valuation_score === 'number'
+            ? previewData.valuation_score
+            : undefined;
+    const previewKeyMetrics = isRecord(previewData?.key_metrics)
+        ? (previewData.key_metrics as Record<string, unknown>)
+        : {};
 
     if (status !== 'done' && reports.length === 0 && !hasPreview) {
         return (
@@ -85,9 +93,9 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                         )}
                     </div>
 
-                    {preview.key_metrics && Object.keys(preview.key_metrics).length > 0 && (
+                    {Object.keys(previewKeyMetrics).length > 0 && (
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                            {Object.entries(preview.key_metrics).map(([label, value]) => (
+                            {Object.entries(previewKeyMetrics).map(([label, value]) => (
                                 <div key={label} className="tech-card p-4 group hover:bg-slate-900/40">
                                     <div className="text-label mb-1 text-slate-600 group-hover:text-slate-400 transition-colors">{label}</div>
                                     <div className="text-sm font-black text-white">

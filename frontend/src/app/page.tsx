@@ -7,7 +7,7 @@ import { HeaderBar } from '../components/HeaderBar';
 import { AgentsRoster } from '../components/AgentsRoster';
 import { AgentDetailPanel } from '../components/AgentDetailPanel';
 import { AgentInfo } from '@/types/agents';
-import { AGENT_CONFIGS } from '../config/agents';
+import { AGENT_CONFIGS, AgentConfig } from '../config/agents';
 
 export default function Home({ assistantId = "agent" }: { assistantId?: string }) {
   const {
@@ -68,10 +68,12 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
 
   // Define Agents Roster Data (Linking to current workflow nodes)
   // Derive 'attention' status from active interrupts
-  const hasTickerInterrupt = messages.some(m => m.isInteractive && (m.type === 'interrupt_ticker' || m.agentId === 'intent_extraction'));
+  const hasTickerInterrupt = messages.some(
+    (m) => m.isInteractive && m.type === 'interrupt.request'
+  );
 
   const agents: AgentInfo[] = useMemo(() => {
-    return AGENT_CONFIGS.map((config: any) => {
+    return AGENT_CONFIGS.map((config: AgentConfig) => {
       const baseStatus = agentStatuses[config.id] || 'idle';
       return {
         id: config.id,

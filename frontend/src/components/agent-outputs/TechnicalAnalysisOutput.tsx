@@ -25,12 +25,12 @@ import {
     Zap,
     AlertTriangle,
     Maximize2,
-    Minimize2,
-    Loader2
+    Minimize2
 } from 'lucide-react';
-import { TechnicalSignalOutput, TechnicalAnalysisSuccess } from '@/types/agents/technical';
+import { TechnicalAnalysisSuccess } from '@/types/agents/technical';
 import { useArtifact } from '../../hooks/useArtifact';
 import { AgentLoadingState } from './AgentLoadingState';
+import { TechnicalPreview, isTechnicalPreview, isRecord } from '@/types/preview';
 
 interface TechnicalAnalysisOutputProps {
     output: StandardAgentOutput | null;
@@ -165,29 +165,20 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
     const [isAutoFit, setIsAutoFit] = useState(false);
     const [timeframe, setTimeframe] = useState<Timeframe>('ALL');
 
-    // 1. Determine if we have a reference to fetch
-    const reference = (output as any)?.reference || (output as any)?.artifact?.reference;
-    const preview = (output as any)?.preview || (output as any)?.artifact?.preview || (output as any);
+    const reference = output?.reference;
+    const preview = output?.preview;
+    const previewData: TechnicalPreview | null = isTechnicalPreview(preview) ? preview : null;
 
-    console.log('[TechnicalAnalysisOutput] Render:', { output, reference, preview });
-
-    // 2. Fetch artifact if reference exists
     const { data: artifactData, isLoading: isArtifactLoading } = useArtifact<TechnicalAnalysisSuccess>(
         reference?.artifact_id
     );
 
-    // 3. Resolve the actual data to display (Artifact > Preview)
-    const effectiveOutput = artifactData || preview;
-    const ticker = (effectiveOutput as any)?.ticker || (output as any)?.ticker || 'N/A';
-    console.log('[TechnicalAnalysisOutput] Effective Output:', effectiveOutput);
-
     // Data Processing & Outlier Filtering
     const chartData = useMemo(() => {
-        // Strict check: only use raw_data from reference artifact
-        if (!effectiveOutput?.raw_data?.z_score_series) return [];
+        if (!artifactData?.raw_data?.z_score_series) return [];
 
-        return Object.entries(effectiveOutput.raw_data.z_score_series)
-            .filter(([_, value]) => {
+        return Object.entries(artifactData.raw_data.z_score_series)
+            .filter(([, value]) => {
                 if (typeof value !== 'number' || Math.abs(value) < 0.0001) return false;
                 return true;
             })
@@ -205,7 +196,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                 };
             })
             .sort((a, b) => a.timestamp - b.timestamp);
-    }, [effectiveOutput]);
+    }, [artifactData]);
 
     // Filter chart data by timeframe
     const filteredChartData = useMemo(() => {
@@ -238,10 +229,9 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         return chartData.filter(d => d.timestamp >= cutoffTime);
     }, [chartData, timeframe]);
 
-    // Wait for completion before showing data, unless we have preview data
-    const hasData = effectiveOutput && (effectiveOutput.frac_diff_metrics || effectiveOutput.signal_state);
+    const hasData = !!artifactData || !!previewData;
 
-    if ((status !== 'done' && !hasData) || !effectiveOutput) {
+    if ((status !== 'done' && !hasData) || (!artifactData && !previewData)) {
         return (
             <AgentLoadingState
                 type="full"
@@ -254,11 +244,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         );
     }
 
-    const { frac_diff_metrics, signal_state, llm_interpretation, semantic_tags } = effectiveOutput;
-
-    // Lightweight Preview Mode
-    if ((!frac_diff_metrics || !signal_state) && (effectiveOutput as any).signal_display) {
-        const previewFn = effectiveOutput as any;
+    if (!artifactData && previewData?.signal_display) {
         return (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-700">
                 <header className="space-y-4">
@@ -269,7 +255,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                         <div>
                             <h3 className="text-xl font-bold text-white tracking-tight">Technical Intelligence (Preview)</h3>
                             <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                                <span className="text-cyan-400">{(effectiveOutput as any)?.ticker || 'UNKNOWN'}</span>
+                                <span className="text-cyan-400">{previewData?.ticker || 'UNKNOWN'}</span>
                             </div>
                         </div>
                     </div>
@@ -278,19 +264,19 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="tech-card p-4 text-center group hover:bg-slate-900/40">
                         <div className="text-label mb-1 text-slate-600 group-hover:text-slate-400 transition-colors">Signal</div>
-                        <div className="text-lg font-black text-white">{previewFn.signal_display}</div>
+                        <div className="text-lg font-black text-white">{previewData.signal_display}</div>
                     </div>
                     <div className="tech-card p-4 text-center group hover:bg-slate-900/40">
                         <div className="text-label mb-1 text-slate-600 group-hover:text-slate-400 transition-colors">Price</div>
-                        <div className="text-lg font-black text-white">{previewFn.latest_price_display}</div>
+                        <div className="text-lg font-black text-white">{previewData.latest_price_display}</div>
                     </div>
                     <div className="tech-card p-4 text-center group hover:bg-slate-900/40">
                         <div className="text-label mb-1 text-slate-600 group-hover:text-slate-400 transition-colors">Z-Score</div>
-                        <div className="text-lg font-black text-white">{previewFn.z_score_display}</div>
+                        <div className="text-lg font-black text-white">{previewData.z_score_display}</div>
                     </div>
                     <div className="tech-card p-4 text-center group hover:bg-slate-900/40">
                         <div className="text-label mb-1 text-slate-600 group-hover:text-slate-400 transition-colors">Opt. d</div>
-                        <div className="text-lg font-black text-white">{previewFn.optimal_d_display}</div>
+                        <div className="text-lg font-black text-white">{previewData.optimal_d_display}</div>
                     </div>
                 </div>
 
@@ -303,7 +289,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         );
     }
 
-    if (!frac_diff_metrics || !signal_state) {
+    if (!artifactData) {
         return (
             <AgentLoadingState
                 type="full"
@@ -313,6 +299,8 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
             />
         );
     }
+
+    const { frac_diff_metrics, signal_state, llm_interpretation, semantic_tags } = artifactData;
 
     const strength = getSignalStrengthLabel(frac_diff_metrics.optimal_d, frac_diff_metrics.adf_pvalue);
     const StrengthIcon = strength.icon;
@@ -325,7 +313,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
     const autoMax = dataValues.length > 0 ? Math.max(...(dataValues as number[])) + 0.1 : 'auto';
     const autoMin = dataValues.length > 0 ? Math.min(...(dataValues as number[])) - 0.1 : 'auto';
 
-    const currentDomain: [any, any] = isAutoFit
+    const currentDomain: [number | 'auto', number | 'auto'] = isAutoFit
         ? [autoMin, autoMax]
         : fixedDomain;
 
@@ -344,7 +332,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                         <div>
                             <h3 className="text-xl font-bold text-white tracking-tight">Technical Intelligence</h3>
                             <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                                <span className="text-cyan-400">{effectiveOutput.ticker}</span>
+                                <span className="text-cyan-400">{artifactData.ticker}</span>
                                 <span className="opacity-30">|</span>
                                 <span>Advanced FracDiff Analysis</span>
                             </div>
@@ -367,8 +355,8 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                     {llm_interpretation ? (
                         <ReactMarkdown
                             components={{
-                                strong: ({ node, ...props }) => <span className="font-bold text-indigo-300 not-italic" {...props} />,
-                                p: ({ node, ...props }) => <p className="mb-2 last:mb-0" {...props} />
+                                strong: (props) => <span className="font-bold text-indigo-300 not-italic" {...props} />,
+                                p: (props) => <p className="mb-2 last:mb-0" {...props} />
                             }}
                         >
                             {llm_interpretation}
@@ -548,9 +536,11 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                                 contentStyle={{ backgroundColor: '#020617', borderColor: '#1e293b', borderRadius: '8px', padding: '12px' }}
                                                 labelStyle={{ color: '#64748b', fontSize: '10px', fontWeight: 800, marginBottom: '4px', textTransform: 'uppercase' }}
                                                 itemStyle={{ color: '#22d3ee', fontSize: '12px', fontWeight: 700 }}
-                                                formatter={(value: number, name: string, props: any) => {
-                                                    const original = props.payload.originalValue;
-                                                    return [original ? original.toFixed(4) : value.toFixed(4), "Z-Score"];
+                                                formatter={(value: number, name: string, props: unknown) => {
+                                                    const payload = isRecord(props) && isRecord(props.payload) ? props.payload : null;
+                                                    const original = payload?.originalValue;
+                                                    const originalValue = typeof original === 'number' ? original : null;
+                                                    return [originalValue !== null ? originalValue.toFixed(4) : value.toFixed(4), "Z-Score"];
                                                 }}
                                             />
                                             <Area

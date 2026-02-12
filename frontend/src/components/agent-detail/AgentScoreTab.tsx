@@ -1,12 +1,13 @@
 import React from 'react';
 import { AgentInfo, DimensionScore } from '@/types/agents';
+import { FinancialReport } from '@/types/agents/fundamental';
 import { BarChart3, TrendingUp, FileText } from 'lucide-react';
 
 interface AgentScoreTabProps {
     agent: AgentInfo;
     dimensionScores: DimensionScore[];
     financialMetrics: { label: string; value: string | number }[];
-    latestReport: any;
+    latestReport: FinancialReport | null;
 }
 
 export const AgentScoreTab: React.FC<AgentScoreTabProps> = ({
@@ -15,6 +16,7 @@ export const AgentScoreTab: React.FC<AgentScoreTabProps> = ({
     financialMetrics,
     latestReport
 }) => {
+    const companyName = latestReport?.base.company_name?.value;
     return (
         <div className="p-8 space-y-8 animate-in slide-in-from-bottom-2 duration-300">
             {/* Dimension Scores Card */}
@@ -70,7 +72,7 @@ export const AgentScoreTab: React.FC<AgentScoreTabProps> = ({
                         </p>
                         <p>
                             {latestReport ? (
-                                `Analyzing financial data for ${latestReport.ticker || 'selected company'} showing a ROE of ${(latestReport.roe * 100).toFixed(1)}%.`
+                                `Analyzing financial data for ${typeof companyName === 'string' ? companyName : 'selected company'}.`
                             ) : (
                                 'Waiting for financial data to be extracted and processed.'
                             )}

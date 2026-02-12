@@ -2,6 +2,22 @@ export type Direction = 'STRONG_LONG' | 'LONG' | 'NEUTRAL' | 'AVOID' | 'SHORT' |
 export type PriceImplication = 'SURGE' | 'MODERATE_UP' | 'FLAT' | 'MODERATE_DOWN' | 'CRASH';
 export type RiskProfileType = 'DEFENSIVE_VALUE' | 'GROWTH_TECH' | 'SPECULATIVE_CRYPTO_BIO';
 
+export interface DebateHistoryMessage {
+    name?: string;
+    role?: string;
+    content: string;
+}
+
+export interface EvidenceFact {
+    fact_id: string;
+    source_type: 'financials' | 'news' | 'technicals';
+    source_weight: 'HIGH' | 'MEDIUM' | 'LOW';
+    summary: string;
+    value?: string | number;
+    period?: string;
+    provenance?: Record<string, unknown>;
+}
+
 export interface Scenario {
     probability: number;
     outcome_description: string;
@@ -36,8 +52,8 @@ export interface DebateConclusion {
 }
 
 export interface DebateSuccess extends DebateConclusion {
-    history?: any[];
-    facts?: any[]; // registry of evidence facts
+    history?: DebateHistoryMessage[];
+    facts?: EvidenceFact[]; // registry of evidence facts
 }
 
 export interface DebateError {

@@ -1,11 +1,12 @@
 import React, { memo } from 'react';
-import { Zap, TrendingUp, Loader2 } from 'lucide-react';
+import { Zap, TrendingUp } from 'lucide-react';
 import { NewsResearchCard } from '../NewsResearchCard';
 import { AINewsSummary } from '../AINewsSummary';
 import { NewsResearchOutput as NewsResearchOutputType } from '@/types/agents/news';
 import { StandardAgentOutput, AgentStatus } from '@/types/agents';
 import { useArtifact } from '../../hooks/useArtifact';
 import { AgentLoadingState } from './AgentLoadingState';
+import { NewsPreview, isNewsPreview } from '@/types/preview';
 
 interface NewsResearchOutputProps {
     output: StandardAgentOutput | null;
@@ -18,24 +19,20 @@ const NewsResearchOutputComponent: React.FC<NewsResearchOutputProps> = ({
     resolvedTicker,
     status
 }) => {
-    // 1. Determine if we have a reference to fetch
-    const reference = (output as any)?.reference || (output as any)?.artifact?.reference;
-    const preview = (output as any)?.preview || (output as any)?.artifact?.preview || (output as any);
+    const reference = output?.reference;
+    const preview = output?.preview;
+    const previewData: NewsPreview | null = isNewsPreview(preview) ? preview : null;
 
-    // 2. Fetch artifact if reference exists
     const { data: artifactData, isLoading: isArtifactLoading } = useArtifact<NewsResearchOutputType>(
         reference?.artifact_id
     );
 
-    // 3. Resolve the actual data to display (Artifact > Preview)
-    // Legacy fallback to 'output' itself is removed.
-    const effectiveOutput = artifactData || preview;
+    const effectiveOutput = artifactData || previewData;
 
-    // 4. Check if we have valid data to show
-    const isPreviewOnly = !artifactData && !!preview;
+    const isPreviewOnly = !artifactData && !!previewData;
     const hasData = effectiveOutput && (
-        (effectiveOutput.news_items && effectiveOutput.news_items.length > 0) ||
-        typeof effectiveOutput.sentiment_score === 'number' ||
+        (artifactData?.news_items && artifactData.news_items.length > 0) ||
+        typeof artifactData?.sentiment_score === 'number' ||
         isPreviewOnly
     );
 
@@ -81,18 +78,18 @@ const NewsResearchOutputComponent: React.FC<NewsResearchOutputProps> = ({
                     <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Article Breakdown</h3>
                 </div>
 
-                {effectiveOutput.news_items && effectiveOutput.news_items.length > 0 ? (
+                {artifactData?.news_items && artifactData.news_items.length > 0 ? (
                     <div className="grid grid-cols-1 gap-6">
-                        {effectiveOutput.news_items.map((item: any) => (
+                        {artifactData.news_items.map((item) => (
                             <NewsResearchCard key={item.id} item={item} />
                         ))}
                     </div>
-                ) : isPreviewOnly && (preview as any).top_headlines ? (
+                ) : isPreviewOnly && previewData?.top_headlines ? (
                     <div className="space-y-4">
                         <div className="p-4 bg-slate-900/40 border border-slate-800 rounded-xl">
                             <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Recent Headlines (Preview)</h4>
                             <div className="space-y-2">
-                                {(preview as any).top_headlines.map((headline: string, i: number) => (
+                                {previewData.top_headlines.map((headline: string, i: number) => (
                                     <div key={i} className="flex gap-2 text-xs text-slate-300">
                                         <div className="w-1 h-1 bg-cyan-500 rounded-full mt-1.5 shrink-0" />
                                         <span>{headline}</span>

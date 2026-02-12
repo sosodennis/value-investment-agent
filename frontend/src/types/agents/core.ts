@@ -1,5 +1,5 @@
 export interface ExecutorSuccess {
-    params: Record<string, any>;
+    params: Record<string, unknown>;
     model_type: string;
 }
 
@@ -21,7 +21,7 @@ export interface AuditorError {
 export type AuditorResult = AuditorSuccess | AuditorError;
 
 export interface CalculatorSuccess {
-    metrics: Record<string, any>;
+    metrics: Record<string, unknown>;
     model_type: string;
 }
 

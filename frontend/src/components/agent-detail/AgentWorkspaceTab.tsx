@@ -1,6 +1,11 @@
 import React from 'react';
 import { AgentInfo } from '@/types/agents';
 import { Message } from '@/types/protocol';
+import {
+    InterruptRequestData,
+    InterruptResumePayload,
+    isInterruptRequestData,
+} from '@/types/interrupts';
 import { LayoutPanelTop, Activity, Clock } from 'lucide-react';
 import { DynamicInterruptForm } from '../DynamicInterruptForm';
 
@@ -9,7 +14,7 @@ interface AgentWorkspaceTabProps {
     currentNode?: string | null;
     currentStatus?: string | null;
     messages: Message[];
-    onSubmitCommand?: (payload: any) => Promise<void>;
+    onSubmitCommand?: (payload: InterruptResumePayload) => Promise<void>;
     activityFeed?: { id: string, node: string, agentId?: string, status: string, timestamp: number }[];
 }
 
@@ -21,6 +26,13 @@ export const AgentWorkspaceTab: React.FC<AgentWorkspaceTabProps> = ({
     onSubmitCommand,
     activityFeed = []
 }) => {
+    const interruptMessages = messages.filter(
+        (message): message is Message & { data: InterruptRequestData } =>
+            !!message.isInteractive &&
+            message.agentId === agent.id &&
+            isInterruptRequestData(message.data)
+    );
+
     return (
         <div className="p-8 space-y-8 animate-in slide-in-from-bottom-2 duration-300">
             {/* Current Active Step */}
@@ -53,24 +65,15 @@ export const AgentWorkspaceTab: React.FC<AgentWorkspaceTabProps> = ({
                     </div>
 
                     {/* Active Interrupts (Scoped) */}
-                    {messages.filter(m => {
-                        if (!m.isInteractive) return false;
-                        return m.agentId === agent.id;
-                    }).map((msg) => (
+                    {interruptMessages.map((msg) => (
                         <div key={msg.id} className="mt-4">
-                            {msg.data?.schema ? (
-                                <DynamicInterruptForm
-                                    schema={msg.data.schema}
-                                    uiSchema={msg.data.ui_schema}
-                                    title={msg.data.title}
-                                    description={msg.data.description}
-                                    onSubmit={(data) => onSubmitCommand?.(data)}
-                                />
-                            ) : (
-                                <div className="bg-warning/10 border border-warning/20 rounded-xl p-4 text-xs text-warning/80">
-                                    Interruption requested, but no UI schema provided.
-                                </div>
-                            )}
+                            <DynamicInterruptForm
+                                schema={msg.data.schema}
+                                uiSchema={msg.data.ui_schema}
+                                title={msg.data.title}
+                                description={msg.data.description}
+                                onSubmit={(data) => onSubmitCommand?.(data)}
+                            />
                         </div>
                     ))}
                 </div>

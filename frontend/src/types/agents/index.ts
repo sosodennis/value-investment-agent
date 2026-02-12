@@ -1,3 +1,5 @@
+import { PreviewPayload } from '@/types/preview';
+
 export type AgentStatus = 'idle' | 'running' | 'done' | 'attention' | 'error' | 'degraded';
 
 export interface AgentErrorLog {
@@ -14,8 +16,9 @@ export interface ArtifactReference {
 }
 
 export interface StandardAgentOutput {
-    preview?: any;
-    reference?: ArtifactReference;
+    summary: string;
+    preview?: PreviewPayload | null;
+    reference?: ArtifactReference | null;
     error_logs?: AgentErrorLog[];
 }
 
