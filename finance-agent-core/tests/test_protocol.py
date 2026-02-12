@@ -1,4 +1,5 @@
 from langchain_core.messages import AIMessageChunk
+from pydantic import BaseModel
 
 from src.interface.adapters import adapt_langgraph_event, create_interrupt_event
 from src.interface.protocol import AgentEvent
@@ -80,3 +81,31 @@ def test_create_interrupt():
     assert event.type == "interrupt.request"
     assert event.data["type"] == "ticker_selection"
     assert event.source == "system.interrupt"
+
+
+def test_adapt_state_update_from_basemodel_output():
+    class MockOutput(BaseModel):
+        artifact: dict[str, object]
+
+    lg_event = {
+        "event": "on_chain_end",
+        "metadata": {
+            "langgraph_node": "intent_extraction",
+            "agent_id": "intent_extraction",
+        },
+        "data": {
+            "output": MockOutput(
+                artifact={
+                    "summary": "Resolved ticker",
+                    "preview": {"resolved_ticker": "GME"},
+                    "reference": None,
+                }
+            )
+        },
+    }
+
+    adapted = adapt_langgraph_event(lg_event, "thread_1", 30)
+    assert adapted and isinstance(adapted, list)
+    assert adapted[0].type == "state.update"
+    assert adapted[0].source == "intent_extraction"
+    assert adapted[0].data["preview"]["resolved_ticker"] == "GME"

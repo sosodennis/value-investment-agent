@@ -1,5 +1,6 @@
 import hashlib
 import json
+from collections.abc import Mapping
 from datetime import datetime
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
@@ -8,12 +9,9 @@ from langgraph.types import Command
 
 from src.common.tools.llm import get_llm
 from src.common.tools.logger import get_logger
-from src.interface.schemas import AgentOutputArtifact, ArtifactReference
+from src.common.traceable import ManualProvenance, XBRLProvenance
+from src.interface.schemas import ArtifactReference, build_artifact_payload
 from src.services.artifact_manager import artifact_manager
-from src.workflow.nodes.fundamental_analysis.tools.sec_xbrl.models import (
-    ManualProvenance,
-    XBRLProvenance,
-)
 
 from .mappers import summarize_debate_for_preview
 from .prompts import (
@@ -125,8 +123,7 @@ def _get_last_message_from_role(history: list, role_name: str) -> str:
     if not history:
         return ""
     for msg in reversed(history):
-        # 優先檢查 .name 屬性
-        if hasattr(msg, "name") and msg.name == role_name:
+        if getattr(msg, "name", None) == role_name:
             return msg.content
         # 其次檢查 additional_kwargs (某些模型會放在這裡)
         if (
@@ -135,6 +132,26 @@ def _get_last_message_from_role(history: list, role_name: str) -> str:
         ):
             return msg.content
     return ""
+
+
+def _artifact_ref_id_from_context(ctx: Mapping[str, object]) -> str | None:
+    artifact = ctx.get("artifact")
+    if not isinstance(artifact, Mapping):
+        return None
+    reference = artifact.get("reference")
+    if not isinstance(reference, Mapping):
+        return None
+    artifact_id = reference.get("artifact_id")
+    if not isinstance(artifact_id, str):
+        return None
+    return artifact_id
+
+
+def _artifact_data(artifact_obj: object) -> object:
+    data = getattr(artifact_obj, "data", None)
+    if data is None:
+        raise TypeError("Artifact object missing 'data' field")
+    return data
 
 
 def _log_llm_config(agent_name: str, round_num: int, llm: object) -> None:
@@ -209,32 +226,19 @@ async def _prepare_debate_reports(state: DebateState) -> dict:
     )
     # News Data
     news_ctx = state.get("financial_news_research", {})
-    news_artifact = news_ctx.get("artifact")
     news_data = {}
     news_artifact_id = None
 
-    # Try getting from artifact reference (L3)
-    artifact_id = None
-    if news_artifact:
-        # Check if it's an object or dict
-        if hasattr(news_artifact, "reference") and news_artifact.reference:
-            artifact_id = news_artifact.reference.artifact_id
-        elif isinstance(news_artifact, dict) and news_artifact.get("reference"):
-            ref = news_artifact.get("reference")
-            if isinstance(ref, dict):
-                artifact_id = ref.get("artifact_id")
-            elif hasattr(ref, "artifact_id"):
-                artifact_id = ref.artifact_id
-
-    # Fallback to news_items_artifact_id
-    if not artifact_id:
-        artifact_id = news_ctx.get("news_items_artifact_id")
+    artifact_id = _artifact_ref_id_from_context(news_ctx)
+    if artifact_id is None:
+        news_items_id_raw = news_ctx.get("news_items_artifact_id")
+        artifact_id = news_items_id_raw if isinstance(news_items_id_raw, str) else None
     news_artifact_id = artifact_id
 
     if artifact_id:
         artifact_obj = await artifact_manager.get_artifact(artifact_id)
-        if artifact_obj and hasattr(artifact_obj, "data"):
-            raw_data = artifact_obj.data
+        if artifact_obj:
+            raw_data = _artifact_data(artifact_obj)
             # News data compression expects a dict with "news_items" key
             if isinstance(raw_data, list):
                 news_data = {"news_items": raw_data}
@@ -243,30 +247,23 @@ async def _prepare_debate_reports(state: DebateState) -> dict:
 
     # Technical Analysis Data
     ta_ctx = state.get("technical_analysis", {})
-    ta_artifact = ta_ctx.get("artifact")
     ta_data = {}
     ta_artifact_id = None
 
-    artifact_id = None
-    if ta_artifact:
-        if hasattr(ta_artifact, "reference") and ta_artifact.reference:
-            artifact_id = ta_artifact.reference.artifact_id
-        elif isinstance(ta_artifact, dict) and ta_artifact.get("reference"):
-            ref = ta_artifact.get("reference")
-            if isinstance(ref, dict):
-                artifact_id = ref.get("artifact_id")
-            elif hasattr(ref, "artifact_id"):
-                artifact_id = ref.artifact_id
-
-    # Fallback to chart_data_id or price_artifact_id
-    if not artifact_id:
-        artifact_id = ta_ctx.get("chart_data_id") or ta_ctx.get("price_artifact_id")
+    artifact_id = _artifact_ref_id_from_context(ta_ctx)
+    if artifact_id is None:
+        chart_data_id = ta_ctx.get("chart_data_id")
+        price_artifact_id = ta_ctx.get("price_artifact_id")
+        if isinstance(chart_data_id, str):
+            artifact_id = chart_data_id
+        elif isinstance(price_artifact_id, str):
+            artifact_id = price_artifact_id
     ta_artifact_id = artifact_id
 
     if artifact_id:
         artifact_obj = await artifact_manager.get_artifact(artifact_id)
-        if artifact_obj and hasattr(artifact_obj, "data"):
-            ta_data = artifact_obj.data
+        if artifact_obj:
+            ta_data = _artifact_data(artifact_obj)
 
     # Fundamental Analysis Data
     fa_ctx = state.get("fundamental_analysis", {})
@@ -274,11 +271,12 @@ async def _prepare_debate_reports(state: DebateState) -> dict:
     fa_artifact_id = fa_ctx.get("financial_reports_artifact_id")
     if fa_artifact_id:
         artifact_obj = await artifact_manager.get_artifact(fa_artifact_id)
-        if artifact_obj and hasattr(artifact_obj, "data"):
-            if isinstance(artifact_obj.data, list):
-                fa_reports = artifact_obj.data
-            elif isinstance(artifact_obj.data, dict):
-                fa_reports = artifact_obj.data.get("financial_reports", [])
+        if artifact_obj:
+            fa_data = _artifact_data(artifact_obj)
+            if isinstance(fa_data, list):
+                fa_reports = fa_data
+            elif isinstance(fa_data, dict):
+                fa_reports = fa_data.get("financial_reports", [])
 
     logger.info(
         "DEBATE_REPORT_INPUT ticker=%s financials=%d news_items=%d ta_present=%s news_artifact_id=%s ta_artifact_id=%s",
@@ -341,15 +339,6 @@ async def debate_aggregator_node(state: DebateState) -> Command:
     )
 
 
-def _safe_get_data(artifact_res: object) -> object:
-    """Helper to extract data from potential Pydantic model or dict."""
-    if hasattr(artifact_res, "data"):
-        return artifact_res.data
-    if isinstance(artifact_res, dict):
-        return artifact_res.get("data")
-    return artifact_res
-
-
 async def fact_extractor_node(state: DebateState) -> Command:
     """
     Extracts deterministic facts from financials, news, and technicals.
@@ -368,11 +357,12 @@ async def fact_extractor_node(state: DebateState) -> Command:
     fa_artifact_id = fa_ctx.get("financial_reports_artifact_id")
     if fa_artifact_id:
         artifact_obj = await artifact_manager.get_artifact(fa_artifact_id)
-        if artifact_obj and hasattr(artifact_obj, "data"):
-            if isinstance(artifact_obj.data, list):
-                fa_reports = artifact_obj.data
-            elif isinstance(artifact_obj.data, dict):
-                fa_reports = artifact_obj.data.get("financial_reports", [])
+        if artifact_obj:
+            fa_data = _artifact_data(artifact_obj)
+            if isinstance(fa_data, list):
+                fa_reports = fa_data
+            elif isinstance(fa_data, dict):
+                fa_reports = fa_data.get("financial_reports", [])
     for report in fa_reports:
         fiscal_year = report.get("base", {}).get("fiscal_year", {}).get("value", "N/A")
         metrics = compress_financial_data([report])[0].get("metrics", {})
@@ -387,20 +377,15 @@ async def fact_extractor_node(state: DebateState) -> Command:
                 )
 
             # Simple mapping to XBRLProvenance object
-            provenance = (
-                XBRLProvenance(
-                    concept=prov_raw.concept
-                    if hasattr(prov_raw, "concept")
-                    else str(metric_name),
-                    period=prov_raw.period
-                    if hasattr(prov_raw, "period")
-                    else str(fiscal_year),
+            if isinstance(prov_raw, dict):
+                provenance = XBRLProvenance(
+                    concept=str(prov_raw.get("concept") or metric_name),
+                    period=str(prov_raw.get("period") or fiscal_year),
                 )
-                if prov_raw
-                else ManualProvenance(
+            else:
+                provenance = ManualProvenance(
                     description=f"Extracted from {fiscal_year} report"
                 )
-            )
 
             facts.append(
                 EvidenceFact(
@@ -419,18 +404,13 @@ async def fact_extractor_node(state: DebateState) -> Command:
     news_ctx = state.get("financial_news_research", {})
     # Similar logic to _prepare_debate_reports to get news items
     news_artifact_id = news_ctx.get("news_items_artifact_id")
-    if not news_artifact_id and isinstance(news_ctx.get("artifact"), dict):
-        news_artifact_id = (
-            news_ctx.get("artifact").get("reference", {}).get("artifact_id")
-        )
-    elif not news_artifact_id and hasattr(news_ctx.get("artifact"), "reference"):
-        ref = getattr(news_ctx.get("artifact"), "reference", None)
-        news_artifact_id = getattr(ref, "artifact_id", None)
+    if not isinstance(news_artifact_id, str):
+        news_artifact_id = _artifact_ref_id_from_context(news_ctx)
 
     if news_artifact_id:
         art = await artifact_manager.get_artifact(news_artifact_id)
         if art:
-            data = _safe_get_data(art) or {}
+            data = _artifact_data(art)
             news_items = data if isinstance(data, list) else data.get("news_items", [])
 
     for item in news_items:
@@ -466,16 +446,13 @@ async def fact_extractor_node(state: DebateState) -> Command:
     # --- 3. Technical Facts (T001...) ---
     ta_ctx = state.get("technical_analysis", {})
     ta_artifact_id = ta_ctx.get("chart_data_id") or ta_ctx.get("price_artifact_id")
-    if not ta_artifact_id and isinstance(ta_ctx.get("artifact"), dict):
-        ta_artifact_id = ta_ctx.get("artifact").get("reference", {}).get("artifact_id")
-    elif not ta_artifact_id and hasattr(ta_ctx.get("artifact"), "reference"):
-        ref = getattr(ta_ctx.get("artifact"), "reference", None)
-        ta_artifact_id = getattr(ref, "artifact_id", None)
+    if not isinstance(ta_artifact_id, str):
+        ta_artifact_id = _artifact_ref_id_from_context(ta_ctx)
 
     if ta_artifact_id:
         art = await artifact_manager.get_artifact(ta_artifact_id)
         if art:
-            ta_data = _safe_get_data(art) or {}
+            ta_data = _artifact_data(art)
             signal = ta_data.get("signal_state", {})
 
             if signal:
@@ -831,7 +808,7 @@ async def r1_moderator_node(state: DebateState) -> Command:
                     "winning_thesis": "Round 1 complete, synthesizing arguments...",
                 }
             )
-            artifact = AgentOutputArtifact(
+            artifact = build_artifact_payload(
                 summary="Cognitive Debate: Round 1 moderator critique complete",
                 preview=preview,
                 reference=None,
@@ -939,7 +916,7 @@ async def r2_moderator_node(state: DebateState) -> Command:
                     "winning_thesis": "Round 2 cross-review complete, assessing vulnerabilities...",
                 }
             )
-            artifact = AgentOutputArtifact(
+            artifact = build_artifact_payload(
                 summary="Cognitive Debate: Round 2 adversarial analysis complete",
                 preview=preview,
                 reference=None,
@@ -1077,7 +1054,7 @@ async def verdict_node(state: DebateState) -> Command:
         if facts_artifact_id:
             art = await artifact_manager.get_artifact(facts_artifact_id)
             if art:
-                data = _safe_get_data(art) or {}
+                data = _artifact_data(art)
                 # Handle both list (v1) and dict with facts key (v2)
                 facts_data = data if isinstance(data, list) else data.get("facts", [])
                 valid_facts = [
@@ -1097,10 +1074,8 @@ async def verdict_node(state: DebateState) -> Command:
         # Prepare full report data (Conclusion + History + Facts)
         full_report_data = {
             **conclusion_data,
-            "facts": [
-                f.model_dump() if hasattr(f, "model_dump") else f for f in valid_facts
-            ],
-            "history": [msg.dict() if hasattr(msg, "dict") else msg for msg in history],
+            "facts": [f.model_dump(mode="json") for f in valid_facts],
+            "history": [msg.model_dump(mode="json") for msg in history],
         }
 
         # Save artifact (L3) - Now full report, not just transcript
@@ -1121,7 +1096,7 @@ async def verdict_node(state: DebateState) -> Command:
                     type="debate_final_report",
                 )
 
-            artifact = AgentOutputArtifact(
+            artifact = build_artifact_payload(
                 summary=f"Debate: {preview.get('verdict_display')}",
                 preview=preview,
                 reference=reference,

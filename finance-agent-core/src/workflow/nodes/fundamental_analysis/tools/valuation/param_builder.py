@@ -2,14 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from src.common.traceable import ComputedProvenance, ManualProvenance, TraceableField
+
 from ..sec_xbrl.models import (
-    ComputedProvenance,
     FinancialReport,
     FinancialServicesExtension,
     IndustrialExtension,
-    ManualProvenance,
     RealEstateExtension,
-    TraceableField,
 )
 from .assumptions import (
     DEFAULT_DA_RATE,

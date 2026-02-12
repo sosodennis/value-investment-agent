@@ -1,10 +1,15 @@
-from typing import Any
+from collections.abc import Mapping
 
+from langchain_core.messages import AIMessageChunk
+from langgraph.types import Command
+from pydantic import BaseModel
+
+from src.common.types import JSONObject
 from src.interface.mappers import NodeOutputMapper
 from src.interface.protocol import AgentEvent
 
 
-def get_agent_name(metadata: dict | None = None) -> str:
+def get_agent_name(metadata: Mapping[str, object] | None = None) -> str:
     """
     Map internal node name to high-level agent name.
 
@@ -17,8 +22,22 @@ def get_agent_name(metadata: dict | None = None) -> str:
     return "System"
 
 
+def _as_mapping(value: object, context: str) -> Mapping[str, object]:
+    """Normalize allowed structured outputs into a mapping for downstream mappers."""
+    if isinstance(value, Mapping):
+        return value
+    if isinstance(value, BaseModel):
+        dumped = value.model_dump(mode="json")
+        if not isinstance(dumped, dict):
+            raise TypeError(
+                f"{context} BaseModel must dump to dict, got {type(dumped)!r}"
+            )
+        return dumped
+    raise TypeError(f"{context} must be Mapping|BaseModel, got {type(value)!r}")
+
+
 def adapt_langgraph_event(
-    event: dict, thread_id: str, seq_id: int, run_id: str = ""
+    event: Mapping[str, object], thread_id: str, seq_id: int, run_id: str = ""
 ) -> list[AgentEvent]:
     """
     Transforms a LangGraph v2 astream_events chunk into standardized AgentEvents.
@@ -28,10 +47,19 @@ def adapt_langgraph_event(
     2. Use NodeOutputMapper to transform nested state to flat UI payload (semantic concern)
     3. Emit standardized events
     """
-    kind = event["event"]
-    metadata = event.get("metadata", {})
-    node_name = metadata.get("langgraph_node", "")
-    tags = event.get("tags", []) or []
+    kind = event.get("event")
+    if not isinstance(kind, str):
+        raise TypeError("Invalid LangGraph event: missing string 'event'")
+
+    metadata_raw = event.get("metadata")
+    metadata: Mapping[str, object] = (
+        metadata_raw if isinstance(metadata_raw, Mapping) else {}
+    )
+    node_name_raw = metadata.get("langgraph_node")
+    node_name = node_name_raw if isinstance(node_name_raw, str) else ""
+
+    tags_raw = event.get("tags")
+    tags = tags_raw if isinstance(tags_raw, list) else []
 
     # 1. Handle Tag-Based Stream Control
     # If a node is tagged with "hide_stream", we ignore its chat model streaming events
@@ -40,8 +68,11 @@ def adapt_langgraph_event(
 
     # 2. Handle Token Streaming (Typewriter effect)
     if kind == "on_chat_model_stream":
-        chunk = event["data"].get("chunk")
-        if chunk and hasattr(chunk, "content") and chunk.content:
+        data_raw = event.get("data")
+        if not isinstance(data_raw, Mapping):
+            return []
+        chunk = data_raw.get("chunk")
+        if isinstance(chunk, AIMessageChunk) and chunk.content:
             return [
                 AgentEvent(
                     thread_id=thread_id,
@@ -70,20 +101,25 @@ def adapt_langgraph_event(
 
     elif kind == "on_chain_end":
         agent_id = get_agent_name(metadata)
-        raw_output = event["data"].get("output")
+        data_raw = event.get("data")
+        if not isinstance(data_raw, Mapping):
+            raise TypeError("Invalid on_chain_end event: 'data' must be a mapping")
+        raw_output = data_raw.get("output")
 
         # Step 1: Unwrap Command objects (LangGraph returns {update: {...}, goto: ...})
-        output = raw_output
-        if hasattr(raw_output, "update") and isinstance(raw_output.update, dict):
-            output = raw_output.update
-        elif isinstance(raw_output, dict) and "update" in raw_output:
-            # Heuristic: if it has 'update' and 'goto', it's a serialized Command
-            if "goto" in raw_output or "graph" in raw_output:
-                output = raw_output["update"]
-
-        # Ensure we have a dict to work with
-        if not isinstance(output, dict):
-            output = {}
+        output: Mapping[str, object]
+        if isinstance(raw_output, Command):
+            output = _as_mapping(raw_output.update, "on_chain_end Command.update")
+        elif isinstance(raw_output, Mapping):
+            update_raw = raw_output.get("update")
+            if update_raw is not None:
+                output = _as_mapping(update_raw, "on_chain_end output.update")
+            else:
+                output = _as_mapping(raw_output, "on_chain_end output")
+        elif isinstance(raw_output, BaseModel):
+            output = _as_mapping(raw_output, "on_chain_end output")
+        else:
+            raise TypeError(f"Invalid on_chain_end output type: {type(raw_output)!r}")
 
         events = []
 
@@ -107,8 +143,11 @@ def adapt_langgraph_event(
             # 3. Explicit Status Emission (Restored Logic)
             # If the output contains explicit `node_statuses`, we must emit agent.status events.
             # This replaces the old "auto-done" logic with "explicit-done" logic.
-            if "node_statuses" in output and isinstance(output["node_statuses"], dict):
-                for node_id, status in output["node_statuses"].items():
+            node_statuses_raw = output.get("node_statuses")
+            if isinstance(node_statuses_raw, Mapping):
+                for node_id, status in node_statuses_raw.items():
+                    if not isinstance(node_id, str) or not isinstance(status, str):
+                        raise TypeError("node_statuses must be a mapping[str, str]")
                     events.append(
                         AgentEvent(
                             thread_id=thread_id,
@@ -125,6 +164,12 @@ def adapt_langgraph_event(
 
     # 3. Handle Errors
     elif kind == "on_chain_error":
+        data_raw = event.get("data")
+        error_message = "Unknown error"
+        if isinstance(data_raw, Mapping):
+            err_raw = data_raw.get("error")
+            if err_raw is not None:
+                error_message = str(err_raw)
         return [
             AgentEvent(
                 thread_id=thread_id,
@@ -132,9 +177,7 @@ def adapt_langgraph_event(
                 seq_id=seq_id,
                 type="error",
                 source=get_agent_name(metadata),
-                data={
-                    "message": str(event.get("data", {}).get("error", "Unknown error"))
-                },
+                data={"message": error_message},
             )
         ]
 
@@ -142,36 +185,66 @@ def adapt_langgraph_event(
 
 
 def create_interrupt_event(
-    interrupt_payload: Any,
+    interrupt_payload: object,
     thread_id: str,
     seq_id: int,
     run_id: str = "",
     source: str = "system.interrupt",
 ) -> AgentEvent:
-    """Creates a standardized interrupt request event with UI schema if possible."""
-    from src.workflow.interrupts import HumanTickerSelection
+    """Creates a standardized interrupt request event with strict payload schema."""
+    if not isinstance(interrupt_payload, Mapping):
+        raise TypeError(f"Invalid interrupt payload type: {type(interrupt_payload)!r}")
+    interrupt_type = interrupt_payload.get("type")
+    if interrupt_type != "ticker_selection":
+        raise TypeError(f"Unsupported interrupt type: {interrupt_type!r}")
 
-    data = interrupt_payload
+    candidates = interrupt_payload.get("candidates")
+    if not isinstance(candidates, list):
+        raise TypeError("ticker_selection interrupt must contain a candidates list")
 
-    # REFACTORED: Try to use generic to_ui_payload if available
-    # Instead of hardcoding types, we check for the conversion method
-    if hasattr(interrupt_payload, "to_ui_payload"):
-        data = interrupt_payload.to_ui_payload()
-    elif isinstance(interrupt_payload, dict):
-        itype = interrupt_payload.get("type")
-        try:
-            # Fallback for raw dicts if they match known types
-            if itype == "ticker_selection":
-                data = HumanTickerSelection.model_validate(
-                    interrupt_payload
-                ).to_ui_payload()
-        except Exception as e:
-            # Fallback to raw payload
-            from src.common.tools.logger import get_logger
+    ticker_options: list[str] = []
+    ticker_titles: list[str] = []
+    for candidate in candidates:
+        if not isinstance(candidate, Mapping):
+            raise TypeError("Each candidate must be a mapping")
+        symbol = candidate.get("symbol")
+        name = candidate.get("name")
+        confidence = candidate.get("confidence")
+        if not isinstance(symbol, str) or not isinstance(name, str):
+            raise TypeError("Candidate symbol/name must be strings")
+        confidence_pct = 0.0
+        if isinstance(confidence, int | float):
+            confidence_pct = confidence * 100
+        ticker_options.append(symbol)
+        ticker_titles.append(f"{symbol} - {name} ({confidence_pct:.0f}% match)")
 
-            get_logger(__name__).warning(
-                f"⚠️ [Adapter] Failed to hydrate interrupt schema: {e}"
-            )
+    reason = interrupt_payload.get("reason")
+    description = (
+        reason
+        if isinstance(reason, str)
+        else "Multiple tickers found or ambiguity detected."
+    )
+
+    data: JSONObject = {
+        "type": "ticker_selection",
+        "title": "Ticker Resolution",
+        "description": description,
+        "data": {},
+        "schema": {
+            "title": "Select Correct Ticker",
+            "type": "object",
+            "properties": {
+                "selected_symbol": {
+                    "type": "string",
+                    "title": "Target Company",
+                    "enum": ticker_options,
+                    "enumNames": ticker_titles,
+                }
+            },
+            "required": ["selected_symbol"],
+        },
+        "ui_schema": {"selected_symbol": {"ui:widget": "radio"}},
+    }
 
     return AgentEvent(
         thread_id=thread_id,
@@ -179,5 +252,5 @@ def create_interrupt_event(
         seq_id=seq_id,
         type="interrupt.request",
         source=source,
-        data=data if isinstance(data, dict) else {"payload": data},
+        data=data,
     )

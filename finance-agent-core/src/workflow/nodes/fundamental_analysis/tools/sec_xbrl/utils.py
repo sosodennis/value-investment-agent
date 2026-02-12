@@ -3,14 +3,16 @@ from datetime import date
 from edgar import set_identity
 
 from src.common.tools.logger import get_logger
+from src.common.traceable import (
+    ComputedProvenance,
+    ManualProvenance,
+    TraceableField,
+)
 
 from .factory import FinancialReportFactory
 from .models import (
-    ComputedProvenance,
     FinancialReport,
     IndustrialExtension,
-    ManualProvenance,
-    TraceableField,
 )
 
 logger = get_logger(__name__)

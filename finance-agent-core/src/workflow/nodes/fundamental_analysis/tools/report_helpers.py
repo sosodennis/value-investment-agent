@@ -12,15 +12,15 @@ def _wrap_text(text: str, width: int = 40) -> str:
 def _value_of(value: object | None) -> object | None:
     if value is None:
         return None
-    if hasattr(value, "value"):
-        return value.value
-    return value
+    return getattr(value, "value", value)
 
 
 def _src(value: object | None) -> str:
-    if value is None or not hasattr(value, "provenance"):
+    if value is None:
         return ""
-    provenance = value.provenance
+    provenance = getattr(value, "provenance", None)
+    if provenance is None:
+        return ""
     if isinstance(provenance, XBRLProvenance):
         return f" | [XBRL: {provenance.concept}]"
     if isinstance(provenance, ComputedProvenance):

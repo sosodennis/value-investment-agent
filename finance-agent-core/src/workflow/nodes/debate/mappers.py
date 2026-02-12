@@ -1,9 +1,9 @@
-from typing import Any
+from src.common.types import JSONObject
 
 from .schemas import DebatePreview
 
 
-def summarize_debate_for_preview(ctx: dict[str, Any]) -> dict[str, Any]:
+def summarize_debate_for_preview(ctx: JSONObject) -> JSONObject:
     """
     Maps DebateContext to DebatePreview.
     Ensures output is <1KB for rapid UI rendering.

@@ -2,19 +2,22 @@
 SEC XBRL extraction and mapping utilities.
 """
 
+from src.common.traceable import (
+    ComputedProvenance,
+    ManualProvenance,
+    TraceableField,
+    XBRLProvenance,
+)
+
 from .extractor import SearchConfig, SearchType, SECReportExtractor
 from .factory import FinancialReportFactory
 from .mapping import REGISTRY
 from .models import (
     BaseFinancialModel,
-    ComputedProvenance,
     FinancialReport,
     FinancialServicesExtension,
     IndustrialExtension,
-    ManualProvenance,
     RealEstateExtension,
-    TraceableField,
-    XBRLProvenance,
 )
 from .utils import fetch_financial_data
 

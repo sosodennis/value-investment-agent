@@ -4,7 +4,6 @@ import sys
 import uuid
 from collections import defaultdict
 from contextlib import asynccontextmanager
-from typing import Any
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
@@ -20,6 +19,7 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command
 
 from src.common.tools.logger import get_logger
+from src.common.types import InterruptResumePayload, JSONObject
 from src.infrastructure.database import init_db
 from src.interface.adapters import adapt_langgraph_event, create_interrupt_event
 from src.interface.protocol import AgentEvent
@@ -75,7 +75,7 @@ app.add_middleware(
 class RequestSchema(BaseModel):
     thread_id: str
     message: str | None = None
-    resume_payload: Any | None = None
+    resume_payload: InterruptResumePayload | None = None
 
 
 # Track active tasks, event replay buffers, and sequence counters
@@ -85,25 +85,21 @@ event_replay_buffers: dict[str, list[str]] = defaultdict(list)
 thread_sequences: dict[str, int] = defaultdict(lambda: 1)
 
 
-def build_agent_lookup(graph: Any) -> dict[str, str]:
+def build_agent_lookup(graph: CompiledStateGraph) -> dict[str, str]:
     """
     Recursively traverse the graph to build a node_name -> agent_id map.
     This enables Zero Config architecture by discovering identity at runtime.
     """
     lookup = {}
 
-    def traverse(g):
-        if not hasattr(g, "nodes"):
-            return
-
+    def traverse(g: CompiledStateGraph) -> None:
         for name, node in g.nodes.items():
             # 1. Map current node
-            if (
-                hasattr(node, "metadata")
-                and node.metadata
-                and "agent_id" in node.metadata
-            ):
-                lookup[name] = node.metadata["agent_id"]
+            metadata = getattr(node, "metadata", None)
+            if isinstance(metadata, dict):
+                agent_id = metadata.get("agent_id")
+                if isinstance(agent_id, str):
+                    lookup[name] = agent_id
 
             # 2. Recurse into subgraphs
             runnable = getattr(node, "bound", None)
@@ -116,9 +112,9 @@ def build_agent_lookup(graph: Any) -> dict[str, str]:
 
 async def event_generator(
     thread_id: str,
-    input_data: Any,
-    config: dict,
-    graph: Any,
+    input_data: Command | dict[str, object],
+    config: dict[str, dict[str, str]],
+    graph: CompiledStateGraph,
     agent_lookup: dict[str, str] | None = None,
 ):
     """
@@ -369,13 +365,17 @@ async def get_thread_history(request: Request, thread_id: str):
                         current_interrupts.append(i.value)
 
         # Helper to safely extract nested context
-        def get_context(name: str) -> dict:
+        def get_context(name: str) -> JSONObject:
             val = snapshot.values.get(name)
-            if val and hasattr(val, "model_dump"):
-                return val.model_dump()
-            return val or {}
+            if val is None:
+                return {}
+            if not isinstance(val, dict):
+                raise TypeError(
+                    f"Invalid state context '{name}', expected dict got {type(val)!r}"
+                )
+            return val
 
-        fundamental = get_context("fundamental")
+        fundamental = get_context("fundamental_analysis")
 
         # Dynamic Agent Output Discovery (Standardization Phase 1)
         # Use Mapper instead of raw loop
@@ -495,7 +495,9 @@ async def stream_agent(request: Request, body: RequestSchema):
         # RESUME: Keep existing sequence
         input_data = Command(resume=body.resume_payload)
     else:
-        input_data = None
+        raise HTTPException(
+            status_code=400, detail="Either message or resume_payload is required."
+        )
 
     # Start independent task
     task = asyncio.create_task(

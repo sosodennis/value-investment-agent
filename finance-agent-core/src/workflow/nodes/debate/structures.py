@@ -2,11 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from src.workflow.nodes.fundamental_analysis.tools.sec_xbrl.models import (
-    ComputedProvenance,
-    ManualProvenance,
-    XBRLProvenance,
-)
+from src.common.traceable import ComputedProvenance, ManualProvenance, XBRLProvenance
 
 Direction = Literal["STRONG_LONG", "LONG", "NEUTRAL", "AVOID", "SHORT", "STRONG_SHORT"]
 

@@ -6,7 +6,7 @@ Handles extraction, searching, decision, and clarification for ticker resolution
 from langgraph.types import Command, interrupt
 
 from src.common.tools.logger import get_logger
-from src.interface.schemas import AgentOutputArtifact
+from src.interface.schemas import build_artifact_payload
 
 from ..fundamental_analysis.extraction import (
     IntentExtraction,
@@ -261,7 +261,9 @@ def decision_node(state: IntentExtractionState) -> Command:
 
         # 2. Construct Artifact
         summary = f"已確認分析標的: {resolved_ticker}"
-        artifact = AgentOutputArtifact(summary=summary, preview=preview, reference=None)
+        artifact = build_artifact_payload(
+            summary=summary, preview=preview, reference=None
+        )
 
         # 3. Inject artifact
         intent_ctx["artifact"] = artifact
@@ -361,7 +363,7 @@ def clarification_node(state: IntentExtractionState) -> Command:
             }
             preview = summarize_intent_for_preview(intent_ctx)
             summary = f"已確認分析標的: {selected_symbol}"
-            artifact = AgentOutputArtifact(
+            artifact = build_artifact_payload(
                 summary=summary, preview=preview, reference=None
             )
             intent_ctx["artifact"] = artifact

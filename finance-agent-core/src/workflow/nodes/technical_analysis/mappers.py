@@ -3,10 +3,10 @@ Mappers for Technical Analysis agent.
 Converts internal state/context to UI-friendly preview structures.
 """
 
-from typing import Any
+from src.common.types import JSONObject
 
 
-def summarize_ta_for_preview(ctx: dict[str, Any]) -> dict[str, Any]:
+def summarize_ta_for_preview(ctx: JSONObject) -> JSONObject:
     """
     Summarize technical analysis results for UI preview.
     Target size < 1KB.

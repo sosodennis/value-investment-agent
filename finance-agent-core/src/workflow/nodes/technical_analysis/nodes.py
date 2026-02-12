@@ -7,7 +7,7 @@ from langgraph.graph import END
 from langgraph.types import Command
 
 from src.common.tools.logger import get_logger
-from src.interface.schemas import AgentOutputArtifact, ArtifactReference
+from src.interface.schemas import ArtifactReference, build_artifact_payload
 from src.services.artifact_manager import artifact_manager
 
 from .mappers import summarize_ta_for_preview
@@ -126,7 +126,7 @@ async def data_fetch_node(state: TechnicalAnalysisState) -> Command:
         "optimal_d_display": "d=N/A",
         "strength_display": "Strength: N/A",
     }
-    artifact = AgentOutputArtifact(
+    artifact = build_artifact_payload(
         summary=f"Technical Analysis: Data fetched for {resolved_ticker}",
         preview=preview,
         reference=None,
@@ -249,11 +249,15 @@ async def fracdiff_compute_node(state: TechnicalAnalysisState) -> Command:
         }
 
         fd_dict = {
-            k.strftime("%Y-%m-%d") if hasattr(k, "strftime") else k: safe_float(v)
+            (k.strftime("%Y-%m-%d") if isinstance(k, pd.Timestamp) else k): safe_float(
+                v
+            )
             for k, v in fd_series.to_dict().items()
         }
         z_dict = {
-            k.strftime("%Y-%m-%d") if hasattr(k, "strftime") else k: safe_float(v)
+            (k.strftime("%Y-%m-%d") if isinstance(k, pd.Timestamp) else k): safe_float(
+                v
+            )
             for k, v in z_score_series.to_dict().items()
         }
 
@@ -297,7 +301,7 @@ async def fracdiff_compute_node(state: TechnicalAnalysisState) -> Command:
         "optimal_d_display": f"d={float(optimal_d):.2f}",
         "strength_display": f"Strength: {float(stat_strength_data['value']):.1f}",
     }
-    artifact = AgentOutputArtifact(
+    artifact = build_artifact_payload(
         summary=f"Technical Analysis: Patterns computed for {state.get('ticker')}",
         preview=preview,
         reference=None,
@@ -509,7 +513,7 @@ async def semantic_translate_node(state: TechnicalAnalysisState) -> Command:
                     type="ta_full_report",
                 )
 
-            artifact = AgentOutputArtifact(
+            artifact = build_artifact_payload(
                 summary=f"Technical Analysis: {direction} (d={opt_d:.2f})",
                 preview=preview,
                 reference=reference,

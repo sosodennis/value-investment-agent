@@ -1,19 +1,21 @@
 from typing import TypeVar
 
 from src.common.tools.logger import get_logger
+from src.common.traceable import (
+    ComputedProvenance,
+    ManualProvenance,
+    TraceableField,
+    XBRLProvenance,
+)
 
 from .extractor import SearchConfig, SearchType, SECReportExtractor
 from .mapping import REGISTRY
 from .models import (
     BaseFinancialModel,
-    ComputedProvenance,
     FinancialReport,
     FinancialServicesExtension,
     IndustrialExtension,
-    ManualProvenance,
     RealEstateExtension,
-    TraceableField,
-    XBRLProvenance,
 )
 
 T = TypeVar("T")

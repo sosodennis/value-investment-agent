@@ -1,8 +1,8 @@
 import uuid
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class AgentEvent(BaseModel):
@@ -43,7 +43,7 @@ class AgentEvent(BaseModel):
     )
 
     # Event Data Payload
-    data: dict[str, Any] = Field(
+    data: dict[str, object] = Field(
         default_factory=dict,
         description=(
             "Payload containing event-specific data. "
@@ -53,9 +53,8 @@ class AgentEvent(BaseModel):
     )
 
     # Optional metadata
-    metadata: dict[str, Any] = Field(
+    metadata: dict[str, object] = Field(
         default_factory=dict, description="Additional tracking metadata"
     )
 
-    class Config:
-        json_encoders = {datetime: lambda v: v.isoformat()}
+    model_config = ConfigDict(json_encoders={datetime: lambda v: v.isoformat()})

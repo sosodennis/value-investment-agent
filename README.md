@@ -135,6 +135,13 @@ npm install
 npm run dev
 ```
 
+## 🧭 Development Guidelines
+Backend contributor rules are documented at:
+
+*   [`finance-agent-core/docs/development_guidelines.md`](finance-agent-core/docs/development_guidelines.md)
+
+This guideline is mandatory for backend changes (typed contracts, boundary rules, no-compatibility policy, and validation checklist).
+
 ## 🤝 Contributing
 Contributions are welcome! Please follow the coding standards outlined in the project.
 1.  Fork the repository.

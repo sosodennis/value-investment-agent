@@ -10,7 +10,10 @@ Design Principles:
 3. Mappers bridge the gap without polluting either side
 """
 
-from typing import Any
+from collections.abc import Mapping
+from typing import cast
+
+from src.common.types import AgentOutputArtifactPayload
 
 
 class NodeOutputMapper:
@@ -23,25 +26,21 @@ class NodeOutputMapper:
     """
 
     @staticmethod
-    def _extract_artifact(value) -> dict | None:
-        """Helper to extract artifact from a value (dict or Pydantic model)."""
-        # Check for Pydantic model with artifact
-        if hasattr(value, "artifact") and value.artifact:
-            return (
-                value.artifact.model_dump()
-                if hasattr(value.artifact, "model_dump")
-                else value.artifact
-            )
-
-        # Check for dict with artifact
-        if isinstance(value, dict) and value.get("artifact"):
-            val = value["artifact"]
-            return val.model_dump() if hasattr(val, "model_dump") else val
-
-        return None
+    def _extract_artifact(value: object) -> AgentOutputArtifactPayload | None:
+        """Helper to extract canonical artifact payload from a context dict."""
+        if not isinstance(value, Mapping):
+            return None
+        artifact = value.get("artifact")
+        if artifact is None:
+            return None
+        if not isinstance(artifact, dict):
+            raise TypeError(f"Invalid artifact payload type: {type(artifact)!r}")
+        return cast(AgentOutputArtifactPayload, artifact)
 
     @staticmethod
-    def transform(agent_id: str, output: dict) -> dict | None:
+    def transform(
+        agent_id: str, output: Mapping[str, object]
+    ) -> AgentOutputArtifactPayload | None:
         """
         Extract AgentOutputArtifact from the state update for a specific agent.
 
@@ -49,9 +48,6 @@ class NodeOutputMapper:
         1. Flat Pattern: Artifact exists directly in update (Subgraphs)
         2. Nested Pattern: Artifact is nested under agent's state key (Parent Graph)
         """
-        if not isinstance(output, dict):
-            return None
-
         # 1. Flat Pattern (Direct artifact)
         # Standard for subgraphs to enable immediate UI updates without sync barriers.
         if "artifact" in output:
@@ -65,12 +61,14 @@ class NodeOutputMapper:
         return None
 
     @staticmethod
-    def map_all_outputs(graph_state: dict[str, Any]) -> dict[str, dict]:
+    def map_all_outputs(
+        graph_state: Mapping[str, object],
+    ) -> dict[str, AgentOutputArtifactPayload]:
         """
         Scan the entire Graph State and extract all Agent Outputs.
         This is the only method the Server needs to call.
         """
-        mapped_outputs = {}
+        mapped_outputs: dict[str, AgentOutputArtifactPayload] = {}
         for key, value in graph_state.items():
             # Reuse the existing extraction logic
             artifact_data = NodeOutputMapper._extract_artifact(value)

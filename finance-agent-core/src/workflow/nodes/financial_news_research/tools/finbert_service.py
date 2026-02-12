@@ -1,8 +1,8 @@
 import re
 from dataclasses import asdict, dataclass
-from typing import Any, Optional
 
 from src.common.tools.logger import get_logger
+from src.common.types import JSONObject
 
 logger = get_logger(__name__)
 
@@ -17,7 +17,7 @@ class FinBERTResult:
     all_scores: dict[str, float]
     has_numbers: bool  # Detected numerical values (weakness flag)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> JSONObject:
         return asdict(self)
 
 
@@ -27,7 +27,7 @@ class FinBERTAnalyzer:
     Optimized for cost/latency by providing a 'skip LLM' recommendation.
     """
 
-    _instance: Optional["FinBERTAnalyzer"] = None
+    _instance: "FinBERTAnalyzer | None" = None
 
     def __new__(cls):
         if cls._instance is None:

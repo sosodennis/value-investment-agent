@@ -56,7 +56,7 @@ class TraceableFieldBase(BaseModel):
         elif isinstance(p, ComputedProvenance):
             print(f"{indent}- {self.name}: {val_str} [Calc: {p.expression}]")
             for _, field in p.inputs.items():
-                if hasattr(field, "explain"):
+                if isinstance(field, TraceableFieldBase):
                     field.explain(level + 1)
         elif isinstance(p, ManualProvenance):
             print(f"{indent}- {self.name}: {val_str} [MANUAL: {p.description}]")

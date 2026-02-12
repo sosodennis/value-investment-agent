@@ -3,10 +3,10 @@ Mappers for Intent Extraction agent.
 Transforms internal state/context into UI-ready preview data.
 """
 
-from typing import Any
+from src.common.types import JSONObject
 
 
-def summarize_intent_for_preview(ctx: dict[str, Any]) -> dict[str, Any]:
+def summarize_intent_for_preview(ctx: JSONObject) -> JSONObject:
     """
     Transform IntentExtractionContext into a lightweight preview for the UI.
 

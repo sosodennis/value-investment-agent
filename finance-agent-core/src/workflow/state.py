@@ -3,13 +3,13 @@ Shared state definitions for the workflow graph.
 Refactored to comply with Engineering Charter v3.1 (TypedDict + Artifact Store).
 """
 
-from typing import Annotated, Any, NotRequired
+from typing import Annotated, NotRequired
 
 from langchain_core.messages import AnyMessage
 from langgraph.graph import add_messages
 from typing_extensions import TypedDict
 
-from src.interface.schemas import AgentOutputArtifact
+from src.common.types import AgentOutputArtifactPayload, JSONObject
 
 # 注意：我們不再需要從 pydantic 導入 BaseModel 用於 State
 # 也不再需要 AgentOutputArtifact，因為它只存在於 Adapter 層
@@ -24,7 +24,7 @@ def merge_dict(a: dict, b: dict) -> dict:
     return {**a, **b}
 
 
-def last_value(a: Any | None, b: Any | None) -> Any | None:
+def last_value(a: object | None, b: object | None) -> object | None:
     """Reducer that keeps the last non-None value."""
     return b if b is not None else a
 
@@ -41,12 +41,12 @@ class IntentExtractionContext(TypedDict):
     """Context for intent extraction workflow."""
 
     # 使用 NotRequired 標記可選字段
-    extracted_intent: NotRequired[dict[str, Any] | None]
-    ticker_candidates: NotRequired[list[Any] | None]
+    extracted_intent: NotRequired[JSONObject | None]
+    ticker_candidates: NotRequired[list[JSONObject] | None]
     resolved_ticker: NotRequired[str | None]
-    company_profile: NotRequired[dict[str, Any] | None]
+    company_profile: NotRequired[JSONObject | None]
     status: NotRequired[str | None]  # extraction, searching, deciding, resolved
-    artifact: NotRequired[AgentOutputArtifact | None]
+    artifact: NotRequired[AgentOutputArtifactPayload | None]
 
 
 class DebateContext(TypedDict):
@@ -73,7 +73,7 @@ class DebateContext(TypedDict):
     facts_hash: NotRequired[str | None]
     facts_summary: NotRequired[dict[str, int] | None]
 
-    artifact: NotRequired[AgentOutputArtifact | None]
+    artifact: NotRequired[AgentOutputArtifactPayload | None]
 
 
 class FundamentalAnalysisContext(TypedDict):
@@ -83,7 +83,7 @@ class FundamentalAnalysisContext(TypedDict):
     approved: NotRequired[bool | None]
     model_type: NotRequired[str | None]  # e.g., saas, bank
     selected_model: NotRequired[str | None]  # e.g., dcf_standard, ddm
-    model_selection_details: NotRequired[dict | None]
+    model_selection_details: NotRequired[JSONObject | None]
 
     # [L2 Data] 關鍵業務指標 (Source of Truth)
     valuation_score: NotRequired[float | None]
@@ -93,10 +93,10 @@ class FundamentalAnalysisContext(TypedDict):
     financial_reports_artifact_id: NotRequired[str | None]
 
     # 下面這些複雜對象建議未來也轉為 Artifact ID 或精簡字典
-    extraction_output: NotRequired[dict | None]
-    audit_output: NotRequired[dict | None]
-    calculation_output: NotRequired[dict | None]
-    artifact: NotRequired[AgentOutputArtifact | None]
+    extraction_output: NotRequired[JSONObject | None]
+    audit_output: NotRequired[JSONObject | None]
+    calculation_output: NotRequired[JSONObject | None]
+    artifact: NotRequired[AgentOutputArtifactPayload | None]
 
 
 class FinancialNewsContext(TypedDict):
@@ -121,7 +121,7 @@ class FinancialNewsContext(TypedDict):
     report_id: NotRequired[str]
 
     error_message: NotRequired[str]
-    artifact: NotRequired[AgentOutputArtifact | None]
+    artifact: NotRequired[AgentOutputArtifactPayload | None]
 
 
 class TechnicalAnalysisContext(TypedDict):
@@ -140,7 +140,7 @@ class TechnicalAnalysisContext(TypedDict):
     # [L3 Pointer] 指向圖表數據或回測報告
     price_artifact_id: NotRequired[str | None]
     chart_data_id: NotRequired[str | None]
-    artifact: NotRequired[AgentOutputArtifact | None]
+    artifact: NotRequired[AgentOutputArtifactPayload | None]
 
 
 # --- Root State ---

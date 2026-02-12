@@ -4,7 +4,7 @@ from langgraph.graph import END
 from langgraph.types import Command
 
 from src.common.tools.logger import get_logger
-from src.interface.schemas import AgentOutputArtifact, ArtifactReference
+from src.interface.schemas import ArtifactReference, build_artifact_payload
 from src.services.artifact_manager import artifact_manager
 
 from .mappers import summarize_fundamental_for_preview
@@ -175,7 +175,7 @@ async def financial_health_node(state: FundamentalAnalysisState) -> Command:
                 mapper_ctx["industry"] = profile.get("industry")
 
             preview = summarize_fundamental_for_preview(mapper_ctx, reports_data)
-            artifact = AgentOutputArtifact(
+            artifact = build_artifact_payload(
                 summary=f"Fundamental Analysis: Data fetched for {resolved_ticker}",
                 preview=preview,
                 reference=None,
@@ -283,7 +283,7 @@ async def model_selection_node(state: FundamentalAnalysisState) -> Command:
                 def get_val(field):
                     if field is None:
                         return None
-                    return field.value if hasattr(field, "value") else field
+                    return getattr(field, "value", field)
 
                 # Extract basic metrics
                 net_income_val = get_val(base.net_income)
@@ -401,7 +401,7 @@ async def model_selection_node(state: FundamentalAnalysisState) -> Command:
                     type="financial_reports",
                 )
 
-            artifact = AgentOutputArtifact(
+            artifact = build_artifact_payload(
                 summary=f"基本面分析: {preview.get('company_name', resolved_ticker)} ({preview.get('selected_model')})",
                 preview=preview,
                 reference=reference,
@@ -566,7 +566,7 @@ async def valuation_node(state: FundamentalAnalysisState) -> Command:
             download_url=f"/api/artifacts/{reports_artifact_id}",
             type="financial_reports",
         )
-        artifact = AgentOutputArtifact(
+        artifact = build_artifact_payload(
             summary=f"估值完成: {ticker or 'UNKNOWN'} ({model_type})",
             preview=preview,
             reference=reference,

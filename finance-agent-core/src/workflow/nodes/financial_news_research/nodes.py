@@ -9,7 +9,7 @@ from langgraph.types import Command
 
 from src.common.tools.llm import get_llm
 from src.common.tools.logger import get_logger
-from src.interface.schemas import AgentOutputArtifact, ArtifactReference
+from src.interface.schemas import ArtifactReference, build_artifact_payload
 from src.services.artifact_manager import artifact_manager
 
 from .mappers import summarize_news_for_preview
@@ -148,7 +148,7 @@ URL: {r.get('link')}
         "article_count_display": f"找到 {len(cleaned_results)} 篇新聞",
         "top_headlines": [r.get("title") for r in cleaned_results[:3]],
     }
-    artifact = AgentOutputArtifact(
+    artifact = build_artifact_payload(
         summary=f"News Research: Found {len(cleaned_results)} articles for {ticker}",
         preview=preview,
         reference=None,
@@ -545,9 +545,7 @@ async def analyst_node(state: FinancialNewsState) -> Command:
                     }
                 )
 
-            item["analysis"] = (
-                analysis.model_dump() if hasattr(analysis, "model_dump") else analysis
-            )
+            item["analysis"] = analysis.model_dump(mode="json")
             item["analysis"]["source"] = "llm"
 
         except Exception as e:
@@ -678,7 +676,7 @@ async def aggregator_node(state: FinancialNewsState) -> Command:
                 type="news_analysis_report",
             )
 
-        artifact = AgentOutputArtifact(
+        artifact = build_artifact_payload(
             summary=f"News Research: {overall_sentiment.value.upper()} ({weighted_score:.2f})",
             preview=preview,
             reference=reference,

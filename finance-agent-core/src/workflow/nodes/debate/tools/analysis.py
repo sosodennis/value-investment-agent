@@ -3,6 +3,8 @@ Utility functions for debate agent enhancements.
 Includes sycophancy detection using FastEmbed and CAPM-based hurdle rate calculation.
 """
 
+from enum import Enum
+
 import numpy as np
 from fastembed import TextEmbedding
 
@@ -98,7 +100,7 @@ def _get_return_from_scenario(
 ) -> float:
     """Map price implication strings to numerical return values."""
     impl = scenarios.get(case_key, {}).get("price_implication", "FLAT")
-    if hasattr(impl, "value"):
+    if isinstance(impl, Enum):
         impl = impl.value
     impl = str(impl).upper()
 
