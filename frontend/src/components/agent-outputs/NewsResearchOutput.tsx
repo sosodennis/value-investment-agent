@@ -6,7 +6,8 @@ import { NewsResearchOutput as NewsResearchOutputType } from '@/types/agents/new
 import { StandardAgentOutput, AgentStatus } from '@/types/agents';
 import { useArtifact } from '../../hooks/useArtifact';
 import { AgentLoadingState } from './AgentLoadingState';
-import { NewsPreview, isNewsPreview } from '@/types/preview';
+import { NewsPreview } from '@/types/preview';
+import { parseNewsPreview } from '@/types/agents/news-preview-parser';
 
 interface NewsResearchOutputProps {
     output: StandardAgentOutput | null;
@@ -21,7 +22,10 @@ const NewsResearchOutputComponent: React.FC<NewsResearchOutputProps> = ({
 }) => {
     const reference = output?.reference;
     const preview = output?.preview;
-    const previewData: NewsPreview | null = isNewsPreview(preview) ? preview : null;
+    const previewData: NewsPreview | null = parseNewsPreview(
+        preview,
+        'news_output.preview'
+    );
 
     const { data: artifactData, isLoading: isArtifactLoading } = useArtifact<NewsResearchOutputType>(
         reference?.artifact_id

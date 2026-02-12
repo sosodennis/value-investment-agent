@@ -149,6 +149,12 @@ Cross-stack contract sync:
     *   `contracts/openapi.json`
     *   `frontend/src/types/generated/api-contract.ts`
 
+Audit-oriented change governance docs:
+
+*   `docs/fullstack-change-control-playbook.md`
+*   `docs/sse-protocol-migration-checklist.md`
+*   `docs/sse-v2-migration-pr-example.md`
+
 ## 🤝 Contributing
 Contributions are welcome! Please follow the coding standards outlined in the project.
 1.  Fork the repository.

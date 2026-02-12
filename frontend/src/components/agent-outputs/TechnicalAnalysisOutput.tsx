@@ -30,7 +30,8 @@ import {
 import { TechnicalAnalysisSuccess } from '@/types/agents/technical';
 import { useArtifact } from '../../hooks/useArtifact';
 import { AgentLoadingState } from './AgentLoadingState';
-import { TechnicalPreview, isTechnicalPreview, isRecord } from '@/types/preview';
+import { TechnicalPreview, isRecord } from '@/types/preview';
+import { parseTechnicalPreview } from '@/types/agents/technical-preview-parser';
 
 interface TechnicalAnalysisOutputProps {
     output: StandardAgentOutput | null;
@@ -38,6 +39,7 @@ interface TechnicalAnalysisOutputProps {
 }
 
 type Timeframe = '1W' | '2W' | '1M' | '3M' | '1Y' | 'ALL';
+const TIMEFRAMES: Timeframe[] = ['1W', '2W', '1M', '3M', '1Y', 'ALL'];
 
 // --- 1. Semantic Helpers ---
 
@@ -167,7 +169,10 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
 
     const reference = output?.reference;
     const preview = output?.preview;
-    const previewData: TechnicalPreview | null = isTechnicalPreview(preview) ? preview : null;
+    const previewData: TechnicalPreview | null = parseTechnicalPreview(
+        preview,
+        'technical_output.preview'
+    );
 
     const { data: artifactData, isLoading: isArtifactLoading } = useArtifact<TechnicalAnalysisSuccess>(
         reference?.artifact_id
@@ -183,7 +188,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                 return true;
             })
             .map(([date, value]) => {
-                const val = value as number;
+                const val = value;
                 let displayValue = val;
                 if (val > 10) displayValue = 10;
                 if (val < -10) displayValue = -10;
@@ -307,15 +312,19 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
 
     const dataValues = filteredChartData
         .map(d => d.value)
-        .filter(v => typeof v === 'number' && !isNaN(v) && isFinite(v));
+        .filter((v): v is number => typeof v === 'number' && !isNaN(v) && isFinite(v));
 
     const fixedDomain: [number, number] = [-3, 3];
-    const autoMax = dataValues.length > 0 ? Math.max(...(dataValues as number[])) + 0.1 : 'auto';
-    const autoMin = dataValues.length > 0 ? Math.min(...(dataValues as number[])) - 0.1 : 'auto';
+    const autoMax = dataValues.length > 0 ? Math.max(...dataValues) + 0.1 : 'auto';
+    const autoMin = dataValues.length > 0 ? Math.min(...dataValues) - 0.1 : 'auto';
 
     const currentDomain: [number | 'auto', number | 'auto'] = isAutoFit
         ? [autoMin, autoMax]
         : fixedDomain;
+    const shouldShowUpperReference =
+        !isAutoFit || (typeof autoMax === 'number' && autoMax > 1.8);
+    const shouldShowLowerReference =
+        !isAutoFit || (typeof autoMin === 'number' && autoMin < -1.8);
 
     const isReferenceLoading = reference && isArtifactLoading && !artifactData;
 
@@ -469,7 +478,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 </div>
                                 <div className="flex items-center gap-4">
                                     <div className="flex items-center bg-slate-800/50 rounded-lg p-0.5 border border-slate-700/50">
-                                        {(['1W', '2W', '1M', '3M', '1Y', 'ALL'] as Timeframe[]).map((tf) => (
+                                        {TIMEFRAMES.map((tf) => (
                                             <button
                                                 key={tf}
                                                 onClick={() => setTimeframe(tf)}
@@ -552,7 +561,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                                 animationDuration={500}
                                             />
 
-                                            {(!isAutoFit || (autoMax as number) > 1.8) && (
+                                            {shouldShowUpperReference && (
                                                 <ReferenceLine
                                                     y={2}
                                                     stroke="#f43f5e"
@@ -562,7 +571,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                                 />
                                             )}
 
-                                            {(!isAutoFit || (autoMin as number) < -1.8) && (
+                                            {shouldShowLowerReference && (
                                                 <ReferenceLine
                                                     y={-2}
                                                     stroke="#f43f5e"

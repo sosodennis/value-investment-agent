@@ -10,6 +10,9 @@ import { AgentScoreTab } from './agent-detail/AgentScoreTab';
 import { AgentHistoryTab } from './agent-detail/AgentHistoryTab';
 import { AgentOutputTab } from './agent-detail/AgentOutputTab';
 
+type DetailTab = 'Workspace' | 'Score' | 'History' | 'Output' | 'Logs';
+const DETAIL_TABS: DetailTab[] = ['Workspace', 'Score', 'History', 'Output', 'Logs'];
+
 interface AgentDetailPanelProps {
     agent: AgentInfo | null;
     agentOutput?: StandardAgentOutput | null;
@@ -31,7 +34,7 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
     currentStatus,
     activityFeed = []
 }) => {
-    const [activeTab, setActiveTab] = useState<'Workspace' | 'Score' | 'History' | 'Output' | 'Logs'>('Workspace');
+    const [activeTab, setActiveTab] = useState<DetailTab>('Workspace');
 
     // Use our new hook to derive all financial data
     const {
@@ -92,7 +95,7 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                 </div>
 
                 <div className="flex gap-8">
-                    {(['Workspace', 'Score', 'History', 'Output', 'Logs'] as const).map((tab) => (
+                    {DETAIL_TABS.map((tab) => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}

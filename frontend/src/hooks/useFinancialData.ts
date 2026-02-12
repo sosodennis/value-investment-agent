@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { DimensionScore, StandardAgentOutput } from '@/types/agents';
-import { FinancialReport, TraceableField } from '@/types/agents/fundamental';
+import { TraceableField } from '@/types/agents/fundamental';
+import { parseFinancialPreview, ParsedSignalState } from '@/types/agents/fundamental-preview-parser';
 import { isRecord } from '@/types/preview';
 
 const getFieldValue = (field: TraceableField | null | undefined): number => {
@@ -11,7 +12,7 @@ const getFieldValue = (field: TraceableField | null | undefined): number => {
 };
 
 const isTraceableField = (value: unknown): value is TraceableField =>
-    isRecord(value) && 'value' in value;
+    typeof value === 'object' && value !== null && 'value' in value;
 
 const getOptionalTraceableField = (
     source: unknown,
@@ -32,46 +33,24 @@ const getScore = (
     return Math.min(Math.max(Math.round(score), 0), 100);
 };
 
-const getPreviewRecord = (
-    output: StandardAgentOutput | null | undefined
-): Record<string, unknown> | null => {
-    const preview = output?.preview;
-    return isRecord(preview) ? preview : null;
-};
-
-const getFinancialReports = (preview: Record<string, unknown> | null): FinancialReport[] => {
-    const reports = preview?.financial_reports;
-    return Array.isArray(reports) ? (reports as FinancialReport[]) : [];
-};
-
-const getRiskLevelScore = (
-    preview: Record<string, unknown> | null
-): number | null => {
-    const signalState = preview?.signal_state;
-    if (!isRecord(signalState)) return null;
+const getRiskLevelScore = (signalState: ParsedSignalState | undefined): number | null => {
+    if (!signalState) return null;
     const riskLevel = signalState.risk_level;
     if (riskLevel === 'low') return 90;
     if (riskLevel === 'medium') return 60;
     return 20;
 };
 
-const getZScoreValuation = (
-    preview: Record<string, unknown> | null
-): number | null => {
-    const signalState = preview?.signal_state;
-    if (!isRecord(signalState)) return null;
-    const zScore = signalState.z_score;
-    if (typeof zScore !== 'number') return null;
-    return Math.abs(zScore) > 2 ? 80 : 50;
+const getZScoreValuation = (signalState: ParsedSignalState | undefined): number | null => {
+    if (!signalState) return null;
+    return Math.abs(signalState.z_score) > 2 ? 80 : 50;
 };
 
 const getResolvedTicker = (
     output: StandardAgentOutput | null | undefined
 ): string | null => {
-    const preview = getPreviewRecord(output);
-    if (!preview) return null;
-    const ticker = preview.ticker;
-    return typeof ticker === 'string' ? ticker : null;
+    const parsed = parseFinancialPreview(output?.preview, 'intent_extraction.preview');
+    return parsed?.ticker ?? null;
 };
 
 export const useFinancialData = (
@@ -83,8 +62,11 @@ export const useFinancialData = (
         const resolvedTicker = getResolvedTicker(intentOutput);
 
         const rawOutput = allAgentOutputs[agentId] ?? null;
-        const preview = getPreviewRecord(rawOutput);
-        const agentReports = getFinancialReports(preview);
+        const parsedPreview = parseFinancialPreview(
+            rawOutput?.preview,
+            `${agentId}.preview`
+        );
+        const agentReports = parsedPreview?.financial_reports ?? [];
         const latestReport = agentReports.length > 0 ? agentReports[0] : null;
         const previousBase = agentReports.length > 1 ? agentReports[1].base : null;
         const latestBase = latestReport?.base;
@@ -104,13 +86,10 @@ export const useFinancialData = (
             ? getFieldValue(getOptionalTraceableField(latestBase, 'pe_ratio'))
             : 20;
 
-        const valuationScore =
-            typeof preview?.valuation_score === 'number' ? preview.valuation_score : null;
-        const riskScoreFromSignal = getRiskLevelScore(preview);
-        const valuationFromSignal = getZScoreValuation(preview);
-        const keyMetrics = isRecord(preview?.key_metrics)
-            ? (preview.key_metrics as Record<string, string>)
-            : {};
+        const valuationScore = parsedPreview?.valuation_score ?? null;
+        const riskScoreFromSignal = getRiskLevelScore(parsedPreview?.signal_state);
+        const valuationFromSignal = getZScoreValuation(parsedPreview?.signal_state);
+        const keyMetrics = parsedPreview?.key_metrics ?? {};
 
         const dimensionScores: DimensionScore[] = [
             {
@@ -155,7 +134,7 @@ export const useFinancialData = (
         ];
 
         return {
-            resolvedTicker: resolvedTicker || (typeof preview?.ticker === 'string' ? preview.ticker : null),
+            resolvedTicker: resolvedTicker || parsedPreview?.ticker || null,
             latestReport,
             dimensionScores,
             financialMetrics,

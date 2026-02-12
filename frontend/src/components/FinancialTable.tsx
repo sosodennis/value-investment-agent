@@ -1,10 +1,7 @@
 import React, { memo, useMemo } from 'react';
 import {
     FinancialReport,
-    TraceableField,
-    IndustrialExtension,
-    FinancialServicesExtension,
-    RealEstateExtension
+    TraceableField
 } from '@/types/agents/fundamental';
 import { Info } from 'lucide-react';
 
@@ -109,6 +106,33 @@ const FinancialTableComponent: React.FC<FinancialTableProps> = ({ reports, ticke
             'loans_and_leases' in sortedReports[0].extension ? 'FinancialServices' :
                 'real_estate_assets' in sortedReports[0].extension ? 'RealEstate' : null) : null;
 
+    const getIndustrialField = (
+        report: FinancialReport,
+        field: 'inventory' | 'rd_expense' | 'capex'
+    ): TraceableField | null | undefined => {
+        const extension = report.extension;
+        if (!extension || !('inventory' in extension)) return null;
+        return extension[field];
+    };
+
+    const getFinancialServicesField = (
+        report: FinancialReport,
+        field: 'loans_and_leases' | 'deposits' | 'interest_income'
+    ): TraceableField | null | undefined => {
+        const extension = report.extension;
+        if (!extension || !('loans_and_leases' in extension)) return null;
+        return extension[field];
+    };
+
+    const getRealEstateField = (
+        report: FinancialReport,
+        field: 'real_estate_assets' | 'ffo'
+    ): TraceableField | null | undefined => {
+        const extension = report.extension;
+        if (!extension || !('real_estate_assets' in extension)) return null;
+        return extension[field];
+    };
+
     return (
         <div className="w-full mt-4 mb-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
@@ -153,26 +177,26 @@ const FinancialTableComponent: React.FC<FinancialTableProps> = ({ reports, ticke
                             {extensionType === 'Industrial' && (
                                 <>
                                     <tr className="bg-slate-800/20"><td colSpan={headers.length + 1} className="py-2 px-4 text-xs font-bold text-slate-500 uppercase">Industrial Metrics</td></tr>
-                                    {renderRow("Inventory", r => (r.extension as IndustrialExtension)?.inventory)}
-                                    {renderRow("R&D Info", r => (r.extension as IndustrialExtension)?.rd_expense)}
-                                    {renderRow("Capex", r => (r.extension as IndustrialExtension)?.capex)}
+                                    {renderRow("Inventory", r => getIndustrialField(r, 'inventory'))}
+                                    {renderRow("R&D Info", r => getIndustrialField(r, 'rd_expense'))}
+                                    {renderRow("Capex", r => getIndustrialField(r, 'capex'))}
                                 </>
                             )}
 
                             {extensionType === 'FinancialServices' && (
                                 <>
                                     <tr className="bg-slate-800/20"><td colSpan={headers.length + 1} className="py-2 px-4 text-xs font-bold text-slate-500 uppercase">Banking Metrics</td></tr>
-                                    {renderRow("Loans", r => (r.extension as FinancialServicesExtension)?.loans_and_leases)}
-                                    {renderRow("Deposits", r => (r.extension as FinancialServicesExtension)?.deposits)}
-                                    {renderRow("Interest Income", r => (r.extension as FinancialServicesExtension)?.interest_income)}
+                                    {renderRow("Loans", r => getFinancialServicesField(r, 'loans_and_leases'))}
+                                    {renderRow("Deposits", r => getFinancialServicesField(r, 'deposits'))}
+                                    {renderRow("Interest Income", r => getFinancialServicesField(r, 'interest_income'))}
                                 </>
                             )}
 
                             {extensionType === 'RealEstate' && (
                                 <>
                                     <tr className="bg-slate-800/20"><td colSpan={headers.length + 1} className="py-2 px-4 text-xs font-bold text-slate-500 uppercase">REIT Metrics</td></tr>
-                                    {renderRow("Real Estate Assets", r => (r.extension as RealEstateExtension)?.real_estate_assets)}
-                                    {renderRow("FFO", r => (r.extension as RealEstateExtension)?.ffo)}
+                                    {renderRow("Real Estate Assets", r => getRealEstateField(r, 'real_estate_assets'))}
+                                    {renderRow("FFO", r => getRealEstateField(r, 'ffo'))}
                                 </>
                             )}
 

@@ -51,12 +51,16 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
         };
     }, [newsItems]);
 
-    const categoryStats = useMemo(() => newsItems.reduce((acc, item) => {
-        item.categories.forEach(cat => {
-            acc[cat] = (acc[cat] || 0) + 1;
-        });
-        return acc;
-    }, {} as Record<string, number>), [newsItems]);
+    const categoryStats = useMemo(
+        () =>
+            newsItems.reduce<Record<string, number>>((acc, item) => {
+                item.categories.forEach((cat) => {
+                    acc[cat] = (acc[cat] || 0) + 1;
+                });
+                return acc;
+            }, {}),
+        [newsItems]
+    );
 
     // Calculate score percentage (mapping -1 to 1 into 0 to 100)
     const sentimentScore = !isPreview && typeof output.sentiment_score === 'number' ? output.sentiment_score : 0;

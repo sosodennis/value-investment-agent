@@ -3,8 +3,10 @@ import { InterruptResumePayload } from '../types/interrupts';
 import {
     isAgentEvent,
     Message,
+    parseHistoryResponse,
+    parseStreamStartResponse,
+    parseThreadStateResponse,
     StreamRequest,
-    ThreadStateResponse,
 } from '../types/protocol';
 import { useAgentReducer } from './useAgentReducer';
 
@@ -12,6 +14,18 @@ const API_URL = process.env.NEXT_PUBLIC_LANGGRAPH_URL || 'http://localhost:8000'
 
 const toErrorMessage = (error: unknown, fallback: string): string =>
     error instanceof Error ? error.message : fallback;
+
+const hasDetail = (value: object): value is { detail: unknown } =>
+    'detail' in value;
+
+const parseErrorDetail = (value: unknown): string | null => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        return null;
+    }
+    if (!hasDetail(value)) return null;
+    const detail = value.detail;
+    return typeof detail === 'string' ? detail : null;
+};
 
 export function useAgent(assistantId: string = 'agent') {
     void assistantId;
@@ -52,7 +66,7 @@ export function useAgent(assistantId: string = 'agent') {
                         const jsonStr = line.slice(6);
                         if (jsonStr === 'null') return;
                         try {
-                            const parsed = JSON.parse(jsonStr) as unknown;
+                            const parsed: unknown = JSON.parse(jsonStr);
                             if (isAgentEvent(parsed)) {
                                 processEvent(parsed);
                             } else {
@@ -103,8 +117,14 @@ export function useAgent(assistantId: string = 'agent') {
                 });
 
                 if (!res.ok) {
-                    const errorData = (await res.json()) as { detail?: string };
-                    throw new Error(errorData.detail || 'Could not start job');
+                    const errorRaw: unknown = await res.json();
+                    throw new Error(parseErrorDetail(errorRaw) || 'Could not start job');
+                }
+                const startData = parseStreamStartResponse(await res.json());
+                if (startData.thread_id !== currentThreadId) {
+                    throw new Error(
+                        `Thread ID mismatch: expected ${currentThreadId}, got ${startData.thread_id}.`
+                    );
                 }
                 await parseStream(currentThreadId);
             } catch (error) {
@@ -158,8 +178,14 @@ export function useAgent(assistantId: string = 'agent') {
                     body: JSON.stringify(requestPayload),
                 });
                 if (!res.ok) {
-                    const errorData = (await res.json()) as { detail?: string };
-                    throw new Error(errorData.detail || 'Could not resume job');
+                    const errorRaw: unknown = await res.json();
+                    throw new Error(parseErrorDetail(errorRaw) || 'Could not resume job');
+                }
+                const startData = parseStreamStartResponse(await res.json());
+                if (startData.thread_id !== threadId) {
+                    throw new Error(
+                        `Thread ID mismatch: expected ${threadId}, got ${startData.thread_id}.`
+                    );
                 }
                 await parseStream(threadId);
             } catch (error) {
@@ -182,13 +208,14 @@ export function useAgent(assistantId: string = 'agent') {
                     throw new Error(`History fetch failed: ${historyResponse.status}`);
                 }
 
-                const historyData = (await historyResponse.json()) as Message[];
+                const historyRaw: unknown = await historyResponse.json();
+                const historyData = parseHistoryResponse(historyRaw);
                 if (historyData.length < 20) setHasMore(false);
 
                 const stateResponse = await fetch(`${API_URL}/thread/${id}`);
                 if (stateResponse.ok) {
-                    const stateData =
-                        (await stateResponse.json()) as ThreadStateResponse;
+                    const stateRaw: unknown = await stateResponse.json();
+                    const stateData = parseThreadStateResponse(stateRaw);
                     dispatchLoadHistory(historyData, id, stateData);
                     if (stateData.is_running && !before) {
                         await parseStream(id);

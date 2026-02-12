@@ -3,7 +3,10 @@ import Form from '@rjsf/core';
 import { RJSFSchema, UiSchema, WidgetProps } from '@rjsf/utils';
 import validator from '@rjsf/validator-ajv8';
 import { Zap, AlertTriangle } from 'lucide-react';
-import { InterruptResumePayload } from '@/types/interrupts';
+import {
+    InterruptResumePayload,
+    parseInterruptResumePayload,
+} from '@/types/interrupts';
 
 interface EnumOption {
     value: string;
@@ -207,9 +210,8 @@ export const DynamicInterruptForm: React.FC<DynamicInterruptFormProps> = ({
                         widgets={widgets}
                         validator={validator}
                         onSubmit={({ formData: data }) => {
-                            if (data && typeof data === 'object') {
-                                onSubmit(data as InterruptResumePayload);
-                            }
+                            const payload = parseInterruptResumePayload(data);
+                            onSubmit(payload);
                         }}
                         className="space-y-4"
                     />

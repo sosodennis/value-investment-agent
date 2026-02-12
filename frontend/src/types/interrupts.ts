@@ -4,15 +4,15 @@ import { RJSFSchema, UiSchema } from '@rjsf/utils';
 export interface TickerCandidate {
     symbol: string;
     name: string;
-    exchange?: string;
-    type?: string;
+    exchange?: string | null;
+    type?: string | null;
     confidence: number;
 }
 
 export interface IntentExtraction {
-    company_name?: string;
-    ticker?: string;
-    model_preference?: string;
+    company_name?: string | null;
+    ticker?: string | null;
+    model_preference?: string | null;
     is_valuation_request: boolean;
     reasoning: string;
 }
@@ -45,8 +45,24 @@ export interface AuditApprovalResumePayload {
 
 export type InterruptResumePayload =
     | TickerSelectionResumePayload
-    | AuditApprovalResumePayload
-    | Record<string, unknown>;
+    | AuditApprovalResumePayload;
+
+export const parseInterruptResumePayload = (
+    value: unknown
+): InterruptResumePayload => {
+    if (!isRecord(value)) {
+        throw new TypeError('Interrupt resume payload must be an object.');
+    }
+    if (typeof value.selected_symbol === 'string') {
+        return { selected_symbol: value.selected_symbol };
+    }
+    if (typeof value.approved === 'boolean') {
+        return { approved: value.approved };
+    }
+    throw new TypeError(
+        'Unsupported interrupt resume payload shape. Expected selected_symbol or approved.'
+    );
+};
 
 export const isInterruptRequestData = (
     value: unknown

@@ -11,6 +11,9 @@
 - [ ] Core logic (`workflow/state`, `workflow/nodes`, `interface/mappers`) uses canonical typed payloads only.
 - [ ] No compatibility fallback branches were introduced.
 - [ ] Frontend protocol/types updated if backend contract changed.
+- [ ] Frontend API boundary decoding is parser-first (no direct `as` cast from `fetch(...).json()` payloads).
+- [ ] Frontend preview consumption is parser-first (no `as FinancialReport[]` or equivalent raw preview assertions in UI paths).
+- [ ] New/changed preview output uses dedicated parser module (`frontend/src/types/agents/<domain>-preview-parser.ts`).
 
 ## Typing Rules
 - [ ] No `Any` introduced in `finance-agent-core/src` or `finance-agent-core/api`.
@@ -31,16 +34,17 @@
 - [ ] Forbidden patterns check passed (`rg -n "\bAny\b|hasattr\(" src api`).
 - [ ] Relevant tests passed (`uv run pytest ...`).
 - [ ] Frontend lint/test/typecheck passed (`npm run lint && npm run typecheck && npm run test -- --run`).
+- [ ] Frontend parser tests passed (contract and preview parser suites).
 - [ ] Contract artifacts re-generated and committed (`bash scripts/generate-contracts.sh`).
 - [ ] Monorepo contract gates workflow passed.
 
 ## Protocol Migration (If introducing new SSE protocol version, e.g. `v2`)
-- [ ] `contracts/fixtures/manifest.json` updated (`planned_versions` and/or `supported_versions`).
+- [ ] `contracts/fixtures/manifest.json` updated (`supported_versions` reflects the new canonical version set).
 - [ ] New version fixture added (or updated) under `contracts/fixtures/`.
 - [ ] Fixture validator passed (`python3 scripts/validate-sse-fixtures.py`).
-- [ ] Backend fixture tests updated/passed for migration window.
-- [ ] Frontend fixture tests updated/passed for migration window.
-- [ ] Deprecation window for old version documented (target removal PR or date).
+- [ ] Backend fixture tests updated/passed for the new canonical version.
+- [ ] Frontend fixture tests updated/passed for the new canonical version.
+- [ ] Old protocol version removed from runtime support in the same PR (zero-compat policy).
 
 ## Docs
 - [ ] Documentation updated if contracts or behavior changed.

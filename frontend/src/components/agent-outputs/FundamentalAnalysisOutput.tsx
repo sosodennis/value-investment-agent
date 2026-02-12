@@ -2,7 +2,8 @@ import React, { memo } from 'react';
 import { LayoutPanelTop, BarChart3 } from 'lucide-react';
 import { FinancialTable } from '../FinancialTable';
 import { AgentStatus, StandardAgentOutput } from '@/types/agents';
-import { FinancialReport, FundamentalAnalysisSuccess } from '@/types/agents/fundamental';
+import { FundamentalAnalysisSuccess } from '@/types/agents/fundamental';
+import { parseFinancialPreview } from '@/types/agents/fundamental-preview-parser';
 import { useArtifact } from '../../hooks/useArtifact';
 import { AgentLoadingState } from './AgentLoadingState';
 import { isRecord } from '@/types/preview';
@@ -27,21 +28,12 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
     );
 
     const effectiveData = artifactData || previewData;
-    const reportsRaw = isRecord(effectiveData)
-        ? effectiveData.financial_reports
-        : undefined;
-    const reports: FinancialReport[] = Array.isArray(reportsRaw)
-        ? (reportsRaw as FinancialReport[])
-        : [];
+    const parsed = parseFinancialPreview(effectiveData, 'fundamental_output.payload');
+    const reports = parsed?.financial_reports ?? [];
 
     const hasPreview = !!previewData;
-    const valuationScore =
-        typeof previewData?.valuation_score === 'number'
-            ? previewData.valuation_score
-            : undefined;
-    const previewKeyMetrics = isRecord(previewData?.key_metrics)
-        ? (previewData.key_metrics as Record<string, unknown>)
-        : {};
+    const valuationScore = parsed?.valuation_score;
+    const previewKeyMetrics = parsed?.key_metrics ?? {};
 
     if (status !== 'done' && reports.length === 0 && !hasPreview) {
         return (

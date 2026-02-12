@@ -5,7 +5,8 @@ import { DebateTranscript } from './DebateTranscript';
 import { DebateFactSheet } from './DebateFactSheet';
 import { StandardAgentOutput, AgentStatus } from '@/types/agents';
 import { useArtifact } from '../../hooks/useArtifact';
-import { DebatePreview, isDebatePreview } from '@/types/preview';
+import { DebatePreview } from '@/types/preview';
+import { parseDebatePreview } from '@/types/agents/debate-preview-parser';
 
 interface DebateOutputProps {
     output: StandardAgentOutput | null;
@@ -16,7 +17,10 @@ interface DebateOutputProps {
 const DebateOutputComponent: React.FC<DebateOutputProps> = ({ output, resolvedTicker, status }) => {
     const reference = output?.reference;
     const preview = output?.preview;
-    const previewData: DebatePreview | null = isDebatePreview(preview) ? preview : null;
+    const previewData: DebatePreview | null = parseDebatePreview(
+        preview,
+        'debate_output.preview'
+    );
 
     const { data: artifactData, isLoading: isArtifactLoading } = useArtifact<DebateSuccess>(
         reference?.artifact_id
