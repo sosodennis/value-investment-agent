@@ -35,6 +35,7 @@ jobs:
         run: >
           uv run pytest
           tests/test_protocol.py
+          tests/test_protocol_fixtures.py
           tests/test_mappers.py
           tests/test_news_mapper.py
           tests/test_debate_mapper.py
@@ -81,6 +82,9 @@ jobs:
             echo "Found forbidden enumNames fallback in source files."
             exit 1
           fi
+
+      - name: Validate SSE fixture manifest and payload versions
+        run: python3 scripts/validate-sse-fixtures.py
 
   contract-codegen-check:
     runs-on: ubuntu-latest

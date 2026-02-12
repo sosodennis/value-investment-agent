@@ -16,7 +16,7 @@ In scope (本輪實作):
 5. Progress 文檔與可追溯變更記錄
 
 Out of scope (下一輪):
-1. Consumer-driven fixtures pipeline
+1. None for current roadmap slice
 
 ## Phases
 
@@ -97,6 +97,18 @@ Tasks:
 Exit Criteria:
 1. 所有新 SSE 事件都帶 `protocol_version: "v1"`
 2. 前端只接受已知版本事件（未知版本會被拒收）
+
+## Phase 7: Consumer-Driven Contract Fixtures
+
+Tasks:
+1. 建立共享 SSE fixtures（存放於 repo contracts）
+2. Backend 測試消費 fixtures 並用 Pydantic 協議模型驗證
+3. Frontend 測試消費同一份 fixtures 並用 `isAgentEvent` 驗證
+4. 將 fixture 測試納入 CI contract gate
+
+Exit Criteria:
+1. 任一端協議破壞都會在 CI 被 fixture 測試攔截
+2. Fixture 檔案與協議版本有明確文檔規範
 
 ## Definition of Done (This Iteration)
 

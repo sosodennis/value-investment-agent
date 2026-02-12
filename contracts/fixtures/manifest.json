@@ -1,0 +1,15 @@
+{
+  "supported_versions": [
+    {
+      "version": "v1",
+      "fixture": "sse-events-v1.json"
+    }
+  ],
+  "planned_versions": [
+    {
+      "version": "v2",
+      "fixture_template": "sse-events-v2.template.json",
+      "status": "draft"
+    }
+  ]
+}

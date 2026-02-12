@@ -34,5 +34,13 @@
 - [ ] Contract artifacts re-generated and committed (`bash scripts/generate-contracts.sh`).
 - [ ] Monorepo contract gates workflow passed.
 
+## Protocol Migration (If introducing new SSE protocol version, e.g. `v2`)
+- [ ] `contracts/fixtures/manifest.json` updated (`planned_versions` and/or `supported_versions`).
+- [ ] New version fixture added (or updated) under `contracts/fixtures/`.
+- [ ] Fixture validator passed (`python3 scripts/validate-sse-fixtures.py`).
+- [ ] Backend fixture tests updated/passed for migration window.
+- [ ] Frontend fixture tests updated/passed for migration window.
+- [ ] Deprecation window for old version documented (target removal PR or date).
+
 ## Docs
 - [ ] Documentation updated if contracts or behavior changed.

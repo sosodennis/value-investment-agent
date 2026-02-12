@@ -1,0 +1,127 @@
+[
+  {
+    "id": "evt_0001",
+    "timestamp": "2026-02-12T00:00:01Z",
+    "thread_id": "thread_fixture",
+    "run_id": "run_fixture",
+    "seq_id": 1,
+    "protocol_version": "v1",
+    "type": "agent.status",
+    "source": "intent_extraction",
+    "data": {
+      "status": "running",
+      "node": "extraction"
+    },
+    "metadata": {}
+  },
+  {
+    "id": "evt_0002",
+    "timestamp": "2026-02-12T00:00:02Z",
+    "thread_id": "thread_fixture",
+    "run_id": "run_fixture",
+    "seq_id": 2,
+    "protocol_version": "v1",
+    "type": "content.delta",
+    "source": "intent_extraction",
+    "data": {
+      "content": "Analyzing user request..."
+    },
+    "metadata": {}
+  },
+  {
+    "id": "evt_0003",
+    "timestamp": "2026-02-12T00:00:03Z",
+    "thread_id": "thread_fixture",
+    "run_id": "run_fixture",
+    "seq_id": 3,
+    "protocol_version": "v1",
+    "type": "state.update",
+    "source": "intent_extraction",
+    "data": {
+      "summary": "Resolved ticker candidate list.",
+      "preview": {
+        "ticker": "GME",
+        "company_name": "GameStop Corp."
+      },
+      "reference": null
+    },
+    "metadata": {}
+  },
+  {
+    "id": "evt_0004",
+    "timestamp": "2026-02-12T00:00:04Z",
+    "thread_id": "thread_fixture",
+    "run_id": "run_fixture",
+    "seq_id": 4,
+    "protocol_version": "v1",
+    "type": "interrupt.request",
+    "source": "intent_extraction",
+    "data": {
+      "type": "ticker_selection",
+      "title": "Ticker Resolution",
+      "description": "Multiple tickers found or ambiguity detected.",
+      "data": {},
+      "schema": {
+        "title": "Select Correct Ticker",
+        "type": "object",
+        "properties": {
+          "selected_symbol": {
+            "type": "string",
+            "title": "Target Company",
+            "enum": [
+              "GME",
+              "GMED"
+            ],
+            "oneOf": [
+              {
+                "const": "GME",
+                "title": "GME - GameStop Corp. (90% match)"
+              },
+              {
+                "const": "GMED",
+                "title": "GMED - Globe Medical Inc. (65% match)"
+              }
+            ]
+          }
+        },
+        "required": [
+          "selected_symbol"
+        ]
+      },
+      "ui_schema": {
+        "selected_symbol": {
+          "ui:widget": "radio"
+        }
+      }
+    },
+    "metadata": {}
+  },
+  {
+    "id": "evt_0005",
+    "timestamp": "2026-02-12T00:00:05Z",
+    "thread_id": "thread_fixture",
+    "run_id": "run_fixture",
+    "seq_id": 5,
+    "protocol_version": "v1",
+    "type": "lifecycle.status",
+    "source": "System",
+    "data": {
+      "status": "paused"
+    },
+    "metadata": {}
+  },
+  {
+    "id": "evt_0006",
+    "timestamp": "2026-02-12T00:00:06Z",
+    "thread_id": "thread_fixture",
+    "run_id": "run_fixture",
+    "seq_id": 6,
+    "protocol_version": "v1",
+    "type": "error",
+    "source": "System",
+    "data": {
+      "message": "Synthetic fixture error."
+    },
+    "metadata": {}
+  }
+]

@@ -4,7 +4,7 @@ Date: 2026-02-12
 ## Status Summary
 
 Overall: `IN_PROGRESS`
-Current phase: `Phase 6 completed; preparing next backlog phase`
+Current phase: `Phase 7 completed`
 
 ## Progress Log
 
@@ -37,12 +37,22 @@ Completed:
 14. CI 新增 `contract-codegen-check`（檢查 generated drift）
 15. 改為使用官方套件 `openapi-typescript` 生成 frontend 型別（移除自寫生成器）
 16. SSE 事件 envelope 加入 `protocol_version: "v1"`，前端事件驗證同步強制檢查版本
+17. 建立共享 SSE fixtures：
+   - `/Users/denniswong/Desktop/Project/value-investment-agent/contracts/fixtures/sse-events-v1.json`
+   - `/Users/denniswong/Desktop/Project/value-investment-agent/contracts/fixtures/manifest.json`
+18. Backend fixture 測試：
+   - `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/tests/test_protocol_fixtures.py`
+19. Frontend fixture 測試：
+   - `/Users/denniswong/Desktop/Project/value-investment-agent/frontend/src/types/protocol.contract.test.ts`
+20. CI contract suite 納入 fixture 測試
+21. 新增 fixture 版本一致性驗證腳本：
+   - `/Users/denniswong/Desktop/Project/value-investment-agent/scripts/validate-sse-fixtures.py`
 
 In Progress:
-1. 下一輪規劃（SSE versioning / consumer fixtures）
+1. 下一輪規劃（fixture 擴充與多版本策略）
 
 Pending:
-1. Consumer-driven contract fixtures pipeline
+1. 多版本 fixture（v1/v2 migration window）策略
 
 Validation results:
 1. Backend targeted ruff passed:
@@ -56,6 +66,11 @@ Validation results:
    - `npm run test -- --run`
 4. Contract generation passed:
    - `bash scripts/generate-contracts.sh`
+5. Consumer-driven fixture tests passed (local):
+   - Backend: `UV_CACHE_DIR=/tmp/.uv-cache uv run pytest tests/test_protocol_fixtures.py -q`
+   - Frontend: `npm run test -- --run` (includes `protocol.contract.test.ts`)
+6. Fixture validator passed:
+   - `python3 scripts/validate-sse-fixtures.py`
 
 ## Checklist by Phase
 
@@ -93,9 +108,17 @@ Phase 6:
 2. [x] Frontend protocol_version validation
 3. [x] Test coverage for version field
 
+Phase 7:
+1. [x] Shared SSE fixture file
+2. [x] Backend fixture consumer test
+3. [x] Frontend fixture consumer test
+4. [x] CI contract gate integration
+
 ## Risks / Notes
 
 1. `response_model` 會讓歷史資料或異常 payload 提前暴露為 500；需要同步補 normalize 邏輯。
 2. Next.js build 在離線環境會因 Google Fonts 失敗，與 contract 升級無關。
 3. `uv run ruff check src api tests` 目前會在既有未改動檔案（如 `tests/calculations/test_core.py`）報 import-sort 歷史問題；本輪已針對改動範圍做通過驗證。
 4. 初次安裝 `openapi-typescript` 需可連 npm registry。
+5. 目前 fixture 只覆蓋 `v1`；若引入 `v2` 需並存 fixtures 並維持 migration policy。
+6. `v2` 目前僅提供 template，不會納入 supported fixture 測試。
