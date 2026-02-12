@@ -3,7 +3,9 @@ import os
 import sys
 import uuid
 from collections import defaultdict
+from collections.abc import Mapping
 from contextlib import asynccontextmanager
+from typing import Literal
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
@@ -19,10 +21,11 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command
 
 from src.common.tools.logger import get_logger
-from src.common.types import InterruptResumePayload, JSONObject
+from src.common.types import InterruptResumePayload, JSONObject, JSONValue
 from src.infrastructure.database import init_db
 from src.interface.adapters import adapt_langgraph_event, create_interrupt_event
 from src.interface.protocol import AgentEvent
+from src.interface.schemas import AgentOutputArtifact
 from src.services.artifact_manager import artifact_manager
 from src.services.history import history_service
 from src.workflow.graph import get_graph
@@ -78,6 +81,39 @@ class RequestSchema(BaseModel):
     resume_payload: InterruptResumePayload | None = None
 
 
+class MessageResponse(BaseModel):
+    id: str
+    role: Literal["user", "assistant", "system", "tool"]
+    content: str
+    type: str = "text"
+    data: JSONValue | None = None
+    created_at: str | None = None
+
+
+class ThreadStateResponse(BaseModel):
+    thread_id: str
+    messages: list[MessageResponse]
+    interrupts: list[InterruptValue]
+    resolved_ticker: str | None = None
+    status: str | None = None
+    next: list[str] | None = None
+    is_running: bool
+    node_statuses: dict[str, str]
+    agent_outputs: dict[str, AgentOutputArtifact]
+    last_seq_id: int
+
+
+class AgentStatusesResponse(BaseModel):
+    node_statuses: dict[str, str]
+    current_node: str | None = None
+    agent_outputs: dict[str, AgentOutputArtifact]
+
+
+class StreamStartResponse(BaseModel):
+    status: Literal["started", "running"]
+    thread_id: str
+
+
 # Track active tasks, event replay buffers, and sequence counters
 active_tasks: dict[str, asyncio.Task] = {}
 running_queues: dict[str, list[asyncio.Queue]] = defaultdict(list)
@@ -108,6 +144,21 @@ def build_agent_lookup(graph: CompiledStateGraph) -> dict[str, str]:
 
     traverse(graph)
     return lookup
+
+
+def _normalize_statuses(value: object) -> dict[str, str]:
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise TypeError(
+            f"Invalid node_statuses type, expected mapping got {type(value)!r}"
+        )
+    normalized: dict[str, str] = {}
+    for key, status in value.items():
+        if not isinstance(key, str) or not isinstance(status, str):
+            raise TypeError("node_statuses must be a mapping[str, str]")
+        normalized[key] = status
+    return normalized
 
 
 async def event_generator(
@@ -317,7 +368,7 @@ async def event_generator(
         logger.info(f"🏁 [Server] Task for {thread_id} finished.")
 
 
-@app.get("/history/{thread_id}")
+@app.get("/history/{thread_id}", response_model=list[MessageResponse])
 async def get_history(thread_id: str, limit: int = 20, before: str | None = None):
     """Retrieve persistent history with cursor pagination."""
     try:
@@ -333,7 +384,7 @@ async def get_history(thread_id: str, limit: int = 20, before: str | None = None
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@app.get("/thread/{thread_id}")
+@app.get("/thread/{thread_id}", response_model=ThreadStateResponse)
 async def get_thread_history(request: Request, thread_id: str):
     """Retrieve history and job status."""
     config = {"configurable": {"thread_id": thread_id}}
@@ -341,28 +392,38 @@ async def get_thread_history(request: Request, thread_id: str):
         graph = request.app.state.graph
         snapshot = await graph.aget_state(config)
 
-        messages = []
+        messages: list[MessageResponse] = []
         for m in snapshot.values.get("messages", []):
-            role = "assistant" if isinstance(m, AIMessage) else "user"
+            if isinstance(m, AIMessage):
+                role: Literal["assistant", "user", "system", "tool"] = "assistant"
+            elif isinstance(m, HumanMessage):
+                role = "user"
+            else:
+                role = "system"
+            msg_type_raw = m.additional_kwargs.get("type", "text")
+            msg_type = msg_type_raw if isinstance(msg_type_raw, str) else "text"
             messages.append(
-                {
-                    "id": getattr(m, "id", f"msg_{id(m)}"),
-                    "role": role,
-                    "content": m.content,
-                    "type": m.additional_kwargs.get("type", "text"),
-                    "data": m.additional_kwargs.get("data"),
-                }
+                MessageResponse(
+                    id=getattr(m, "id", f"msg_{id(m)}"),
+                    role=role,
+                    content=str(m.content),
+                    type=msg_type,
+                    data=m.additional_kwargs.get("data"),
+                )
             )
 
-        current_interrupts = []
+        current_interrupts: list[InterruptValue] = []
         for task in snapshot.tasks:
             if task.interrupts:
                 for i in task.interrupts:
                     try:
                         val = InterruptValue.model_validate(i.value)
-                        current_interrupts.append(val.model_dump())
-                    except Exception:
-                        current_interrupts.append(i.value)
+                        current_interrupts.append(val)
+                    except Exception as exc:
+                        logger.warning(
+                            f"Skipping invalid interrupt payload in thread {thread_id}: {exc}"
+                        )
+                        continue
 
         # Helper to safely extract nested context
         def get_context(name: str) -> JSONObject:
@@ -382,25 +443,27 @@ async def get_thread_history(request: Request, thread_id: str):
         from src.interface.mappers import NodeOutputMapper
 
         agent_outputs = NodeOutputMapper.map_all_outputs(snapshot.values)
+        node_statuses = _normalize_statuses(snapshot.values.get("node_statuses"))
+        last_seq_id = max(thread_sequences.get(thread_id, 1) - 1, 0)
 
-        res = {
-            "thread_id": thread_id,
-            "messages": messages,
-            "interrupts": current_interrupts,
-            "resolved_ticker": fundamental.get("resolved_ticker"),
-            "status": fundamental.get("status"),
-            "next": snapshot.next,
-            "is_running": thread_id in active_tasks,
-            "node_statuses": snapshot.values.get("node_statuses", {}),
-            "agent_outputs": agent_outputs,
-        }
-        return res
+        return ThreadStateResponse(
+            thread_id=thread_id,
+            messages=messages,
+            interrupts=current_interrupts,
+            resolved_ticker=fundamental.get("resolved_ticker"),
+            status=fundamental.get("status"),
+            next=snapshot.next,
+            is_running=thread_id in active_tasks,
+            node_statuses=node_statuses,
+            agent_outputs=agent_outputs,
+            last_seq_id=last_seq_id,
+        )
     except Exception as e:
         logger.error(f"❌ [Server] get_thread_history failed: {e}")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@app.get("/thread/{thread_id}/agents")
+@app.get("/thread/{thread_id}/agents", response_model=AgentStatusesResponse)
 async def get_agent_statuses(request: Request, thread_id: str):
     """Retrieve node statuses and financial reports for the dashboard."""
     config = {"configurable": {"thread_id": thread_id}}
@@ -410,11 +473,17 @@ async def get_agent_statuses(request: Request, thread_id: str):
         from src.interface.mappers import NodeOutputMapper
 
         agent_outputs = NodeOutputMapper.map_all_outputs(snapshot.values)
-        return {
-            "node_statuses": snapshot.values.get("node_statuses", {}),
-            "current_node": snapshot.values.get("current_node"),
-            "agent_outputs": agent_outputs,
-        }
+        node_statuses = _normalize_statuses(snapshot.values.get("node_statuses"))
+        current_node = snapshot.values.get("current_node")
+        if current_node is not None and not isinstance(current_node, str):
+            raise TypeError(
+                f"Invalid current_node type, expected str|None got {type(current_node)!r}"
+            )
+        return AgentStatusesResponse(
+            node_statuses=node_statuses,
+            current_node=current_node,
+            agent_outputs=agent_outputs,
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -468,7 +537,7 @@ async def attach_stream(thread_id: str):
     return StreamingResponse(sse_adapter(), media_type="text/event-stream")
 
 
-@app.post("/stream")
+@app.post("/stream", response_model=StreamStartResponse)
 async def stream_agent(request: Request, body: RequestSchema):
     """Start or resume a job."""
     thread_id = body.thread_id
@@ -479,7 +548,7 @@ async def stream_agent(request: Request, body: RequestSchema):
             raise HTTPException(
                 status_code=409, detail="Job already running for this thread."
             )
-        return {"status": "running", "thread_id": thread_id}
+        return StreamStartResponse(status="running", thread_id=thread_id)
 
     # Prepare input
     if body.message:
@@ -511,7 +580,7 @@ async def stream_agent(request: Request, body: RequestSchema):
     )
     active_tasks[thread_id] = task
 
-    return {"status": "started", "thread_id": thread_id}
+    return StreamStartResponse(status="started", thread_id=thread_id)
 
 
 # Removed app.on_event("startup") in favor of lifespan

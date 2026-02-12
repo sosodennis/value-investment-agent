@@ -24,6 +24,23 @@ def test_ticker_selection_serialization():
     assert dump["intent"]["company_name"] == "Apple"
 
 
+def test_ticker_selection_ui_payload_uses_one_of():
+    candidates = [
+        TickerCandidate(symbol="AAPL", name="Apple Inc.", confidence=0.9),
+        TickerCandidate(symbol="AAPL34", name="Apple Brasil", confidence=0.7),
+    ]
+    selection = HumanTickerSelection(candidates=candidates)
+
+    payload = selection.to_ui_payload()
+    schema = payload["schema"]
+    selected_symbol = schema["properties"]["selected_symbol"]
+
+    assert selected_symbol["enum"] == ["AAPL", "AAPL34"]
+    assert "enumNames" not in selected_symbol
+    assert selected_symbol["oneOf"][0]["const"] == "AAPL"
+    assert selected_symbol["oneOf"][0]["title"].startswith("AAPL - Apple Inc.")
+
+
 def test_interrupt_value_validation():
     adapter = TypeAdapter(InterruptValue)
     # Valid ticker selection

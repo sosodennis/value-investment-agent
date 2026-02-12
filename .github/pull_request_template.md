@@ -10,11 +10,13 @@
 - [ ] Boundary logic remains in boundary layers (`api`, `interface/adapters`, persistence serialization).
 - [ ] Core logic (`workflow/state`, `workflow/nodes`, `interface/mappers`) uses canonical typed payloads only.
 - [ ] No compatibility fallback branches were introduced.
+- [ ] Frontend protocol/types updated if backend contract changed.
 
 ## Typing Rules
 - [ ] No `Any` introduced in `finance-agent-core/src` or `finance-agent-core/api`.
 - [ ] No `hasattr(...)`-based duck typing introduced in core logic.
 - [ ] New/changed function signatures have explicit types.
+- [ ] Frontend `npm run typecheck` passed.
 
 ## Artifact / State Rules
 - [ ] State `artifact` fields use canonical dict payloads.
@@ -28,6 +30,8 @@
 - [ ] Lint passed (`uv run ruff check ...`).
 - [ ] Forbidden patterns check passed (`rg -n "\bAny\b|hasattr\(" src api`).
 - [ ] Relevant tests passed (`uv run pytest ...`).
+- [ ] Frontend lint/test/typecheck passed (`npm run lint && npm run typecheck && npm run test -- --run`).
+- [ ] Monorepo contract gates workflow passed.
 
 ## Docs
 - [ ] Documentation updated if contracts or behavior changed.

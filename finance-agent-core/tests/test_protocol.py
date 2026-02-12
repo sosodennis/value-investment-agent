@@ -81,6 +81,10 @@ def test_create_interrupt():
     assert event.type == "interrupt.request"
     assert event.data["type"] == "ticker_selection"
     assert event.source == "system.interrupt"
+    schema = event.data["schema"]
+    selected_symbol = schema["properties"]["selected_symbol"]
+    assert selected_symbol["oneOf"] == []
+    assert "enumNames" not in selected_symbol
 
 
 def test_adapt_state_update_from_basemodel_output():

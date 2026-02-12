@@ -238,7 +238,10 @@ def create_interrupt_event(
                     "type": "string",
                     "title": "Target Company",
                     "enum": ticker_options,
-                    "enumNames": ticker_titles,
+                    "oneOf": [
+                        {"const": symbol, "title": ticker_titles[idx]}
+                        for idx, symbol in enumerate(ticker_options)
+                    ],
                 }
             },
             "required": ["selected_symbol"],

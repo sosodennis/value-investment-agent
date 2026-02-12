@@ -1,0 +1,83 @@
+name: Monorepo Contract Gates
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  backend-lint-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: finance-agent-core
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Ruff check
+        run: uv run ruff check src api tests
+
+      - name: Contract-focused pytest suite
+        run: >
+          uv run pytest
+          tests/test_protocol.py
+          tests/test_mappers.py
+          tests/test_news_mapper.py
+          tests/test_debate_mapper.py
+          tests/test_interrupts.py
+          -q
+
+  frontend-lint-type-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm run test -- --run
+
+  contract-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Guard against enumNames fallback reintroduction
+        run: |
+          if grep -R --line-number "enumNames" finance-agent-core/src finance-agent-core/api frontend/src; then
+            echo "Found forbidden enumNames fallback in source files."
+            exit 1
+          fi
