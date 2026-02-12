@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "generate:api-contract": "openapi-typescript ../contracts/openapi.json -o src/types/generated/api-contract.ts",
+    "sync:api-contract": "bash ../scripts/generate-contracts.sh",
     "typecheck": "tsc --noEmit",
     "test": "vitest"
   },
@@ -39,6 +41,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.0",
     "jsdom": "^27.4.0",
+    "openapi-typescript": "^7.13.0",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.0.17"

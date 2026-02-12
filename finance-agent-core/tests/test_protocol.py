@@ -2,7 +2,7 @@ from langchain_core.messages import AIMessageChunk
 from pydantic import BaseModel
 
 from src.interface.adapters import adapt_langgraph_event, create_interrupt_event
-from src.interface.protocol import AgentEvent
+from src.interface.protocol import PROTOCOL_VERSION, AgentEvent
 
 
 def test_agent_event_serialization():
@@ -17,6 +17,7 @@ def test_agent_event_serialization():
     assert "test_thread" in json_str
     assert "content.delta" in json_str
     assert "TestAgent" in json_str
+    assert event.model_dump()["protocol_version"] == PROTOCOL_VERSION
 
 
 def test_adapt_token_stream():

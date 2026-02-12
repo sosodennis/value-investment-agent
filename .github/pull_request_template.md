@@ -31,6 +31,7 @@
 - [ ] Forbidden patterns check passed (`rg -n "\bAny\b|hasattr\(" src api`).
 - [ ] Relevant tests passed (`uv run pytest ...`).
 - [ ] Frontend lint/test/typecheck passed (`npm run lint && npm run typecheck && npm run test -- --run`).
+- [ ] Contract artifacts re-generated and committed (`bash scripts/generate-contracts.sh`).
 - [ ] Monorepo contract gates workflow passed.
 
 ## Docs

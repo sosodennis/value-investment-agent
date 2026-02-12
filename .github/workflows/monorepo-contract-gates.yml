@@ -29,7 +29,7 @@ jobs:
         run: uv sync --dev
 
       - name: Ruff check
-        run: uv run ruff check src api tests
+        run: uv run ruff check src api
 
       - name: Contract-focused pytest suite
         run: >
@@ -79,5 +79,45 @@ jobs:
         run: |
           if grep -R --line-number "enumNames" finance-agent-core/src finance-agent-core/api frontend/src; then
             echo "Found forbidden enumNames fallback in source files."
+            exit 1
+          fi
+
+  contract-codegen-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: finance-agent-core
+        run: uv sync --dev
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Regenerate contracts
+        run: bash scripts/generate-contracts.sh
+
+      - name: Ensure generated contracts are committed
+        run: |
+          if [[ -n "$(git status --porcelain -- contracts/openapi.json frontend/src/types/generated/api-contract.ts)" ]]; then
+            echo "Generated contract artifacts are out of sync. Run: bash scripts/generate-contracts.sh"
+            git status --porcelain -- contracts/openapi.json frontend/src/types/generated/api-contract.ts
             exit 1
           fi

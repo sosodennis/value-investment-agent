@@ -142,6 +142,13 @@ Backend contributor rules are documented at:
 
 This guideline is mandatory for backend changes (typed contracts, boundary rules, no-compatibility policy, and validation checklist).
 
+Cross-stack contract sync:
+
+*   Run `bash scripts/generate-contracts.sh` after backend API contract changes.
+*   Commit both generated files:
+    *   `contracts/openapi.json`
+    *   `frontend/src/types/generated/api-contract.ts`
+
 ## 🤝 Contributing
 Contributions are welcome! Please follow the coding standards outlined in the project.
 1.  Fork the repository.

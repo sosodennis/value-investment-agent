@@ -21,7 +21,7 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command
 
 from src.common.tools.logger import get_logger
-from src.common.types import InterruptResumePayload, JSONObject, JSONValue
+from src.common.types import InterruptResumePayload, JSONObject
 from src.infrastructure.database import init_db
 from src.interface.adapters import adapt_langgraph_event, create_interrupt_event
 from src.interface.protocol import AgentEvent
@@ -86,7 +86,7 @@ class MessageResponse(BaseModel):
     role: Literal["user", "assistant", "system", "tool"]
     content: str
     type: str = "text"
-    data: JSONValue | None = None
+    data: dict[str, object] | list[object] | str | int | float | bool | None = None
     created_at: str | None = None
 
 

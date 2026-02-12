@@ -16,9 +16,7 @@ In scope (本輪實作):
 5. Progress 文檔與可追溯變更記錄
 
 Out of scope (下一輪):
-1. OpenAPI -> frontend type codegen 全自動化
-2. SSE event schema 的版本化 (`protocol_version`)
-3. Consumer-driven fixtures pipeline
+1. Consumer-driven fixtures pipeline
 
 ## Phases
 
@@ -77,6 +75,29 @@ Tasks:
 Exit Criteria:
 1. PR 可自動檢出跨端 contract 破壞
 
+## Phase 5: OpenAPI -> Frontend Types Codegen
+
+Tasks:
+1. Backend 導出 OpenAPI (`contracts/openapi.json`)
+2. Frontend 基於 OpenAPI 生成 TS contract types
+3. Frontend 協議層接入 generated types（至少 REST 邊界）
+4. CI 增加 codegen drift check（未同步生成即 fail）
+
+Exit Criteria:
+1. OpenAPI 變更會驅動 frontend 型別更新
+2. PR 無法在 codegen drift 狀態下合併
+
+## Phase 6: SSE Protocol Versioning
+
+Tasks:
+1. Backend `AgentEvent` envelope 增加 `protocol_version`
+2. 前端 `isAgentEvent` 驗證強制檢查版本（目前 `v1`）
+3. 補測試以確保事件序列化帶版本欄位
+
+Exit Criteria:
+1. 所有新 SSE 事件都帶 `protocol_version: "v1"`
+2. 前端只接受已知版本事件（未知版本會被拒收）
+
 ## Definition of Done (This Iteration)
 
 1. 計劃/progress 文檔已建立並有執行記錄
@@ -84,6 +105,7 @@ Exit Criteria:
 3. Interrupt schema 完成 oneOf 對齊
 4. Frontend 有獨立 typecheck script 並通過
 5. CI workflow 已落地（可在 PR 上執行）
+6. OpenAPI -> frontend types codegen pipeline 已落地並在 CI 檢查
 
 ## Validation Commands
 

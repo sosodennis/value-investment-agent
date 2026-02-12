@@ -1,6 +1,12 @@
 import { AgentStatus, StandardAgentOutput } from './agents';
 import { HumanTickerSelection, InterruptRequestData, InterruptResumePayload } from './interrupts';
 import { isRecord } from './preview';
+import { operations } from './generated/api-contract';
+
+type ApiThreadStateResponse =
+    operations['get_thread_history_thread__thread_id__get']['responses'][200]['content']['application/json'];
+type ApiStreamStartResponse =
+    operations['stream_agent_stream_post']['responses'][200]['content']['application/json'];
 
 export interface Message {
     id: string;
@@ -27,6 +33,7 @@ interface AgentEventBase {
     thread_id: string;
     run_id: string;
     seq_id: number;
+    protocol_version: 'v1';
     source: string;
     metadata?: Record<string, unknown>;
 }
@@ -78,18 +85,15 @@ export type AgentEvent =
     | LifecycleStatusEvent
     | ErrorEvent;
 
-export interface ThreadStateResponse {
-    thread_id: string;
+export type ThreadStateResponse = Omit<
+    ApiThreadStateResponse,
+    'node_statuses' | 'agent_outputs' | 'interrupts' | 'messages'
+> & {
     messages: Message[];
     interrupts: HumanTickerSelection[];
-    resolved_ticker?: string | null;
-    status?: string | null;
-    next?: string[] | null;
-    is_running: boolean;
     node_statuses: Record<string, AgentStatus>;
     agent_outputs: Record<string, StandardAgentOutput>;
-    last_seq_id?: number;
-}
+};
 
 export interface StreamRequest {
     thread_id: string;
@@ -97,10 +101,7 @@ export interface StreamRequest {
     resume_payload?: InterruptResumePayload;
 }
 
-export interface StreamStartResponse {
-    status: 'started' | 'running';
-    thread_id: string;
-}
+export type StreamStartResponse = ApiStreamStartResponse;
 
 export const isAgentEvent = (value: unknown): value is AgentEvent => {
     if (!isRecord(value)) return false;
@@ -111,6 +112,7 @@ export const isAgentEvent = (value: unknown): value is AgentEvent => {
     if (typeof value.thread_id !== 'string') return false;
     if (typeof value.run_id !== 'string') return false;
     if (typeof value.seq_id !== 'number') return false;
+    if (value.protocol_version !== 'v1') return false;
     if (typeof value.source !== 'string') return false;
     if (!isRecord(value.data)) return false;
     return (

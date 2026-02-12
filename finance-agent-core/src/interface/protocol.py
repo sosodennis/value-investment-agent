@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+PROTOCOL_VERSION = "v1"
+
 
 class AgentEvent(BaseModel):
     """
@@ -25,6 +27,10 @@ class AgentEvent(BaseModel):
     )
     seq_id: int = Field(
         ..., description="Logical clock sequence ID for ordering and deduplication"
+    )
+    protocol_version: Literal["v1"] = Field(
+        default=PROTOCOL_VERSION,
+        description="Event protocol version for cross-stack compatibility control",
     )
 
     # Event Type Discriminator
