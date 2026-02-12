@@ -46,6 +46,45 @@ describe('artifact parsers', () => {
         expect(parsed.financial_reports).toHaveLength(1);
     });
 
+    it('normalizes nullable textual fields in fundamental artifact', () => {
+        const parsed = parseFundamentalArtifact({
+            ticker: 'AAPL',
+            model_type: 'dcf',
+            company_name: null,
+            sector: null,
+            industry: null,
+            reasoning: null,
+            status: 'done',
+            financial_reports: [
+                {
+                    base: {
+                        fiscal_year: { value: '2024' },
+                        fiscal_period: { value: 'FY' },
+                        period_end_date: { value: '2024-09-30' },
+                        currency: { value: 'USD' },
+                        company_name: { value: 'Apple Inc.' },
+                        cik: { value: '0000320193' },
+                        sic_code: { value: '3571' },
+                        shares_outstanding: { value: 1000 },
+                        total_revenue: { value: 100 },
+                        net_income: { value: 10 },
+                        income_tax_expense: { value: 1 },
+                        total_assets: { value: 200 },
+                        total_liabilities: { value: 100 },
+                        total_equity: { value: 100 },
+                        cash_and_equivalents: { value: 40 },
+                        operating_cash_flow: { value: 20 },
+                    },
+                },
+            ],
+        });
+
+        expect(parsed.company_name).toBe('AAPL');
+        expect(parsed.sector).toBe('Unknown');
+        expect(parsed.industry).toBe('Unknown');
+        expect(parsed.reasoning).toBe('');
+    });
+
     it('rejects invalid fundamental status', () => {
         expect(() =>
             parseFundamentalArtifact({
@@ -142,6 +181,70 @@ describe('artifact parsers', () => {
         expect(parsed.debate_rounds).toBe(3);
     });
 
+    it('accepts nullable optional fields in debate artifact', () => {
+        const parsed = parseDebateArtifact({
+            scenario_analysis: {
+                bull_case: {
+                    probability: 50,
+                    outcome_description: 'Upside',
+                    price_implication: 'SURGE',
+                },
+                bear_case: {
+                    probability: 20,
+                    outcome_description: 'Downside',
+                    price_implication: 'CRASH',
+                },
+                base_case: {
+                    probability: 30,
+                    outcome_description: 'Base',
+                    price_implication: 'FLAT',
+                },
+            },
+            risk_profile: 'GROWTH_TECH',
+            final_verdict: 'NEUTRAL',
+            winning_thesis: 'Balanced view',
+            primary_catalyst: 'Execution',
+            primary_risk: 'Macro uncertainty',
+            supporting_factors: ['Cash flow resilience'],
+            debate_rounds: 2,
+            rr_ratio: null,
+            alpha: null,
+            risk_free_benchmark: null,
+            raw_ev: null,
+            conviction: null,
+            analysis_bias: null,
+            model_summary: null,
+            data_quality_warning: null,
+            history: [
+                {
+                    name: null,
+                    role: null,
+                    content: 'Agent message',
+                },
+            ],
+            facts: [
+                {
+                    fact_id: 'F1',
+                    source_type: 'financials',
+                    source_weight: 'HIGH',
+                    summary: 'Revenue stable',
+                    value: null,
+                    units: null,
+                    period: null,
+                },
+            ],
+        });
+
+        expect(parsed.history?.[0]?.name).toBeUndefined();
+        expect(parsed.history?.[0]?.role).toBeUndefined();
+        expect(parsed.facts?.[0]?.value).toBeUndefined();
+        expect(parsed.facts?.[0]?.period).toBeUndefined();
+        expect(parsed.facts?.[0]?.units).toBeUndefined();
+        expect(parsed.rr_ratio).toBeUndefined();
+        expect(parsed.analysis_bias).toBeUndefined();
+        expect(parsed.data_quality_warning).toBeUndefined();
+    });
+
     it('parses technical artifact', () => {
         const parsed = parseTechnicalArtifact({
             ticker: 'AAPL',
@@ -175,6 +278,36 @@ describe('artifact parsers', () => {
 
         expect(parsed.signal_state.risk_level).toBe('medium');
         expect(parsed.raw_data?.z_score_series?.['2026-02-10']).toBe(1.1);
+    });
+
+    it('accepts nullable llm_interpretation in technical artifact', () => {
+        const parsed = parseTechnicalArtifact({
+            ticker: 'AAPL',
+            timestamp: '2026-02-12T00:00:00Z',
+            frac_diff_metrics: {
+                optimal_d: 0.4,
+                window_length: 120,
+                adf_statistic: -3.2,
+                adf_pvalue: 0.02,
+                memory_strength: 'balanced',
+            },
+            signal_state: {
+                z_score: 1.2,
+                statistical_state: 'deviating',
+                direction: 'up',
+                risk_level: 'medium',
+                confluence: {
+                    bollinger_state: 'inside',
+                    macd_momentum: 'positive',
+                    obv_state: 'rising',
+                    statistical_strength: 0.7,
+                },
+            },
+            semantic_tags: ['momentum'],
+            llm_interpretation: null,
+        });
+
+        expect(parsed.llm_interpretation).toBeUndefined();
     });
 
     it('rejects non-json value for unknown artifact parser', () => {

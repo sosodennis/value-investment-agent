@@ -58,6 +58,54 @@ describe('parseFinancialPreview', () => {
         ).toThrowError('preview.key_metrics.ROE must be a string.');
     });
 
+    it('accepts null valuation_score as absent value', () => {
+        const parsed = parseFinancialPreview({
+            ticker: 'AAPL',
+            valuation_score: null,
+        });
+
+        expect(parsed?.ticker).toBe('AAPL');
+        expect(parsed?.valuation_score).toBeUndefined();
+    });
+
+    it('accepts nullable ticker as absent value', () => {
+        const parsed = parseFinancialPreview({
+            ticker: null,
+            valuation_score: 80,
+        });
+
+        expect(parsed?.ticker).toBeUndefined();
+        expect(parsed?.valuation_score).toBe(80);
+    });
+
+    it('accepts backend report shape without period_end_date/currency and with industry_type', () => {
+        const base = buildBase();
+        const { period_end_date, currency, ...backendLikeBase } = base;
+        void period_end_date;
+        void currency;
+
+        const parsed = parseFinancialPreview({
+            financial_reports: [
+                {
+                    base: backendLikeBase,
+                    industry_type: 'Financial',
+                    extension: {
+                        loans_and_leases: null,
+                        deposits: null,
+                        allowance_for_credit_losses: null,
+                        interest_income: null,
+                        interest_expense: null,
+                        provision_for_loan_losses: null,
+                    },
+                },
+            ],
+        });
+
+        expect(parsed?.financial_reports?.[0]?.base.period_end_date).toBeNull();
+        expect(parsed?.financial_reports?.[0]?.base.currency).toBeNull();
+        expect(parsed?.financial_reports?.[0]?.extension_type).toBe('FinancialServices');
+    });
+
     it('rejects financial report missing required base fields', () => {
         const base = buildBase();
         const { total_revenue, ...invalidBase } = base;

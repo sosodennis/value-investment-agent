@@ -59,12 +59,20 @@ const parseBoolean = (value: unknown, context: string): boolean => {
     return value;
 };
 
-const parseOptionalString = (
+const parseNullableOptionalNumber = (
     value: unknown,
     context: string
-): string | undefined => {
-    if (value === undefined) return undefined;
-    return parseString(value, context);
+): number | undefined => {
+    if (value === undefined || value === null) return undefined;
+    return parseNumber(value, context);
+};
+
+const parseNullableOptionalBoolean = (
+    value: unknown,
+    context: string
+): boolean | undefined => {
+    if (value === undefined || value === null) return undefined;
+    return parseBoolean(value, context);
 };
 
 const parseNullableOptionalString = (
@@ -329,14 +337,14 @@ const parseDebateHistoryMessage = (
     context: string
 ): DebateHistoryMessage => {
     const record = toRecord(value, context);
-    const name = parseOptionalString(record.name, `${context}.name`);
-    const role = parseOptionalString(record.role, `${context}.role`);
+    const name = parseNullableOptionalString(record.name, `${context}.name`);
+    const role = parseNullableOptionalString(record.role, `${context}.role`);
 
     const item: DebateHistoryMessage = {
         content: parseString(record.content, `${context}.content`),
     };
-    if (name !== undefined) item.name = name;
-    if (role !== undefined) item.role = role;
+    if (typeof name === 'string') item.name = name;
+    if (typeof role === 'string') item.role = role;
     return item;
 };
 
@@ -362,10 +370,13 @@ const parseEvidenceFact = (value: unknown, context: string): EvidenceFact => {
     const valueField = record.value;
     if (
         valueField !== undefined &&
+        valueField !== null &&
         typeof valueField !== 'string' &&
         typeof valueField !== 'number'
     ) {
-        throw new TypeError(`${context}.value must be string | number | undefined.`);
+        throw new TypeError(
+            `${context}.value must be string | number | null | undefined.`
+        );
     }
 
     const provenanceRaw = record.provenance;
@@ -383,9 +394,14 @@ const parseEvidenceFact = (value: unknown, context: string): EvidenceFact => {
         source_weight: sourceWeight,
         summary: parseString(record.summary, `${context}.summary`),
     };
-    if (valueField !== undefined) fact.value = valueField;
-    if (record.period !== undefined) {
-        fact.period = parseString(record.period, `${context}.period`);
+    if (valueField !== undefined && valueField !== null) fact.value = valueField;
+    const units = parseNullableOptionalString(record.units, `${context}.units`);
+    if (typeof units === 'string') {
+        fact.units = units;
+    }
+    const period = parseNullableOptionalString(record.period, `${context}.period`);
+    if (typeof period === 'string') {
+        fact.period = period;
     }
     if (provenanceRaw !== undefined && provenanceRaw !== null) {
         fact.provenance = provenanceRaw;
@@ -435,41 +451,44 @@ export const parseDebateArtifact = (
         debate_rounds: parseNumber(record.debate_rounds, `${context}.debate_rounds`),
     };
 
-    if (record.rr_ratio !== undefined) {
-        artifact.rr_ratio = parseNumber(record.rr_ratio, `${context}.rr_ratio`);
+    const rrRatio = parseNullableOptionalNumber(record.rr_ratio, `${context}.rr_ratio`);
+    if (rrRatio !== undefined) artifact.rr_ratio = rrRatio;
+    const alpha = parseNullableOptionalNumber(record.alpha, `${context}.alpha`);
+    if (alpha !== undefined) artifact.alpha = alpha;
+    const riskFreeBenchmark = parseNullableOptionalNumber(
+        record.risk_free_benchmark,
+        `${context}.risk_free_benchmark`
+    );
+    if (riskFreeBenchmark !== undefined) {
+        artifact.risk_free_benchmark = riskFreeBenchmark;
     }
-    if (record.alpha !== undefined) {
-        artifact.alpha = parseNumber(record.alpha, `${context}.alpha`);
+    const rawEv = parseNullableOptionalNumber(record.raw_ev, `${context}.raw_ev`);
+    if (rawEv !== undefined) artifact.raw_ev = rawEv;
+    const conviction = parseNullableOptionalNumber(
+        record.conviction,
+        `${context}.conviction`
+    );
+    if (conviction !== undefined) artifact.conviction = conviction;
+    const analysisBias = parseNullableOptionalString(
+        record.analysis_bias,
+        `${context}.analysis_bias`
+    );
+    if (typeof analysisBias === 'string') {
+        artifact.analysis_bias = analysisBias;
     }
-    if (record.risk_free_benchmark !== undefined) {
-        artifact.risk_free_benchmark = parseNumber(
-            record.risk_free_benchmark,
-            `${context}.risk_free_benchmark`
-        );
+    const modelSummary = parseNullableOptionalString(
+        record.model_summary,
+        `${context}.model_summary`
+    );
+    if (typeof modelSummary === 'string') {
+        artifact.model_summary = modelSummary;
     }
-    if (record.raw_ev !== undefined) {
-        artifact.raw_ev = parseNumber(record.raw_ev, `${context}.raw_ev`);
-    }
-    if (record.conviction !== undefined) {
-        artifact.conviction = parseNumber(record.conviction, `${context}.conviction`);
-    }
-    if (record.analysis_bias !== undefined) {
-        artifact.analysis_bias = parseString(
-            record.analysis_bias,
-            `${context}.analysis_bias`
-        );
-    }
-    if (record.model_summary !== undefined) {
-        artifact.model_summary = parseString(
-            record.model_summary,
-            `${context}.model_summary`
-        );
-    }
-    if (record.data_quality_warning !== undefined) {
-        artifact.data_quality_warning = parseBoolean(
-            record.data_quality_warning,
-            `${context}.data_quality_warning`
-        );
+    const dataQualityWarning = parseNullableOptionalBoolean(
+        record.data_quality_warning,
+        `${context}.data_quality_warning`
+    );
+    if (dataQualityWarning !== undefined) {
+        artifact.data_quality_warning = dataQualityWarning;
     }
 
     if (historyRaw !== undefined) {
@@ -617,11 +636,12 @@ export const parseTechnicalArtifact = (
         semantic_tags: parseStringArray(record.semantic_tags, `${context}.semantic_tags`),
     };
 
-    if (record.llm_interpretation !== undefined) {
-        artifact.llm_interpretation = parseString(
-            record.llm_interpretation,
-            `${context}.llm_interpretation`
-        );
+    const llmInterpretation = parseNullableOptionalString(
+        record.llm_interpretation,
+        `${context}.llm_interpretation`
+    );
+    if (typeof llmInterpretation === 'string') {
+        artifact.llm_interpretation = llmInterpretation;
     }
 
     if (rawDataRecord !== undefined) {
@@ -671,13 +691,25 @@ export const parseFundamentalArtifact = (
     if (!parsed?.financial_reports) {
         throw new TypeError(`${context}.financial_reports is required.`);
     }
+    const ticker = parseString(record.ticker, `${context}.ticker`);
+    const companyName = parseNullableOptionalString(
+        record.company_name,
+        `${context}.company_name`
+    );
+    const sector = parseNullableOptionalString(record.sector, `${context}.sector`);
+    const industry = parseNullableOptionalString(record.industry, `${context}.industry`);
+    const reasoning = parseNullableOptionalString(
+        record.reasoning,
+        `${context}.reasoning`
+    );
+
     return {
-        ticker: parseString(record.ticker, `${context}.ticker`),
+        ticker,
         model_type: parseString(record.model_type, `${context}.model_type`),
-        company_name: parseString(record.company_name, `${context}.company_name`),
-        sector: parseString(record.sector, `${context}.sector`),
-        industry: parseString(record.industry, `${context}.industry`),
-        reasoning: parseString(record.reasoning, `${context}.reasoning`),
+        company_name: companyName ?? ticker,
+        sector: sector ?? 'Unknown',
+        industry: industry ?? 'Unknown',
+        reasoning: reasoning ?? '',
         financial_reports: parsed.financial_reports,
         status: 'done',
     };

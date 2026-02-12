@@ -14,6 +14,7 @@ export interface EvidenceFact {
     source_weight: 'HIGH' | 'MEDIUM' | 'LOW';
     summary: string;
     value?: string | number;
+    units?: string;
     period?: string;
     provenance?: Record<string, unknown>;
 }

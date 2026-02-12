@@ -47,6 +47,15 @@ describe('preview parsers', () => {
         expect(parsed?.signal_display).toBe('BULLISH');
     });
 
+    it('accepts nullable technical ticker as absent value', () => {
+        const parsed = parseTechnicalPreview({
+            ticker: null,
+            signal_display: 'BULLISH',
+        });
+        expect(parsed?.ticker).toBeUndefined();
+        expect(parsed?.signal_display).toBe('BULLISH');
+    });
+
     it('rejects invalid technical preview fields', () => {
         expect(() =>
             parseTechnicalPreview({

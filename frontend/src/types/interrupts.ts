@@ -14,7 +14,7 @@ export interface IntentExtraction {
     ticker?: string | null;
     model_preference?: string | null;
     is_valuation_request: boolean;
-    reasoning: string;
+    reasoning?: string | null;
 }
 
 export interface HumanTickerSelection {

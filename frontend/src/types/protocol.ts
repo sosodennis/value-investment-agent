@@ -106,8 +106,11 @@ const parseTickerCandidate = (value: unknown, context: string): TickerCandidate 
         throw new TypeError(`${context}.confidence must be a number.`);
     }
 
-    const exchange = parseOptionalString(record.exchange, `${context}.exchange`);
-    const type = parseOptionalString(record.type, `${context}.type`);
+    const exchange = parseNullableOptionalString(
+        record.exchange,
+        `${context}.exchange`
+    );
+    const type = parseNullableOptionalString(record.type, `${context}.type`);
 
     const candidate: TickerCandidate = {
         symbol,
@@ -126,12 +129,8 @@ const parseIntentExtraction = (
     if (value === undefined || value === null) return undefined;
     const record = toRecord(value, context);
     const isValuation = record.is_valuation_request;
-    const reasoning = record.reasoning;
     if (typeof isValuation !== 'boolean') {
         throw new TypeError(`${context}.is_valuation_request must be a boolean.`);
-    }
-    if (typeof reasoning !== 'string') {
-        throw new TypeError(`${context}.reasoning must be a string.`);
     }
 
     const companyName = parseNullableOptionalString(
@@ -143,16 +142,20 @@ const parseIntentExtraction = (
         record.model_preference,
         `${context}.model_preference`
     );
+    const reasoning = parseNullableOptionalString(
+        record.reasoning,
+        `${context}.reasoning`
+    );
 
     const intent: IntentExtraction = {
         is_valuation_request: isValuation,
-        reasoning,
     };
     if (companyName !== undefined) intent.company_name = companyName;
     if (ticker !== undefined) intent.ticker = ticker;
     if (modelPreference !== undefined) {
         intent.model_preference = modelPreference;
     }
+    if (reasoning !== undefined) intent.reasoning = reasoning;
     return intent;
 };
 

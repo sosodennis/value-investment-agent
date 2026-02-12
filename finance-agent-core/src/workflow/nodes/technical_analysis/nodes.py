@@ -7,6 +7,7 @@ from langgraph.graph import END
 from langgraph.types import Command
 
 from src.common.tools.logger import get_logger
+from src.interface.canonical_serializers import canonicalize_technical_artifact_data
 from src.interface.schemas import ArtifactReference, build_artifact_payload
 from src.services.artifact_manager import artifact_manager
 
@@ -439,19 +440,19 @@ async def semantic_translate_node(state: TechnicalAnalysisState) -> Command:
             preview = summarize_ta_for_preview(ctx)
             direction = str(tags_dict["direction"]).upper()
 
-            statistical_state = "EQUILIBRIUM"
+            statistical_state = "equilibrium"
             z_abs = abs(ctx.get("z_score_latest", 0))
             if z_abs >= 2.0:
-                statistical_state = "STATISTICAL_ANOMALY"
+                statistical_state = "anomaly"
             elif z_abs >= 1.0:
-                statistical_state = "DEVIATING"
+                statistical_state = "deviating"
 
-            memory_strength = "BALANCED"
+            memory_strength = "balanced"
             opt_d = ctx.get("optimal_d", 0.5)
             if opt_d < 0.3:
-                memory_strength = "STRUCTURALLY_STABLE"
+                memory_strength = "structurally_stable"
             elif opt_d > 0.6:
-                memory_strength = "FRAGILE"
+                memory_strength = "fragile"
 
             raw_data = {}
             if chart_artifact_id:
@@ -465,7 +466,7 @@ async def semantic_translate_node(state: TechnicalAnalysisState) -> Command:
 
             from datetime import datetime
 
-            full_report_data = {
+            full_report_data_raw = {
                 "ticker": ticker,
                 "timestamp": datetime.now().isoformat(),
                 "frac_diff_metrics": {
@@ -497,6 +498,9 @@ async def semantic_translate_node(state: TechnicalAnalysisState) -> Command:
                 "llm_interpretation": llm_interpretation,
                 "raw_data": raw_data,
             }
+            full_report_data = canonicalize_technical_artifact_data(
+                full_report_data_raw
+            )
 
             timestamp_int = int(time.time())
             report_id = await artifact_manager.save_artifact(

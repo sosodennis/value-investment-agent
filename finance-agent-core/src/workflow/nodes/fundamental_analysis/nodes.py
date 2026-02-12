@@ -4,6 +4,10 @@ from langgraph.graph import END
 from langgraph.types import Command
 
 from src.common.tools.logger import get_logger
+from src.interface.canonical_serializers import (
+    canonicalize_fundamental_artifact_data,
+    normalize_financial_reports,
+)
 from src.interface.schemas import ArtifactReference, build_artifact_payload
 from src.services.artifact_manager import artifact_manager
 
@@ -13,7 +17,6 @@ from .subgraph_state import FundamentalAnalysisState
 from .tools.model_selection import select_valuation_model
 from .tools.report_helpers import fmt_currency, fmt_num, fmt_str, ratio
 from .tools.sec_xbrl.models import (
-    FinancialReport,
     FinancialServicesExtension,
     IndustrialExtension,
     RealEstateExtension,
@@ -155,7 +158,9 @@ async def financial_health_node(state: FundamentalAnalysisState) -> Command:
                             row.append("None")
                     ext_rows.append(row)
 
-            reports_data = [r.model_dump() for r in financial_reports]
+            reports_data = normalize_financial_reports(
+                financial_reports, "financial_health.financial_reports"
+            )
             reports_artifact_id = await artifact_manager.save_artifact(
                 data=reports_data,
                 artifact_type="financial_reports",
@@ -272,28 +277,46 @@ async def model_selection_node(state: FundamentalAnalysisState) -> Command:
             try:
                 # Use most recent year (index 0)
                 latest_report_data = financial_reports[0]
-                report = FinancialReport(**latest_report_data)
-                base = report.base
+                base = (
+                    latest_report_data.get("base", {})
+                    if isinstance(latest_report_data, dict)
+                    else {}
+                )
 
                 # Add financial health context to reasoning
-                fy = base.fiscal_year.value if base.fiscal_year else "Unknown"
-                health_context = f"\n\nFinancial Health Insights (FY{fy}):\n"
+                def get_field(data: object, key: str) -> object | None:
+                    if isinstance(data, dict):
+                        return data.get(key)
+                    return getattr(data, key, None)
 
-                # Helper to extract value from TraceableField
-                def get_val(field):
+                # Supports canonical traceable objects ({ "value": ... }) and model objects.
+                def get_val(field: object) -> object | None:
                     if field is None:
                         return None
+                    if isinstance(field, dict):
+                        return field.get("value")
                     return getattr(field, "value", field)
 
+                def to_number(value: object) -> float | None:
+                    if isinstance(value, bool):
+                        return None
+                    if not isinstance(value, int | float):
+                        return None
+                    return float(value)
+
+                fy_value = get_val(get_field(base, "fiscal_year"))
+                fy = str(fy_value) if fy_value is not None else "Unknown"
+                health_context = f"\n\nFinancial Health Insights (FY{fy}):\n"
+
                 # Extract basic metrics
-                net_income_val = get_val(base.net_income)
-                equity_val = get_val(base.total_equity)
-                ocf_val = get_val(base.operating_cash_flow)
+                net_income_val = to_number(get_val(get_field(base, "net_income")))
+                equity_val = to_number(get_val(get_field(base, "total_equity")))
+                ocf_val = to_number(get_val(get_field(base, "operating_cash_flow")))
 
                 # Derived ratios for reasoning context
                 roe_val = (
                     (net_income_val / equity_val)
-                    if (net_income_val and equity_val)
+                    if (net_income_val is not None and equity_val not in (None, 0.0))
                     else None
                 )
 
@@ -369,19 +392,24 @@ async def model_selection_node(state: FundamentalAnalysisState) -> Command:
                 mapper_ctx["sector"] = profile_data.get("sector")
                 mapper_ctx["industry"] = profile_data.get("industry")
 
-            preview = summarize_fundamental_for_preview(mapper_ctx, financial_reports)
+            normalized_reports = normalize_financial_reports(
+                financial_reports, "model_selection.financial_reports"
+            )
+            preview = summarize_fundamental_for_preview(mapper_ctx, normalized_reports)
 
             # L3: Store full reports in Artifact Store
-            full_report_data = {
-                "ticker": resolved_ticker,
-                "model_type": model_type,
-                "company_name": mapper_ctx.get("company_name", resolved_ticker),
-                "sector": mapper_ctx.get("sector", "Unknown"),
-                "industry": mapper_ctx.get("industry", "Unknown"),
-                "reasoning": reasoning,
-                "financial_reports": financial_reports,
-                "status": "done",
-            }
+            full_report_data = canonicalize_fundamental_artifact_data(
+                {
+                    "ticker": resolved_ticker,
+                    "model_type": model_type,
+                    "company_name": mapper_ctx.get("company_name", resolved_ticker),
+                    "sector": mapper_ctx.get("sector", "Unknown"),
+                    "industry": mapper_ctx.get("industry", "Unknown"),
+                    "reasoning": reasoning,
+                    "financial_reports": normalized_reports,
+                    "status": "done",
+                }
+            )
 
             timestamp = int(time.time())
             report_id = await artifact_manager.save_artifact(

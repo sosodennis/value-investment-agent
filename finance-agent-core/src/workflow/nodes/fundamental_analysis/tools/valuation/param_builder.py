@@ -2,19 +2,24 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from src.common.traceable import ComputedProvenance, ManualProvenance, TraceableField
-
-from ..sec_xbrl.models import (
-    FinancialReport,
-    FinancialServicesExtension,
-    IndustrialExtension,
-    RealEstateExtension,
+from src.common.traceable import (
+    ComputedProvenance,
+    ManualProvenance,
+    TraceableField,
 )
+
 from .assumptions import (
     DEFAULT_DA_RATE,
     DEFAULT_TERMINAL_GROWTH,
     DEFAULT_WACC,
     assume_rate,
+)
+from .report_contract import (
+    FinancialReport,
+    FinancialServicesExtension,
+    IndustrialExtension,
+    RealEstateExtension,
+    parse_financial_reports,
 )
 
 TraceInput = TraceableField[float] | TraceableField[list[float]]
@@ -34,9 +39,9 @@ PROJECTION_YEARS = 5
 def build_params(
     model_type: str,
     ticker: str | None,
-    reports_raw: list[FinancialReport | dict] | None,
+    reports_raw: list[FinancialReport | dict[str, object]] | None,
 ) -> ParamBuildResult:
-    reports = _coerce_reports(reports_raw or [])
+    reports = parse_financial_reports(reports_raw or [])
     if not reports:
         raise ValueError("No SEC XBRL financial reports available")
 
@@ -59,16 +64,6 @@ def build_params(
         return _build_eva_params(ticker, latest)
 
     raise ValueError(f"Unsupported model type for SEC XBRL builder: {model_type}")
-
-
-def _coerce_reports(reports: list[FinancialReport | dict]) -> list[FinancialReport]:
-    result: list[FinancialReport] = []
-    for item in reports:
-        if isinstance(item, FinancialReport):
-            result.append(item)
-        elif isinstance(item, dict):
-            result.append(FinancialReport.model_validate(item))
-    return result
 
 
 def _report_year(report: FinancialReport) -> int:

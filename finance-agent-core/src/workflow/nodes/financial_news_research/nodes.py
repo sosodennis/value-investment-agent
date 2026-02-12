@@ -9,6 +9,7 @@ from langgraph.types import Command
 
 from src.common.tools.llm import get_llm
 from src.common.tools.logger import get_logger
+from src.interface.canonical_serializers import canonicalize_news_artifact_data
 from src.interface.schemas import ArtifactReference, build_artifact_payload
 from src.services.artifact_manager import artifact_manager
 
@@ -653,7 +654,7 @@ async def aggregator_node(state: FinancialNewsState) -> Command:
         key_themes=all_themes,
     )
 
-    report_data = final_output.model_dump(mode="json")
+    report_data = canonicalize_news_artifact_data(final_output.model_dump(mode="json"))
 
     timestamp = int(time.time())
     try:

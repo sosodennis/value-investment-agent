@@ -125,6 +125,25 @@ Applies to:
 2. SSE 協議漂移與 artifact shape 漂移可 fail-fast。
 3. lint/typecheck/test 全部通過。
 
+## Wave 6 (P0): Backend Canonical Artifact Serialization
+
+目標：把 backend artifact 輸出 shape 在存儲前統一 canonicalize，避免 frontend strict parser 因輸出漂移崩潰。
+
+任務：
+1. 新增 backend canonical serializer 模組，集中處理 fundamental/news/debate/technical artifact shape 正規化。
+2. 以 Pydantic model-driven 方式定義 canonical contract（validator 負責 enum/nullability/casing normalization）。
+3. fundamental full report 存檔前走 canonical serializer（含 `financial_reports` traceable fields）。
+4. technical full report 存檔前走 canonical serializer（含 enum casing 與 `raw_data` series numeric 清洗）。
+5. news/debate full report 存檔前走 canonical serializer（含 enum/nullability/history/facts 正規化）。
+6. 補 backend serializer 單元測試（合法/非法 payload）。
+7. 補 `/api/artifacts/{id}` integration tests，檢查 endpoint 回傳 contract shape。
+8. 更新流程文檔與 progress 文檔，記錄 wave 輸出與驗收證據。
+
+驗收：
+1. backend 產生的 artifact shape 與 frontend parser contract 一致。
+2. 已覆蓋 historical drift 類型（例如 `period_end_date` scalar、`memory_strength`/`statistical_state` casing、news/debate enum/nullability 漂移）。
+3. backend ruff/pytest（含 serializer + artifact API integration tests）通過。
+
 ## 5. Breaking Policy (No Compatibility)
 
 本計劃採用「不保留舊版本兼容」：

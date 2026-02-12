@@ -16,6 +16,14 @@ const parseOptionalString = (
     throw new TypeError(`${context} must be a string | undefined.`);
 };
 
+const parseNullableOptionalString = (
+    value: unknown,
+    context: string
+): string | undefined => {
+    if (value === null) return undefined;
+    return parseOptionalString(value, context);
+};
+
 export const parseTechnicalPreview = (
     value: unknown,
     context = 'technical preview'
@@ -24,7 +32,7 @@ export const parseTechnicalPreview = (
     const record = toRecord(value, context);
 
     const preview: TechnicalPreview = {};
-    const ticker = parseOptionalString(record.ticker, `${context}.ticker`);
+    const ticker = parseNullableOptionalString(record.ticker, `${context}.ticker`);
     const latestPrice = parseOptionalString(
         record.latest_price_display,
         `${context}.latest_price_display`

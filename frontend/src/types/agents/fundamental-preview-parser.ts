@@ -40,6 +40,14 @@ const parseOptionalString = (
     throw new TypeError(`${context} must be a string | undefined.`);
 };
 
+const parseNullableOptionalString = (
+    value: unknown,
+    context: string
+): string | undefined => {
+    if (value === null) return undefined;
+    return parseOptionalString(value, context);
+};
+
 const parseOptionalNumber = (
     value: unknown,
     context: string
@@ -47,6 +55,14 @@ const parseOptionalNumber = (
     if (value === undefined) return undefined;
     if (typeof value === 'number') return value;
     throw new TypeError(`${context} must be a number | undefined.`);
+};
+
+const parseNullableOptionalNumber = (
+    value: unknown,
+    context: string
+): number | undefined => {
+    if (value === null) return undefined;
+    return parseOptionalNumber(value, context);
 };
 
 const parseProvenance = (value: unknown, context: string): Provenance | null => {
@@ -97,6 +113,14 @@ const parseTraceableField = (value: unknown, context: string): TraceableField | 
     return field;
 };
 
+const parseOptionalTraceableField = (
+    value: unknown,
+    context: string
+): TraceableField | null => {
+    if (value === undefined || value === null) return null;
+    return parseTraceableField(value, context);
+};
+
 const parseBase = (value: unknown, context: string): FinancialReportBase => {
     const record = toRecord(value, context);
     return {
@@ -105,11 +129,11 @@ const parseBase = (value: unknown, context: string): FinancialReportBase => {
             record.fiscal_period,
             `${context}.fiscal_period`
         ),
-        period_end_date: parseTraceableField(
+        period_end_date: parseOptionalTraceableField(
             record.period_end_date,
             `${context}.period_end_date`
         ),
-        currency: parseTraceableField(record.currency, `${context}.currency`),
+        currency: parseOptionalTraceableField(record.currency, `${context}.currency`),
         company_name: parseTraceableField(
             record.company_name,
             `${context}.company_name`
@@ -243,6 +267,44 @@ const parseExtensionType = (
     );
 };
 
+const parseIndustryType = (
+    value: unknown,
+    context: string
+): FinancialReport['extension_type'] => {
+    if (value === undefined || value === null) return undefined;
+    if (value === 'Industrial') return 'Industrial';
+    if (value === 'FinancialServices' || value === 'Financial') {
+        return 'FinancialServices';
+    }
+    if (value === 'RealEstate') return 'RealEstate';
+    if (value === 'General') return null;
+    throw new TypeError(
+        `${context} must be Industrial | Financial | FinancialServices | RealEstate | General | null | undefined.`
+    );
+};
+
+const inferExtensionTypeFromShape = (
+    value: unknown,
+    context: string
+): FinancialReport['extension_type'] => {
+    if (value === undefined || value === null) return undefined;
+    const record = toRecord(value, context);
+    if ('inventory' in record || 'accounts_receivable' in record || 'capex' in record) {
+        return 'Industrial';
+    }
+    if (
+        'loans_and_leases' in record ||
+        'deposits' in record ||
+        'allowance_for_credit_losses' in record
+    ) {
+        return 'FinancialServices';
+    }
+    if ('real_estate_assets' in record || 'ffo' in record) {
+        return 'RealEstate';
+    }
+    return undefined;
+};
+
 const parseExtension = (
     value: unknown,
     extensionType: FinancialReport['extension_type'],
@@ -271,16 +333,28 @@ const parseFinancialReport = (value: unknown, context: string): FinancialReport 
         throw new TypeError(`${context}.base is required.`);
     }
 
-    const extensionType = parseExtensionType(
+    const extensionTypeExplicit = parseExtensionType(
         record.extension_type,
         `${context}.extension_type`
     );
+    const extensionTypeFromIndustry = parseIndustryType(
+        record.industry_type,
+        `${context}.industry_type`
+    );
+    const extensionTypeInferred = inferExtensionTypeFromShape(
+        record.extension,
+        `${context}.extension`
+    );
+    const extensionType =
+        extensionTypeExplicit ??
+        extensionTypeFromIndustry ??
+        extensionTypeInferred;
 
     const report: FinancialReport = {
         base: parseBase(record.base, `${context}.base`),
     };
 
-    if ('extension_type' in record) {
+    if (extensionType !== undefined) {
         report.extension_type = extensionType ?? null;
     }
     if ('extension' in record) {
@@ -353,10 +427,10 @@ export const parseFinancialPreview = (
     const record = toRecord(value, context);
     const parsed: ParsedFinancialPreview = {};
 
-    const ticker = parseOptionalString(record.ticker, `${context}.ticker`);
+    const ticker = parseNullableOptionalString(record.ticker, `${context}.ticker`);
     if (ticker !== undefined) parsed.ticker = ticker;
 
-    const valuationScore = parseOptionalNumber(
+    const valuationScore = parseNullableOptionalNumber(
         record.valuation_score,
         `${context}.valuation_score`
     );

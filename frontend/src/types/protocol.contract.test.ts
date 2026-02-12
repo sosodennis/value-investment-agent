@@ -248,40 +248,47 @@ describe('REST boundary parsers', () => {
         ).toThrowError('thread.node_statuses.unknown_agent has unsupported status value.');
     });
 
-    it('rejects null exchange in ticker candidate under zero-compat mode', () => {
-        expect(() =>
-            parseThreadStateResponse({
-                thread_id: 'thread_1',
-                messages: [
-                    {
-                        id: 'm1',
-                        role: 'assistant',
-                        content: 'done',
-                        type: 'text',
-                    },
-                ],
-                interrupts: [
-                    {
-                        type: 'ticker_selection',
-                        reason: 'Ambiguous ticker',
-                        candidates: [
-                            {
-                                symbol: 'AAPL',
-                                name: 'Apple Inc.',
-                                confidence: 0.95,
-                                exchange: null,
-                            },
-                        ],
-                    },
-                ],
-                is_running: false,
-                node_statuses: {
-                    intent_extraction: 'done',
+    it('accepts nullable ticker candidate fields and nullable intent reasoning', () => {
+        const parsed = parseThreadStateResponse({
+            thread_id: 'thread_1',
+            messages: [
+                {
+                    id: 'm1',
+                    role: 'assistant',
+                    content: 'done',
+                    type: 'text',
                 },
-                agent_outputs: {},
-                last_seq_id: 1,
-            })
-        ).toThrowError('thread.interrupts[0].candidates[0].exchange must be a string | undefined.');
+            ],
+            interrupts: [
+                {
+                    type: 'ticker_selection',
+                    reason: 'Ambiguous ticker',
+                    candidates: [
+                        {
+                            symbol: 'AAPL',
+                            name: 'Apple Inc.',
+                            confidence: 0.95,
+                            exchange: null,
+                            type: null,
+                        },
+                    ],
+                    intent: {
+                        is_valuation_request: true,
+                        reasoning: null,
+                    },
+                },
+            ],
+            is_running: false,
+            node_statuses: {
+                intent_extraction: 'done',
+            },
+            agent_outputs: {},
+            last_seq_id: 1,
+        });
+
+        expect(parsed.interrupts[0]?.candidates[0]?.exchange).toBeNull();
+        expect(parsed.interrupts[0]?.candidates[0]?.type).toBeNull();
+        expect(parsed.interrupts[0]?.intent?.reasoning).toBeNull();
     });
 
     it('rejects invalid thread state payload', () => {

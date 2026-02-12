@@ -10,6 +10,7 @@ from langgraph.types import Command
 from src.common.tools.llm import get_llm
 from src.common.tools.logger import get_logger
 from src.common.traceable import ManualProvenance, XBRLProvenance
+from src.interface.canonical_serializers import canonicalize_debate_artifact_data
 from src.interface.schemas import ArtifactReference, build_artifact_payload
 from src.services.artifact_manager import artifact_manager
 
@@ -1072,11 +1073,12 @@ async def verdict_node(state: DebateState) -> Command:
         conclusion_data["citation_audit"] = audit_results
 
         # Prepare full report data (Conclusion + History + Facts)
-        full_report_data = {
+        full_report_data_raw = {
             **conclusion_data,
             "facts": [f.model_dump(mode="json") for f in valid_facts],
             "history": [msg.model_dump(mode="json") for msg in history],
         }
+        full_report_data = canonicalize_debate_artifact_data(full_report_data_raw)
 
         # Save artifact (L3) - Now full report, not just transcript
         report_id = await artifact_manager.save_artifact(
