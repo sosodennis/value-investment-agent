@@ -2,33 +2,29 @@ import React, { memo } from 'react';
 import { Zap, TrendingUp } from 'lucide-react';
 import { NewsResearchCard } from '../NewsResearchCard';
 import { AINewsSummary } from '../AINewsSummary';
-import { NewsResearchOutput as NewsResearchOutputType } from '@/types/agents/news';
-import { StandardAgentOutput, AgentStatus } from '@/types/agents';
+import { parseNewsArtifact } from '@/types/agents/artifact-parsers';
+import { ArtifactReference, AgentStatus } from '@/types/agents';
 import { useArtifact } from '../../hooks/useArtifact';
 import { AgentLoadingState } from './AgentLoadingState';
 import { NewsPreview } from '@/types/preview';
-import { parseNewsPreview } from '@/types/agents/news-preview-parser';
 
 interface NewsResearchOutputProps {
-    output: StandardAgentOutput | null;
+    reference: ArtifactReference | null;
+    previewData: NewsPreview | null;
     resolvedTicker: string | null | undefined;
     status: AgentStatus;
 }
 
 const NewsResearchOutputComponent: React.FC<NewsResearchOutputProps> = ({
-    output,
+    reference,
+    previewData,
     resolvedTicker,
     status
 }) => {
-    const reference = output?.reference;
-    const preview = output?.preview;
-    const previewData: NewsPreview | null = parseNewsPreview(
-        preview,
-        'news_output.preview'
-    );
-
-    const { data: artifactData, isLoading: isArtifactLoading } = useArtifact<NewsResearchOutputType>(
-        reference?.artifact_id
+    const { data: artifactData, isLoading: isArtifactLoading } = useArtifact(
+        reference?.artifact_id,
+        parseNewsArtifact,
+        'news_output.artifact'
     );
 
     const effectiveOutput = artifactData || previewData;

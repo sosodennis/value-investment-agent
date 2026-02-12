@@ -1,29 +1,29 @@
 import React, { memo } from 'react';
 import { Shield, Target, AlertTriangle, TrendingUp, TrendingDown, Minus, Info, CheckCircle2, Zap, Loader2 } from 'lucide-react';
-import { DebateSuccess } from '@/types/agents/debate';
+import { parseDebateArtifact } from '@/types/agents/artifact-parsers';
 import { DebateTranscript } from './DebateTranscript';
 import { DebateFactSheet } from './DebateFactSheet';
-import { StandardAgentOutput, AgentStatus } from '@/types/agents';
+import { ArtifactReference, AgentStatus } from '@/types/agents';
 import { useArtifact } from '../../hooks/useArtifact';
 import { DebatePreview } from '@/types/preview';
-import { parseDebatePreview } from '@/types/agents/debate-preview-parser';
 
 interface DebateOutputProps {
-    output: StandardAgentOutput | null;
+    reference: ArtifactReference | null;
+    previewData: DebatePreview | null;
     resolvedTicker?: string | null;
     status: AgentStatus;
 }
 
-const DebateOutputComponent: React.FC<DebateOutputProps> = ({ output, resolvedTicker, status }) => {
-    const reference = output?.reference;
-    const preview = output?.preview;
-    const previewData: DebatePreview | null = parseDebatePreview(
-        preview,
-        'debate_output.preview'
-    );
-
-    const { data: artifactData, isLoading: isArtifactLoading } = useArtifact<DebateSuccess>(
-        reference?.artifact_id
+const DebateOutputComponent: React.FC<DebateOutputProps> = ({
+    reference,
+    previewData,
+    resolvedTicker,
+    status
+}) => {
+    const { data: artifactData, isLoading: isArtifactLoading } = useArtifact(
+        reference?.artifact_id,
+        parseDebateArtifact,
+        'debate_output.artifact'
     );
 
     const isPreviewOnly = !artifactData && !!previewData;

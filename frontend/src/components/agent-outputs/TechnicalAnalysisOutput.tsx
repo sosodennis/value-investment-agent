@@ -1,6 +1,6 @@
 import React, { useState, useMemo, memo } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { AgentStatus, StandardAgentOutput } from '@/types/agents';
+import { AgentStatus, ArtifactReference } from '@/types/agents';
 import {
     ResponsiveContainer,
     AreaChart,
@@ -27,14 +27,14 @@ import {
     Maximize2,
     Minimize2
 } from 'lucide-react';
-import { TechnicalAnalysisSuccess } from '@/types/agents/technical';
+import { parseTechnicalArtifact } from '@/types/agents/artifact-parsers';
 import { useArtifact } from '../../hooks/useArtifact';
 import { AgentLoadingState } from './AgentLoadingState';
 import { TechnicalPreview, isRecord } from '@/types/preview';
-import { parseTechnicalPreview } from '@/types/agents/technical-preview-parser';
 
 interface TechnicalAnalysisOutputProps {
-    output: StandardAgentOutput | null;
+    reference: ArtifactReference | null;
+    previewData: TechnicalPreview | null;
     status: AgentStatus;
 }
 
@@ -160,22 +160,18 @@ const ProbabilityGauge = ({ value }: { value: number }) => {
 // --- 3. Main Component ---
 
 const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> = ({
-    output,
+    reference,
+    previewData,
     status
 }) => {
     const [showAdvanced, setShowAdvanced] = useState(false);
     const [isAutoFit, setIsAutoFit] = useState(false);
     const [timeframe, setTimeframe] = useState<Timeframe>('ALL');
 
-    const reference = output?.reference;
-    const preview = output?.preview;
-    const previewData: TechnicalPreview | null = parseTechnicalPreview(
-        preview,
-        'technical_output.preview'
-    );
-
-    const { data: artifactData, isLoading: isArtifactLoading } = useArtifact<TechnicalAnalysisSuccess>(
-        reference?.artifact_id
+    const { data: artifactData, isLoading: isArtifactLoading } = useArtifact(
+        reference?.artifact_id,
+        parseTechnicalArtifact,
+        'technical_output.artifact'
     );
 
     // Data Processing & Outlier Filtering

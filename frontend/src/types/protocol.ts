@@ -2,6 +2,7 @@ import { AgentErrorLog, AgentStatus, StandardAgentOutput } from './agents';
 import {
     HumanTickerSelection,
     InterruptRequestData,
+    parseInterruptRequestData,
     InterruptResumePayload,
     IntentExtraction,
     TickerCandidate,
@@ -13,6 +14,8 @@ type ApiThreadStateResponse =
     operations['get_thread_history_thread__thread_id__get']['responses'][200]['content']['application/json'];
 type ApiStreamStartResponse =
     operations['stream_agent_stream_post']['responses'][200]['content']['application/json'];
+type ApiAgentStatusesResponse =
+    operations['get_agent_statuses_thread__thread_id__agents_get']['responses'][200]['content']['application/json'];
 
 export interface Message {
     id: string;
@@ -277,15 +280,21 @@ const parseMessage = (value: unknown, context: string): Message => {
         throw new TypeError(`${context}.content must be a string.`);
     }
 
+    const type = parseMessageType(record.type, `${context}.type`);
     const message: Message = {
         id,
         role,
         content,
-        type: parseMessageType(record.type, `${context}.type`),
+        type,
     };
 
     if ('data' in record) {
-        message.data = record.data;
+        message.data =
+            type === 'interrupt.request'
+                ? parseInterruptRequestData(record.data, `${context}.data`)
+                : record.data;
+    } else if (type === 'interrupt.request') {
+        throw new TypeError(`${context}.data is required for interrupt.request.`);
     }
     if ('created_at' in record) {
         const createdAt = parseNullableOptionalString(
@@ -418,6 +427,26 @@ export type AgentEventType =
     | 'agent.status'
     | 'error';
 
+const isAgentEventType = (value: unknown): value is AgentEventType =>
+    value === 'lifecycle.status' ||
+    value === 'content.delta' ||
+    value === 'state.update' ||
+    value === 'interrupt.request' ||
+    value === 'agent.status' ||
+    value === 'error';
+
+type LifecycleStatus = LifecycleStatusEvent['data']['status'];
+const LIFECYCLE_STATUS_VALUES: LifecycleStatus[] = [
+    'idle',
+    'running',
+    'paused',
+    'error',
+    'done',
+];
+
+const isLifecycleStatus = (value: unknown): value is LifecycleStatus =>
+    LIFECYCLE_STATUS_VALUES.some((status) => status === value);
+
 interface AgentEventBase {
     id: string;
     timestamp: string;
@@ -486,6 +515,14 @@ export type ThreadStateResponse = Omit<
     agent_outputs: Record<string, StandardAgentOutput>;
 };
 
+export type AgentStatusesResponse = Omit<
+    ApiAgentStatusesResponse,
+    'node_statuses' | 'agent_outputs'
+> & {
+    node_statuses: Record<string, AgentStatus>;
+    agent_outputs: Record<string, StandardAgentOutput>;
+};
+
 export interface StreamRequest {
     thread_id: string;
     message?: string;
@@ -494,24 +531,216 @@ export interface StreamRequest {
 
 export type StreamStartResponse = ApiStreamStartResponse;
 
-export const isAgentEvent = (value: unknown): value is AgentEvent => {
-    if (!isRecord(value)) return false;
-    const type = value.type;
-    if (typeof type !== 'string') return false;
-    if (typeof value.id !== 'string') return false;
-    if (typeof value.timestamp !== 'string') return false;
-    if (typeof value.thread_id !== 'string') return false;
-    if (typeof value.run_id !== 'string') return false;
-    if (typeof value.seq_id !== 'number') return false;
-    if (value.protocol_version !== 'v1') return false;
-    if (typeof value.source !== 'string') return false;
-    if (!isRecord(value.data)) return false;
-    return (
-        type === 'lifecycle.status' ||
-        type === 'content.delta' ||
-        type === 'state.update' ||
-        type === 'interrupt.request' ||
-        type === 'agent.status' ||
-        type === 'error'
+const parseValidationErrorMessage = (value: unknown): string | null => {
+    if (!Array.isArray(value)) return null;
+    const messages: string[] = [];
+    for (const entry of value) {
+        if (!isRecord(entry) || Array.isArray(entry)) {
+            continue;
+        }
+        const record = entry;
+        const msg = record.msg;
+        if (typeof msg !== 'string') continue;
+        const locRaw = record.loc;
+        const loc =
+            Array.isArray(locRaw) &&
+            locRaw.every((part) => typeof part === 'string' || typeof part === 'number')
+                ? locRaw.map(String).join('.')
+                : null;
+        messages.push(loc ? `${loc}: ${msg}` : msg);
+    }
+    return messages.length > 0 ? messages.join('; ') : null;
+};
+
+export const parseApiErrorMessage = (
+    value: unknown
+): string | null => {
+    if (!isRecord(value)) return null;
+    if (!('detail' in value)) return null;
+    const detail = value.detail;
+    if (typeof detail === 'string') return detail;
+    const validationMessage = parseValidationErrorMessage(detail);
+    return validationMessage;
+};
+
+export const parseAgentStatusesResponse = (
+    value: unknown
+): AgentStatusesResponse => {
+    const record = toRecord(value, 'agent statuses response');
+    const nodeStatusesRecord = toRecord(
+        record.node_statuses,
+        'agent statuses response.node_statuses'
     );
+    const node_statuses: Record<string, AgentStatus> = {};
+    for (const [node, statusRaw] of Object.entries(nodeStatusesRecord)) {
+        node_statuses[node] = parseAgentStatus(
+            statusRaw,
+            `agent statuses response.node_statuses.${node}`
+        );
+    }
+
+    const outputsRecord = toRecord(
+        record.agent_outputs,
+        'agent statuses response.agent_outputs'
+    );
+    const agent_outputs: Record<string, StandardAgentOutput> = {};
+    for (const [agentId, output] of Object.entries(outputsRecord)) {
+        agent_outputs[agentId] = parseStandardAgentOutput(
+            output,
+            `agent statuses response.agent_outputs.${agentId}`
+        );
+    }
+
+    const current_node = parseNullableOptionalString(
+        record.current_node,
+        'agent statuses response.current_node'
+    );
+    const response: AgentStatusesResponse = {
+        node_statuses,
+        agent_outputs,
+    };
+    if (current_node !== undefined) {
+        response.current_node = current_node;
+    }
+    return response;
+};
+
+export const parseAgentEvent = (
+    value: unknown,
+    context = 'agent event'
+): AgentEvent => {
+    const record = toRecord(value, context);
+    if (!isAgentEventType(record.type)) {
+        throw new TypeError(`${context}.type is invalid.`);
+    }
+
+    const id = record.id;
+    const timestamp = record.timestamp;
+    const threadId = record.thread_id;
+    const runId = record.run_id;
+    const seqId = record.seq_id;
+    const protocolVersion = record.protocol_version;
+    const source = record.source;
+    if (typeof id !== 'string') {
+        throw new TypeError(`${context}.id must be a string.`);
+    }
+    if (typeof timestamp !== 'string') {
+        throw new TypeError(`${context}.timestamp must be a string.`);
+    }
+    if (typeof threadId !== 'string') {
+        throw new TypeError(`${context}.thread_id must be a string.`);
+    }
+    if (typeof runId !== 'string') {
+        throw new TypeError(`${context}.run_id must be a string.`);
+    }
+    if (typeof seqId !== 'number') {
+        throw new TypeError(`${context}.seq_id must be a number.`);
+    }
+    if (protocolVersion !== 'v1') {
+        throw new TypeError(`${context}.protocol_version must be v1.`);
+    }
+    if (typeof source !== 'string') {
+        throw new TypeError(`${context}.source must be a string.`);
+    }
+
+    let metadata: Record<string, unknown> | undefined;
+    if ('metadata' in record && record.metadata !== undefined) {
+        metadata = toRecord(record.metadata, `${context}.metadata`);
+    }
+
+    const base: AgentEventBase = {
+        id,
+        timestamp,
+        thread_id: threadId,
+        run_id: runId,
+        seq_id: seqId,
+        protocol_version: 'v1',
+        source,
+    };
+    const baseWithMetadata: AgentEventBase =
+        metadata === undefined ? base : { ...base, metadata };
+
+    if (record.type === 'content.delta') {
+        const data = toRecord(record.data, `${context}.data`);
+        const content = data.content;
+        if (typeof content !== 'string') {
+            throw new TypeError(`${context}.data.content must be a string.`);
+        }
+        return {
+            ...baseWithMetadata,
+            type: 'content.delta',
+            data: {
+                content,
+            },
+        };
+    }
+
+    if (record.type === 'state.update') {
+        return {
+            ...baseWithMetadata,
+            type: 'state.update',
+            data: parseStandardAgentOutput(record.data, `${context}.data`),
+        };
+    }
+
+    if (record.type === 'interrupt.request') {
+        return {
+            ...baseWithMetadata,
+            type: 'interrupt.request',
+            data: parseInterruptRequestData(record.data, `${context}.data`),
+        };
+    }
+
+    if (record.type === 'agent.status') {
+        const data = toRecord(record.data, `${context}.data`);
+        const status = parseAgentStatus(data.status, `${context}.data.status`);
+        const node = parseOptionalString(data.node, `${context}.data.node`);
+        const event: AgentStatusEvent = {
+            ...baseWithMetadata,
+            type: 'agent.status',
+            data: {
+                status,
+            },
+        };
+        if (node !== undefined) {
+            event.data.node = node;
+        }
+        return event;
+    }
+
+    if (record.type === 'lifecycle.status') {
+        const data = toRecord(record.data, `${context}.data`);
+        if (!isLifecycleStatus(data.status)) {
+            throw new TypeError(`${context}.data.status is invalid.`);
+        }
+        return {
+            ...baseWithMetadata,
+            type: 'lifecycle.status',
+            data: {
+                status: data.status,
+            },
+        };
+    }
+
+    const data = toRecord(record.data, `${context}.data`);
+    const message = data.message;
+    if (typeof message !== 'string') {
+        throw new TypeError(`${context}.data.message must be a string.`);
+    }
+    return {
+        ...baseWithMetadata,
+        type: 'error',
+        data: {
+            message,
+        },
+    };
+};
+
+export const isAgentEvent = (value: unknown): value is AgentEvent => {
+    try {
+        parseAgentEvent(value);
+        return true;
+    } catch {
+        return false;
+    }
 };

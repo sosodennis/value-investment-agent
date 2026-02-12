@@ -3,6 +3,9 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
     isAgentEvent,
+    parseAgentEvent,
+    parseAgentStatusesResponse,
+    parseApiErrorMessage,
     parseHistoryResponse,
     parseStreamStartResponse,
     parseThreadStateResponse,
@@ -74,6 +77,7 @@ describe('SSE contract fixtures', () => {
             expect(events.length).toBeGreaterThan(0);
             for (const event of events) {
                 expect(isAgentEvent(event)).toBe(true);
+                expect(() => parseAgentEvent(event)).not.toThrow();
             }
         }
     });
@@ -90,10 +94,69 @@ describe('SSE contract fixtures', () => {
 
         const candidate = { ...first, protocol_version: 'v2' };
         expect(isAgentEvent(candidate)).toBe(false);
+        expect(() => parseAgentEvent(candidate)).toThrowError(
+            'agent event.protocol_version must be v1.'
+        );
+    });
+
+    it('rejects invalid state.update payload shape', () => {
+        expect(() =>
+            parseAgentEvent({
+                id: 'evt_1',
+                timestamp: new Date().toISOString(),
+                thread_id: 'thread_1',
+                run_id: 'run_1',
+                seq_id: 1,
+                protocol_version: 'v1',
+                source: 'intent_extraction',
+                type: 'state.update',
+                data: {
+                    summary: 123,
+                },
+            })
+        ).toThrowError('agent event.data.summary must be a string.');
     });
 });
 
 describe('REST boundary parsers', () => {
+    it('parses interrupt.request message payload from history', () => {
+        const parsed = parseHistoryResponse([
+            {
+                id: 'm_interrupt_1',
+                role: 'assistant',
+                content: 'Please choose ticker',
+                type: 'interrupt.request',
+                data: {
+                    type: 'ticker_selection',
+                    title: 'Select ticker',
+                    description: 'Multiple matches found',
+                    data: {
+                        options: ['AAPL', 'AAP'],
+                    },
+                    schema: {
+                        type: 'object',
+                    },
+                },
+            },
+        ]);
+
+        expect(parsed[0]?.type).toBe('interrupt.request');
+        expect(parsed[0]?.data).toBeDefined();
+    });
+
+    it('rejects interrupt.request message without valid data payload', () => {
+        expect(() =>
+            parseHistoryResponse([
+                {
+                    id: 'm_interrupt_2',
+                    role: 'assistant',
+                    content: 'Please choose ticker',
+                    type: 'interrupt.request',
+                },
+            ])
+        ).toThrowError('history[0].data is required for interrupt.request.');
+    });
+
     it('rejects unknown history message type', () => {
         expect(() =>
             parseHistoryResponse([
@@ -248,5 +311,58 @@ describe('REST boundary parsers', () => {
                 thread_id: 'thread_2',
             })
         ).toThrowError('stream start response.status must be started or running.');
+    });
+
+    it('parses agent statuses response with strict status values', () => {
+        const parsed = parseAgentStatusesResponse({
+            current_node: 'intent_extraction',
+            node_statuses: {
+                intent_extraction: 'running',
+                fundamental_analysis: 'done',
+            },
+            agent_outputs: {
+                intent_extraction: {
+                    summary: 'Extracting ticker',
+                    preview: {
+                        ticker: 'AAPL',
+                    },
+                },
+            },
+        });
+
+        expect(parsed.current_node).toBe('intent_extraction');
+        expect(parsed.node_statuses.intent_extraction).toBe('running');
+        expect(parsed.agent_outputs.intent_extraction?.summary).toBe(
+            'Extracting ticker'
+        );
+    });
+
+    it('rejects unknown status in agent statuses response', () => {
+        expect(() =>
+            parseAgentStatusesResponse({
+                node_statuses: {
+                    intent_extraction: 'queued',
+                },
+                agent_outputs: {},
+            })
+        ).toThrowError(
+            'agent statuses response.node_statuses.intent_extraction has unsupported status value.'
+        );
+    });
+
+    it('extracts API error messages from string and validation formats', () => {
+        expect(parseApiErrorMessage({ detail: 'Simple error' })).toBe('Simple error');
+        expect(
+            parseApiErrorMessage({
+                detail: [
+                    {
+                        loc: ['body', 'thread_id'],
+                        msg: 'Field required',
+                        type: 'missing',
+                    },
+                ],
+            })
+        ).toBe('body.thread_id: Field required');
+        expect(parseApiErrorMessage({ detail: [{ foo: 'bar' }] })).toBeNull();
     });
 });

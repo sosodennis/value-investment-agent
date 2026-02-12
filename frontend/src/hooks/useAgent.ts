@@ -1,8 +1,9 @@
 import { useCallback, useState } from 'react';
 import { InterruptResumePayload } from '../types/interrupts';
 import {
-    isAgentEvent,
     Message,
+    parseAgentEvent,
+    parseApiErrorMessage,
     parseHistoryResponse,
     parseStreamStartResponse,
     parseThreadStateResponse,
@@ -15,16 +16,18 @@ const API_URL = process.env.NEXT_PUBLIC_LANGGRAPH_URL || 'http://localhost:8000'
 const toErrorMessage = (error: unknown, fallback: string): string =>
     error instanceof Error ? error.message : fallback;
 
-const hasDetail = (value: object): value is { detail: unknown } =>
-    'detail' in value;
-
-const parseErrorDetail = (value: unknown): string | null => {
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-        return null;
+const readErrorMessage = async (
+    response: Response,
+    fallback: string
+): Promise<string> => {
+    try {
+        const raw: unknown = await response.json();
+        return (
+            parseApiErrorMessage(raw) || `${fallback} (HTTP ${response.status})`
+        );
+    } catch {
+        return `${fallback} (HTTP ${response.status})`;
     }
-    if (!hasDetail(value)) return null;
-    const detail = value.detail;
-    return typeof detail === 'string' ? detail : null;
 };
 
 export function useAgent(assistantId: string = 'agent') {
@@ -46,7 +49,11 @@ export function useAgent(assistantId: string = 'agent') {
             let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
             try {
                 const response = await fetch(`${API_URL}/stream/${threadId}`);
-                if (!response.ok) throw new Error('Failed to attach to stream');
+                if (!response.ok) {
+                    throw new Error(
+                        await readErrorMessage(response, 'Failed to attach to stream')
+                    );
+                }
 
                 reader = response.body?.getReader();
                 const decoder = new TextDecoder();
@@ -67,13 +74,11 @@ export function useAgent(assistantId: string = 'agent') {
                         if (jsonStr === 'null') return;
                         try {
                             const parsed: unknown = JSON.parse(jsonStr);
-                            if (isAgentEvent(parsed)) {
-                                processEvent(parsed);
-                            } else {
-                                console.warn('Dropped invalid SSE payload:', parsed);
-                            }
+                            const event = parseAgentEvent(parsed, 'stream event');
+                            processEvent(event);
                         } catch (e) {
                             console.error('Error parsing SSE data:', line, e);
+                            throw e;
                         }
                     }
                 }
@@ -117,8 +122,7 @@ export function useAgent(assistantId: string = 'agent') {
                 });
 
                 if (!res.ok) {
-                    const errorRaw: unknown = await res.json();
-                    throw new Error(parseErrorDetail(errorRaw) || 'Could not start job');
+                    throw new Error(await readErrorMessage(res, 'Could not start job'));
                 }
                 const startData = parseStreamStartResponse(await res.json());
                 if (startData.thread_id !== currentThreadId) {
@@ -178,8 +182,7 @@ export function useAgent(assistantId: string = 'agent') {
                     body: JSON.stringify(requestPayload),
                 });
                 if (!res.ok) {
-                    const errorRaw: unknown = await res.json();
-                    throw new Error(parseErrorDetail(errorRaw) || 'Could not resume job');
+                    throw new Error(await readErrorMessage(res, 'Could not resume job'));
                 }
                 const startData = parseStreamStartResponse(await res.json());
                 if (startData.thread_id !== threadId) {
@@ -205,7 +208,9 @@ export function useAgent(assistantId: string = 'agent') {
 
                 const historyResponse = await fetch(historyUrl.toString());
                 if (!historyResponse.ok) {
-                    throw new Error(`History fetch failed: ${historyResponse.status}`);
+                    throw new Error(
+                        await readErrorMessage(historyResponse, 'History fetch failed')
+                    );
                 }
 
                 const historyRaw: unknown = await historyResponse.json();
@@ -221,6 +226,9 @@ export function useAgent(assistantId: string = 'agent') {
                         await parseStream(id);
                     }
                 } else {
+                    setError(
+                        await readErrorMessage(stateResponse, 'Thread state fetch failed')
+                    );
                     dispatchLoadHistory(historyData, id);
                 }
             } catch (error) {

@@ -1,32 +1,51 @@
 import React, { memo } from 'react';
 import { FileText, Clock, Loader2, Database, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
-import { AgentErrorLog, AgentStatus, StandardAgentOutput } from '@/types/agents';
+import { AgentStatus } from '@/types/agents';
+import { GenericOutputViewModel } from '@/types/agents/output-adapter';
+import { parseUnknownArtifact } from '@/types/agents/artifact-parsers';
 import { useArtifact } from '../../hooks/useArtifact';
 
 interface GenericAgentOutputProps {
     agentName: string;
-    output: StandardAgentOutput | null;
+    viewModel: GenericOutputViewModel;
     status: AgentStatus;
 }
 
 const GenericAgentOutputComponent: React.FC<GenericAgentOutputProps> = ({
     agentName,
-    output,
+    viewModel,
     status
 }) => {
-    const reference = output?.reference;
-    const preview = output?.preview ?? null;
-    const errorLogs: AgentErrorLog[] = output?.error_logs || [];
+    const reference = viewModel.reference;
+    const preview = viewModel.preview;
+    const errorLogs = viewModel.errorLogs;
 
     const [isLogsExpanded, setIsLogsExpanded] = React.useState(false);
 
-    const { data: artifactData, isLoading: isArtifactLoading } = useArtifact<Record<string, unknown>>(
-        reference?.artifact_id
+    const { data: artifactData, isLoading: isArtifactLoading } = useArtifact(
+        reference?.artifact_id,
+        parseUnknownArtifact,
+        'generic_output.artifact'
     );
 
-    const effectiveData = artifactData || preview;
+    const fallbackPayload: Record<string, unknown> = {};
+    if (viewModel.summary !== null) {
+        fallbackPayload.summary = viewModel.summary;
+    }
+    if (preview !== null) {
+        fallbackPayload.preview = preview;
+    }
+    if (reference !== null) {
+        fallbackPayload.reference = reference;
+    }
+    if (errorLogs.length > 0) {
+        fallbackPayload.error_logs = errorLogs;
+    }
 
-    if ((status !== 'done' && !effectiveData) || !output) {
+    const hasFallbackPayload = Object.keys(fallbackPayload).length > 0;
+    const effectiveData = artifactData || (hasFallbackPayload ? fallbackPayload : null);
+
+    if (status !== 'done' && !effectiveData) {
         return (
             <div className="flex-1 flex flex-col items-center justify-center p-12 text-center h-full min-h-[300px]">
                 <Clock size={48} className="text-slate-900 mb-4 animate-pulse opacity-50" />

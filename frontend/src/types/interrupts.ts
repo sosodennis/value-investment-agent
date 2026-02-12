@@ -68,6 +68,9 @@ export const isInterruptRequestData = (
     value: unknown
 ): value is InterruptRequestData => {
     if (!isRecord(value)) return false;
+    if ('ui_schema' in value && value.ui_schema !== undefined && !isRecord(value.ui_schema)) {
+        return false;
+    }
     return (
         value.type === 'ticker_selection' &&
         typeof value.title === 'string' &&
@@ -75,4 +78,16 @@ export const isInterruptRequestData = (
         isRecord(value.data) &&
         isRecord(value.schema)
     );
+};
+
+export const parseInterruptRequestData = (
+    value: unknown,
+    context = 'interrupt request'
+): InterruptRequestData => {
+    if (!isInterruptRequestData(value)) {
+        throw new TypeError(
+            `${context} has invalid shape. Expected ticker_selection interrupt payload.`
+        );
+    }
+    return value;
 };

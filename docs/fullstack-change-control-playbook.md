@@ -85,6 +85,8 @@ npm run test -- --run
 4. Implement backend behavior.
 5. Implement frontend consumption/rendering with parser-first boundaries:
    - runtime decode in protocol/parser layer
+   - SSE event parse (`parseAgentEvent`) before reducer ingestion
+   - artifact response parse before component consumption
    - domain parser module per agent output
    - UI consumes parsed view model only
 6. Update tests:
@@ -183,8 +185,12 @@ Render a new preview/reference output without breaking existing agents.
 2. If API schema changed, regenerate contracts.
 3. Create or update a dedicated preview parser module:
    - `frontend/src/types/agents/<domain>-preview-parser.ts`
-4. Extend output component to consume parsed preview model only.
-5. Add parser test + UI/contract test coverage.
+4. Register parser into output adapter/registry:
+   - `frontend/src/types/agents/output-adapter.ts`
+5. Extend output component to consume parsed preview model only.
+   - component receives `previewData/reference` from adapter
+   - component must not parse raw `output.preview` directly
+6. Add parser test + UI/contract test coverage.
 
 ### Pseudo
 
@@ -203,18 +209,24 @@ export const parseNewDomainPreview = (value: unknown): NewDomainPreview | null =
   // strict runtime validation, throw on invalid field types
 };
 
-// frontend output component
-const preview = parseNewDomainPreview(output?.preview, "new_domain.preview");
-const score = preview?.score_display ?? "N/A";
+// output adapter registry
+export const adaptAgentOutput = (agentId: string, output: StandardAgentOutput | null) => {
+  // route to parser by agentId and return typed view model
+};
+
+// AgentOutputTab (boundary)
+const vm = adaptAgentOutput(agent.id, rawOutput);
+return <NewDomainOutput previewData={vm.preview} reference={vm.reference} status={status} />;
 ```
 
 ### Controls
 
 1. New output fields must be optional-safe in frontend.
 2. No direct assumptions on nullable fields.
-3. Parser and UI must be split by responsibility:
+3. Parser/adapter/UI must be split by responsibility:
    - parser file validates shape
-   - component file renders parsed data
+   - adapter routes parser and produces view model
+   - component file renders parsed data only
 4. Contract artifacts must be regenerated when schema changes.
 
 ---
@@ -266,6 +278,7 @@ For external audit completeness, also cover:
 5. Contract-only refactor (no behavior change)
 6. Removing an agent entirely from workflow
 7. Artifact reference format change (`download_url`, `type`, id rules)
+8. Introducing a new response endpoint (REST/SSE/Artifact) and parser-first onboarding
 
 ---
 

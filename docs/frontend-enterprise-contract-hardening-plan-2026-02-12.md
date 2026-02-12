@@ -91,6 +91,40 @@ Applies to:
 2. 審計可追溯（文檔 + 測試 + checklist 一致）。
 3. runtime 路徑 type assertion 回歸可被機械檢出。
 
+## Wave 4 (P1): Output Adapter/Registry Consolidation
+
+目標：把 output 解析職責從 UI component 移到單一 adapter 邊界層。
+
+任務：
+1. 新增 `agentId -> parser` 的 output adapter/registry（typed union view model）。
+2. `AgentOutputTab` 成為唯一 output 解析入口（按 agent 產生 view model）。
+3. `Fundamental/News/Debate/Technical` output component 改為只接收 parsed preview + reference。
+4. `useFinancialData` 改為透過 adapter helper 取 preview，避免直接碰 raw preview。
+5. 補齊 adapter 測試（合法/非法 payload）。
+
+驗收：
+1. 主要 output component 不再直接 parse `output.preview`。
+2. parser/adapter/UI 責任分層清晰，符合 `contract -> parser/adapter -> view model -> UI`。
+3. lint/typecheck/test 全部通過。
+
+## Wave 5 (P0): Full Response Standardization
+
+目標：所有前端 response 入口都走 parser-first，消除 runtime 裸 payload 消費。
+
+任務：
+1. SSE 事件改為 `parseAgentEvent(...)` 深層解析（含 `state.update`/`interrupt.request` data）。
+2. `useArtifact` 改為強制傳入 parser（每個 artifact response 必須經 runtime parse）。
+3. 建立 artifact parsers（fundamental/news/debate/technical + generic JSON）。
+4. 所有 output component artifact 消費改為 parser-first。
+5. 補齊對應測試（SSE parser + artifact parser）。
+6. 非 2xx 回應也要 parser-first（`detail: string | ValidationError[]`）。
+7. 對 contract 中已存在但暫未接入 UI 的 response（如 `/thread/{thread_id}/agents`）提供獨立 parser 與測試覆蓋。
+
+驗收：
+1. `fetch(...).json()` 結果在所有入口都先 parse，再進入狀態或 UI。
+2. SSE 協議漂移與 artifact shape 漂移可 fail-fast。
+3. lint/typecheck/test 全部通過。
+
 ## 5. Breaking Policy (No Compatibility)
 
 本計劃採用「不保留舊版本兼容」：

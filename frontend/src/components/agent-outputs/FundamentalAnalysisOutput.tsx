@@ -1,39 +1,35 @@
 import React, { memo } from 'react';
 import { LayoutPanelTop, BarChart3 } from 'lucide-react';
 import { FinancialTable } from '../FinancialTable';
-import { AgentStatus, StandardAgentOutput } from '@/types/agents';
-import { FundamentalAnalysisSuccess } from '@/types/agents/fundamental';
-import { parseFinancialPreview } from '@/types/agents/fundamental-preview-parser';
+import { AgentStatus, ArtifactReference } from '@/types/agents';
+import { parseFundamentalArtifact } from '@/types/agents/artifact-parsers';
+import { ParsedFinancialPreview } from '@/types/agents/fundamental-preview-parser';
 import { useArtifact } from '../../hooks/useArtifact';
 import { AgentLoadingState } from './AgentLoadingState';
-import { isRecord } from '@/types/preview';
 
-interface FundamentalAnalysisOutputProps {
-    output: StandardAgentOutput | null;
+export interface FundamentalAnalysisOutputProps {
+    reference: ArtifactReference | null;
+    previewData: ParsedFinancialPreview | null;
     resolvedTicker: string | null | undefined;
     status: AgentStatus;
 }
 
 const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProps> = ({
-    output,
+    reference,
+    previewData,
     resolvedTicker,
     status
 }) => {
-    const reference = output?.reference;
-    const preview = output?.preview;
-    const previewData = isRecord(preview) ? preview : null;
-
-    const { data: artifactData, isLoading: isArtifactLoading } = useArtifact<FundamentalAnalysisSuccess>(
-        reference?.artifact_id
+    const { data: artifactData, isLoading: isArtifactLoading } = useArtifact(
+        reference?.artifact_id,
+        parseFundamentalArtifact,
+        'fundamental_output.artifact'
     );
 
-    const effectiveData = artifactData || previewData;
-    const parsed = parseFinancialPreview(effectiveData, 'fundamental_output.payload');
-    const reports = parsed?.financial_reports ?? [];
-
     const hasPreview = !!previewData;
-    const valuationScore = parsed?.valuation_score;
-    const previewKeyMetrics = parsed?.key_metrics ?? {};
+    const reports = artifactData?.financial_reports ?? previewData?.financial_reports ?? [];
+    const valuationScore = previewData?.valuation_score;
+    const previewKeyMetrics = previewData?.key_metrics ?? {};
 
     if (status !== 'done' && reports.length === 0 && !hasPreview) {
         return (
@@ -116,5 +112,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
     );
 };
 
-// Export with React.memo for performance optimization
-export const FundamentalAnalysisOutput = memo(FundamentalAnalysisOutputComponent);
+// Export with explicit props generic to stabilize memoized component type inference.
+export const FundamentalAnalysisOutput = memo<FundamentalAnalysisOutputProps>(
+    FundamentalAnalysisOutputComponent
+);

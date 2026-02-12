@@ -6,7 +6,7 @@ Related plan:
 ## Status Overview
 
 - Overall: `IN PROGRESS`
-- Current wave: `Wave 3 (P1) Governance and Gates`
+- Current wave: `Wave 5 (P0) Full Response Standardization`
 
 ## Checklist
 
@@ -24,6 +24,18 @@ Related plan:
 12. [x] Wave 2 擴展：Debate output 的 view-model parser 化
 13. [x] Preview parser 按 domain 拆分（news/debate/technical）
 14. [x] Wave 3 第三批：新增 lint/CI gate，防止 runtime `as` assertion 回歸
+15. [x] 新增 output adapter/registry（agentId -> typed preview/view model）
+16. [x] `AgentOutputTab` 改為單一解析入口（UI 不直接 parse preview）
+17. [x] `Fundamental/News/Debate/Technical` output 改為接收 parsed preview + reference
+18. [x] `useFinancialData` 改用 adapter helper 取 preview
+19. [x] output adapter 測試補齊
+20. [x] `GenericAgentOutput` 改為消費 adapter generic view model（不再依賴 raw output）
+21. [x] SSE 入口改為 `parseAgentEvent(...)` 深層解析（取代淺層 guard）
+22. [x] `useArtifact` 改為 parser-first（強制傳 parser）
+23. [x] 新增 artifact parsers（fundamental/news/debate/technical/generic）
+24. [x] 所有 output artifact 消費改為 parser-first
+25. [x] 補齊 artifact parser 測試
+26. [x] 補齊剩餘 response 邊界：`HTTP error payload` parser + `AgentStatusesResponse` parser + history interrupt data parser
 
 ## Execution Log
 
@@ -76,8 +88,42 @@ Related plan:
    - `frontend/eslint.config.mjs` 新增 runtime 路徑規則：禁止 `TSAsExpression`
    - 規則覆蓋 `components/hooks/types(agents/protocol/interrupts)`，測試檔排除
    - 透過既有 CI `frontend-lint-type-test` job 機械化攔截 assertion 回歸
+13. Wave 4 完成（Output Adapter/Registry）：
+   - 新增 `src/types/agents/output-adapter.ts`，提供：
+     - `adaptAgentOutput(...)`（agentId -> typed view model）
+     - `parse*PreviewFromOutput(...)` helpers
+   - `AgentOutputTab` 改為單一解析入口，`Fundamental/News/Debate/Technical/Generic` 全部只接收 adapter 結果
+   - `FundamentalAnalysisOutput` / `NewsResearchOutput` / `DebateOutput` / `TechnicalAnalysisOutput` 移除 component 內 preview parser
+   - `useFinancialData` 改用 `parseFundamentalPreviewFromOutput(...)`
+   - 新增測試：`src/types/agents/output-adapter.test.ts`
+14. Wave 4 驗證結果：
+   - `npm run lint` passed
+   - `npm run typecheck` passed
+   - `npm run test -- --run` passed（`5 files`, `23 tests`）
+15. Wave 5 完成（Full Response Standardization）：
+   - `protocol.ts` 新增 `parseAgentEvent(...)`，`isAgentEvent(...)` 改為 parser-based guard
+   - `useAgent.ts` stream 消費改為 `parseAgentEvent(...)`（payload drift fail-fast）
+   - `useArtifact.ts` 改為必須注入 parser：artifact response 不可直接當 typed data 使用
+   - 新增 `src/types/agents/artifact-parsers.ts`
+   - `Fundamental/News/Debate/Technical/Generic` output 全部改為 artifact parser-first
+   - 新增測試：`src/types/agents/artifact-parsers.test.ts`
+16. Wave 5 驗證結果：
+   - `npm run lint` passed
+   - `npm run typecheck` passed
+   - `npm run test -- --run` passed（`6 files`, `31 tests`）
+17. Wave 5 補漏完成（remaining response coverage）：
+   - `protocol.ts` 新增 `parseApiErrorMessage(...)`（支援 `detail: string` 與 `detail: ValidationError[]`）
+   - `useAgent.ts` / `useArtifact.ts` non-2xx 路徑改為 parser-first error extraction（含 non-JSON fallback）
+   - `protocol.ts` 新增 `parseAgentStatusesResponse(...)`，覆蓋 `/thread/{thread_id}/agents` contract response
+   - `parseHistoryResponse(...)` 對 `interrupt.request` message data 改為 strict parse（缺失/錯型直接 fail-fast）
+18. 補漏後驗證結果：
+   - `npm run lint` passed
+   - `npm run typecheck` passed
+   - `npm run test -- --run` passed（`6 files`, `36 tests`）
 
 ## Risks / Notes
 
 1. 目前已採 zero-compat parser；後端只要 payload 漂移，前端會直接 fail-fast。
 2. 規則目前鎖定 runtime 關鍵路徑；若未來新增 runtime folder，需同步擴充 ESLint `files` 範圍。
+3. 目前 adapter 僅覆蓋核心四個 output agent；若新增 agent，需同步擴充 `output-adapter.ts` 與 adapter tests。
+4. 新增 artifact endpoint 或 SSE event type 時，必須同步新增 parser 與測試，否則無法通過 Wave5 標準。

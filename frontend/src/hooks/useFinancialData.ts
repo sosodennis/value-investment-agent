@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
 import { DimensionScore, StandardAgentOutput } from '@/types/agents';
 import { TraceableField } from '@/types/agents/fundamental';
-import { parseFinancialPreview, ParsedSignalState } from '@/types/agents/fundamental-preview-parser';
+import { ParsedSignalState } from '@/types/agents/fundamental-preview-parser';
+import { parseFundamentalPreviewFromOutput } from '@/types/agents/output-adapter';
 import { isRecord } from '@/types/preview';
 
 const getFieldValue = (field: TraceableField | null | undefined): number => {
@@ -49,7 +50,10 @@ const getZScoreValuation = (signalState: ParsedSignalState | undefined): number 
 const getResolvedTicker = (
     output: StandardAgentOutput | null | undefined
 ): string | null => {
-    const parsed = parseFinancialPreview(output?.preview, 'intent_extraction.preview');
+    const parsed = parseFundamentalPreviewFromOutput(
+        output ?? null,
+        'intent_extraction'
+    );
     return parsed?.ticker ?? null;
 };
 
@@ -62,9 +66,9 @@ export const useFinancialData = (
         const resolvedTicker = getResolvedTicker(intentOutput);
 
         const rawOutput = allAgentOutputs[agentId] ?? null;
-        const parsedPreview = parseFinancialPreview(
-            rawOutput?.preview,
-            `${agentId}.preview`
+        const parsedPreview = parseFundamentalPreviewFromOutput(
+            rawOutput,
+            `${agentId}`
         );
         const agentReports = parsedPreview?.financial_reports ?? [];
         const latestReport = agentReports.length > 0 ? agentReports[0] : null;

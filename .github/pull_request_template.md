@@ -12,8 +12,11 @@
 - [ ] No compatibility fallback branches were introduced.
 - [ ] Frontend protocol/types updated if backend contract changed.
 - [ ] Frontend API boundary decoding is parser-first (no direct `as` cast from `fetch(...).json()` payloads).
+- [ ] Frontend SSE boundary decoding is parser-first (`parseAgentEvent(...)` used before reducer/event consumption).
+- [ ] Frontend artifact boundary decoding is parser-first (`useArtifact` call sites provide explicit parser).
 - [ ] Frontend preview consumption is parser-first (no `as FinancialReport[]` or equivalent raw preview assertions in UI paths).
 - [ ] New/changed preview output uses dedicated parser module (`frontend/src/types/agents/<domain>-preview-parser.ts`).
+- [ ] New/changed output wiring updates `frontend/src/types/agents/output-adapter.ts` (parser/adapter/view-model boundary remains centralized).
 
 ## Typing Rules
 - [ ] No `Any` introduced in `finance-agent-core/src` or `finance-agent-core/api`.
