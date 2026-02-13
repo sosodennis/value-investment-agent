@@ -86,3 +86,11 @@ Historical (reference only, may contain phased context):
 2. `docs/fullstack-change-control-playbook.md`
 3. `docs/monorepo-contract-upgrade-plan.md`
 4. `docs/monorepo-contract-upgrade-progress.md`
+
+## 9. Implementation Tracking
+
+1. Active execution status is tracked in:
+   - `docs/deep-refactor-progress-2026-02-13.md`
+2. Current deepening state:
+   - Fundamental package domain/application layering is implemented.
+   - News/Technical/Debate are in hardening migration toward the same end-state.

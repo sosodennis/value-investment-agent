@@ -1,7 +1,9 @@
 """
-Extraction logic for the Planner Node.
+Extraction logic for the Intent agent.
 Uses LLM to extract intent (Company, Model Preference) from user query.
 """
+
+from __future__ import annotations
 
 import re
 
@@ -9,12 +11,14 @@ from dotenv import find_dotenv, load_dotenv
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
+from src.agents.intent.domain.models import TickerCandidate
 from src.common.tools.llm import get_llm
-
-from .structures import TickerCandidate
+from src.common.tools.logger import get_logger
 
 # Load environment variables
 load_dotenv(find_dotenv())
+
+logger = get_logger(__name__)
 
 
 class IntentExtraction(BaseModel):
@@ -54,14 +58,11 @@ def _heuristic_extract(query: str) -> IntentExtraction:
     """
     query_lower = query.lower()
 
-    # 1. Look for obvious tickers (all caps, 1-5 chars)
     tickers = re.findall(r"\b[A-Z]{1,5}\b", query)
     ticker = tickers[0] if tickers else None
 
-    # 2. Extract company name if no ticker
     company_name = ticker
     if not company_name:
-        # Filter out common valuation stop words
         stop_words = {
             "valuation",
             "valuate",
@@ -78,15 +79,14 @@ def _heuristic_extract(query: str) -> IntentExtraction:
         }
         words = query.split()
 
-        # Filter words that are not stop words (case-insensitive)
         potential_names = [
             w for w in words if w.lower() not in stop_words and len(w) > 1
         ]
 
         if potential_names:
-            company_name = potential_names[-1]  # Take the last meaningful word
+            company_name = potential_names[-1]
         elif words:
-            company_name = words[-1]  # Fallback to last word if everything else fails
+            company_name = words[-1]
 
     return IntentExtraction(
         company_name=company_name,
@@ -102,20 +102,17 @@ def deduplicate_candidates(candidates: list[TickerCandidate]) -> list[TickerCand
     """
     De-duplicate ticker candidates that are likely the same security (e.g., BRK.B vs BRK-B).
     """
-    seen_normalized = {}
-    unique_candidates = []
+    seen_normalized: dict[str, TickerCandidate] = {}
+    unique_candidates: list[TickerCandidate] = []
 
     for candidate in candidates:
-        # Normalize: uppercase, remove common delimiters for sharing classes
         norm_symbol = re.sub(r"[\.\-]", "", candidate.symbol.upper())
 
         if norm_symbol not in seen_normalized:
             seen_normalized[norm_symbol] = candidate
             unique_candidates.append(candidate)
         else:
-            # If current candidate has higher confidence, replace the existing one
             if candidate.confidence > seen_normalized[norm_symbol].confidence:
-                # Update in the list as well
                 idx = unique_candidates.index(seen_normalized[norm_symbol])
                 unique_candidates[idx] = candidate
                 seen_normalized[norm_symbol] = candidate
@@ -155,11 +152,8 @@ def extract_candidates_from_search(
         response = chain.invoke({"query": query, "search_results": search_results})
 
         return response.candidates
-    except Exception as e:
-        from src.common.tools.logger import get_logger
-
-        logger = get_logger(__name__)
-        logger.warning(f"LLM Search Extraction failed: {e}. Returning empty list.")
+    except Exception as exc:
+        logger.warning(f"LLM Search Extraction failed: {exc}. Returning empty list.")
         return []
 
 
@@ -194,9 +188,6 @@ Return the IntentExtraction object.
         chain = prompt | llm.with_structured_output(IntentExtraction)
         response = chain.invoke({"query": query})
         return response
-    except Exception as e:
-        from src.common.tools.logger import get_logger
-
-        logger = get_logger(__name__)
-        logger.warning(f"LLM Extraction failed: {e}. Using fallback.")
+    except Exception as exc:
+        logger.warning(f"LLM Extraction failed: {exc}. Using fallback.")
         return _heuristic_extract(query)

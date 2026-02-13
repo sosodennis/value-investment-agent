@@ -3,22 +3,14 @@ Intent Extraction Nodes.
 Handles extraction, searching, decision, and clarification for ticker resolution.
 """
 
+from collections.abc import Mapping
+
 from langgraph.types import Command, interrupt
 
-from src.common.contracts import OUTPUT_KIND_INTENT_EXTRACTION
+from src.agents.intent.application.extraction import IntentExtraction
+from src.agents.intent.application.orchestrator import intent_orchestrator
 from src.common.tools.logger import get_logger
-from src.interface.schemas import build_artifact_payload
 
-from ..fundamental_analysis.extraction import (
-    IntentExtraction,
-    deduplicate_candidates,
-    extract_candidates_from_search,
-    extract_intent,
-)
-from ..fundamental_analysis.structures import TickerCandidate
-from ..fundamental_analysis.tools import get_company_profile, search_ticker, web_search
-from ..fundamental_analysis.tools.model_selection import should_request_clarification
-from .mappers import summarize_intent_for_preview
 from .subgraph_state import IntentExtractionState
 
 logger = get_logger(__name__)
@@ -44,7 +36,7 @@ def extraction_node(state: IntentExtractionState) -> Command:
 
     logger.info(f"--- Intent Extraction: Extracting intent from: {user_query} ---")
     try:
-        intent = extract_intent(user_query)
+        intent = intent_orchestrator.extract_intent(user_query)
         return Command(
             update={
                 "intent_extraction": {
@@ -81,85 +73,30 @@ def searching_node(state: IntentExtractionState) -> Command:
     """Search for the ticker based on extracted intent."""
     intent_ctx = state.get("intent_extraction", {})
     intent = intent_ctx.get("extracted_intent") or {}
-
-    # Extract explicit fields
-    extracted_ticker = intent.get("ticker")
-    extracted_name = intent.get("company_name")
-
-    # === Multi-Query Strategy ===
-    search_queries = []
-
-    # 1. Company Name (Broad Match) - Priorities catching multiple share classes (GOOG vs GOOGL)
-    if extracted_name:
-        search_queries.append(extracted_name)
-
-    # 2. Ticker (Exact Match) - Add if distinct from name
-    if extracted_ticker and extracted_ticker != extracted_name:
-        search_queries.append(extracted_ticker)
-
-    # If explicit extraction failed, fallback to the raw query (heuristic)
+    search_queries = intent_orchestrator.build_search_queries(
+        extracted_ticker=intent.get("ticker") if isinstance(intent, Mapping) else None,
+        extracted_name=(
+            intent.get("company_name") if isinstance(intent, Mapping) else None
+        ),
+        user_query=state.get("user_query"),
+    )
     if not search_queries:
-        user_query = state.get("user_query")
-        if user_query:
-            # Basic heuristic cleanup
-            clean_query = user_query.replace("Valuate", "").replace("Value", "").strip()
-            search_queries.append(clean_query)
-        else:
-            logger.warning(
-                "--- Intent Extraction: Search query missing, requesting clarification ---"
-            )
-            return Command(
-                update={
-                    "intent_extraction": {"status": "clarifying"},
-                    "current_node": "searching",
-                    "internal_progress": {"searching": "done", "clarifying": "running"},
-                },
-                goto="clarifying",
-            )
+        logger.warning(
+            "--- Intent Extraction: Search query missing, requesting clarification ---"
+        )
+        return Command(
+            update={
+                "intent_extraction": {"status": "clarifying"},
+                "current_node": "searching",
+                "internal_progress": {"searching": "done", "clarifying": "running"},
+            },
+            goto="clarifying",
+        )
 
     logger.info(f"--- Intent Extraction: Searching for queries: {search_queries} ---")
-    candidate_map = {}
 
     try:
-        # === Execute Search on All Queries ===
-        for query in search_queries:
-            # 1. Try Yahoo Finance Search
-            yf_candidates = search_ticker(query)
-
-            # Check for high confidence matches
-            high_confidence_candidates = [
-                c for c in yf_candidates if c.confidence >= 0.9
-            ]
-            if high_confidence_candidates:
-                logger.info(
-                    f"--- Intent Extraction: High confidence match found via Yahoo for '{query}': {[c.symbol for c in high_confidence_candidates]} ---"
-                )
-
-            for c in yf_candidates:
-                # Deduplicate by symbol
-                if c.symbol not in candidate_map:
-                    candidate_map[c.symbol] = c
-                else:
-                    # Merge: Keep the one with higher confidence
-                    if c.confidence > candidate_map[c.symbol].confidence:
-                        candidate_map[c.symbol] = c
-
-        # 2. Web Search fallback (Always run to ensure coverage)
-        # Use the primary query (Name or Ticker) for web search
-        primary_query = search_queries[0]
-        # Use quotes to force exact match and reduce noise
-        search_results = web_search(f'"{primary_query}" stock ticker symbol official')
-
-        web_candidates = extract_candidates_from_search(primary_query, search_results)
-
-        for c in web_candidates:
-            if c.symbol in candidate_map:
-                if c.confidence > candidate_map[c.symbol].confidence:
-                    candidate_map[c.symbol] = c
-            else:
-                candidate_map[c.symbol] = c
-
-        final_candidates = deduplicate_candidates(list(candidate_map.values()))
+        final_candidates = intent_orchestrator.search_candidates(search_queries)
         logger.info(f"Final candidates: {[c.symbol for c in final_candidates]}")
 
         return Command(
@@ -212,10 +149,8 @@ def decision_node(state: IntentExtractionState) -> Command:
         )
 
     try:
-        # Check for ambiguity
-        candidate_objs = [TickerCandidate(**c) for c in candidates]
-
-        if should_request_clarification(candidate_objs):
+        candidate_objs = intent_orchestrator.parse_candidates(candidates)
+        if intent_orchestrator.needs_clarification(candidate_objs):
             logger.warning(
                 "--- Intent Extraction: Ambiguity detected, requesting clarification ---"
             )
@@ -231,7 +166,7 @@ def decision_node(state: IntentExtractionState) -> Command:
         # Resolved - proceed to set resolved ticker
         resolved_ticker = candidate_objs[0].symbol
         logger.info(f"--- Intent Extraction: Ticker resolved to {resolved_ticker} ---")
-        profile = get_company_profile(resolved_ticker)
+        profile = intent_orchestrator.resolve_profile(resolved_ticker)
 
         if not profile:
             logger.warning(
@@ -248,28 +183,13 @@ def decision_node(state: IntentExtractionState) -> Command:
 
         from langgraph.graph import END
 
-        # --- Adapter Logic Integration ---
-        # Prepare context for artifact generation
-        intent_ctx = {
-            "status": "resolved",
-            "resolved_ticker": resolved_ticker,
-            "company_profile": profile.model_dump(),
-            # Other fields might be merged by the graph automatically, but we rely on what we are returning
-        }
-
-        # 1. Generate local preview
-        preview = summarize_intent_for_preview(intent_ctx)
-
-        # 2. Construct Artifact
-        summary = f"已確認分析標的: {resolved_ticker}"
-        artifact = build_artifact_payload(
-            kind=OUTPUT_KIND_INTENT_EXTRACTION,
-            summary=summary,
-            preview=preview,
-            reference=None,
+        intent_ctx = intent_orchestrator.build_resolved_intent_context(
+            ticker=resolved_ticker,
+            profile=profile,
         )
-
-        # 3. Inject artifact
+        artifact = intent_orchestrator.build_output_artifact(
+            resolved_ticker=resolved_ticker, intent_ctx=intent_ctx
+        )
         intent_ctx["artifact"] = artifact
 
         return Command(
@@ -327,21 +247,17 @@ def clarification_node(state: IntentExtractionState) -> Command:
     logger.info(f"--- Intent Extraction: Received user input: {user_input} ---")
 
     # user_input is what the frontend sends back, e.g. { "selected_symbol": "GOOGL" }
-    selected_symbol = user_input.get("selected_symbol") or user_input.get("ticker")
-
-    if not selected_symbol:
-        # Fallback to top candidate if resumed without choice
-        intent_ctx = state.get("intent_extraction", {})
-        candidates = intent_ctx.get("ticker_candidates") or []
-        if candidates:
-            top = candidates[0]
-            selected_symbol = top.get("symbol") if isinstance(top, dict) else top.symbol
+    candidate_objs = intent_orchestrator.parse_candidates(candidates_raw)
+    selected_symbol = intent_orchestrator.resolve_selected_symbol(
+        user_input=user_input,
+        candidate_objs=candidate_objs,
+    )
 
     if selected_symbol:
         logger.info(
             f"✅ User selected or fallback symbol: {selected_symbol}. Resolving..."
         )
-        profile = get_company_profile(selected_symbol)
+        profile = intent_orchestrator.resolve_profile(selected_symbol)
         if profile:
             from langchain_core.messages import AIMessage, HumanMessage
             from langgraph.graph import END
@@ -359,19 +275,13 @@ def clarification_node(state: IntentExtractionState) -> Command:
                 HumanMessage(content=f"Selected Ticker: {selected_symbol}"),
             ]
 
-            # --- Adapter Logic Integration ---
-            intent_ctx = {
-                "status": "resolved",
-                "resolved_ticker": selected_symbol,
-                "company_profile": profile.model_dump(),
-            }
-            preview = summarize_intent_for_preview(intent_ctx)
-            summary = f"已確認分析標的: {selected_symbol}"
-            artifact = build_artifact_payload(
-                kind=OUTPUT_KIND_INTENT_EXTRACTION,
-                summary=summary,
-                preview=preview,
-                reference=None,
+            intent_ctx = intent_orchestrator.build_resolved_intent_context(
+                ticker=selected_symbol,
+                profile=profile,
+            )
+            artifact = intent_orchestrator.build_output_artifact(
+                resolved_ticker=selected_symbol,
+                intent_ctx=intent_ctx,
             )
             intent_ctx["artifact"] = artifact
 

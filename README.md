@@ -141,6 +141,7 @@ Authoritative engineering guidelines (mandatory):
 *   [`docs/clean-architecture-engineering-guideline.md`](docs/clean-architecture-engineering-guideline.md)
 *   [`docs/backend-guideline.md`](docs/backend-guideline.md)
 *   [`docs/frontend-guideline.md`](docs/frontend-guideline.md)
+*   [`docs/fundamental-reference-architecture.md`](docs/fundamental-reference-architecture.md) (reference implementation)
 
 Cross-stack contract sync:
 

@@ -73,6 +73,7 @@ Examples:
 1. Node-level workflow steps.
 2. Use-case services combining domain + ports.
 3. Coordination logic and progress transitions.
+4. Agent-facing orchestrator entrypoint consumed by `src/workflow/**`.
 
 Forbidden:
 1. Low-level persistence format handling.
@@ -171,3 +172,9 @@ If still unclear, choose owner-agent local placement first, not `shared`.
 2. Contract tests for artifact/API boundaries.
 3. Parser fail-fast tests for invalid payloads.
 4. Zero compatibility fallback in runtime contract path.
+
+## 11. Workflow Boundary Rule (Target End-State)
+
+1. `src/workflow/**` should import `src/agents/*/application/**` only.
+2. `src/workflow/**` should not import `src/agents/*/data/**` or `src/agents/*/interface/**` directly.
+3. During migration, any exception must be documented in progress tracker with removal plan.

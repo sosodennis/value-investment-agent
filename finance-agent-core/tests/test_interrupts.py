@@ -1,9 +1,9 @@
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
+from src.agents.intent.application.extraction import IntentExtraction
+from src.agents.intent.domain.models import TickerCandidate
 from src.workflow.interrupts import HumanTickerSelection, InterruptValue
-from src.workflow.nodes.fundamental_analysis.extraction import IntentExtraction
-from src.workflow.nodes.fundamental_analysis.structures import TickerCandidate
 
 
 def test_ticker_selection_serialization():

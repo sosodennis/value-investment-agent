@@ -5,14 +5,19 @@ Policy: Zero compatibility in workflow contract path.
 
 ## 1. Backend Architecture Boundaries
 
-1. Domain: valuation logic and invariants.
-2. Application: workflow nodes and state transitions (`src/workflow/**`).
-3. Interface: contract models/parsers/mappers (`src/interface/**`).
-4. Infrastructure: DB and external integrations (`src/infrastructure/**`, external services).
+1. Domain: business semantics, invariants, financial rules (`src/agents/*/domain/**`).
+2. Application: agent use-cases and orchestrators (`src/agents/*/application/**`).
+3. Data: repositories/adapters to persistence and providers (`src/agents/*/data/**`).
+4. Interface: contracts/parsers/serializers/mappers (`src/agents/*/interface/**`, `src/interface/**`).
+5. Orchestration: framework wiring/state transitions (`src/workflow/**`).
+6. Infrastructure: DB/runtime/external integrations (`src/infrastructure/**`, external services).
 
 Rule:
-1. Workflow nodes consume typed contracts only.
+1. Workflow nodes are orchestration-only and call agent application entrypoints.
 2. Contract validation happens at boundaries (interface/ports), not ad-hoc in nodes.
+3. Domain logic must not live in `src/workflow/**`.
+4. Example end-state entrypoint:
+   - `src/agents/fundamental/application/orchestrator.py`
 
 ## 2. Mandatory Contract Path
 
@@ -95,3 +100,4 @@ Constants:
 ## 9. Detailed Reference
 
 1. `docs/backend-canonicalization-flow.md` (detailed canonicalization and artifact flow)
+2. `docs/fundamental-reference-architecture.md` (concrete package-boundary example)

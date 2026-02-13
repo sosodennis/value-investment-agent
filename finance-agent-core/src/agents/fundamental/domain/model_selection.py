@@ -7,11 +7,13 @@ industry, SIC, financial signals, and data coverage.
 
 from dataclasses import dataclass
 
-from src.agents.fundamental.data.ports import FundamentalReportsAdapter
+from src.agents.fundamental.domain.entities import FundamentalReportsAdapter
+from src.agents.fundamental.domain.rules import calculate_cagr
 from src.common.tools.logger import get_logger
 from src.common.types import JSONObject
+from src.shared.domain.market_identity import CompanyProfile
 
-from ..structures import CompanyProfile, ValuationModel
+from .models import ValuationModel
 
 logger = get_logger(__name__)
 
@@ -186,17 +188,6 @@ def _matches_keywords(text: str, keywords: tuple[str, ...]) -> bool:
     return any(k in text for k in keywords)
 
 
-def _calculate_cagr(values: list[float]) -> float | None:
-    if len(values) < 2:
-        return None
-    latest = values[0]
-    earliest = values[-1]
-    if latest <= 0 or earliest <= 0:
-        return None
-    years = len(values) - 1
-    return (latest / earliest) ** (1 / years) - 1
-
-
 def _collect_signals(
     profile: CompanyProfile, financial_reports: list[JSONObject] | None
 ) -> SelectionSignals:
@@ -223,7 +214,7 @@ def _collect_signals(
         is_profitable = net_income > 0 if net_income is not None else None
 
     revenue_series = adapter.numeric_series("base.total_revenue")
-    revenue_cagr = _calculate_cagr(revenue_series)
+    revenue_cagr = calculate_cagr(revenue_series)
 
     fields_to_check = {
         "base.total_revenue",
@@ -364,38 +355,3 @@ def select_valuation_model(
         candidates=tuple(sorted(candidates, key=lambda c: c.score, reverse=True)),
         signals=signals,
     )
-
-
-def should_request_clarification(
-    candidates: list, confidence_threshold: float = 0.85
-) -> bool:
-    """
-    Determine if human clarification is needed for ticker resolution.
-
-    Args:
-        candidates: List of ticker candidates
-        confidence_threshold: Minimum confidence to auto-select
-
-    Returns:
-        True if clarification is needed
-    """
-    if not candidates:
-        return True  # No matches found
-
-    if len(candidates) == 1 and candidates[0].confidence >= confidence_threshold:
-        return False  # Single high-confidence match
-
-    if len(candidates) > 1:
-        # Check if top two candidates are very close in confidence
-        if len(candidates) >= 2:
-            top_conf = candidates[0].confidence
-            second_conf = candidates[1].confidence
-            # Relaxed threshold to catch cases like GOOG (0.9) vs GOOGL (1.0)
-            # where the difference is exactly 0.1
-            if abs(top_conf - second_conf) <= 0.15:  # Ambiguous
-                return True
-        # If we have multiple candidates but they're not close in confidence,
-        # still ask for clarification to be safe
-        return True
-
-    return False

@@ -18,20 +18,17 @@ the artifact pointer:
 - `financial_reports_artifact_id`: Artifact id pointing to stored financial
   reports (either raw list or full report payload).
 
-## Controlled Assumptions (Temporary)
-Some valuation inputs (e.g., WACC, terminal growth, missing D&A rate) may use
-controlled defaults to keep preview flows unblocked. **This is a temporary
-measure and is planned to be refactored** into a stricter, enterprise-grade
-assumption workflow with explicit audit controls.
+## Runtime Boundaries (Current)
+`fundamental_analysis` workflow nodes are orchestration-only and delegate to
+the agent package:
 
-## Tools Layout
-```
-fundamental_analysis/tools/
-  sec_xbrl/        # SEC XBRL extraction + mapping + models + factory + utils
-  valuation/       # Skill registry, param builder, engine, skills
-  model_selection.py
-  report_helpers.py
-  tickers.py
-  profiles.py
-  web_search.py
-```
+1. Domain:
+   - `src/agents/fundamental/domain/model_selection.py`
+   - `src/agents/fundamental/domain/valuation/**`
+2. Data clients:
+   - `src/agents/fundamental/data/clients/sec_xbrl/**`
+   - (Ticker resolution/search clients now live under `src/agents/intent/data/`)
+3. Application entrypoint:
+   - `src/agents/fundamental/application/orchestrator.py`
+
+The workflow layer should not contain a local `tools/` package anymore.

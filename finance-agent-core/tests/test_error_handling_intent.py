@@ -14,7 +14,7 @@ async def test_extraction_node_error_fallback():
     state = {"user_query": "Analyze Apple"}
 
     with patch(
-        "src.workflow.nodes.intent_extraction.nodes.extract_intent",
+        "src.workflow.nodes.intent_extraction.nodes.intent_orchestrator.extract_intent",
         side_effect=Exception("LLM Error"),
     ):
         command = extraction_node(state)
@@ -35,7 +35,7 @@ async def test_searching_node_error_fallback():
     }
 
     with patch(
-        "src.workflow.nodes.intent_extraction.nodes.search_ticker",
+        "src.workflow.nodes.intent_extraction.nodes.intent_orchestrator.search_candidates",
         side_effect=Exception("Search Error"),
     ):
         command = searching_node(state)
@@ -54,7 +54,7 @@ async def test_decision_node_error_fallback():
     }
 
     with patch(
-        "src.workflow.nodes.intent_extraction.nodes.TickerCandidate",
+        "src.workflow.nodes.intent_extraction.nodes.intent_orchestrator.parse_candidates",
         side_effect=Exception("Validation Error"),
     ):
         command = decision_node(state)

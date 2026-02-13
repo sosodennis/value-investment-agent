@@ -1,17 +1,11 @@
 from langgraph.graph import END
 from langgraph.types import Command
 
-from src.agents.fundamental.application.services import (
-    build_and_store_model_selection_artifact,
-    build_mapper_context,
-    build_selection_details,
-    build_valuation_error_update,
-    build_valuation_missing_inputs_update,
-    build_valuation_success_update,
-    enrich_reasoning_with_health_context,
-)
-from src.agents.fundamental.data.ports import fundamental_artifact_port
-from src.agents.fundamental.interface.mappers import summarize_fundamental_for_preview
+from src.agents.fundamental.application.orchestrator import fundamental_orchestrator
+from src.agents.fundamental.data.clients.sec_xbrl.utils import fetch_financial_data
+from src.agents.fundamental.domain.model_selection import select_valuation_model
+from src.agents.fundamental.domain.valuation.param_builder import build_params
+from src.agents.fundamental.domain.valuation.registry import SkillRegistry
 from src.common.contracts import (
     OUTPUT_KIND_FUNDAMENTAL_ANALYSIS,
 )
@@ -21,13 +15,9 @@ from src.interface.canonical_serializers import (
     normalize_financial_reports,
 )
 from src.interface.schemas import build_artifact_payload
+from src.shared.domain.market_identity import CompanyProfile
 
-from .structures import CompanyProfile, ValuationModel
 from .subgraph_state import FundamentalAnalysisState
-from .tools.model_selection import select_valuation_model
-from .tools.sec_xbrl.utils import fetch_financial_data
-from .tools.valuation.param_builder import build_params
-from .tools.valuation.registry import SkillRegistry
 
 logger = get_logger(__name__)
 
@@ -76,22 +66,22 @@ async def financial_health_node(state: FundamentalAnalysisState) -> Command:
             reports_data = normalize_financial_reports(
                 financial_reports, "financial_health.financial_reports"
             )
-            reports_artifact_id = (
-                await fundamental_artifact_port.save_financial_reports(
-                    data={"financial_reports": reports_data},
-                    produced_by="fundamental_analysis.financial_health",
-                    key_prefix=f"fa_reports_{resolved_ticker}",
-                )
+            reports_artifact_id = await fundamental_orchestrator.save_financial_reports(
+                data={"financial_reports": reports_data},
+                produced_by="fundamental_analysis.financial_health",
+                key_prefix=f"fa_reports_{resolved_ticker}",
             )
 
             # [NEW] Emit preliminary artifact for real-time UI
-            mapper_ctx = build_mapper_context(
+            mapper_ctx = fundamental_orchestrator.build_mapper_context(
                 intent_ctx,
                 resolved_ticker,
                 status="fetching_complete",
             )
 
-            preview = summarize_fundamental_for_preview(mapper_ctx, reports_data)
+            preview = fundamental_orchestrator.summarize_preview(
+                mapper_ctx, reports_data
+            )
             artifact = build_artifact_payload(
                 kind=OUTPUT_KIND_FUNDAMENTAL_ANALYSIS,
                 summary=f"Fundamental Analysis: Data fetched for {resolved_ticker}",
@@ -173,7 +163,7 @@ async def model_selection_node(state: FundamentalAnalysisState) -> Command:
         reports_artifact_id = fa_ctx.get("financial_reports_artifact_id")
         financial_reports: list[JSONObject] = []
         if reports_artifact_id:
-            artifact_reports = await fundamental_artifact_port.load_financial_reports(
+            artifact_reports = await fundamental_orchestrator.load_financial_reports(
                 reports_artifact_id
             )
             if artifact_reports is not None:
@@ -186,40 +176,32 @@ async def model_selection_node(state: FundamentalAnalysisState) -> Command:
         # Enhance reasoning with financial health insights (using latest report)
         if financial_reports:
             try:
-                reasoning = enrich_reasoning_with_health_context(
-                    reasoning,
-                    financial_reports,
-                    port=fundamental_artifact_port,
+                reasoning = (
+                    fundamental_orchestrator.enrich_reasoning_with_health_context(
+                        reasoning,
+                        financial_reports,
+                    )
                 )
             except Exception as e:
                 logger.warning(f"⚠️  Could not parse financial report for insights: {e}")
 
         # Capture model selection details for auditability
-        selection_details = build_selection_details(selection)
+        selection_details = fundamental_orchestrator.build_selection_details(selection)
 
         # Map selected valuation model to calculator skill key
-        model_type_map = {
-            ValuationModel.DCF_GROWTH: "saas",
-            ValuationModel.DCF_STANDARD: "saas",
-            ValuationModel.DDM: "bank",
-            ValuationModel.FFO: "reit_ffo",
-            ValuationModel.EV_REVENUE: "ev_revenue",
-            ValuationModel.EV_EBITDA: "ev_ebitda",
-            ValuationModel.RESIDUAL_INCOME: "residual_income",
-            ValuationModel.EVA: "eva",
-        }
-        model_type = model_type_map.get(model, "saas")
+        model_type = fundamental_orchestrator.resolve_selection_model_type(model.value)
 
         # [NEW] Generate final artifact
         try:
-            artifact, report_id = await build_and_store_model_selection_artifact(
+            (
+                artifact,
+                report_id,
+            ) = await fundamental_orchestrator.build_and_store_model_selection_artifact(
                 intent_ctx=intent_ctx,
                 resolved_ticker=resolved_ticker,
                 model_type=model_type,
                 reasoning=reasoning,
                 financial_reports=financial_reports,
-                port=fundamental_artifact_port,
-                summarize_preview=summarize_fundamental_for_preview,
             )
             logger.info(
                 f"--- [Fundamental Analysis] L3 reports saved (ID: {report_id}) ---"
@@ -298,7 +280,7 @@ async def valuation_node(state: FundamentalAnalysisState) -> Command:
         reports_artifact_id = fundamental.get("financial_reports_artifact_id")
         if not reports_artifact_id:
             raise ValueError("Missing financial_reports_artifact_id for valuation")
-        reports_raw_data = await fundamental_artifact_port.load_financial_reports(
+        reports_raw_data = await fundamental_orchestrator.load_financial_reports(
             reports_artifact_id
         )
         if reports_raw_data is None:
@@ -320,7 +302,7 @@ async def valuation_node(state: FundamentalAnalysisState) -> Command:
                 f"Missing SEC XBRL inputs for {model_type}: {', '.join(build_result.missing)}"
             )
             return Command(
-                update=build_valuation_missing_inputs_update(
+                update=fundamental_orchestrator.build_valuation_missing_inputs_update(
                     fundamental=fundamental,
                     missing_inputs=build_result.missing,
                     assumptions=build_result.assumptions,
@@ -335,7 +317,7 @@ async def valuation_node(state: FundamentalAnalysisState) -> Command:
         result = calc_func(params_obj)
 
         return Command(
-            update=build_valuation_success_update(
+            update=fundamental_orchestrator.build_valuation_success_update(
                 fundamental=fundamental,
                 intent_ctx=intent_ctx,
                 ticker=ticker,
@@ -345,13 +327,12 @@ async def valuation_node(state: FundamentalAnalysisState) -> Command:
                 params_dump=params_obj.model_dump(mode="json"),
                 calculation_metrics=result,
                 assumptions=build_result.assumptions,
-                summarize_preview=summarize_fundamental_for_preview,
             ),
             goto=END,
         )
     except Exception as e:
         logger.error(f"Valuation Node Failed: {e}", exc_info=True)
         return Command(
-            update=build_valuation_error_update(str(e)),
+            update=fundamental_orchestrator.build_valuation_error_update(str(e)),
             goto=END,
         )

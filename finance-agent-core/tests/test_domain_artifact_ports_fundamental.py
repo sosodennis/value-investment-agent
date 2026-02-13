@@ -1,6 +1,7 @@
-from src.agents.fundamental.data.ports import (
-    FundamentalReportsAdapter,
-    fundamental_artifact_port,
+from src.agents.fundamental.domain.entities import FundamentalReportsAdapter
+from src.agents.fundamental.domain.services import (
+    build_latest_health_context,
+    extract_latest_health_insights,
 )
 
 
@@ -16,7 +17,7 @@ def test_extract_latest_health_insights_from_traceable_fields() -> None:
         }
     ]
 
-    insights = fundamental_artifact_port.extract_latest_health_insights(reports)
+    insights = extract_latest_health_insights(reports)
 
     assert insights is not None
     assert insights.fiscal_year == "2024"
@@ -29,7 +30,7 @@ def test_extract_latest_health_insights_from_traceable_fields() -> None:
 def test_extract_latest_health_insights_returns_none_when_base_missing() -> None:
     reports = [{"foo": "bar"}]
 
-    insights = fundamental_artifact_port.extract_latest_health_insights(reports)
+    insights = extract_latest_health_insights(reports)
 
     assert insights is None
 
@@ -46,7 +47,7 @@ def test_build_latest_health_context_omits_roe_when_equity_zero() -> None:
         }
     ]
 
-    context = fundamental_artifact_port.build_latest_health_context(reports)
+    context = build_latest_health_context(reports)
 
     assert "FY2023" in context
     assert "Net Income" in context

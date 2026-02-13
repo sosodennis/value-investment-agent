@@ -1,6 +1,6 @@
 import json
 
-from src.workflow.nodes.intent_extraction.mappers import summarize_intent_for_preview
+from src.agents.intent.interface.mappers import summarize_intent_for_preview
 
 
 def test_summarize_intent_with_resolved_ticker():

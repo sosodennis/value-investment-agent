@@ -1,8 +1,3 @@
 # Architecture boundary baseline
 # This file tracks known existing boundary violations before deep refactor.
 # CI fails only on NEW violations beyond this baseline.
-
-XAG001|finance-agent-core/src/workflow/nodes/intent_extraction/nodes.py:12|src.workflow.nodes.fundamental_analysis.extraction
-XAG001|finance-agent-core/src/workflow/nodes/intent_extraction/nodes.py:18|src.workflow.nodes.fundamental_analysis.structures
-XAG001|finance-agent-core/src/workflow/nodes/intent_extraction/nodes.py:19|src.workflow.nodes.fundamental_analysis.tools
-XAG001|finance-agent-core/src/workflow/nodes/intent_extraction/nodes.py:20|src.workflow.nodes.fundamental_analysis.tools.model_selection

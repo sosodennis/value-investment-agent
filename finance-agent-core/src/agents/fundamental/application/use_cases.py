@@ -4,7 +4,11 @@ import time
 from collections.abc import Callable, Sequence
 from typing import Protocol
 
-from src.agents.fundamental.data.ports import FundamentalArtifactPort
+from src.agents.fundamental.application.ports import IFundamentalReportRepo
+from src.agents.fundamental.domain.services import (
+    build_latest_health_context,
+    resolve_calculator_model_type,
+)
 from src.common.contracts import (
     ARTIFACT_KIND_FINANCIAL_REPORTS,
     OUTPUT_KIND_FUNDAMENTAL_ANALYSIS,
@@ -104,12 +108,10 @@ def build_selection_details(selection: _ModelSelectionLike) -> dict[str, object]
 def enrich_reasoning_with_health_context(
     reasoning: str,
     financial_reports: list[JSONObject],
-    *,
-    port: FundamentalArtifactPort,
 ) -> str:
     if not financial_reports:
         return reasoning
-    return reasoning + port.build_latest_health_context(financial_reports)
+    return reasoning + build_latest_health_context(financial_reports)
 
 
 async def build_and_store_model_selection_artifact(
@@ -119,7 +121,7 @@ async def build_and_store_model_selection_artifact(
     model_type: str,
     reasoning: str,
     financial_reports: list[JSONObject],
-    port: FundamentalArtifactPort,
+    port: IFundamentalReportRepo,
     summarize_preview: Callable[[dict[str, object], list[JSONObject]], JSONObject],
 ) -> tuple[AgentOutputArtifactPayload | None, str | None]:
     if not resolved_ticker:
@@ -266,3 +268,7 @@ def build_valuation_error_update(error: str) -> JSONObject:
         "internal_progress": {"calculation": "error"},
         "node_statuses": {"fundamental_analysis": "error"},
     }
+
+
+def resolve_selection_model_type(selected_model_value: str) -> str:
+    return resolve_calculator_model_type(selected_model_value)

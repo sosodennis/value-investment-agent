@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.agents.fundamental.application.services import (
+from src.agents.fundamental.application.use_cases import (
     build_valuation_error_update,
     build_valuation_missing_inputs_update,
     build_valuation_success_update,

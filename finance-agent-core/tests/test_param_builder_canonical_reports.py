@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from src.interface.canonical_serializers import normalize_financial_reports
-from src.workflow.nodes.fundamental_analysis.tools.valuation.param_builder import (
+from src.agents.fundamental.domain.valuation.param_builder import (
     build_params,
 )
+from src.interface.canonical_serializers import normalize_financial_reports
 
 
 def _tf(value: float | str) -> dict[str, object]:

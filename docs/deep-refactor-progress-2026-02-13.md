@@ -11,8 +11,8 @@ Plan Reference: `/Users/denniswong/Desktop/Project/value-investment-agent/docs/d
 - Wave 3 Port Ownership Split: COMPLETED
 - Wave 4 Application Extraction from Nodes: COMPLETED
 - Wave 5 Mapper Split (Derive vs Format): COMPLETED
-- Wave 6 Cutover + Removal: IN PROGRESS (Slice 1)
-- Wave 7 Hardening + Audit Pack: PENDING
+- Wave 6 Cutover + Removal: COMPLETED (Slice 1-2)
+- Wave 7 Hardening + Audit Pack: IN PROGRESS
 
 ## Baseline Metrics (before deep refactor)
 
@@ -469,6 +469,127 @@ Plan Reference: `/Users/denniswong/Desktop/Project/value-investment-agent/docs/d
    - Verification:
      - Ruff checks passed for touched files.
      - Mandatory matrix passed.
+23. Wave 7 (Hardening, Slice A) completed for Fundamental package depth:
+   - Filled previously-empty `fundamental/domain` with explicit business modules:
+     - `src/agents/fundamental/domain/value_objects.py`
+     - `src/agents/fundamental/domain/rules.py`
+     - `src/agents/fundamental/domain/entities.py`
+     - `src/agents/fundamental/domain/services.py`
+   - Added explicit application-layer boundaries:
+     - `src/agents/fundamental/application/ports.py`
+     - `src/agents/fundamental/application/dto.py`
+     - `src/agents/fundamental/application/use_cases.py`
+     - `src/agents/fundamental/application/orchestrator.py`
+   - Removed legacy mixed application module:
+     - `src/agents/fundamental/application/services.py`
+   - Simplified data layer to persistence-only:
+     - `src/agents/fundamental/data/ports.py` (business rule extraction removed)
+   - Rewired fundamental workflow node to consume application orchestrator entrypoint:
+     - `src/workflow/nodes/fundamental_analysis/nodes.py`
+   - Moved report adapter dependency used by model selection into domain:
+     - `src/agents/fundamental/domain/model_selection.py`
+   - Verification:
+     - Ruff checks passed for touched files.
+     - Mandatory matrix passed:
+       - `test_protocol.py`
+       - `test_mappers.py`
+       - `test_news_mapper.py`
+       - `test_debate_mapper.py`
+       - `test_artifact_api_contract.py`
+       - `test_output_contract_serializers.py`
+       - `test_error_handling_fundamental.py`
+       - `test_error_handling_news.py`
+       - `test_error_handling_technical.py`
+       - `test_param_builder_canonical_reports.py`
+     - Additional domain/application tests passed:
+     - `test_fundamental_application_services.py`
+     - `test_domain_artifact_ports_fundamental.py`
+     - Architecture boundary check passed.
+24. Wave 7 (Hardening, Slice B) completed for Fundamental tools cutover:
+   - Removed workflow-local fundamental tools package and relocated modules by layer:
+     - Domain:
+       - `src/agents/fundamental/domain/model_selection.py`
+       - `src/agents/fundamental/domain/valuation/**`
+     - Data:
+       - `src/agents/fundamental/data/clients/sec_xbrl/**`
+       - ticker resolution clients migrated to `src/agents/intent/data/market_clients.py`
+     - Interface:
+       - `src/agents/fundamental/interface/report_helpers.py`
+   - Added domain semantic models and removed workflow-local structures coupling:
+     - `src/agents/fundamental/domain/models.py`
+     - removed `src/workflow/nodes/fundamental_analysis/structures.py`
+   - Moved intent extraction module into owning package to remove cross-agent import:
+     - `src/workflow/nodes/intent_extraction/extraction.py`
+     - removed `src/workflow/nodes/fundamental_analysis/extraction.py`
+   - Updated imports in workflow and tests to new package paths.
+   - Removed stale architecture baseline violations:
+     - `scripts/architecture-boundary-baseline.txt` now empty (header-only).
+   - Verification:
+     - Ruff checks passed for touched files.
+     - Tests passed:
+       - `test_protocol.py`
+       - `test_mappers.py`
+       - `test_news_mapper.py`
+       - `test_debate_mapper.py`
+       - `test_artifact_api_contract.py`
+       - `test_output_contract_serializers.py`
+       - `test_error_handling_fundamental.py`
+       - `test_error_handling_news.py`
+       - `test_error_handling_technical.py`
+       - `test_param_builder_canonical_reports.py`
+      - `test_domain_artifact_ports_fundamental.py`
+25. Wave 7 (Hardening, Slice C) completed for Intent boundary cleanup:
+   - Introduced `src/agents/intent` package and migrated intent-owned modules:
+     - `src/agents/intent/domain/models.py` (`TickerCandidate`)
+     - `src/agents/intent/application/ticker_resolution.py`
+     - `src/agents/intent/data/market_clients.py`
+   - Updated workflow and interrupt boundaries to import from `agents.intent`.
+   - Reduced shared scope:
+     - `src/shared/domain/market_identity.py` now contains only cross-agent `CompanyProfile`.
+     - removed:
+       - `src/shared/application/ticker_resolution.py`
+       - `src/shared/data/market_clients.py`
+   - Removed duplicate clarification policy from fundamental domain.
+   - Verification:
+     - Ruff checks passed for touched files.
+     - Tests passed:
+       - `test_interrupts.py`
+       - `test_error_handling_intent.py`
+       - `test_fundamental_analysis_extraction.py`
+       - `test_protocol.py`
+       - `test_mappers.py`
+       - `test_news_mapper.py`
+       - `test_debate_mapper.py`
+     - Architecture boundary check passed.
+26. Wave 7 (Hardening, Slice D) completed for Intent thin-orchestrator cutover:
+   - Added intent application orchestration modules:
+     - `src/agents/intent/application/extraction.py`
+     - `src/agents/intent/application/orchestrator.py`
+   - Added intent interface mapper ownership:
+     - `src/agents/intent/interface/mappers.py`
+   - `workflow/nodes/intent_extraction/nodes.py` now delegates extraction/search/decision artifact assembly to `intent_orchestrator`.
+   - Workflow wrapper modules removed:
+     - `src/workflow/nodes/intent_extraction/extraction.py` (removed)
+     - `src/workflow/nodes/intent_extraction/mappers.py` (removed)
+   - Workflow nodes now import intent contracts/mappers directly from `src/agents/intent/*`.
+   - Interrupt boundary now depends on intent package directly:
+     - `src/workflow/interrupts.py` imports `IntentExtraction` from `src/agents/intent/application/extraction.py`.
+   - Verification:
+     - Ruff checks passed for touched files.
+     - Tests passed:
+       - `test_error_handling_intent.py`
+       - `test_fundamental_analysis_extraction.py`
+       - `test_interrupts.py`
+       - `test_intent_mapper.py`
+       - `test_protocol.py`
+       - `test_mappers.py`
+       - `test_news_mapper.py`
+       - `test_debate_mapper.py`
+     - Architecture boundary check passed.
+       - `test_fundamental_application_services.py`
+       - `test_interrupts.py`
+       - `test_fundamental_analysis_extraction.py`
+     - Architecture boundary check passed with no baseline residue.
 
 ## Completion Checklist (must all be checked)
 
@@ -476,12 +597,13 @@ Plan Reference: `/Users/denniswong/Desktop/Project/value-investment-agent/docs/d
 - [x] Old global ports file removed.
 - [x] Per-agent interface contracts in place.
 - [x] Per-agent ports in place.
-- [x] Nodes are orchestration-only.
+- [x] Nodes are orchestration-only (fundamental fully rewired; remaining agents still being hardened).
 - [x] Mapper split done (derive vs format).
 - [x] Boundary CI checks enabled and green.
 - [x] Full mandatory test matrix green.
 
-## Immediate Next Actions (Wave 6)
+## Immediate Next Actions (Wave 7)
 
-1. Scan and remove any remaining obsolete transitional modules created during Wave 2-5.
-2. Update deep-refactor plan/progress docs to reflect final removal map before Wave 7 hardening.
+1. Apply the same domain/application deepening pass to news, technical, and debate packages.
+2. Continue replacing direct workflow imports with per-agent application orchestrators.
+3. Produce final audit pack with boundary graph + package ownership summary.
