@@ -1,0 +1,386 @@
+from __future__ import annotations
+
+import time
+from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import dataclass
+
+import pandas as pd
+
+from src.agents.technical.application.services import (
+    assemble_backtest_context,
+    assemble_semantic_finalize,
+    build_data_fetch_error_update,
+    build_data_fetch_success_update,
+    build_fracdiff_error_update,
+    build_fracdiff_preview,
+    build_fracdiff_success_update,
+    build_semantic_error_update,
+    build_semantic_success_update,
+    safe_float,
+    serialize_fracdiff_outputs,
+)
+from src.agents.technical.data.ports import (
+    TechnicalArtifactPort,
+    technical_artifact_port,
+)
+from src.agents.technical.interface.mappers import summarize_ta_for_preview
+from src.common.contracts import (
+    ARTIFACT_KIND_TA_FULL_REPORT,
+    OUTPUT_KIND_TECHNICAL_ANALYSIS,
+)
+from src.common.tools.logger import get_logger
+from src.common.types import JSONObject
+from src.interface.canonical_serializers import canonicalize_technical_artifact_data
+from src.interface.schemas import ArtifactReference, build_artifact_payload
+
+logger = get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class TechnicalNodeResult:
+    update: dict[str, object]
+    goto: str
+
+
+@dataclass(frozen=True)
+class TechnicalOrchestrator:
+    port: TechnicalArtifactPort
+    summarize_preview: Callable[[JSONObject], JSONObject]
+
+    async def run_data_fetch(
+        self,
+        state: Mapping[str, object],
+        *,
+        fetch_daily_ohlcv_fn: Callable[[str], pd.DataFrame],
+    ) -> TechnicalNodeResult:
+        intent_ctx_raw = state.get("intent_extraction", {})
+        intent_ctx = intent_ctx_raw if isinstance(intent_ctx_raw, Mapping) else {}
+        resolved_ticker = intent_ctx.get("resolved_ticker")
+        if not isinstance(resolved_ticker, str) or not resolved_ticker:
+            logger.error("--- TA: No resolved ticker available, cannot proceed ---")
+            return TechnicalNodeResult(
+                update=build_data_fetch_error_update("No resolved ticker available"),
+                goto="END",
+            )
+
+        logger.info(f"--- TA: Fetching data for {resolved_ticker} ---")
+
+        try:
+            df = fetch_daily_ohlcv_fn(resolved_ticker)
+        except Exception as exc:
+            logger.error(f"--- TA: Data fetch failed for {resolved_ticker}: {exc} ---")
+            return TechnicalNodeResult(
+                update=build_data_fetch_error_update(f"Data fetch failed: {str(exc)}"),
+                goto="END",
+            )
+
+        if df is None or df.empty:
+            logger.warning(f"⚠️  Could not fetch data for {resolved_ticker}")
+            return TechnicalNodeResult(
+                update=build_data_fetch_error_update(
+                    "Empty data returned from provider"
+                ),
+                goto="END",
+            )
+
+        price_series = df["price"].rename(index=lambda x: x.strftime("%Y-%m-%d"))
+        volume_series = df["volume"].rename(index=lambda x: x.strftime("%Y-%m-%d"))
+        price_data = {
+            "price_series": price_series.astype(object)
+            .where(pd.notnull(price_series), None)
+            .to_dict(),
+            "volume_series": volume_series.astype(object)
+            .where(pd.notnull(volume_series), None)
+            .to_dict(),
+        }
+
+        price_artifact_id = await self.port.save_price_series(
+            data=price_data,
+            produced_by="technical_analysis.data_fetch",
+            key_prefix=resolved_ticker,
+        )
+
+        preview = {
+            "ticker": resolved_ticker,
+            "latest_price_display": f"${df['price'].iloc[-1]:,.2f}",
+            "signal_display": "📊 FETCHING DATA...",
+            "z_score_display": "Z: N/A",
+            "optimal_d_display": "d=N/A",
+            "strength_display": "Strength: N/A",
+        }
+        artifact = build_artifact_payload(
+            kind=OUTPUT_KIND_TECHNICAL_ANALYSIS,
+            summary=f"Technical Analysis: Data fetched for {resolved_ticker}",
+            preview=preview,
+            reference=None,
+        )
+
+        return TechnicalNodeResult(
+            update=build_data_fetch_success_update(
+                price_artifact_id=price_artifact_id,
+                resolved_ticker=resolved_ticker,
+                artifact=artifact,
+            ),
+            goto="fracdiff_compute",
+        )
+
+    async def run_fracdiff_compute(
+        self,
+        state: Mapping[str, object],
+        *,
+        calculate_rolling_fracdiff_fn: Callable[
+            ..., tuple[object, object, int, object, object]
+        ],
+        compute_z_score_fn: Callable[..., object],
+        calculate_rolling_z_score_fn: Callable[..., object],
+        calculate_fd_bollinger_fn: Callable[..., JSONObject],
+        calculate_statistical_strength_fn: Callable[..., JSONObject],
+        calculate_fd_macd_fn: Callable[..., JSONObject],
+        calculate_fd_obv_fn: Callable[..., JSONObject],
+    ) -> TechnicalNodeResult:
+        logger.info("--- TA: Computing Rolling FracDiff ---")
+
+        price_ctx_raw = state.get("technical_analysis", {})
+        price_ctx = price_ctx_raw if isinstance(price_ctx_raw, Mapping) else {}
+        price_artifact_id = price_ctx.get("price_artifact_id")
+
+        if not isinstance(price_artifact_id, str) or not price_artifact_id:
+            logger.error(
+                "--- TA: No price artifact ID available for FracDiff computation ---"
+            )
+            return TechnicalNodeResult(
+                update=build_fracdiff_error_update("Missing price artifact ID"),
+                goto="END",
+            )
+
+        try:
+            price_data = await self.port.load_price_series(price_artifact_id)
+            if price_data is None:
+                logger.error(
+                    f"--- TA: Price artifact {price_artifact_id} not found ---"
+                )
+                return TechnicalNodeResult(
+                    update=build_fracdiff_error_update(
+                        "Price artifact not found in store"
+                    ),
+                    goto="END",
+                )
+
+            prices = pd.Series(price_data.price_series)
+            prices.index = pd.to_datetime(prices.index)
+            volumes = pd.Series(price_data.volume_series)
+            volumes.index = pd.to_datetime(volumes.index)
+
+            fd_series, optimal_d, window_length, adf_stat, adf_pvalue = (
+                calculate_rolling_fracdiff_fn(
+                    prices, lookback_window=252, recalc_step=5
+                )
+            )
+
+            z_score = compute_z_score_fn(fd_series, lookback=252)
+            z_score_series = calculate_rolling_z_score_fn(fd_series, lookback=252)
+
+            bollinger_data = calculate_fd_bollinger_fn(fd_series)
+            stat_strength_data = calculate_statistical_strength_fn(z_score_series)
+            macd_data = calculate_fd_macd_fn(fd_series)
+            obv_data = calculate_fd_obv_fn(prices, volumes)
+
+            serialization = serialize_fracdiff_outputs(
+                fd_series=fd_series,
+                z_score_series=z_score_series,
+                bollinger_data=bollinger_data,
+                stat_strength_data=stat_strength_data,
+                obv_data=obv_data,
+            )
+
+            chart_data = {
+                "fracdiff_series": serialization.fracdiff_series,
+                "z_score_series": serialization.z_score_series,
+                "indicators": {
+                    "bollinger": serialization.bollinger,
+                    "obv": serialization.obv,
+                },
+            }
+
+            key_prefix = state.get("ticker")
+            chart_data_id = await self.port.save_chart_data(
+                data=chart_data,
+                produced_by="technical_analysis.fracdiff_compute",
+                key_prefix=key_prefix if isinstance(key_prefix, str) else None,
+            )
+        except Exception as exc:
+            logger.error(
+                f"--- TA: FracDiff computation crash: {exc} ---", exc_info=True
+            )
+            return TechnicalNodeResult(
+                update=build_fracdiff_error_update(f"Computation crashed: {str(exc)}"),
+                goto="END",
+            )
+
+        ticker_raw = state.get("ticker")
+        ticker_value = ticker_raw if isinstance(ticker_raw, str) else "N/A"
+        preview = build_fracdiff_preview(
+            ticker=ticker_value,
+            latest_price=prices.iloc[-1],
+            z_score=z_score,
+            optimal_d=optimal_d,
+            statistical_strength=serialization.stat_strength.get("value"),
+        )
+        artifact = build_artifact_payload(
+            kind=OUTPUT_KIND_TECHNICAL_ANALYSIS,
+            summary=f"Technical Analysis: Patterns computed for {ticker_value}",
+            preview=preview,
+            reference=None,
+        )
+
+        return TechnicalNodeResult(
+            update=build_fracdiff_success_update(
+                latest_price=safe_float(prices.iloc[-1]),
+                optimal_d=safe_float(optimal_d),
+                z_score_latest=safe_float(z_score),
+                chart_data_id=chart_data_id,
+                window_length=int(window_length),
+                adf_statistic=safe_float(adf_stat),
+                adf_pvalue=safe_float(adf_pvalue),
+                bollinger=serialization.bollinger,
+                statistical_strength_val=serialization.stat_strength["value"],
+                macd=macd_data,
+                obv=serialization.obv,
+                artifact=artifact,
+            ),
+            goto="semantic_translate",
+        )
+
+    async def run_semantic_translate(
+        self,
+        state: Mapping[str, object],
+        *,
+        assemble_fn: Callable[..., JSONObject],
+        generate_interpretation_fn: Callable[..., Awaitable[str]],
+        calculate_statistical_strength_fn: Callable[..., JSONObject],
+        calculate_fd_bollinger_fn: Callable[..., JSONObject],
+        calculate_fd_obv_fn: Callable[..., JSONObject],
+        fetch_risk_free_series_fn: Callable[..., pd.Series],
+        backtester_factory: type[object],
+        format_backtest_for_llm_fn: Callable[[object], str],
+        wfa_optimizer_factory: type[object],
+        format_wfa_for_llm_fn: Callable[[object], str],
+    ) -> TechnicalNodeResult:
+        logger.info("--- TA: Generating semantic interpretation ---")
+
+        ctx_raw = state.get("technical_analysis", {})
+        ctx = ctx_raw if isinstance(ctx_raw, Mapping) else {}
+        intent_ctx_raw = state.get("intent_extraction", {})
+        intent_ctx = intent_ctx_raw if isinstance(intent_ctx_raw, Mapping) else {}
+        ticker = intent_ctx.get("resolved_ticker")
+
+        if not isinstance(ticker, str) or not ticker:
+            logger.error("--- TA: Missing resolved ticker for semantic translation ---")
+            error_update = build_semantic_error_update(
+                "Missing intent_extraction.resolved_ticker"
+            )
+            return TechnicalNodeResult(update=error_update.update, goto="END")
+
+        optimal_d = ctx.get("optimal_d")
+        z_score = ctx.get("z_score_latest")
+        if optimal_d is None or z_score is None:
+            logger.error("--- TA: No FracDiff metrics available for translation ---")
+            error_update = build_semantic_error_update(
+                "No FracDiff metrics available for translation"
+            )
+            return TechnicalNodeResult(update=error_update.update, goto="END")
+
+        try:
+            tags_dict = assemble_fn(
+                z_score=z_score,
+                optimal_d=optimal_d,
+                bollinger_data=ctx.get("bollinger", {"state": "INSIDE"}),
+                stat_strength_data={"value": ctx.get("statistical_strength_val", 50.0)},
+                macd_data=ctx.get("macd", {"momentum_state": "NEUTRAL"}),
+                obv_data=ctx.get("obv", {"state": "NEUTRAL", "fd_obv_z": 0.0}),
+            )
+
+            price_artifact_id = ctx.get("price_artifact_id")
+            chart_artifact_id = ctx.get("chart_data_id")
+            backtest_result = await assemble_backtest_context(
+                technical_port=self.port,
+                price_artifact_id=price_artifact_id,
+                chart_artifact_id=chart_artifact_id,
+                calculate_statistical_strength_fn=calculate_statistical_strength_fn,
+                calculate_fd_bollinger_fn=calculate_fd_bollinger_fn,
+                calculate_fd_obv_fn=calculate_fd_obv_fn,
+                fetch_risk_free_series_fn=fetch_risk_free_series_fn,
+                backtester_factory=backtester_factory,
+                format_backtest_for_llm_fn=format_backtest_for_llm_fn,
+                wfa_optimizer_factory=wfa_optimizer_factory,
+                format_wfa_for_llm_fn=format_wfa_for_llm_fn,
+            )
+            llm_interpretation = await generate_interpretation_fn(
+                tags_dict,
+                ticker,
+                backtest_result.backtest_context,
+                backtest_result.wfa_context,
+            )
+
+            try:
+                preview = self.summarize_preview(dict(ctx))
+                semantic_result = assemble_semantic_finalize(
+                    ticker=ticker,
+                    technical_context=dict(ctx),
+                    tags_dict=tags_dict,
+                    llm_interpretation=llm_interpretation,
+                    price_data=backtest_result.price_data,
+                    chart_data=backtest_result.chart_data,
+                )
+                full_report_data = canonicalize_technical_artifact_data(
+                    semantic_result.full_report_data_raw
+                )
+
+                report_id = await self.port.save_full_report(
+                    data=full_report_data,
+                    produced_by="technical_analysis.semantic_translate",
+                    key_prefix=f"ta_{ticker}_{int(time.time())}",
+                )
+                reference = ArtifactReference(
+                    artifact_id=report_id,
+                    download_url=f"/api/artifacts/{report_id}",
+                    type=ARTIFACT_KIND_TA_FULL_REPORT,
+                )
+                artifact = build_artifact_payload(
+                    kind=OUTPUT_KIND_TECHNICAL_ANALYSIS,
+                    summary=(
+                        f"Technical Analysis: {semantic_result.direction} "
+                        f"(d={semantic_result.opt_d:.2f})"
+                    ),
+                    preview=preview,
+                    reference=reference,
+                )
+                ta_update = semantic_result.ta_update
+                ta_update["artifact"] = artifact
+            except Exception as exc:
+                logger.error(f"Failed to generate artifact in node: {exc}")
+                ta_update = {
+                    "signal": tags_dict["direction"],
+                    "statistical_strength": tags_dict["statistical_state"],
+                    "risk_level": tags_dict["risk_level"],
+                    "llm_interpretation": llm_interpretation,
+                    "semantic_tags": tags_dict["tags"],
+                    "memory_strength": tags_dict["memory_strength"],
+                }
+
+            success_update = build_semantic_success_update(ta_update)
+            return TechnicalNodeResult(update=success_update.update, goto="END")
+        except Exception as exc:
+            logger.error(
+                f"--- TA: Semantic translation failed: {exc} ---", exc_info=True
+            )
+            error_update = build_semantic_error_update(
+                f"Semantic translation failed: {str(exc)}"
+            )
+            return TechnicalNodeResult(update=error_update.update, goto="END")
+
+
+technical_orchestrator = TechnicalOrchestrator(
+    port=technical_artifact_port,
+    summarize_preview=summarize_ta_for_preview,
+)

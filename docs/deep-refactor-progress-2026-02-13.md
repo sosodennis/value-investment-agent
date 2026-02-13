@@ -586,10 +586,78 @@ Plan Reference: `/Users/denniswong/Desktop/Project/value-investment-agent/docs/d
        - `test_news_mapper.py`
        - `test_debate_mapper.py`
      - Architecture boundary check passed.
-       - `test_fundamental_application_services.py`
-       - `test_interrupts.py`
-       - `test_fundamental_analysis_extraction.py`
-     - Architecture boundary check passed with no baseline residue.
+27. Wave 7 (Hardening, Slice E) completed for News thin-orchestrator cutover:
+   - Added news application orchestrator:
+     - `src/agents/news/application/orchestrator.py`
+   - `workflow/nodes/financial_news_research/nodes.py` converted to thin adapter:
+     - all funnel stage logic delegated to `news_orchestrator`.
+     - workflow node now handles only `Command` wiring and message emission.
+   - Node line-count reduction:
+     - `financial_news_research/nodes.py`: `447 -> 101` (~77.4% reduction).
+   - Verification:
+     - Ruff checks passed for touched files.
+     - Tests passed:
+       - `test_error_handling_news.py`
+       - `test_news_application_services.py`
+       - `test_news_mapper.py`
+       - `test_protocol.py`
+       - `test_mappers.py`
+     - `test_debate_mapper.py`
+     - Architecture boundary check passed.
+28. Wave 7 (Hardening, Slice F) completed for Technical thin-orchestrator cutover:
+   - Added technical application orchestrator:
+     - `src/agents/technical/application/orchestrator.py`
+   - `workflow/nodes/technical_analysis/nodes.py` converted to thin adapter:
+     - all stage logic delegated to `technical_orchestrator`.
+     - workflow node now handles only `Command` wiring and done-status message emission.
+   - Technical orchestrator now owns:
+     - data fetch result assembly
+     - fracdiff computation orchestration and artifact assembly
+     - semantic finalize/report save orchestration
+   - Verification:
+     - Ruff checks passed for touched files.
+     - Tests passed:
+       - `test_error_handling_technical.py`
+       - `test_technical_application_services.py`
+       - `test_protocol.py`
+       - `test_mappers.py`
+       - `test_news_mapper.py`
+     - `test_debate_mapper.py`
+     - Architecture boundary check passed.
+29. Wave 7 (Hardening, Slice G) completed for News/Technical layer completion (before Debate):
+   - News domain layer is no longer empty:
+     - added `src/agents/news/domain/models.py`
+     - added `src/agents/news/domain/services.py`
+     - moved sentiment aggregation/selection business rules out of application service into domain service.
+   - Technical domain layer is no longer empty:
+     - added `src/agents/technical/domain/models.py`
+     - added `src/agents/technical/domain/services.py`
+     - moved numeric/domain rules (`safe_float`, state derivation, report payload assembly) out of application service into domain service.
+   - News tooling moved out of workflow package:
+     - from `workflow/nodes/financial_news_research/tools/*`
+     - to `src/agents/news/data/clients/*`
+   - Technical tooling moved out of workflow package:
+     - from `workflow/nodes/technical_analysis/tools/*`
+     - to `src/agents/technical/data/tools/*`
+   - News interface assets moved out of workflow package:
+     - `prompts.py` and `structures.py` moved to `src/agents/news/interface/`.
+   - Technical interface structure models moved out of workflow package:
+     - `workflow/nodes/technical_analysis/structures.py`
+     - to `src/agents/technical/interface/structures.py`.
+   - Workflow node modules now import only from `src/agents/{news,technical}/*` for their own logic/resources.
+   - Verification:
+     - Ruff checks passed for touched files.
+     - Tests passed:
+       - `test_news_application_services.py`
+       - `test_technical_application_services.py`
+       - `test_technical_analysis.py`
+       - `test_error_handling_news.py`
+       - `test_error_handling_technical.py`
+       - `test_news_mapper.py`
+       - `test_protocol.py`
+       - `test_mappers.py`
+       - `test_debate_mapper.py`
+     - Architecture boundary check passed.
 
 ## Completion Checklist (must all be checked)
 
@@ -604,6 +672,5 @@ Plan Reference: `/Users/denniswong/Desktop/Project/value-investment-agent/docs/d
 
 ## Immediate Next Actions (Wave 7)
 
-1. Apply the same domain/application deepening pass to news, technical, and debate packages.
-2. Continue replacing direct workflow imports with per-agent application orchestrators.
-3. Produce final audit pack with boundary graph + package ownership summary.
+1. Perform debate cross-agent public-contract-only refactor (no direct sub-agent data imports).
+2. Produce final audit pack with boundary graph + package ownership summary.

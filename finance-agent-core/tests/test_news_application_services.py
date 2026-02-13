@@ -26,7 +26,7 @@ from src.agents.news.application.services import (
     run_analysis_with_fallback,
     run_selector_with_fallback,
 )
-from src.workflow.nodes.financial_news_research.structures import (
+from src.agents.news.interface.structures import (
     FinancialNewsItem,
     SourceInfo,
 )

@@ -13,10 +13,12 @@ from src.agents.technical.application.services import (
     build_full_report_payload,
     build_semantic_error_update,
     build_semantic_success_update,
-    derive_memory_strength,
-    derive_statistical_state,
     safe_float,
     serialize_fracdiff_outputs,
+)
+from src.agents.technical.domain.services import (
+    derive_memory_strength,
+    derive_statistical_state,
 )
 from src.interface.artifact_api_models import (
     PriceSeriesArtifactData,

@@ -8,7 +8,7 @@ import pandas as pd
 
 def test_find_optimal_d_returns_valid_range():
     """Test that optimal d value is between 0 and 1."""
-    from src.workflow.nodes.technical_analysis.tools import find_optimal_d
+    from src.agents.technical.data.tools import find_optimal_d
 
     # Create synthetic price series with trend
     np.random.seed(42)
@@ -24,7 +24,7 @@ def test_find_optimal_d_returns_valid_range():
 
 def test_apply_fracdiff_preserves_structure():
     """Test that FracDiff output has expected structure."""
-    from src.workflow.nodes.technical_analysis.tools import frac_diff_ffd
+    from src.agents.technical.data.tools import frac_diff_ffd
 
     # Create synthetic price series
     np.random.seed(42)
@@ -39,7 +39,7 @@ def test_apply_fracdiff_preserves_structure():
 
 def test_compute_z_score():
     """Test Z-score computation."""
-    from src.workflow.nodes.technical_analysis.tools import compute_z_score
+    from src.agents.technical.data.tools import compute_z_score
 
     # Create synthetic FracDiff series
     np.random.seed(42)
@@ -54,12 +54,12 @@ def test_compute_z_score():
 
 def test_semantic_tags_mapping():
     """Test that semantic tags are correctly mapped based on thresholds."""
-    from src.workflow.nodes.technical_analysis.structures import (
+    from src.agents.technical.data.tools.semantic_layer import assembler
+    from src.agents.technical.interface.structures import (
         MemoryStrength,
         RiskLevel,
         StatisticalState,
     )
-    from src.workflow.nodes.technical_analysis.tools.semantic_layer import assembler
 
     # Dummy data for confluence
     dummy_bb = {"state": "INSIDE"}

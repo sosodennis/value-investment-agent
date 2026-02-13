@@ -6,15 +6,14 @@ Converts numerical FracDiff metrics into semantic tags and natural language.
 
 from langchain_core.prompts import ChatPromptTemplate
 
-from src.common.tools.llm import get_llm
-from src.common.tools.logger import get_logger
-
-from ..structures import (
+from src.agents.technical.interface.structures import (
     ConfluenceEvidence,
     MemoryStrength,
     RiskLevel,
     StatisticalState,
 )
+from src.common.tools.llm import get_llm
+from src.common.tools.logger import get_logger
 
 logger = get_logger(__name__)
 
