@@ -2,8 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from src.agents.intent.application.extraction import IntentExtraction
 from src.agents.intent.domain.models import TickerCandidate
+from src.agents.intent.interface.contracts import IntentExtraction
 
 
 class HumanTickerSelection(BaseModel):

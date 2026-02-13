@@ -1,8 +1,11 @@
 # Sub-Agent Boundary Audit (Based on Package Guideline)
 Date: 2026-02-13
-Status: Active assessment
+Status: Historical audit snapshot (non-normative)
 Scope: `finance-agent-core` sub-agents (`fundamental`, `news`, `technical`, `debate`)
 Reference: `/Users/denniswong/Desktop/Project/value-investment-agent/docs/sub-agent-package-architecture-guideline.md`
+
+This audit captures pre-cutover findings and evidence paths.
+Use canonical guideline docs for current implementation rules.
 
 ## 1. Summary
 

@@ -7,6 +7,7 @@ from typing import Protocol
 from src.agents.fundamental.application.ports import IFundamentalReportRepo
 from src.agents.fundamental.domain.services import (
     build_latest_health_context,
+    extract_equity_value_from_metrics,
     resolve_calculator_model_type,
 )
 from src.common.contracts import (
@@ -217,9 +218,7 @@ def build_valuation_success_update(
     if assumptions:
         fa_update["assumptions"] = assumptions
 
-    equity_value = calculation_metrics.get(
-        "intrinsic_value"
-    ) or calculation_metrics.get("equity_value")
+    equity_value = extract_equity_value_from_metrics(calculation_metrics)
     mapper_ctx = build_mapper_context(
         intent_ctx,
         ticker,

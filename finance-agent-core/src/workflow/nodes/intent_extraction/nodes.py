@@ -7,8 +7,8 @@ from collections.abc import Mapping
 
 from langgraph.types import Command, interrupt
 
-from src.agents.intent.application.extraction import IntentExtraction
 from src.agents.intent.application.orchestrator import intent_orchestrator
+from src.agents.intent.interface.contracts import IntentExtraction
 from src.common.tools.logger import get_logger
 
 from .subgraph_state import IntentExtractionState

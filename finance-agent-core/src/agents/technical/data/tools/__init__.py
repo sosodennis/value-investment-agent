@@ -22,7 +22,7 @@ from .indicators import (
 )
 from .market import fetch_risk_free_series
 from .ohlcv import fetch_daily_ohlcv
-from .semantic_layer import assembler, generate_interpretation
+from .semantic_layer import generate_interpretation
 from .stats import (
     calculate_rolling_z_score,
     calculate_statistical_strength,
@@ -49,6 +49,5 @@ __all__ = [
     "WalkForwardOptimizer",
     "format_backtest_for_llm",
     "format_wfa_for_llm",
-    "assembler",
     "generate_interpretation",
 ]

@@ -101,3 +101,4 @@ Constants:
 
 1. `docs/backend-canonicalization-flow.md` (detailed canonicalization and artifact flow)
 2. `docs/fundamental-reference-architecture.md` (concrete package-boundary example)
+3. `docs/agent-layer-responsibility-and-naming-guideline.md` (authoritative agent-layer ownership + naming)

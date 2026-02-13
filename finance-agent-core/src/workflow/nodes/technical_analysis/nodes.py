@@ -8,7 +8,6 @@ from src.agents.technical.application import technical_orchestrator
 from src.agents.technical.data.tools import (
     CombinedBacktester,
     WalkForwardOptimizer,
-    assembler,
     calculate_fd_bollinger,
     calculate_fd_macd,
     calculate_fd_obv,
@@ -22,6 +21,8 @@ from src.agents.technical.data.tools import (
     format_wfa_for_llm,
     generate_interpretation,
 )
+from src.agents.technical.domain.policies import assemble_semantic_tags
+from src.agents.technical.interface.serializers import build_full_report_payload
 
 from .subgraph_state import TechnicalAnalysisState
 
@@ -70,7 +71,8 @@ async def fracdiff_compute_node(state: TechnicalAnalysisState) -> Command:
 async def semantic_translate_node(state: TechnicalAnalysisState) -> Command:
     result = await technical_orchestrator.run_semantic_translate(
         state,
-        assemble_fn=assembler.assemble,
+        assemble_fn=assemble_semantic_tags,
+        build_full_report_payload_fn=build_full_report_payload,
         generate_interpretation_fn=generate_interpretation,
         calculate_statistical_strength_fn=calculate_statistical_strength,
         calculate_fd_bollinger_fn=calculate_fd_bollinger,

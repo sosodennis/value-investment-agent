@@ -4,38 +4,48 @@ from langchain_core.messages import AIMessage, SystemMessage
 from langgraph.graph import END
 from langgraph.types import Command
 
-from src.agents.debate.application.services import (
+from src.agents.debate.application.use_cases import (
     MAX_CHAR_HISTORY,
     execute_bear_round,
     execute_bull_round,
     execute_moderator_round,
     extract_debate_facts,
 )
-from src.agents.debate.application.services import (
+from src.agents.debate.application.use_cases import (
     compress_reports as _compress_reports,
 )
-from src.agents.debate.application.services import (
+from src.agents.debate.application.use_cases import (
     get_trimmed_history as _get_trimmed_history,
 )
-from src.agents.debate.application.services import (
+from src.agents.debate.application.use_cases import (
     log_compressed_reports as _log_compressed_reports,
 )
-from src.agents.debate.application.services import (
+from src.agents.debate.application.use_cases import (
     log_llm_config as _log_llm_config,
 )
-from src.agents.debate.application.services import (
+from src.agents.debate.application.use_cases import (
     log_llm_response as _log_llm_response,
 )
-from src.agents.debate.application.services import (
+from src.agents.debate.application.use_cases import (
     log_messages as _log_messages,
 )
-from src.agents.debate.application.services import (
+from src.agents.debate.application.use_cases import (
     prepare_debate_reports as _prepare_debate_reports,
 )
-from src.agents.debate.application.services import (
+from src.agents.debate.application.use_cases import (
     resolved_ticker_from_state as _resolved_ticker_from_state,
 )
+from src.agents.debate.data.market_data import (
+    get_current_risk_free_rate,
+    get_dynamic_payoff_map,
+)
 from src.agents.debate.data.ports import debate_artifact_port
+from src.agents.debate.domain.models import DebateConclusion, EvidenceFact
+from src.agents.debate.domain.services import (
+    calculate_pragmatic_verdict,
+    get_sycophancy_detector,
+)
+from src.agents.debate.domain.validators import FactValidator
 from src.agents.debate.interface.mappers import summarize_debate_for_preview
 from src.common.contracts import (
     ARTIFACT_KIND_DEBATE_FINAL_REPORT,
@@ -56,10 +66,7 @@ from .prompts import (
     MODERATOR_SYSTEM_PROMPT,
     VERDICT_PROMPT,
 )
-from .structures import DebateConclusion, EvidenceFact
 from .subgraph_state import DebateState
-from .tools import calculate_pragmatic_verdict
-from .tools.validators import FactValidator
 
 logger = get_logger(__name__)
 
@@ -190,7 +197,6 @@ async def _execute_moderator_critique(
 ) -> dict[str, object]:
     """Internal helper for Moderator Critique across rounds."""
     llm = get_llm()
-    from .tools import get_sycophancy_detector
 
     return await execute_moderator_round(
         state=state,
@@ -528,7 +534,12 @@ async def verdict_node(state: DebateState) -> Command:
             json.dumps(conclusion_data, ensure_ascii=True, indent=2),
         )
 
-        metrics = calculate_pragmatic_verdict(conclusion_data, ticker=ticker)
+        metrics = calculate_pragmatic_verdict(
+            conclusion_data,
+            ticker=ticker,
+            get_risk_free_rate=get_current_risk_free_rate,
+            get_payoff_map=get_dynamic_payoff_map,
+        )
         conclusion_data.update(metrics)
         conclusion_data["debate_rounds"] = 3
 

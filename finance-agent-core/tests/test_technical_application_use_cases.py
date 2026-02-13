@@ -4,7 +4,7 @@ import math
 
 import pandas as pd
 
-from src.agents.technical.application.services import (
+from src.agents.technical.application.use_cases import (
     assemble_semantic_finalize,
     build_data_fetch_error_update,
     build_data_fetch_success_update,

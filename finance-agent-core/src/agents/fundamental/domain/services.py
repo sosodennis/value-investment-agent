@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from src.agents.fundamental.domain.entities import (
     FinancialHealthInsights,
+    FundamentalPreviewMetrics,
     FundamentalReportsAdapter,
 )
 from src.agents.fundamental.domain.rules import calculate_cagr, safe_ratio
@@ -52,6 +53,34 @@ def build_latest_health_context(financial_reports: list[JSONObject]) -> str:
     if insights.operating_cash_flow is not None:
         lines.append(f"\n- OCF: ${insights.operating_cash_flow:,.0f}")
     return "".join(lines)
+
+
+def extract_latest_preview_metrics(
+    financial_reports: list[JSONObject],
+) -> FundamentalPreviewMetrics | None:
+    adapter = FundamentalReportsAdapter(financial_reports)
+    latest = adapter.latest_report()
+    if latest is None:
+        return None
+
+    net_income = adapter.latest_number("base.net_income")
+    total_equity = adapter.latest_number("base.total_equity")
+    return FundamentalPreviewMetrics(
+        revenue_raw=adapter.latest_number("base.total_revenue"),
+        net_income_raw=net_income,
+        total_assets_raw=adapter.latest_number("base.total_assets"),
+        roe_ratio=safe_ratio(net_income, total_equity),
+    )
+
+
+def extract_equity_value_from_metrics(calculation_metrics: JSONObject) -> object | None:
+    intrinsic_value = calculation_metrics.get("intrinsic_value")
+    if intrinsic_value is not None:
+        return intrinsic_value
+    equity_value = calculation_metrics.get("equity_value")
+    if equity_value is not None:
+        return equity_value
+    return None
 
 
 def resolve_calculator_model_type(selected_model_value: str) -> str:

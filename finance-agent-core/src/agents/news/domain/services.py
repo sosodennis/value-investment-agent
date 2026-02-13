@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from src.agents.news.domain.entities import NewsItemEntity
 from src.agents.news.domain.models import NewsAggregationResult
 from src.common.types import JSONObject
 
 
 def aggregate_news_items(
-    news_items: list[JSONObject], *, ticker: str
+    news_items: list[NewsItemEntity], *, ticker: str
 ) -> NewsAggregationResult:
     weighted_score = 0.0
     sentiment_label = "neutral"
@@ -19,25 +20,18 @@ def aggregate_news_items(
         summaries: list[str] = []
 
         for item in news_items:
-            analysis_raw = item.get("analysis")
-            if not isinstance(analysis_raw, dict):
+            analysis = item.analysis
+            if analysis is None:
                 continue
-            source_raw = item.get("source")
-            source_info = source_raw if isinstance(source_raw, dict) else {}
-            weight = float(source_info.get("reliability_score", 0.5))
+            weight = item.source.reliability_score if item.source is not None else 0.5
             total_weight += weight
-            weighted_score_sum += (
-                float(analysis_raw.get("sentiment_score", 0.0)) * weight
-            )
+            weighted_score_sum += analysis.sentiment_score * weight
 
-            key_theme_raw = analysis_raw.get("key_event")
-            if isinstance(key_theme_raw, str) and key_theme_raw:
-                themes.add(key_theme_raw)
+            if analysis.key_event:
+                themes.add(analysis.key_event)
 
-            key_facts = analysis_raw.get("key_facts", [])
-            facts_count = len(key_facts) if isinstance(key_facts, list) else 0
             summaries.append(
-                f"- {analysis_raw.get('summary', 'No summary')} ({facts_count} key facts)"
+                f"- {analysis.summary} ({analysis.key_facts_count} key facts)"
             )
 
         weighted_score = weighted_score_sum / total_weight if total_weight > 0 else 0.0
@@ -49,24 +43,16 @@ def aggregate_news_items(
         summary_text = "\n".join(summaries)
         key_themes = list(themes)
 
-    report_payload: JSONObject = {
-        "ticker": ticker,
-        "news_items": news_items,
-        "overall_sentiment": sentiment_label,
-        "sentiment_score": round(weighted_score, 2),
-        "key_themes": key_themes,
-    }
     top_headlines = [
-        str(item.get("title"))
+        item.title
         for item in news_items[:3]
-        if isinstance(item.get("title"), str) and item.get("title")
+        if isinstance(item.title, str) and item.title
     ]
     return NewsAggregationResult(
         sentiment_label=sentiment_label,
         weighted_score=round(weighted_score, 2),
         key_themes=key_themes,
         summary_text=summary_text,
-        report_payload=report_payload,
         top_headlines=top_headlines,
     )
 

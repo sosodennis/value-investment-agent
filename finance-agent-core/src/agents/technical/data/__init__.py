@@ -2,7 +2,6 @@ from .ports import TechnicalArtifactPort, technical_artifact_port
 from .tools import (
     CombinedBacktester,
     WalkForwardOptimizer,
-    assembler,
     calculate_dynamic_thresholds,
     calculate_fd_bollinger,
     calculate_fd_macd,
@@ -27,7 +26,6 @@ __all__ = [
     "technical_artifact_port",
     "CombinedBacktester",
     "WalkForwardOptimizer",
-    "assembler",
     "calculate_dynamic_thresholds",
     "calculate_fd_bollinger",
     "calculate_fd_macd",

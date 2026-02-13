@@ -1,6 +1,9 @@
 # Deep Refactor Wave 1 Package Map
 Date: 2026-02-13
-Status: Completed (Wave 1 baseline map)
+Status: Historical baseline map (non-normative)
+
+This file records Wave 1 planning/mapping state.
+Some references are intentionally pre-cutover snapshots.
 
 ## 1. Created Skeleton Packages
 

@@ -54,12 +54,7 @@ def test_compute_z_score():
 
 def test_semantic_tags_mapping():
     """Test that semantic tags are correctly mapped based on thresholds."""
-    from src.agents.technical.data.tools.semantic_layer import assembler
-    from src.agents.technical.interface.structures import (
-        MemoryStrength,
-        RiskLevel,
-        StatisticalState,
-    )
+    from src.agents.technical.domain.policies import assemble_semantic_tags
 
     # Dummy data for confluence
     dummy_bb = {"state": "INSIDE"}
@@ -68,7 +63,7 @@ def test_semantic_tags_mapping():
     dummy_obv = {"fd_obv_z": 0.0, "state": "NEUTRAL"}
 
     # Test case 1: Low d, low Z
-    tags_dict = assembler.assemble(
+    tags_dict = assemble_semantic_tags(
         z_score=0.5,
         optimal_d=0.2,
         bollinger_data=dummy_bb,
@@ -76,12 +71,12 @@ def test_semantic_tags_mapping():
         macd_data=dummy_macd,
         obv_data=dummy_obv,
     )
-    assert tags_dict["memory_strength"] == MemoryStrength.STRUCTURALLY_STABLE
-    assert tags_dict["statistical_state"] == StatisticalState.EQUILIBRIUM
-    assert tags_dict["risk_level"] == RiskLevel.LOW
+    assert tags_dict["memory_strength"] == "structurally_stable"
+    assert tags_dict["statistical_state"] == "equilibrium"
+    assert tags_dict["risk_level"] == "low"
 
     # Test case 2: High d, high Z
-    tags_dict = assembler.assemble(
+    tags_dict = assemble_semantic_tags(
         z_score=2.5,
         optimal_d=0.7,
         bollinger_data=dummy_bb,
@@ -89,12 +84,12 @@ def test_semantic_tags_mapping():
         macd_data=dummy_macd,
         obv_data=dummy_obv,
     )
-    assert tags_dict["memory_strength"] == MemoryStrength.FRAGILE
-    assert tags_dict["statistical_state"] == StatisticalState.STATISTICAL_ANOMALY
-    assert tags_dict["risk_level"] == RiskLevel.CRITICAL
+    assert tags_dict["memory_strength"] == "fragile"
+    assert tags_dict["statistical_state"] == "anomaly"
+    assert tags_dict["risk_level"] == "critical"
 
     # Test case 3: Balanced d, medium Z
-    tags_dict = assembler.assemble(
+    tags_dict = assemble_semantic_tags(
         z_score=1.5,
         optimal_d=0.4,
         bollinger_data=dummy_bb,
@@ -102,14 +97,14 @@ def test_semantic_tags_mapping():
         macd_data=dummy_macd,
         obv_data=dummy_obv,
     )
-    assert tags_dict["memory_strength"] == MemoryStrength.BALANCED
-    assert tags_dict["statistical_state"] == StatisticalState.DEVIATING
-    assert tags_dict["risk_level"] == RiskLevel.MEDIUM
+    assert tags_dict["memory_strength"] == "balanced"
+    assert tags_dict["statistical_state"] == "deviating"
+    assert tags_dict["risk_level"] == "medium"
 
 
 def test_compress_ta_data():
     """Test TA data compression for debate."""
-    from src.workflow.nodes.debate.tools import compress_ta_data
+    from src.agents.debate.domain.services import compress_ta_data
 
     # Mock TA output
     ta_output = {
@@ -142,7 +137,7 @@ def test_compress_ta_data():
 
 def test_compress_ta_data_handles_none():
     """Test that compress_ta_data handles None input."""
-    from src.workflow.nodes.debate.tools import compress_ta_data
+    from src.agents.debate.domain.services import compress_ta_data
 
     result = compress_ta_data(None)
     assert result is None

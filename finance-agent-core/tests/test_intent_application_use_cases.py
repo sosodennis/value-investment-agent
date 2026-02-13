@@ -1,4 +1,4 @@
-from src.agents.intent.application.extraction import _heuristic_extract
+from src.agents.intent.application.use_cases import _heuristic_extract
 
 
 def test_heuristic_extract_nvidia_valuation():

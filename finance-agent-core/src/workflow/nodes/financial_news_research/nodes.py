@@ -10,17 +10,17 @@ from src.agents.news.data.clients import (
     get_source_reliability,
     news_search_multi_timeframe,
 )
+from src.agents.news.interface.contracts import (
+    AIAnalysisModel,
+    FinancialNewsItemModel,
+    SourceInfoModel,
+)
 from src.agents.news.interface.prompts import (
     ANALYST_SYSTEM_PROMPT,
     ANALYST_USER_PROMPT_BASIC,
     ANALYST_USER_PROMPT_WITH_FINBERT,
     SELECTOR_SYSTEM_PROMPT,
     SELECTOR_USER_PROMPT,
-)
-from src.agents.news.interface.structures import (
-    AIAnalysis,
-    FinancialNewsItem,
-    SourceInfo,
 )
 from src.common.tools.llm import get_llm
 from src.common.tools.logger import get_logger
@@ -62,8 +62,8 @@ async def fetch_node(state: FinancialNewsState) -> Command:
         fetch_clean_text_async_fn=fetch_clean_text_async,
         generate_news_id_fn=generate_news_id,
         get_source_reliability_fn=get_source_reliability,
-        item_factory=FinancialNewsItem,
-        source_factory=SourceInfo,
+        item_factory=FinancialNewsItemModel,
+        source_factory=SourceInfoModel,
     )
     return Command(update=result.update, goto=_resolve_goto(result.goto))
 
@@ -77,7 +77,7 @@ async def analyst_node(state: FinancialNewsState) -> Command:
         analyst_system_prompt=ANALYST_SYSTEM_PROMPT,
         analyst_user_prompt_basic=ANALYST_USER_PROMPT_BASIC,
         analyst_user_prompt_with_finbert=ANALYST_USER_PROMPT_WITH_FINBERT,
-        analysis_model_type=AIAnalysis,
+        analysis_model_type=AIAnalysisModel,
     )
     return Command(update=result.update, goto=_resolve_goto(result.goto))
 

@@ -4,16 +4,12 @@ Includes sycophancy detection using FastEmbed and CAPM-based hurdle rate calcula
 """
 
 from enum import Enum
+from typing import Protocol
 
 import numpy as np
 from fastembed import TextEmbedding
 
 from src.common.tools.logger import get_logger
-
-from .market_data import (
-    get_current_risk_free_rate,
-    get_dynamic_payoff_map,
-)
 
 logger = get_logger(__name__)
 
@@ -110,23 +106,41 @@ def _get_return_from_scenario(
     return 0.0
 
 
-def calculate_pragmatic_verdict(conclusion_data: dict, ticker: str = None) -> dict:
+class _RiskFreeRateProvider(Protocol):
+    def __call__(self) -> float: ...
+
+
+class _DynamicPayoffMapProvider(Protocol):
+    def __call__(self, ticker: str | None, risk_profile: str) -> dict[str, float]: ...
+
+
+def calculate_pragmatic_verdict(
+    conclusion_data: dict[str, object],
+    *,
+    ticker: str | None,
+    get_risk_free_rate: _RiskFreeRateProvider,
+    get_payoff_map: _DynamicPayoffMapProvider,
+) -> dict[str, object]:
     """
     V2.0 Simplified: The Pragmatic Reward/Risk Model
     """
-    scenarios = conclusion_data.get("scenario_analysis", {})
-    risk_profile = conclusion_data.get("risk_profile", "GROWTH_TECH")
+    scenarios_raw = conclusion_data.get("scenario_analysis")
+    scenarios = scenarios_raw if isinstance(scenarios_raw, dict) else {}
+    risk_profile_raw = conclusion_data.get("risk_profile")
+    risk_profile = (
+        str(risk_profile_raw) if isinstance(risk_profile_raw, str) else "GROWTH_TECH"
+    )
 
     p_bull, p_bear, p_base = _get_normalized_probabilities(scenarios)
 
-    payoff_map = get_dynamic_payoff_map(ticker, risk_profile)
+    payoff_map = get_payoff_map(ticker, risk_profile)
     r_bull = _get_return_from_scenario(scenarios, "bull_case", payoff_map)
     r_base = _get_return_from_scenario(scenarios, "base_case", payoff_map)
     r_bear = _get_return_from_scenario(scenarios, "bear_case", payoff_map)
 
     raw_ev = (p_bull * r_bull) + (p_base * r_base) + (p_bear * r_bear)
 
-    risk_free = get_current_risk_free_rate()
+    risk_free = get_risk_free_rate()
     alpha = raw_ev - risk_free
 
     weighted_upside = (p_bull * r_bull) + (p_base * max(0, r_base))

@@ -81,7 +81,7 @@ async def test_semantic_translate_node_error():
 
     # Simulate Assembler Crash
     with patch(
-        "src.workflow.nodes.technical_analysis.nodes.assembler.assemble"
+        "src.workflow.nodes.technical_analysis.nodes.assemble_semantic_tags"
     ) as mock_assemble:
         mock_assemble.side_effect = Exception("Assembler Crash")
 

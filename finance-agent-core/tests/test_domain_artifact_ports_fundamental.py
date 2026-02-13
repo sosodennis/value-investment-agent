@@ -1,6 +1,7 @@
 from src.agents.fundamental.domain.entities import FundamentalReportsAdapter
 from src.agents.fundamental.domain.services import (
     build_latest_health_context,
+    extract_equity_value_from_metrics,
     extract_latest_health_insights,
 )
 
@@ -73,3 +74,13 @@ def test_fundamental_reports_adapter_extracts_series_and_coverage() -> None:
     coverage = adapter.data_coverage({"base.net_income", "base.total_assets"})
     assert coverage["base.net_income"] is True
     assert coverage["base.total_assets"] is False
+
+
+def test_extract_equity_value_from_metrics_prefers_intrinsic_even_if_zero() -> None:
+    metrics = {"intrinsic_value": 0.0, "equity_value": 99.0}
+    assert extract_equity_value_from_metrics(metrics) == 0.0
+
+
+def test_extract_equity_value_from_metrics_falls_back_to_equity() -> None:
+    metrics = {"equity_value": 88.0}
+    assert extract_equity_value_from_metrics(metrics) == 88.0

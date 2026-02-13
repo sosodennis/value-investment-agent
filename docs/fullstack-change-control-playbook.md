@@ -33,7 +33,7 @@ Every cross-stack change must guarantee:
 1. Backend Owner:
    - Owns API/SSE schema and protocol evolution.
 2. Frontend Owner:
-   - Owns rendering, parser compatibility, UX behavior.
+   - Owns rendering, parser boundaries, runtime validation, UX behavior.
 3. Contract Owner:
    - Owns `contracts/` assets and fixture policy.
 4. Reviewer (cross-functional):

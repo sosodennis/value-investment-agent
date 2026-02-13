@@ -1,14 +1,10 @@
 from .models import FracdiffSerializationResult
-from .services import (
-    build_full_report_payload,
-    derive_memory_strength,
-    derive_statistical_state,
-    safe_float,
-)
+from .policies import assemble_semantic_tags
+from .services import derive_memory_strength, derive_statistical_state, safe_float
 
 __all__ = [
     "FracdiffSerializationResult",
-    "build_full_report_payload",
+    "assemble_semantic_tags",
     "derive_memory_strength",
     "derive_statistical_state",
     "safe_float",

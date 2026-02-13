@@ -138,9 +138,11 @@ npm run dev
 ## 🧭 Development Guidelines
 Authoritative engineering guidelines (mandatory):
 
+*   [`docs/README.md`](docs/README.md) (document authority index)
 *   [`docs/clean-architecture-engineering-guideline.md`](docs/clean-architecture-engineering-guideline.md)
 *   [`docs/backend-guideline.md`](docs/backend-guideline.md)
 *   [`docs/frontend-guideline.md`](docs/frontend-guideline.md)
+*   [`docs/agent-layer-responsibility-and-naming-guideline.md`](docs/agent-layer-responsibility-and-naming-guideline.md)
 *   [`docs/fundamental-reference-architecture.md`](docs/fundamental-reference-architecture.md) (reference implementation)
 
 Cross-stack contract sync:
@@ -154,6 +156,7 @@ Additional audit/history references (non-normative):
 
 *   `docs/fullstack-change-control-playbook.md`
 *   `docs/clean-architecture-agent-workflow-blueprint.md`
+*   `docs/agent-cross-review-2026-02-13.md`
 
 ## 🤝 Contributing
 Contributions are welcome! Please follow the coding standards outlined in the project.

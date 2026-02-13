@@ -1,11 +1,9 @@
 from .application import (
-    IntentExtraction,
     IntentOrchestrator,
     deduplicate_candidates,
     extract_candidates_from_search,
     extract_intent,
     intent_orchestrator,
-    should_request_clarification,
 )
 from .data.market_clients import (
     get_company_profile,
@@ -13,10 +11,12 @@ from .data.market_clients import (
     validate_ticker,
     web_search,
 )
-from .domain.models import TickerCandidate
+from .domain import TickerCandidate, should_request_clarification
+from .interface.contracts import IntentExtraction, SearchExtraction
 
 __all__ = [
     "IntentExtraction",
+    "SearchExtraction",
     "IntentOrchestrator",
     "TickerCandidate",
     "deduplicate_candidates",

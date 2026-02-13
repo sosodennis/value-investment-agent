@@ -1,6 +1,6 @@
 import re
 
-from ..structures import EvidenceFact
+from .models import EvidenceFact
 
 
 class FactValidator:

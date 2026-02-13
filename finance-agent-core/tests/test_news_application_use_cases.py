@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from src.agents.news.application.services import (
+from src.agents.news.application.use_cases import (
     AnalysisChains,
     aggregate_news_items,
     analyze_news_items,
@@ -26,10 +26,8 @@ from src.agents.news.application.services import (
     run_analysis_with_fallback,
     run_selector_with_fallback,
 )
-from src.agents.news.interface.structures import (
-    FinancialNewsItem,
-    SourceInfo,
-)
+from src.agents.news.data.mappers import to_news_item_entities
+from src.agents.news.interface.contracts import FinancialNewsItemModel, SourceInfoModel
 
 
 def test_aggregate_news_items_computes_weighted_sentiment_and_themes() -> None:
@@ -56,12 +54,11 @@ def test_aggregate_news_items_computes_weighted_sentiment_and_themes() -> None:
         },
     ]
 
-    result = aggregate_news_items(news_items, ticker="GME")
+    result = aggregate_news_items(to_news_item_entities(news_items), ticker="GME")
 
     assert result.sentiment_label == "bullish"
     assert result.weighted_score > 0.3
     assert "Earnings beat" in result.key_themes
-    assert result.report_payload["ticker"] == "GME"
     assert len(result.top_headlines) == 2
 
 
@@ -94,8 +91,8 @@ def test_build_news_item_payload_creates_canonical_item() -> None:
         content_id="artifact-x",
         generated_id="id-x",
         reliability_score=0.9,
-        item_factory=FinancialNewsItem,
-        source_factory=SourceInfo,
+        item_factory=FinancialNewsItemModel,
+        source_factory=SourceInfoModel,
     )
     assert payload["id"] == "id-x"
     assert payload["content_id"] == "artifact-x"
@@ -310,8 +307,8 @@ def test_build_news_items_from_fetch_results_creates_items() -> None:
             port=_FakeNewsPort(),
             generate_news_id_fn=lambda _url, _title: "news-1",
             get_source_reliability_fn=lambda _url: 0.9,
-            item_factory=FinancialNewsItem,
-            source_factory=SourceInfo,
+            item_factory=FinancialNewsItemModel,
+            source_factory=SourceInfoModel,
         )
     )
     assert len(result.news_items) == 1

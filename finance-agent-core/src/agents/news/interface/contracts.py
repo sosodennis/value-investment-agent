@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from src.common.types import JSONObject
 from src.interface.artifact_model_shared import (
@@ -114,7 +115,7 @@ class AIAnalysisModel(BaseModel):
     impact_level: Literal["high", "medium", "low"]
     key_event: str | None = None
     reasoning: str
-    key_facts: list[KeyFactModel]
+    key_facts: list[KeyFactModel] = Field(default_factory=list)
 
     @field_validator("summary", "reasoning", mode="before")
     @classmethod
@@ -148,12 +149,14 @@ class FinancialNewsItemModel(BaseModel):
     id: str
     url: str
     published_at: str | None = None
-    fetched_at: str
+    fetched_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
     title: str
     snippet: str
     full_content: str | None = None
     source: SourceInfoModel
-    related_tickers: list[FinancialEntityModel]
+    related_tickers: list[FinancialEntityModel] = Field(default_factory=list)
     categories: list[
         Literal[
             "general",
@@ -164,8 +167,8 @@ class FinancialNewsItemModel(BaseModel):
             "bullish",
             "bearish",
         ]
-    ]
-    tags: list[str]
+    ] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
     analysis: AIAnalysisModel | None = None
 
     @field_validator(

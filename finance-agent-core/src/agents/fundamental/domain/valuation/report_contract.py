@@ -3,6 +3,10 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from src.agents.fundamental.domain.report_semantics import (
+    infer_extension_type_from_extension,
+    normalize_extension_type_token,
+)
 from src.common.traceable import (
     ComputedProvenance,
     ManualProvenance,
@@ -132,11 +136,15 @@ def _coerce_report(value: Mapping[str, object]) -> FinancialReport:
         else None
     )
 
-    extension_type = _normalize_extension_type_token(value.get("extension_type"))
+    extension_type = normalize_extension_type_token(
+        value.get("extension_type"), context="financial report.extension_type"
+    )
     if extension_type is None:
-        extension_type = _normalize_extension_type_token(value.get("industry_type"))
+        extension_type = normalize_extension_type_token(
+            value.get("industry_type"), context="financial report.industry_type"
+        )
     if extension_type is None and extension_map is not None:
-        extension_type = _infer_extension_type_from_mapping(extension_map)
+        extension_type = infer_extension_type_from_extension(extension_map)
 
     base = BaseFinancialModel(
         fields=_coerce_traceable_mapping(base_raw, context="financial report.base")
@@ -175,68 +183,6 @@ def _as_mapping(value: object, context: str) -> Mapping[str, object]:
     if isinstance(value, Mapping):
         return value
     raise TypeError(f"{context} must be an object")
-
-
-def _normalize_extension_type_token(value: object) -> str | None:
-    if value is None:
-        return None
-    if not isinstance(value, str):
-        raise TypeError("extension_type must be a string")
-    token = value.strip().lower()
-    if token == "industrial":
-        return "Industrial"
-    if token in {
-        "financialservices",
-        "financial_services",
-        "financial services",
-        "financial",
-    }:
-        return "FinancialServices"
-    if token in {"realestate", "real_estate", "real estate"}:
-        return "RealEstate"
-    if token == "general":
-        return None
-    raise TypeError(f"unsupported extension type: {value!r}")
-
-
-def _infer_extension_type_from_mapping(mapping: Mapping[str, object]) -> str | None:
-    if any(
-        key in mapping
-        for key in (
-            "inventory",
-            "accounts_receivable",
-            "cogs",
-            "rd_expense",
-            "sga_expense",
-            "capex",
-        )
-    ):
-        return "Industrial"
-    if any(
-        key in mapping
-        for key in (
-            "loans_and_leases",
-            "deposits",
-            "allowance_for_credit_losses",
-            "interest_income",
-            "interest_expense",
-            "provision_for_loan_losses",
-            "risk_weighted_assets",
-            "tier1_capital_ratio",
-        )
-    ):
-        return "FinancialServices"
-    if any(
-        key in mapping
-        for key in (
-            "real_estate_assets",
-            "accumulated_depreciation",
-            "depreciation_and_amortization",
-            "ffo",
-        )
-    ):
-        return "RealEstate"
-    return None
 
 
 def _coerce_traceable_mapping(

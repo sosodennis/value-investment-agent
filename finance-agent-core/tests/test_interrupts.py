@@ -1,7 +1,7 @@
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
-from src.agents.intent.application.extraction import IntentExtraction
+from src.agents.intent.application.use_cases import IntentExtraction
 from src.agents.intent.domain.models import TickerCandidate
 from src.workflow.interrupts import HumanTickerSelection, InterruptValue
 

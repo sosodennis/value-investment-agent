@@ -4,31 +4,49 @@ import asyncio
 import time
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from typing import Protocol
 
 from langchain_core.prompts import ChatPromptTemplate
 
-from src.agents.news.application.services import (
-    aggregate_news_items,
+from src.agents.news.application.analysis_service import (
     analyze_news_items,
     build_analysis_chains,
-    build_analyst_chain_error_update,
-    build_analyst_node_update,
+)
+from src.agents.news.application.fetch_service import (
     build_articles_to_fetch,
     build_cleaned_search_results,
-    build_fetch_node_update,
     build_news_items_from_fetch_results,
-    build_news_summary_message,
+)
+from src.agents.news.application.ports import LLMLike
+from src.agents.news.application.selection_service import (
+    format_selector_input,
+    run_selector_with_fallback,
+)
+from src.agents.news.application.state_readers import (
+    aggregator_ticker_from_state,
+    company_name_from_state,
+    news_items_artifact_id_from_state,
+    resolved_ticker_from_state,
+    search_artifact_id_from_state,
+    selection_artifact_id_from_state,
+)
+from src.agents.news.application.state_updates import (
+    build_aggregator_node_update,
+    build_analyst_chain_error_update,
+    build_analyst_node_update,
+    build_fetch_node_update,
     build_search_node_empty_update,
     build_search_node_error_update,
     build_search_node_no_ticker_update,
     build_search_node_success_update,
     build_selector_node_update,
-    format_selector_input,
-    run_selector_with_fallback,
+)
+from src.agents.news.application.use_cases import (
+    aggregate_news_items,
+    build_news_summary_message,
 )
 from src.agents.news.data.ports import NewsArtifactPort, news_artifact_port
 from src.agents.news.interface.mappers import summarize_news_for_preview
+from src.agents.news.interface.serializers import build_news_report_payload
 from src.common.contracts import (
     ARTIFACT_KIND_NEWS_ANALYSIS_REPORT,
     OUTPUT_KIND_FINANCIAL_NEWS_RESEARCH,
@@ -38,10 +56,6 @@ from src.common.types import JSONObject
 from src.interface.schemas import ArtifactReference, build_artifact_payload
 
 logger = get_logger(__name__)
-
-
-class _LLMLike(Protocol):
-    pass
 
 
 @dataclass(frozen=True)
@@ -64,12 +78,7 @@ class NewsOrchestrator:
             [str, str | None], Awaitable[list[dict[str, object]]]
         ],
     ) -> NewsNodeResult:
-        intent_ctx_raw = state.get("intent_extraction", {})
-        intent_ctx = intent_ctx_raw if isinstance(intent_ctx_raw, Mapping) else {}
-        ticker = intent_ctx.get("resolved_ticker")
-        if not isinstance(ticker, str) or not ticker:
-            fallback_ticker = state.get("ticker")
-            ticker = fallback_ticker if isinstance(fallback_ticker, str) else None
+        ticker = resolved_ticker_from_state(state)
         if not ticker:
             logger.warning("Financial News Research: No ticker resolved, skipping.")
             return NewsNodeResult(
@@ -78,13 +87,7 @@ class NewsOrchestrator:
 
         logger.info(f"--- [News Research] Searching news for {ticker} ---")
         try:
-            company_name = None
-            profile = intent_ctx.get("company_profile")
-            if isinstance(profile, Mapping):
-                name = profile.get("name")
-                if isinstance(name, str):
-                    company_name = name
-
+            company_name = company_name_from_state(state)
             results = await news_search_multi_timeframe_fn(ticker, company_name)
         except Exception as exc:
             logger.error(
@@ -146,13 +149,11 @@ class NewsOrchestrator:
         self,
         state: Mapping[str, object],
         *,
-        get_llm_fn: Callable[[], _LLMLike],
+        get_llm_fn: Callable[[], object],
         selector_system_prompt: str,
         selector_user_prompt: str,
     ) -> NewsNodeResult:
-        ctx_raw = state.get("financial_news_research", {})
-        ctx = ctx_raw if isinstance(ctx_raw, Mapping) else {}
-        search_artifact_id = ctx.get("search_artifact_id")
+        search_artifact_id = search_artifact_id_from_state(state)
 
         formatted_results = ""
         raw_results: list[dict[str, object]] = []
@@ -166,12 +167,7 @@ class NewsOrchestrator:
         except Exception as exc:
             logger.error(f"Failed to retrieve search artifact: {exc}")
 
-        intent_ctx_raw = state.get("intent_extraction", {})
-        intent_ctx = intent_ctx_raw if isinstance(intent_ctx_raw, Mapping) else {}
-        ticker = intent_ctx.get("resolved_ticker")
-        if not isinstance(ticker, str) or not ticker:
-            fallback_ticker = state.get("ticker")
-            ticker = fallback_ticker if isinstance(fallback_ticker, str) else None
+        ticker = resolved_ticker_from_state(state)
 
         logger.info(f"--- [News Research] Selecting top articles for {ticker} ---")
         llm = get_llm_fn()
@@ -228,10 +224,8 @@ class NewsOrchestrator:
         item_factory: type[object],
         source_factory: type[object],
     ) -> NewsNodeResult:
-        ctx_raw = state.get("financial_news_research", {})
-        ctx = ctx_raw if isinstance(ctx_raw, Mapping) else {}
-        search_id = ctx.get("search_artifact_id")
-        selection_id = ctx.get("selection_artifact_id")
+        search_id = search_artifact_id_from_state(state)
+        selection_id = selection_artifact_id_from_state(state)
 
         raw_results: list[dict[str, object]] = []
         selected_indices: list[int] = []
@@ -272,12 +266,7 @@ class NewsOrchestrator:
             full_contents = [None] * len(articles_to_fetch)
             article_errors.append(f"Content fetch partially failed: {str(exc)}")
 
-        intent_ctx_raw = state.get("intent_extraction", {})
-        intent_ctx = intent_ctx_raw if isinstance(intent_ctx_raw, Mapping) else {}
-        ticker = intent_ctx.get("resolved_ticker")
-        if not isinstance(ticker, str) or not ticker:
-            fallback_ticker = state.get("ticker")
-            ticker = fallback_ticker if isinstance(fallback_ticker, str) else ""
+        ticker = resolved_ticker_from_state(state) or ""
         timestamp = int(time.time())
 
         fetch_result = await build_news_items_from_fetch_results(
@@ -315,16 +304,14 @@ class NewsOrchestrator:
         self,
         state: Mapping[str, object],
         *,
-        get_llm_fn: Callable[[], _LLMLike],
+        get_llm_fn: Callable[[], LLMLike],
         get_finbert_analyzer_fn: Callable[[], object],
         analyst_system_prompt: str,
         analyst_user_prompt_basic: str,
         analyst_user_prompt_with_finbert: str,
         analysis_model_type: type[object],
     ) -> NewsNodeResult:
-        ctx_raw = state.get("financial_news_research", {})
-        ctx = ctx_raw if isinstance(ctx_raw, Mapping) else {}
-        news_items_id = ctx.get("news_items_artifact_id")
+        news_items_id = news_items_artifact_id_from_state(state)
 
         news_items: list[dict] = []
         article_errors: list[str] = []
@@ -334,12 +321,7 @@ class NewsOrchestrator:
             logger.error(f"Failed to retrieve news items: {exc}")
             article_errors.append(f"Failed to retrieve news items: {str(exc)}")
 
-        intent_ctx_raw = state.get("intent_extraction", {})
-        intent_ctx = intent_ctx_raw if isinstance(intent_ctx_raw, Mapping) else {}
-        ticker = intent_ctx.get("resolved_ticker")
-        if not isinstance(ticker, str) or not ticker:
-            fallback_ticker = state.get("ticker")
-            ticker = fallback_ticker if isinstance(fallback_ticker, str) else None
+        ticker = resolved_ticker_from_state(state)
 
         logger.info(
             f"--- [News Research] Analyzing {len(news_items)} articles for {ticker} ---"
@@ -406,9 +388,7 @@ class NewsOrchestrator:
         *,
         canonicalize_news_artifact_data_fn: Callable[[object], JSONObject],
     ) -> NewsNodeResult:
-        ctx_raw = state.get("financial_news_research", {})
-        ctx = ctx_raw if isinstance(ctx_raw, Mapping) else {}
-        news_items_id = ctx.get("news_items_artifact_id")
+        news_items_id = news_items_artifact_id_from_state(state)
 
         news_items: list[dict] = []
         try:
@@ -416,12 +396,17 @@ class NewsOrchestrator:
         except Exception as exc:
             logger.error(f"Failed to retrieve news items for aggregation: {exc}")
 
-        ticker_raw = state.get("ticker")
-        ticker = ticker_raw if isinstance(ticker_raw, str) and ticker_raw else "UNKNOWN"
+        news_item_entities = self.port.project_news_item_entities(news_items)
+        ticker = aggregator_ticker_from_state(state)
         logger.info(f"--- [News Research] Aggregating results for {ticker} ---")
 
-        aggregation = aggregate_news_items(news_items, ticker=ticker)
-        report_data = canonicalize_news_artifact_data_fn(aggregation.report_payload)
+        aggregation = aggregate_news_items(news_item_entities, ticker=ticker)
+        report_payload = build_news_report_payload(
+            ticker=ticker,
+            news_items=news_items,
+            aggregation=aggregation,
+        )
+        report_data = canonicalize_news_artifact_data_fn(report_payload)
 
         timestamp = int(time.time())
         try:
@@ -435,7 +420,7 @@ class NewsOrchestrator:
             report_id = None
 
         try:
-            preview = self.summarize_preview(aggregation.report_payload, news_items)
+            preview = self.summarize_preview(report_payload, news_items)
             reference = None
             if report_id:
                 reference = ArtifactReference(
@@ -454,24 +439,16 @@ class NewsOrchestrator:
             logger.error(f"Failed to generate news artifact: {exc}")
             artifact = None
 
-        news_update: dict[str, object] = {
-            "status": "success",
-            "sentiment_summary": aggregation.sentiment_label,
-            "sentiment_score": aggregation.weighted_score,
-            "article_count": len(news_items),
-            "report_id": report_id,
-            "top_headlines": aggregation.top_headlines,
-        }
-        if artifact:
-            news_update["artifact"] = artifact
-
         return NewsNodeResult(
-            update={
-                "financial_news_research": news_update,
-                "current_node": "aggregator_node",
-                "internal_progress": {"aggregator_node": "done"},
-                "node_statuses": {"financial_news_research": "done"},
-            },
+            update=build_aggregator_node_update(
+                status="success",
+                sentiment_summary=aggregation.sentiment_label,
+                sentiment_score=aggregation.weighted_score,
+                article_count=len(news_items),
+                report_id=report_id,
+                top_headlines=aggregation.top_headlines,
+                artifact=artifact,
+            ),
             goto="END",
             summary_message=build_news_summary_message(
                 ticker=ticker, result=aggregation

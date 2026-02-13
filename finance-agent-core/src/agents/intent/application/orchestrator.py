@@ -3,19 +3,19 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
-from src.agents.intent.application.extraction import (
-    IntentExtraction,
+from src.agents.intent.application.use_cases import (
     deduplicate_candidates,
     extract_candidates_from_search,
     extract_intent,
 )
-from src.agents.intent.application.ticker_resolution import should_request_clarification
 from src.agents.intent.data.market_clients import (
     get_company_profile,
     search_ticker,
     web_search,
 )
 from src.agents.intent.domain.models import TickerCandidate
+from src.agents.intent.domain.policies import should_request_clarification
+from src.agents.intent.interface.contracts import IntentExtraction
 from src.agents.intent.interface.mappers import summarize_intent_for_preview
 from src.common.contracts import OUTPUT_KIND_INTENT_EXTRACTION
 from src.common.types import AgentOutputArtifactPayload, JSONObject

@@ -1,0 +1,680 @@
+# Deep Refactor Progress Tracker
+Date: 2026-02-13
+Status: Historical working log (non-normative)
+Plan Reference: `/Users/denniswong/Desktop/Project/value-investment-agent/docs/deep-refactor-master-plan-2026-02-13.md`
+
+This file preserves step-by-step migration history.
+It may reference superseded file names during intermediate waves.
+For active rules, follow `docs/README.md` and canonical guideline docs.
+
+## Overall Status
+
+- Wave 0 Guardrails: COMPLETED
+- Wave 1 Package Skeleton + Shared Base: COMPLETED
+- Wave 2 Contract Ownership Split: COMPLETED
+- Wave 3 Port Ownership Split: COMPLETED
+- Wave 4 Application Extraction from Nodes: COMPLETED
+- Wave 5 Mapper Split (Derive vs Format): COMPLETED
+- Wave 6 Cutover + Removal: COMPLETED (Slice 1-2)
+- Wave 7 Hardening + Audit Pack: IN PROGRESS
+
+## Baseline Metrics (before deep refactor)
+
+1. Global contract file exists: `src/interface/artifact_domain_models.py` (NO, removed in Wave 2)
+2. Global ports file exists: `src/services/domain_artifact_ports.py` (NO, removed in Wave 3)
+3. Node-level mixed concern hit count (heuristic): 36
+4. Architecture boundary CI gate: ENFORCED (baseline mode)
+
+## Change Log
+
+### 2026-02-13
+
+1. Deep refactor plan created.
+2. Sub-agent package guideline created.
+3. Sub-agent boundary audit created.
+4. Wave 0 completed:
+   - Added architecture boundary checker script.
+   - Added baseline violation file.
+   - Added CI gate for boundary violations.
+   - Added freeze list doc.
+   - Added baseline snapshot (import graph + node line counts).
+5. Wave 1 completed:
+   - Created `src/shared/{domain,application,data,interface}` package skeleton.
+   - Created `src/agents/{fundamental,news,technical,debate}/{domain,application,data,interface}` package skeleton.
+   - Added current-to-target package mapping document.
+6. Wave 2 completed:
+   - Split global artifact domain contracts into per-agent modules:
+     - `src/agents/fundamental/interface/contracts.py`
+     - `src/agents/news/interface/contracts.py`
+     - `src/agents/technical/interface/contracts.py`
+     - `src/agents/debate/interface/contracts.py`
+   - Updated registry/API/ports imports to new per-agent contract modules.
+   - Removed old global file: `src/interface/artifact_domain_models.py`.
+   - Verification:
+     - Ruff checks passed for touched files.
+     - Tests passed:
+       - `test_artifact_contract_registry.py`
+       - `test_artifact_api_contract.py`
+     - `test_domain_artifact_ports_fundamental.py`
+     - core protocol/mappers suites.
+7. Wave 3 completed:
+   - Added shared generic typed port:
+     - `src/shared/data/typed_artifact_port.py`
+   - Split concrete artifact ports into per-agent modules:
+     - `src/agents/fundamental/data/ports.py`
+     - `src/agents/news/data/ports.py`
+     - `src/agents/technical/data/ports.py`
+     - `src/agents/debate/data/ports.py`
+   - Rewired workflow and services import paths to per-agent ports.
+   - Removed old global ports file:
+     - `src/services/domain_artifact_ports.py`
+   - Updated architecture boundary baseline (resolved one previous violation).
+   - Verification:
+     - Ruff checks passed for all touched files.
+     - Tests passed:
+       - `test_domain_artifact_ports_fundamental.py`
+       - `test_error_handling_fundamental.py`
+       - `test_error_handling_news.py`
+       - `test_error_handling_technical.py`
+       - `test_protocol.py`
+       - `test_mappers.py`
+       - `test_news_mapper.py`
+       - `test_debate_mapper.py`
+       - `test_artifact_contract_registry.py`
+       - `test_artifact_api_contract.py`
+8. Wave 4 Phase A completed:
+   - Added debate application service module:
+     - `src/agents/debate/application/services.py`
+     - Moved prompt/report preparation + logging/history helpers out of `debate/nodes.py`.
+   - Added fundamental application service module:
+     - `src/agents/fundamental/application/services.py`
+     - Moved mapper-context + selection-details + reasoning enrichment assembly helpers out of `fundamental_analysis/nodes.py`.
+   - Added news application service module:
+     - `src/agents/news/application/services.py`
+     - Moved search normalization/selector formatting assembly out of `financial_news_research/nodes.py`.
+   - Current node line counts after Phase A:
+     - `fundamental_analysis/nodes.py`: `575 -> 547`
+     - `debate/nodes.py`: `1164 -> 950`
+   - Verification:
+     - Ruff checks passed for all touched files.
+     - Tests passed:
+       - `test_error_handling_fundamental.py`
+       - `test_error_handling_news.py`
+       - `test_domain_artifact_ports_fundamental.py`
+       - `test_protocol.py`
+       - `test_mappers.py`
+       - `test_news_mapper.py`
+       - `test_debate_mapper.py`
+9. Wave 4 Phase B completed:
+   - Debate fact extraction logic moved to application service:
+     - `src/agents/debate/application/services.py` (`extract_debate_facts`)
+     - `fact_extractor_node` now orchestration + persistence only.
+   - Debate report retrieval policy centralized:
+     - `src/agents/debate/application/services.py` (`get_debate_reports_text`)
+     - Reused by bull/bear/moderator execution helpers.
+   - Node line-count delta (against baseline):
+     - `debate/nodes.py`: `1164 -> 777` (~33.2% reduction)
+     - `fundamental_analysis/nodes.py`: `575 -> 547`
+   - Verification:
+     - Ruff checks passed for all touched files.
+     - Tests passed:
+       - `test_debate_mapper.py`
+       - `test_news_mapper.py`
+       - `test_error_handling_news.py`
+       - `test_error_handling_fundamental.py`
+       - `test_domain_artifact_ports_fundamental.py`
+       - `test_protocol.py`
+       - `test_mappers.py`
+10. Wave 4 Phase C (partial) completed:
+   - Debate round-execution logic moved to application service:
+     - `src/agents/debate/application/services.py`
+       - `execute_bull_round`
+       - `execute_bear_round`
+       - `execute_moderator_round`
+     - `debate/nodes.py` helpers now thin wrappers delegating to service layer.
+   - Technical helper extraction started:
+     - Added `src/agents/technical/application/services.py`.
+     - Moved FracDiff serialization/preview/report-payload assembly out of `technical_analysis/nodes.py`:
+       - `serialize_fracdiff_outputs`
+       - `build_fracdiff_preview`
+       - `build_full_report_payload`
+       - `safe_float`
+   - Added tests:
+     - `tests/test_technical_application_use_cases.py`
+   - Current node line-count delta (against baseline):
+     - `debate/nodes.py`: `1164 -> 631` (~45.8% reduction)
+     - `technical_analysis/nodes.py`: `601 -> 533` (~11.3% reduction)
+     - `fundamental_analysis/nodes.py`: `575 -> 547` (~4.9% reduction)
+     - `financial_news_research/nodes.py`: `701 -> 692` (~1.3% reduction)
+   - Verification:
+     - Ruff checks passed for all touched files.
+     - Tests passed:
+       - `test_technical_application_use_cases.py`
+       - `test_error_handling_technical.py`
+       - `test_protocol.py`
+       - `test_mappers.py`
+       - `test_news_mapper.py`
+     - `test_debate_mapper.py`
+     - Architecture boundary check passed.
+11. Wave 4 Phase C (continued) completed:
+   - Technical backtest/WFA context assembly moved behind application service boundary:
+     - `src/agents/technical/application/services.py`
+       - `assemble_backtest_context`
+     - `technical_analysis/nodes.py` now orchestrates and injects tool dependencies instead of owning assembly logic.
+   - Removed dead fundamental financial-health table-building block (no runtime output usage), reducing mixed concern in node code:
+     - `src/workflow/nodes/fundamental_analysis/nodes.py`
+   - Current node line-count delta (against baseline):
+     - `debate/nodes.py`: `1164 -> 631` (~45.8% reduction)
+     - `technical_analysis/nodes.py`: `601 -> 533` (~11.3% reduction)
+     - `fundamental_analysis/nodes.py`: `575 -> 547` (~4.9% reduction)
+     - `financial_news_research/nodes.py`: `701 -> 692` (~1.3% reduction)
+   - Verification:
+     - Ruff checks passed for all touched files.
+     - Tests passed:
+       - `test_technical_application_use_cases.py`
+       - `test_error_handling_technical.py`
+       - `test_error_handling_fundamental.py`
+       - `test_protocol.py`
+       - `test_mappers.py`
+       - `test_news_mapper.py`
+     - `test_debate_mapper.py`
+     - Architecture boundary check passed.
+12. Wave 4 Phase C (continued, second slice) completed:
+   - Fundamental model-selection artifact/report assembly moved to application service:
+     - `src/agents/fundamental/application/services.py`
+       - `build_and_store_model_selection_artifact`
+     - `fundamental_analysis/nodes.py` now delegates full-report payload + save + output artifact composition.
+   - Technical backtest context assembly updated to dependency-injected service boundary to avoid circular imports:
+     - `src/agents/technical/application/services.py`
+       - `assemble_backtest_context` now receives tool dependencies from node.
+     - `technical_analysis/nodes.py` reduced to orchestration + dependency wiring.
+   - Current node line-count delta (against baseline):
+     - `fundamental_analysis/nodes.py`: `575 -> 411` (~28.5% reduction)
+     - `technical_analysis/nodes.py`: `601 -> 494` (~17.8% reduction)
+     - `debate/nodes.py`: `1164 -> 631` (~45.8% reduction)
+     - `financial_news_research/nodes.py`: `701 -> 692` (~1.3% reduction)
+   - Verification:
+     - Ruff checks passed for all touched files.
+     - Tests passed:
+       - `test_technical_application_use_cases.py`
+       - `test_error_handling_fundamental.py`
+       - `test_error_handling_technical.py`
+       - `test_protocol.py`
+       - `test_mappers.py`
+       - `test_news_mapper.py`
+     - `test_debate_mapper.py`
+     - Architecture boundary check passed.
+13. Wave 4 Phase C (continued, third slice) completed:
+   - Technical semantic finalization assembly moved to application service:
+     - `src/agents/technical/application/services.py`
+       - `assemble_semantic_finalize`
+     - `technical_analysis/nodes.py` now delegates raw-data/report/update composition.
+   - News aggregator core logic moved to application service:
+     - `src/agents/news/application/services.py`
+       - `aggregate_news_items`
+       - `build_news_summary_message`
+     - `financial_news_research/nodes.py` now orchestrates persistence/output only.
+   - Added/extended tests:
+     - `tests/test_news_application_use_cases.py`
+     - `tests/test_technical_application_use_cases.py`
+   - Current node line-count delta (against baseline):
+     - `fundamental_analysis/nodes.py`: `575 -> 411` (~28.5% reduction)
+     - `technical_analysis/nodes.py`: `601 -> 485` (~19.3% reduction)
+     - `debate/nodes.py`: `1164 -> 631` (~45.8% reduction)
+     - `financial_news_research/nodes.py`: `701 -> 646` (~7.8% reduction)
+   - Verification:
+     - Ruff checks passed for all touched files.
+     - Tests passed:
+       - `test_news_application_use_cases.py`
+       - `test_technical_application_use_cases.py`
+       - `test_error_handling_news.py`
+       - `test_error_handling_technical.py`
+       - `test_error_handling_fundamental.py`
+       - `test_protocol.py`
+       - `test_mappers.py`
+       - `test_news_mapper.py`
+     - `test_debate_mapper.py`
+     - Architecture boundary check passed.
+14. Wave 4 Phase C (continued, fourth slice) completed:
+   - Technical semantic command payload building moved to application service:
+     - `src/agents/technical/application/services.py`
+       - `build_semantic_success_update`
+       - `build_semantic_error_update`
+     - `technical_analysis/nodes.py` now delegates success/error update payload composition.
+   - News fetch/analyst loop payload shaping moved to application service:
+     - `src/agents/news/application/services.py`
+       - `build_articles_to_fetch`
+       - `build_news_item_payload`
+       - `build_analysis_chain_payload`
+       - `build_fetch_node_update`
+       - `build_analyst_node_update`
+     - `financial_news_research/nodes.py` keeps I/O orchestration and delegates payload shaping.
+   - Added/extended tests:
+     - `tests/test_news_application_use_cases.py`
+     - `tests/test_technical_application_use_cases.py`
+   - Current node line-count delta (against baseline):
+     - `fundamental_analysis/nodes.py`: `575 -> 411` (~28.5% reduction)
+     - `technical_analysis/nodes.py`: `601 -> 453` (~24.6% reduction)
+     - `debate/nodes.py`: `1164 -> 631` (~45.8% reduction)
+     - `financial_news_research/nodes.py`: `701 -> 583` (~16.8% reduction)
+   - Verification:
+     - Ruff checks passed for all touched files.
+     - Tests passed:
+       - `test_news_application_use_cases.py`
+       - `test_technical_application_use_cases.py`
+       - `test_error_handling_news.py`
+       - `test_error_handling_technical.py`
+       - `test_error_handling_fundamental.py`
+       - `test_protocol.py`
+       - `test_mappers.py`
+     - `test_news_mapper.py`
+     - `test_debate_mapper.py`
+     - Architecture boundary check passed.
+15. Wave 4 Phase C (continued, fifth slice) completed:
+   - News selector/analyst chain-construction and fallback policy moved to application service:
+     - `src/agents/news/application/services.py`
+       - `build_selector_fallback_indices`
+       - `normalize_selected_indices`
+       - `build_analysis_chains`
+       - `run_analysis_with_fallback`
+     - `financial_news_research/nodes.py` now delegates selector fallback/normalize and analyst chain invoke fallback handling.
+   - Fundamental valuation success/error/missing-input update payload composition moved to application service:
+     - `src/agents/fundamental/application/services.py`
+       - `build_valuation_missing_inputs_update`
+       - `build_valuation_success_update`
+       - `build_valuation_error_update`
+     - `fundamental_analysis/nodes.py` now delegates valuation update assembly and keeps orchestration only.
+   - Added/extended tests:
+     - `tests/test_news_application_use_cases.py`
+     - `tests/test_fundamental_application_services.py`
+   - Current node line-count delta (against baseline):
+     - `fundamental_analysis/nodes.py`: `575 -> 411` (~28.5% reduction)
+     - `technical_analysis/nodes.py`: `601 -> 453` (~24.6% reduction)
+     - `debate/nodes.py`: `1164 -> 631` (~45.8% reduction)
+     - `financial_news_research/nodes.py`: `701 -> 596` (~15.0% reduction)
+   - Verification:
+     - Ruff checks passed for all touched files.
+     - Tests passed:
+       - `test_fundamental_application_services.py`
+       - `test_news_application_use_cases.py`
+       - `test_error_handling_fundamental.py`
+       - `test_error_handling_news.py`
+       - `test_protocol.py`
+       - `test_mappers.py`
+       - `test_news_mapper.py`
+     - `test_debate_mapper.py`
+     - Architecture boundary check passed.
+16. Wave 4 Phase C (continued, sixth slice) completed:
+   - News selector/fetch/analyst execution paths further extracted into application service:
+     - `src/agents/news/application/services.py`
+       - `run_selector_with_fallback`
+       - `build_news_items_from_fetch_results`
+       - `analyze_news_items`
+     - `financial_news_research/nodes.py` now delegates selector execution and fetch/analyst per-item loops.
+   - Technical data-fetch/fracdiff command update assembly moved to application service:
+     - `src/agents/technical/application/services.py`
+       - `build_data_fetch_error_update`
+       - `build_data_fetch_success_update`
+       - `build_fracdiff_error_update`
+       - `build_fracdiff_success_update`
+     - `technical_analysis/nodes.py` now delegates data-fetch/fracdiff update payload construction.
+   - Added/extended tests:
+     - `tests/test_news_application_use_cases.py`
+     - `tests/test_technical_application_use_cases.py`
+   - Current node line-count delta (against baseline):
+     - `fundamental_analysis/nodes.py`: `575 -> 355` (~38.3% reduction)
+     - `technical_analysis/nodes.py`: `601 -> 376` (~37.4% reduction)
+     - `debate/nodes.py`: `1164 -> 631` (~45.8% reduction)
+     - `financial_news_research/nodes.py`: `701 -> 498` (~29.0% reduction)
+   - Verification:
+     - Ruff checks passed for all touched files.
+     - Tests passed:
+       - `test_technical_application_use_cases.py`
+       - `test_news_application_use_cases.py`
+       - `test_error_handling_technical.py`
+       - `test_error_handling_news.py`
+       - `test_error_handling_fundamental.py`
+       - `test_protocol.py`
+       - `test_mappers.py`
+       - `test_news_mapper.py`
+     - `test_debate_mapper.py`
+     - Architecture boundary check passed.
+17. Wave 5 (Slice 1) started and completed for News mapper:
+   - Added application derivation layer:
+     - `src/agents/news/application/view_models.py`
+       - `derive_news_preview_view_model`
+   - Added interface formatting layer:
+     - `src/agents/news/interface/formatters.py`
+       - `format_news_preview`
+   - Rewired legacy workflow mapper into thin adapter:
+     - `src/workflow/nodes/financial_news_research/mappers.py`
+       - now only delegates to derive + format layers.
+   - Added dedicated derive/format tests:
+     - `tests/test_news_preview_layers.py`
+   - Verification:
+     - Ruff checks passed for touched files.
+     - Tests passed:
+       - `test_news_preview_layers.py`
+       - `test_news_mapper.py`
+       - `test_news_application_use_cases.py`
+       - `test_technical_application_use_cases.py`
+       - `test_error_handling_news.py`
+       - `test_error_handling_technical.py`
+       - `test_protocol.py`
+       - `test_mappers.py`
+       - `test_debate_mapper.py`
+18. Wave 5 (Slice 2) completed for Technical mapper:
+   - Added application derivation layer:
+     - `src/agents/technical/application/view_models.py`
+       - `derive_ta_preview_view_model`
+   - Added interface formatting layer:
+     - `src/agents/technical/interface/formatters.py`
+       - `format_ta_preview`
+   - Rewired legacy workflow mapper into thin adapter:
+     - `src/workflow/nodes/technical_analysis/mappers.py`
+       - now delegates to derive + format layers.
+   - Added dedicated derive/format tests:
+     - `tests/test_technical_preview_layers.py`
+   - Verification:
+     - Ruff checks passed for touched files.
+     - Tests passed:
+       - `test_technical_preview_layers.py`
+       - `test_news_preview_layers.py`
+       - `test_news_mapper.py`
+       - `test_news_application_use_cases.py`
+       - `test_technical_application_use_cases.py`
+       - `test_protocol.py`
+       - `test_mappers.py`
+       - `test_debate_mapper.py`
+     - Architecture boundary check passed.
+19. Wave 5 (Slice 3) completed for Fundamental mapper:
+   - Added application derivation layer:
+     - `src/agents/fundamental/application/view_models.py`
+       - `derive_fundamental_preview_view_model`
+   - Added interface formatting layer:
+     - `src/agents/fundamental/interface/formatters.py`
+       - `format_fundamental_preview`
+   - Rewired legacy workflow mapper into thin adapter:
+     - `src/workflow/nodes/fundamental_analysis/mappers.py`
+       - now delegates to derive + format layers.
+   - Added dedicated derive/format tests:
+     - `tests/test_fundamental_preview_layers.py`
+   - Verification:
+     - Ruff checks passed for touched files.
+     - Tests passed:
+       - `test_fundamental_preview_layers.py`
+       - `test_fundamental_mapper.py`
+       - `test_news_preview_layers.py`
+       - `test_technical_preview_layers.py`
+       - `test_news_mapper.py`
+       - `test_mappers.py`
+       - `test_protocol.py`
+       - `test_debate_mapper.py`
+     - Architecture boundary check passed.
+20. Wave 5 (Slice 4) completed for Debate mapper:
+   - Added application derivation layer:
+     - `src/agents/debate/application/view_models.py`
+       - `derive_debate_preview_view_model`
+   - Added interface formatting layer:
+     - `src/agents/debate/interface/formatters.py`
+       - `format_debate_preview`
+   - Rewired legacy workflow mapper into thin adapter:
+     - `src/workflow/nodes/debate/mappers.py`
+       - now delegates to derive + format layers.
+   - Added dedicated derive/format tests:
+     - `tests/test_debate_preview_layers.py`
+   - Verification:
+     - Ruff checks passed for touched files.
+     - Tests passed:
+       - `test_debate_preview_layers.py`
+       - `test_debate_mapper.py`
+       - `test_fundamental_preview_layers.py`
+       - `test_fundamental_mapper.py`
+       - `test_news_preview_layers.py`
+       - `test_technical_preview_layers.py`
+       - `test_news_mapper.py`
+       - `test_mappers.py`
+     - `test_protocol.py`
+     - Architecture boundary check passed.
+21. Wave 6 (Slice 1) started and completed: remove obsolete workflow mapper adapters.
+   - Added canonical mapper entrypoints under agent interface packages:
+     - `src/agents/fundamental/interface/mappers.py`
+     - `src/agents/news/interface/mappers.py`
+     - `src/agents/technical/interface/mappers.py`
+     - `src/agents/debate/interface/mappers.py`
+   - Updated workflow nodes to import summarize functions from agent interface mappers directly.
+   - Updated mapper tests to import from agent interface mappers.
+   - Removed obsolete workflow mapper files:
+     - `src/workflow/nodes/fundamental_analysis/mappers.py`
+     - `src/workflow/nodes/financial_news_research/mappers.py`
+     - `src/workflow/nodes/technical_analysis/mappers.py`
+     - `src/workflow/nodes/debate/mappers.py`
+   - Verification:
+     - Ruff checks passed for touched files.
+     - Mandatory matrix passed:
+       - `test_protocol.py`
+       - `test_mappers.py`
+       - `test_news_mapper.py`
+       - `test_debate_mapper.py`
+       - `test_artifact_api_contract.py`
+       - `test_output_contract_serializers.py`
+       - `test_error_handling_fundamental.py`
+       - `test_error_handling_news.py`
+       - `test_error_handling_technical.py`
+     - `test_param_builder_canonical_reports.py`
+     - Architecture boundary check passed.
+22. Wave 6 (Slice 2) completed: runtime marker cleanup for zero-leftover policy.
+   - Removed residual legacy/compat/TODO markers from runtime code path:
+     - `src/interface/protocol.py` (protocol version description wording)
+     - `src/workflow/nodes/fundamental_analysis/nodes.py` (valuation docstring wording)
+     - `src/workflow/nodes/intent_extraction/subgraph_state.py` (state comment wording)
+     - `src/workflow/nodes/financial_news_research/subgraph_state.py` (state comment wording)
+     - `src/workflow/nodes/fundamental_analysis/tools/sec_xbrl/factory.py` (TODO comment wording)
+   - Verification:
+     - Ruff checks passed for touched files.
+     - Mandatory matrix passed.
+23. Wave 7 (Hardening, Slice A) completed for Fundamental package depth:
+   - Filled previously-empty `fundamental/domain` with explicit business modules:
+     - `src/agents/fundamental/domain/value_objects.py`
+     - `src/agents/fundamental/domain/rules.py`
+     - `src/agents/fundamental/domain/entities.py`
+     - `src/agents/fundamental/domain/services.py`
+   - Added explicit application-layer boundaries:
+     - `src/agents/fundamental/application/ports.py`
+     - `src/agents/fundamental/application/dto.py`
+     - `src/agents/fundamental/application/use_cases.py`
+     - `src/agents/fundamental/application/orchestrator.py`
+   - Removed legacy mixed application module:
+     - `src/agents/fundamental/application/services.py`
+   - Simplified data layer to persistence-only:
+     - `src/agents/fundamental/data/ports.py` (business rule extraction removed)
+   - Rewired fundamental workflow node to consume application orchestrator entrypoint:
+     - `src/workflow/nodes/fundamental_analysis/nodes.py`
+   - Moved report adapter dependency used by model selection into domain:
+     - `src/agents/fundamental/domain/model_selection.py`
+   - Verification:
+     - Ruff checks passed for touched files.
+     - Mandatory matrix passed:
+       - `test_protocol.py`
+       - `test_mappers.py`
+       - `test_news_mapper.py`
+       - `test_debate_mapper.py`
+       - `test_artifact_api_contract.py`
+       - `test_output_contract_serializers.py`
+       - `test_error_handling_fundamental.py`
+       - `test_error_handling_news.py`
+       - `test_error_handling_technical.py`
+       - `test_param_builder_canonical_reports.py`
+     - Additional domain/application tests passed:
+     - `test_fundamental_application_services.py`
+     - `test_domain_artifact_ports_fundamental.py`
+     - Architecture boundary check passed.
+24. Wave 7 (Hardening, Slice B) completed for Fundamental tools cutover:
+   - Removed workflow-local fundamental tools package and relocated modules by layer:
+     - Domain:
+       - `src/agents/fundamental/domain/model_selection.py`
+       - `src/agents/fundamental/domain/valuation/**`
+     - Data:
+       - `src/agents/fundamental/data/clients/sec_xbrl/**`
+       - ticker resolution clients migrated to `src/agents/intent/data/market_clients.py`
+     - Interface:
+       - `src/agents/fundamental/interface/report_helpers.py`
+   - Added domain semantic models and removed workflow-local structures coupling:
+     - `src/agents/fundamental/domain/models.py`
+     - removed `src/workflow/nodes/fundamental_analysis/structures.py`
+   - Moved intent extraction module into owning package to remove cross-agent import:
+     - `src/workflow/nodes/intent_extraction/extraction.py`
+     - removed `src/workflow/nodes/fundamental_analysis/extraction.py`
+   - Updated imports in workflow and tests to new package paths.
+   - Removed stale architecture baseline violations:
+     - `scripts/architecture-boundary-baseline.txt` now empty (header-only).
+   - Verification:
+     - Ruff checks passed for touched files.
+     - Tests passed:
+       - `test_protocol.py`
+       - `test_mappers.py`
+       - `test_news_mapper.py`
+       - `test_debate_mapper.py`
+       - `test_artifact_api_contract.py`
+       - `test_output_contract_serializers.py`
+       - `test_error_handling_fundamental.py`
+       - `test_error_handling_news.py`
+       - `test_error_handling_technical.py`
+       - `test_param_builder_canonical_reports.py`
+      - `test_domain_artifact_ports_fundamental.py`
+25. Wave 7 (Hardening, Slice C) completed for Intent boundary cleanup:
+   - Introduced `src/agents/intent` package and migrated intent-owned modules:
+     - `src/agents/intent/domain/models.py` (`TickerCandidate`)
+     - `src/agents/intent/application/ticker_resolution.py`
+     - `src/agents/intent/data/market_clients.py`
+   - Updated workflow and interrupt boundaries to import from `agents.intent`.
+   - Reduced shared scope:
+     - `src/shared/domain/market_identity.py` now contains only cross-agent `CompanyProfile`.
+     - removed:
+       - `src/shared/application/ticker_resolution.py`
+       - `src/shared/data/market_clients.py`
+   - Removed duplicate clarification policy from fundamental domain.
+   - Verification:
+     - Ruff checks passed for touched files.
+     - Tests passed:
+       - `test_interrupts.py`
+       - `test_error_handling_intent.py`
+       - `test_intent_application_use_cases.py`
+       - `test_protocol.py`
+       - `test_mappers.py`
+       - `test_news_mapper.py`
+       - `test_debate_mapper.py`
+     - Architecture boundary check passed.
+26. Wave 7 (Hardening, Slice D) completed for Intent thin-orchestrator cutover:
+   - Added intent application orchestration modules:
+     - `src/agents/intent/application/use_cases.py`
+     - `src/agents/intent/application/orchestrator.py`
+   - Added intent interface mapper ownership:
+     - `src/agents/intent/interface/mappers.py`
+   - `workflow/nodes/intent_extraction/nodes.py` now delegates extraction/search/decision artifact assembly to `intent_orchestrator`.
+   - Workflow wrapper modules removed:
+     - `src/workflow/nodes/intent_extraction/extraction.py` (removed)
+     - `src/workflow/nodes/intent_extraction/mappers.py` (removed)
+   - Workflow nodes now import intent contracts/mappers directly from `src/agents/intent/*`.
+   - Interrupt boundary now depends on intent package directly:
+     - `src/workflow/interrupts.py` imports `IntentExtraction` from `src/agents/intent/application/use_cases.py`.
+   - Verification:
+     - Ruff checks passed for touched files.
+     - Tests passed:
+       - `test_error_handling_intent.py`
+       - `test_intent_application_use_cases.py`
+       - `test_interrupts.py`
+       - `test_intent_mapper.py`
+       - `test_protocol.py`
+       - `test_mappers.py`
+       - `test_news_mapper.py`
+       - `test_debate_mapper.py`
+     - Architecture boundary check passed.
+27. Wave 7 (Hardening, Slice E) completed for News thin-orchestrator cutover:
+   - Added news application orchestrator:
+     - `src/agents/news/application/orchestrator.py`
+   - `workflow/nodes/financial_news_research/nodes.py` converted to thin adapter:
+     - all funnel stage logic delegated to `news_orchestrator`.
+     - workflow node now handles only `Command` wiring and message emission.
+   - Node line-count reduction:
+     - `financial_news_research/nodes.py`: `447 -> 101` (~77.4% reduction).
+   - Verification:
+     - Ruff checks passed for touched files.
+     - Tests passed:
+       - `test_error_handling_news.py`
+       - `test_news_application_use_cases.py`
+       - `test_news_mapper.py`
+       - `test_protocol.py`
+       - `test_mappers.py`
+     - `test_debate_mapper.py`
+     - Architecture boundary check passed.
+28. Wave 7 (Hardening, Slice F) completed for Technical thin-orchestrator cutover:
+   - Added technical application orchestrator:
+     - `src/agents/technical/application/orchestrator.py`
+   - `workflow/nodes/technical_analysis/nodes.py` converted to thin adapter:
+     - all stage logic delegated to `technical_orchestrator`.
+     - workflow node now handles only `Command` wiring and done-status message emission.
+   - Technical orchestrator now owns:
+     - data fetch result assembly
+     - fracdiff computation orchestration and artifact assembly
+     - semantic finalize/report save orchestration
+   - Verification:
+     - Ruff checks passed for touched files.
+     - Tests passed:
+       - `test_error_handling_technical.py`
+       - `test_technical_application_use_cases.py`
+       - `test_protocol.py`
+       - `test_mappers.py`
+       - `test_news_mapper.py`
+     - `test_debate_mapper.py`
+     - Architecture boundary check passed.
+29. Wave 7 (Hardening, Slice G) completed for News/Technical layer completion (before Debate):
+   - News domain layer is no longer empty:
+     - added `src/agents/news/domain/models.py`
+     - added `src/agents/news/domain/services.py`
+     - moved sentiment aggregation/selection business rules out of application service into domain service.
+   - Technical domain layer is no longer empty:
+     - added `src/agents/technical/domain/models.py`
+     - added `src/agents/technical/domain/services.py`
+     - moved numeric/domain rules (`safe_float`, state derivation, report payload assembly) out of application service into domain service.
+   - News tooling moved out of workflow package:
+     - from `workflow/nodes/financial_news_research/tools/*`
+     - to `src/agents/news/data/clients/*`
+   - Technical tooling moved out of workflow package:
+     - from `workflow/nodes/technical_analysis/tools/*`
+     - to `src/agents/technical/data/tools/*`
+   - News interface assets moved out of workflow package:
+     - `prompts.py` and `structures.py` moved to `src/agents/news/interface/`.
+   - Technical interface structure models moved out of workflow package:
+     - `workflow/nodes/technical_analysis/structures.py`
+     - to `src/agents/technical/interface/structures.py`.
+   - Workflow node modules now import only from `src/agents/{news,technical}/*` for their own logic/resources.
+   - Verification:
+     - Ruff checks passed for touched files.
+     - Tests passed:
+       - `test_news_application_use_cases.py`
+       - `test_technical_application_use_cases.py`
+       - `test_technical_analysis.py`
+       - `test_error_handling_news.py`
+       - `test_error_handling_technical.py`
+       - `test_news_mapper.py`
+       - `test_protocol.py`
+       - `test_mappers.py`
+       - `test_debate_mapper.py`
+     - Architecture boundary check passed.
+
+## Completion Checklist (must all be checked)
+
+- [x] Old global contract file removed.
+- [x] Old global ports file removed.
+- [x] Per-agent interface contracts in place.
+- [x] Per-agent ports in place.
+- [x] Nodes are orchestration-only (fundamental fully rewired; remaining agents still being hardened).
+- [x] Mapper split done (derive vs format).
+- [x] Boundary CI checks enabled and green.
+- [x] Full mandatory test matrix green.
+
+## Immediate Next Actions (Wave 7)
+
+1. Perform debate cross-agent public-contract-only refactor (no direct sub-agent data imports).
+2. Produce final audit pack with boundary graph + package ownership summary.

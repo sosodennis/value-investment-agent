@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from src.agents.news.data.mappers import to_news_item_entities
+from src.agents.news.domain.entities import NewsItemEntity
 from src.agents.news.interface.contracts import NewsArtifactModel
 from src.common.contracts import (
     ARTIFACT_KIND_NEWS_ANALYSIS_REPORT,
@@ -17,7 +19,6 @@ from src.interface.artifact_api_models import (
     NewsSelectionArtifactData,
     SearchResultsArtifactData,
 )
-from src.interface.artifact_contract_registry import parse_news_items_for_debate
 from src.services.artifact_manager import artifact_manager
 from src.shared.data.typed_artifact_port import TypedArtifactPort
 
@@ -114,20 +115,6 @@ class NewsArtifactPort:
             context=f"artifact {artifact_id} news_items_list",
         )
 
-    async def load_news_items_for_debate(
-        self, artifact_id: str
-    ) -> list[JSONObject] | None:
-        envelope = await self.search_results_port.manager.get_artifact_envelope(
-            artifact_id
-        )
-        if envelope is None:
-            return None
-        return parse_news_items_for_debate(
-            envelope.kind,
-            envelope.data,
-            context=f"artifact {artifact_id} {envelope.kind}",
-        )
-
     async def load_search_context(
         self, search_artifact_id: object
     ) -> tuple[str, list[dict[str, object]]]:
@@ -162,6 +149,11 @@ class NewsArtifactPort:
         if news_items_data is None:
             return []
         return news_items_data.news_items
+
+    def project_news_item_entities(
+        self, news_items: list[dict[str, object]]
+    ) -> list[NewsItemEntity]:
+        return to_news_item_entities(news_items)
 
     async def load_news_article_text(self, content_artifact_id: object) -> str | None:
         if not isinstance(content_artifact_id, str):

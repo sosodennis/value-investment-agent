@@ -1,6 +1,9 @@
 # Deep Refactor Temporary Freeze List
 Date: 2026-02-13
-Status: Active during Wave 0 -> Wave 2
+Status: Historical (freeze period closed)
+
+Freeze constraints in this file are no longer active.
+Retained only as audit evidence for migration controls.
 
 ## Scope
 

@@ -47,6 +47,29 @@ def test_build_valuation_success_update_includes_output_and_artifact() -> None:
     assert update["node_statuses"]["fundamental_analysis"] == "done"
 
 
+def test_build_valuation_success_update_keeps_zero_intrinsic_value() -> None:
+    update = build_valuation_success_update(
+        fundamental={},
+        intent_ctx={},
+        ticker="GME",
+        model_type="dcf_standard",
+        reports_raw=[],
+        reports_artifact_id="artifact-123",
+        params_dump={},
+        calculation_metrics={"intrinsic_value": 0.0, "equity_value": 42.5},
+        assumptions=[],
+        summarize_preview=lambda _ctx, _reports: {},
+    )
+
+    fa = update["fundamental_analysis"]
+    assert isinstance(fa, dict)
+    artifact = fa["artifact"]
+    assert isinstance(artifact, dict)
+    preview = artifact["preview"]
+    assert isinstance(preview, dict)
+    assert preview["equity_value"] == 0.0
+
+
 def test_build_valuation_error_update_sets_calculation_error() -> None:
     update = build_valuation_error_update("boom")
     assert update["node_statuses"]["fundamental_analysis"] == "error"

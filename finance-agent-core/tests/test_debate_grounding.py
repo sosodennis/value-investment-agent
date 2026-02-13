@@ -1,5 +1,5 @@
-from src.workflow.nodes.debate.structures import EvidenceFact
-from src.workflow.nodes.debate.tools.validators import FactValidator
+from src.agents.debate.domain.models import EvidenceFact
+from src.agents.debate.domain.validators import FactValidator
 
 
 def test_fact_extraction_regex():

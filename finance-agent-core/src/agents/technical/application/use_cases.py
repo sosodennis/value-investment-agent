@@ -7,10 +7,7 @@ from typing import Protocol
 import pandas as pd
 
 from src.agents.technical.domain.models import FracdiffSerializationResult
-from src.agents.technical.domain.services import (
-    build_full_report_payload,
-    safe_float,
-)
+from src.agents.technical.domain.services import safe_float
 from src.common.tools.logger import get_logger
 from src.common.types import AgentOutputArtifactPayload, JSONObject
 from src.interface.artifact_api_models import (
@@ -213,6 +210,7 @@ def assemble_semantic_finalize(
     llm_interpretation: str,
     price_data: PriceSeriesArtifactData | None,
     chart_data: TechnicalChartArtifactData | None,
+    build_full_report_payload_fn: Callable[..., JSONObject],
 ) -> SemanticFinalizeResult:
     direction = str(tags_dict.get("direction") or "NEUTRAL").upper()
     opt_d = float(technical_context.get("optimal_d", 0.5))
@@ -225,7 +223,7 @@ def assemble_semantic_finalize(
             "z_score_series": chart_data.z_score_series,
         }
 
-    full_report_data_raw = build_full_report_payload(
+    full_report_data_raw = build_full_report_payload_fn(
         ticker=ticker,
         technical_context=technical_context,
         tags_dict=tags_dict,

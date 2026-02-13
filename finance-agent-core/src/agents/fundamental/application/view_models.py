@@ -1,24 +1,7 @@
 from __future__ import annotations
 
+from src.agents.fundamental.domain.services import extract_latest_preview_metrics
 from src.common.types import JSONObject
-
-
-def _extract_traceable_value(base: JSONObject, field_name: str) -> object:
-    field = base.get(field_name)
-    if isinstance(field, dict):
-        return field.get("value")
-    return field
-
-
-def _safe_ratio(numerator: object, denominator: object) -> float | None:
-    try:
-        num = float(numerator)  # type: ignore[arg-type]
-        den = float(denominator)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        return None
-    if den == 0:
-        return None
-    return num / den
 
 
 def derive_fundamental_preview_view_model(
@@ -32,22 +15,14 @@ def derive_fundamental_preview_view_model(
 
     metrics: JSONObject = {}
     if financial_reports:
-        latest = financial_reports[0]
-        base_raw = latest.get("base")
-        base = base_raw if isinstance(base_raw, dict) else {}
-
-        revenue = _extract_traceable_value(base, "total_revenue")
-        net_income = _extract_traceable_value(base, "net_income")
-        total_assets = _extract_traceable_value(base, "total_assets")
-        total_equity = _extract_traceable_value(base, "total_equity")
-        roe_ratio = _safe_ratio(net_income, total_equity)
-
-        metrics = {
-            "revenue_raw": revenue,
-            "net_income_raw": net_income,
-            "total_assets_raw": total_assets,
-            "roe_ratio": roe_ratio,
-        }
+        preview_metrics = extract_latest_preview_metrics(financial_reports)
+        if preview_metrics is not None:
+            metrics = {
+                "revenue_raw": preview_metrics.revenue_raw,
+                "net_income_raw": preview_metrics.net_income_raw,
+                "total_assets_raw": preview_metrics.total_assets_raw,
+                "roe_ratio": preview_metrics.roe_ratio,
+            }
 
     return {
         "ticker": ticker,

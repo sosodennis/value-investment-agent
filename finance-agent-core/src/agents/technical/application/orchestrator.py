@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from src.agents.technical.application.services import (
+from src.agents.technical.application.use_cases import (
     assemble_backtest_context,
     assemble_semantic_finalize,
     build_data_fetch_error_update,
@@ -256,6 +256,7 @@ class TechnicalOrchestrator:
         state: Mapping[str, object],
         *,
         assemble_fn: Callable[..., JSONObject],
+        build_full_report_payload_fn: Callable[..., JSONObject],
         generate_interpretation_fn: Callable[..., Awaitable[str]],
         calculate_statistical_strength_fn: Callable[..., JSONObject],
         calculate_fd_bollinger_fn: Callable[..., JSONObject],
@@ -331,6 +332,7 @@ class TechnicalOrchestrator:
                     llm_interpretation=llm_interpretation,
                     price_data=backtest_result.price_data,
                     chart_data=backtest_result.chart_data,
+                    build_full_report_payload_fn=build_full_report_payload_fn,
                 )
                 full_report_data = canonicalize_technical_artifact_data(
                     semantic_result.full_report_data_raw

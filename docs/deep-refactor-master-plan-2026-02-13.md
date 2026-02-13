@@ -1,8 +1,11 @@
 # Deep Refactor Master Plan (Big-Bang, Zero Leftover)
 Date: 2026-02-13
-Status: Approved for execution
+Status: Historical plan (non-normative)
 Scope: `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core`
 Policy: Zero compatibility, fail-fast, contract-first, no leftover transitional architecture.
+
+This file is retained for audit trace.
+Use `docs/README.md` and canonical guideline docs for current execution rules.
 
 ## 1. Objective
 
