@@ -3,10 +3,19 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
-from src.agents.fundamental.application import use_cases
+from src.agents.fundamental.application import state_readers, state_updates, use_cases
+from src.agents.fundamental.data.mappers import (
+    financial_report_models_to_json,
+    project_selection_reports_from_models,
+)
 from src.agents.fundamental.data.ports import (
     FundamentalArtifactPort,
     fundamental_artifact_port,
+)
+from src.agents.fundamental.domain.entities import FundamentalSelectionReport
+from src.agents.fundamental.interface.contracts import (
+    FinancialReportModel,
+    FundamentalPreviewInputModel,
 )
 from src.agents.fundamental.interface.mappers import summarize_fundamental_for_preview
 from src.common.contracts import OUTPUT_KIND_FUNDAMENTAL_ANALYSIS
@@ -27,7 +36,9 @@ class FundamentalNodeResult:
 @dataclass(frozen=True)
 class FundamentalOrchestrator:
     port: FundamentalArtifactPort
-    summarize_preview: Callable[[dict[str, object], list[JSONObject]], JSONObject]
+    summarize_preview: Callable[
+        [FundamentalPreviewInputModel, list[JSONObject]], JSONObject
+    ]
 
     def build_mapper_context(
         self,
@@ -59,8 +70,10 @@ class FundamentalOrchestrator:
             key_prefix=key_prefix,
         )
 
-    async def load_financial_reports(self, artifact_id: str) -> list[JSONObject] | None:
-        return await self.port.load_financial_reports(artifact_id)
+    async def load_financial_report_models(
+        self, artifact_id: str
+    ) -> list[FinancialReportModel] | None:
+        return await self.port.load_financial_report_models(artifact_id)
 
     def build_selection_details(
         self, selection: use_cases._ModelSelectionLike
@@ -70,7 +83,7 @@ class FundamentalOrchestrator:
     def enrich_reasoning_with_health_context(
         self,
         reasoning: str,
-        financial_reports: list[JSONObject],
+        financial_reports: list[FundamentalSelectionReport],
     ) -> str:
         return use_cases.enrich_reasoning_with_health_context(
             reasoning, financial_reports
@@ -147,25 +160,14 @@ class FundamentalOrchestrator:
         fetch_financial_data_fn: Callable[[str], object],
         normalize_financial_reports_fn: Callable[[object, str], list[JSONObject]],
     ) -> FundamentalNodeResult:
-        intent_ctx_raw = state.get("intent_extraction", {})
-        intent_ctx = intent_ctx_raw if isinstance(intent_ctx_raw, Mapping) else {}
-        resolved_ticker = intent_ctx.get("resolved_ticker")
-        if not isinstance(resolved_ticker, str) or not resolved_ticker:
+        intent_state = state_readers.read_intent_state(state)
+        resolved_ticker = intent_state.resolved_ticker
+        if resolved_ticker is None:
             logger.error(
                 "--- Fundamental Analysis: No resolved ticker available, cannot proceed ---"
             )
             return FundamentalNodeResult(
-                update={
-                    "current_node": "financial_health",
-                    "internal_progress": {"financial_health": "error"},
-                    "error_logs": [
-                        {
-                            "node": "financial_health",
-                            "error": "No resolved ticker available",
-                            "severity": "error",
-                        }
-                    ],
-                },
+                update=state_updates.build_financial_health_missing_ticker_update(),
                 goto="END",
             )
 
@@ -189,7 +191,7 @@ class FundamentalOrchestrator:
                     key_prefix=f"fa_reports_{resolved_ticker}",
                 )
                 mapper_ctx = self.build_mapper_context(
-                    dict(intent_ctx),
+                    intent_state.context,
                     resolved_ticker,
                     status="fetching_complete",
                 )
@@ -206,39 +208,20 @@ class FundamentalOrchestrator:
                     resolved_ticker,
                 )
 
-            fa_update: JSONObject = {
-                "financial_reports_artifact_id": reports_artifact_id,
-                "status": "model_selection",
-            }
-            if artifact is not None:
-                fa_update["artifact"] = artifact
-
             return FundamentalNodeResult(
-                update={
-                    "fundamental_analysis": fa_update,
-                    "current_node": "financial_health",
-                    "internal_progress": {
-                        "financial_health": "done",
-                        "model_selection": "running",
-                    },
-                    "node_statuses": {"fundamental_analysis": "running"},
-                },
+                update=state_updates.build_financial_health_success_update(
+                    reports_artifact_id=reports_artifact_id,
+                    artifact=artifact,
+                ),
                 goto="model_selection",
             )
         except Exception as exc:
             logger.error("Financial Health Node Failed: %s", exc, exc_info=True)
             return FundamentalNodeResult(
-                update={
-                    "error_logs": [
-                        {
-                            "node": "financial_health",
-                            "error": str(exc),
-                            "severity": "error",
-                        }
-                    ],
-                    "internal_progress": {"financial_health": "error"},
-                    "node_statuses": {"fundamental_analysis": "error"},
-                },
+                update=state_updates.build_node_error_update(
+                    node="financial_health",
+                    error=str(exc),
+                ),
                 goto="END",
             )
 
@@ -246,49 +229,46 @@ class FundamentalOrchestrator:
         self,
         state: Mapping[str, object],
         *,
-        select_valuation_model_fn: Callable[[CompanyProfile, list[JSONObject]], object],
+        select_valuation_model_fn: Callable[
+            [CompanyProfile, list[FundamentalSelectionReport]], object
+        ],
     ) -> FundamentalNodeResult:
         try:
-            intent_ctx_raw = state.get("intent_extraction", {})
-            intent_ctx = intent_ctx_raw if isinstance(intent_ctx_raw, Mapping) else {}
-            profile_data = intent_ctx.get("company_profile")
-            profile = (
-                CompanyProfile(**profile_data)
-                if isinstance(profile_data, Mapping)
-                else None
-            )
-            resolved_ticker = intent_ctx.get("resolved_ticker")
+            intent_state = state_readers.read_intent_state(state)
+            profile = intent_state.profile
+            resolved_ticker = intent_state.resolved_ticker
 
             if profile is None:
                 logger.warning(
                     "--- Fundamental Analysis: Missing company profile, cannot select model ---"
                 )
                 return FundamentalNodeResult(
-                    update={
-                        "fundamental_analysis": {"status": "clarifying"},
-                        "current_node": "model_selection",
-                        "internal_progress": {"model_selection": "waiting"},
-                    },
+                    update=state_updates.build_model_selection_waiting_update(),
                     goto="clarifying",
                 )
 
-            fa_ctx_raw = state.get("fundamental_analysis", {})
-            fa_ctx = fa_ctx_raw if isinstance(fa_ctx_raw, Mapping) else {}
-            reports_artifact_id = fa_ctx.get("financial_reports_artifact_id")
+            fundamental_state = state_readers.read_fundamental_state(state)
+            reports_artifact_id = fundamental_state.financial_reports_artifact_id
             financial_reports: list[JSONObject] = []
-            if isinstance(reports_artifact_id, str) and reports_artifact_id:
-                loaded = await self.load_financial_reports(reports_artifact_id)
-                if loaded is not None:
-                    financial_reports = loaded
+            selection_reports: list[FundamentalSelectionReport] = []
+            if reports_artifact_id is not None:
+                loaded_models = await self.load_financial_report_models(
+                    reports_artifact_id
+                )
+                if loaded_models is not None:
+                    selection_reports = project_selection_reports_from_models(
+                        loaded_models
+                    )
+                    financial_reports = financial_report_models_to_json(loaded_models)
 
-            selection = select_valuation_model_fn(profile, financial_reports)
+            selection = select_valuation_model_fn(profile, selection_reports)
             model = selection.model
             reasoning = selection.reasoning
 
             if financial_reports:
                 reasoning = self.enrich_reasoning_with_health_context(
                     reasoning,
-                    financial_reports,
+                    selection_reports,
                 )
 
             selection_details = self.build_selection_details(selection)
@@ -301,10 +281,8 @@ class FundamentalOrchestrator:
                     artifact,
                     report_id,
                 ) = await self.build_and_store_model_selection_artifact(
-                    intent_ctx=dict(intent_ctx),
-                    resolved_ticker=resolved_ticker
-                    if isinstance(resolved_ticker, str)
-                    else None,
+                    intent_ctx=intent_state.context,
+                    resolved_ticker=resolved_ticker,
                     model_type=model_type,
                     reasoning=reasoning,
                     financial_reports=financial_reports,
@@ -324,32 +302,19 @@ class FundamentalOrchestrator:
                 fa_update["artifact"] = artifact
 
             return FundamentalNodeResult(
-                update={
-                    "fundamental_analysis": fa_update,
-                    "ticker": resolved_ticker,
-                    "current_node": "model_selection",
-                    "internal_progress": {
-                        "model_selection": "done",
-                        "calculation": "running",
-                    },
-                    "node_statuses": {"fundamental_analysis": "running"},
-                },
+                update=state_updates.build_model_selection_success_update(
+                    fa_update=fa_update,
+                    resolved_ticker=resolved_ticker,
+                ),
                 goto="calculation",
             )
         except Exception as exc:
             logger.error("Model Selection Node Failed: %s", exc, exc_info=True)
             return FundamentalNodeResult(
-                update={
-                    "error_logs": [
-                        {
-                            "node": "model_selection",
-                            "error": str(exc),
-                            "severity": "error",
-                        }
-                    ],
-                    "internal_progress": {"model_selection": "error"},
-                    "node_statuses": {"fundamental_analysis": "error"},
-                },
+                update=state_updates.build_node_error_update(
+                    node="model_selection",
+                    error=str(exc),
+                ),
                 goto="END",
             )
 
@@ -362,16 +327,14 @@ class FundamentalOrchestrator:
     ) -> FundamentalNodeResult:
         logger.info("--- Fundamental Analysis: Running valuation calculation ---")
         try:
-            fundamental_raw = state.get("fundamental_analysis", {})
-            fundamental = (
-                fundamental_raw if isinstance(fundamental_raw, Mapping) else {}
-            )
-            model_type = fundamental.get("model_type")
-            intent_ctx_raw = state.get("intent_extraction", {})
-            intent_ctx = intent_ctx_raw if isinstance(intent_ctx_raw, Mapping) else {}
-            ticker = intent_ctx.get("resolved_ticker")
+            fundamental_state = state_readers.read_fundamental_state(state)
+            fundamental = fundamental_state.context
+            model_type = fundamental_state.model_type
+            intent_state = state_readers.read_intent_state(state)
+            intent_ctx = intent_state.context
+            ticker = intent_state.resolved_ticker
 
-            if not isinstance(model_type, str) or not model_type:
+            if model_type is None:
                 raise ValueError("Missing model_type for valuation calculation")
 
             skill = get_skill_fn(model_type)
@@ -381,16 +344,18 @@ class FundamentalOrchestrator:
             schema = skill["schema"]
             calc_func = skill["calculator"]
 
-            reports_artifact_id = fundamental.get("financial_reports_artifact_id")
-            if not isinstance(reports_artifact_id, str) or not reports_artifact_id:
+            reports_artifact_id = fundamental_state.financial_reports_artifact_id
+            if reports_artifact_id is None:
                 raise ValueError("Missing financial_reports_artifact_id for valuation")
 
-            reports_raw_data = await self.load_financial_reports(reports_artifact_id)
-            if reports_raw_data is None:
+            reports_models = await self.load_financial_report_models(
+                reports_artifact_id
+            )
+            if reports_models is None:
                 raise ValueError(
                     "Missing financial reports artifact data for valuation"
                 )
-            reports_raw = reports_raw_data
+            reports_raw = financial_report_models_to_json(reports_models)
             if not reports_raw:
                 raise ValueError("Empty financial reports data for valuation")
 
@@ -422,8 +387,8 @@ class FundamentalOrchestrator:
             return FundamentalNodeResult(
                 update=self.build_valuation_success_update(
                     fundamental=dict(fundamental),
-                    intent_ctx=dict(intent_ctx),
-                    ticker=ticker if isinstance(ticker, str) else None,
+                    intent_ctx=intent_ctx,
+                    ticker=ticker,
                     model_type=model_type,
                     reports_raw=reports_raw,
                     reports_artifact_id=reports_artifact_id,

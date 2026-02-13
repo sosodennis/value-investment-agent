@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from src.agents.intent.domain.models import TickerCandidate
+from src.agents.intent.interface.contracts import TickerCandidateModel
 from src.common.types import JSONObject
 
 
@@ -24,3 +26,23 @@ def _get_status_label(status: str | None) -> str:
         "resolved": "已確認標的",
     }
     return mapping.get(status, "準備中" if not status else f"狀態: {status}")
+
+
+def to_ticker_candidate(model: TickerCandidateModel) -> TickerCandidate:
+    return TickerCandidate(
+        symbol=model.symbol,
+        name=model.name,
+        exchange=model.exchange,
+        type=model.type,
+        confidence=model.confidence,
+    )
+
+
+def from_ticker_candidate(candidate: TickerCandidate) -> TickerCandidateModel:
+    return TickerCandidateModel(
+        symbol=candidate.symbol,
+        name=candidate.name,
+        exchange=candidate.exchange,
+        type=candidate.type,
+        confidence=candidate.confidence,
+    )

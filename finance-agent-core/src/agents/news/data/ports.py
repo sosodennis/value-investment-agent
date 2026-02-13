@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
 
 from src.agents.news.data.mappers import to_news_item_entities
 from src.agents.news.domain.entities import NewsItemEntity
@@ -123,7 +124,13 @@ class NewsArtifactPort:
         search_data = await self.load_search_results(search_artifact_id)
         if search_data is None:
             return "", []
-        return search_data.formatted_results, search_data.raw_results
+        return (
+            search_data.formatted_results,
+            cast(
+                list[dict[str, object]],
+                [item.model_dump(mode="json") for item in search_data.raw_results],
+            ),
+        )
 
     async def load_fetch_context(
         self,
@@ -136,19 +143,31 @@ class NewsArtifactPort:
             return [], []
         search_data = await self.load_search_results(search_artifact_id)
         selection_data = await self.load_news_selection(selection_artifact_id)
-        raw_results = search_data.raw_results if search_data is not None else []
+        raw_results = (
+            cast(
+                list[dict[str, object]],
+                [item.model_dump(mode="json") for item in search_data.raw_results],
+            )
+            if search_data is not None
+            else []
+        )
         selected_indices = (
             selection_data.selected_indices if selection_data is not None else []
         )
         return raw_results, selected_indices
 
-    async def load_news_items_data(self, news_items_artifact_id: object) -> list[dict]:
+    async def load_news_items_data(
+        self, news_items_artifact_id: object
+    ) -> list[dict[str, object]]:
         if not isinstance(news_items_artifact_id, str):
             return []
         news_items_data = await self.load_news_items(news_items_artifact_id)
         if news_items_data is None:
             return []
-        return news_items_data.news_items
+        return cast(
+            list[dict[str, object]],
+            [item.model_dump(mode="json") for item in news_items_data.news_items],
+        )
 
     def project_news_item_entities(
         self, news_items: list[dict[str, object]]

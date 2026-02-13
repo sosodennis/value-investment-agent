@@ -6,6 +6,17 @@ from src.common.types import JSONObject
 
 
 @dataclass(frozen=True)
+class FundamentalAppContextDTO:
+    ticker: str
+    status: str
+    company_name: str
+    sector: str | None = None
+    industry: str | None = None
+    model_type: str | None = None
+    valuation_summary: str | None = None
+
+
+@dataclass(frozen=True)
 class FinancialHealthResult:
     reports: list[JSONObject]
     artifact_id: str | None

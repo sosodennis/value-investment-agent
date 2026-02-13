@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from src.agents.fundamental.data.mappers import project_selection_reports
 from src.agents.fundamental.domain.services import extract_latest_preview_metrics
 from src.common.types import JSONObject
 
@@ -15,7 +16,8 @@ def derive_fundamental_preview_view_model(
 
     metrics: JSONObject = {}
     if financial_reports:
-        preview_metrics = extract_latest_preview_metrics(financial_reports)
+        selection_reports = project_selection_reports(financial_reports)
+        preview_metrics = extract_latest_preview_metrics(selection_reports)
         if preview_metrics is not None:
             metrics = {
                 "revenue_raw": preview_metrics.revenue_raw,

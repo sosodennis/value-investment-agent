@@ -4,22 +4,28 @@ import math
 
 import pandas as pd
 
-from src.agents.technical.application.use_cases import (
+from src.agents.technical.application.semantic_service import (
     assemble_semantic_finalize,
+)
+from src.agents.technical.application.state_updates import (
     build_data_fetch_error_update,
     build_data_fetch_success_update,
     build_fracdiff_error_update,
     build_fracdiff_success_update,
-    build_full_report_payload,
     build_semantic_error_update,
     build_semantic_success_update,
-    safe_float,
-    serialize_fracdiff_outputs,
+)
+from src.agents.technical.data.mappers import serialize_fracdiff_outputs
+from src.agents.technical.domain.models import (
+    SemanticConfluenceResult,
+    SemanticTagPolicyResult,
 )
 from src.agents.technical.domain.services import (
     derive_memory_strength,
     derive_statistical_state,
+    safe_float,
 )
+from src.agents.technical.interface.serializers import build_full_report_payload
 from src.interface.artifact_api_models import (
     PriceSeriesArtifactData,
     TechnicalChartArtifactData,
@@ -119,16 +125,25 @@ def test_assemble_semantic_finalize_builds_update_and_raw_data() -> None:
             "obv": {"state": "NEUTRAL"},
             "statistical_strength_val": 66.0,
         },
-        tags_dict={
-            "direction": "bullish",
-            "risk_level": "MEDIUM",
-            "tags": ["MeanReversion"],
-            "statistical_state": "deviating",
-            "memory_strength": "balanced",
-        },
+        tags_result=SemanticTagPolicyResult(
+            direction="bullish",
+            risk_level="MEDIUM",
+            tags=["MeanReversion"],
+            statistical_state="deviating",
+            memory_strength="balanced",
+            z_score=1.7,
+            confluence=SemanticConfluenceResult(
+                bollinger_state="INSIDE",
+                statistical_strength=66.0,
+                macd_momentum="UP",
+                obv_state="NEUTRAL",
+            ),
+            evidence_list=[],
+        ),
         llm_interpretation="Some interpretation",
         price_data=price_data,
         chart_data=chart_data,
+        build_full_report_payload_fn=build_full_report_payload,
     )
 
     assert result.direction == "BULLISH"

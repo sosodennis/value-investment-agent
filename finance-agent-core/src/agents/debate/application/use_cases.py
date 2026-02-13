@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
@@ -13,6 +12,8 @@ from src.agents.debate.application.debate_context import (
     build_debate_artifact_context,
     build_debate_conversation_context,
 )
+from src.agents.debate.application.dto import DebateFactExtractionResult
+from src.agents.debate.application.ports import SycophancyDetectorPort
 from src.agents.debate.application.prompt_runtime import (
     MAX_CHAR_HISTORY as PROMPT_MAX_CHAR_HISTORY,
 )
@@ -20,13 +21,12 @@ from src.agents.debate.application.prompt_runtime import (
     build_bear_round_messages,
     build_bull_round_messages,
     build_moderator_messages,
-    compress_reports,
-    log_compressed_reports,
     log_debate_context,
     log_llm_config,
     log_llm_response,
     log_messages,
 )
+from src.agents.debate.application.report_service import get_debate_reports_text
 from src.agents.debate.data.report_reader import load_debate_source_data
 from src.agents.debate.domain.fact_builders import (
     build_financial_facts,
@@ -36,94 +36,15 @@ from src.agents.debate.domain.fact_builders import (
     summarize_facts_by_source,
 )
 from src.agents.debate.domain.models import EvidenceFact, FactBundle
-from src.agents.debate.domain.services import (
-    compress_financial_data,
-    compress_news_data,
-    compress_ta_data,
-)
 from src.common.tools.logger import get_logger
-from src.common.types import JSONObject
 
 logger = get_logger(__name__)
 
 MAX_CHAR_HISTORY = PROMPT_MAX_CHAR_HISTORY
 
 
-@dataclass(frozen=True)
-class DebateFactExtractionResult:
-    ticker: str
-    facts: list[EvidenceFact]
-    facts_hash: str
-    summary: dict[str, int]
-    bundle_payload: JSONObject
-    strict_facts_registry: str
-
-
 class _LLMLike(Protocol):
     async def ainvoke(self, messages: object) -> object: ...
-
-
-async def prepare_debate_reports(state: Mapping[str, object]) -> dict[str, object]:
-    """
-    Prepare compressed reports for the LLM prompt on the fly.
-    This avoids mirroring large data in the state.
-    """
-    artifact_context = build_debate_artifact_context(state)
-    ticker = artifact_context.ticker
-    fa_artifact_id = artifact_context.financial_reports_artifact_id
-    news_artifact_id = artifact_context.news_artifact_id
-    ta_artifact_id = artifact_context.technical_artifact_id
-
-    source_data = await load_debate_source_data(
-        financial_reports_artifact_id=fa_artifact_id,
-        news_artifact_id=news_artifact_id,
-        technical_artifact_id=ta_artifact_id,
-    )
-
-    logger.info(
-        "DEBATE_REPORT_INPUT ticker=%s financials=%d news_items=%d ta_present=%s news_artifact_id=%s ta_artifact_id=%s",
-        ticker or "unknown",
-        len(source_data.financial_reports),
-        len(source_data.news_items),
-        source_data.technical_payload is not None,
-        news_artifact_id or "none",
-        ta_artifact_id or "none",
-    )
-
-    news_data: dict[str, object] = {"news_items": source_data.news_items}
-    return {
-        "financials": {
-            "data": compress_financial_data(source_data.financial_reports),
-            "source_weight": "HIGH",
-            "rationale": "Primary source: SEC XBRL filings (audited, regulatory-grade data)",
-        },
-        "news": {
-            "data": compress_news_data(news_data),
-            "source_weight": "MEDIUM",
-            "rationale": "Secondary source: Curated financial news (editorial bias possible)",
-        },
-        "technical_analysis": {
-            "data": compress_ta_data(source_data.technical_payload),
-            "source_weight": "HIGH",
-            "rationale": "Quantitative source: Fractional differentiation analysis (statistical signals)",
-        },
-        "ticker": ticker,
-    }
-
-
-async def get_debate_reports_text(
-    state: Mapping[str, object], *, stage: str, ticker: str
-) -> str:
-    artifact_context = build_debate_artifact_context(state)
-    cached_reports = artifact_context.cached_reports
-    if cached_reports is not None:
-        log_compressed_reports(stage, ticker, cached_reports, "cached")
-        return cached_reports
-
-    reports = await prepare_debate_reports(state)
-    compressed_reports = compress_reports(reports)
-    log_compressed_reports(stage, ticker, compressed_reports, "computed")
-    return compressed_reports
 
 
 async def extract_debate_facts(
@@ -288,7 +209,7 @@ async def execute_moderator_round(
     round_num: int,
     system_prompt_template: str,
     llm: _LLMLike,
-    detector: object,
+    detector: SycophancyDetectorPort,
 ) -> dict[str, object]:
     conversation_context = build_debate_conversation_context(state)
     ticker = conversation_context.ticker

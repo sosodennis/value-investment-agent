@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from src.agents.intent.application.use_cases import (
@@ -17,6 +17,10 @@ from src.agents.intent.domain.models import TickerCandidate
 from src.agents.intent.domain.policies import should_request_clarification
 from src.agents.intent.interface.contracts import IntentExtraction
 from src.agents.intent.interface.mappers import summarize_intent_for_preview
+from src.agents.intent.interface.parsers import (
+    parse_resume_selection_input,
+    parse_ticker_candidates,
+)
 from src.common.contracts import OUTPUT_KIND_INTENT_EXTRACTION
 from src.common.types import AgentOutputArtifactPayload, JSONObject
 from src.interface.schemas import build_artifact_payload
@@ -91,14 +95,7 @@ class IntentOrchestrator:
         return self.deduplicate_candidates_fn(list(candidate_map.values()))
 
     def parse_candidates(self, raw_candidates: object) -> list[TickerCandidate]:
-        if not isinstance(raw_candidates, list):
-            return []
-        candidates: list[TickerCandidate] = []
-        for raw in raw_candidates:
-            if not isinstance(raw, Mapping):
-                continue
-            candidates.append(TickerCandidate.model_validate(raw))
-        return candidates
+        return parse_ticker_candidates(raw_candidates)
 
     def needs_clarification(self, candidates: list[TickerCandidate]) -> bool:
         return self.should_request_clarification_fn(candidates)
@@ -132,13 +129,11 @@ class IntentOrchestrator:
         user_input: object,
         candidate_objs: list[TickerCandidate],
     ) -> str | None:
-        if isinstance(user_input, Mapping):
-            selected_symbol = user_input.get("selected_symbol")
-            if isinstance(selected_symbol, str) and selected_symbol.strip():
-                return selected_symbol.strip()
-            ticker = user_input.get("ticker")
-            if isinstance(ticker, str) and ticker.strip():
-                return ticker.strip()
+        parsed_input = parse_resume_selection_input(user_input)
+        if parsed_input.selected_symbol is not None:
+            return parsed_input.selected_symbol
+        if parsed_input.ticker is not None:
+            return parsed_input.ticker
 
         if candidate_objs:
             return candidate_objs[0].symbol

@@ -5,7 +5,6 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from src.common.types import JSONObject
 from src.interface.artifact_model_shared import (
     symbol,
     to_json,
@@ -13,7 +12,6 @@ from src.interface.artifact_model_shared import (
     to_optional_number,
     to_optional_string,
     to_string,
-    validate_and_dump,
 )
 
 RISK_PROFILE_MAP: dict[str, str] = {
@@ -242,12 +240,3 @@ class DebateArtifactModel(BaseModel):
         if not isinstance(value, bool):
             raise TypeError("debate.data_quality_warning must be a boolean")
         return value
-
-
-def parse_debate_artifact_model(value: object) -> JSONObject:
-    return validate_and_dump(
-        DebateArtifactModel,
-        value,
-        "debate artifact",
-        exclude_none=True,
-    )

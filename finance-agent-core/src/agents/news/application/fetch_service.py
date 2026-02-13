@@ -5,9 +5,6 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from src.agents.news.application.ports import NewsArtifactArticleWriterPort
-from src.agents.news.domain.services import (
-    build_articles_to_fetch as domain_build_articles_to_fetch,
-)
 from src.common.tools.logger import get_logger
 from src.common.types import JSONObject
 
@@ -23,7 +20,12 @@ class FetchBuildResult:
 def build_articles_to_fetch(
     raw_results: list[JSONObject], selected_indices: list[int]
 ) -> list[JSONObject]:
-    return domain_build_articles_to_fetch(raw_results, selected_indices)
+    selected: list[JSONObject] = []
+    for idx in selected_indices:
+        if idx >= len(raw_results):
+            continue
+        selected.append(raw_results[idx])
+    return selected
 
 
 def build_cleaned_search_results(results: list[dict[str, object]]) -> list[JSONObject]:

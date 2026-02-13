@@ -277,6 +277,20 @@ class FundamentalArtifactModel(BaseModel):
         return to_string(value, "fundamental artifact text")
 
 
+class FundamentalPreviewInputModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ticker: str
+    company_name: str
+    sector: str
+    industry: str
+    status: str
+    selected_model: str | None = None
+    model_type: str | None = None
+    valuation_summary: str | None = None
+    valuation_score: float | None = None
+
+
 def parse_financial_reports_model(value: object) -> list[JSONObject]:
     if not isinstance(value, list):
         raise TypeError("financial reports must be a list")

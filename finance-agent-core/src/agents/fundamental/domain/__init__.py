@@ -1,7 +1,7 @@
 from .entities import (
     FinancialHealthInsights,
     FundamentalPreviewMetrics,
-    FundamentalReportsAdapter,
+    FundamentalSelectionReport,
 )
 from .model_selection import select_valuation_model
 from .models import CompanyProfile, ValuationModel
@@ -28,7 +28,7 @@ __all__ = [
     "CompanyProfile",
     "FinancialHealthInsights",
     "FundamentalPreviewMetrics",
-    "FundamentalReportsAdapter",
+    "FundamentalSelectionReport",
     "ValuationModel",
     "build_latest_health_context",
     "calculate_revenue_cagr",

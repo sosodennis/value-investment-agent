@@ -4,22 +4,23 @@ import time
 from collections.abc import Callable, Sequence
 from typing import Protocol
 
+from src.agents.fundamental.application.dto import FundamentalAppContextDTO
 from src.agents.fundamental.application.ports import IFundamentalReportRepo
+from src.agents.fundamental.domain.entities import FundamentalSelectionReport
 from src.agents.fundamental.domain.services import (
     build_latest_health_context,
     extract_equity_value_from_metrics,
     resolve_calculator_model_type,
 )
-from src.common.contracts import (
-    ARTIFACT_KIND_FINANCIAL_REPORTS,
-    OUTPUT_KIND_FUNDAMENTAL_ANALYSIS,
+from src.agents.fundamental.interface.contracts import FundamentalPreviewInputModel
+from src.agents.fundamental.interface.serializers import (
+    build_model_selection_artifact,
+    build_model_selection_report_payload,
+    build_valuation_artifact,
+    build_valuation_preview,
+    normalize_model_selection_reports,
 )
 from src.common.types import AgentOutputArtifactPayload, JSONObject
-from src.interface.canonical_serializers import (
-    canonicalize_fundamental_artifact_data,
-    normalize_financial_reports,
-)
-from src.interface.schemas import ArtifactReference, build_artifact_payload
 
 
 def build_mapper_context(
@@ -29,26 +30,31 @@ def build_mapper_context(
     status: str,
     model_type: str | None = None,
     valuation_summary: str | None = None,
-) -> dict[str, object]:
+) -> FundamentalAppContextDTO:
     ticker = resolved_ticker or "UNKNOWN"
-    mapper_ctx: dict[str, object] = {
-        "ticker": ticker,
-        "status": status,
-        "company_name": ticker,
-    }
+    company_name = ticker
+    sector: str | None = None
+    industry: str | None = None
 
     profile = intent_ctx.get("company_profile")
     if isinstance(profile, dict):
-        mapper_ctx["company_name"] = profile.get("name")
-        mapper_ctx["sector"] = profile.get("sector")
-        mapper_ctx["industry"] = profile.get("industry")
+        name_raw = profile.get("name")
+        sector_raw = profile.get("sector")
+        industry_raw = profile.get("industry")
+        if isinstance(name_raw, str) and name_raw:
+            company_name = name_raw
+        sector = sector_raw if isinstance(sector_raw, str) else None
+        industry = industry_raw if isinstance(industry_raw, str) else None
 
-    if model_type is not None:
-        mapper_ctx["model_type"] = model_type
-    if valuation_summary is not None:
-        mapper_ctx["valuation_summary"] = valuation_summary
-
-    return mapper_ctx
+    return FundamentalAppContextDTO(
+        ticker=ticker,
+        status=status,
+        company_name=company_name,
+        sector=sector,
+        industry=industry,
+        model_type=model_type,
+        valuation_summary=valuation_summary,
+    )
 
 
 class _SelectionSignals(Protocol):
@@ -108,7 +114,7 @@ def build_selection_details(selection: _ModelSelectionLike) -> dict[str, object]
 
 def enrich_reasoning_with_health_context(
     reasoning: str,
-    financial_reports: list[JSONObject],
+    financial_reports: list[FundamentalSelectionReport],
 ) -> str:
     if not financial_reports:
         return reasoning
@@ -123,7 +129,9 @@ async def build_and_store_model_selection_artifact(
     reasoning: str,
     financial_reports: list[JSONObject],
     port: IFundamentalReportRepo,
-    summarize_preview: Callable[[dict[str, object], list[JSONObject]], JSONObject],
+    summarize_preview: Callable[
+        [FundamentalPreviewInputModel, list[JSONObject]], JSONObject
+    ],
 ) -> tuple[AgentOutputArtifactPayload | None, str | None]:
     if not resolved_ticker:
         return None, None
@@ -135,22 +143,29 @@ async def build_and_store_model_selection_artifact(
         model_type=model_type,
         valuation_summary=reasoning,
     )
-    normalized_reports = normalize_financial_reports(
-        financial_reports, "model_selection.financial_reports"
+    normalized_reports = normalize_model_selection_reports(financial_reports)
+    preview = summarize_preview(
+        FundamentalPreviewInputModel(
+            ticker=mapper_ctx.ticker,
+            company_name=mapper_ctx.company_name,
+            sector=mapper_ctx.sector or "Unknown",
+            industry=mapper_ctx.industry or "Unknown",
+            status=mapper_ctx.status,
+            selected_model=mapper_ctx.model_type,
+            model_type=mapper_ctx.model_type,
+            valuation_summary=mapper_ctx.valuation_summary,
+        ),
+        normalized_reports,
     )
-    preview = summarize_preview(mapper_ctx, normalized_reports)
 
-    full_report_data = canonicalize_fundamental_artifact_data(
-        {
-            "ticker": resolved_ticker,
-            "model_type": model_type,
-            "company_name": mapper_ctx.get("company_name", resolved_ticker),
-            "sector": mapper_ctx.get("sector", "Unknown"),
-            "industry": mapper_ctx.get("industry", "Unknown"),
-            "reasoning": reasoning,
-            "financial_reports": normalized_reports,
-            "status": "done",
-        }
+    full_report_data = build_model_selection_report_payload(
+        ticker=resolved_ticker,
+        model_type=model_type,
+        company_name=mapper_ctx.company_name,
+        sector=mapper_ctx.sector or "Unknown",
+        industry=mapper_ctx.industry or "Unknown",
+        reasoning=reasoning,
+        normalized_reports=normalized_reports,
     )
 
     timestamp = int(time.time())
@@ -160,16 +175,10 @@ async def build_and_store_model_selection_artifact(
         key_prefix=f"fa_{resolved_ticker}_{timestamp}",
     )
 
-    reference = ArtifactReference(
-        artifact_id=report_id,
-        download_url=f"/api/artifacts/{report_id}",
-        type=ARTIFACT_KIND_FINANCIAL_REPORTS,
-    )
-    artifact = build_artifact_payload(
-        kind=OUTPUT_KIND_FUNDAMENTAL_ANALYSIS,
-        summary=f"基本面分析: {preview.get('company_name', resolved_ticker)} ({preview.get('selected_model')})",
+    artifact = build_model_selection_artifact(
+        ticker=resolved_ticker,
+        report_id=report_id,
         preview=preview,
-        reference=reference,
     )
     return artifact, report_id
 
@@ -210,7 +219,9 @@ def build_valuation_success_update(
     params_dump: JSONObject,
     calculation_metrics: JSONObject,
     assumptions: list[str],
-    summarize_preview: Callable[[dict[str, object], list[JSONObject]], JSONObject],
+    summarize_preview: Callable[
+        [FundamentalPreviewInputModel, list[JSONObject]], JSONObject
+    ],
 ) -> JSONObject:
     fa_update = fundamental.copy()
     fa_update["extraction_output"] = {"params": params_dump}
@@ -219,31 +230,29 @@ def build_valuation_success_update(
         fa_update["assumptions"] = assumptions
 
     equity_value = extract_equity_value_from_metrics(calculation_metrics)
-    mapper_ctx = build_mapper_context(
+    app_context = build_mapper_context(
         intent_ctx,
         ticker,
         status="calculated",
         model_type=model_type,
     )
-    preview = summarize_preview(mapper_ctx, reports_raw)
-    preview.update(
-        {
-            "model_type": model_type,
-            "equity_value": equity_value,
-            "status": "calculated",
-        }
+    preview = build_valuation_preview(
+        ticker=app_context.ticker,
+        company_name=app_context.company_name,
+        sector=app_context.sector or "Unknown",
+        industry=app_context.industry or "Unknown",
+        status=app_context.status,
+        valuation_summary=app_context.valuation_summary,
+        model_type=model_type,
+        reports_raw=reports_raw,
+        equity_value=equity_value,
+        summarize_preview=summarize_preview,
     )
-
-    reference = ArtifactReference(
-        artifact_id=reports_artifact_id,
-        download_url=f"/api/artifacts/{reports_artifact_id}",
-        type=ARTIFACT_KIND_FINANCIAL_REPORTS,
-    )
-    artifact = build_artifact_payload(
-        kind=OUTPUT_KIND_FUNDAMENTAL_ANALYSIS,
-        summary=f"估值完成: {ticker or 'UNKNOWN'} ({model_type})",
+    artifact = build_valuation_artifact(
+        ticker=ticker,
+        model_type=model_type,
+        reports_artifact_id=reports_artifact_id,
         preview=preview,
-        reference=reference,
     )
     fa_update["artifact"] = artifact
     return {

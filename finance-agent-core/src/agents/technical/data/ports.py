@@ -13,7 +13,7 @@ from src.interface.artifact_api_models import (
     PriceSeriesArtifactData,
     TechnicalChartArtifactData,
 )
-from src.interface.artifact_contract_registry import parse_technical_debate_payload
+from src.interface.canonical_serializers import canonicalize_technical_artifact_data
 from src.services.artifact_manager import artifact_manager
 from src.shared.data.typed_artifact_port import TypedArtifactPort
 
@@ -79,16 +79,18 @@ class TechnicalArtifactPort:
             key_prefix=key_prefix,
         )
 
-    async def load_debate_payload(self, artifact_id: str) -> JSONObject | None:
-        envelope = await self.price_series_port.manager.get_artifact_envelope(
-            artifact_id
-        )
-        if envelope is None:
-            return None
-        return parse_technical_debate_payload(
-            envelope.kind,
-            envelope.data,
-            context=f"artifact {artifact_id} {envelope.kind}",
+    async def save_full_report_canonical(
+        self,
+        data: object,
+        *,
+        produced_by: str,
+        key_prefix: str | None = None,
+    ) -> str:
+        canonical = canonicalize_technical_artifact_data(data)
+        return await self.save_full_report(
+            canonical,
+            produced_by=produced_by,
+            key_prefix=key_prefix,
         )
 
     async def load_price_and_chart_data(

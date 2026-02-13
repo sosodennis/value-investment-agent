@@ -1,33 +1,28 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from src.agents.fundamental.domain.entities import (
     FinancialHealthInsights,
     FundamentalPreviewMetrics,
-    FundamentalReportsAdapter,
+    FundamentalSelectionReport,
 )
 from src.agents.fundamental.domain.rules import calculate_cagr, safe_ratio
 from src.agents.fundamental.domain.value_objects import MODEL_TYPE_BY_SELECTION
-from src.common.types import JSONObject
 
 
 def extract_latest_health_insights(
-    financial_reports: list[JSONObject],
+    financial_reports: list[FundamentalSelectionReport],
 ) -> FinancialHealthInsights | None:
-    adapter = FundamentalReportsAdapter(financial_reports)
-    latest_report = adapter.latest_report()
-    if latest_report is None:
+    if not financial_reports:
         return None
 
-    base = latest_report.get("base")
-    if not isinstance(base, dict):
-        return None
+    latest_report = financial_reports[0]
+    fiscal_year = latest_report.fiscal_year or "Unknown"
 
-    fy_raw = adapter.latest_value("base.fiscal_year")
-    fiscal_year = str(fy_raw) if fy_raw is not None else "Unknown"
-
-    net_income = adapter.latest_number("base.net_income")
-    total_equity = adapter.latest_number("base.total_equity")
-    operating_cash_flow = adapter.latest_number("base.operating_cash_flow")
+    net_income = latest_report.net_income
+    total_equity = latest_report.total_equity
+    operating_cash_flow = latest_report.operating_cash_flow
 
     return FinancialHealthInsights(
         fiscal_year=fiscal_year,
@@ -38,7 +33,9 @@ def extract_latest_health_insights(
     )
 
 
-def build_latest_health_context(financial_reports: list[JSONObject]) -> str:
+def build_latest_health_context(
+    financial_reports: list[FundamentalSelectionReport],
+) -> str:
     insights = extract_latest_health_insights(financial_reports)
     if insights is None:
         return ""
@@ -56,24 +53,25 @@ def build_latest_health_context(financial_reports: list[JSONObject]) -> str:
 
 
 def extract_latest_preview_metrics(
-    financial_reports: list[JSONObject],
+    financial_reports: list[FundamentalSelectionReport],
 ) -> FundamentalPreviewMetrics | None:
-    adapter = FundamentalReportsAdapter(financial_reports)
-    latest = adapter.latest_report()
-    if latest is None:
+    if not financial_reports:
         return None
 
-    net_income = adapter.latest_number("base.net_income")
-    total_equity = adapter.latest_number("base.total_equity")
+    latest = financial_reports[0]
+    net_income = latest.net_income
+    total_equity = latest.total_equity
     return FundamentalPreviewMetrics(
-        revenue_raw=adapter.latest_number("base.total_revenue"),
+        revenue_raw=latest.total_revenue,
         net_income_raw=net_income,
-        total_assets_raw=adapter.latest_number("base.total_assets"),
+        total_assets_raw=latest.total_assets,
         roe_ratio=safe_ratio(net_income, total_equity),
     )
 
 
-def extract_equity_value_from_metrics(calculation_metrics: JSONObject) -> object | None:
+def extract_equity_value_from_metrics(
+    calculation_metrics: Mapping[str, object],
+) -> object | None:
     intrinsic_value = calculation_metrics.get("intrinsic_value")
     if intrinsic_value is not None:
         return intrinsic_value
@@ -90,7 +88,12 @@ def resolve_calculator_model_type(selected_model_value: str) -> str:
     return model.value
 
 
-def calculate_revenue_cagr(financial_reports: list[JSONObject]) -> float | None:
-    adapter = FundamentalReportsAdapter(financial_reports)
-    revenue_series = adapter.numeric_series("base.total_revenue")
+def calculate_revenue_cagr(
+    financial_reports: list[FundamentalSelectionReport],
+) -> float | None:
+    revenue_series = [
+        report.total_revenue
+        for report in financial_reports
+        if report.total_revenue is not None
+    ]
     return calculate_cagr(revenue_series)

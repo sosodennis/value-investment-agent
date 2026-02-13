@@ -10,8 +10,10 @@ import re
 from dotenv import find_dotenv, load_dotenv
 from langchain_core.prompts import ChatPromptTemplate
 
+from src.agents.intent.domain.extraction_policies import heuristic_extract_intent
 from src.agents.intent.domain.models import TickerCandidate
 from src.agents.intent.interface.contracts import IntentExtraction, SearchExtraction
+from src.agents.intent.interface.mappers import to_ticker_candidate
 from src.common.tools.llm import get_llm
 from src.common.tools.logger import get_logger
 
@@ -22,49 +24,12 @@ logger = get_logger(__name__)
 
 
 def _heuristic_extract(query: str) -> IntentExtraction:
-    """
-    Fallback parser for when LLM is unavailable.
-    Simple keyword matching for major stocks.
-    """
-    query_lower = query.lower()
-
-    tickers = re.findall(r"\b[A-Z]{1,5}\b", query)
-    ticker = tickers[0] if tickers else None
-
-    company_name = ticker
-    if not company_name:
-        stop_words = {
-            "valuation",
-            "valuate",
-            "value",
-            "price",
-            "stock",
-            "analysis",
-            "report",
-            "for",
-            "of",
-            "the",
-            "a",
-            "an",
-        }
-        words = query.split()
-
-        potential_names = [
-            w for w in words if w.lower() not in stop_words and len(w) > 1
-        ]
-
-        if potential_names:
-            company_name = potential_names[-1]
-        elif words:
-            company_name = words[-1]
-
+    heuristic = heuristic_extract_intent(query)
     return IntentExtraction(
-        company_name=company_name,
-        ticker=ticker,
-        is_valuation_request="val" in query_lower
-        or "price" in query_lower
-        or ticker is not None,
-        reasoning="Fallback heuristic used due to API error.",
+        company_name=heuristic.company_name,
+        ticker=heuristic.ticker,
+        is_valuation_request=heuristic.is_valuation_request,
+        reasoning=heuristic.reasoning,
     )
 
 
@@ -121,7 +86,7 @@ def extract_candidates_from_search(
         chain = prompt | llm.with_structured_output(SearchExtraction)
         response = chain.invoke({"query": query, "search_results": search_results})
 
-        return response.candidates
+        return [to_ticker_candidate(candidate) for candidate in response.candidates]
     except Exception as exc:
         logger.warning(f"LLM Search Extraction failed: {exc}. Returning empty list.")
         return []

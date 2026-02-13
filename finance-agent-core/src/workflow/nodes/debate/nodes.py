@@ -4,6 +4,30 @@ from langchain_core.messages import AIMessage, SystemMessage
 from langgraph.graph import END
 from langgraph.types import Command
 
+from src.agents.debate.application.prompt_runtime import (
+    compress_reports as _compress_reports,
+)
+from src.agents.debate.application.prompt_runtime import (
+    get_trimmed_history as _get_trimmed_history,
+)
+from src.agents.debate.application.prompt_runtime import (
+    log_compressed_reports as _log_compressed_reports,
+)
+from src.agents.debate.application.prompt_runtime import (
+    log_llm_config as _log_llm_config,
+)
+from src.agents.debate.application.prompt_runtime import (
+    log_llm_response as _log_llm_response,
+)
+from src.agents.debate.application.prompt_runtime import (
+    log_messages as _log_messages,
+)
+from src.agents.debate.application.report_service import (
+    prepare_debate_reports as _prepare_debate_reports,
+)
+from src.agents.debate.application.state_readers import (
+    resolved_ticker_from_state as _resolved_ticker_from_state,
+)
 from src.agents.debate.application.use_cases import (
     MAX_CHAR_HISTORY,
     execute_bear_round,
@@ -11,40 +35,14 @@ from src.agents.debate.application.use_cases import (
     execute_moderator_round,
     extract_debate_facts,
 )
-from src.agents.debate.application.use_cases import (
-    compress_reports as _compress_reports,
-)
-from src.agents.debate.application.use_cases import (
-    get_trimmed_history as _get_trimmed_history,
-)
-from src.agents.debate.application.use_cases import (
-    log_compressed_reports as _log_compressed_reports,
-)
-from src.agents.debate.application.use_cases import (
-    log_llm_config as _log_llm_config,
-)
-from src.agents.debate.application.use_cases import (
-    log_llm_response as _log_llm_response,
-)
-from src.agents.debate.application.use_cases import (
-    log_messages as _log_messages,
-)
-from src.agents.debate.application.use_cases import (
-    prepare_debate_reports as _prepare_debate_reports,
-)
-from src.agents.debate.application.use_cases import (
-    resolved_ticker_from_state as _resolved_ticker_from_state,
-)
 from src.agents.debate.data.market_data import (
     get_current_risk_free_rate,
     get_dynamic_payoff_map,
 )
 from src.agents.debate.data.ports import debate_artifact_port
+from src.agents.debate.data.sycophancy_client import get_sycophancy_detector_client
 from src.agents.debate.domain.models import DebateConclusion, EvidenceFact
-from src.agents.debate.domain.services import (
-    calculate_pragmatic_verdict,
-    get_sycophancy_detector,
-)
+from src.agents.debate.domain.services import calculate_pragmatic_verdict
 from src.agents.debate.domain.validators import FactValidator
 from src.agents.debate.interface.mappers import summarize_debate_for_preview
 from src.common.contracts import (
@@ -203,7 +201,7 @@ async def _execute_moderator_critique(
         round_num=round_num,
         system_prompt_template=MODERATOR_SYSTEM_PROMPT,
         llm=llm,
-        detector=get_sycophancy_detector(),
+        detector=get_sycophancy_detector_client(),
     )
 
 

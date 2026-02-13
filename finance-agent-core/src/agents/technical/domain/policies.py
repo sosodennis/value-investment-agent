@@ -1,23 +1,23 @@
 from __future__ import annotations
 
-from src.common.types import JSONObject
-
-from .services import safe_float
+from .models import (
+    SemanticConfluenceResult,
+    SemanticTagPolicyInput,
+    SemanticTagPolicyResult,
+)
 
 
 def assemble_semantic_tags(
-    *,
-    z_score: float,
-    optimal_d: float,
-    bollinger_data: JSONObject,
-    stat_strength_data: JSONObject,
-    macd_data: JSONObject,
-    obv_data: JSONObject,
-) -> JSONObject:
+    payload: SemanticTagPolicyInput,
+) -> SemanticTagPolicyResult:
     tags: list[str] = []
     evidence_text: list[str] = []
 
-    cdf_val = safe_float(stat_strength_data.get("value")) or 50.0
+    z_score = payload.z_score
+    optimal_d = payload.optimal_d
+    confluence = payload.confluence
+
+    cdf_val = confluence.statistical_strength
 
     abs_z = abs(z_score)
     statistical_state = "equilibrium"
@@ -42,8 +42,8 @@ def assemble_semantic_tags(
         memory_strength = "fragile"
         tags.append("STRUCTURE_FRAGILE")
 
-    bollinger_state = str(bollinger_data.get("state") or "INSIDE")
-    macd_momentum = str(macd_data.get("momentum_state") or "NEUTRAL")
+    bollinger_state = confluence.bollinger_state
+    macd_momentum = confluence.macd_momentum
 
     if (z_score > 2.0) and (bollinger_state == "BREAKOUT_UPPER"):
         tags.append("SETUP_PERFECT_STORM_SHORT")
@@ -73,8 +73,8 @@ def assemble_semantic_tags(
             f"Internal structure is weakening (Prob: {cdf_val:.1f}%) approaching statistical limits."
         )
 
-    obv_z = safe_float(obv_data.get("fd_obv_z")) or 0.0
-    obv_state = str(obv_data.get("state") or "NEUTRAL")
+    obv_z = confluence.obv_z
+    obv_state = confluence.obv_state
     volume_price_tags: list[str] = []
 
     if (z_score > 0.5) and (obv_z > 0.5):
@@ -127,20 +127,18 @@ def assemble_semantic_tags(
         if risk_level == "critical":
             risk_level = "medium"
 
-    confluence = {
-        "bollinger_state": bollinger_state,
-        "statistical_strength": float(round(cdf_val, 2)),
-        "macd_momentum": macd_momentum,
-        "obv_state": obv_state,
-    }
-
-    return {
-        "tags": tags,
-        "direction": direction,
-        "risk_level": risk_level,
-        "memory_strength": memory_strength,
-        "statistical_state": statistical_state,
-        "z_score": float(round(z_score, 2)),
-        "confluence": confluence,
-        "evidence_list": evidence_text,
-    }
+    return SemanticTagPolicyResult(
+        tags=tags,
+        direction=direction,
+        risk_level=risk_level,
+        memory_strength=memory_strength,
+        statistical_state=statistical_state,
+        z_score=float(round(z_score, 2)),
+        confluence=SemanticConfluenceResult(
+            bollinger_state=bollinger_state,
+            statistical_strength=float(round(cdf_val, 2)),
+            macd_momentum=macd_momentum,
+            obv_state=obv_state,
+        ),
+        evidence_list=evidence_text,
+    )

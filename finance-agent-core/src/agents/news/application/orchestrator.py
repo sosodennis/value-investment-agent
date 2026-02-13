@@ -40,11 +40,11 @@ from src.agents.news.application.state_updates import (
     build_search_node_success_update,
     build_selector_node_update,
 )
-from src.agents.news.application.use_cases import (
+from src.agents.news.data.ports import NewsArtifactPort, news_artifact_port
+from src.agents.news.domain.services import (
     aggregate_news_items,
     build_news_summary_message,
 )
-from src.agents.news.data.ports import NewsArtifactPort, news_artifact_port
 from src.agents.news.interface.mappers import summarize_news_for_preview
 from src.agents.news.interface.serializers import build_news_report_payload
 from src.common.contracts import (

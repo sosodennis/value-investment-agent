@@ -1,37 +1,46 @@
 from __future__ import annotations
 
-import time
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 
 import pandas as pd
 
-from src.agents.technical.application.use_cases import (
-    assemble_backtest_context,
-    assemble_semantic_finalize,
+from src.agents.technical.application.report_service import (
+    build_semantic_report_update,
+)
+from src.agents.technical.application.semantic_service import (
+    execute_semantic_pipeline,
+)
+from src.agents.technical.application.state_readers import (
+    resolved_ticker_from_state,
+    technical_state_from_state,
+)
+from src.agents.technical.application.state_updates import (
     build_data_fetch_error_update,
     build_data_fetch_success_update,
     build_fracdiff_error_update,
-    build_fracdiff_preview,
     build_fracdiff_success_update,
     build_semantic_error_update,
     build_semantic_success_update,
-    safe_float,
-    serialize_fracdiff_outputs,
 )
+from src.agents.technical.application.view_models import build_fracdiff_preview
+from src.agents.technical.data.mappers import serialize_fracdiff_outputs
 from src.agents.technical.data.ports import (
     TechnicalArtifactPort,
     technical_artifact_port,
 )
+from src.agents.technical.domain.models import (
+    SemanticTagPolicyInput,
+    SemanticTagPolicyResult,
+)
+from src.agents.technical.domain.services import safe_float
 from src.agents.technical.interface.mappers import summarize_ta_for_preview
 from src.common.contracts import (
-    ARTIFACT_KIND_TA_FULL_REPORT,
     OUTPUT_KIND_TECHNICAL_ANALYSIS,
 )
 from src.common.tools.logger import get_logger
 from src.common.types import JSONObject
-from src.interface.canonical_serializers import canonicalize_technical_artifact_data
-from src.interface.schemas import ArtifactReference, build_artifact_payload
+from src.interface.schemas import build_artifact_payload
 
 logger = get_logger(__name__)
 
@@ -53,10 +62,8 @@ class TechnicalOrchestrator:
         *,
         fetch_daily_ohlcv_fn: Callable[[str], pd.DataFrame],
     ) -> TechnicalNodeResult:
-        intent_ctx_raw = state.get("intent_extraction", {})
-        intent_ctx = intent_ctx_raw if isinstance(intent_ctx_raw, Mapping) else {}
-        resolved_ticker = intent_ctx.get("resolved_ticker")
-        if not isinstance(resolved_ticker, str) or not resolved_ticker:
+        resolved_ticker = resolved_ticker_from_state(state)
+        if resolved_ticker is None:
             logger.error("--- TA: No resolved ticker available, cannot proceed ---")
             return TechnicalNodeResult(
                 update=build_data_fetch_error_update("No resolved ticker available"),
@@ -140,11 +147,9 @@ class TechnicalOrchestrator:
     ) -> TechnicalNodeResult:
         logger.info("--- TA: Computing Rolling FracDiff ---")
 
-        price_ctx_raw = state.get("technical_analysis", {})
-        price_ctx = price_ctx_raw if isinstance(price_ctx_raw, Mapping) else {}
-        price_artifact_id = price_ctx.get("price_artifact_id")
-
-        if not isinstance(price_artifact_id, str) or not price_artifact_id:
+        technical_context = technical_state_from_state(state)
+        price_artifact_id = technical_context.price_artifact_id
+        if price_artifact_id is None:
             logger.error(
                 "--- TA: No price artifact ID available for FracDiff computation ---"
             )
@@ -217,8 +222,7 @@ class TechnicalOrchestrator:
                 goto="END",
             )
 
-        ticker_raw = state.get("ticker")
-        ticker_value = ticker_raw if isinstance(ticker_raw, str) else "N/A"
+        ticker_value = resolved_ticker_from_state(state) or "N/A"
         preview = build_fracdiff_preview(
             ticker=ticker_value,
             latest_price=prices.iloc[-1],
@@ -255,7 +259,7 @@ class TechnicalOrchestrator:
         self,
         state: Mapping[str, object],
         *,
-        assemble_fn: Callable[..., JSONObject],
+        assemble_fn: Callable[[SemanticTagPolicyInput], SemanticTagPolicyResult],
         build_full_report_payload_fn: Callable[..., JSONObject],
         generate_interpretation_fn: Callable[..., Awaitable[str]],
         calculate_statistical_strength_fn: Callable[..., JSONObject],
@@ -271,19 +275,17 @@ class TechnicalOrchestrator:
 
         ctx_raw = state.get("technical_analysis", {})
         ctx = ctx_raw if isinstance(ctx_raw, Mapping) else {}
-        intent_ctx_raw = state.get("intent_extraction", {})
-        intent_ctx = intent_ctx_raw if isinstance(intent_ctx_raw, Mapping) else {}
-        ticker = intent_ctx.get("resolved_ticker")
-
-        if not isinstance(ticker, str) or not ticker:
+        ticker = resolved_ticker_from_state(state)
+        if ticker is None:
             logger.error("--- TA: Missing resolved ticker for semantic translation ---")
             error_update = build_semantic_error_update(
                 "Missing intent_extraction.resolved_ticker"
             )
             return TechnicalNodeResult(update=error_update.update, goto="END")
 
-        optimal_d = ctx.get("optimal_d")
-        z_score = ctx.get("z_score_latest")
+        technical_context = technical_state_from_state(state)
+        optimal_d = technical_context.optimal_d
+        z_score = technical_context.z_score_latest
         if optimal_d is None or z_score is None:
             logger.error("--- TA: No FracDiff metrics available for translation ---")
             error_update = build_semantic_error_update(
@@ -292,21 +294,13 @@ class TechnicalOrchestrator:
             return TechnicalNodeResult(update=error_update.update, goto="END")
 
         try:
-            tags_dict = assemble_fn(
-                z_score=z_score,
-                optimal_d=optimal_d,
-                bollinger_data=ctx.get("bollinger", {"state": "INSIDE"}),
-                stat_strength_data={"value": ctx.get("statistical_strength_val", 50.0)},
-                macd_data=ctx.get("macd", {"momentum_state": "NEUTRAL"}),
-                obv_data=ctx.get("obv", {"state": "NEUTRAL", "fd_obv_z": 0.0}),
-            )
-
-            price_artifact_id = ctx.get("price_artifact_id")
-            chart_artifact_id = ctx.get("chart_data_id")
-            backtest_result = await assemble_backtest_context(
-                technical_port=self.port,
-                price_artifact_id=price_artifact_id,
-                chart_artifact_id=chart_artifact_id,
+            price_artifact_id = technical_context.price_artifact_id
+            chart_artifact_id = technical_context.chart_data_id
+            pipeline_result = await execute_semantic_pipeline(
+                ticker=ticker,
+                technical_context=dict(ctx),
+                assemble_fn=assemble_fn,
+                generate_interpretation_fn=generate_interpretation_fn,
                 calculate_statistical_strength_fn=calculate_statistical_strength_fn,
                 calculate_fd_bollinger_fn=calculate_fd_bollinger_fn,
                 calculate_fd_obv_fn=calculate_fd_obv_fn,
@@ -315,61 +309,18 @@ class TechnicalOrchestrator:
                 format_backtest_for_llm_fn=format_backtest_for_llm_fn,
                 wfa_optimizer_factory=wfa_optimizer_factory,
                 format_wfa_for_llm_fn=format_wfa_for_llm_fn,
+                technical_port=self.port,
+                price_artifact_id=price_artifact_id,
+                chart_artifact_id=chart_artifact_id,
+                build_full_report_payload_fn=build_full_report_payload_fn,
             )
-            llm_interpretation = await generate_interpretation_fn(
-                tags_dict,
-                ticker,
-                backtest_result.backtest_context,
-                backtest_result.wfa_context,
+            ta_update = await build_semantic_report_update(
+                technical_port=self.port,
+                ticker=ticker,
+                technical_context=dict(ctx),
+                summarize_preview=self.summarize_preview,
+                pipeline_result=pipeline_result,
             )
-
-            try:
-                preview = self.summarize_preview(dict(ctx))
-                semantic_result = assemble_semantic_finalize(
-                    ticker=ticker,
-                    technical_context=dict(ctx),
-                    tags_dict=tags_dict,
-                    llm_interpretation=llm_interpretation,
-                    price_data=backtest_result.price_data,
-                    chart_data=backtest_result.chart_data,
-                    build_full_report_payload_fn=build_full_report_payload_fn,
-                )
-                full_report_data = canonicalize_technical_artifact_data(
-                    semantic_result.full_report_data_raw
-                )
-
-                report_id = await self.port.save_full_report(
-                    data=full_report_data,
-                    produced_by="technical_analysis.semantic_translate",
-                    key_prefix=f"ta_{ticker}_{int(time.time())}",
-                )
-                reference = ArtifactReference(
-                    artifact_id=report_id,
-                    download_url=f"/api/artifacts/{report_id}",
-                    type=ARTIFACT_KIND_TA_FULL_REPORT,
-                )
-                artifact = build_artifact_payload(
-                    kind=OUTPUT_KIND_TECHNICAL_ANALYSIS,
-                    summary=(
-                        f"Technical Analysis: {semantic_result.direction} "
-                        f"(d={semantic_result.opt_d:.2f})"
-                    ),
-                    preview=preview,
-                    reference=reference,
-                )
-                ta_update = semantic_result.ta_update
-                ta_update["artifact"] = artifact
-            except Exception as exc:
-                logger.error(f"Failed to generate artifact in node: {exc}")
-                ta_update = {
-                    "signal": tags_dict["direction"],
-                    "statistical_strength": tags_dict["statistical_state"],
-                    "risk_level": tags_dict["risk_level"],
-                    "llm_interpretation": llm_interpretation,
-                    "semantic_tags": tags_dict["tags"],
-                    "memory_strength": tags_dict["memory_strength"],
-                }
-
             success_update = build_semantic_success_update(ta_update)
             return TechnicalNodeResult(update=success_update.update, goto="END")
         except Exception as exc:

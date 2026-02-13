@@ -64,6 +64,35 @@ class SourceInfoModel(BaseModel):
         return to_optional_string(value, "source.author")
 
 
+class NewsSearchResultItemModel(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    title: str
+    source: str
+    snippet: str
+    link: str
+    date: str | None = None
+    image: str | None = None
+    categories: list[str] = Field(default_factory=list)
+
+    @field_validator("title", "source", "snippet", "link", mode="before")
+    @classmethod
+    def _required_text(cls, value: object) -> str:
+        return to_string(value, "search result field")
+
+    @field_validator("date", "image", mode="before")
+    @classmethod
+    def _optional_text(cls, value: object) -> str | None:
+        return to_optional_string(value, "search result optional field")
+
+    @field_validator("categories", mode="before")
+    @classmethod
+    def _categories(cls, value: object) -> list[str]:
+        if not isinstance(value, list):
+            raise TypeError("search result.categories must be a list")
+        return [to_string(item, "search result.categories[]") for item in value]
+
+
 class FinancialEntityModel(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -155,6 +184,7 @@ class FinancialNewsItemModel(BaseModel):
     title: str
     snippet: str
     full_content: str | None = None
+    content_id: str | None = None
     source: SourceInfoModel
     related_tickers: list[FinancialEntityModel] = Field(default_factory=list)
     categories: list[
@@ -178,6 +208,7 @@ class FinancialNewsItemModel(BaseModel):
         "title",
         "snippet",
         "full_content",
+        "content_id",
         "published_at",
         mode="before",
     )

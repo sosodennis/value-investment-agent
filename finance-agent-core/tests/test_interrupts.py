@@ -1,13 +1,14 @@
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
-from src.agents.intent.application.use_cases import IntentExtraction
-from src.agents.intent.domain.models import TickerCandidate
+from src.agents.intent.interface.contracts import IntentExtraction, TickerCandidateModel
 from src.workflow.interrupts import HumanTickerSelection, InterruptValue
 
 
 def test_ticker_selection_serialization():
-    candidates = [TickerCandidate(symbol="AAPL", name="Apple Inc.", confidence=0.9)]
+    candidates = [
+        TickerCandidateModel(symbol="AAPL", name="Apple Inc.", confidence=0.9)
+    ]
     intent = IntentExtraction(
         company_name="Apple",
         is_valuation_request=True,
@@ -26,8 +27,8 @@ def test_ticker_selection_serialization():
 
 def test_ticker_selection_ui_payload_uses_one_of():
     candidates = [
-        TickerCandidate(symbol="AAPL", name="Apple Inc.", confidence=0.9),
-        TickerCandidate(symbol="AAPL34", name="Apple Brasil", confidence=0.7),
+        TickerCandidateModel(symbol="AAPL", name="Apple Inc.", confidence=0.9),
+        TickerCandidateModel(symbol="AAPL34", name="Apple Brasil", confidence=0.7),
     ]
     selection = HumanTickerSelection(candidates=candidates)
 

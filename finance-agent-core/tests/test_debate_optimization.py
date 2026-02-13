@@ -9,7 +9,7 @@ from src.workflow.nodes.debate.nodes import debate_aggregator_node, r1_bull_node
 async def test_debate_aggregator_caches_reports():
     # Mock pre-requisites
     state = {
-        "ticker": "AAPL",
+        "intent_extraction": {"resolved_ticker": "AAPL"},
         "financial_news_research": {},
         "technical_analysis": {},
         "fundamental_analysis": {},
@@ -74,11 +74,12 @@ async def test_agent_fallbacks_if_no_cache():
 
     with (
         patch(
-            "src.workflow.nodes.debate.nodes._prepare_debate_reports",
+            "src.agents.debate.application.report_service.prepare_debate_reports",
             new_mock=AsyncMock(),
         ) as mock_prepare,
         patch(
-            "src.workflow.nodes.debate.nodes._compress_reports", return_value="data"
+            "src.agents.debate.application.report_service.compress_reports",
+            return_value="data",
         ) as mock_compress,
         patch("src.workflow.nodes.debate.nodes.get_llm") as mock_get_llm,
     ):

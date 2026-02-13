@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from src.agents.intent.domain.models import TickerCandidate
-
 
 class IntentExtraction(BaseModel):
     """Extracted intent from user query."""
@@ -26,10 +24,18 @@ class IntentExtraction(BaseModel):
 class SearchExtraction(BaseModel):
     """Extracted ticker candidates from web search."""
 
-    candidates: list[TickerCandidate] = Field(
+    candidates: list[TickerCandidateModel] = Field(
         default_factory=list,
         description="List of potential stock tickers found in search results.",
     )
     reasoning: str | None = Field(
         None, description="Brief reasoning for why these candidates were chosen."
     )
+
+
+class TickerCandidateModel(BaseModel):
+    symbol: str = Field(..., description="Stock ticker symbol")
+    name: str = Field(..., description="Company name")
+    exchange: str | None = Field(None, description="Exchange code")
+    type: str | None = Field(None, description="Security type (stock, ETF, etc.)")
+    confidence: float = Field(1.0, description="Match confidence score (0-1)")

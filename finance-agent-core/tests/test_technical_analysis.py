@@ -54,52 +54,55 @@ def test_compute_z_score():
 
 def test_semantic_tags_mapping():
     """Test that semantic tags are correctly mapped based on thresholds."""
+    from src.agents.technical.domain.models import (
+        SemanticConfluenceInput,
+        SemanticTagPolicyInput,
+    )
     from src.agents.technical.domain.policies import assemble_semantic_tags
 
-    # Dummy data for confluence
-    dummy_bb = {"state": "INSIDE"}
-    dummy_stat = {"value": 50.0}
-    dummy_macd = {"momentum_state": "NEUTRAL"}
-    dummy_obv = {"fd_obv_z": 0.0, "state": "NEUTRAL"}
+    dummy_confluence = SemanticConfluenceInput(
+        bollinger_state="INSIDE",
+        statistical_strength=50.0,
+        macd_momentum="NEUTRAL",
+        obv_state="NEUTRAL",
+        obv_z=0.0,
+    )
 
     # Test case 1: Low d, low Z
-    tags_dict = assemble_semantic_tags(
-        z_score=0.5,
-        optimal_d=0.2,
-        bollinger_data=dummy_bb,
-        stat_strength_data=dummy_stat,
-        macd_data=dummy_macd,
-        obv_data=dummy_obv,
+    tags_result = assemble_semantic_tags(
+        SemanticTagPolicyInput(
+            z_score=0.5,
+            optimal_d=0.2,
+            confluence=dummy_confluence,
+        )
     )
-    assert tags_dict["memory_strength"] == "structurally_stable"
-    assert tags_dict["statistical_state"] == "equilibrium"
-    assert tags_dict["risk_level"] == "low"
+    assert tags_result.memory_strength == "structurally_stable"
+    assert tags_result.statistical_state == "equilibrium"
+    assert tags_result.risk_level == "low"
 
     # Test case 2: High d, high Z
-    tags_dict = assemble_semantic_tags(
-        z_score=2.5,
-        optimal_d=0.7,
-        bollinger_data=dummy_bb,
-        stat_strength_data=dummy_stat,
-        macd_data=dummy_macd,
-        obv_data=dummy_obv,
+    tags_result = assemble_semantic_tags(
+        SemanticTagPolicyInput(
+            z_score=2.5,
+            optimal_d=0.7,
+            confluence=dummy_confluence,
+        )
     )
-    assert tags_dict["memory_strength"] == "fragile"
-    assert tags_dict["statistical_state"] == "anomaly"
-    assert tags_dict["risk_level"] == "critical"
+    assert tags_result.memory_strength == "fragile"
+    assert tags_result.statistical_state == "anomaly"
+    assert tags_result.risk_level == "critical"
 
     # Test case 3: Balanced d, medium Z
-    tags_dict = assemble_semantic_tags(
-        z_score=1.5,
-        optimal_d=0.4,
-        bollinger_data=dummy_bb,
-        stat_strength_data=dummy_stat,
-        macd_data=dummy_macd,
-        obv_data=dummy_obv,
+    tags_result = assemble_semantic_tags(
+        SemanticTagPolicyInput(
+            z_score=1.5,
+            optimal_d=0.4,
+            confluence=dummy_confluence,
+        )
     )
-    assert tags_dict["memory_strength"] == "balanced"
-    assert tags_dict["statistical_state"] == "deviating"
-    assert tags_dict["risk_level"] == "medium"
+    assert tags_result.memory_strength == "balanced"
+    assert tags_result.statistical_state == "deviating"
+    assert tags_result.risk_level == "medium"
 
 
 def test_compress_ta_data():

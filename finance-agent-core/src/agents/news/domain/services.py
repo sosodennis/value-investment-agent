@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from src.agents.news.domain.entities import NewsItemEntity
 from src.agents.news.domain.models import NewsAggregationResult
-from src.common.types import JSONObject
 
 
 def aggregate_news_items(
@@ -64,24 +63,3 @@ def build_news_summary_message(*, ticker: str, result: NewsAggregationResult) ->
         f"**Analysis Summaries:**\n{result.summary_text}\n\n"
         f"**Themes:** {', '.join(result.key_themes) or 'N/A'}"
     )
-
-
-def build_articles_to_fetch(
-    raw_results: list[JSONObject], selected_indices: list[int]
-) -> list[JSONObject]:
-    selected: list[JSONObject] = []
-    for idx in selected_indices:
-        if idx >= len(raw_results):
-            continue
-        selected.append(raw_results[idx])
-    return selected
-
-
-def build_selector_fallback_indices(raw_results: list[JSONObject]) -> list[int]:
-    return list(range(min(3, len(raw_results))))
-
-
-def normalize_selected_indices(
-    selected_indices: list[int], *, limit: int = 10
-) -> list[int]:
-    return list(dict.fromkeys(selected_indices))[:limit]

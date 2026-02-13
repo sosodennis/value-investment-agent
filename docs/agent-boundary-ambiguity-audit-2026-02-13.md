@@ -31,17 +31,20 @@ Priority:
 Status Update (2026-02-13):
 
 1. P0 items `D1`, `D2`, `T1` 已完成清理並通過回歸測試。
-2. 其餘項目維持 backlog，按優先級逐步處理。
+2. Intent items `A1`~`A5` 已完成清理並通過回歸測試。
+3. Debate items `D3`~`D6` 已完成清理並通過回歸測試。
+4. Cross-agent items `X2`, `X4` 已完成清理並通過回歸測試。
+5. `X3` 已完成清理，跨-agent backlog 已清空。
 
 ## 3. 總覽
 
 | Agent | P0 | P1 | P2 | 主要風險 |
 |---|---:|---:|---:|---|
-| intent | 0 | 3 | 2 | application 承擔 parsing/selection 細節，domain model 角色模糊 |
-| fundamental | 0 | 5 | 3 | application/orchestrator 過厚，domain 使用 JSONObject 偏重 payload |
-| news | 0 | 6 | 3 | use_cases 過大且同時含 orchestration + parsing + formatting |
-| technical | 1 | 4 | 2 | application 依賴 interface serializer（層向內依賴） |
-| debate | 2 | 5 | 2 | domain->data 反向依賴，cross-agent 讀取走 internal ports |
+| intent | 0 | 0 | 0 | 已收斂至 interface parser + domain policy + interface DTO |
+| fundamental | 0 | 0 | 0 | 已收斂為 state_readers/state_updates + typed projection |
+| news | 0 | 0 | 0 | 已收斂為 service modules + typed contracts |
+| technical | 0 | 0 | 0 | 已收斂為 service modules + state_readers/state_updates |
+| debate | 0 | 0 | 0 | 已收斂至 shared contract reader + typed application services |
 
 ## 4. Agent 級別清單
 
@@ -54,6 +57,10 @@ Status Update (2026-02-13):
 - 最終期望:
   - `interface/parsers.py` 提供 `parse_ticker_candidates(...)`。
   - orchestrator 只接收 typed candidates。
+ - 狀態: DONE (2026-02-13)
+ - 備註: 已新增 `intent/interface/parsers.py::parse_ticker_candidates`，
+   `application/orchestrator.py::parse_candidates` 現在只呼叫 parser，
+   移除 application 內 raw mapping/list parsing 細節。
 
 ### A2 (P1)
 - 位置: `finance-agent-core/src/agents/intent/application/orchestrator.py:129`
@@ -62,6 +69,10 @@ Status Update (2026-02-13):
 - 最終期望:
   - `interface/parsers.py` 輸出 `ResolvedSelectionInput`。
   - application 僅做業務決策（pick symbol policy）。
+ - 狀態: DONE (2026-02-13)
+ - 備註: 已新增 `ResolvedSelectionInput` 與
+   `parse_resume_selection_input(...)`，`resolve_selected_symbol` 僅保留
+   業務決策（selected_symbol/ticker 優先序 + fallback policy）。
 
 ### A3 (P1)
 - 位置: `finance-agent-core/src/agents/intent/application/use_cases.py:24`
@@ -70,6 +81,10 @@ Status Update (2026-02-13):
 - 最終期望:
   - 抽 `domain/extraction_policies.py`（heuristic policy）
   - application 組裝策略，不承載細節實作。
+ - 狀態: DONE (2026-02-13)
+ - 備註: 已新增 `intent/domain/extraction_policies.py`；
+   `application/use_cases.py` 現在透過 domain heuristic policy 組裝
+   `IntentExtraction`，不再在 application 內定義 heuristic 細節。
 
 ### A4 (P2)
 - 位置: `finance-agent-core/src/agents/intent/domain/models.py:6`
@@ -78,6 +93,9 @@ Status Update (2026-02-13):
 - 最終期望:
   - 若作為交換契約: 移到 `interface/contracts.py`。
   - 若作為業務 VO: domain 保留 dataclass/純型別，interface 做 DTO 映射。
+ - 狀態: DONE (2026-02-13)
+ - 備註: `domain/models.py::TickerCandidate` 已改為 dataclass VO，
+   並在 `interface/mappers.py` 補齊 domain <-> interface DTO 映射。
 
 ### A5 (P2)
 - 位置: `finance-agent-core/src/agents/intent/interface/contracts.py:5`
@@ -86,6 +104,10 @@ Status Update (2026-02-13):
 - 最終期望:
   - interface contract 自有 DTO model。
   - domain 透過 mapper 轉換，不直接被 interface import。
+ - 狀態: DONE (2026-02-13)
+ - 備註: `interface/contracts.py` 已新增 `TickerCandidateModel` 並改
+   `SearchExtraction.candidates` 為 interface DTO；`use_cases.py` 透過
+   `to_ticker_candidate(...)` 轉換到 domain VO。
 
 ## 4.2 Fundamental Agent
 
@@ -96,6 +118,10 @@ Status Update (2026-02-13):
 - 最終期望:
   - use_cases 保留「業務決策 + output intent」。
   - output artifact/state 組裝下沉 `interface/serializers.py`。
+ - 狀態: DONE (2026-02-13)
+ - 備註: 已新增 `fundamental/interface/serializers.py`，並將 model selection /
+   valuation 的 report payload、preview、artifact 組裝從
+   `application/use_cases.py` 下沉至 interface serializer。
 
 ### F2 (P1)
 - 位置: `finance-agent-core/src/agents/fundamental/application/orchestrator.py:142`
@@ -104,6 +130,10 @@ Status Update (2026-02-13):
 - 最終期望:
   - state read/write 下沉到 `application/state_readers.py` + `application/state_updates.py`。
   - orchestrator 只保留流程轉移。
+ - 狀態: DONE (2026-02-13)
+ - 備註: 已新增 `fundamental/application/state_readers.py` 與
+   `fundamental/application/state_updates.py`；`run_financial_health`,
+   `run_model_selection`, `run_valuation` 已改為讀取/組裝 helper。
 
 ### F3 (P1)
 - 位置: `finance-agent-core/src/agents/fundamental/domain/model_selection.py:13`
@@ -112,6 +142,12 @@ Status Update (2026-02-13):
 - 最終期望:
   - 建立 `domain/entities.py` 的 typed report projection。
   - model_selection 對 typed entity 計算，不直接走 JSON path。
+ - 狀態: DONE (2026-02-13)
+ - 備註: 已新增 `FundamentalSelectionReport`，並由
+   `fundamental/data/mappers.py::project_selection_reports` 將 artifact payload
+   映射為 typed projection；`domain/model_selection.py` 現在僅接受
+   `list[FundamentalSelectionReport]`，移除 JSON path (`base.*`, `extension.*`)
+   依賴。
 
 ### F4 (P1)
 - 位置: `finance-agent-core/src/agents/fundamental/data/ports.py:38`
@@ -120,6 +156,12 @@ Status Update (2026-02-13):
 - 最終期望:
   - `TypedArtifactPort` 直接支持 nested field extract 或 domain repo mapper。
   - port return typed domain projection，而不是 raw list cast。
+ - 狀態: DONE (2026-02-13)
+ - 備註: `FundamentalArtifactPort` 已改為
+   `load_financial_report_models(...) -> list[FinancialReportModel]`；
+   raw JSON 轉換與 selection projection 已收斂到
+   `fundamental/data/mappers.py`（`financial_report_models_to_json`,
+   `project_selection_reports_from_models`）。
 
 ### F5 (P2)
 - 位置: `finance-agent-core/src/agents/fundamental/application/use_cases.py:25`
@@ -128,11 +170,16 @@ Status Update (2026-02-13):
 - 最終期望:
   - `application/dto.py` 定義 app dto。
   - `interface/mappers.py` 負責 preview dto 轉換。
+ - 狀態: DONE (2026-02-13)
+ - 備註: 已新增 `FundamentalAppContextDTO`（application）與
+   `FundamentalPreviewInputModel`（interface），`use_cases.py` 不再以
+   跨層 `dict` 傳遞 context 語義；`interface/mappers.py` 改為以 preview DTO
+   輸入，完成 app dto 與 preview dto 分離。
 
 ## 4.3 News Agent
 
 ### N1 (P1)
-- 位置: `finance-agent-core/src/agents/news/application/use_cases.py:154`
+- 位置: `finance-agent-core/src/agents/news/application/{analysis_service.py,fetch_service.py,selection_service.py}`
 - 問題: 一個檔案同時包含 selector fallback、fetch payload builder、analysis chain、LLM 結果解析。
 - 原因: use_cases 過大，責任混合（policy + parser + formatter + orchestration helper）。
 - 最終期望:
@@ -141,9 +188,10 @@ Status Update (2026-02-13):
     - `application/fetch_service.py`
     - `application/analysis_service.py`
     - `interface/parsers.py`（LLM/JSON parse）
- - 狀態: PARTIAL DONE (2026-02-13)
+ - 狀態: DONE (2026-02-13)
  - 備註: 已拆出 `selection_service.py`、`fetch_service.py`、`analysis_service.py`；
-   `interface/parsers.py` 收斂仍待後續波次。
+   並新增 `news/interface/parsers.py`，將 selector JSON 與 LLM structured output
+   解析收斂到 interface 層。
 
 ### N2 (P1)
 - 位置: `finance-agent-core/src/agents/news/application/orchestrator.py:60`
@@ -168,7 +216,7 @@ Status Update (2026-02-13):
    debate 端已改為直接透過 shared artifact contract 解析。
 
 ### N4 (P1)
-- 位置: `finance-agent-core/src/agents/news/application/use_cases.py:74`
+- 位置: `finance-agent-core/src/agents/news/application/selection_service.py`
 - 問題: `format_selector_input` 這類展示/提示格式化屬 interface concern。
 - 原因: prompt formatting 分散在 use_cases。
 - 最終期望:
@@ -178,7 +226,7 @@ Status Update (2026-02-13):
    `news/interface/prompt_formatters.py`，application service 只負責調用。
 
 ### N5 (P2)
-- 位置: `finance-agent-core/src/agents/news/application/use_cases.py:91`
+- 位置: `finance-agent-core/src/agents/news/application/{selection_service.py,analysis_service.py}`
 - 問題: `_ChainLike/_ModelDumpLike/_LLMLike` protocol 與執行細節混在同檔。
 - 原因: typing scaffolding 未模組化。
 - 最終期望:
@@ -199,11 +247,17 @@ Status Update (2026-02-13):
  - 備註: 已新增 `news/domain/entities.py` 與 `news/data/mappers.py`；
    `aggregate_news_items` 已改為只接受 `NewsItemEntity`，並由
    `NewsArtifactPort.project_news_item_entities(...)` 進入 domain。
+ - 補充收斂: `NewsItemsListArtifactData.news_items` 已升級為
+   `list[FinancialNewsItemModel]`，並在 `artifact_contract_registry` /
+   `news data port` 統一 model_dump 為 JSON，移除 raw dict payload 依賴。
+ - 補充收斂: `SearchResultsArtifactData.raw_results` 已升級為
+   `list[NewsSearchResultItemModel]`；application 仍走 JSON 讀取，但
+   schema 驗證與欄位約束已收斂到 interface contract。
 
 ## 4.4 Technical Agent
 
 ### T1 (P0)
-- 位置: `finance-agent-core/src/agents/technical/application/use_cases.py:11`
+- 位置: `finance-agent-core/src/agents/technical/application/orchestrator.py`
 - 問題: application 直接 import `interface.serializers.build_full_report_payload`。
 - 原因: 層依賴方向反向（application -> interface）。
 - 最終期望:
@@ -217,6 +271,10 @@ Status Update (2026-02-13):
 - 原因: interface canonicalization 責任滲入 application flow。
 - 最終期望:
   - canonicalization 收斂到 data repo 或 interface serializer adapter。
+ - 狀態: DONE (2026-02-13)
+ - 備註: `canonicalize_technical_artifact_data` 已下沉到
+   `technical/data/ports.py` 的 `save_full_report_canonical(...)`；
+   orchestrator 不再直接 import/call canonicalizer。
 
 ### T3 (P1)
 - 位置: `finance-agent-core/src/agents/technical/data/ports.py:82`
@@ -225,6 +283,10 @@ Status Update (2026-02-13):
 - 最終期望:
   - 技術指標 public contract 固定；
   - debate 在自身 parser 層轉換成可辯論 payload。
+ - 狀態: DONE (2026-02-13)
+ - 備註: `technical/data/ports.py` 的 `load_debate_payload` 已移除；
+   technical producer 僅發布 public artifact contract，consumer 轉換留在
+   `debate/data/report_reader.py` + shared contract parser。
 
 ### T4 (P1)
 - 位置: `finance-agent-core/src/agents/technical/application/orchestrator.py:303`
@@ -232,13 +294,21 @@ Status Update (2026-02-13):
 - 原因: application use case 拆分不足。
 - 最終期望:
   - 分拆 `semantic_service`, `report_service`, `state_updates`。
+ - 狀態: DONE (2026-02-13)
+ - 備註: 已新增 `technical/application/semantic_service.py`,
+   `technical/application/report_service.py`, `technical/application/state_updates.py`；
+   `orchestrator.run_semantic_translate` 已收斂為流程編排。
 
 ### T5 (P2)
-- 位置: `finance-agent-core/src/agents/technical/application/use_cases.py:128`
+- 位置: `finance-agent-core/src/agents/technical/data/mappers.py`
 - 問題: use_cases 仍包含大量 pandas/index 轉換細節（infra-like）。
 - 原因: domain/application 與 data transformation 邊界未細分。
 - 最終期望:
   - pandas 序列化/資料轉換抽到 data mapper。
+ - 狀態: DONE (2026-02-13)
+ - 備註: `serialize_fracdiff_outputs` 與序列化細節已下沉至
+   `technical/data/mappers.py`；technical application 已移除 `use_cases.py`
+   re-export 聚合層，直接引用 service/state modules。
   - application 只協調 typed series objects。
 
 ## 4.5 Debate Agent
@@ -267,6 +337,10 @@ Status Update (2026-02-13):
 - 原因: 這是 infra/tool concern，不是純業務規則。
 - 最終期望:
   - 移到 `data/clients` 或 `application/services` 並以 port 注入。
+ - 狀態: DONE (2026-02-13)
+ - 備註: `SycophancyDetector` 已由 domain 移至
+   `debate/data/sycophancy_client.py`，application 透過
+   `SycophancyDetectorPort` 注入；`domain/services.py` 不再載入 fastembed model。
 
 ### D4 (P1)
 - 位置: `finance-agent-core/src/agents/debate/application/use_cases.py:52`
@@ -274,6 +348,9 @@ Status Update (2026-02-13):
 - 原因: dto ownership 不一致，造成「放哪裡」反覆爭議。
 - 最終期望:
   - 統一放 `application/dto.py`（或 domain value object，二選一且固定）。
+ - 狀態: DONE (2026-02-13)
+ - 備註: `DebateFactExtractionResult` 已移至
+   `debate/application/dto.py`，`use_cases.py` 改為引用 dto，完成 dto ownership 收斂。
 
 ### D5 (P1)
 - 位置: `finance-agent-core/src/agents/debate/application/use_cases.py:65`
@@ -283,6 +360,11 @@ Status Update (2026-02-13):
   - data reader 回 typed source bundle。
   - domain 提供 pure compression policy。
   - application 僅 orchestrate。
+ - 狀態: DONE (2026-02-13)
+ - 備註: 已新增 `debate/application/report_service.py`；
+   `prepare_debate_reports` / `get_debate_reports_text` 從 use_cases 下沉為
+   dedicated app service。`data/report_reader.py` 提供 typed `DebateSourceData`，
+   domain 僅保留 pure compression policies。
 
 ### D6 (P2)
 - 位置: `finance-agent-core/src/agents/debate/interface/contracts.py:247`
@@ -290,6 +372,10 @@ Status Update (2026-02-13):
 - 原因: registry 與 agent interface parse 還有重複橋接。
 - 最終期望:
   - parse 路由統一走 artifact contract registry，agent interface 只保留 model/rules。
+ - 狀態: DONE (2026-02-13)
+ - 備註: `parse_debate_artifact_model` 薄封裝已移除；
+   debate artifact canonicalization 現在統一走
+   `interface/artifact_contract_registry.py` 的 model routing。
 
 ## 5. 橫向（跨 agent）問題
 
@@ -302,15 +388,40 @@ Status Update (2026-02-13):
 - 位置: `fundamental/news/technical` orchestrator/use_cases 多處。
 - 問題: 每個 agent 都重複 state extraction/update 組裝。
 - 最終期望: 每 agent 標準化 `application/state_readers.py` + `application/state_updates.py`。
+ - 狀態: DONE (2026-02-13)
+ - 備註:
+   - `technical/application/state_readers.py` 已新增，並在 orchestrator 統一使用；
+   - `technical` 的 `data_fetch/fracdiff` update builders 已下沉到
+     `technical/application/state_updates.py`；
+   - `fundamental/news/technical` 三者現在都具備 `state_readers/state_updates`
+     的固定責任邊界。
 
 ### X3 (P1) Domain 對 JSON payload 依賴過重
 - 位置: `fundamental/domain/model_selection.py`, `news/domain/services.py` 等。
 - 問題: domain 直接操作 dict path，易受 contract shape 變動影響。
 - 最終期望: domain 只吃 typed entities/value objects。
+ - 狀態: DONE (2026-02-13)
+ - 備註:
+   - `news/domain/services.py` 已移除 JSON helper（article selection/fallback/indices normalize）；
+     對應邏輯已下沉到 `news/application/{fetch_service,selection_service}.py`。
+   - `technical/domain/policies.py` 已改為 typed policy input/output
+     (`SemanticTagPolicyInput` / `SemanticTagPolicyResult`)；
+     JSON <-> typed 轉換已收斂於
+     `technical/application/semantic_service.py`。
+   - `fundamental/domain/services.py` 已改為只接受
+     `list[FundamentalSelectionReport]`，並移除 `FundamentalReportsAdapter`；
+     raw report payload 轉換收斂到 `fundamental/data/mappers.py`。
 
 ### X4 (P2) 命名不一致（service/use_cases/orchestrator/parser）
 - 問題: 同類責任在不同 agent 命名策略不同，造成放置判斷成本。
 - 最終期望: 以 `docs/backend-guideline.md` 命名規則統一（後續單獨命名規範文檔可再固化）。
+ - 狀態: DONE (2026-02-13)
+ - 備註:
+   - 移除 `news/application/use_cases.py` 與
+     `technical/application/use_cases.py` 的 re-export 聚合層；
+   - orchestrator/test 改為直接引用 `*_service.py`、`state_updates.py`、
+     `data/mappers.py`；
+   - 命名與職責收斂為「orchestrator + service + state_readers/state_updates」。
 
 ## 6. 最終目標（每個 agent 一致形態）
 

@@ -6,16 +6,25 @@ industry, SIC, financial signals, and data coverage.
 """
 
 from dataclasses import dataclass
+from typing import Literal
 
-from src.agents.fundamental.domain.entities import FundamentalReportsAdapter
+from src.agents.fundamental.domain.entities import FundamentalSelectionReport
 from src.agents.fundamental.domain.rules import calculate_cagr
 from src.common.tools.logger import get_logger
-from src.common.types import JSONObject
 from src.shared.domain.market_identity import CompanyProfile
 
 from .models import ValuationModel
 
 logger = get_logger(__name__)
+
+SelectionField = Literal[
+    "total_revenue",
+    "net_income",
+    "operating_cash_flow",
+    "total_equity",
+    "total_assets",
+    "extension_ffo",
+]
 
 
 @dataclass(frozen=True)
@@ -26,7 +35,7 @@ class ModelSpec:
     sector_keywords: tuple[str, ...]
     industry_keywords: tuple[str, ...]
     sic_ranges: tuple[tuple[int, int], ...]
-    required_fields: tuple[str, ...]
+    required_fields: tuple[SelectionField, ...]
     requires_profitability: bool | None = None
     prefers_preprofit: bool = False
     prefers_high_growth: bool = False
@@ -43,7 +52,7 @@ class SelectionSignals:
     net_income: float | None
     operating_cash_flow: float | None
     total_equity: float | None
-    data_coverage: dict[str, bool]
+    data_coverage: dict[SelectionField, bool]
 
 
 @dataclass(frozen=True)
@@ -70,7 +79,7 @@ MODEL_SPECS: tuple[ModelSpec, ...] = (
         sector_keywords=("financial", "bank", "utilities", "utility"),
         industry_keywords=("bank", "banking", "regional bank", "utility"),
         sic_ranges=((6000, 6999),),
-        required_fields=("base.net_income", "base.total_equity"),
+        required_fields=("net_income", "total_equity"),
         requires_profitability=True,
         base_score=3.0,
     ),
@@ -81,7 +90,7 @@ MODEL_SPECS: tuple[ModelSpec, ...] = (
         sector_keywords=("real estate",),
         industry_keywords=("reit", "real estate"),
         sic_ranges=((6798, 6798),),
-        required_fields=("base.net_income", "extension.ffo"),
+        required_fields=("net_income", "extension_ffo"),
         requires_profitability=None,
         base_score=3.0,
     ),
@@ -97,9 +106,9 @@ MODEL_SPECS: tuple[ModelSpec, ...] = (
         industry_keywords=("software", "saas", "internet", "semiconductor", "cloud"),
         sic_ranges=(),
         required_fields=(
-            "base.total_revenue",
-            "base.operating_cash_flow",
-            "base.net_income",
+            "total_revenue",
+            "operating_cash_flow",
+            "net_income",
         ),
         requires_profitability=None,
         prefers_high_growth=True,
@@ -113,9 +122,9 @@ MODEL_SPECS: tuple[ModelSpec, ...] = (
         industry_keywords=("manufacturing", "consumer", "pharma", "energy"),
         sic_ranges=(),
         required_fields=(
-            "base.total_revenue",
-            "base.operating_cash_flow",
-            "base.net_income",
+            "total_revenue",
+            "operating_cash_flow",
+            "net_income",
         ),
         requires_profitability=True,
         base_score=1.5,
@@ -127,7 +136,7 @@ MODEL_SPECS: tuple[ModelSpec, ...] = (
         sector_keywords=("technology", "communication services"),
         industry_keywords=("software", "saas", "internet", "biotech"),
         sic_ranges=(),
-        required_fields=("base.total_revenue",),
+        required_fields=("total_revenue",),
         requires_profitability=False,
         prefers_preprofit=True,
         prefers_high_growth=True,
@@ -140,7 +149,7 @@ MODEL_SPECS: tuple[ModelSpec, ...] = (
         sector_keywords=(),
         industry_keywords=(),
         sic_ranges=(),
-        required_fields=("base.total_revenue", "base.net_income"),
+        required_fields=("total_revenue", "net_income"),
         requires_profitability=True,
         base_score=0.5,
     ),
@@ -151,7 +160,7 @@ MODEL_SPECS: tuple[ModelSpec, ...] = (
         sector_keywords=("financial", "bank", "insurance"),
         industry_keywords=("bank", "insurance", "financial"),
         sic_ranges=((6000, 6999),),
-        required_fields=("base.net_income", "base.total_equity"),
+        required_fields=("net_income", "total_equity"),
         requires_profitability=True,
         base_score=0.3,
     ),
@@ -162,7 +171,7 @@ MODEL_SPECS: tuple[ModelSpec, ...] = (
         sector_keywords=(),
         industry_keywords=(),
         sic_ranges=(),
-        required_fields=("base.net_income", "base.total_assets"),
+        required_fields=("net_income", "total_assets"),
         requires_profitability=True,
         base_score=0.2,
     ),
@@ -188,43 +197,48 @@ def _matches_keywords(text: str, keywords: tuple[str, ...]) -> bool:
     return any(k in text for k in keywords)
 
 
+def _latest_report(
+    financial_reports: list[FundamentalSelectionReport],
+) -> FundamentalSelectionReport | None:
+    if not financial_reports:
+        return None
+    return financial_reports[0]
+
+
 def _collect_signals(
-    profile: CompanyProfile, financial_reports: list[JSONObject] | None
+    profile: CompanyProfile,
+    financial_reports: list[FundamentalSelectionReport] | None,
 ) -> SelectionSignals:
     sector = _normalize(profile.sector)
     industry = _normalize(profile.industry)
 
-    adapter = FundamentalReportsAdapter(financial_reports or [])
-
-    sic_raw = adapter.latest_value("base.sic_code")
-    sic = None
-    if sic_raw is not None:
-        try:
-            sic = int(sic_raw)
-        except (ValueError, TypeError):
-            sic = None
-
-    net_income = adapter.latest_number("base.net_income")
-    operating_cash_flow = adapter.latest_number("base.operating_cash_flow")
-    total_equity = adapter.latest_number("base.total_equity")
+    reports = financial_reports or []
+    latest = _latest_report(reports)
+    sic = latest.sic_code if latest is not None else None
+    net_income = latest.net_income if latest is not None else None
+    operating_cash_flow = latest.operating_cash_flow if latest is not None else None
+    total_equity = latest.total_equity if latest is not None else None
 
     if profile.is_profitable is not None:
         is_profitable = profile.is_profitable
     else:
         is_profitable = net_income > 0 if net_income is not None else None
 
-    revenue_series = adapter.numeric_series("base.total_revenue")
+    revenue_series = [r.total_revenue for r in reports if r.total_revenue is not None]
     revenue_cagr = calculate_cagr(revenue_series)
 
-    fields_to_check = {
-        "base.total_revenue",
-        "base.net_income",
-        "base.operating_cash_flow",
-        "base.total_equity",
-        "base.total_assets",
-        "extension.ffo",
+    fields_to_check: tuple[SelectionField, ...] = (
+        "total_revenue",
+        "net_income",
+        "operating_cash_flow",
+        "total_equity",
+        "total_assets",
+        "extension_ffo",
+    )
+    data_coverage: dict[SelectionField, bool] = {
+        field: (latest is not None and getattr(latest, field) is not None)
+        for field in fields_to_check
     }
-    data_coverage = adapter.data_coverage(fields_to_check)
 
     return SelectionSignals(
         sector=sector,
@@ -306,7 +320,8 @@ def _evaluate_spec(spec: ModelSpec, signals: SelectionSignals) -> ModelCandidate
 
 
 def select_valuation_model(
-    profile: CompanyProfile, financial_reports: list[JSONObject] | None = None
+    profile: CompanyProfile,
+    financial_reports: list[FundamentalSelectionReport] | None = None,
 ) -> ModelSelectionResult:
     """
     Select the appropriate valuation model based on company characteristics and data coverage.

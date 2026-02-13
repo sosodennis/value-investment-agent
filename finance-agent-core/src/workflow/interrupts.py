@@ -2,15 +2,14 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from src.agents.intent.domain.models import TickerCandidate
-from src.agents.intent.interface.contracts import IntentExtraction
+from src.agents.intent.interface.contracts import IntentExtraction, TickerCandidateModel
 
 
 class HumanTickerSelection(BaseModel):
     """Payload for ticker selection interrupt."""
 
     type: Literal["ticker_selection"] = "ticker_selection"
-    candidates: list[TickerCandidate] = Field(default_factory=list)
+    candidates: list[TickerCandidateModel] = Field(default_factory=list)
     intent: IntentExtraction | None = None
     reason: str = "Multiple tickers found or ambiguity detected."
 

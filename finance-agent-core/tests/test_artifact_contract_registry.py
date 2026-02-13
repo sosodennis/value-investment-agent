@@ -15,6 +15,24 @@ from src.interface.artifact_contract_registry import (
 )
 
 
+def _news_item_minimal() -> dict[str, object]:
+    return {
+        "id": "n1",
+        "url": "https://example.com/n1",
+        "fetched_at": "2026-02-13T00:00:00+00:00",
+        "title": "n1",
+        "snippet": "snippet",
+        "source": {
+            "name": "Reuters",
+            "domain": "reuters.com",
+            "reliability_score": 0.9,
+        },
+        "related_tickers": [],
+        "categories": ["general"],
+        "tags": [],
+    }
+
+
 def test_parse_artifact_data_model_as_routes_kind_to_model() -> None:
     parsed = parse_artifact_data_model_as(
         ARTIFACT_KIND_PRICE_SERIES,
@@ -122,7 +140,7 @@ def test_parse_technical_debate_payload_rejects_unsupported_kind() -> None:
 def test_parse_news_items_for_debate_accepts_two_supported_kinds() -> None:
     from_items_list = parse_news_items_for_debate(
         ARTIFACT_KIND_NEWS_ITEMS_LIST,
-        {"news_items": [{"id": "n1"}]},
+        {"news_items": [_news_item_minimal()]},
         context="unit-test",
     )
     assert len(from_items_list) == 1

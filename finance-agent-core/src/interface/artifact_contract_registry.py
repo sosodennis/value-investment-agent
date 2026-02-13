@@ -8,7 +8,6 @@ from pydantic import BaseModel, ValidationError
 
 from src.agents.debate.interface.contracts import (
     DebateArtifactModel,
-    parse_debate_artifact_model,
 )
 from src.agents.fundamental.interface.contracts import parse_fundamental_artifact_model
 from src.agents.news.interface.contracts import (
@@ -51,6 +50,7 @@ _ModelT = TypeVar("_ModelT", bound=BaseModel)
 class ArtifactContractSpec:
     kind: str
     model: type[BaseModel]
+    dump_exclude_none: bool = False
 
 
 _ARTIFACT_MODEL_SPECS: dict[str, ArtifactContractSpec] = {
@@ -97,6 +97,7 @@ _ARTIFACT_MODEL_SPECS: dict[str, ArtifactContractSpec] = {
     ARTIFACT_KIND_DEBATE_FINAL_REPORT: ArtifactContractSpec(
         kind=ARTIFACT_KIND_DEBATE_FINAL_REPORT,
         model=DebateArtifactModel,
+        dump_exclude_none=True,
     ),
 }
 
@@ -124,7 +125,6 @@ def _canonicalize_financial_reports_payload(value: object) -> JSONObject:
 _CANONICALIZERS_BY_KIND: dict[str, Callable[[object], JSONObject]] = {
     ARTIFACT_KIND_FINANCIAL_REPORTS: _canonicalize_financial_reports_payload,
     ARTIFACT_KIND_NEWS_ANALYSIS_REPORT: parse_news_artifact_model,
-    ARTIFACT_KIND_DEBATE_FINAL_REPORT: parse_debate_artifact_model,
     ARTIFACT_KIND_TA_FULL_REPORT: parse_technical_artifact_model,
 }
 
@@ -180,8 +180,15 @@ def parse_artifact_data_json(
     *,
     context: str,
 ) -> JSONObject:
-    parsed = parse_artifact_data_model(kind, value, context=context)
-    dumped = parsed.model_dump(mode="json")
+    spec = _ARTIFACT_MODEL_SPECS.get(kind)
+    if spec is None:
+        raise TypeError(f"{context} has unsupported artifact kind: {kind!r}")
+    try:
+        parsed = spec.model.model_validate(value)
+    except ValidationError as exc:
+        raise TypeError(f"{context} validation failed: {exc}") from exc
+
+    dumped = parsed.model_dump(mode="json", exclude_none=spec.dump_exclude_none)
     if not isinstance(dumped, dict):
         raise TypeError(f"{context} must serialize to object")
     return cast(JSONObject, dumped)
@@ -230,7 +237,10 @@ def parse_news_items_for_debate(
             model=NewsItemsListArtifactData,
             context=context,
         )
-        return cast(list[JSONObject], parsed.news_items)
+        return cast(
+            list[JSONObject],
+            [item.model_dump(mode="json") for item in parsed.news_items],
+        )
 
     payload = parse_artifact_data_json(kind, value, context=context)
     news_items = payload.get("news_items")

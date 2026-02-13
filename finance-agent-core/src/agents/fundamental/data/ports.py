@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import cast
 
+from src.agents.fundamental.interface.contracts import FinancialReportModel
 from src.common.contracts import ARTIFACT_KIND_FINANCIAL_REPORTS
 from src.common.types import JSONObject
 from src.interface.artifact_api_models import FinancialReportsArtifactData
@@ -35,15 +35,13 @@ class FundamentalArtifactPort:
             context=f"artifact {artifact_id} financial_reports data",
         )
 
-    async def load_financial_reports(self, artifact_id: str) -> list[JSONObject] | None:
+    async def load_financial_report_models(
+        self, artifact_id: str
+    ) -> list[FinancialReportModel] | None:
         payload = await self.load_financial_reports_payload(artifact_id)
         if payload is None:
             return None
-        dumped = payload.model_dump(mode="json")
-        reports = dumped.get("financial_reports")
-        if not isinstance(reports, list):
-            raise TypeError(f"artifact {artifact_id} financial_reports must be a list")
-        return cast(list[JSONObject], reports)
+        return payload.financial_reports
 
 
 fundamental_artifact_port = FundamentalArtifactPort(

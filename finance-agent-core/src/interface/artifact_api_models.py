@@ -9,7 +9,11 @@ from src.agents.debate.interface.contracts import (
     EvidenceFactModel,
 )
 from src.agents.fundamental.interface.contracts import FinancialReportModel
-from src.agents.news.interface.contracts import NewsArtifactModel
+from src.agents.news.interface.contracts import (
+    FinancialNewsItemModel,
+    NewsArtifactModel,
+    NewsSearchResultItemModel,
+)
 from src.agents.technical.interface.contracts import TechnicalArtifactModel
 from src.common.contracts import (
     ARTIFACT_KIND_DEBATE_FACTS,
@@ -63,7 +67,7 @@ class TechnicalChartArtifactData(BaseModel):
 class SearchResultsArtifactData(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    raw_results: list[dict[str, object]]
+    raw_results: list[NewsSearchResultItemModel]
     formatted_results: str
 
 
@@ -84,7 +88,7 @@ class NewsArticleArtifactData(BaseModel):
 class NewsItemsListArtifactData(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    news_items: list[dict[str, object]]
+    news_items: list[FinancialNewsItemModel]
 
 
 class DebateFactsArtifactData(BaseModel):

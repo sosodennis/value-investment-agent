@@ -96,8 +96,19 @@ Constants:
 2. Mixing Pydantic model objects and unvalidated dicts in workflow state.
 3. Silent coercion to hide contract drift.
 4. Reintroducing direct artifact manager reads in node code.
+5. `application/use_cases.py` 作為純 re-export 聚合層（易造成命名/責任混亂）。
 
-## 9. Detailed Reference
+## 9. Application Naming Rules (Mandatory)
+
+1. `orchestrator.py`: 只做流程編排與節點轉移。
+2. `*_service.py`: 單一業務流程片段（可測、可重用）。
+3. `state_readers.py`: 只做 state extraction / typed read。
+4. `state_updates.py`: 只做 state update payload 組裝。
+5. `dto.py`: application layer DTO。
+6. `ports.py`: application 對外依賴介面。
+7. 禁止新增 `use_cases.py` 作為 alias/re-export facade；若已有歷史檔案，應逐步刪除並改為直接引用 service/state modules。
+
+## 10. Detailed Reference
 
 1. `docs/backend-canonicalization-flow.md` (detailed canonicalization and artifact flow)
 2. `docs/fundamental-reference-architecture.md` (concrete package-boundary example)

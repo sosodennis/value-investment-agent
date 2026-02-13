@@ -1,8 +1,15 @@
+from src.agents.fundamental.interface.contracts import FundamentalPreviewInputModel
 from src.agents.fundamental.interface.mappers import summarize_fundamental_for_preview
 
 
 def test_summarize_fundamental_for_preview_empty():
-    ctx = {"ticker": "AAPL", "status": "done"}
+    ctx = FundamentalPreviewInputModel(
+        ticker="AAPL",
+        company_name="AAPL",
+        sector="Unknown",
+        industry="Unknown",
+        status="done",
+    )
     preview = summarize_fundamental_for_preview(ctx)
 
     assert preview["ticker"] == "AAPL"
@@ -11,14 +18,15 @@ def test_summarize_fundamental_for_preview_empty():
 
 
 def test_summarize_fundamental_for_preview_with_reports():
-    ctx = {
-        "ticker": "TSLA",
-        "company_name": "Tesla, Inc.",
-        "model_type": "saas",
-        "sector": "Consumer Cyclical",
-        "industry": "Auto Manufacturers",
-        "valuation_score": 0.85,
-    }
+    ctx = FundamentalPreviewInputModel(
+        ticker="TSLA",
+        company_name="Tesla, Inc.",
+        model_type="saas",
+        sector="Consumer Cyclical",
+        industry="Auto Manufacturers",
+        status="done",
+        valuation_score=0.85,
+    )
 
     financial_reports = [
         {
@@ -41,7 +49,13 @@ def test_summarize_fundamental_for_preview_with_reports():
 
 
 def test_summarize_fundamental_for_preview_small_numbers():
-    ctx = {"ticker": "SMALL"}
+    ctx = FundamentalPreviewInputModel(
+        ticker="SMALL",
+        company_name="SMALL",
+        sector="Unknown",
+        industry="Unknown",
+        status="done",
+    )
     financial_reports = [
         {
             "base": {
