@@ -7,7 +7,9 @@ industry, SIC, financial signals, and data coverage.
 
 from dataclasses import dataclass
 
+from src.agents.fundamental.data.ports import FundamentalReportsAdapter
 from src.common.tools.logger import get_logger
+from src.common.types import JSONObject
 
 from ..structures import CompanyProfile, ValuationModel
 
@@ -169,18 +171,6 @@ def _normalize(text: str | None) -> str:
     return (text or "").strip().lower()
 
 
-def _extract_path(report: dict, path: str) -> float | str | None:
-    cur: object | None = report
-    for part in path.split("."):
-        if not isinstance(cur, dict):
-            return None
-        cur = cur.get(part)
-    if isinstance(cur, dict):
-        val = cur.get("value")
-        return val
-    return cur  # Could be None or scalar
-
-
 def _in_sic_ranges(sic: int | None, ranges: tuple[tuple[int, int], ...]) -> bool:
     if sic is None or not ranges:
         return False
@@ -208,13 +198,14 @@ def _calculate_cagr(values: list[float]) -> float | None:
 
 
 def _collect_signals(
-    profile: CompanyProfile, financial_reports: list[dict] | None
+    profile: CompanyProfile, financial_reports: list[JSONObject] | None
 ) -> SelectionSignals:
     sector = _normalize(profile.sector)
     industry = _normalize(profile.industry)
 
-    latest_report = financial_reports[0] if financial_reports else {}
-    sic_raw = _extract_path(latest_report, "base.sic_code")
+    adapter = FundamentalReportsAdapter(financial_reports or [])
+
+    sic_raw = adapter.latest_value("base.sic_code")
     sic = None
     if sic_raw is not None:
         try:
@@ -222,30 +213,18 @@ def _collect_signals(
         except (ValueError, TypeError):
             sic = None
 
-    net_income_val = _extract_path(latest_report, "base.net_income")
-    ocf_val = _extract_path(latest_report, "base.operating_cash_flow")
-    equity_val = _extract_path(latest_report, "base.total_equity")
-
-    net_income = (
-        float(net_income_val) if isinstance(net_income_val, int | float) else None
-    )
-    operating_cash_flow = float(ocf_val) if isinstance(ocf_val, int | float) else None
-    total_equity = float(equity_val) if isinstance(equity_val, int | float) else None
+    net_income = adapter.latest_number("base.net_income")
+    operating_cash_flow = adapter.latest_number("base.operating_cash_flow")
+    total_equity = adapter.latest_number("base.total_equity")
 
     if profile.is_profitable is not None:
         is_profitable = profile.is_profitable
     else:
         is_profitable = net_income > 0 if net_income is not None else None
 
-    revenue_series: list[float] = []
-    if financial_reports:
-        for rep in financial_reports:
-            rev_val = _extract_path(rep, "base.total_revenue")
-            if isinstance(rev_val, int | float):
-                revenue_series.append(float(rev_val))
+    revenue_series = adapter.numeric_series("base.total_revenue")
     revenue_cagr = _calculate_cagr(revenue_series)
 
-    data_coverage: dict[str, bool] = {}
     fields_to_check = {
         "base.total_revenue",
         "base.net_income",
@@ -254,8 +233,7 @@ def _collect_signals(
         "base.total_assets",
         "extension.ffo",
     }
-    for field in fields_to_check:
-        data_coverage[field] = _extract_path(latest_report, field) is not None
+    data_coverage = adapter.data_coverage(fields_to_check)
 
     return SelectionSignals(
         sector=sector,
@@ -337,7 +315,7 @@ def _evaluate_spec(spec: ModelSpec, signals: SelectionSignals) -> ModelCandidate
 
 
 def select_valuation_model(
-    profile: CompanyProfile, financial_reports: list[dict] | None = None
+    profile: CompanyProfile, financial_reports: list[JSONObject] | None = None
 ) -> ModelSelectionResult:
     """
     Select the appropriate valuation model based on company characteristics and data coverage.

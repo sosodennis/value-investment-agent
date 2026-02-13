@@ -76,6 +76,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Architecture boundary guard (no new violations)
+        run: python3 scripts/check_architecture_boundaries.py
+
       - name: Guard against enumNames fallback reintroduction
         run: |
           if grep -R --line-number "enumNames" finance-agent-core/src finance-agent-core/api frontend/src; then

@@ -1,4 +1,3 @@
-import math
 import time
 
 import pandas as pd
@@ -6,12 +5,29 @@ from langchain_core.messages import AIMessage
 from langgraph.graph import END
 from langgraph.types import Command
 
+from src.agents.technical.application.services import (
+    assemble_backtest_context,
+    assemble_semantic_finalize,
+    build_data_fetch_error_update,
+    build_data_fetch_success_update,
+    build_fracdiff_error_update,
+    build_fracdiff_preview,
+    build_fracdiff_success_update,
+    build_semantic_error_update,
+    build_semantic_success_update,
+    safe_float,
+    serialize_fracdiff_outputs,
+)
+from src.agents.technical.data.ports import technical_artifact_port
+from src.agents.technical.interface.mappers import summarize_ta_for_preview
+from src.common.contracts import (
+    ARTIFACT_KIND_TA_FULL_REPORT,
+    OUTPUT_KIND_TECHNICAL_ANALYSIS,
+)
 from src.common.tools.logger import get_logger
 from src.interface.canonical_serializers import canonicalize_technical_artifact_data
 from src.interface.schemas import ArtifactReference, build_artifact_payload
-from src.services.artifact_manager import artifact_manager
 
-from .mappers import summarize_ta_for_preview
 from .subgraph_state import (
     TechnicalAnalysisState,
 )
@@ -41,22 +57,11 @@ async def data_fetch_node(state: TechnicalAnalysisState) -> Command:
     [Node 1] Fetch historical daily OHLCV data via yfinance.
     """
     intent_ctx = state.get("intent_extraction", {})
-    resolved_ticker = intent_ctx.get("resolved_ticker") or state.get("ticker")
+    resolved_ticker = intent_ctx.get("resolved_ticker")
     if not resolved_ticker:
         logger.error("--- TA: No resolved ticker available, cannot proceed ---")
         return Command(
-            update={
-                "current_node": "data_fetch",
-                "internal_progress": {"data_fetch": "error"},
-                "node_statuses": {"technical_analysis": "error"},
-                "error_logs": [
-                    {
-                        "node": "data_fetch",
-                        "error": "No resolved ticker available",
-                        "severity": "error",
-                    }
-                ],
-            },
+            update=build_data_fetch_error_update("No resolved ticker available"),
             goto=END,
         )
 
@@ -68,36 +73,14 @@ async def data_fetch_node(state: TechnicalAnalysisState) -> Command:
     except Exception as e:
         logger.error(f"--- TA: Data fetch failed for {resolved_ticker}: {e} ---")
         return Command(
-            update={
-                "current_node": "data_fetch",
-                "internal_progress": {"data_fetch": "error"},
-                "node_statuses": {"technical_analysis": "error"},
-                "error_logs": [
-                    {
-                        "node": "data_fetch",
-                        "error": f"Data fetch failed: {str(e)}",
-                        "severity": "error",
-                    }
-                ],
-            },
+            update=build_data_fetch_error_update(f"Data fetch failed: {str(e)}"),
             goto=END,
         )
 
     if df is None or df.empty:
         logger.warning(f"⚠️  Could not fetch data for {resolved_ticker}")
         return Command(
-            update={
-                "current_node": "data_fetch",
-                "internal_progress": {"data_fetch": "error"},
-                "node_statuses": {"technical_analysis": "error"},
-                "error_logs": [
-                    {
-                        "node": "data_fetch",
-                        "error": "Empty data returned from provider",
-                        "severity": "error",
-                    }
-                ],
-            },
+            update=build_data_fetch_error_update("Empty data returned from provider"),
             goto=END,
         )
 
@@ -114,8 +97,10 @@ async def data_fetch_node(state: TechnicalAnalysisState) -> Command:
         .to_dict(),
     }
 
-    price_artifact_id = await artifact_manager.save_artifact(
-        data=price_data, artifact_type="price_series", key_prefix=resolved_ticker
+    price_artifact_id = await technical_artifact_port.save_price_series(
+        data=price_data,
+        produced_by="technical_analysis.data_fetch",
+        key_prefix=resolved_ticker,
     )
 
     # [NEW] Emit preliminary artifact for real-time UI
@@ -128,25 +113,18 @@ async def data_fetch_node(state: TechnicalAnalysisState) -> Command:
         "strength_display": "Strength: N/A",
     }
     artifact = build_artifact_payload(
+        kind=OUTPUT_KIND_TECHNICAL_ANALYSIS,
         summary=f"Technical Analysis: Data fetched for {resolved_ticker}",
         preview=preview,
         reference=None,
     )
 
     return Command(
-        update={
-            "technical_analysis": {
-                "price_artifact_id": price_artifact_id,
-                "ticker": resolved_ticker,
-                "artifact": artifact,
-            },
-            "current_node": "data_fetch",
-            "internal_progress": {
-                "data_fetch": "done",
-                "fracdiff_compute": "running",
-            },
-            "node_statuses": {"technical_analysis": "running"},
-        },
+        update=build_data_fetch_success_update(
+            price_artifact_id=price_artifact_id,
+            resolved_ticker=resolved_ticker,
+            artifact=artifact,
+        ),
         goto="fracdiff_compute",
     )
 
@@ -165,48 +143,23 @@ async def fracdiff_compute_node(state: TechnicalAnalysisState) -> Command:
             "--- TA: No price artifact ID available for FracDiff computation ---"
         )
         return Command(
-            update={
-                "current_node": "fracdiff_compute",
-                "internal_progress": {"fracdiff_compute": "error"},
-                "node_statuses": {"technical_analysis": "error"},
-                "error_logs": [
-                    {
-                        "node": "fracdiff_compute",
-                        "error": "Missing price artifact ID",
-                        "severity": "error",
-                    }
-                ],
-            },
+            update=build_fracdiff_error_update("Missing price artifact ID"),
             goto=END,
         )
 
     try:
-        price_artifact = await artifact_manager.get_artifact(price_artifact_id)
-        if not price_artifact:
+        price_data = await technical_artifact_port.load_price_series(price_artifact_id)
+        if price_data is None:
             logger.error(f"--- TA: Price artifact {price_artifact_id} not found ---")
             return Command(
-                update={
-                    "current_node": "fracdiff_compute",
-                    "internal_progress": {"fracdiff_compute": "error"},
-                    "node_statuses": {"technical_analysis": "error"},
-                    "error_logs": [
-                        {
-                            "node": "fracdiff_compute",
-                            "error": "Price artifact not found in store",
-                            "severity": "error",
-                        }
-                    ],
-                },
+                update=build_fracdiff_error_update("Price artifact not found in store"),
                 goto=END,
             )
 
-        price_dict = price_artifact.data.get("price_series")
-        volume_dict = price_artifact.data.get("volume_series")
-
-        prices = pd.Series(price_dict)
+        prices = pd.Series(price_data.price_series)
         prices.index = pd.to_datetime(prices.index)
 
-        volumes = pd.Series(volume_dict)
+        volumes = pd.Series(price_data.volume_series)
         volumes.index = pd.to_datetime(volumes.index)
 
         fd_series, optimal_d, window_length, adf_stat, adf_pvalue = (
@@ -221,115 +174,65 @@ async def fracdiff_compute_node(state: TechnicalAnalysisState) -> Command:
         macd_data = calculate_fd_macd(fd_series)
         obv_data = calculate_fd_obv(prices, volumes)
 
-        def safe_float(val):
-            try:
-                f_val = float(val)
-                if math.isnan(f_val):
-                    return None
-                return f_val
-            except (ValueError, TypeError):
-                return None
-
-        bollinger_serializable = {
-            "upper": safe_float(bollinger_data["upper"]),
-            "middle": safe_float(bollinger_data["middle"]),
-            "lower": safe_float(bollinger_data["lower"]),
-            "state": bollinger_data["state"],
-            "bandwidth": safe_float(bollinger_data["bandwidth"]),
-        }
-
-        stat_strength_serializable = {
-            "value": safe_float(stat_strength_data["value"]),
-        }
-
-        obv_serializable = {
-            "raw_obv_val": safe_float(obv_data["raw_obv_val"]),
-            "fd_obv_z": safe_float(obv_data["fd_obv_z"]),
-            "optimal_d": safe_float(obv_data["optimal_d"]),
-            "state": obv_data["state"],
-        }
-
-        fd_dict = {
-            (k.strftime("%Y-%m-%d") if isinstance(k, pd.Timestamp) else k): safe_float(
-                v
-            )
-            for k, v in fd_series.to_dict().items()
-        }
-        z_dict = {
-            (k.strftime("%Y-%m-%d") if isinstance(k, pd.Timestamp) else k): safe_float(
-                v
-            )
-            for k, v in z_score_series.to_dict().items()
-        }
+        serialization = serialize_fracdiff_outputs(
+            fd_series=fd_series,
+            z_score_series=z_score_series,
+            bollinger_data=bollinger_data,
+            stat_strength_data=stat_strength_data,
+            obv_data=obv_data,
+        )
 
         chart_data = {
-            "fracdiff_series": fd_dict,
-            "z_score_series": z_dict,
+            "fracdiff_series": serialization.fracdiff_series,
+            "z_score_series": serialization.z_score_series,
             "indicators": {
-                "bollinger": bollinger_serializable,
-                "obv": obv_serializable,
+                "bollinger": serialization.bollinger,
+                "obv": serialization.obv,
             },
         }
 
-        chart_data_id = await artifact_manager.save_artifact(
+        chart_data_id = await technical_artifact_port.save_chart_data(
             data=chart_data,
-            artifact_type="ta_chart_data",
+            produced_by="technical_analysis.fracdiff_compute",
             key_prefix=state.get("ticker"),
         )
     except Exception as e:
         logger.error(f"--- TA: FracDiff computation crash: {e} ---", exc_info=True)
         return Command(
-            update={
-                "current_node": "fracdiff_compute",
-                "internal_progress": {"fracdiff_compute": "error"},
-                "node_statuses": {"technical_analysis": "error"},
-                "error_logs": [
-                    {
-                        "node": "fracdiff_compute",
-                        "error": f"Computation crashed: {str(e)}",
-                        "severity": "error",
-                    }
-                ],
-            },
+            update=build_fracdiff_error_update(f"Computation crashed: {str(e)}"),
             goto=END,
         )
 
-    preview = {
-        "ticker": state.get("ticker", "N/A"),
-        "latest_price_display": f"${float(prices.iloc[-1]):,.2f}",
-        "signal_display": "🧬 COMPUTING...",
-        "z_score_display": f"Z: {float(z_score):+.2f}",
-        "optimal_d_display": f"d={float(optimal_d):.2f}",
-        "strength_display": f"Strength: {float(stat_strength_data['value']):.1f}",
-    }
+    ticker_value = str(state.get("ticker", "N/A"))
+    preview = build_fracdiff_preview(
+        ticker=ticker_value,
+        latest_price=prices.iloc[-1],
+        z_score=z_score,
+        optimal_d=optimal_d,
+        statistical_strength=serialization.stat_strength.get("value"),
+    )
     artifact = build_artifact_payload(
+        kind=OUTPUT_KIND_TECHNICAL_ANALYSIS,
         summary=f"Technical Analysis: Patterns computed for {state.get('ticker')}",
         preview=preview,
         reference=None,
     )
 
     return Command(
-        update={
-            "technical_analysis": {
-                "latest_price": safe_float(prices.iloc[-1]),
-                "optimal_d": safe_float(optimal_d),
-                "z_score_latest": safe_float(z_score),
-                "chart_data_id": chart_data_id,
-                "window_length": int(window_length),
-                "adf_statistic": safe_float(adf_stat),
-                "adf_pvalue": safe_float(adf_pvalue),
-                "bollinger": bollinger_serializable,
-                "statistical_strength_val": stat_strength_serializable["value"],
-                "macd": macd_data,
-                "obv": obv_serializable,
-                "artifact": artifact,
-            },
-            "current_node": "fracdiff_compute",
-            "internal_progress": {
-                "fracdiff_compute": "done",
-                "semantic_translate": "running",
-            },
-        },
+        update=build_fracdiff_success_update(
+            latest_price=safe_float(prices.iloc[-1]),
+            optimal_d=safe_float(optimal_d),
+            z_score_latest=safe_float(z_score),
+            chart_data_id=chart_data_id,
+            window_length=int(window_length),
+            adf_statistic=safe_float(adf_stat),
+            adf_pvalue=safe_float(adf_pvalue),
+            bollinger=serialization.bollinger,
+            statistical_strength_val=serialization.stat_strength["value"],
+            macd=macd_data,
+            obv=serialization.obv,
+            artifact=artifact,
+        ),
         goto="semantic_translate",
     )
 
@@ -342,26 +245,28 @@ async def semantic_translate_node(state: TechnicalAnalysisState) -> Command:
 
     ctx = state.get("technical_analysis", {})
     intent_ctx = state.get("intent_extraction", {})
-    ticker = intent_ctx.get("resolved_ticker") or state.get("ticker")
+    ticker = intent_ctx.get("resolved_ticker")
+
+    if not ticker:
+        logger.error("--- TA: Missing resolved ticker for semantic translation ---")
+        error_update = build_semantic_error_update(
+            "Missing intent_extraction.resolved_ticker"
+        )
+        return Command(
+            update=error_update.update,
+            goto=END,
+        )
 
     optimal_d = ctx.get("optimal_d")
     z_score = ctx.get("z_score_latest")
 
     if optimal_d is None or z_score is None:
         logger.error("--- TA: No FracDiff metrics available for translation ---")
+        error_update = build_semantic_error_update(
+            "No FracDiff metrics available for translation"
+        )
         return Command(
-            update={
-                "current_node": "semantic_translate",
-                "internal_progress": {"semantic_translate": "error"},
-                "node_statuses": {"technical_analysis": "error"},
-                "error_logs": [
-                    {
-                        "node": "semantic_translate",
-                        "error": "No FracDiff metrics available for translation",
-                        "severity": "error",
-                    }
-                ],
-            },
+            update=error_update.update,
             goto=END,
         )
 
@@ -375,62 +280,25 @@ async def semantic_translate_node(state: TechnicalAnalysisState) -> Command:
             obv_data=ctx.get("obv", {"state": "NEUTRAL", "fd_obv_z": 0.0}),
         )
 
-        try:
-            price_artifact_id = ctx.get("price_artifact_id")
-            chart_artifact_id = ctx.get("chart_data_id")
-
-            price_artifact = await artifact_manager.get_artifact(price_artifact_id)
-            chart_artifact = await artifact_manager.get_artifact(chart_artifact_id)
-
-            if not price_artifact or not chart_artifact:
-                raise ValueError("Artifacts not found")
-
-            price_dict = price_artifact.data.get("price_series")
-            prices = pd.Series(price_dict)
-            prices.index = pd.to_datetime(prices.index)
-
-            vol_dict = price_artifact.data.get("volume_series")
-            volumes = pd.Series(vol_dict)
-            volumes.index = pd.to_datetime(volumes.index)
-
-            fd_dict = chart_artifact.data.get("fracdiff_series")
-            fd_series = pd.Series(fd_dict)
-            fd_series.index = pd.to_datetime(fd_series.index)
-
-            z_score_series = pd.Series(chart_artifact.data.get("z_score_series"))
-            z_score_series.index = pd.to_datetime(z_score_series.index)
-
-            stat_strength_full = calculate_statistical_strength(z_score_series)
-            bb_full = calculate_fd_bollinger(fd_series)
-            obv_full = calculate_fd_obv(prices, volumes)
-
-            rf_series = fetch_risk_free_series(period="5y")
-
-            backtester = CombinedBacktester(
-                price_series=prices,
-                z_score_series=z_score_series,
-                stat_strength_dict=stat_strength_full,
-                obv_dict=obv_full,
-                bollinger_dict=bb_full,
-                rf_series=rf_series,
-            )
-
-            bt_results = backtester.run(transaction_cost=0.0005)
-            backtest_context = format_backtest_for_llm(bt_results)
-
-            try:
-                wfa_optimizer = WalkForwardOptimizer(backtester)
-                wfa_results = wfa_optimizer.run(train_window=252, test_window=63)
-                wfa_context = format_wfa_for_llm(wfa_results)
-            except Exception:
-                wfa_context = ""
-
-        except Exception as e:
-            logger.warning(
-                f"Backtesting failed: {e}. Proceeding without statistical verification."
-            )
-            backtest_context = ""
-            wfa_context = ""
+        price_artifact_id = ctx.get("price_artifact_id")
+        chart_artifact_id = ctx.get("chart_data_id")
+        backtest_result = await assemble_backtest_context(
+            technical_port=technical_artifact_port,
+            price_artifact_id=price_artifact_id,
+            chart_artifact_id=chart_artifact_id,
+            calculate_statistical_strength_fn=calculate_statistical_strength,
+            calculate_fd_bollinger_fn=calculate_fd_bollinger,
+            calculate_fd_obv_fn=calculate_fd_obv,
+            fetch_risk_free_series_fn=fetch_risk_free_series,
+            backtester_factory=CombinedBacktester,
+            format_backtest_for_llm_fn=format_backtest_for_llm,
+            wfa_optimizer_factory=WalkForwardOptimizer,
+            format_wfa_for_llm_fn=format_wfa_for_llm,
+        )
+        backtest_context = backtest_result.backtest_context
+        wfa_context = backtest_result.wfa_context
+        price_data = backtest_result.price_data
+        chart_data = backtest_result.chart_data
 
         llm_interpretation = await generate_interpretation(
             tags_dict, ticker, backtest_context, wfa_context
@@ -438,74 +306,24 @@ async def semantic_translate_node(state: TechnicalAnalysisState) -> Command:
 
         try:
             preview = summarize_ta_for_preview(ctx)
-            direction = str(tags_dict["direction"]).upper()
-
-            statistical_state = "equilibrium"
-            z_abs = abs(ctx.get("z_score_latest", 0))
-            if z_abs >= 2.0:
-                statistical_state = "anomaly"
-            elif z_abs >= 1.0:
-                statistical_state = "deviating"
-
-            memory_strength = "balanced"
-            opt_d = ctx.get("optimal_d", 0.5)
-            if opt_d < 0.3:
-                memory_strength = "structurally_stable"
-            elif opt_d > 0.6:
-                memory_strength = "fragile"
-
-            raw_data = {}
-            if chart_artifact_id:
-                chart_artifact = await artifact_manager.get_artifact(chart_artifact_id)
-                if chart_artifact:
-                    raw_data = {
-                        "price_series": price_dict if "price_dict" in locals() else {},
-                        "fracdiff_series": chart_artifact.data.get("fracdiff_series"),
-                        "z_score_series": chart_artifact.data.get("z_score_series"),
-                    }
-
-            from datetime import datetime
-
-            full_report_data_raw = {
-                "ticker": ticker,
-                "timestamp": datetime.now().isoformat(),
-                "frac_diff_metrics": {
-                    "optimal_d": ctx.get("optimal_d"),
-                    "window_length": ctx.get("window_length"),
-                    "adf_statistic": ctx.get("adf_statistic"),
-                    "adf_pvalue": ctx.get("adf_pvalue"),
-                    "memory_strength": memory_strength,
-                },
-                "signal_state": {
-                    "z_score": ctx.get("z_score_latest"),
-                    "statistical_state": statistical_state,
-                    "direction": direction,
-                    "risk_level": tags_dict.get("risk_level", "MEDIUM").lower(),
-                    "confluence": {
-                        "bollinger_state": ctx.get("bollinger", {}).get(
-                            "state", "INSIDE"
-                        ),
-                        "macd_momentum": ctx.get("macd", {}).get(
-                            "momentum_state", "NEUTRAL"
-                        ),
-                        "obv_state": ctx.get("obv", {}).get("state", "NEUTRAL"),
-                        "statistical_strength": ctx.get(
-                            "statistical_strength_val", 50.0
-                        ),
-                    },
-                },
-                "semantic_tags": tags_dict.get("tags", []),
-                "llm_interpretation": llm_interpretation,
-                "raw_data": raw_data,
-            }
+            semantic_result = assemble_semantic_finalize(
+                ticker=ticker,
+                technical_context=ctx,
+                tags_dict=tags_dict,
+                llm_interpretation=llm_interpretation,
+                price_data=price_data,
+                chart_data=chart_data,
+            )
+            direction = semantic_result.direction
+            opt_d = semantic_result.opt_d
             full_report_data = canonicalize_technical_artifact_data(
-                full_report_data_raw
+                semantic_result.full_report_data_raw
             )
 
             timestamp_int = int(time.time())
-            report_id = await artifact_manager.save_artifact(
+            report_id = await technical_artifact_port.save_full_report(
                 data=full_report_data,
-                artifact_type="ta_full_report",
+                produced_by="technical_analysis.semantic_translate",
                 key_prefix=f"ta_{ticker}_{timestamp_int}",
             )
 
@@ -514,63 +332,45 @@ async def semantic_translate_node(state: TechnicalAnalysisState) -> Command:
                 reference = ArtifactReference(
                     artifact_id=report_id,
                     download_url=f"/api/artifacts/{report_id}",
-                    type="ta_full_report",
+                    type=ARTIFACT_KIND_TA_FULL_REPORT,
                 )
 
             artifact = build_artifact_payload(
+                kind=OUTPUT_KIND_TECHNICAL_ANALYSIS,
                 summary=f"Technical Analysis: {direction} (d={opt_d:.2f})",
                 preview=preview,
                 reference=reference,
             )
+            ta_update = semantic_result.ta_update
+            ta_update["artifact"] = artifact
         except Exception as e:
             logger.error(f"Failed to generate artifact in node: {e}")
             artifact = None
+            ta_update = {
+                "signal": tags_dict["direction"],
+                "statistical_strength": tags_dict["statistical_state"],
+                "risk_level": tags_dict["risk_level"],
+                "llm_interpretation": llm_interpretation,
+                "semantic_tags": tags_dict["tags"],
+                "memory_strength": tags_dict["memory_strength"],
+            }
 
-        ta_update = {
-            "signal": tags_dict["direction"],
-            "statistical_strength": tags_dict["statistical_state"],
-            "risk_level": tags_dict["risk_level"],
-            "llm_interpretation": llm_interpretation,
-            "semantic_tags": tags_dict["tags"],
-            "memory_strength": tags_dict["memory_strength"],
-        }
-        if artifact:
-            ta_update["artifact"] = artifact
-
-        return Command(
-            update={
-                "technical_analysis": ta_update,
-                "current_node": "semantic_translate",
-                "internal_progress": {"semantic_translate": "done"},
-                "node_statuses": {"technical_analysis": "done"},
-                "messages": [
-                    AIMessage(
-                        content="",
-                        additional_kwargs={
-                            "type": "technical_analysis",
-                            "agent_id": "technical_analysis",
-                            "status": "done",
-                        },
-                    )
-                ],
-            },
-            goto=END,
-        )
+        success_update = build_semantic_success_update(ta_update)
+        success_update.update["messages"] = [
+            AIMessage(
+                content="",
+                additional_kwargs={
+                    "type": "technical_analysis",
+                    "agent_id": "technical_analysis",
+                    "status": "done",
+                },
+            )
+        ]
+        return Command(update=success_update.update, goto=END)
 
     except Exception as e:
         logger.error(f"--- TA: Semantic translation failed: {e} ---", exc_info=True)
-        return Command(
-            update={
-                "current_node": "semantic_translate",
-                "internal_progress": {"semantic_translate": "error"},
-                "node_statuses": {"technical_analysis": "error"},
-                "error_logs": [
-                    {
-                        "node": "semantic_translate",
-                        "error": f"Semantic translation failed: {str(e)}",
-                        "severity": "error",
-                    }
-                ],
-            },
-            goto=END,
+        error_update = build_semantic_error_update(
+            f"Semantic translation failed: {str(e)}"
         )
+        return Command(update=error_update.update, goto=END)

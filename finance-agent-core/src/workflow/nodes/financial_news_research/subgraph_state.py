@@ -48,9 +48,8 @@ class FinancialNewsState(TypedDict):
     Internal state for financial news research subgraph.
     Converted to TypedDict per Engineering Charter v3.1 §3.1.
 
-    NOTE: Intermediate pipeline data (raw_results, formatted_results, etc.)
-    is temporarily kept for backward compatibility with existing graph nodes.
-    These will be removed when graph nodes are refactored to use Artifact Store.
+    Intermediate pipeline payloads are persisted via Artifact Store IDs only.
+    No in-state mirror payloads are allowed.
     """
 
     # --- From Input ---

@@ -1,9 +1,11 @@
 from typing import cast
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
+from src.common.contracts import AGENT_OUTPUT_VERSION
 from src.common.types import (
     AgentOutputArtifactPayload,
+    AgentOutputKind,
     ArtifactReferencePayload,
     JSONObject,
 )
@@ -41,6 +43,18 @@ class AgentOutputArtifact(BaseModel):
     in LangGraph checkpoints.
     """
 
+    kind: AgentOutputKind = Field(
+        ...,
+        description=(
+            "Output contract kind discriminator "
+            "(e.g. 'fundamental_analysis.output')."
+        ),
+    )
+    version: str = Field(
+        default=AGENT_OUTPUT_VERSION,
+        description="Output contract version. Must be 'v1'.",
+    )
+
     # L1: Message bubble text
     summary: str = Field(
         ..., description="L1: Short summary for message bubble (<500 chars)"
@@ -58,6 +72,13 @@ class AgentOutputArtifact(BaseModel):
         description="L3: Cold data pointer for async loading. Points to Artifact Store.",
     )
 
+    @field_validator("version", mode="before")
+    @classmethod
+    def _version(cls, value: object) -> str:
+        if value != AGENT_OUTPUT_VERSION:
+            raise TypeError(f"Agent output version must be {AGENT_OUTPUT_VERSION!r}")
+        return AGENT_OUTPUT_VERSION
+
 
 def to_artifact_reference_payload(
     reference: ArtifactReference,
@@ -69,12 +90,29 @@ def to_artifact_payload(artifact: AgentOutputArtifact) -> AgentOutputArtifactPay
     return cast(AgentOutputArtifactPayload, artifact.model_dump(mode="json"))
 
 
+def parse_agent_output_artifact_payload(
+    value: object, context: str = "agent output artifact"
+) -> AgentOutputArtifactPayload:
+    try:
+        model = AgentOutputArtifact.model_validate(value)
+    except ValidationError as exc:
+        raise TypeError(f"{context} validation failed: {exc}") from exc
+    payload = model.model_dump(mode="json")
+    return cast(AgentOutputArtifactPayload, payload)
+
+
 def build_artifact_payload(
+    kind: AgentOutputKind,
     summary: str,
     preview: JSONObject | None,
     reference: ArtifactReference | None,
+    version: str = AGENT_OUTPUT_VERSION,
 ) -> AgentOutputArtifactPayload:
     artifact = AgentOutputArtifact(
-        summary=summary, preview=preview, reference=reference
+        kind=kind,
+        version=version,
+        summary=summary,
+        preview=preview,
+        reference=reference,
     )
     return to_artifact_payload(artifact)

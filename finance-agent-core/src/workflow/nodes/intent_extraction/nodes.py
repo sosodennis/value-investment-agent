@@ -5,6 +5,7 @@ Handles extraction, searching, decision, and clarification for ticker resolution
 
 from langgraph.types import Command, interrupt
 
+from src.common.contracts import OUTPUT_KIND_INTENT_EXTRACTION
 from src.common.tools.logger import get_logger
 from src.interface.schemas import build_artifact_payload
 
@@ -262,7 +263,10 @@ def decision_node(state: IntentExtractionState) -> Command:
         # 2. Construct Artifact
         summary = f"已確認分析標的: {resolved_ticker}"
         artifact = build_artifact_payload(
-            summary=summary, preview=preview, reference=None
+            kind=OUTPUT_KIND_INTENT_EXTRACTION,
+            summary=summary,
+            preview=preview,
+            reference=None,
         )
 
         # 3. Inject artifact
@@ -364,7 +368,10 @@ def clarification_node(state: IntentExtractionState) -> Command:
             preview = summarize_intent_for_preview(intent_ctx)
             summary = f"已確認分析標的: {selected_symbol}"
             artifact = build_artifact_payload(
-                summary=summary, preview=preview, reference=None
+                kind=OUTPUT_KIND_INTENT_EXTRACTION,
+                summary=summary,
+                preview=preview,
+                reference=None,
             )
             intent_ctx["artifact"] = artifact
 

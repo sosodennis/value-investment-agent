@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from typing import TypeAlias
+from typing import Literal, TypeAlias
 
 from typing_extensions import TypedDict
+
+from src.common.contracts import AgentOutputKind
 
 JSONScalar: TypeAlias = str | int | float | bool | None
 JSONValue: TypeAlias = JSONScalar | list["JSONValue"] | dict[str, "JSONValue"]
@@ -17,6 +19,8 @@ class ArtifactReferencePayload(TypedDict):
 
 
 class AgentOutputArtifactPayload(TypedDict):
+    kind: AgentOutputKind
+    version: Literal["v1"]
     summary: str
     preview: JSONObject | None
     reference: ArtifactReferencePayload | None

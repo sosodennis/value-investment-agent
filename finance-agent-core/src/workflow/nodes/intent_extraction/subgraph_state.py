@@ -37,7 +37,7 @@ class IntentExtractionOutput(BaseModel):
 class IntentExtractionState(TypedDict):
     """
     Internal state for intent extraction subgraph.
-    Uses TypedDict for performance and LangGraph native compatibility.
+    Uses TypedDict for performance and native LangGraph state reducers.
     """
 
     # --- From Input ---

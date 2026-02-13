@@ -24,6 +24,10 @@ from src.common.tools.logger import get_logger
 from src.common.types import InterruptResumePayload, JSONObject
 from src.infrastructure.database import init_db
 from src.interface.adapters import adapt_langgraph_event, create_interrupt_event
+from src.interface.artifact_api_models import (
+    ArtifactApiResponse,
+    validate_artifact_api_response,
+)
 from src.interface.protocol import AgentEvent
 from src.interface.schemas import AgentOutputArtifact
 from src.services.artifact_manager import artifact_manager
@@ -488,17 +492,22 @@ async def get_agent_statuses(request: Request, thread_id: str):
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@app.get("/api/artifacts/{artifact_id}")
+@app.get("/api/artifacts/{artifact_id}", response_model=ArtifactApiResponse)
 async def get_artifact(artifact_id: str):
     """Retrieve artifact data with HTTP caching."""
     from fastapi.responses import JSONResponse
 
-    artifact = await artifact_manager.get_artifact(artifact_id)
-    if not artifact:
+    envelope = await artifact_manager.get_artifact_envelope(artifact_id)
+    if envelope is None:
         raise HTTPException(status_code=404, detail="Artifact not found")
 
+    validated = validate_artifact_api_response(
+        envelope.model_dump(mode="json"),
+        context=f"artifact {artifact_id}",
+    )
+
     return JSONResponse(
-        content=artifact.data,
+        content=validated.model_dump(mode="json"),
         headers={
             "Cache-Control": "public, max-age=3600",
             "ETag": f'"{artifact_id}"',

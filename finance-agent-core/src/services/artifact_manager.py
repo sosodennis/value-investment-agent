@@ -1,5 +1,13 @@
 import uuid
 
+from src.interface.artifact_envelope import (
+    ArtifactEnvelope,
+    ArtifactPayload,
+    build_artifact_envelope,
+    parse_artifact_envelope,
+    parse_artifact_payload,
+)
+
 from ..infrastructure.database import AsyncSessionLocal
 from ..infrastructure.models import Artifact
 
@@ -13,8 +21,9 @@ class ArtifactManager:
 
     @staticmethod
     async def save_artifact(
-        data: dict | list,
+        data: ArtifactPayload,
         artifact_type: str,
+        produced_by: str,
         key_prefix: str | None = None,
         thread_id: str | None = None,
     ) -> str:
@@ -22,8 +31,9 @@ class ArtifactManager:
         Save an artifact to the database.
 
         Args:
-            data: The JSON-serializable data to store
-            artifact_type: Type identifier (e.g., "news_items", "financial_statements")
+            data: Canonical artifact payload (stored inside ArtifactEnvelope.data)
+            artifact_type: Artifact kind identifier
+            produced_by: Node identity that produced this artifact
             key_prefix: Optional semantic key prefix for debugging (e.g., "AAPL")
             thread_id: Optional thread ID to associate with this artifact
 
@@ -39,6 +49,11 @@ class ArtifactManager:
             )
         """
         artifact_id = str(uuid.uuid4())
+        envelope = build_artifact_envelope(
+            kind=artifact_type,
+            produced_by=produced_by,
+            data=data,
+        )
 
         # Generate semantic key if prefix provided
         key = None
@@ -51,7 +66,7 @@ class ArtifactManager:
                 key=key,
                 thread_id=thread_id,
                 type=artifact_type,
-                data=data,
+                data=envelope.model_dump(mode="json"),
             )
             session.add(artifact)
             await session.commit()
@@ -73,6 +88,26 @@ class ArtifactManager:
         async with AsyncSessionLocal() as session:
             artifact = await session.get(Artifact, artifact_id)
             return artifact
+
+    @staticmethod
+    async def get_artifact_envelope(artifact_id: str) -> ArtifactEnvelope | None:
+        artifact = await ArtifactManager.get_artifact(artifact_id)
+        if artifact is None:
+            return None
+        return parse_artifact_envelope(artifact.data, f"artifact {artifact_id}")
+
+    @staticmethod
+    async def get_artifact_data(
+        artifact_id: str, expected_kind: str | None = None
+    ) -> ArtifactPayload | None:
+        artifact = await ArtifactManager.get_artifact(artifact_id)
+        if artifact is None:
+            return None
+        return parse_artifact_payload(
+            artifact.data,
+            context=f"artifact {artifact_id}",
+            expected_kind=expected_kind,
+        )
 
 
 # Singleton instance

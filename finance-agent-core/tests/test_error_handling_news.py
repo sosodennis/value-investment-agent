@@ -41,11 +41,9 @@ async def test_selector_node_error_log():
     }
 
     with patch(
-        "src.services.artifact_manager.artifact_manager.get_artifact"
+        "src.services.artifact_manager.artifact_manager.get_artifact_data"
     ) as mock_get:
-        mock_get.return_value = MagicMock(
-            data={"raw_results": [], "formatted_results": ""}
-        )
+        mock_get.return_value = {"raw_results": [], "formatted_results": ""}
 
         with patch(
             "src.workflow.nodes.financial_news_research.nodes.get_llm"
@@ -77,7 +75,7 @@ async def test_fetch_node_error_log():
     # We simulate an artifact store error which should now be caught
     # and added to article_errors, making the status degraded.
     with patch(
-        "src.services.artifact_manager.artifact_manager.get_artifact"
+        "src.services.artifact_manager.artifact_manager.get_artifact_data"
     ) as mock_get:
         mock_get.side_effect = Exception("Artifact Store Error")
 
@@ -99,12 +97,14 @@ async def test_analyst_node_error_log():
         "financial_news_research": {"news_items_artifact_id": "n1"},
     }
 
-    async def mock_get_artifact(id):
-        return MagicMock(data={"news_items": [{"title": "T1", "link": "L1"}]})
+    async def mock_get_artifact_data(_artifact_id, expected_kind=None):
+        if expected_kind == "news_items_list":
+            return {"news_items": [{"title": "T1", "link": "L1"}]}
+        return None
 
     with patch(
-        "src.services.artifact_manager.artifact_manager.get_artifact",
-        side_effect=mock_get_artifact,
+        "src.services.artifact_manager.artifact_manager.get_artifact_data",
+        side_effect=mock_get_artifact_data,
     ):
         with patch(
             "src.workflow.nodes.financial_news_research.nodes.get_llm"

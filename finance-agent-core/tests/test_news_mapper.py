@@ -1,8 +1,6 @@
 import json
 
-from src.workflow.nodes.financial_news_research.mappers import (
-    summarize_news_for_preview,
-)
+from src.agents.news.interface.mappers import summarize_news_for_preview
 
 
 def test_summarize_news_for_preview_success():

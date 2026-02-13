@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { StandardAgentOutput } from './index';
+import { AgentOutputKind, StandardAgentOutput } from './index';
 import { adaptAgentOutput } from './output-adapter';
 
-const toOutput = (value: unknown): StandardAgentOutput =>
+const toOutput = (
+    value: unknown,
+    kind: AgentOutputKind = 'generic.output'
+): StandardAgentOutput =>
     ({
+        kind,
+        version: 'v1',
         summary: 'ok',
         preview: value,
     }) as unknown as StandardAgentOutput;
@@ -13,6 +18,8 @@ describe('output adapter', () => {
         const viewModel = adaptAgentOutput(
             'fundamental_analysis',
             {
+                kind: 'fundamental_analysis.output',
+                version: 'v1',
                 summary: 'done',
                 reference: {
                     artifact_id: 'artifact_1',
@@ -43,6 +50,8 @@ describe('output adapter', () => {
         const viewModel = adaptAgentOutput(
             'financial_news_research',
             {
+                kind: 'financial_news_research.output',
+                version: 'v1',
                 summary: 'done',
                 preview: {
                     sentiment_display: 'Bullish',
@@ -63,7 +72,7 @@ describe('output adapter', () => {
     it('adapts unknown agent to generic preview record', () => {
         const viewModel = adaptAgentOutput(
             'custom_agent',
-            toOutput({ custom: 'value' }),
+            toOutput({ custom: 'value' }, 'generic.output'),
             'adapter.custom'
         );
         expect(viewModel.kind).toBe('generic');
@@ -75,7 +84,27 @@ describe('output adapter', () => {
 
     it('rejects invalid generic preview shape', () => {
         expect(() =>
-            adaptAgentOutput('custom_agent', toOutput(123), 'adapter.custom')
+            adaptAgentOutput(
+                'custom_agent',
+                toOutput(123, 'generic.output'),
+                'adapter.custom'
+            )
         ).toThrowError('adapter.custom.preview must be an object.');
+    });
+
+    it('routes by output kind instead of agent id', () => {
+        const viewModel = adaptAgentOutput(
+            'custom_agent',
+            toOutput(
+                {
+                    ticker: 'AAPL',
+                    valuation_score: 70,
+                    key_metrics: {},
+                },
+                'fundamental_analysis.output'
+            ),
+            'adapter.by_kind'
+        );
+        expect(viewModel.kind).toBe('fundamental_analysis');
     });
 });

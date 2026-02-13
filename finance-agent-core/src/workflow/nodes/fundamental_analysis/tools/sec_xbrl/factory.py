@@ -1181,7 +1181,7 @@ class FinancialReportFactory:
             )
 
         # CapEx: PaymentsToAcquirePropertyPlantAndEquipment
-        # TODO: Add filtering by Statement Type to avoid "IncurredButNotYetPaid" issues.
+        # Note: statement-type filtering can further reduce false-positive tag matches.
         tf_capex = BaseFinancialModelFactory._extract_field(
             extractor,
             R("capex")

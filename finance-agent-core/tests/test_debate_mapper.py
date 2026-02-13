@@ -1,4 +1,4 @@
-from src.workflow.nodes.debate.mappers import summarize_debate_for_preview
+from src.agents.debate.interface.mappers import summarize_debate_for_preview
 
 
 def test_summarize_debate_for_preview_full():

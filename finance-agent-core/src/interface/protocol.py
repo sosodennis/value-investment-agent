@@ -30,7 +30,7 @@ class AgentEvent(BaseModel):
     )
     protocol_version: Literal["v1"] = Field(
         default=PROTOCOL_VERSION,
-        description="Event protocol version for cross-stack compatibility control",
+        description="Event protocol version for strict cross-stack validation",
     )
 
     # Event Type Discriminator
@@ -54,7 +54,7 @@ class AgentEvent(BaseModel):
         description=(
             "Payload containing event-specific data. "
             "For 'state.update' events, contains AgentOutputArtifact fields: "
-            "{summary: str, preview: dict | None, reference: ArtifactReference | None}"
+            "{kind: str, version: 'v1', summary: str, preview: dict | None, reference: ArtifactReference | None}"
         ),
     )
 

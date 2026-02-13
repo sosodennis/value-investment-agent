@@ -1,4 +1,3 @@
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -96,11 +95,11 @@ async def test_model_selection_node_accepts_canonical_report_shape():
 
     with (
         patch(
-            "src.workflow.nodes.fundamental_analysis.nodes.artifact_manager.get_artifact",
-            new=AsyncMock(return_value=SimpleNamespace(data=canonical_reports)),
+            "src.agents.fundamental.data.ports.FundamentalArtifactPort.load_financial_reports",
+            new=AsyncMock(return_value=canonical_reports),
         ),
         patch(
-            "src.workflow.nodes.fundamental_analysis.nodes.artifact_manager.save_artifact",
+            "src.agents.fundamental.data.ports.FundamentalArtifactPort.save_financial_reports",
             new=AsyncMock(return_value="artifact_saved"),
         ),
     ):

@@ -1,9 +1,84 @@
 {
   "components": {
     "schemas": {
+      "AIAnalysisModel": {
+        "properties": {
+          "impact_level": {
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "title": "Impact Level",
+            "type": "string"
+          },
+          "key_event": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key Event"
+          },
+          "key_facts": {
+            "items": {
+              "$ref": "#/components/schemas/KeyFactModel"
+            },
+            "title": "Key Facts",
+            "type": "array"
+          },
+          "reasoning": {
+            "title": "Reasoning",
+            "type": "string"
+          },
+          "sentiment": {
+            "enum": [
+              "bullish",
+              "bearish",
+              "neutral"
+            ],
+            "title": "Sentiment",
+            "type": "string"
+          },
+          "sentiment_score": {
+            "title": "Sentiment Score",
+            "type": "number"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary",
+          "sentiment",
+          "sentiment_score",
+          "impact_level",
+          "reasoning",
+          "key_facts"
+        ],
+        "title": "AIAnalysisModel",
+        "type": "object"
+      },
       "AgentOutputArtifact": {
         "description": "Standard container for all Sub-Agent outputs.\n\nThis structure implements a three-tier data architecture:\n- L1 (summary): Message bubble text (<500 chars) - Always present\n- L2 (preview): Hot data for immediate UI rendering (<1KB) - Optional\n- L3 (reference): Cold data pointer for async loading - Optional\n\nThis ensures efficient state management by avoiding large data duplication\nin LangGraph checkpoints.",
         "properties": {
+          "kind": {
+            "description": "Output contract kind discriminator (e.g. 'fundamental_analysis.output').",
+            "enum": [
+              "intent_extraction.output",
+              "fundamental_analysis.output",
+              "financial_news_research.output",
+              "debate.output",
+              "technical_analysis.output",
+              "generic.output"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
           "preview": {
             "anyOf": [
               {
@@ -32,9 +107,16 @@
             "description": "L1: Short summary for message bubble (<500 chars)",
             "title": "Summary",
             "type": "string"
+          },
+          "version": {
+            "default": "v1",
+            "description": "Output contract version. Must be 'v1'.",
+            "title": "Version",
+            "type": "string"
           }
         },
         "required": [
+          "kind",
           "summary"
         ],
         "title": "AgentOutputArtifact",
@@ -102,6 +184,1024 @@
         "title": "ArtifactReference",
         "type": "object"
       },
+      "ConfluenceEvidenceModel": {
+        "properties": {
+          "bollinger_state": {
+            "title": "Bollinger State",
+            "type": "string"
+          },
+          "macd_momentum": {
+            "title": "Macd Momentum",
+            "type": "string"
+          },
+          "obv_state": {
+            "title": "Obv State",
+            "type": "string"
+          },
+          "statistical_strength": {
+            "title": "Statistical Strength",
+            "type": "number"
+          }
+        },
+        "required": [
+          "bollinger_state",
+          "macd_momentum",
+          "obv_state",
+          "statistical_strength"
+        ],
+        "title": "ConfluenceEvidenceModel",
+        "type": "object"
+      },
+      "DebateArtifactModel": {
+        "properties": {
+          "alpha": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alpha"
+          },
+          "analysis_bias": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Analysis Bias"
+          },
+          "conviction": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conviction"
+          },
+          "data_quality_warning": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Quality Warning"
+          },
+          "debate_rounds": {
+            "title": "Debate Rounds",
+            "type": "integer"
+          },
+          "facts": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/EvidenceFactModel"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Facts"
+          },
+          "final_verdict": {
+            "enum": [
+              "STRONG_LONG",
+              "LONG",
+              "NEUTRAL",
+              "AVOID",
+              "SHORT",
+              "STRONG_SHORT"
+            ],
+            "title": "Final Verdict",
+            "type": "string"
+          },
+          "history": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/DebateHistoryMessageModel"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "History"
+          },
+          "model_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Summary"
+          },
+          "primary_catalyst": {
+            "title": "Primary Catalyst",
+            "type": "string"
+          },
+          "primary_risk": {
+            "title": "Primary Risk",
+            "type": "string"
+          },
+          "raw_ev": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Ev"
+          },
+          "risk_free_benchmark": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Free Benchmark"
+          },
+          "risk_profile": {
+            "enum": [
+              "DEFENSIVE_VALUE",
+              "GROWTH_TECH",
+              "SPECULATIVE_CRYPTO_BIO"
+            ],
+            "title": "Risk Profile",
+            "type": "string"
+          },
+          "rr_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rr Ratio"
+          },
+          "scenario_analysis": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ScenarioModel"
+            },
+            "propertyNames": {
+              "enum": [
+                "bull_case",
+                "bear_case",
+                "base_case"
+              ]
+            },
+            "title": "Scenario Analysis",
+            "type": "object"
+          },
+          "supporting_factors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Supporting Factors",
+            "type": "array"
+          },
+          "winning_thesis": {
+            "title": "Winning Thesis",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scenario_analysis",
+          "risk_profile",
+          "final_verdict",
+          "winning_thesis",
+          "primary_catalyst",
+          "primary_risk",
+          "supporting_factors",
+          "debate_rounds"
+        ],
+        "title": "DebateArtifactModel",
+        "type": "object"
+      },
+      "DebateFactsArtifactData": {
+        "additionalProperties": false,
+        "properties": {
+          "facts": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceFactModel"
+            },
+            "title": "Facts",
+            "type": "array"
+          },
+          "facts_hash": {
+            "title": "Facts Hash",
+            "type": "string"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticker",
+          "facts",
+          "facts_hash",
+          "generated_at"
+        ],
+        "title": "DebateFactsArtifactData",
+        "type": "object"
+      },
+      "DebateFactsArtifactEnvelope": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/DebateFactsArtifactData"
+          },
+          "kind": {
+            "const": "debate_facts",
+            "title": "Kind",
+            "type": "string"
+          },
+          "produced_by": {
+            "title": "Produced By",
+            "type": "string"
+          },
+          "version": {
+            "const": "v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "produced_by",
+          "created_at",
+          "kind",
+          "data"
+        ],
+        "title": "DebateFactsArtifactEnvelope",
+        "type": "object"
+      },
+      "DebateHistoryMessageModel": {
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "title": "DebateHistoryMessageModel",
+        "type": "object"
+      },
+      "DebateReportArtifactEnvelope": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/DebateArtifactModel"
+          },
+          "kind": {
+            "const": "debate_final_report",
+            "title": "Kind",
+            "type": "string"
+          },
+          "produced_by": {
+            "title": "Produced By",
+            "type": "string"
+          },
+          "version": {
+            "const": "v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "produced_by",
+          "created_at",
+          "kind",
+          "data"
+        ],
+        "title": "DebateReportArtifactEnvelope",
+        "type": "object"
+      },
+      "EvidenceFactModel": {
+        "properties": {
+          "fact_id": {
+            "title": "Fact Id",
+            "type": "string"
+          },
+          "period": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period"
+          },
+          "provenance": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provenance"
+          },
+          "source_type": {
+            "enum": [
+              "financials",
+              "news",
+              "technicals"
+            ],
+            "title": "Source Type",
+            "type": "string"
+          },
+          "source_weight": {
+            "enum": [
+              "HIGH",
+              "MEDIUM",
+              "LOW"
+            ],
+            "title": "Source Weight",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "units": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Units"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "fact_id",
+          "source_type",
+          "source_weight",
+          "summary"
+        ],
+        "title": "EvidenceFactModel",
+        "type": "object"
+      },
+      "FinancialEntityModel": {
+        "properties": {
+          "company_name": {
+            "title": "Company Name",
+            "type": "string"
+          },
+          "relevance_score": {
+            "title": "Relevance Score",
+            "type": "number"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticker",
+          "company_name",
+          "relevance_score"
+        ],
+        "title": "FinancialEntityModel",
+        "type": "object"
+      },
+      "FinancialNewsItemModel": {
+        "properties": {
+          "analysis": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AIAnalysisModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "categories": {
+            "items": {
+              "enum": [
+                "general",
+                "corporate_event",
+                "financials",
+                "trusted_news",
+                "analyst_opinion",
+                "bullish",
+                "bearish"
+              ],
+              "type": "string"
+            },
+            "title": "Categories",
+            "type": "array"
+          },
+          "fetched_at": {
+            "title": "Fetched At",
+            "type": "string"
+          },
+          "full_content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Content"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "related_tickers": {
+            "items": {
+              "$ref": "#/components/schemas/FinancialEntityModel"
+            },
+            "title": "Related Tickers",
+            "type": "array"
+          },
+          "snippet": {
+            "title": "Snippet",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/SourceInfoModel"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "url",
+          "fetched_at",
+          "title",
+          "snippet",
+          "source",
+          "related_tickers",
+          "categories",
+          "tags"
+        ],
+        "title": "FinancialNewsItemModel",
+        "type": "object"
+      },
+      "FinancialReportModel": {
+        "properties": {
+          "base": {
+            "$ref": "#/components/schemas/FundamentalBaseModel"
+          },
+          "extension": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IndustrialExtensionModel"
+              },
+              {
+                "$ref": "#/components/schemas/FinancialServicesExtensionModel"
+              },
+              {
+                "$ref": "#/components/schemas/RealEstateExtensionModel"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extension"
+          },
+          "extension_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "Industrial",
+                  "FinancialServices",
+                  "RealEstate"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extension Type"
+          },
+          "industry_type": {
+            "title": "Industry Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "base",
+          "industry_type"
+        ],
+        "title": "FinancialReportModel",
+        "type": "object"
+      },
+      "FinancialReportsArtifactData": {
+        "additionalProperties": false,
+        "properties": {
+          "company_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Name"
+          },
+          "financial_reports": {
+            "items": {
+              "$ref": "#/components/schemas/FinancialReportModel"
+            },
+            "title": "Financial Reports",
+            "type": "array"
+          },
+          "industry": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Industry"
+          },
+          "model_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Type"
+          },
+          "reasoning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning"
+          },
+          "sector": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sector"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "done",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "ticker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ticker"
+          }
+        },
+        "required": [
+          "financial_reports"
+        ],
+        "title": "FinancialReportsArtifactData",
+        "type": "object"
+      },
+      "FinancialReportsArtifactEnvelope": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/FinancialReportsArtifactData"
+          },
+          "kind": {
+            "const": "financial_reports",
+            "title": "Kind",
+            "type": "string"
+          },
+          "produced_by": {
+            "title": "Produced By",
+            "type": "string"
+          },
+          "version": {
+            "const": "v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "produced_by",
+          "created_at",
+          "kind",
+          "data"
+        ],
+        "title": "FinancialReportsArtifactEnvelope",
+        "type": "object"
+      },
+      "FinancialServicesExtensionModel": {
+        "additionalProperties": true,
+        "properties": {
+          "allowance_for_credit_losses": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "deposits": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "interest_expense": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "interest_income": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "loans_and_leases": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provision_for_loan_losses": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "FinancialServicesExtensionModel",
+        "type": "object"
+      },
+      "FracDiffMetricsModel": {
+        "properties": {
+          "adf_pvalue": {
+            "title": "Adf Pvalue",
+            "type": "number"
+          },
+          "adf_statistic": {
+            "title": "Adf Statistic",
+            "type": "number"
+          },
+          "memory_strength": {
+            "enum": [
+              "structurally_stable",
+              "balanced",
+              "fragile"
+            ],
+            "title": "Memory Strength",
+            "type": "string"
+          },
+          "optimal_d": {
+            "title": "Optimal D",
+            "type": "number"
+          },
+          "window_length": {
+            "title": "Window Length",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "optimal_d",
+          "window_length",
+          "adf_statistic",
+          "adf_pvalue",
+          "memory_strength"
+        ],
+        "title": "FracDiffMetricsModel",
+        "type": "object"
+      },
+      "FundamentalBaseModel": {
+        "additionalProperties": true,
+        "properties": {
+          "cash_and_equivalents": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cik": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "company_name": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fiscal_period": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fiscal_year": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "income_tax_expense": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "net_income": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "operating_cash_flow": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "period_end_date": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "shares_outstanding": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sic_code": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "total_assets": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "total_equity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "total_liabilities": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "total_revenue": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "FundamentalBaseModel",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -148,6 +1248,73 @@
           }
         },
         "title": "HumanTickerSelection",
+        "type": "object"
+      },
+      "IndustrialExtensionModel": {
+        "additionalProperties": true,
+        "properties": {
+          "accounts_receivable": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "capex": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cogs": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "inventory": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rd_expense": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sga_expense": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "IndustrialExtensionModel",
         "type": "object"
       },
       "IntentExtraction": {
@@ -211,6 +1378,45 @@
           }
         },
         "title": "InterruptResumePayload",
+        "type": "object"
+      },
+      "KeyFactModel": {
+        "properties": {
+          "citation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Citation"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "is_quantitative": {
+            "title": "Is Quantitative",
+            "type": "boolean"
+          },
+          "sentiment": {
+            "enum": [
+              "bullish",
+              "bearish",
+              "neutral"
+            ],
+            "title": "Sentiment",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content",
+          "is_quantitative",
+          "sentiment"
+        ],
+        "title": "KeyFactModel",
         "type": "object"
       },
       "MessageResponse": {
@@ -286,6 +1492,425 @@
         "title": "MessageResponse",
         "type": "object"
       },
+      "NewsArticleArtifactData": {
+        "additionalProperties": false,
+        "properties": {
+          "full_text": {
+            "title": "Full Text",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "full_text"
+        ],
+        "title": "NewsArticleArtifactData",
+        "type": "object"
+      },
+      "NewsArticleArtifactEnvelope": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/NewsArticleArtifactData"
+          },
+          "kind": {
+            "const": "news_article",
+            "title": "Kind",
+            "type": "string"
+          },
+          "produced_by": {
+            "title": "Produced By",
+            "type": "string"
+          },
+          "version": {
+            "const": "v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "produced_by",
+          "created_at",
+          "kind",
+          "data"
+        ],
+        "title": "NewsArticleArtifactEnvelope",
+        "type": "object"
+      },
+      "NewsArtifactModel": {
+        "properties": {
+          "key_themes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Key Themes",
+            "type": "array"
+          },
+          "news_items": {
+            "items": {
+              "$ref": "#/components/schemas/FinancialNewsItemModel"
+            },
+            "title": "News Items",
+            "type": "array"
+          },
+          "overall_sentiment": {
+            "enum": [
+              "bullish",
+              "bearish",
+              "neutral"
+            ],
+            "title": "Overall Sentiment",
+            "type": "string"
+          },
+          "sentiment_score": {
+            "title": "Sentiment Score",
+            "type": "number"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticker",
+          "news_items",
+          "overall_sentiment",
+          "sentiment_score",
+          "key_themes"
+        ],
+        "title": "NewsArtifactModel",
+        "type": "object"
+      },
+      "NewsItemsListArtifactData": {
+        "additionalProperties": false,
+        "properties": {
+          "news_items": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "News Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "news_items"
+        ],
+        "title": "NewsItemsListArtifactData",
+        "type": "object"
+      },
+      "NewsItemsListArtifactEnvelope": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/NewsItemsListArtifactData"
+          },
+          "kind": {
+            "const": "news_items_list",
+            "title": "Kind",
+            "type": "string"
+          },
+          "produced_by": {
+            "title": "Produced By",
+            "type": "string"
+          },
+          "version": {
+            "const": "v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "produced_by",
+          "created_at",
+          "kind",
+          "data"
+        ],
+        "title": "NewsItemsListArtifactEnvelope",
+        "type": "object"
+      },
+      "NewsReportArtifactEnvelope": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/NewsArtifactModel"
+          },
+          "kind": {
+            "const": "news_analysis_report",
+            "title": "Kind",
+            "type": "string"
+          },
+          "produced_by": {
+            "title": "Produced By",
+            "type": "string"
+          },
+          "version": {
+            "const": "v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "produced_by",
+          "created_at",
+          "kind",
+          "data"
+        ],
+        "title": "NewsReportArtifactEnvelope",
+        "type": "object"
+      },
+      "NewsSelectionArtifactData": {
+        "additionalProperties": false,
+        "properties": {
+          "selected_indices": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Selected Indices",
+            "type": "array"
+          }
+        },
+        "required": [
+          "selected_indices"
+        ],
+        "title": "NewsSelectionArtifactData",
+        "type": "object"
+      },
+      "NewsSelectionArtifactEnvelope": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/NewsSelectionArtifactData"
+          },
+          "kind": {
+            "const": "news_selection",
+            "title": "Kind",
+            "type": "string"
+          },
+          "produced_by": {
+            "title": "Produced By",
+            "type": "string"
+          },
+          "version": {
+            "const": "v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "produced_by",
+          "created_at",
+          "kind",
+          "data"
+        ],
+        "title": "NewsSelectionArtifactEnvelope",
+        "type": "object"
+      },
+      "PriceSeriesArtifactData": {
+        "additionalProperties": false,
+        "properties": {
+          "price_series": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Price Series",
+            "type": "object"
+          },
+          "volume_series": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Volume Series",
+            "type": "object"
+          }
+        },
+        "required": [
+          "price_series",
+          "volume_series"
+        ],
+        "title": "PriceSeriesArtifactData",
+        "type": "object"
+      },
+      "PriceSeriesArtifactEnvelope": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/PriceSeriesArtifactData"
+          },
+          "kind": {
+            "const": "price_series",
+            "title": "Kind",
+            "type": "string"
+          },
+          "produced_by": {
+            "title": "Produced By",
+            "type": "string"
+          },
+          "version": {
+            "const": "v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "produced_by",
+          "created_at",
+          "kind",
+          "data"
+        ],
+        "title": "PriceSeriesArtifactEnvelope",
+        "type": "object"
+      },
+      "RawDataModel": {
+        "properties": {
+          "fracdiff_series": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fracdiff Series"
+          },
+          "price_series": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Series"
+          },
+          "z_score_series": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Z Score Series"
+          }
+        },
+        "title": "RawDataModel",
+        "type": "object"
+      },
+      "RealEstateExtensionModel": {
+        "additionalProperties": true,
+        "properties": {
+          "accumulated_depreciation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "depreciation_and_amortization": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ffo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "real_estate_assets": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "RealEstateExtensionModel",
+        "type": "object"
+      },
       "RequestSchema": {
         "properties": {
           "message": {
@@ -320,6 +1945,169 @@
         "title": "RequestSchema",
         "type": "object"
       },
+      "ScenarioModel": {
+        "properties": {
+          "outcome_description": {
+            "title": "Outcome Description",
+            "type": "string"
+          },
+          "price_implication": {
+            "enum": [
+              "SURGE",
+              "MODERATE_UP",
+              "FLAT",
+              "MODERATE_DOWN",
+              "CRASH"
+            ],
+            "title": "Price Implication",
+            "type": "string"
+          },
+          "probability": {
+            "title": "Probability",
+            "type": "number"
+          }
+        },
+        "required": [
+          "probability",
+          "outcome_description",
+          "price_implication"
+        ],
+        "title": "ScenarioModel",
+        "type": "object"
+      },
+      "SearchResultsArtifactData": {
+        "additionalProperties": false,
+        "properties": {
+          "formatted_results": {
+            "title": "Formatted Results",
+            "type": "string"
+          },
+          "raw_results": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Raw Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "raw_results",
+          "formatted_results"
+        ],
+        "title": "SearchResultsArtifactData",
+        "type": "object"
+      },
+      "SearchResultsArtifactEnvelope": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/SearchResultsArtifactData"
+          },
+          "kind": {
+            "const": "search_results",
+            "title": "Kind",
+            "type": "string"
+          },
+          "produced_by": {
+            "title": "Produced By",
+            "type": "string"
+          },
+          "version": {
+            "const": "v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "produced_by",
+          "created_at",
+          "kind",
+          "data"
+        ],
+        "title": "SearchResultsArtifactEnvelope",
+        "type": "object"
+      },
+      "SignalStateModel": {
+        "properties": {
+          "confluence": {
+            "$ref": "#/components/schemas/ConfluenceEvidenceModel"
+          },
+          "direction": {
+            "title": "Direction",
+            "type": "string"
+          },
+          "risk_level": {
+            "enum": [
+              "low",
+              "medium",
+              "critical"
+            ],
+            "title": "Risk Level",
+            "type": "string"
+          },
+          "statistical_state": {
+            "enum": [
+              "equilibrium",
+              "deviating",
+              "anomaly"
+            ],
+            "title": "Statistical State",
+            "type": "string"
+          },
+          "z_score": {
+            "title": "Z Score",
+            "type": "number"
+          }
+        },
+        "required": [
+          "z_score",
+          "statistical_state",
+          "direction",
+          "risk_level",
+          "confluence"
+        ],
+        "title": "SignalStateModel",
+        "type": "object"
+      },
+      "SourceInfoModel": {
+        "properties": {
+          "author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "reliability_score": {
+            "title": "Reliability Score",
+            "type": "number"
+          }
+        },
+        "required": [
+          "name",
+          "domain",
+          "reliability_score"
+        ],
+        "title": "SourceInfoModel",
+        "type": "object"
+      },
       "StreamStartResponse": {
         "properties": {
           "status": {
@@ -340,6 +2128,174 @@
           "thread_id"
         ],
         "title": "StreamStartResponse",
+        "type": "object"
+      },
+      "TechnicalArtifactModel": {
+        "properties": {
+          "frac_diff_metrics": {
+            "$ref": "#/components/schemas/FracDiffMetricsModel"
+          },
+          "llm_interpretation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Llm Interpretation"
+          },
+          "raw_data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RawDataModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "semantic_tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Semantic Tags",
+            "type": "array"
+          },
+          "signal_state": {
+            "$ref": "#/components/schemas/SignalStateModel"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          },
+          "timestamp": {
+            "title": "Timestamp",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticker",
+          "timestamp",
+          "frac_diff_metrics",
+          "signal_state",
+          "semantic_tags"
+        ],
+        "title": "TechnicalArtifactModel",
+        "type": "object"
+      },
+      "TechnicalChartArtifactData": {
+        "additionalProperties": false,
+        "properties": {
+          "fracdiff_series": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Fracdiff Series",
+            "type": "object"
+          },
+          "indicators": {
+            "additionalProperties": true,
+            "title": "Indicators",
+            "type": "object"
+          },
+          "z_score_series": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Z Score Series",
+            "type": "object"
+          }
+        },
+        "required": [
+          "fracdiff_series",
+          "z_score_series",
+          "indicators"
+        ],
+        "title": "TechnicalChartArtifactData",
+        "type": "object"
+      },
+      "TechnicalChartArtifactEnvelope": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/TechnicalChartArtifactData"
+          },
+          "kind": {
+            "const": "ta_chart_data",
+            "title": "Kind",
+            "type": "string"
+          },
+          "produced_by": {
+            "title": "Produced By",
+            "type": "string"
+          },
+          "version": {
+            "const": "v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "produced_by",
+          "created_at",
+          "kind",
+          "data"
+        ],
+        "title": "TechnicalChartArtifactEnvelope",
+        "type": "object"
+      },
+      "TechnicalReportArtifactEnvelope": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/TechnicalArtifactModel"
+          },
+          "kind": {
+            "const": "ta_full_report",
+            "title": "Kind",
+            "type": "string"
+          },
+          "produced_by": {
+            "title": "Produced By",
+            "type": "string"
+          },
+          "version": {
+            "const": "v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "produced_by",
+          "created_at",
+          "kind",
+          "data"
+        ],
+        "title": "TechnicalReportArtifactEnvelope",
         "type": "object"
       },
       "ThreadStateResponse": {
@@ -484,6 +2440,10 @@
         "title": "TickerCandidate",
         "type": "object"
       },
+      "TraceableFieldModel": {
+        "additionalProperties": true,
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -545,7 +2505,60 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "discriminator": {
+                    "mapping": {
+                      "debate_facts": "#/components/schemas/DebateFactsArtifactEnvelope",
+                      "debate_final_report": "#/components/schemas/DebateReportArtifactEnvelope",
+                      "financial_reports": "#/components/schemas/FinancialReportsArtifactEnvelope",
+                      "news_analysis_report": "#/components/schemas/NewsReportArtifactEnvelope",
+                      "news_article": "#/components/schemas/NewsArticleArtifactEnvelope",
+                      "news_items_list": "#/components/schemas/NewsItemsListArtifactEnvelope",
+                      "news_selection": "#/components/schemas/NewsSelectionArtifactEnvelope",
+                      "price_series": "#/components/schemas/PriceSeriesArtifactEnvelope",
+                      "search_results": "#/components/schemas/SearchResultsArtifactEnvelope",
+                      "ta_chart_data": "#/components/schemas/TechnicalChartArtifactEnvelope",
+                      "ta_full_report": "#/components/schemas/TechnicalReportArtifactEnvelope"
+                    },
+                    "propertyName": "kind"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/FinancialReportsArtifactEnvelope"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PriceSeriesArtifactEnvelope"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TechnicalChartArtifactEnvelope"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TechnicalReportArtifactEnvelope"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SearchResultsArtifactEnvelope"
+                    },
+                    {
+                      "$ref": "#/components/schemas/NewsSelectionArtifactEnvelope"
+                    },
+                    {
+                      "$ref": "#/components/schemas/NewsArticleArtifactEnvelope"
+                    },
+                    {
+                      "$ref": "#/components/schemas/NewsItemsListArtifactEnvelope"
+                    },
+                    {
+                      "$ref": "#/components/schemas/NewsReportArtifactEnvelope"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DebateFactsArtifactEnvelope"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DebateReportArtifactEnvelope"
+                    }
+                  ],
+                  "title": "Response Get Artifact Api Artifacts  Artifact Id  Get"
+                }
               }
             },
             "description": "Successful Response"

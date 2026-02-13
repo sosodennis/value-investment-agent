@@ -6,8 +6,7 @@ This folder contains generated cross-stack contracts used by both backend and fr
 
 1. `openapi.json`: Exported from FastAPI (`finance-agent-core/api/server.py`).
 2. `fixtures/sse-events-v1.json`: Shared SSE contract fixtures consumed by backend and frontend tests.
-3. `fixtures/manifest.json`: Source of truth for supported and planned SSE protocol fixture versions.
-4. `fixtures/sse-events-v2.template.json`: Draft template for next protocol version.
+3. `fixtures/manifest.json`: Source of truth for supported SSE protocol fixture versions.
 
 ## Generate
 
@@ -35,14 +34,9 @@ When SSE envelope or event payload contracts change:
 5. Ensure backend protocol fixture tests pass.
 6. Ensure frontend protocol fixture tests pass.
 
-## Version Coexistence Template
+## Protocol Version Policy
 
-For future protocol rollout (v1 + v2 coexistence):
+For future protocol version rollout:
 
-1. Keep current `v1` in `supported_versions`.
-2. Add `v2` to `planned_versions` with a template fixture.
-3. Once backend/frontend both support v2, promote v2 to `supported_versions` and keep v1 during migration window.
-
-Detailed migration workflow:
-
-1. `docs/sse-protocol-migration-checklist.md`
+1. Add the new version fixture to `supported_versions` only when backend and frontend are both updated in the same PR.
+2. Remove old version fixture from `supported_versions` in the same breaking PR (zero-compat policy).

@@ -1,4 +1,9 @@
-import { AgentErrorLog, AgentStatus, StandardAgentOutput } from './agents';
+import {
+    AgentErrorLog,
+    AgentOutputKind,
+    AgentStatus,
+    StandardAgentOutput,
+} from './agents';
 import {
     HumanTickerSelection,
     InterruptRequestData,
@@ -88,6 +93,29 @@ const parseAgentStatus = (value: unknown, context: string): AgentStatus => {
         return value;
     }
     throw new TypeError(`${context} has unsupported status value.`);
+};
+
+const parseAgentOutputKind = (
+    value: unknown,
+    context: string
+): AgentOutputKind => {
+    if (value === 'intent_extraction.output') return value;
+    if (value === 'fundamental_analysis.output') return value;
+    if (value === 'financial_news_research.output') return value;
+    if (value === 'debate.output') return value;
+    if (value === 'technical_analysis.output') return value;
+    if (value === 'generic.output') return value;
+    throw new TypeError(`${context}.kind has unsupported value.`);
+};
+
+const parseAgentOutputVersion = (
+    value: unknown,
+    context: string
+): 'v1' => {
+    if (value !== 'v1') {
+        throw new TypeError(`${context}.version must be v1.`);
+    }
+    return value;
 };
 
 const parseTickerCandidate = (value: unknown, context: string): TickerCandidate => {
@@ -221,6 +249,8 @@ const parseStandardAgentOutput = (
     context: string
 ): StandardAgentOutput => {
     const record = toRecord(value, context);
+    const kind = parseAgentOutputKind(record.kind, context);
+    const version = parseAgentOutputVersion(record.version, context);
     const summary = record.summary;
     if (typeof summary !== 'string') {
         throw new TypeError(`${context}.summary must be a string.`);
@@ -259,7 +289,7 @@ const parseStandardAgentOutput = (
         };
     }
 
-    const output: StandardAgentOutput = { summary };
+    const output: StandardAgentOutput = { kind, version, summary };
     if (preview !== undefined) output.preview = preview;
     if (reference !== undefined) output.reference = reference;
     if ('error_logs' in record && record.error_logs !== undefined) {

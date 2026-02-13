@@ -15,7 +15,17 @@ export interface ArtifactReference {
     type: string;
 }
 
+export type AgentOutputKind =
+    | 'intent_extraction.output'
+    | 'fundamental_analysis.output'
+    | 'financial_news_research.output'
+    | 'debate.output'
+    | 'technical_analysis.output'
+    | 'generic.output';
+
 export interface StandardAgentOutput {
+    kind: AgentOutputKind;
+    version: 'v1';
     summary: string;
     preview?: PreviewPayload | null;
     reference?: ArtifactReference | null;

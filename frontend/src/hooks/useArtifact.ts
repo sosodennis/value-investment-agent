@@ -1,6 +1,10 @@
 import { useCallback } from 'react';
 import useSWR from 'swr';
 import { parseApiErrorMessage } from '@/types/protocol';
+import {
+    ArtifactKind,
+    parseArtifactEnvelope,
+} from '@/types/agents/artifact-envelope-parser';
 
 const API_URL = process.env.NEXT_PUBLIC_LANGGRAPH_URL || 'http://localhost:8000';
 
@@ -21,7 +25,8 @@ const readErrorMessage = async (response: Response): Promise<string> => {
 const fetchArtifact = async <T>(
     url: string,
     parser: ArtifactParser<T>,
-    context: string
+    context: string,
+    expectedKind?: ArtifactKind
 ): Promise<T> => {
     console.log(`[useArtifact] Fetching: ${url}`);
     try {
@@ -31,8 +36,13 @@ const fetchArtifact = async <T>(
             throw new Error(await readErrorMessage(res));
         }
         const data: unknown = await res.json();
-        const parsed = parser(data, context);
-        console.log(`[useArtifact] Success:`, data);
+        const envelope = parseArtifactEnvelope(
+            data,
+            `${context}.envelope`,
+            expectedKind
+        );
+        const parsed = parser(envelope.data, `${context}.data`);
+        console.log(`[useArtifact] Success:`, envelope);
         return parsed;
     } catch (err) {
         console.error(`[useArtifact] Fetch Error:`, err);
@@ -43,11 +53,12 @@ const fetchArtifact = async <T>(
 export function useArtifact<T>(
     artifactId: string | null | undefined,
     parser: ArtifactParser<T>,
-    context: string
+    context: string,
+    expectedKind?: ArtifactKind
 ) {
     const fetcher = useCallback(
-        (url: string) => fetchArtifact(url, parser, context),
-        [parser, context]
+        (url: string) => fetchArtifact(url, parser, context, expectedKind),
+        [parser, context, expectedKind]
     );
 
     const { data, error, isLoading } = useSWR<T>(

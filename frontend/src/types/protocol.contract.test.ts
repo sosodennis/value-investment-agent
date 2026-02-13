@@ -111,6 +111,8 @@ describe('SSE contract fixtures', () => {
                 source: 'intent_extraction',
                 type: 'state.update',
                 data: {
+                    kind: 'intent_extraction.output',
+                    version: 'v1',
                     summary: 123,
                 },
             })
@@ -211,6 +213,8 @@ describe('REST boundary parsers', () => {
             },
             agent_outputs: {
                 intent_extraction: {
+                    kind: 'intent_extraction.output',
+                    version: 'v1',
                     summary: 'Ticker resolved',
                     preview: { ticker: 'AAPL' },
                     reference: null,
@@ -329,6 +333,8 @@ describe('REST boundary parsers', () => {
             },
             agent_outputs: {
                 intent_extraction: {
+                    kind: 'intent_extraction.output',
+                    version: 'v1',
                     summary: 'Extracting ticker',
                     preview: {
                         ticker: 'AAPL',

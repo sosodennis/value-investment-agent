@@ -14,21 +14,17 @@ import { parseNewsPreview } from './news-preview-parser';
 import { parseTechnicalPreview } from './technical-preview-parser';
 import {
     AgentErrorLog,
+    AgentOutputKind,
     ArtifactReference,
     StandardAgentOutput,
 } from './index';
-
-type CoreAgentId =
-    | 'fundamental_analysis'
-    | 'financial_news_research'
-    | 'debate'
-    | 'technical_analysis';
 
 interface OutputViewModelBase {
     agentId: string;
     summary: string | null;
     reference: ArtifactReference | null;
     errorLogs: AgentErrorLog[];
+    outputKind: AgentOutputKind | null;
 }
 
 export interface FundamentalOutputViewModel extends OutputViewModelBase {
@@ -82,6 +78,7 @@ const buildBaseViewModel = (
     summary: output?.summary ?? null,
     reference: output?.reference ?? null,
     errorLogs: output?.error_logs ?? [],
+    outputKind: output?.kind ?? null,
 });
 
 export const parseFundamentalPreviewFromOutput = (
@@ -107,50 +104,52 @@ export const parseTechnicalPreviewFromOutput = (
 ): TechnicalPreview | null =>
     parseTechnicalPreview(output?.preview, `${context}.preview`);
 
-const isCoreAgent = (agentId: string): agentId is CoreAgentId =>
-    agentId === 'fundamental_analysis' ||
-    agentId === 'financial_news_research' ||
-    agentId === 'debate' ||
-    agentId === 'technical_analysis';
-
 export const adaptAgentOutput = (
     agentId: string,
     output: StandardAgentOutput | null,
     context = 'agent_output'
 ): AgentOutputViewModel => {
     const base = buildBaseViewModel(agentId, output);
-    if (!isCoreAgent(agentId)) {
+    if (output === null) {
         return {
             ...base,
             kind: 'generic',
-            preview: parseGenericPreview(output?.preview, `${context}.preview`),
+            preview: null,
         };
     }
 
-    if (agentId === 'fundamental_analysis') {
+    if (output.kind === 'fundamental_analysis.output') {
         return {
             ...base,
             kind: 'fundamental_analysis',
             preview: parseFundamentalPreviewFromOutput(output, context),
         };
     }
-    if (agentId === 'financial_news_research') {
+    if (output.kind === 'financial_news_research.output') {
         return {
             ...base,
             kind: 'financial_news_research',
             preview: parseNewsPreviewFromOutput(output, context),
         };
     }
-    if (agentId === 'debate') {
+    if (output.kind === 'debate.output') {
         return {
             ...base,
             kind: 'debate',
             preview: parseDebatePreviewFromOutput(output, context),
         };
     }
+    if (output.kind === 'technical_analysis.output') {
+        return {
+            ...base,
+            kind: 'technical_analysis',
+            preview: parseTechnicalPreviewFromOutput(output, context),
+        };
+    }
+
     return {
         ...base,
-        kind: 'technical_analysis',
-        preview: parseTechnicalPreviewFromOutput(output, context),
+        kind: 'generic',
+        preview: parseGenericPreview(output.preview, `${context}.preview`),
     };
 };

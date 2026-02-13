@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
 
 from api.server import app
+from src.interface.artifact_envelope import build_artifact_envelope
 from src.interface.canonical_serializers import (
     canonicalize_debate_artifact_data,
     canonicalize_fundamental_artifact_data,
@@ -37,11 +37,14 @@ async def test_get_artifact_returns_canonical_fundamental_payload() -> None:
             ],
         }
     )
-    artifact = SimpleNamespace(data=payload)
-
+    envelope = build_artifact_envelope(
+        kind="financial_reports",
+        produced_by="tests",
+        data=payload,
+    )
     with patch(
-        "api.server.artifact_manager.get_artifact",
-        new=AsyncMock(return_value=artifact),
+        "api.server.artifact_manager.get_artifact_envelope",
+        new=AsyncMock(return_value=envelope),
     ):
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app),
@@ -50,9 +53,10 @@ async def test_get_artifact_returns_canonical_fundamental_payload() -> None:
             response = await client.get("/api/artifacts/art_fa")
 
     assert response.status_code == 200
-    assert response.json()["company_name"] == "AAPL"
+    assert response.json()["kind"] == "financial_reports"
+    assert response.json()["data"]["company_name"] == "AAPL"
     assert (
-        response.json()["financial_reports"][0]["base"]["fiscal_year"]["value"]
+        response.json()["data"]["financial_reports"][0]["base"]["fiscal_year"]["value"]
         == "2024"
     )
     assert response.headers["cache-control"] == "public, max-age=3600"
@@ -163,15 +167,19 @@ async def test_get_artifact_returns_canonical_news_and_debate_payload() -> None:
         }
     )
 
-    for artifact_id, payload, expected_key in (
-        ("art_news", news_payload, "overall_sentiment"),
-        ("art_debate", debate_payload, "final_verdict"),
-        ("art_ta", technical_payload, "signal_state"),
+    for artifact_id, kind, payload, expected_key in (
+        ("art_news", "news_analysis_report", news_payload, "overall_sentiment"),
+        ("art_debate", "debate_final_report", debate_payload, "final_verdict"),
+        ("art_ta", "ta_full_report", technical_payload, "signal_state"),
     ):
-        artifact = SimpleNamespace(data=payload)
+        envelope = build_artifact_envelope(
+            kind=kind,
+            produced_by="tests",
+            data=payload,
+        )
         with patch(
-            "api.server.artifact_manager.get_artifact",
-            new=AsyncMock(return_value=artifact),
+            "api.server.artifact_manager.get_artifact_envelope",
+            new=AsyncMock(return_value=envelope),
         ):
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=app),
@@ -180,13 +188,14 @@ async def test_get_artifact_returns_canonical_news_and_debate_payload() -> None:
                 response = await client.get(f"/api/artifacts/{artifact_id}")
 
         assert response.status_code == 200
-        assert expected_key in response.json()
+        assert response.json()["kind"] == kind
+        assert expected_key in response.json()["data"]
 
 
 @pytest.mark.asyncio
 async def test_get_artifact_returns_404_when_missing() -> None:
     with patch(
-        "api.server.artifact_manager.get_artifact",
+        "api.server.artifact_manager.get_artifact_envelope",
         new=AsyncMock(return_value=None),
     ):
         async with httpx.AsyncClient(

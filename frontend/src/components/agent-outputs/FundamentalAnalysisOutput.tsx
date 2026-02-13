@@ -23,7 +23,8 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
     const { data: artifactData, isLoading: isArtifactLoading } = useArtifact(
         reference?.artifact_id,
         parseFundamentalArtifact,
-        'fundamental_output.artifact'
+        'fundamental_output.artifact',
+        'financial_reports'
     );
 
     const hasPreview = !!previewData;

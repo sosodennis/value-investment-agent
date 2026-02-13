@@ -1,6 +1,4 @@
-from src.workflow.nodes.fundamental_analysis.mappers import (
-    summarize_fundamental_for_preview,
-)
+from src.agents.fundamental.interface.mappers import summarize_fundamental_for_preview
 
 
 def test_summarize_fundamental_for_preview_empty():

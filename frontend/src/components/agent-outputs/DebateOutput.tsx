@@ -23,7 +23,8 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
     const { data: artifactData, isLoading: isArtifactLoading } = useArtifact(
         reference?.artifact_id,
         parseDebateArtifact,
-        'debate_output.artifact'
+        'debate_output.artifact',
+        'debate_final_report'
     );
 
     const isPreviewOnly = !artifactData && !!previewData;

@@ -38,6 +38,8 @@
     "type": "state.update",
     "source": "intent_extraction",
     "data": {
+      "kind": "intent_extraction.output",
+      "version": "v1",
       "summary": "Resolved ticker candidate list.",
       "preview": {
         "ticker": "GME",

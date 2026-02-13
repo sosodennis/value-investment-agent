@@ -1,20 +1,51 @@
-import hashlib
 import json
-from collections.abc import Mapping
-from datetime import datetime
 
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, SystemMessage
 from langgraph.graph import END
 from langgraph.types import Command
 
+from src.agents.debate.application.services import (
+    MAX_CHAR_HISTORY,
+    execute_bear_round,
+    execute_bull_round,
+    execute_moderator_round,
+    extract_debate_facts,
+)
+from src.agents.debate.application.services import (
+    compress_reports as _compress_reports,
+)
+from src.agents.debate.application.services import (
+    get_trimmed_history as _get_trimmed_history,
+)
+from src.agents.debate.application.services import (
+    log_compressed_reports as _log_compressed_reports,
+)
+from src.agents.debate.application.services import (
+    log_llm_config as _log_llm_config,
+)
+from src.agents.debate.application.services import (
+    log_llm_response as _log_llm_response,
+)
+from src.agents.debate.application.services import (
+    log_messages as _log_messages,
+)
+from src.agents.debate.application.services import (
+    prepare_debate_reports as _prepare_debate_reports,
+)
+from src.agents.debate.application.services import (
+    resolved_ticker_from_state as _resolved_ticker_from_state,
+)
+from src.agents.debate.data.ports import debate_artifact_port
+from src.agents.debate.interface.mappers import summarize_debate_for_preview
+from src.common.contracts import (
+    ARTIFACT_KIND_DEBATE_FINAL_REPORT,
+    OUTPUT_KIND_DEBATE,
+)
 from src.common.tools.llm import get_llm
 from src.common.tools.logger import get_logger
-from src.common.traceable import ManualProvenance, XBRLProvenance
 from src.interface.canonical_serializers import canonicalize_debate_artifact_data
 from src.interface.schemas import ArtifactReference, build_artifact_payload
-from src.services.artifact_manager import artifact_manager
 
-from .mappers import summarize_debate_for_preview
 from .prompts import (
     BEAR_AGENT_SYSTEM_PROMPT,
     BEAR_R1_ADVERSARIAL,
@@ -25,289 +56,15 @@ from .prompts import (
     MODERATOR_SYSTEM_PROMPT,
     VERDICT_PROMPT,
 )
-from .structures import DebateConclusion, EvidenceFact, FactBundle
+from .structures import DebateConclusion, EvidenceFact
 from .subgraph_state import DebateState
-from .tools import (
-    calculate_pragmatic_verdict,
-    compress_financial_data,
-    compress_news_data,
-    compress_ta_data,
-)
+from .tools import calculate_pragmatic_verdict
 from .tools.validators import FactValidator
 
 logger = get_logger(__name__)
 
 # --- LLM Shared Config ---
 DEFAULT_MODEL = "arcee-ai/trinity-large-preview:free"
-MAX_CHAR_REPORTS = 50000
-MAX_CHAR_HISTORY = 32000
-
-
-def _compress_reports(reports: dict, max_chars: int = MAX_CHAR_REPORTS) -> str:
-    """Compress analyst reports to fit context window."""
-    if not reports:
-        return "{}"
-
-    # Try indent=1 first
-    compressed = json.dumps(reports, indent=1, default=str)
-    if len(compressed) <= max_chars:
-        return compressed
-
-    # If still too big, try no indent
-    compressed = json.dumps(reports, separators=(",", ":"), default=str)
-    if len(compressed) <= max_chars:
-        return compressed
-
-    # Hard truncation with warning
-    logger.warning(f"⚠️ Truncating analyst reports: {len(compressed)} -> {max_chars}")
-    return compressed[:max_chars] + "\n\n[... TRUNCATED DUE TO TOKEN LIMITS ...]"
-
-
-def _hash_text(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
-
-
-def _get_trimmed_history(history: list, max_chars: int = MAX_CHAR_HISTORY) -> list:
-    """Get the most recent messages that fit within the character budget."""
-    if not history:
-        return []
-
-    trimmed = []
-    current_chars = 0
-
-    # Iterate backwards through history
-    for msg in reversed(history):
-        msg_content = str(msg.content)
-        if current_chars + len(msg_content) > max_chars:
-            break
-        trimmed.insert(0, msg)
-        current_chars += len(msg_content)
-
-    total_chars = sum(len(str(msg.content)) for msg in history)
-    trimmed_chars = sum(len(str(msg.content)) for msg in trimmed)
-    logger.info(
-        "DEBATE_HISTORY_TRIM total_messages=%d total_chars=%d trimmed_messages=%d trimmed_chars=%d max_chars=%d",
-        len(history),
-        total_chars,
-        len(trimmed),
-        trimmed_chars,
-        max_chars,
-    )
-    return trimmed
-
-
-def _log_messages(messages: list[BaseMessage], agent_name: str, round_num: int = 0):
-    """Log full message content for audit/debugging."""
-    log_header = f"PROMPT SENT TO {agent_name}"
-    if round_num:
-        log_header += f" (Round {round_num})"
-
-    formatted_msg = "\n" + "=" * 50 + f"\n{log_header}\n" + "=" * 50 + "\n"
-    for i, msg in enumerate(messages):
-        role = (
-            "System"
-            if isinstance(msg, SystemMessage)
-            else "Human"
-            if isinstance(msg, HumanMessage)
-            else "AI"
-            if isinstance(msg, AIMessage)
-            else "Unknown"
-        )
-        content = msg.content
-        formatted_msg += f"[{i+1}] {role} Message:\n{content}\n" + "-" * 30 + "\n"
-    formatted_msg += "=" * 50
-    logger.info(formatted_msg)
-
-
-def _get_last_message_from_role(history: list, role_name: str) -> str:
-    """Helper to extract the last message from a specific role with fallback."""
-    if not history:
-        return ""
-    for msg in reversed(history):
-        if getattr(msg, "name", None) == role_name:
-            return msg.content
-        # 其次檢查 additional_kwargs (某些模型會放在這裡)
-        if (
-            isinstance(msg, AIMessage)
-            and msg.additional_kwargs.get("name") == role_name
-        ):
-            return msg.content
-    return ""
-
-
-def _artifact_ref_id_from_context(ctx: Mapping[str, object]) -> str | None:
-    artifact = ctx.get("artifact")
-    if not isinstance(artifact, Mapping):
-        return None
-    reference = artifact.get("reference")
-    if not isinstance(reference, Mapping):
-        return None
-    artifact_id = reference.get("artifact_id")
-    if not isinstance(artifact_id, str):
-        return None
-    return artifact_id
-
-
-def _artifact_data(artifact_obj: object) -> object:
-    data = getattr(artifact_obj, "data", None)
-    if data is None:
-        raise TypeError("Artifact object missing 'data' field")
-    return data
-
-
-def _log_llm_config(agent_name: str, round_num: int, llm: object) -> None:
-    model = getattr(llm, "model_name", None) or getattr(llm, "model", None) or "unknown"
-    temperature = getattr(llm, "temperature", None)
-    timeout = getattr(llm, "timeout", None)
-    logger.info(
-        "DEBATE_LLM_CONFIG agent=%s round=%d model=%s temperature=%s timeout=%s",
-        agent_name,
-        round_num,
-        model,
-        temperature,
-        timeout,
-    )
-
-
-def _log_compressed_reports(
-    stage: str, ticker: str | None, compressed_reports: str, source: str
-) -> None:
-    logger.info(
-        "DEBATE_REPORTS stage=%s ticker=%s source=%s chars=%d hash=%s",
-        stage,
-        ticker or "unknown",
-        source,
-        len(compressed_reports),
-        _hash_text(compressed_reports),
-    )
-
-
-def _log_debate_context(
-    agent_name: str,
-    round_num: int,
-    history: list,
-    my_last_arg: str,
-    opponent_last_arg: str,
-    judge_feedback: str,
-) -> None:
-    logger.info(
-        "DEBATE_CONTEXT agent=%s round=%d history_messages=%d my_last_arg_chars=%d opponent_last_arg_chars=%d judge_feedback_chars=%d",
-        agent_name,
-        round_num,
-        len(history),
-        len(my_last_arg or ""),
-        len(opponent_last_arg or ""),
-        len(judge_feedback or ""),
-    )
-
-
-def _log_llm_response(agent_name: str, round_num: int, response_text: str) -> None:
-    logger.info(
-        "DEBATE_OUTPUT agent=%s round=%d chars=%d hash=%s",
-        agent_name,
-        round_num,
-        len(response_text),
-        _hash_text(response_text),
-    )
-    logger.info(
-        "DEBATE_OUTPUT_TEXT agent=%s round=%d\n%s",
-        agent_name,
-        round_num,
-        response_text,
-    )
-
-
-async def _prepare_debate_reports(state: DebateState) -> dict:
-    """
-    Prepare compressed reports for the LLM prompt on the fly.
-    This avoids mirroring large data in the state (Engineering Charter §3.4).
-    """
-    ticker = state.get("intent_extraction", {}).get("resolved_ticker") or state.get(
-        "ticker"
-    )
-    # News Data
-    news_ctx = state.get("financial_news_research", {})
-    news_data = {}
-    news_artifact_id = None
-
-    artifact_id = _artifact_ref_id_from_context(news_ctx)
-    if artifact_id is None:
-        news_items_id_raw = news_ctx.get("news_items_artifact_id")
-        artifact_id = news_items_id_raw if isinstance(news_items_id_raw, str) else None
-    news_artifact_id = artifact_id
-
-    if artifact_id:
-        artifact_obj = await artifact_manager.get_artifact(artifact_id)
-        if artifact_obj:
-            raw_data = _artifact_data(artifact_obj)
-            # News data compression expects a dict with "news_items" key
-            if isinstance(raw_data, list):
-                news_data = {"news_items": raw_data}
-            elif isinstance(raw_data, dict):
-                news_data = raw_data
-
-    # Technical Analysis Data
-    ta_ctx = state.get("technical_analysis", {})
-    ta_data = {}
-    ta_artifact_id = None
-
-    artifact_id = _artifact_ref_id_from_context(ta_ctx)
-    if artifact_id is None:
-        chart_data_id = ta_ctx.get("chart_data_id")
-        price_artifact_id = ta_ctx.get("price_artifact_id")
-        if isinstance(chart_data_id, str):
-            artifact_id = chart_data_id
-        elif isinstance(price_artifact_id, str):
-            artifact_id = price_artifact_id
-    ta_artifact_id = artifact_id
-
-    if artifact_id:
-        artifact_obj = await artifact_manager.get_artifact(artifact_id)
-        if artifact_obj:
-            ta_data = _artifact_data(artifact_obj)
-
-    # Fundamental Analysis Data
-    fa_ctx = state.get("fundamental_analysis", {})
-    fa_reports: list[dict] = []
-    fa_artifact_id = fa_ctx.get("financial_reports_artifact_id")
-    if fa_artifact_id:
-        artifact_obj = await artifact_manager.get_artifact(fa_artifact_id)
-        if artifact_obj:
-            fa_data = _artifact_data(artifact_obj)
-            if isinstance(fa_data, list):
-                fa_reports = fa_data
-            elif isinstance(fa_data, dict):
-                fa_reports = fa_data.get("financial_reports", [])
-
-    logger.info(
-        "DEBATE_REPORT_INPUT ticker=%s financials=%d news_items=%d ta_present=%s news_artifact_id=%s ta_artifact_id=%s",
-        ticker or "unknown",
-        len(fa_reports),
-        len(news_data.get("news_items", [])),
-        bool(ta_data),
-        news_artifact_id or "none",
-        ta_artifact_id or "none",
-    )
-
-    return {
-        "financials": {
-            "data": compress_financial_data(fa_reports),
-            "source_weight": "HIGH",
-            "rationale": "Primary source: SEC XBRL filings (audited, regulatory-grade data)",
-        },
-        "news": {
-            "data": compress_news_data(news_data),
-            "source_weight": "MEDIUM",
-            "rationale": "Secondary source: Curated financial news (editorial bias possible)",
-        },
-        "technical_analysis": {
-            "data": compress_ta_data(ta_data),
-            "source_weight": "HIGH",
-            "rationale": "Quantitative source: Fractional differentiation analysis (statistical signals)",
-        },
-        "ticker": state.get("intent_extraction", {}).get("resolved_ticker")
-        or state.get("ticker"),
-    }
 
 
 async def debate_aggregator_node(state: DebateState) -> Command:
@@ -315,12 +72,26 @@ async def debate_aggregator_node(state: DebateState) -> Command:
     Initializes debate progress and pre-computes compressed reports.
     Data compression is cached in the state to prevent redundant processing.
     """
+    ticker = _resolved_ticker_from_state(state)
+    if ticker is None:
+        return Command(
+            update={
+                "internal_progress": {"debate_aggregator": "error"},
+                "node_statuses": {"debate": "error"},
+                "error_logs": [
+                    {
+                        "node": "debate_aggregator",
+                        "error": "Missing intent_extraction.resolved_ticker",
+                        "severity": "error",
+                    }
+                ],
+            },
+            goto=END,
+        )
+
     # Pre-compute and cache reports
     reports = await _prepare_debate_reports(state)
     compressed_reports = _compress_reports(reports)
-    ticker = state.get("intent_extraction", {}).get("resolved_ticker") or state.get(
-        "ticker"
-    )
     _log_compressed_reports("debate_aggregator", ticker, compressed_reports, "computed")
 
     next_progress = {
@@ -345,171 +116,39 @@ async def fact_extractor_node(state: DebateState) -> Command:
     Extracts deterministic facts from financials, news, and technicals.
     Grounds the debate by providing stable IDs for evidence citation.
     """
-    ticker = state.get("intent_extraction", {}).get("resolved_ticker") or state.get(
-        "ticker"
-    )
+    ticker = _resolved_ticker_from_state(state)
+    if ticker is None:
+        return Command(
+            update={
+                "fact_extraction_status": "error",
+                "internal_progress": {"fact_extractor": "error"},
+                "node_statuses": {"debate": "error"},
+                "error_logs": [
+                    {
+                        "node": "fact_extractor",
+                        "error": "Missing intent_extraction.resolved_ticker",
+                        "severity": "error",
+                    }
+                ],
+            },
+            goto=END,
+        )
     logger.info("FACT_EXTRACTION_START ticker=%s", ticker)
-
-    facts: list[EvidenceFact] = []
-
-    # --- 1. Financial Facts (F001...) ---
-    fa_ctx = state.get("fundamental_analysis", {})
-    fa_reports: list[dict] = []
-    fa_artifact_id = fa_ctx.get("financial_reports_artifact_id")
-    if fa_artifact_id:
-        artifact_obj = await artifact_manager.get_artifact(fa_artifact_id)
-        if artifact_obj:
-            fa_data = _artifact_data(artifact_obj)
-            if isinstance(fa_data, list):
-                fa_reports = fa_data
-            elif isinstance(fa_data, dict):
-                fa_reports = fa_data.get("financial_reports", [])
-    for report in fa_reports:
-        fiscal_year = report.get("base", {}).get("fiscal_year", {}).get("value", "N/A")
-        metrics = compress_financial_data([report])[0].get("metrics", {})
-
-        for metric_name, value in metrics.items():
-            fact_id = f"F{len(facts) + 1:03d}"
-            # Extract provenance if available
-            prov_raw = report.get("base", {}).get(metric_name, {}).get("provenance")
-            if not prov_raw:
-                prov_raw = (
-                    report.get("extension", {}).get(metric_name, {}).get("provenance")
-                )
-
-            # Simple mapping to XBRLProvenance object
-            if isinstance(prov_raw, dict):
-                provenance = XBRLProvenance(
-                    concept=str(prov_raw.get("concept") or metric_name),
-                    period=str(prov_raw.get("period") or fiscal_year),
-                )
-            else:
-                provenance = ManualProvenance(
-                    description=f"Extracted from {fiscal_year} report"
-                )
-
-            facts.append(
-                EvidenceFact(
-                    fact_id=fact_id,
-                    source_type="financials",
-                    source_weight="HIGH",
-                    summary=f"[{fiscal_year}] {metric_name.replace('_', ' ').title()}: {value}",
-                    value=value,
-                    period=str(fiscal_year),
-                    provenance=provenance,
-                )
-            )
-
-    # --- 2. News Facts (N001...) ---
-    news_items = []
-    news_ctx = state.get("financial_news_research", {})
-    # Similar logic to _prepare_debate_reports to get news items
-    news_artifact_id = news_ctx.get("news_items_artifact_id")
-    if not isinstance(news_artifact_id, str):
-        news_artifact_id = _artifact_ref_id_from_context(news_ctx)
-
-    if news_artifact_id:
-        art = await artifact_manager.get_artifact(news_artifact_id)
-        if art:
-            data = _artifact_data(art)
-            news_items = data if isinstance(data, list) else data.get("news_items", [])
-
-    for item in news_items:
-        analysis = item.get("analysis", {})
-        key_facts = analysis.get("key_facts", []) or [
-            {"content": analysis.get("summary")}
-        ]
-        source_name = item.get("source", {}).get("name", "Unknown")
-        pub_date = item.get("published_at", "N/A")[:10]
-
-        for fact_item in key_facts:
-            content = (
-                fact_item.get("content")
-                if isinstance(fact_item, dict)
-                else str(fact_item)
-            )
-            if not content:
-                continue
-
-            fact_id = f"N{len(facts) + 1:03d}"
-            facts.append(
-                EvidenceFact(
-                    fact_id=fact_id,
-                    source_type="news",
-                    source_weight="MEDIUM",
-                    summary=f"({pub_date}) {source_name}: {content}",
-                    provenance=ManualProvenance(
-                        description=f"News: {item.get('title')}"
-                    ),
-                )
-            )
-
-    # --- 3. Technical Facts (T001...) ---
-    ta_ctx = state.get("technical_analysis", {})
-    ta_artifact_id = ta_ctx.get("chart_data_id") or ta_ctx.get("price_artifact_id")
-    if not isinstance(ta_artifact_id, str):
-        ta_artifact_id = _artifact_ref_id_from_context(ta_ctx)
-
-    if ta_artifact_id:
-        art = await artifact_manager.get_artifact(ta_artifact_id)
-        if art:
-            ta_data = _artifact_data(art)
-            signal = ta_data.get("signal_state", {})
-
-            if signal:
-                fact_id = f"T{len(facts) + 1:03d}"
-                facts.append(
-                    EvidenceFact(
-                        fact_id=fact_id,
-                        source_type="technicals",
-                        source_weight="HIGH",
-                        summary=f"Technical Signal: {signal.get('direction')} (Z-Score: {signal.get('z_score')})",
-                        value=signal.get("z_score"),
-                        provenance=ManualProvenance(
-                            description=f"Technical Signal (Z-Score Analysis) from Artifact {ta_artifact_id}",
-                            author="TechnicalAnalyst",
-                        ),
-                    )
-                )
-
-    # --- Save FactBundle Artifact ---
-    facts_raw = [f.model_dump() for f in facts]
-    # Use default=str to handle Enums in JSON serialization for hashing
-    facts_hash = hashlib.sha256(
-        json.dumps(facts_raw, sort_keys=True, default=str).encode()
-    ).hexdigest()
-
-    bundle = FactBundle(
-        ticker=ticker,
-        facts=facts,
-        facts_hash=facts_hash,
-        generated_at=datetime.utcnow().isoformat(),
+    extracted = await extract_debate_facts(state)
+    artifact_id = await debate_artifact_port.save_facts_bundle(
+        data=extracted.bundle_payload,
+        produced_by="debate.fact_extractor",
+        key_prefix=extracted.ticker,
     )
-
-    artifact_id = await artifact_manager.save_artifact(
-        data=bundle.model_dump(mode="json"),
-        artifact_type="debate_facts",
-        key_prefix=ticker,
-    )
-
-    summary = {
-        "financials": len([f for f in facts if f.source_type == "financials"]),
-        "news": len([f for f in facts if f.source_type == "news"]),
-        "technicals": len([f for f in facts if f.source_type == "technicals"]),
-    }
-
-    logger.info("FACT_EXTRACTION_DONE ticker=%s facts=%d", ticker, len(facts))
+    logger.info("FACT_EXTRACTION_DONE ticker=%s facts=%d", ticker, len(extracted.facts))
 
     return Command(
         update={
             "facts_artifact_id": artifact_id,
-            "facts_hash": facts_hash,
-            "facts_summary": summary,
+            "facts_hash": extracted.facts_hash,
+            "facts_summary": extracted.summary,
             "fact_extraction_status": "done",
-            # [P2 Fix] STRICT GROUNDING: Overwrite reports with ONLY the facts registry.
-            # This prevents hallucination from raw text.
-            "compressed_reports": "FACTS_REGISTRY (STRICT CITATION REQUIRED):\n"
-            + "\n".join([f"[{f.fact_id}] {f.summary}" for f in facts]),
+            "compressed_reports": extracted.strict_facts_registry,
         },
         goto=["r1_bull", "r1_bear"],
     )
@@ -522,211 +161,44 @@ async def _execute_bull_agent(
     state: DebateState, round_num: int, adversarial_rule: str
 ) -> dict[str, object]:
     """Internal helper for Bull logic across rounds."""
-    ticker = state.get("intent_extraction", {}).get("resolved_ticker") or state.get(
-        "ticker"
+    llm = get_llm()
+    return await execute_bull_round(
+        state=state,
+        round_num=round_num,
+        adversarial_rule=adversarial_rule,
+        system_prompt_template=BULL_AGENT_SYSTEM_PROMPT,
+        llm=llm,
     )
-    try:
-        llm = get_llm()
-        _log_llm_config("BULL_AGENT", round_num, llm)
-
-        # Use cached reports if available, fallback to on-the-fly computation
-        compressed_reports = state.get("compressed_reports")
-        reports_source = "cached"
-        if not compressed_reports:
-            reports = await _prepare_debate_reports(state)
-            compressed_reports = _compress_reports(reports)
-            reports_source = "computed"
-        _log_compressed_reports(
-            f"bull_r{round_num}", ticker, compressed_reports, reports_source
-        )
-
-        system_content = BULL_AGENT_SYSTEM_PROMPT.format(
-            ticker=ticker,
-            reports=compressed_reports,
-            adversarial_rule=adversarial_rule,
-        )
-        messages = [SystemMessage(content=system_content)]
-
-        # Context Sandwich for R2+
-        if round_num > 1:
-            history = state.get("history", [])
-            my_last_arg = _get_last_message_from_role(history, "GrowthHunter")
-            bear_last_arg = _get_last_message_from_role(history, "ForensicAccountant")
-            judge_feedback = _get_last_message_from_role(history, "Judge")
-
-            if my_last_arg:
-                messages.append(
-                    AIMessage(content=f"(My Previous Argument):\n{my_last_arg}")
-                )
-            if judge_feedback:
-                messages.append(
-                    HumanMessage(
-                        content=f"<moderator_feedback>\n{judge_feedback}\n</moderator_feedback>"
-                    )
-                )
-            if bear_last_arg:
-                messages.append(
-                    HumanMessage(content=f"DESTROY this argument:\n\n{bear_last_arg}")
-                )
-
-            _log_debate_context(
-                "BULL_AGENT",
-                round_num,
-                history,
-                my_last_arg,
-                bear_last_arg,
-                judge_feedback,
-            )
-
-        _log_messages(messages, "BULL_AGENT", round_num)
-        response = await llm.ainvoke(messages)
-        _log_llm_response("BULL_AGENT", round_num, response.content)
-
-        return {
-            "history": [AIMessage(content=response.content, name="GrowthHunter")],
-            "bull_thesis": response.content,
-        }
-    except Exception as e:
-        logger.error(f"❌ Error in Bull Logic (R{round_num}): {str(e)}")
-        raise e
 
 
 async def _execute_bear_agent(
     state: DebateState, round_num: int, adversarial_rule: str
 ) -> dict[str, object]:
     """Internal helper for Bear logic across rounds."""
-    ticker = state.get("intent_extraction", {}).get("resolved_ticker") or state.get(
-        "ticker"
+    llm = get_llm()
+    return await execute_bear_round(
+        state=state,
+        round_num=round_num,
+        adversarial_rule=adversarial_rule,
+        system_prompt_template=BEAR_AGENT_SYSTEM_PROMPT,
+        llm=llm,
     )
-    try:
-        llm = get_llm()
-        _log_llm_config("BEAR_AGENT", round_num, llm)
-
-        # Use cached reports if available, fallback to on-the-fly computation
-        compressed_reports = state.get("compressed_reports")
-        reports_source = "cached"
-        if not compressed_reports:
-            reports = await _prepare_debate_reports(state)
-            compressed_reports = _compress_reports(reports)
-            reports_source = "computed"
-        _log_compressed_reports(
-            f"bear_r{round_num}", ticker, compressed_reports, reports_source
-        )
-
-        system_content = BEAR_AGENT_SYSTEM_PROMPT.format(
-            ticker=ticker,
-            reports=compressed_reports,
-            adversarial_rule=adversarial_rule,
-        )
-        messages = [SystemMessage(content=system_content)]
-
-        # Context Sandwich for R2+
-        if round_num > 1:
-            history = state.get("history", [])
-            my_last_arg = _get_last_message_from_role(history, "ForensicAccountant")
-            bull_last_arg = _get_last_message_from_role(history, "GrowthHunter")
-            judge_feedback = _get_last_message_from_role(history, "Judge")
-
-            if my_last_arg:
-                messages.append(
-                    AIMessage(content=f"(My Previous Argument):\n{my_last_arg}")
-                )
-            if judge_feedback:
-                messages.append(
-                    HumanMessage(
-                        content=f"<moderator_feedback>\n{judge_feedback}\n</moderator_feedback>"
-                    )
-                )
-            if bull_last_arg:
-                messages.append(
-                    HumanMessage(content=f"DESTROY this argument:\n\n{bull_last_arg}")
-                )
-
-            _log_debate_context(
-                "BEAR_AGENT",
-                round_num,
-                history,
-                my_last_arg,
-                bull_last_arg,
-                judge_feedback,
-            )
-
-        _log_messages(messages, "BEAR_AGENT", round_num)
-        response = await llm.ainvoke(messages)
-        _log_llm_response("BEAR_AGENT", round_num, response.content)
-
-        return {
-            "history": [AIMessage(content=response.content, name="ForensicAccountant")],
-            "bear_thesis": response.content,
-        }
-    except Exception as e:
-        logger.error(f"❌ Error in Bear Logic (R{round_num}): {str(e)}")
-        raise e
 
 
 async def _execute_moderator_critique(
     state: DebateState, round_num: int
 ) -> dict[str, object]:
     """Internal helper for Moderator Critique across rounds."""
-    ticker = state.get("intent_extraction", {}).get("resolved_ticker") or state.get(
-        "ticker"
+    llm = get_llm()
+    from .tools import get_sycophancy_detector
+
+    return await execute_moderator_round(
+        state=state,
+        round_num=round_num,
+        system_prompt_template=MODERATOR_SYSTEM_PROMPT,
+        llm=llm,
+        detector=get_sycophancy_detector(),
     )
-    try:
-        llm = get_llm()
-        _log_llm_config("MODERATOR", round_num, llm)
-        from .tools import get_sycophancy_detector
-
-        detector = get_sycophancy_detector()
-        similarity, is_sycophantic = detector.check_consensus(
-            state.get("debate", {}).get("bull_thesis") or "",
-            state.get("debate", {}).get("bear_thesis") or "",
-        )
-        logger.info(
-            "DEBATE_SYCOPHANCY_CHECK round=%d similarity=%.4f threshold=0.8 flagged=%s",
-            round_num,
-            similarity,
-            is_sycophantic,
-        )
-
-        reports = await _prepare_debate_reports(state)
-        compressed_reports = _compress_reports(reports)
-        trimmed_history = _get_trimmed_history(state.get("history", []))
-
-        # Use cached reports if available, fallback to on-the-fly computation
-        cached_reports = state.get("compressed_reports")
-        if cached_reports:
-            compressed_reports = cached_reports
-            _log_compressed_reports(
-                f"moderator_r{round_num}", ticker, compressed_reports, "cached"
-            )
-        else:
-            _log_compressed_reports(
-                f"moderator_r{round_num}", ticker, compressed_reports, "computed"
-            )
-
-        system_content = MODERATOR_SYSTEM_PROMPT.format(
-            ticker=ticker, reports=compressed_reports
-        )
-
-        if is_sycophantic:
-            system_content += "\n⚠️ SYCOPHANCY DETECTED. Demand counter-arguments."
-
-        messages = [SystemMessage(content=system_content)] + trimmed_history
-        messages.append(
-            HumanMessage(content="Point out logical flaws. DO NOT SUMMARIZE.")
-        )
-
-        _log_messages(messages, "MODERATOR_CRITIQUE", round_num)
-        response = await llm.ainvoke(messages)
-        _log_llm_response("MODERATOR_CRITIQUE", round_num, response.content)
-
-        return {
-            "history": [AIMessage(content=response.content, name="Judge")],
-            "current_round": round_num,
-        }
-    except Exception as e:
-        logger.error(f"❌ Error in Moderator Critique (R{round_num}): {str(e)}")
-        raise e
 
 
 # --- EXPLICIT NODES ---
@@ -810,6 +282,7 @@ async def r1_moderator_node(state: DebateState) -> Command:
                 }
             )
             artifact = build_artifact_payload(
+                kind=OUTPUT_KIND_DEBATE,
                 summary="Cognitive Debate: Round 1 moderator critique complete",
                 preview=preview,
                 reference=None,
@@ -918,6 +391,7 @@ async def r2_moderator_node(state: DebateState) -> Command:
                 }
             )
             artifact = build_artifact_payload(
+                kind=OUTPUT_KIND_DEBATE,
                 summary="Cognitive Debate: Round 2 adversarial analysis complete",
                 preview=preview,
                 reference=None,
@@ -1016,9 +490,22 @@ async def r3_bull_node(state: DebateState) -> Command:
 # --- Final Verdict ---
 async def verdict_node(state: DebateState) -> Command:
     """Final Verdict Node"""
-    ticker = state.get("intent_extraction", {}).get("resolved_ticker") or state.get(
-        "ticker"
-    )
+    ticker = _resolved_ticker_from_state(state)
+    if ticker is None:
+        return Command(
+            update={
+                "internal_progress": {"verdict": "error"},
+                "node_statuses": {"debate": "error"},
+                "error_logs": [
+                    {
+                        "node": "verdict",
+                        "error": "Missing intent_extraction.resolved_ticker",
+                        "severity": "error",
+                    }
+                ],
+            },
+            goto=END,
+        )
     try:
         llm = get_llm()
         _log_llm_config("VERDICT", 3, llm)
@@ -1052,14 +539,13 @@ async def verdict_node(state: DebateState) -> Command:
         # [P1 Fix] Fetch facts from artifact (Single Source of Truth)
         valid_facts = []
         facts_artifact_id = state.get("facts_artifact_id")
-        if facts_artifact_id:
-            art = await artifact_manager.get_artifact(facts_artifact_id)
-            if art:
-                data = _artifact_data(art)
-                # Handle both list (v1) and dict with facts key (v2)
-                facts_data = data if isinstance(data, list) else data.get("facts", [])
+        if isinstance(facts_artifact_id, str):
+            facts_bundle = await debate_artifact_port.load_facts_bundle(
+                facts_artifact_id
+            )
+            if facts_bundle is not None:
                 valid_facts = [
-                    EvidenceFact(**f) if isinstance(f, dict) else f for f in facts_data
+                    EvidenceFact(**fact.model_dump()) for fact in facts_bundle.facts
                 ]
 
         audit_results = {
@@ -1081,9 +567,9 @@ async def verdict_node(state: DebateState) -> Command:
         full_report_data = canonicalize_debate_artifact_data(full_report_data_raw)
 
         # Save artifact (L3) - Now full report, not just transcript
-        report_id = await artifact_manager.save_artifact(
+        report_id = await debate_artifact_port.save_final_report(
             data=full_report_data,
-            artifact_type="debate_final_report",
+            produced_by="debate.verdict",
             key_prefix=ticker,
         )
 
@@ -1095,10 +581,11 @@ async def verdict_node(state: DebateState) -> Command:
                 reference = ArtifactReference(
                     artifact_id=report_id,
                     download_url=f"/api/artifacts/{report_id}",
-                    type="debate_final_report",
+                    type=ARTIFACT_KIND_DEBATE_FINAL_REPORT,
                 )
 
             artifact = build_artifact_payload(
+                kind=OUTPUT_KIND_DEBATE,
                 summary=f"Debate: {preview.get('verdict_display')}",
                 preview=preview,
                 reference=reference,

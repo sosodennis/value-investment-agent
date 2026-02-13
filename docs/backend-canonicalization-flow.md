@@ -2,13 +2,15 @@
 
 Applies to:
 - `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/interface/canonical_serializers.py`
-- `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/interface/canonical_models/__init__.py`
-- `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/interface/canonical_models/shared.py`
-- `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/interface/canonical_models/fundamental.py`
-- `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/interface/canonical_models/news.py`
-- `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/interface/canonical_models/debate.py`
-- `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/interface/canonical_models/technical.py`
+- `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/interface/artifact_contract_registry.py`
+- `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/agents/fundamental/interface/contracts.py`
+- `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/agents/news/interface/contracts.py`
+- `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/agents/technical/interface/contracts.py`
+- `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/agents/debate/interface/contracts.py`
+- `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/interface/artifact_model_shared.py`
 - `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/workflow/nodes/**/nodes.py`
+- `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/shared/data/typed_artifact_port.py`
+- `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/agents/*/data/ports.py`
 - `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/api/server.py`
 - `/Users/denniswong/Desktop/Project/value-investment-agent/frontend/src/types/agents/artifact-parsers.ts`
 
@@ -20,33 +22,44 @@ Applies to:
 
 ## 2. Runtime Flow
 
-`Node Raw Output` -> `canonical_serializers facade` -> `canonical_models/<domain>.py (Pydantic validate + normalize)` -> `artifact_manager.save_artifact` -> `/api/artifacts/{id}` -> `frontend parser-first`
+`Node Raw Output` -> `canonical_serializers facade` -> `artifact_contract_registry (kind -> model)` -> `agents/*/interface/contracts.py (Pydantic validate + normalize)` -> `agents/*/data/ports.py via shared TypedArtifactPort` -> `artifact_manager.save_artifact (ArtifactEnvelope)` -> `/api/artifacts/{id} (discriminated envelope response)` -> `frontend parseArtifactEnvelope -> domain parser`
 
 ## 3. Module Responsibilities
 
 1. Nodes (`workflow/nodes/*/nodes.py`)
 - 只負責產生 domain raw data。
 - 存檔前必須呼叫 `canonicalize_*_artifact_data(...)` 或 `normalize_financial_reports(...)`。
+- 讀取 artifact 必須透過 per-agent ports（`agents/*/data/ports.py`），不直接做 `dict/list` shape fallback。
+- Cross-agent 讀取必須以 `artifact.reference.artifact_id` 為唯一來源，不可回退到舊 state mirror id。
 
 2. Facade (`canonical_serializers.py`)
 - 提供穩定入口（fundamental/news/debate/technical）。
 - 不承載 domain business rule，只轉發到 parser 並保留 context error。
 
-3. Schema layer (`canonical_models/*.py`)
-- `shared.py`: 共用 coercion/validation helper。
-- `fundamental.py`: traceable field + report schema + extension type normalize。
-- `news.py`: sentiment/impact/category normalize。
-- `debate.py`: verdict/risk/scenario/history/facts normalize。
-- `technical.py`: statistical enums + raw time-series normalize。
+2.1 Contract Registry (`artifact_contract_registry.py`)
+- 單一維護 `kind -> model` 路由。
+- 單一維護 cross-agent consumption policy（例如 news/debate/technical payload 允許的 kind）。
+- domain artifact ports 僅調用 registry，不自行判斷 payload shape。
+
+3. Schema layer
+- `artifact_model_shared.py`: 共用 coercion/validation helper。
+- `agents/*/interface/contracts.py`: per-agent schema 模組（fundamental/news/debate/technical）。
 - 輸出統一使用 `model_dump(mode="json")`。
   - fundamental：`exclude_none=False`（保留 traceable null sentinel）。
   - news/debate/technical：`exclude_none=True`（降低 null 噪音）。
 
 4. API layer (`api/server.py`)
-- 僅回傳已 canonicalized 且已儲存的 artifact，不做臨時 patch。
+- 僅回傳已 canonicalized 且已儲存的 artifact envelope。
+- 由 `ArtifactApiResponse`（kind discriminator）做 response contract validate。
 
-5. Frontend parser layer (`artifact-parsers.ts`)
+5. Domain Artifact Ports
+- Shared generic: `shared/data/typed_artifact_port.py`
+- Per-agent concrete: `agents/*/data/ports.py`
+- 在 port 邊界做 Pydantic 驗證，節點內不再散落 defensive shape checks。
+
+6. Frontend parser layer (`artifact-parsers.ts`)
 - parser-first，契約漂移立即 fail-fast。
+- 先由 `parseArtifactEnvelope(...)` 驗證 `kind/version`，再解析 `data`。
 
 ## 4. Pseudo
 
@@ -54,7 +67,7 @@ Applies to:
 # node
 raw = build_news_artifact(...)
 canonical = canonicalize_news_artifact_data(raw)
-artifact_id = await artifact_manager.save_artifact(data=canonical, ...)
+artifact_id = await news_artifact_port.save_news_report(data=canonical, ...)
 ```
 
 ```python
@@ -75,12 +88,12 @@ class NewsArtifactModel(BaseModel):
 
 1. 修改 node raw output（新增/刪除欄位）。
 2. 修改對應 domain model：
-- `canonical_models/fundamental.py`
-- `canonical_models/news.py`
-- `canonical_models/debate.py`
-- `canonical_models/technical.py`
-3. 若是新 domain parser，更新 `canonical_models/__init__.py` export。
-4. 保持 `canonical_serializers.py` 入口對應正確。
+- `agents/fundamental/interface/contracts.py`
+- `agents/news/interface/contracts.py`
+- `agents/technical/interface/contracts.py`
+- `agents/debate/interface/contracts.py`
+3. 若是新 parser helper，更新 `artifact_model_shared.py`。
+4. 保持 `canonical_serializers.py` / `artifact_contract_registry.py` 入口對應正確。
 5. 更新 backend tests：
 - `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/tests/test_output_contract_serializers.py`
 - `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/tests/test_artifact_api_contract.py`

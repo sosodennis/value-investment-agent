@@ -27,6 +27,7 @@ async def test_save_and_retrieve_artifact():
     artifact_id = await artifact_manager.save_artifact(
         data=test_data,
         artifact_type="news_items",
+        produced_by="tests.artifact_manager",
         key_prefix="AAPL",
         thread_id="test_thread_123",
     )
@@ -40,7 +41,10 @@ async def test_save_and_retrieve_artifact():
     artifact = await artifact_manager.get_artifact(artifact_id)
     assert artifact is not None
     assert artifact.type == "news_items"
-    assert artifact.data == test_data
+    assert artifact.data["kind"] == "news_items"
+    assert artifact.data["version"] == "v1"
+    assert artifact.data["produced_by"] == "tests.artifact_manager"
+    assert artifact.data["data"] == test_data
     assert artifact.thread_id == "test_thread_123"
     assert "AAPL" in artifact.key
 
@@ -53,14 +57,16 @@ async def test_save_artifact_without_optional_fields():
 
     # Act
     artifact_id = await artifact_manager.save_artifact(
-        data=test_data, artifact_type="calculation_result"
+        data=test_data,
+        artifact_type="calculation_result",
+        produced_by="tests.artifact_manager",
     )
 
     # Assert
     artifact = await artifact_manager.get_artifact(artifact_id)
     assert artifact is not None
     assert artifact.type == "calculation_result"
-    assert artifact.data == test_data
+    assert artifact.data["data"] == test_data
     assert artifact.key is None
     assert artifact.thread_id is None
 
@@ -83,14 +89,17 @@ async def test_large_artifact_5mb():
 
     # Act
     artifact_id = await artifact_manager.save_artifact(
-        data=large_data, artifact_type="price_data", key_prefix="LARGE_TEST"
+        data=large_data,
+        artifact_type="price_data",
+        produced_by="tests.artifact_manager",
+        key_prefix="LARGE_TEST",
     )
 
     # Assert
     artifact = await artifact_manager.get_artifact(artifact_id)
     assert artifact is not None
     assert artifact.type == "price_data"
-    assert len(artifact.data["price_history"]) == 100000
+    assert len(artifact.data["data"]["price_history"]) == 100000
 
 
 @pytest.mark.anyio
@@ -116,14 +125,16 @@ async def test_save_list_artifact():
 
     # Act
     artifact_id = await artifact_manager.save_artifact(
-        data=test_data, artifact_type="portfolio_allocation"
+        data=test_data,
+        artifact_type="portfolio_allocation",
+        produced_by="tests.artifact_manager",
     )
 
     # Assert
     artifact = await artifact_manager.get_artifact(artifact_id)
     assert artifact is not None
-    assert artifact.data == test_data
-    assert isinstance(artifact.data, list)
+    assert artifact.data["data"] == test_data
+    assert isinstance(artifact.data["data"], list)
 
 
 @pytest.mark.anyio
@@ -131,10 +142,16 @@ async def test_multiple_artifacts_same_type():
     """Test creating multiple artifacts of the same type."""
     # Act
     id1 = await artifact_manager.save_artifact(
-        data={"ticker": "AAPL"}, artifact_type="news_items", key_prefix="AAPL"
+        data={"ticker": "AAPL"},
+        artifact_type="news_items",
+        produced_by="tests.artifact_manager",
+        key_prefix="AAPL",
     )
     id2 = await artifact_manager.save_artifact(
-        data={"ticker": "GOOGL"}, artifact_type="news_items", key_prefix="GOOGL"
+        data={"ticker": "GOOGL"},
+        artifact_type="news_items",
+        produced_by="tests.artifact_manager",
+        key_prefix="GOOGL",
     )
 
     # Assert
@@ -143,7 +160,26 @@ async def test_multiple_artifacts_same_type():
     artifact1 = await artifact_manager.get_artifact(id1)
     artifact2 = await artifact_manager.get_artifact(id2)
 
-    assert artifact1.data["ticker"] == "AAPL"
-    assert artifact2.data["ticker"] == "GOOGL"
+    assert artifact1.data["data"]["ticker"] == "AAPL"
+    assert artifact2.data["data"]["ticker"] == "GOOGL"
     assert "AAPL" in artifact1.key
     assert "GOOGL" in artifact2.key
+
+
+@pytest.mark.anyio
+async def test_get_artifact_data_validates_expected_kind():
+    artifact_id = await artifact_manager.save_artifact(
+        data={"ticker": "AAPL"},
+        artifact_type="news_items",
+        produced_by="tests.artifact_manager",
+    )
+
+    payload = await artifact_manager.get_artifact_data(
+        artifact_id, expected_kind="news_items"
+    )
+    assert payload == {"ticker": "AAPL"}
+
+    with pytest.raises(TypeError):
+        await artifact_manager.get_artifact_data(
+            artifact_id, expected_kind="financial_reports"
+        )

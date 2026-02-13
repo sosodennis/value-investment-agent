@@ -3,8 +3,8 @@ Date: 2026-02-12
 
 ## Status Summary
 
-Overall: `IN_PROGRESS`
-Current phase: `Phase 7 completed`
+Overall: `COMPLETED`
+Current phase: `Closed (Phase 7 completed)`
 
 ## Progress Log
 
@@ -47,12 +47,6 @@ Completed:
 20. CI contract suite 納入 fixture 測試
 21. 新增 fixture 版本一致性驗證腳本：
    - `/Users/denniswong/Desktop/Project/value-investment-agent/scripts/validate-sse-fixtures.py`
-
-In Progress:
-1. 下一輪規劃（fixture 擴充與多版本策略）
-
-Pending:
-1. 多版本 fixture（v1/v2 migration window）策略
 
 Validation results:
 1. Backend targeted ruff passed:
@@ -120,5 +114,3 @@ Phase 7:
 2. Next.js build 在離線環境會因 Google Fonts 失敗，與 contract 升級無關。
 3. `uv run ruff check src api tests` 目前會在既有未改動檔案（如 `tests/calculations/test_core.py`）報 import-sort 歷史問題；本輪已針對改動範圍做通過驗證。
 4. 初次安裝 `openapi-typescript` 需可連 npm registry。
-5. 目前 fixture 只覆蓋 `v1`；若引入 `v2` 需並存 fixtures 並維持 migration policy。
-6. `v2` 目前僅提供 template，不會納入 supported fixture 測試。

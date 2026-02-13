@@ -136,11 +136,11 @@ npm run dev
 ```
 
 ## 🧭 Development Guidelines
-Backend contributor rules are documented at:
+Authoritative engineering guidelines (mandatory):
 
-*   [`finance-agent-core/docs/development_guidelines.md`](finance-agent-core/docs/development_guidelines.md)
-
-This guideline is mandatory for backend changes (typed contracts, boundary rules, no-compatibility policy, and validation checklist).
+*   [`docs/clean-architecture-engineering-guideline.md`](docs/clean-architecture-engineering-guideline.md)
+*   [`docs/backend-guideline.md`](docs/backend-guideline.md)
+*   [`docs/frontend-guideline.md`](docs/frontend-guideline.md)
 
 Cross-stack contract sync:
 
@@ -149,11 +149,10 @@ Cross-stack contract sync:
     *   `contracts/openapi.json`
     *   `frontend/src/types/generated/api-contract.ts`
 
-Audit-oriented change governance docs:
+Additional audit/history references (non-normative):
 
 *   `docs/fullstack-change-control-playbook.md`
-*   `docs/sse-protocol-migration-checklist.md`
-*   `docs/sse-v2-migration-pr-example.md`
+*   `docs/clean-architecture-agent-workflow-blueprint.md`
 
 ## 🤝 Contributing
 Contributions are welcome! Please follow the coding standards outlined in the project.

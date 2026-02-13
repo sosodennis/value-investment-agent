@@ -11,9 +11,9 @@ Design Principles:
 """
 
 from collections.abc import Mapping
-from typing import cast
 
 from src.common.types import AgentOutputArtifactPayload
+from src.interface.schemas import parse_agent_output_artifact_payload
 
 
 class NodeOutputMapper:
@@ -33,9 +33,7 @@ class NodeOutputMapper:
         artifact = value.get("artifact")
         if artifact is None:
             return None
-        if not isinstance(artifact, dict):
-            raise TypeError(f"Invalid artifact payload type: {type(artifact)!r}")
-        return cast(AgentOutputArtifactPayload, artifact)
+        return parse_agent_output_artifact_payload(artifact)
 
     @staticmethod
     def transform(

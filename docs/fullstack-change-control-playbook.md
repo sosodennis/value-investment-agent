@@ -2,6 +2,12 @@
 Date: 2026-02-12
 Applies to: `/finance-agent-core` + `/frontend` monorepo
 
+Status: Historical reference (non-normative for current execution policy).
+Authoritative active rules are:
+1. `/Users/denniswong/Desktop/Project/value-investment-agent/docs/clean-architecture-engineering-guideline.md`
+2. `/Users/denniswong/Desktop/Project/value-investment-agent/docs/backend-guideline.md`
+3. `/Users/denniswong/Desktop/Project/value-investment-agent/docs/frontend-guideline.md`
+
 ## 1. Objective
 
 Prevent maintainability and sustainability degradation by enforcing a traceable, testable, and reviewable process for cross-stack changes.
@@ -294,8 +300,8 @@ Current policy:
 
 See:
 
-1. `docs/sse-protocol-migration-checklist.md`
-2. `docs/sse-v2-migration-pr-example.md`
+1. `docs/clean-architecture-engineering-guideline.md`
+2. `.github/pull_request_template.md`
 
 ---
 

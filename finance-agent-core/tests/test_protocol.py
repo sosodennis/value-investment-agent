@@ -62,7 +62,13 @@ def test_adapt_state_update_news():
         "data": {
             "output": {
                 "financial_news_research": {
-                    "artifact": {"news_items": [{"id": "1", "title": "market up"}]}
+                    "artifact": {
+                        "kind": "financial_news_research.output",
+                        "version": "v1",
+                        "summary": "news complete",
+                        "preview": {"top_headlines": ["market up"]},
+                        "reference": None,
+                    }
                 }
             }
         },
@@ -72,8 +78,9 @@ def test_adapt_state_update_news():
     event = adapted[0]
     # aggregator_node logic now flattens the result
     assert event.type == "state.update"
-    assert "news_items" in event.data
-    assert event.data["news_items"][0]["title"] == "market up"
+    assert event.data["kind"] == "financial_news_research.output"
+    assert event.data["summary"] == "news complete"
+    assert event.data["preview"]["top_headlines"][0] == "market up"
 
 
 def test_create_interrupt():
@@ -101,6 +108,8 @@ def test_adapt_state_update_from_basemodel_output():
         "data": {
             "output": MockOutput(
                 artifact={
+                    "kind": "intent_extraction.output",
+                    "version": "v1",
                     "summary": "Resolved ticker",
                     "preview": {"resolved_ticker": "GME"},
                     "reference": None,

@@ -24,7 +24,8 @@ const NewsResearchOutputComponent: React.FC<NewsResearchOutputProps> = ({
     const { data: artifactData, isLoading: isArtifactLoading } = useArtifact(
         reference?.artifact_id,
         parseNewsArtifact,
-        'news_output.artifact'
+        'news_output.artifact',
+        'news_analysis_report'
     );
 
     const effectiveOutput = artifactData || previewData;

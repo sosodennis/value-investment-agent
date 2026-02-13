@@ -171,7 +171,8 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
     const { data: artifactData, isLoading: isArtifactLoading } = useArtifact(
         reference?.artifact_id,
         parseTechnicalArtifact,
-        'technical_output.artifact'
+        'technical_output.artifact',
+        'ta_full_report'
     );
 
     // Data Processing & Outlier Filtering

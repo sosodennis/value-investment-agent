@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -49,15 +49,12 @@ async def test_fracdiff_compute_node_crash():
     state = {"technical_analysis": {"price_artifact_id": "p1"}}
 
     with patch(
-        "src.services.artifact_manager.artifact_manager.get_artifact"
+        "src.services.artifact_manager.artifact_manager.get_artifact_data"
     ) as mock_get:
-        # Return valid artifact structure
-        mock_get.return_value = MagicMock(
-            data={
-                "price_series": {"2021-01-01": 100.0},
-                "volume_series": {"2021-01-01": 1000.0},
-            }
-        )
+        mock_get.return_value = {
+            "price_series": {"2021-01-01": 100.0},
+            "volume_series": {"2021-01-01": 1000.0},
+        }
 
         with patch(
             "src.workflow.nodes.technical_analysis.nodes.calculate_rolling_fracdiff"

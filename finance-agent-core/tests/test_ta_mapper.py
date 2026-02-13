@@ -1,4 +1,4 @@
-from src.workflow.nodes.technical_analysis.mappers import summarize_ta_for_preview
+from src.agents.technical.interface.mappers import summarize_ta_for_preview
 
 
 def test_summarize_ta_for_preview_full():
