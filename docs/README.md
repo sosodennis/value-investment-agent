@@ -18,6 +18,9 @@ Use these as the single source of truth for current development rules:
 Useful for current state understanding, but subordinate to canonical rules:
 
 1. `docs/agent-cross-review-2026-02-13.md`
+2. `docs/refactor-workstreams-progress-2026-02-13.md`
+3. `docs/legacy-code-elimination-plan-2026-02-16.md`
+4. `docs/legacy-code-audit-register-2026-02-16.md`
 
 ## 3. Historical (Non-Normative, Audit Trace)
 
@@ -25,15 +28,8 @@ These files preserve migration history and may contain old file names or pre-cut
 
 1. `docs/clean-architecture-agent-workflow-blueprint.md`
 2. `docs/fullstack-change-control-playbook.md`
-3. `docs/monorepo-contract-upgrade-plan.md`
-4. `docs/monorepo-contract-upgrade-progress.md`
-5. `docs/deep-refactor-master-plan-2026-02-13.md`
-6. `docs/deep-refactor-progress-2026-02-13.md`
-7. `docs/deep-refactor-wave1-package-map-2026-02-13.md`
-8. `docs/deep-refactor-freeze-list-2026-02-13.md`
-9. `docs/deep-refactor-baseline-snapshot-2026-02-13.md`
-10. `docs/sub-agent-boundary-audit-2026-02-13.md`
-11. `docs/archive/README.md`
+3. `docs/sub-agent-boundary-audit-2026-02-13.md`
+4. `docs/archive/README.md`
 
 ## 4. Interpretation Rules
 

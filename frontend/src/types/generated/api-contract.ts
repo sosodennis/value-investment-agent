@@ -138,7 +138,7 @@ export interface components {
             /** Key Event */
             key_event?: string | null;
             /** Key Facts */
-            key_facts: components["schemas"]["KeyFactModel"][];
+            key_facts?: components["schemas"]["KeyFactModel"][];
             /** Reasoning */
             reasoning: string;
             /**
@@ -263,9 +263,9 @@ export interface components {
             /** Model Summary */
             model_summary?: string | null;
             /** Primary Catalyst */
-            primary_catalyst: string;
+            primary_catalyst: string | null;
             /** Primary Risk */
-            primary_risk: string;
+            primary_risk: string | null;
             /** Raw Ev */
             raw_ev?: number | null;
             /** Risk Free Benchmark */
@@ -284,7 +284,7 @@ export interface components {
             /** Supporting Factors */
             supporting_factors: string[];
             /** Winning Thesis */
-            winning_thesis: string;
+            winning_thesis: string | null;
         };
         /** DebateFactsArtifactData */
         DebateFactsArtifactData: {
@@ -297,8 +297,8 @@ export interface components {
             /** Ticker */
             ticker: string;
         };
-        /** DebateFactsArtifactEnvelope */
-        DebateFactsArtifactEnvelope: {
+        /** DebateFactsEnvelope */
+        DebateFactsEnvelope: {
             /** Created At */
             created_at: string;
             data: components["schemas"]["DebateFactsArtifactData"];
@@ -315,17 +315,8 @@ export interface components {
              */
             version: "v1";
         };
-        /** DebateHistoryMessageModel */
-        DebateHistoryMessageModel: {
-            /** Content */
-            content: string;
-            /** Name */
-            name?: string | null;
-            /** Role */
-            role?: string | null;
-        };
-        /** DebateReportArtifactEnvelope */
-        DebateReportArtifactEnvelope: {
+        /** DebateFinalReportEnvelope */
+        DebateFinalReportEnvelope: {
             /** Created At */
             created_at: string;
             data: components["schemas"]["DebateArtifactModel"];
@@ -341,6 +332,15 @@ export interface components {
              * @constant
              */
             version: "v1";
+        };
+        /** DebateHistoryMessageModel */
+        DebateHistoryMessageModel: {
+            /** Content */
+            content: string;
+            /** Name */
+            name?: string | null;
+            /** Role */
+            role?: string | null;
         };
         /** EvidenceFactModel */
         EvidenceFactModel: {
@@ -382,9 +382,11 @@ export interface components {
         FinancialNewsItemModel: {
             analysis?: components["schemas"]["AIAnalysisModel"] | null;
             /** Categories */
-            categories: ("general" | "corporate_event" | "financials" | "trusted_news" | "analyst_opinion" | "bullish" | "bearish")[];
+            categories?: ("general" | "corporate_event" | "financials" | "trusted_news" | "analyst_opinion" | "bullish" | "bearish")[];
+            /** Content Id */
+            content_id?: string | null;
             /** Fetched At */
-            fetched_at: string;
+            fetched_at?: string;
             /** Full Content */
             full_content?: string | null;
             /** Id */
@@ -392,12 +394,12 @@ export interface components {
             /** Published At */
             published_at?: string | null;
             /** Related Tickers */
-            related_tickers: components["schemas"]["FinancialEntityModel"][];
+            related_tickers?: components["schemas"]["FinancialEntityModel"][];
             /** Snippet */
             snippet: string;
             source: components["schemas"]["SourceInfoModel"];
             /** Tags */
-            tags: string[];
+            tags?: string[];
             /** Title */
             title: string;
             /** Url */
@@ -432,8 +434,8 @@ export interface components {
             /** Ticker */
             ticker?: string | null;
         };
-        /** FinancialReportsArtifactEnvelope */
-        FinancialReportsArtifactEnvelope: {
+        /** FinancialReportsEnvelope */
+        FinancialReportsEnvelope: {
             /** Created At */
             created_at: string;
             data: components["schemas"]["FinancialReportsArtifactData"];
@@ -509,7 +511,7 @@ export interface components {
          */
         HumanTickerSelection: {
             /** Candidates */
-            candidates?: components["schemas"]["TickerCandidate"][];
+            candidates?: components["schemas"]["TickerCandidateModel"][];
             intent?: components["schemas"]["IntentExtraction"] | null;
             /**
              * Reason
@@ -605,6 +607,24 @@ export interface components {
              */
             type: string;
         };
+        /** NewsAnalysisReportEnvelope */
+        NewsAnalysisReportEnvelope: {
+            /** Created At */
+            created_at: string;
+            data: components["schemas"]["NewsArtifactModel"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "news_analysis_report";
+            /** Produced By */
+            produced_by: string;
+            /**
+             * Version
+             * @constant
+             */
+            version: "v1";
+        };
         /** NewsArticleArtifactData */
         NewsArticleArtifactData: {
             /** Full Text */
@@ -614,8 +634,8 @@ export interface components {
             /** Url */
             url?: string | null;
         };
-        /** NewsArticleArtifactEnvelope */
-        NewsArticleArtifactEnvelope: {
+        /** NewsArticleEnvelope */
+        NewsArticleEnvelope: {
             /** Created At */
             created_at: string;
             data: components["schemas"]["NewsArticleArtifactData"];
@@ -651,12 +671,10 @@ export interface components {
         /** NewsItemsListArtifactData */
         NewsItemsListArtifactData: {
             /** News Items */
-            news_items: {
-                [key: string]: unknown;
-            }[];
+            news_items: components["schemas"]["FinancialNewsItemModel"][];
         };
-        /** NewsItemsListArtifactEnvelope */
-        NewsItemsListArtifactEnvelope: {
+        /** NewsItemsListEnvelope */
+        NewsItemsListEnvelope: {
             /** Created At */
             created_at: string;
             data: components["schemas"]["NewsItemsListArtifactData"];
@@ -673,31 +691,30 @@ export interface components {
              */
             version: "v1";
         };
-        /** NewsReportArtifactEnvelope */
-        NewsReportArtifactEnvelope: {
-            /** Created At */
-            created_at: string;
-            data: components["schemas"]["NewsArtifactModel"];
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            kind: "news_analysis_report";
-            /** Produced By */
-            produced_by: string;
-            /**
-             * Version
-             * @constant
-             */
-            version: "v1";
+        /** NewsSearchResultItemModel */
+        NewsSearchResultItemModel: {
+            /** Categories */
+            categories?: string[];
+            /** Date */
+            date?: string | null;
+            /** Image */
+            image?: string | null;
+            /** Link */
+            link: string;
+            /** Snippet */
+            snippet: string;
+            /** Source */
+            source: string;
+            /** Title */
+            title: string;
         };
         /** NewsSelectionArtifactData */
         NewsSelectionArtifactData: {
             /** Selected Indices */
             selected_indices: number[];
         };
-        /** NewsSelectionArtifactEnvelope */
-        NewsSelectionArtifactEnvelope: {
+        /** NewsSelectionEnvelope */
+        NewsSelectionEnvelope: {
             /** Created At */
             created_at: string;
             data: components["schemas"]["NewsSelectionArtifactData"];
@@ -725,8 +742,8 @@ export interface components {
                 [key: string]: number | null;
             };
         };
-        /** PriceSeriesArtifactEnvelope */
-        PriceSeriesArtifactEnvelope: {
+        /** PriceSeriesEnvelope */
+        PriceSeriesEnvelope: {
             /** Created At */
             created_at: string;
             data: components["schemas"]["PriceSeriesArtifactData"];
@@ -792,12 +809,10 @@ export interface components {
             /** Formatted Results */
             formatted_results: string;
             /** Raw Results */
-            raw_results: {
-                [key: string]: unknown;
-            }[];
+            raw_results: components["schemas"]["NewsSearchResultItemModel"][];
         };
-        /** SearchResultsArtifactEnvelope */
-        SearchResultsArtifactEnvelope: {
+        /** SearchResultsEnvelope */
+        SearchResultsEnvelope: {
             /** Created At */
             created_at: string;
             data: components["schemas"]["SearchResultsArtifactData"];
@@ -853,6 +868,42 @@ export interface components {
             /** Thread Id */
             thread_id: string;
         };
+        /** TaChartDataEnvelope */
+        TaChartDataEnvelope: {
+            /** Created At */
+            created_at: string;
+            data: components["schemas"]["TechnicalChartArtifactData"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "ta_chart_data";
+            /** Produced By */
+            produced_by: string;
+            /**
+             * Version
+             * @constant
+             */
+            version: "v1";
+        };
+        /** TaFullReportEnvelope */
+        TaFullReportEnvelope: {
+            /** Created At */
+            created_at: string;
+            data: components["schemas"]["TechnicalArtifactModel"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "ta_full_report";
+            /** Produced By */
+            produced_by: string;
+            /**
+             * Version
+             * @constant
+             */
+            version: "v1";
+        };
         /** TechnicalArtifactModel */
         TechnicalArtifactModel: {
             frac_diff_metrics: components["schemas"]["FracDiffMetricsModel"];
@@ -882,42 +933,6 @@ export interface components {
                 [key: string]: number | null;
             };
         };
-        /** TechnicalChartArtifactEnvelope */
-        TechnicalChartArtifactEnvelope: {
-            /** Created At */
-            created_at: string;
-            data: components["schemas"]["TechnicalChartArtifactData"];
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            kind: "ta_chart_data";
-            /** Produced By */
-            produced_by: string;
-            /**
-             * Version
-             * @constant
-             */
-            version: "v1";
-        };
-        /** TechnicalReportArtifactEnvelope */
-        TechnicalReportArtifactEnvelope: {
-            /** Created At */
-            created_at: string;
-            data: components["schemas"]["TechnicalArtifactModel"];
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            kind: "ta_full_report";
-            /** Produced By */
-            produced_by: string;
-            /**
-             * Version
-             * @constant
-             */
-            version: "v1";
-        };
         /** ThreadStateResponse */
         ThreadStateResponse: {
             /** Agent Outputs */
@@ -945,11 +960,8 @@ export interface components {
             /** Thread Id */
             thread_id: string;
         };
-        /**
-         * TickerCandidate
-         * @description A potential ticker match from search.
-         */
-        TickerCandidate: {
+        /** TickerCandidateModel */
+        TickerCandidateModel: {
             /**
              * Confidence
              * @description Match confidence score (0-1)
@@ -1015,7 +1027,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["FinancialReportsArtifactEnvelope"] | components["schemas"]["PriceSeriesArtifactEnvelope"] | components["schemas"]["TechnicalChartArtifactEnvelope"] | components["schemas"]["TechnicalReportArtifactEnvelope"] | components["schemas"]["SearchResultsArtifactEnvelope"] | components["schemas"]["NewsSelectionArtifactEnvelope"] | components["schemas"]["NewsArticleArtifactEnvelope"] | components["schemas"]["NewsItemsListArtifactEnvelope"] | components["schemas"]["NewsReportArtifactEnvelope"] | components["schemas"]["DebateFactsArtifactEnvelope"] | components["schemas"]["DebateReportArtifactEnvelope"];
+                    "application/json": components["schemas"]["FinancialReportsEnvelope"] | components["schemas"]["PriceSeriesEnvelope"] | components["schemas"]["TaChartDataEnvelope"] | components["schemas"]["TaFullReportEnvelope"] | components["schemas"]["SearchResultsEnvelope"] | components["schemas"]["NewsSelectionEnvelope"] | components["schemas"]["NewsArticleEnvelope"] | components["schemas"]["NewsItemsListEnvelope"] | components["schemas"]["NewsAnalysisReportEnvelope"] | components["schemas"]["DebateFactsEnvelope"] | components["schemas"]["DebateFinalReportEnvelope"];
                 };
             };
             /** @description Validation Error */

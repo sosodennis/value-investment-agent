@@ -1,7 +1,7 @@
 # Deep Refactor Progress Tracker
 Date: 2026-02-13
 Status: Historical working log (non-normative)
-Plan Reference: `/Users/denniswong/Desktop/Project/value-investment-agent/docs/deep-refactor-master-plan-2026-02-13.md`
+Plan Reference: `/Users/denniswong/Desktop/Project/value-investment-agent/docs/archive/deep-refactor-master-plan-2026-02-13.md`
 
 This file preserves step-by-step migration history.
 It may reference superseded file names during intermediate waves.

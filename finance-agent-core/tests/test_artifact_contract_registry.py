@@ -1,17 +1,15 @@
-from src.common.contracts import (
+from src.interface.artifacts.artifact_contract_registry import (
+    canonicalize_artifact_data_by_kind,
+    parse_artifact_data_json,
+    parse_artifact_data_model_as,
+)
+from src.interface.artifacts.artifact_data_models import PriceSeriesArtifactData
+from src.shared.kernel.contracts import (
     ARTIFACT_KIND_DEBATE_FINAL_REPORT,
     ARTIFACT_KIND_FINANCIAL_REPORTS,
     ARTIFACT_KIND_NEWS_ANALYSIS_REPORT,
-    ARTIFACT_KIND_NEWS_ITEMS_LIST,
     ARTIFACT_KIND_PRICE_SERIES,
-    ARTIFACT_KIND_SEARCH_RESULTS,
-)
-from src.interface.artifact_api_models import PriceSeriesArtifactData
-from src.interface.artifact_contract_registry import (
-    canonicalize_artifact_data_by_kind,
-    parse_artifact_data_model_as,
-    parse_news_items_for_debate,
-    parse_technical_debate_payload,
+    ARTIFACT_KIND_TA_FULL_REPORT,
 )
 
 
@@ -47,7 +45,7 @@ def test_parse_artifact_data_model_as_routes_kind_to_model() -> None:
     assert parsed.price_series["2026-01-01"] == 100.0
 
 
-def test_canonicalize_financial_reports_detects_full_payload() -> None:
+def test_canonicalize_financial_reports_uses_model_validation_only() -> None:
     canonical = canonicalize_artifact_data_by_kind(
         ARTIFACT_KIND_FINANCIAL_REPORTS,
         {
@@ -70,9 +68,9 @@ def test_canonicalize_financial_reports_detects_full_payload() -> None:
         },
         context="unit-test",
     )
-    assert canonical["company_name"] == "AAPL"
-    assert canonical["sector"] == "Unknown"
-    assert canonical["industry"] == "Unknown"
+    assert canonical["ticker"] == "AAPL"
+    assert canonical["company_name"] is None
+    assert canonical["sector"] is None
 
 
 def test_canonicalize_debate_uses_domain_normalization() -> None:
@@ -125,36 +123,62 @@ def test_canonicalize_debate_uses_domain_normalization() -> None:
     assert "analysis_bias" not in canonical
 
 
-def test_parse_technical_debate_payload_rejects_unsupported_kind() -> None:
+def test_parse_artifact_data_json_rejects_unsupported_kind() -> None:
     try:
-        parse_technical_debate_payload(
-            ARTIFACT_KIND_SEARCH_RESULTS,
-            {"raw_results": [], "formatted_results": ""},
+        parse_artifact_data_json(
+            "unsupported_kind",
+            {"a": 1},
             context="unit-test",
         )
         raise AssertionError("expected TypeError")
     except TypeError as exc:
-        assert "not supported for technical debate payload" in str(exc)
+        assert "unsupported artifact kind" in str(exc)
 
 
-def test_parse_news_items_for_debate_accepts_two_supported_kinds() -> None:
-    from_items_list = parse_news_items_for_debate(
-        ARTIFACT_KIND_NEWS_ITEMS_LIST,
-        {"news_items": [_news_item_minimal()]},
-        context="unit-test",
-    )
-    assert len(from_items_list) == 1
-    assert from_items_list[0]["id"] == "n1"
-
-    from_report = parse_news_items_for_debate(
+def test_parse_artifact_data_json_for_news_report() -> None:
+    parsed = parse_artifact_data_json(
         ARTIFACT_KIND_NEWS_ANALYSIS_REPORT,
         {
             "ticker": "AAPL",
             "overall_sentiment": "bullish",
             "sentiment_score": 0.8,
             "key_themes": [],
-            "news_items": [],
+            "news_items": [_news_item_minimal()],
         },
         context="unit-test",
     )
-    assert from_report == []
+    news_items = parsed.get("news_items")
+    assert isinstance(news_items, list)
+    assert len(news_items) == 1
+
+
+def test_parse_artifact_data_json_for_technical_report() -> None:
+    parsed = parse_artifact_data_json(
+        ARTIFACT_KIND_TA_FULL_REPORT,
+        {
+            "ticker": "AAPL",
+            "timestamp": "2026-01-01T00:00:00+00:00",
+            "frac_diff_metrics": {
+                "optimal_d": 0.4,
+                "window_length": 120,
+                "adf_statistic": -3.1,
+                "adf_pvalue": 0.03,
+                "memory_strength": "balanced",
+            },
+            "signal_state": {
+                "z_score": 1.2,
+                "statistical_state": "deviating",
+                "direction": "bullish",
+                "risk_level": "medium",
+                "confluence": {
+                    "bollinger_state": "upper_band_touch",
+                    "macd_momentum": "positive",
+                    "obv_state": "accumulation",
+                    "statistical_strength": 0.7,
+                },
+            },
+            "semantic_tags": ["mean-reversion"],
+        },
+        context="unit-test",
+    )
+    assert parsed["ticker"] == "AAPL"

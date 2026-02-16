@@ -12,15 +12,7 @@ from src.agents.fundamental.domain.services import (
     extract_equity_value_from_metrics,
     resolve_calculator_model_type,
 )
-from src.agents.fundamental.interface.contracts import FundamentalPreviewInputModel
-from src.agents.fundamental.interface.serializers import (
-    build_model_selection_artifact,
-    build_model_selection_report_payload,
-    build_valuation_artifact,
-    build_valuation_preview,
-    normalize_model_selection_reports,
-)
-from src.common.types import AgentOutputArtifactPayload, JSONObject
+from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
 
 
 def build_mapper_context(
@@ -130,7 +122,16 @@ async def build_and_store_model_selection_artifact(
     financial_reports: list[JSONObject],
     port: IFundamentalReportRepo,
     summarize_preview: Callable[
-        [FundamentalPreviewInputModel, list[JSONObject]], JSONObject
+        [FundamentalAppContextDTO, list[JSONObject]], JSONObject
+    ],
+    normalize_model_selection_reports_fn: Callable[
+        [list[JSONObject]], list[JSONObject]
+    ],
+    build_model_selection_report_payload_fn: Callable[
+        [str, str, str, str, str, str, list[JSONObject]], JSONObject
+    ],
+    build_model_selection_artifact_fn: Callable[
+        [str, str, JSONObject], AgentOutputArtifactPayload
     ],
 ) -> tuple[AgentOutputArtifactPayload | None, str | None]:
     if not resolved_ticker:
@@ -143,29 +144,17 @@ async def build_and_store_model_selection_artifact(
         model_type=model_type,
         valuation_summary=reasoning,
     )
-    normalized_reports = normalize_model_selection_reports(financial_reports)
-    preview = summarize_preview(
-        FundamentalPreviewInputModel(
-            ticker=mapper_ctx.ticker,
-            company_name=mapper_ctx.company_name,
-            sector=mapper_ctx.sector or "Unknown",
-            industry=mapper_ctx.industry or "Unknown",
-            status=mapper_ctx.status,
-            selected_model=mapper_ctx.model_type,
-            model_type=mapper_ctx.model_type,
-            valuation_summary=mapper_ctx.valuation_summary,
-        ),
-        normalized_reports,
-    )
+    normalized_reports = normalize_model_selection_reports_fn(financial_reports)
+    preview = summarize_preview(mapper_ctx, normalized_reports)
 
-    full_report_data = build_model_selection_report_payload(
-        ticker=resolved_ticker,
-        model_type=model_type,
-        company_name=mapper_ctx.company_name,
-        sector=mapper_ctx.sector or "Unknown",
-        industry=mapper_ctx.industry or "Unknown",
-        reasoning=reasoning,
-        normalized_reports=normalized_reports,
+    full_report_data = build_model_selection_report_payload_fn(
+        resolved_ticker,
+        model_type,
+        mapper_ctx.company_name,
+        mapper_ctx.sector or "Unknown",
+        mapper_ctx.industry or "Unknown",
+        reasoning,
+        normalized_reports,
     )
 
     timestamp = int(time.time())
@@ -175,11 +164,7 @@ async def build_and_store_model_selection_artifact(
         key_prefix=f"fa_{resolved_ticker}_{timestamp}",
     )
 
-    artifact = build_model_selection_artifact(
-        ticker=resolved_ticker,
-        report_id=report_id,
-        preview=preview,
-    )
+    artifact = build_model_selection_artifact_fn(resolved_ticker, report_id, preview)
     return artifact, report_id
 
 
@@ -220,7 +205,10 @@ def build_valuation_success_update(
     calculation_metrics: JSONObject,
     assumptions: list[str],
     summarize_preview: Callable[
-        [FundamentalPreviewInputModel, list[JSONObject]], JSONObject
+        [FundamentalAppContextDTO, list[JSONObject]], JSONObject
+    ],
+    build_valuation_artifact_fn: Callable[
+        [str | None, str, str, JSONObject], AgentOutputArtifactPayload
     ],
 ) -> JSONObject:
     fa_update = fundamental.copy()
@@ -236,23 +224,16 @@ def build_valuation_success_update(
         status="calculated",
         model_type=model_type,
     )
-    preview = build_valuation_preview(
-        ticker=app_context.ticker,
-        company_name=app_context.company_name,
-        sector=app_context.sector or "Unknown",
-        industry=app_context.industry or "Unknown",
-        status=app_context.status,
-        valuation_summary=app_context.valuation_summary,
-        model_type=model_type,
-        reports_raw=reports_raw,
-        equity_value=equity_value,
-        summarize_preview=summarize_preview,
+    preview = summarize_preview(app_context, reports_raw)
+    preview.update(
+        {
+            "model_type": model_type,
+            "equity_value": equity_value,
+            "status": "calculated",
+        }
     )
-    artifact = build_valuation_artifact(
-        ticker=ticker,
-        model_type=model_type,
-        reports_artifact_id=reports_artifact_id,
-        preview=preview,
+    artifact = build_valuation_artifact_fn(
+        ticker, model_type, reports_artifact_id, preview
     )
     fa_update["artifact"] = artifact
     return {

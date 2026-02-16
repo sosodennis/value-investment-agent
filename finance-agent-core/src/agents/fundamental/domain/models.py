@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from enum import Enum
 
-from src.shared.domain.market_identity import CompanyProfile
+from src.shared.cross_agent.domain.market_identity import CompanyProfile
 
 
 class ValuationModel(str, Enum):

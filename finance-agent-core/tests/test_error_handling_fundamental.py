@@ -2,7 +2,6 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from src.agents.fundamental.interface.contracts import FinancialReportModel
 from src.workflow.nodes.fundamental_analysis.nodes import (
     financial_health_node,
     model_selection_node,
@@ -96,13 +95,8 @@ async def test_model_selection_node_accepts_canonical_report_shape():
 
     with (
         patch(
-            "src.agents.fundamental.data.ports.FundamentalArtifactPort.load_financial_report_models",
-            new=AsyncMock(
-                return_value=[
-                    FinancialReportModel.model_validate(item)
-                    for item in canonical_reports
-                ]
-            ),
+            "src.agents.fundamental.data.ports.FundamentalArtifactPort.load_financial_reports",
+            new=AsyncMock(return_value=canonical_reports),
         ),
         patch(
             "src.agents.fundamental.data.ports.FundamentalArtifactPort.save_financial_reports",

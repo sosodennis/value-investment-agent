@@ -6,7 +6,7 @@ import json
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
 from src.agents.debate.application.state_readers import get_last_message_from_role
-from src.common.tools.logger import get_logger
+from src.shared.kernel.tools.logger import get_logger
 
 logger = get_logger(__name__)
 

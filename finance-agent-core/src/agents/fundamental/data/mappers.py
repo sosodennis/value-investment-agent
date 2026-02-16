@@ -6,7 +6,7 @@ from src.agents.fundamental.interface.contracts import (
     RealEstateExtensionModel,
     TraceableFieldModel,
 )
-from src.common.types import JSONObject
+from src.shared.kernel.types import JSONObject
 
 
 def financial_report_models_to_json(

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.common.traceable import TraceableField
+from src.shared.kernel.traceable import TraceableField
 
 from ...engine.graphs.reit_ffo import create_reit_ffo_graph
 from .schemas import ReitFfoParams

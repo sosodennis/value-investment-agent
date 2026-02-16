@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import numpy as np
 from fastembed import TextEmbedding
 
-from src.common.tools.logger import get_logger
+from src.shared.kernel.tools.logger import get_logger
 
 logger = get_logger(__name__)
 

@@ -7,7 +7,7 @@ from src.agents.news.application.analysis_service import (
     analyze_news_items,
     build_analysis_chain_payload,
     build_analysis_chains,
-    run_analysis_with_fallback,
+    run_analysis_with_resilience,
 )
 from src.agents.news.application.fetch_service import (
     build_articles_to_fetch,
@@ -16,9 +16,9 @@ from src.agents.news.application.fetch_service import (
     parse_published_at,
 )
 from src.agents.news.application.selection_service import (
-    build_selector_fallback_indices,
+    build_selector_degraded_indices,
     normalize_selected_indices,
-    run_selector_with_fallback,
+    run_selector_with_resilience,
 )
 from src.agents.news.application.state_updates import (
     build_analyst_chain_error_update,
@@ -179,9 +179,9 @@ def test_parse_published_at_invalid_returns_none() -> None:
     assert parse_published_at("bad-date") is None
 
 
-def test_build_selector_fallback_indices_returns_top_three() -> None:
+def test_build_selector_degraded_indices_returns_top_three() -> None:
     raw_results = [{"t": "A"}, {"t": "B"}, {"t": "C"}, {"t": "D"}]
-    assert build_selector_fallback_indices(raw_results) == [0, 1, 2]
+    assert build_selector_degraded_indices(raw_results) == [0, 1, 2]
 
 
 def test_normalize_selected_indices_deduplicates_and_limits() -> None:
@@ -236,17 +236,17 @@ def test_build_analysis_chains_returns_two_invokable_chains() -> None:
     assert chains.finbert.invoke({}).model_dump(mode="json")["summary"] == "ok"
 
 
-def test_run_analysis_with_fallback_uses_basic_when_finbert_chain_fails() -> None:
+def test_run_analysis_with_resilience_uses_basic_when_finbert_chain_fails() -> None:
     chains = AnalysisChains(
         basic=_GoodChain({"source_chain": "basic"}),
         finbert=_FailingChain(),
     )
-    payload, used_fallback = run_analysis_with_fallback(
+    payload, used_degraded_path = run_analysis_with_resilience(
         chains=chains,
         chain_payload={"ticker": "GME"},
         prefer_finbert_chain=True,
     )
-    assert used_fallback is True
+    assert used_degraded_path is True
     assert payload["source_chain"] == "basic"
 
 
@@ -264,11 +264,11 @@ class _SelectorChain:
         return _SelectorResponse(self._content)
 
 
-def test_run_selector_with_fallback_parses_selected_urls() -> None:
+def test_run_selector_with_resilience_parses_selected_urls() -> None:
     chain = _SelectorChain(
         '{"selected_articles":[{"url":"https://x.com/a"},{"url":"https://x.com/c"}]}'
     )
-    result = run_selector_with_fallback(
+    result = run_selector_with_resilience(
         chain=chain,
         ticker="GME",
         formatted_results="...",

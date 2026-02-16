@@ -1,4 +1,4 @@
-from .orchestrator import IntentOrchestrator, intent_orchestrator
+from .orchestrator import IntentOrchestrator
 from .use_cases import (
     deduplicate_candidates,
     extract_candidates_from_search,
@@ -10,5 +10,4 @@ __all__ = [
     "deduplicate_candidates",
     "extract_candidates_from_search",
     "extract_intent",
-    "intent_orchestrator",
 ]

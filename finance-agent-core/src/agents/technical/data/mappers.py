@@ -2,9 +2,14 @@ from __future__ import annotations
 
 import pandas as pd
 
-from src.agents.technical.domain.models import FracdiffSerializationResult
+from src.agents.technical.domain.models import (
+    BollingerSnapshot,
+    FracdiffSerializationResult,
+    ObvSnapshot,
+    StatisticalStrengthSnapshot,
+)
 from src.agents.technical.domain.services import safe_float
-from src.common.types import JSONObject
+from src.shared.kernel.types import JSONObject
 
 
 def _series_to_json(series: pd.Series) -> dict[str, float | None]:
@@ -24,24 +29,24 @@ def serialize_fracdiff_outputs(
     stat_strength_data: JSONObject,
     obv_data: JSONObject,
 ) -> FracdiffSerializationResult:
-    bollinger = {
-        "upper": safe_float(bollinger_data.get("upper")),
-        "middle": safe_float(bollinger_data.get("middle")),
-        "lower": safe_float(bollinger_data.get("lower")),
-        "state": str(bollinger_data.get("state") or "INSIDE"),
-        "bandwidth": safe_float(bollinger_data.get("bandwidth")),
-    }
+    bollinger = BollingerSnapshot(
+        upper=safe_float(bollinger_data.get("upper")),
+        middle=safe_float(bollinger_data.get("middle")),
+        lower=safe_float(bollinger_data.get("lower")),
+        state=str(bollinger_data.get("state") or "INSIDE"),
+        bandwidth=safe_float(bollinger_data.get("bandwidth")),
+    )
 
-    stat_strength = {
-        "value": safe_float(stat_strength_data.get("value")),
-    }
+    stat_strength = StatisticalStrengthSnapshot(
+        value=safe_float(stat_strength_data.get("value"))
+    )
 
-    obv = {
-        "raw_obv_val": safe_float(obv_data.get("raw_obv_val")),
-        "fd_obv_z": safe_float(obv_data.get("fd_obv_z")),
-        "optimal_d": safe_float(obv_data.get("optimal_d")),
-        "state": str(obv_data.get("state") or "NEUTRAL"),
-    }
+    obv = ObvSnapshot(
+        raw_obv_val=safe_float(obv_data.get("raw_obv_val")),
+        fd_obv_z=safe_float(obv_data.get("fd_obv_z")),
+        optimal_d=safe_float(obv_data.get("optimal_d")),
+        state=str(obv_data.get("state") or "NEUTRAL"),
+    )
 
     return FracdiffSerializationResult(
         bollinger=bollinger,

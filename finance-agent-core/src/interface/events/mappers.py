@@ -12,8 +12,8 @@ Design Principles:
 
 from collections.abc import Mapping
 
-from src.common.types import AgentOutputArtifactPayload
-from src.interface.schemas import parse_agent_output_artifact_payload
+from src.interface.events.schemas import parse_agent_output_artifact_payload
+from src.shared.kernel.types import AgentOutputArtifactPayload
 
 
 class NodeOutputMapper:

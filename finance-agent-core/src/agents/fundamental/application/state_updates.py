@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.common.types import AgentOutputArtifactPayload, JSONObject
+from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
 
 
 def build_financial_health_missing_ticker_update() -> JSONObject:

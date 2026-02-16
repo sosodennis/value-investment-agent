@@ -13,7 +13,10 @@ from src.agents.debate.application.debate_context import (
     build_debate_conversation_context,
 )
 from src.agents.debate.application.dto import DebateFactExtractionResult
-from src.agents.debate.application.ports import SycophancyDetectorPort
+from src.agents.debate.application.ports import (
+    DebateSourceReaderPort,
+    SycophancyDetectorPort,
+)
 from src.agents.debate.application.prompt_runtime import (
     MAX_CHAR_HISTORY as PROMPT_MAX_CHAR_HISTORY,
 )
@@ -27,7 +30,6 @@ from src.agents.debate.application.prompt_runtime import (
     log_messages,
 )
 from src.agents.debate.application.report_service import get_debate_reports_text
-from src.agents.debate.data.report_reader import load_debate_source_data
 from src.agents.debate.domain.fact_builders import (
     build_financial_facts,
     build_news_facts,
@@ -36,7 +38,7 @@ from src.agents.debate.domain.fact_builders import (
     summarize_facts_by_source,
 )
 from src.agents.debate.domain.models import EvidenceFact, FactBundle
-from src.common.tools.logger import get_logger
+from src.shared.kernel.tools.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -49,6 +51,8 @@ class _LLMLike(Protocol):
 
 async def extract_debate_facts(
     state: Mapping[str, object],
+    *,
+    source_reader: DebateSourceReaderPort,
 ) -> DebateFactExtractionResult:
     artifact_context = build_debate_artifact_context(state)
     ticker = artifact_context.ticker
@@ -57,7 +61,7 @@ async def extract_debate_facts(
             "Missing intent_extraction.resolved_ticker for fact extraction"
         )
 
-    source_data = await load_debate_source_data(
+    source_data = await source_reader.load_debate_source_data(
         financial_reports_artifact_id=artifact_context.financial_reports_artifact_id,
         news_artifact_id=artifact_context.news_artifact_id,
         technical_artifact_id=artifact_context.technical_artifact_id,
@@ -108,6 +112,7 @@ async def execute_bull_round(
     adversarial_rule: str,
     system_prompt_template: str,
     llm: _LLMLike,
+    source_reader: DebateSourceReaderPort,
 ) -> dict[str, object]:
     conversation_context = build_debate_conversation_context(state)
     ticker = conversation_context.ticker
@@ -116,7 +121,7 @@ async def execute_bull_round(
 
     log_llm_config("BULL_AGENT", round_num, llm)
     compressed_reports = await get_debate_reports_text(
-        state, stage=f"bull_r{round_num}", ticker=ticker
+        state, stage=f"bull_r{round_num}", ticker=ticker, source_reader=source_reader
     )
 
     system_content = system_prompt_template.format(
@@ -159,6 +164,7 @@ async def execute_bear_round(
     adversarial_rule: str,
     system_prompt_template: str,
     llm: _LLMLike,
+    source_reader: DebateSourceReaderPort,
 ) -> dict[str, object]:
     conversation_context = build_debate_conversation_context(state)
     ticker = conversation_context.ticker
@@ -167,7 +173,7 @@ async def execute_bear_round(
 
     log_llm_config("BEAR_AGENT", round_num, llm)
     compressed_reports = await get_debate_reports_text(
-        state, stage=f"bear_r{round_num}", ticker=ticker
+        state, stage=f"bear_r{round_num}", ticker=ticker, source_reader=source_reader
     )
 
     system_content = system_prompt_template.format(
@@ -210,6 +216,7 @@ async def execute_moderator_round(
     system_prompt_template: str,
     llm: _LLMLike,
     detector: SycophancyDetectorPort,
+    source_reader: DebateSourceReaderPort,
 ) -> dict[str, object]:
     conversation_context = build_debate_conversation_context(state)
     ticker = conversation_context.ticker
@@ -230,7 +237,10 @@ async def execute_moderator_round(
     )
 
     compressed_reports = await get_debate_reports_text(
-        state, stage=f"moderator_r{round_num}", ticker=ticker
+        state,
+        stage=f"moderator_r{round_num}",
+        ticker=ticker,
+        source_reader=source_reader,
     )
     history = conversation_context.history
 

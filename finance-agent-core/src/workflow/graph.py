@@ -4,7 +4,7 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.graph import END, START, StateGraph
 from psycopg_pool import AsyncConnectionPool
 
-from src.common.tools.logger import get_logger
+from src.shared.kernel.tools.logger import get_logger
 
 from .nodes.consolidate_research import consolidate_research_node
 from .nodes.debate.graph import build_debate_subgraph

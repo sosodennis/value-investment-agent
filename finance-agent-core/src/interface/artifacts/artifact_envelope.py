@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field, field_validator
 
-from src.common.contracts import ARTIFACT_CONTRACT_VERSION
+from src.shared.kernel.contracts import ARTIFACT_CONTRACT_VERSION
 
 ArtifactPayload = dict[str, object] | list[object]
 

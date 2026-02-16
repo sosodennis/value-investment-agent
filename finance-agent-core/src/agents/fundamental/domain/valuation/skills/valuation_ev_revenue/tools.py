@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.common.traceable import TraceableField
+from src.shared.kernel.traceable import TraceableField
 
 from ...engine.graphs.ev_multiple import create_ev_multiple_graph
 from .schemas import EVRevenueParams

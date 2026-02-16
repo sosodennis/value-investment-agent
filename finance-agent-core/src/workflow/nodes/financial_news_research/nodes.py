@@ -2,7 +2,7 @@ from langchain_core.messages import AIMessage
 from langgraph.graph import END
 from langgraph.types import Command
 
-from src.agents.news.application.orchestrator import news_orchestrator
+from src.agents.news.application.orchestrator import NewsOrchestrator
 from src.agents.news.data.clients import (
     fetch_clean_text_async,
     generate_news_id,
@@ -10,11 +10,13 @@ from src.agents.news.data.clients import (
     get_source_reliability,
     news_search_multi_timeframe,
 )
+from src.agents.news.data.ports import news_artifact_port
 from src.agents.news.interface.contracts import (
     AIAnalysisModel,
     FinancialNewsItemModel,
     SourceInfoModel,
 )
+from src.agents.news.interface.mappers import summarize_news_for_preview
 from src.agents.news.interface.prompts import (
     ANALYST_SYSTEM_PROMPT,
     ANALYST_USER_PROMPT_BASIC,
@@ -22,13 +24,44 @@ from src.agents.news.interface.prompts import (
     SELECTOR_SYSTEM_PROMPT,
     SELECTOR_USER_PROMPT,
 )
-from src.common.tools.llm import get_llm
-from src.common.tools.logger import get_logger
-from src.interface.canonical_serializers import canonicalize_news_artifact_data
+from src.agents.news.interface.serializers import build_news_report_payload
+from src.infrastructure.llm.provider import get_llm
+from src.interface.events.schemas import ArtifactReference, build_artifact_payload
+from src.shared.kernel.contracts import (
+    ARTIFACT_KIND_NEWS_ANALYSIS_REPORT,
+    OUTPUT_KIND_FINANCIAL_NEWS_RESEARCH,
+)
+from src.shared.kernel.tools.logger import get_logger
 
 from .subgraph_state import FinancialNewsState
 
 logger = get_logger(__name__)
+
+
+def _build_news_output_artifact(
+    summary: str, preview: dict[str, object], report_id: str | None
+) -> dict[str, object] | None:
+    reference = None
+    if report_id:
+        reference = ArtifactReference(
+            artifact_id=report_id,
+            download_url=f"/api/artifacts/{report_id}",
+            type=ARTIFACT_KIND_NEWS_ANALYSIS_REPORT,
+        )
+    return build_artifact_payload(
+        kind=OUTPUT_KIND_FINANCIAL_NEWS_RESEARCH,
+        summary=summary,
+        preview=preview,
+        reference=reference,
+    )
+
+
+news_orchestrator = NewsOrchestrator(
+    port=news_artifact_port,
+    summarize_preview=summarize_news_for_preview,
+    build_news_report_payload=build_news_report_payload,
+    build_output_artifact=_build_news_output_artifact,
+)
 
 
 def _resolve_goto(goto: str) -> str:
@@ -84,10 +117,7 @@ async def analyst_node(state: FinancialNewsState) -> Command:
 
 async def aggregator_node(state: FinancialNewsState) -> Command:
     """[Funnel Node 5] Aggregate results and update state."""
-    result = await news_orchestrator.run_aggregator(
-        state,
-        canonicalize_news_artifact_data_fn=canonicalize_news_artifact_data,
-    )
+    result = await news_orchestrator.run_aggregator(state)
 
     update = dict(result.update)
     summary_message = result.summary_message

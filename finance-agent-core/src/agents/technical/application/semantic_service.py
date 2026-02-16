@@ -11,22 +11,28 @@ from src.agents.technical.domain.models import (
     SemanticTagPolicyInput,
     SemanticTagPolicyResult,
 )
-from src.common.tools.logger import get_logger
-from src.common.types import JSONObject
-from src.interface.artifact_api_models import (
-    PriceSeriesArtifactData,
-    TechnicalChartArtifactData,
-)
+from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.types import JSONObject
 
 logger = get_logger(__name__)
+
+
+class _PriceSeriesDataLike(Protocol):
+    price_series: dict[str, float]
+    volume_series: dict[str, float]
+
+
+class _TechnicalChartDataLike(Protocol):
+    fracdiff_series: dict[str, float]
+    z_score_series: dict[str, float]
 
 
 @dataclass(frozen=True)
 class BacktestContextResult:
     backtest_context: str
     wfa_context: str
-    price_data: PriceSeriesArtifactData | None
-    chart_data: TechnicalChartArtifactData | None
+    price_data: _PriceSeriesDataLike | None
+    chart_data: _TechnicalChartDataLike | None
 
 
 @dataclass(frozen=True)
@@ -51,7 +57,7 @@ class _TechnicalPortLike(Protocol):
         self,
         price_artifact_id: object,
         chart_artifact_id: object,
-    ) -> tuple[PriceSeriesArtifactData | None, TechnicalChartArtifactData | None]: ...
+    ) -> tuple[_PriceSeriesDataLike | None, _TechnicalChartDataLike | None]: ...
 
 
 class _BacktesterLike(Protocol):
@@ -76,8 +82,8 @@ async def assemble_backtest_context(
     wfa_optimizer_factory: Callable[[_BacktesterLike], _WFAOptimizerLike],
     format_wfa_for_llm_fn: Callable[[object], str],
 ) -> BacktestContextResult:
-    price_data: PriceSeriesArtifactData | None = None
-    chart_data: TechnicalChartArtifactData | None = None
+    price_data: _PriceSeriesDataLike | None = None
+    chart_data: _TechnicalChartDataLike | None = None
     try:
         price_data, chart_data = await technical_port.load_price_and_chart_data(
             price_artifact_id, chart_artifact_id
@@ -146,8 +152,8 @@ def assemble_semantic_finalize(
     technical_context: JSONObject,
     tags_result: SemanticTagPolicyResult,
     llm_interpretation: str,
-    price_data: PriceSeriesArtifactData | None,
-    chart_data: TechnicalChartArtifactData | None,
+    price_data: _PriceSeriesDataLike | None,
+    chart_data: _TechnicalChartDataLike | None,
     build_full_report_payload_fn: Callable[..., JSONObject],
 ) -> SemanticFinalizeResult:
     direction = tags_result.direction.upper()

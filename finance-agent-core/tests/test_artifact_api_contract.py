@@ -6,18 +6,20 @@ import httpx
 import pytest
 
 from api.server import app
-from src.interface.artifact_envelope import build_artifact_envelope
-from src.interface.canonical_serializers import (
-    canonicalize_debate_artifact_data,
-    canonicalize_fundamental_artifact_data,
-    canonicalize_news_artifact_data,
-    canonicalize_technical_artifact_data,
+from src.agents.debate.interface.contracts import parse_debate_artifact_model
+from src.agents.fundamental.interface.contracts import (
+    parse_fundamental_artifact_model,
 )
+from src.agents.news.interface.contracts import parse_news_artifact_model
+from src.agents.technical.interface.contracts import (
+    parse_technical_artifact_model,
+)
+from src.interface.artifacts.artifact_envelope import build_artifact_envelope
 
 
 @pytest.mark.asyncio
 async def test_get_artifact_returns_canonical_fundamental_payload() -> None:
-    payload = canonicalize_fundamental_artifact_data(
+    payload = parse_fundamental_artifact_model(
         {
             "ticker": "AAPL",
             "model_type": "saas",
@@ -65,7 +67,7 @@ async def test_get_artifact_returns_canonical_fundamental_payload() -> None:
 
 @pytest.mark.asyncio
 async def test_get_artifact_returns_canonical_news_and_debate_payload() -> None:
-    news_payload = canonicalize_news_artifact_data(
+    news_payload = parse_news_artifact_model(
         {
             "ticker": "NVDA",
             "news_items": [
@@ -111,7 +113,7 @@ async def test_get_artifact_returns_canonical_news_and_debate_payload() -> None:
         }
     )
 
-    debate_payload = canonicalize_debate_artifact_data(
+    debate_payload = parse_debate_artifact_model(
         {
             "scenario_analysis": {
                 "bull_case": {
@@ -140,7 +142,7 @@ async def test_get_artifact_returns_canonical_news_and_debate_payload() -> None:
         }
     )
 
-    technical_payload = canonicalize_technical_artifact_data(
+    technical_payload = parse_technical_artifact_model(
         {
             "ticker": "TSLA",
             "timestamp": "2026-02-12T12:00:00Z",

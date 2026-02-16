@@ -10,7 +10,7 @@ from src.workflow.nodes.intent_extraction.nodes import (
 
 
 @pytest.mark.asyncio
-async def test_extraction_node_error_fallback():
+async def test_extraction_node_error_degraded_path():
     state = {"user_query": "Analyze Apple"}
 
     with patch(
@@ -27,7 +27,7 @@ async def test_extraction_node_error_fallback():
 
 
 @pytest.mark.asyncio
-async def test_searching_node_error_fallback():
+async def test_searching_node_error_degraded_path():
     state = {
         "intent_extraction": {
             "extracted_intent": {"company_name": "Apple", "ticker": "AAPL"}
@@ -46,7 +46,7 @@ async def test_searching_node_error_fallback():
 
 
 @pytest.mark.asyncio
-async def test_decision_node_error_fallback():
+async def test_decision_node_error_degraded_path():
     state = {
         "intent_extraction": {
             "ticker_candidates": [{"symbol": "AAPL", "confidence": 1.0}]

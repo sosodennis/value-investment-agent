@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from src.agents.intent.domain.models import TickerCandidate
 from src.agents.intent.interface.contracts import TickerCandidateModel
-from src.common.types import JSONObject
+from src.shared.kernel.types import JSONObject
 
 
 def summarize_intent_for_preview(ctx: JSONObject) -> JSONObject:

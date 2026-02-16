@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from src.common.traceable import (
+from src.shared.kernel.traceable import (
     ComputedProvenance,
     ManualProvenance,
     TraceableField,

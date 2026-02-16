@@ -6,7 +6,7 @@ from src.agents.technical.domain.services import (
     derive_memory_strength,
     derive_statistical_state,
 )
-from src.common.types import JSONObject
+from src.shared.kernel.types import JSONObject
 
 
 def build_full_report_payload(

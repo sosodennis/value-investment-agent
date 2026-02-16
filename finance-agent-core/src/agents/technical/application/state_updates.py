@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from src.common.types import AgentOutputArtifactPayload, JSONObject
+from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
 
 
 @dataclass(frozen=True)

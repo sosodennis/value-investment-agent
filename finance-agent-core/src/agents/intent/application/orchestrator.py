@@ -2,43 +2,42 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Protocol
 
-from src.agents.intent.application.use_cases import (
-    deduplicate_candidates,
-    extract_candidates_from_search,
-    extract_intent,
-)
-from src.agents.intent.data.market_clients import (
-    get_company_profile,
-    search_ticker,
-    web_search,
-)
 from src.agents.intent.domain.models import TickerCandidate
-from src.agents.intent.domain.policies import should_request_clarification
-from src.agents.intent.interface.contracts import IntentExtraction
-from src.agents.intent.interface.mappers import summarize_intent_for_preview
-from src.agents.intent.interface.parsers import (
-    parse_resume_selection_input,
-    parse_ticker_candidates,
-)
-from src.common.contracts import OUTPUT_KIND_INTENT_EXTRACTION
-from src.common.types import AgentOutputArtifactPayload, JSONObject
-from src.interface.schemas import build_artifact_payload
-from src.shared.domain.market_identity import CompanyProfile
+from src.shared.cross_agent.domain.market_identity import CompanyProfile
+from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
+
+
+class _ParsedSelectionInput(Protocol):
+    selected_symbol: str | None
+    ticker: str | None
+
+
+class _IntentExtractionLike(Protocol):
+    company_name: str | None
+    ticker: str | None
+    is_valuation_request: bool
+    reasoning: str | None
+
+    def model_dump(self, *, mode: str = "python") -> dict[str, object]: ...
 
 
 @dataclass
 class IntentOrchestrator:
-    extract_intent_fn: Callable[[str], IntentExtraction]
+    extract_intent_fn: Callable[[str], _IntentExtractionLike]
     search_ticker_fn: Callable[[str], list[TickerCandidate]]
     web_search_fn: Callable[[str], str]
     extract_candidates_from_search_fn: Callable[[str, str], list[TickerCandidate]]
     deduplicate_candidates_fn: Callable[[list[TickerCandidate]], list[TickerCandidate]]
     should_request_clarification_fn: Callable[[list[TickerCandidate]], bool]
     get_company_profile_fn: Callable[[str], CompanyProfile | None]
+    parse_ticker_candidates_fn: Callable[[object], list[TickerCandidate]]
+    parse_resume_selection_input_fn: Callable[[object], _ParsedSelectionInput]
     summarize_preview_fn: Callable[[JSONObject], JSONObject]
+    build_output_artifact_fn: Callable[[str, JSONObject], AgentOutputArtifactPayload]
 
-    def extract_intent(self, user_query: str) -> IntentExtraction:
+    def extract_intent(self, user_query: str) -> _IntentExtractionLike:
         return self.extract_intent_fn(user_query)
 
     def build_search_queries(
@@ -95,7 +94,7 @@ class IntentOrchestrator:
         return self.deduplicate_candidates_fn(list(candidate_map.values()))
 
     def parse_candidates(self, raw_candidates: object) -> list[TickerCandidate]:
-        return parse_ticker_candidates(raw_candidates)
+        return self.parse_ticker_candidates_fn(raw_candidates)
 
     def needs_clarification(self, candidates: list[TickerCandidate]) -> bool:
         return self.should_request_clarification_fn(candidates)
@@ -115,12 +114,9 @@ class IntentOrchestrator:
     def build_output_artifact(
         self, *, resolved_ticker: str, intent_ctx: JSONObject
     ) -> AgentOutputArtifactPayload:
-        summary = f"已確認分析標的: {resolved_ticker}"
-        return build_artifact_payload(
-            kind=OUTPUT_KIND_INTENT_EXTRACTION,
-            summary=summary,
-            preview=self.summarize_preview_fn(intent_ctx),
-            reference=None,
+        return self.build_output_artifact_fn(
+            f"已確認分析標的: {resolved_ticker}",
+            self.summarize_preview_fn(intent_ctx),
         )
 
     def resolve_selected_symbol(
@@ -129,7 +125,7 @@ class IntentOrchestrator:
         user_input: object,
         candidate_objs: list[TickerCandidate],
     ) -> str | None:
-        parsed_input = parse_resume_selection_input(user_input)
+        parsed_input = self.parse_resume_selection_input_fn(user_input)
         if parsed_input.selected_symbol is not None:
             return parsed_input.selected_symbol
         if parsed_input.ticker is not None:
@@ -138,15 +134,3 @@ class IntentOrchestrator:
         if candidate_objs:
             return candidate_objs[0].symbol
         return None
-
-
-intent_orchestrator = IntentOrchestrator(
-    extract_intent_fn=extract_intent,
-    search_ticker_fn=search_ticker,
-    web_search_fn=web_search,
-    extract_candidates_from_search_fn=extract_candidates_from_search,
-    deduplicate_candidates_fn=deduplicate_candidates,
-    should_request_clarification_fn=should_request_clarification,
-    get_company_profile_fn=get_company_profile,
-    summarize_preview_fn=summarize_intent_for_preview,
-)

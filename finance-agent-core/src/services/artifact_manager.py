@@ -1,6 +1,6 @@
 import uuid
 
-from src.interface.artifact_envelope import (
+from src.interface.artifacts.artifact_envelope import (
     ArtifactEnvelope,
     ArtifactPayload,
     build_artifact_envelope,

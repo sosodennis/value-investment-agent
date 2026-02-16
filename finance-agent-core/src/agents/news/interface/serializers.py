@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from src.agents.news.domain.models import NewsAggregationResult
-from src.common.types import JSONObject
+from src.shared.kernel.types import JSONObject
 
 
 def build_news_report_payload(

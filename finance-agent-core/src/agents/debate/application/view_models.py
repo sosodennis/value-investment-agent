@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.common.types import JSONObject
+from src.shared.kernel.types import JSONObject
 
 
 def derive_debate_preview_view_model(ctx: JSONObject) -> JSONObject:

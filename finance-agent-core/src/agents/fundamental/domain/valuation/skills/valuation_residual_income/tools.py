@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.common.traceable import TraceableField
+from src.shared.kernel.traceable import TraceableField
 
 from ...engine.graphs.residual_income import create_residual_income_graph
 from .schemas import ResidualIncomeParams

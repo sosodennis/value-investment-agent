@@ -25,22 +25,14 @@ from src.agents.technical.application.state_updates import (
 )
 from src.agents.technical.application.view_models import build_fracdiff_preview
 from src.agents.technical.data.mappers import serialize_fracdiff_outputs
-from src.agents.technical.data.ports import (
-    TechnicalArtifactPort,
-    technical_artifact_port,
-)
+from src.agents.technical.data.ports import TechnicalArtifactPort
 from src.agents.technical.domain.models import (
     SemanticTagPolicyInput,
     SemanticTagPolicyResult,
 )
 from src.agents.technical.domain.services import safe_float
-from src.agents.technical.interface.mappers import summarize_ta_for_preview
-from src.common.contracts import (
-    OUTPUT_KIND_TECHNICAL_ANALYSIS,
-)
-from src.common.tools.logger import get_logger
-from src.common.types import JSONObject
-from src.interface.schemas import build_artifact_payload
+from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.types import JSONObject
 
 logger = get_logger(__name__)
 
@@ -55,6 +47,8 @@ class TechnicalNodeResult:
 class TechnicalOrchestrator:
     port: TechnicalArtifactPort
     summarize_preview: Callable[[JSONObject], JSONObject]
+    build_progress_artifact: Callable[[str, JSONObject], dict[str, object]]
+    build_semantic_output_artifact: Callable[[str, JSONObject, str], dict[str, object]]
 
     async def run_data_fetch(
         self,
@@ -115,11 +109,9 @@ class TechnicalOrchestrator:
             "optimal_d_display": "d=N/A",
             "strength_display": "Strength: N/A",
         }
-        artifact = build_artifact_payload(
-            kind=OUTPUT_KIND_TECHNICAL_ANALYSIS,
-            summary=f"Technical Analysis: Data fetched for {resolved_ticker}",
-            preview=preview,
-            reference=None,
+        artifact = self.build_progress_artifact(
+            f"Technical Analysis: Data fetched for {resolved_ticker}",
+            preview,
         )
 
         return TechnicalNodeResult(
@@ -202,8 +194,8 @@ class TechnicalOrchestrator:
                 "fracdiff_series": serialization.fracdiff_series,
                 "z_score_series": serialization.z_score_series,
                 "indicators": {
-                    "bollinger": serialization.bollinger,
-                    "obv": serialization.obv,
+                    "bollinger": serialization.bollinger.to_dict(),
+                    "obv": serialization.obv.to_dict(),
                 },
             }
 
@@ -228,13 +220,11 @@ class TechnicalOrchestrator:
             latest_price=prices.iloc[-1],
             z_score=z_score,
             optimal_d=optimal_d,
-            statistical_strength=serialization.stat_strength.get("value"),
+            statistical_strength=serialization.stat_strength.value,
         )
-        artifact = build_artifact_payload(
-            kind=OUTPUT_KIND_TECHNICAL_ANALYSIS,
-            summary=f"Technical Analysis: Patterns computed for {ticker_value}",
-            preview=preview,
-            reference=None,
+        artifact = self.build_progress_artifact(
+            f"Technical Analysis: Patterns computed for {ticker_value}",
+            preview,
         )
 
         return TechnicalNodeResult(
@@ -246,10 +236,10 @@ class TechnicalOrchestrator:
                 window_length=int(window_length),
                 adf_statistic=safe_float(adf_stat),
                 adf_pvalue=safe_float(adf_pvalue),
-                bollinger=serialization.bollinger,
-                statistical_strength_val=serialization.stat_strength["value"],
+                bollinger=serialization.bollinger.to_dict(),
+                statistical_strength_val=serialization.stat_strength.value,
                 macd=macd_data,
-                obv=serialization.obv,
+                obv=serialization.obv.to_dict(),
                 artifact=artifact,
             ),
             goto="semantic_translate",
@@ -320,6 +310,7 @@ class TechnicalOrchestrator:
                 technical_context=dict(ctx),
                 summarize_preview=self.summarize_preview,
                 pipeline_result=pipeline_result,
+                build_output_artifact=self.build_semantic_output_artifact,
             )
             success_update = build_semantic_success_update(ta_update)
             return TechnicalNodeResult(update=success_update.update, goto="END")
@@ -331,9 +322,3 @@ class TechnicalOrchestrator:
                 f"Semantic translation failed: {str(exc)}"
             )
             return TechnicalNodeResult(update=error_update.update, goto="END")
-
-
-technical_orchestrator = TechnicalOrchestrator(
-    port=technical_artifact_port,
-    summarize_preview=summarize_ta_for_preview,
-)

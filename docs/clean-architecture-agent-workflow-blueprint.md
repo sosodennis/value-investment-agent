@@ -64,7 +64,7 @@ Implementation tracking:
 
 1. Current `src/workflow/nodes/**`:
    - 保留為 Application 層主體，但要抽離手寫 contract/fallback 到 Interface layer。
-2. Current `src/interface/artifact_domain_models.py` + `src/interface/artifact_model_shared.py`:
+2. Current `src/interface/artifacts/artifact_contract_specs.py` + `src/interface/artifacts/artifact_model_shared.py`:
    - 作為 Interface contract core（方向正確）。
 3. Current `src/services/artifact_manager.py`:
    - 升級為 typed repository（save/load with contract validation）。

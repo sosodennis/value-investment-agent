@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 
-from src.common.traceable import TraceableField
+from src.shared.kernel.traceable import TraceableField
 
 TraceInput = TraceableField[float] | TraceableField[list[float]]
 

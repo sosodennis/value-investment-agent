@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from src.agents.debate.domain.models import EvidenceFact
 from src.agents.debate.domain.services import compress_financial_data
-from src.common.traceable import ManualProvenance, XBRLProvenance
-from src.common.types import JSONObject
+from src.shared.kernel.traceable import ManualProvenance, XBRLProvenance
+from src.shared.kernel.types import JSONObject
 
 
 def build_financial_facts(

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from src.agents.news.application.view_models import derive_news_preview_view_model
 from src.agents.news.interface.formatters import format_news_preview
-from src.common.types import JSONObject
+from src.shared.kernel.types import JSONObject
 
 
 def summarize_news_for_preview(

@@ -7,7 +7,7 @@ from src.agents.fundamental.domain.report_semantics import (
     infer_extension_type_from_extension,
     normalize_extension_type_token,
 )
-from src.common.traceable import (
+from src.shared.kernel.traceable import (
     ComputedProvenance,
     ManualProvenance,
     TraceableField,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.common.types import JSONObject
+from src.shared.kernel.types import JSONObject
 
 
 def format_news_preview(view_model: JSONObject) -> JSONObject:

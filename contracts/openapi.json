@@ -57,8 +57,7 @@
           "sentiment",
           "sentiment_score",
           "impact_level",
-          "reasoning",
-          "key_facts"
+          "reasoning"
         ],
         "title": "AIAnalysisModel",
         "type": "object"
@@ -314,12 +313,26 @@
             "title": "Model Summary"
           },
           "primary_catalyst": {
-            "title": "Primary Catalyst",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Catalyst"
           },
           "primary_risk": {
-            "title": "Primary Risk",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Risk"
           },
           "raw_ev": {
             "anyOf": [
@@ -385,8 +398,15 @@
             "type": "array"
           },
           "winning_thesis": {
-            "title": "Winning Thesis",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Winning Thesis"
           }
         },
         "required": [
@@ -434,7 +454,7 @@
         "title": "DebateFactsArtifactData",
         "type": "object"
       },
-      "DebateFactsArtifactEnvelope": {
+      "DebateFactsEnvelope": {
         "properties": {
           "created_at": {
             "title": "Created At",
@@ -465,7 +485,41 @@
           "kind",
           "data"
         ],
-        "title": "DebateFactsArtifactEnvelope",
+        "title": "DebateFactsEnvelope",
+        "type": "object"
+      },
+      "DebateFinalReportEnvelope": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/DebateArtifactModel"
+          },
+          "kind": {
+            "const": "debate_final_report",
+            "title": "Kind",
+            "type": "string"
+          },
+          "produced_by": {
+            "title": "Produced By",
+            "type": "string"
+          },
+          "version": {
+            "const": "v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "produced_by",
+          "created_at",
+          "kind",
+          "data"
+        ],
+        "title": "DebateFinalReportEnvelope",
         "type": "object"
       },
       "DebateHistoryMessageModel": {
@@ -501,40 +555,6 @@
           "content"
         ],
         "title": "DebateHistoryMessageModel",
-        "type": "object"
-      },
-      "DebateReportArtifactEnvelope": {
-        "properties": {
-          "created_at": {
-            "title": "Created At",
-            "type": "string"
-          },
-          "data": {
-            "$ref": "#/components/schemas/DebateArtifactModel"
-          },
-          "kind": {
-            "const": "debate_final_report",
-            "title": "Kind",
-            "type": "string"
-          },
-          "produced_by": {
-            "title": "Produced By",
-            "type": "string"
-          },
-          "version": {
-            "const": "v1",
-            "title": "Version",
-            "type": "string"
-          }
-        },
-        "required": [
-          "version",
-          "produced_by",
-          "created_at",
-          "kind",
-          "data"
-        ],
-        "title": "DebateReportArtifactEnvelope",
         "type": "object"
       },
       "EvidenceFactModel": {
@@ -677,6 +697,17 @@
             "title": "Categories",
             "type": "array"
           },
+          "content_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Id"
+          },
           "fetched_at": {
             "title": "Fetched At",
             "type": "string"
@@ -740,13 +771,9 @@
         "required": [
           "id",
           "url",
-          "fetched_at",
           "title",
           "snippet",
-          "source",
-          "related_tickers",
-          "categories",
-          "tags"
+          "source"
         ],
         "title": "FinancialNewsItemModel",
         "type": "object"
@@ -896,7 +923,7 @@
         "title": "FinancialReportsArtifactData",
         "type": "object"
       },
-      "FinancialReportsArtifactEnvelope": {
+      "FinancialReportsEnvelope": {
         "properties": {
           "created_at": {
             "title": "Created At",
@@ -927,7 +954,7 @@
           "kind",
           "data"
         ],
-        "title": "FinancialReportsArtifactEnvelope",
+        "title": "FinancialReportsEnvelope",
         "type": "object"
       },
       "FinancialServicesExtensionModel": {
@@ -1220,7 +1247,7 @@
         "properties": {
           "candidates": {
             "items": {
-              "$ref": "#/components/schemas/TickerCandidate"
+              "$ref": "#/components/schemas/TickerCandidateModel"
             },
             "title": "Candidates",
             "type": "array"
@@ -1492,6 +1519,40 @@
         "title": "MessageResponse",
         "type": "object"
       },
+      "NewsAnalysisReportEnvelope": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/NewsArtifactModel"
+          },
+          "kind": {
+            "const": "news_analysis_report",
+            "title": "Kind",
+            "type": "string"
+          },
+          "produced_by": {
+            "title": "Produced By",
+            "type": "string"
+          },
+          "version": {
+            "const": "v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "produced_by",
+          "created_at",
+          "kind",
+          "data"
+        ],
+        "title": "NewsAnalysisReportEnvelope",
+        "type": "object"
+      },
       "NewsArticleArtifactData": {
         "additionalProperties": false,
         "properties": {
@@ -1528,7 +1589,7 @@
         "title": "NewsArticleArtifactData",
         "type": "object"
       },
-      "NewsArticleArtifactEnvelope": {
+      "NewsArticleEnvelope": {
         "properties": {
           "created_at": {
             "title": "Created At",
@@ -1559,7 +1620,7 @@
           "kind",
           "data"
         ],
-        "title": "NewsArticleArtifactEnvelope",
+        "title": "NewsArticleEnvelope",
         "type": "object"
       },
       "NewsArtifactModel": {
@@ -1611,8 +1672,7 @@
         "properties": {
           "news_items": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/FinancialNewsItemModel"
             },
             "title": "News Items",
             "type": "array"
@@ -1624,7 +1684,7 @@
         "title": "NewsItemsListArtifactData",
         "type": "object"
       },
-      "NewsItemsListArtifactEnvelope": {
+      "NewsItemsListEnvelope": {
         "properties": {
           "created_at": {
             "title": "Created At",
@@ -1655,41 +1715,64 @@
           "kind",
           "data"
         ],
-        "title": "NewsItemsListArtifactEnvelope",
+        "title": "NewsItemsListEnvelope",
         "type": "object"
       },
-      "NewsReportArtifactEnvelope": {
+      "NewsSearchResultItemModel": {
         "properties": {
-          "created_at": {
-            "title": "Created At",
+          "categories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Categories",
+            "type": "array"
+          },
+          "date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date"
+          },
+          "image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image"
+          },
+          "link": {
+            "title": "Link",
             "type": "string"
           },
-          "data": {
-            "$ref": "#/components/schemas/NewsArtifactModel"
-          },
-          "kind": {
-            "const": "news_analysis_report",
-            "title": "Kind",
+          "snippet": {
+            "title": "Snippet",
             "type": "string"
           },
-          "produced_by": {
-            "title": "Produced By",
+          "source": {
+            "title": "Source",
             "type": "string"
           },
-          "version": {
-            "const": "v1",
-            "title": "Version",
+          "title": {
+            "title": "Title",
             "type": "string"
           }
         },
         "required": [
-          "version",
-          "produced_by",
-          "created_at",
-          "kind",
-          "data"
+          "title",
+          "source",
+          "snippet",
+          "link"
         ],
-        "title": "NewsReportArtifactEnvelope",
+        "title": "NewsSearchResultItemModel",
         "type": "object"
       },
       "NewsSelectionArtifactData": {
@@ -1709,7 +1792,7 @@
         "title": "NewsSelectionArtifactData",
         "type": "object"
       },
-      "NewsSelectionArtifactEnvelope": {
+      "NewsSelectionEnvelope": {
         "properties": {
           "created_at": {
             "title": "Created At",
@@ -1740,7 +1823,7 @@
           "kind",
           "data"
         ],
-        "title": "NewsSelectionArtifactEnvelope",
+        "title": "NewsSelectionEnvelope",
         "type": "object"
       },
       "PriceSeriesArtifactData": {
@@ -1782,7 +1865,7 @@
         "title": "PriceSeriesArtifactData",
         "type": "object"
       },
-      "PriceSeriesArtifactEnvelope": {
+      "PriceSeriesEnvelope": {
         "properties": {
           "created_at": {
             "title": "Created At",
@@ -1813,7 +1896,7 @@
           "kind",
           "data"
         ],
-        "title": "PriceSeriesArtifactEnvelope",
+        "title": "PriceSeriesEnvelope",
         "type": "object"
       },
       "RawDataModel": {
@@ -1984,8 +2067,7 @@
           },
           "raw_results": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/NewsSearchResultItemModel"
             },
             "title": "Raw Results",
             "type": "array"
@@ -1998,7 +2080,7 @@
         "title": "SearchResultsArtifactData",
         "type": "object"
       },
-      "SearchResultsArtifactEnvelope": {
+      "SearchResultsEnvelope": {
         "properties": {
           "created_at": {
             "title": "Created At",
@@ -2029,7 +2111,7 @@
           "kind",
           "data"
         ],
-        "title": "SearchResultsArtifactEnvelope",
+        "title": "SearchResultsEnvelope",
         "type": "object"
       },
       "SignalStateModel": {
@@ -2128,6 +2210,74 @@
           "thread_id"
         ],
         "title": "StreamStartResponse",
+        "type": "object"
+      },
+      "TaChartDataEnvelope": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/TechnicalChartArtifactData"
+          },
+          "kind": {
+            "const": "ta_chart_data",
+            "title": "Kind",
+            "type": "string"
+          },
+          "produced_by": {
+            "title": "Produced By",
+            "type": "string"
+          },
+          "version": {
+            "const": "v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "produced_by",
+          "created_at",
+          "kind",
+          "data"
+        ],
+        "title": "TaChartDataEnvelope",
+        "type": "object"
+      },
+      "TaFullReportEnvelope": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/TechnicalArtifactModel"
+          },
+          "kind": {
+            "const": "ta_full_report",
+            "title": "Kind",
+            "type": "string"
+          },
+          "produced_by": {
+            "title": "Produced By",
+            "type": "string"
+          },
+          "version": {
+            "const": "v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "produced_by",
+          "created_at",
+          "kind",
+          "data"
+        ],
+        "title": "TaFullReportEnvelope",
         "type": "object"
       },
       "TechnicalArtifactModel": {
@@ -2230,74 +2380,6 @@
         "title": "TechnicalChartArtifactData",
         "type": "object"
       },
-      "TechnicalChartArtifactEnvelope": {
-        "properties": {
-          "created_at": {
-            "title": "Created At",
-            "type": "string"
-          },
-          "data": {
-            "$ref": "#/components/schemas/TechnicalChartArtifactData"
-          },
-          "kind": {
-            "const": "ta_chart_data",
-            "title": "Kind",
-            "type": "string"
-          },
-          "produced_by": {
-            "title": "Produced By",
-            "type": "string"
-          },
-          "version": {
-            "const": "v1",
-            "title": "Version",
-            "type": "string"
-          }
-        },
-        "required": [
-          "version",
-          "produced_by",
-          "created_at",
-          "kind",
-          "data"
-        ],
-        "title": "TechnicalChartArtifactEnvelope",
-        "type": "object"
-      },
-      "TechnicalReportArtifactEnvelope": {
-        "properties": {
-          "created_at": {
-            "title": "Created At",
-            "type": "string"
-          },
-          "data": {
-            "$ref": "#/components/schemas/TechnicalArtifactModel"
-          },
-          "kind": {
-            "const": "ta_full_report",
-            "title": "Kind",
-            "type": "string"
-          },
-          "produced_by": {
-            "title": "Produced By",
-            "type": "string"
-          },
-          "version": {
-            "const": "v1",
-            "title": "Version",
-            "type": "string"
-          }
-        },
-        "required": [
-          "version",
-          "produced_by",
-          "created_at",
-          "kind",
-          "data"
-        ],
-        "title": "TechnicalReportArtifactEnvelope",
-        "type": "object"
-      },
       "ThreadStateResponse": {
         "properties": {
           "agent_outputs": {
@@ -2389,8 +2471,7 @@
         "title": "ThreadStateResponse",
         "type": "object"
       },
-      "TickerCandidate": {
-        "description": "A potential ticker match from search.",
+      "TickerCandidateModel": {
         "properties": {
           "confidence": {
             "default": 1.0,
@@ -2437,7 +2518,7 @@
           "symbol",
           "name"
         ],
-        "title": "TickerCandidate",
+        "title": "TickerCandidateModel",
         "type": "object"
       },
       "TraceableFieldModel": {
@@ -2508,53 +2589,53 @@
                 "schema": {
                   "discriminator": {
                     "mapping": {
-                      "debate_facts": "#/components/schemas/DebateFactsArtifactEnvelope",
-                      "debate_final_report": "#/components/schemas/DebateReportArtifactEnvelope",
-                      "financial_reports": "#/components/schemas/FinancialReportsArtifactEnvelope",
-                      "news_analysis_report": "#/components/schemas/NewsReportArtifactEnvelope",
-                      "news_article": "#/components/schemas/NewsArticleArtifactEnvelope",
-                      "news_items_list": "#/components/schemas/NewsItemsListArtifactEnvelope",
-                      "news_selection": "#/components/schemas/NewsSelectionArtifactEnvelope",
-                      "price_series": "#/components/schemas/PriceSeriesArtifactEnvelope",
-                      "search_results": "#/components/schemas/SearchResultsArtifactEnvelope",
-                      "ta_chart_data": "#/components/schemas/TechnicalChartArtifactEnvelope",
-                      "ta_full_report": "#/components/schemas/TechnicalReportArtifactEnvelope"
+                      "debate_facts": "#/components/schemas/DebateFactsEnvelope",
+                      "debate_final_report": "#/components/schemas/DebateFinalReportEnvelope",
+                      "financial_reports": "#/components/schemas/FinancialReportsEnvelope",
+                      "news_analysis_report": "#/components/schemas/NewsAnalysisReportEnvelope",
+                      "news_article": "#/components/schemas/NewsArticleEnvelope",
+                      "news_items_list": "#/components/schemas/NewsItemsListEnvelope",
+                      "news_selection": "#/components/schemas/NewsSelectionEnvelope",
+                      "price_series": "#/components/schemas/PriceSeriesEnvelope",
+                      "search_results": "#/components/schemas/SearchResultsEnvelope",
+                      "ta_chart_data": "#/components/schemas/TaChartDataEnvelope",
+                      "ta_full_report": "#/components/schemas/TaFullReportEnvelope"
                     },
                     "propertyName": "kind"
                   },
                   "oneOf": [
                     {
-                      "$ref": "#/components/schemas/FinancialReportsArtifactEnvelope"
+                      "$ref": "#/components/schemas/FinancialReportsEnvelope"
                     },
                     {
-                      "$ref": "#/components/schemas/PriceSeriesArtifactEnvelope"
+                      "$ref": "#/components/schemas/PriceSeriesEnvelope"
                     },
                     {
-                      "$ref": "#/components/schemas/TechnicalChartArtifactEnvelope"
+                      "$ref": "#/components/schemas/TaChartDataEnvelope"
                     },
                     {
-                      "$ref": "#/components/schemas/TechnicalReportArtifactEnvelope"
+                      "$ref": "#/components/schemas/TaFullReportEnvelope"
                     },
                     {
-                      "$ref": "#/components/schemas/SearchResultsArtifactEnvelope"
+                      "$ref": "#/components/schemas/SearchResultsEnvelope"
                     },
                     {
-                      "$ref": "#/components/schemas/NewsSelectionArtifactEnvelope"
+                      "$ref": "#/components/schemas/NewsSelectionEnvelope"
                     },
                     {
-                      "$ref": "#/components/schemas/NewsArticleArtifactEnvelope"
+                      "$ref": "#/components/schemas/NewsArticleEnvelope"
                     },
                     {
-                      "$ref": "#/components/schemas/NewsItemsListArtifactEnvelope"
+                      "$ref": "#/components/schemas/NewsItemsListEnvelope"
                     },
                     {
-                      "$ref": "#/components/schemas/NewsReportArtifactEnvelope"
+                      "$ref": "#/components/schemas/NewsAnalysisReportEnvelope"
                     },
                     {
-                      "$ref": "#/components/schemas/DebateFactsArtifactEnvelope"
+                      "$ref": "#/components/schemas/DebateFactsEnvelope"
                     },
                     {
-                      "$ref": "#/components/schemas/DebateReportArtifactEnvelope"
+                      "$ref": "#/components/schemas/DebateFinalReportEnvelope"
                     }
                   ],
                   "title": "Response Get Artifact Api Artifacts  Artifact Id  Get"

@@ -17,23 +17,32 @@ from src.agents.fundamental.domain.report_semantics import (
     infer_extension_type_from_extension,
     normalize_extension_type_token,
 )
-from src.common.types import JSONObject
-from src.interface.artifact_model_shared import (
+from src.interface.artifacts.artifact_model_shared import (
     as_mapping,
-    to_json,
     to_optional_string,
     to_string,
     validate_and_dump,
+    validate_list_and_dump,
+)
+from src.shared.kernel.types import JSONObject
+
+from .types import (
+    FundamentalText,
+    OptionalFundamentalNumber,
+    OptionalFundamentalText,
+    TraceableOptionalText,
+    TraceableProvenance,
+    TraceableValue,
 )
 
 
 class TraceableFieldModel(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    name: str | None = None
-    value: str | int | float | None
-    provenance: dict[str, object] | None = None
-    timestamp: str | None = None
+    name: TraceableOptionalText = None
+    value: TraceableValue
+    provenance: TraceableProvenance = None
+    timestamp: TraceableOptionalText = None
 
     @model_validator(mode="before")
     @classmethod
@@ -47,43 +56,6 @@ class TraceableFieldModel(BaseModel):
                 return {"value": None}
             return {"value": data}
         return data
-
-    @field_validator("value", mode="before")
-    @classmethod
-    def _value(cls, value: object) -> str | int | float | None:
-        if value is None:
-            return None
-        if isinstance(value, bool):
-            raise TypeError("traceable value cannot be boolean")
-        if isinstance(value, str):
-            return value
-        if isinstance(value, int):
-            return value
-        if isinstance(value, float):
-            if not math.isfinite(value):
-                return None
-            return value
-        raise TypeError("traceable value must be string | number | null")
-
-    @field_validator("provenance", mode="before")
-    @classmethod
-    def _provenance(cls, value: object) -> dict[str, object] | None:
-        if value is None:
-            return None
-        parsed = to_json(value, "traceable.provenance")
-        if not isinstance(parsed, dict):
-            raise TypeError("traceable.provenance must serialize to object")
-        return parsed
-
-    @field_validator("timestamp", mode="before")
-    @classmethod
-    def _timestamp(cls, value: object) -> str | None:
-        return to_optional_string(value, "traceable.timestamp")
-
-    @field_validator("name", mode="before")
-    @classmethod
-    def _name(cls, value: object) -> str | None:
-        return to_optional_string(value, "traceable.name")
 
     @model_serializer(mode="plain")
     def _serialize(self) -> dict[str, object]:
@@ -222,12 +194,12 @@ class FinancialReportModel(BaseModel):
 class FundamentalArtifactModel(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    ticker: str
-    model_type: str
-    company_name: str
-    sector: str
-    industry: str
-    reasoning: str
+    ticker: FundamentalText
+    model_type: FundamentalText
+    company_name: FundamentalText
+    sector: FundamentalText
+    industry: FundamentalText
+    reasoning: FundamentalText
     financial_reports: list[FinancialReportModel]
     status: Literal["done"]
 
@@ -263,44 +235,30 @@ class FundamentalArtifactModel(BaseModel):
         mapping["status"] = "done"
         return mapping
 
-    @field_validator(
-        "ticker",
-        "model_type",
-        "company_name",
-        "sector",
-        "industry",
-        "reasoning",
-        mode="before",
-    )
-    @classmethod
-    def _text_fields(cls, value: object) -> str:
-        return to_string(value, "fundamental artifact text")
-
 
 class FundamentalPreviewInputModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    ticker: str
-    company_name: str
-    sector: str
-    industry: str
-    status: str
-    selected_model: str | None = None
-    model_type: str | None = None
-    valuation_summary: str | None = None
-    valuation_score: float | None = None
+    ticker: FundamentalText
+    company_name: FundamentalText
+    sector: FundamentalText
+    industry: FundamentalText
+    status: FundamentalText
+    selected_model: OptionalFundamentalText = None
+    model_type: OptionalFundamentalText = None
+    valuation_summary: OptionalFundamentalText = None
+    valuation_score: OptionalFundamentalNumber = None
 
 
-def parse_financial_reports_model(value: object) -> list[JSONObject]:
-    if not isinstance(value, list):
-        raise TypeError("financial reports must be a list")
-    reports: list[JSONObject] = []
-    for index, item in enumerate(value):
-        report = validate_and_dump(
-            FinancialReportModel, item, f"financial report[{index}]", exclude_none=False
-        )
-        reports.append(report)
-    return reports
+def parse_financial_reports_model(
+    value: object, context: str = "financial reports"
+) -> list[JSONObject]:
+    return validate_list_and_dump(
+        FinancialReportModel,
+        value,
+        context,
+        exclude_none=False,
+    )
 
 
 def parse_fundamental_artifact_model(value: object) -> JSONObject:

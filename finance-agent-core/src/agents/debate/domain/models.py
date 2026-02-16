@@ -2,7 +2,11 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from src.common.traceable import ComputedProvenance, ManualProvenance, XBRLProvenance
+from src.shared.kernel.traceable import (
+    ComputedProvenance,
+    ManualProvenance,
+    XBRLProvenance,
+)
 
 Direction = Literal["STRONG_LONG", "LONG", "NEUTRAL", "AVOID", "SHORT", "STRONG_SHORT"]
 

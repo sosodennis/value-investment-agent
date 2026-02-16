@@ -3,20 +3,18 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from src.agents.debate.application.debate_context import build_debate_artifact_context
+from src.agents.debate.application.dto import DebateSourceData
+from src.agents.debate.application.ports import DebateSourceReaderPort
 from src.agents.debate.application.prompt_runtime import (
     compress_reports,
     log_compressed_reports,
-)
-from src.agents.debate.data.report_reader import (
-    DebateSourceData,
-    load_debate_source_data,
 )
 from src.agents.debate.domain.services import (
     compress_financial_data,
     compress_news_data,
     compress_ta_data,
 )
-from src.common.tools.logger import get_logger
+from src.shared.kernel.tools.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -58,9 +56,13 @@ def build_compressed_report_payload(
     }
 
 
-async def prepare_debate_reports(state: Mapping[str, object]) -> dict[str, object]:
+async def prepare_debate_reports(
+    state: Mapping[str, object],
+    *,
+    source_reader: DebateSourceReaderPort,
+) -> dict[str, object]:
     artifact_context = build_debate_artifact_context(state)
-    source_data = await load_debate_source_data(
+    source_data = await source_reader.load_debate_source_data(
         financial_reports_artifact_id=artifact_context.financial_reports_artifact_id,
         news_artifact_id=artifact_context.news_artifact_id,
         technical_artifact_id=artifact_context.technical_artifact_id,
@@ -74,14 +76,18 @@ async def prepare_debate_reports(state: Mapping[str, object]) -> dict[str, objec
 
 
 async def get_debate_reports_text(
-    state: Mapping[str, object], *, stage: str, ticker: str
+    state: Mapping[str, object],
+    *,
+    stage: str,
+    ticker: str,
+    source_reader: DebateSourceReaderPort,
 ) -> str:
     artifact_context = build_debate_artifact_context(state)
     if artifact_context.cached_reports is not None:
         log_compressed_reports(stage, ticker, artifact_context.cached_reports, "cached")
         return artifact_context.cached_reports
 
-    reports = await prepare_debate_reports(state)
+    reports = await prepare_debate_reports(state, source_reader=source_reader)
     compressed_reports = compress_reports(reports)
     log_compressed_reports(stage, ticker, compressed_reports, "computed")
     return compressed_reports

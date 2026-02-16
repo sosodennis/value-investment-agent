@@ -40,19 +40,20 @@ from src.agents.debate.data.market_data import (
     get_dynamic_payoff_map,
 )
 from src.agents.debate.data.ports import debate_artifact_port
+from src.agents.debate.data.report_reader import debate_source_reader
 from src.agents.debate.data.sycophancy_client import get_sycophancy_detector_client
 from src.agents.debate.domain.models import DebateConclusion, EvidenceFact
 from src.agents.debate.domain.services import calculate_pragmatic_verdict
 from src.agents.debate.domain.validators import FactValidator
+from src.agents.debate.interface.contracts import parse_debate_artifact_model
 from src.agents.debate.interface.mappers import summarize_debate_for_preview
-from src.common.contracts import (
+from src.infrastructure.llm.provider import get_llm
+from src.interface.events.schemas import ArtifactReference, build_artifact_payload
+from src.shared.kernel.contracts import (
     ARTIFACT_KIND_DEBATE_FINAL_REPORT,
     OUTPUT_KIND_DEBATE,
 )
-from src.common.tools.llm import get_llm
-from src.common.tools.logger import get_logger
-from src.interface.canonical_serializers import canonicalize_debate_artifact_data
-from src.interface.schemas import ArtifactReference, build_artifact_payload
+from src.shared.kernel.tools.logger import get_logger
 
 from .prompts import (
     BEAR_AGENT_SYSTEM_PROMPT,
@@ -95,7 +96,7 @@ async def debate_aggregator_node(state: DebateState) -> Command:
         )
 
     # Pre-compute and cache reports
-    reports = await _prepare_debate_reports(state)
+    reports = await _prepare_debate_reports(state, source_reader=debate_source_reader)
     compressed_reports = _compress_reports(reports)
     _log_compressed_reports("debate_aggregator", ticker, compressed_reports, "computed")
 
@@ -139,7 +140,7 @@ async def fact_extractor_node(state: DebateState) -> Command:
             goto=END,
         )
     logger.info("FACT_EXTRACTION_START ticker=%s", ticker)
-    extracted = await extract_debate_facts(state)
+    extracted = await extract_debate_facts(state, source_reader=debate_source_reader)
     artifact_id = await debate_artifact_port.save_facts_bundle(
         data=extracted.bundle_payload,
         produced_by="debate.fact_extractor",
@@ -173,6 +174,7 @@ async def _execute_bull_agent(
         adversarial_rule=adversarial_rule,
         system_prompt_template=BULL_AGENT_SYSTEM_PROMPT,
         llm=llm,
+        source_reader=debate_source_reader,
     )
 
 
@@ -187,6 +189,7 @@ async def _execute_bear_agent(
         adversarial_rule=adversarial_rule,
         system_prompt_template=BEAR_AGENT_SYSTEM_PROMPT,
         llm=llm,
+        source_reader=debate_source_reader,
     )
 
 
@@ -202,6 +205,7 @@ async def _execute_moderator_critique(
         system_prompt_template=MODERATOR_SYSTEM_PROMPT,
         llm=llm,
         detector=get_sycophancy_detector_client(),
+        source_reader=debate_source_reader,
     )
 
 
@@ -573,7 +577,7 @@ async def verdict_node(state: DebateState) -> Command:
             "facts": [f.model_dump(mode="json") for f in valid_facts],
             "history": [msg.model_dump(mode="json") for msg in history],
         }
-        full_report_data = canonicalize_debate_artifact_data(full_report_data_raw)
+        full_report_data = parse_debate_artifact_model(full_report_data_raw)
 
         # Save artifact (L3) - Now full report, not just transcript
         report_id = await debate_artifact_port.save_final_report(

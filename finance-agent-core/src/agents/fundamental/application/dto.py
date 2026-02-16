@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from src.common.types import JSONObject
+from src.shared.kernel.types import JSONObject
 
 
 @dataclass(frozen=True)

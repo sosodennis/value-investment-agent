@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.common.types import JSONObject
+from src.shared.kernel.types import JSONObject
 
 
 def _format_metric_value(value: object, *, is_currency: bool) -> str:

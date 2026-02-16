@@ -4,9 +4,9 @@ from langchain_core.messages import AIMessageChunk
 from langgraph.types import Command
 from pydantic import BaseModel
 
-from src.common.types import JSONObject
-from src.interface.mappers import NodeOutputMapper
-from src.interface.protocol import AgentEvent
+from src.interface.events.mappers import NodeOutputMapper
+from src.interface.events.protocol import AgentEvent
+from src.shared.kernel.types import JSONObject
 
 
 def get_agent_name(metadata: Mapping[str, object] | None = None) -> str:

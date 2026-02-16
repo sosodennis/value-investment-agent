@@ -44,7 +44,7 @@ def debate_context_from_state(state: Mapping[str, object]) -> Mapping[str, objec
 
 
 def get_last_message_from_role(history: list[BaseMessage], role_name: str) -> str:
-    """Extract the last message from a specific role with fallback."""
+    """Extract the last message from a specific role with resilience handling."""
     if not history:
         return ""
     for msg in reversed(history):

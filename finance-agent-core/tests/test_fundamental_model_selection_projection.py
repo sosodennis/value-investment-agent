@@ -3,7 +3,7 @@ from __future__ import annotations
 from src.agents.fundamental.data.mappers import project_selection_reports
 from src.agents.fundamental.domain.model_selection import select_valuation_model
 from src.agents.fundamental.domain.models import ValuationModel
-from src.shared.domain.market_identity import CompanyProfile
+from src.shared.cross_agent.domain.market_identity import CompanyProfile
 
 
 def test_project_selection_reports_extracts_typed_fields() -> None:

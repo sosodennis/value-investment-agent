@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from src.agents.technical.domain.services import safe_float
-from src.common.types import JSONObject
+from src.shared.kernel.types import JSONObject
 
 
 def build_fracdiff_preview(

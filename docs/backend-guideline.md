@@ -22,17 +22,17 @@ Rule:
 ## 2. Mandatory Contract Path
 
 For artifacts:
-1. Canonicalize payload with `src/interface/canonical_serializers.py` when needed.
-2. Artifact kind -> model routing must go through `src/interface/artifact_contract_registry.py`.
-3. Persist/read via per-agent ports (`src/agents/*/data/ports.py`) using shared `TypedArtifactPort[TModel]` from `src/shared/data/typed_artifact_port.py`.
+1. Canonicalize payload with agent interface parser (`src/agents/*/interface/contracts.py`) when needed.
+2. Artifact kind -> model routing must go through `src/interface/artifacts/artifact_contract_registry.py`.
+3. Persist/read via per-agent ports (`src/agents/*/data/ports.py`) using shared `TypedArtifactPort[TModel]` from `src/shared/cross_agent/data/typed_artifact_port.py`.
 4. Store envelope via `src/services/artifact_manager.py`.
 
 For agent output:
-1. Build with `build_artifact_payload(...)` from `src/interface/schemas.py`.
+1. Build with `build_artifact_payload(...)` from `src/interface/events/schemas.py`.
 2. Output must include `kind/version/summary/preview/reference`.
 
 Constants:
-1. Use `src/common/contracts.py` for artifact kinds/output kinds/version constants.
+1. Use `src/shared/kernel/contracts.py` for artifact kinds/output kinds/version constants.
 2. Do not hardcode contract literal strings in new logic.
 
 ## 3. Workflow Node Rules
@@ -47,26 +47,27 @@ Constants:
 1. No `Any` in `src/` and `api/` runtime path.
 2. No `hasattr(...)`-based dispatch in core path.
 3. Prefer `TypedDict`, `Literal`, Pydantic `BaseModel`, and `JSONValue/JSONObject` aliases.
-4. Provenance imports must come from `src/common/traceable.py`.
+4. Provenance imports must come from `src/shared/kernel/traceable.py`.
 
 ## 5. Canonical Backend File Map
 
-1. Contract constants: `src/common/contracts.py`
-2. Shared JSON types: `src/common/types.py`
-3. Output schema: `src/interface/schemas.py`
-4. Artifact API schema: `src/interface/artifact_api_models.py`
-5. Contract registry (kind routing): `src/interface/artifact_contract_registry.py`
+1. Contract constants: `src/shared/kernel/contracts.py`
+2. Shared JSON types: `src/shared/kernel/types.py`
+3. Output schema: `src/interface/events/schemas.py`
+4. Artifact API schema: `src/interface/artifacts/artifact_api_models.py`
+5. Contract specs SSOT (kind->model): `src/interface/artifacts/artifact_contract_specs.py`
+6. Contract registry (kind routing): `src/interface/artifacts/artifact_contract_registry.py`
    Includes debate/news/technical consumption policies for cross-agent payload reads.
-6. Canonicalization: `src/interface/canonical_serializers.py`, `src/agents/*/interface/contracts.py`, `src/interface/artifact_model_shared.py`
-7. Domain ports:
-   - Shared generic port: `src/shared/data/typed_artifact_port.py`
+7. Canonicalization: `src/agents/*/interface/contracts.py`, `src/interface/artifacts/artifact_contract_registry.py`, `src/interface/artifacts/artifact_model_shared.py`
+8. Domain ports:
+   - Shared generic port: `src/shared/cross_agent/data/typed_artifact_port.py`
    - Per-agent concrete ports: `src/agents/*/data/ports.py`
 
 ## 6. Standard Backend Change Recipes
 
 ## 6.1 Add New Agent Artifact/Output
 
-1. Add kind constants in `src/common/contracts.py`.
+1. Add kind constants in `src/shared/kernel/contracts.py`.
 2. Add/extend interface schemas (`schemas.py`, `artifact_api_models.py`).
 3. Add typed save/load methods in domain artifact port.
 4. Use typed port methods in node.
@@ -97,6 +98,17 @@ Constants:
 3. Silent coercion to hide contract drift.
 4. Reintroducing direct artifact manager reads in node code.
 5. `application/use_cases.py` 作為純 re-export 聚合層（易造成命名/責任混亂）。
+
+## 8. Typed Artifact Port Policy (Mandatory)
+
+1. Shared generic data contract path is `src/shared/cross_agent/data/typed_artifact_port.py`.
+2. Per-agent `data/ports.py` may keep thin facades only when they provide one of:
+   - domain naming clarity for use-cases
+   - multi-artifact composition helper
+   - domain projection helper (entity mapping)
+3. Repetitive pure forwarding logic must be consolidated via internal generic helpers (no copy-paste save/load bodies).
+4. Do not bypass per-agent ports from workflow nodes; workflow uses application/data entrypoints only.
+5. If a facade method is pure pass-through and adds no naming/composition meaning, remove it or merge it into a higher-level helper.
 
 ## 9. Application Naming Rules (Mandatory)
 

@@ -4,25 +4,15 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 from src.agents.fundamental.application import state_readers, state_updates, use_cases
+from src.agents.fundamental.application.dto import FundamentalAppContextDTO
 from src.agents.fundamental.data.mappers import (
-    financial_report_models_to_json,
-    project_selection_reports_from_models,
+    project_selection_reports,
 )
-from src.agents.fundamental.data.ports import (
-    FundamentalArtifactPort,
-    fundamental_artifact_port,
-)
+from src.agents.fundamental.data.ports import FundamentalArtifactPort
 from src.agents.fundamental.domain.entities import FundamentalSelectionReport
-from src.agents.fundamental.interface.contracts import (
-    FinancialReportModel,
-    FundamentalPreviewInputModel,
-)
-from src.agents.fundamental.interface.mappers import summarize_fundamental_for_preview
-from src.common.contracts import OUTPUT_KIND_FUNDAMENTAL_ANALYSIS
-from src.common.tools.logger import get_logger
-from src.common.types import AgentOutputArtifactPayload, JSONObject
-from src.interface.schemas import build_artifact_payload
-from src.shared.domain.market_identity import CompanyProfile
+from src.shared.cross_agent.domain.market_identity import CompanyProfile
+from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
 
 logger = get_logger(__name__)
 
@@ -37,7 +27,18 @@ class FundamentalNodeResult:
 class FundamentalOrchestrator:
     port: FundamentalArtifactPort
     summarize_preview: Callable[
-        [FundamentalPreviewInputModel, list[JSONObject]], JSONObject
+        [FundamentalAppContextDTO, list[JSONObject] | None], JSONObject
+    ]
+    build_progress_artifact: Callable[[str, JSONObject], AgentOutputArtifactPayload]
+    normalize_model_selection_reports: Callable[[list[JSONObject]], list[JSONObject]]
+    build_model_selection_report_payload: Callable[
+        [str, str, str, str, str, str, list[JSONObject]], JSONObject
+    ]
+    build_model_selection_artifact: Callable[
+        [str, str, JSONObject], AgentOutputArtifactPayload
+    ]
+    build_valuation_artifact: Callable[
+        [str | None, str, str, JSONObject], AgentOutputArtifactPayload
     ]
 
     def build_mapper_context(
@@ -70,10 +71,8 @@ class FundamentalOrchestrator:
             key_prefix=key_prefix,
         )
 
-    async def load_financial_report_models(
-        self, artifact_id: str
-    ) -> list[FinancialReportModel] | None:
-        return await self.port.load_financial_report_models(artifact_id)
+    async def load_financial_reports(self, artifact_id: str) -> list[JSONObject] | None:
+        return await self.port.load_financial_reports(artifact_id)
 
     def build_selection_details(
         self, selection: use_cases._ModelSelectionLike
@@ -106,6 +105,9 @@ class FundamentalOrchestrator:
             financial_reports=financial_reports,
             port=self.port,
             summarize_preview=self.summarize_preview,
+            normalize_model_selection_reports_fn=self.normalize_model_selection_reports,
+            build_model_selection_report_payload_fn=self.build_model_selection_report_payload,
+            build_model_selection_artifact_fn=self.build_model_selection_artifact,
         )
 
     def resolve_selection_model_type(self, selected_model_value: str) -> str:
@@ -148,6 +150,7 @@ class FundamentalOrchestrator:
             calculation_metrics=calculation_metrics,
             assumptions=assumptions,
             summarize_preview=self.summarize_preview,
+            build_valuation_artifact_fn=self.build_valuation_artifact,
         )
 
     def build_valuation_error_update(self, error: str) -> JSONObject:
@@ -196,11 +199,9 @@ class FundamentalOrchestrator:
                     status="fetching_complete",
                 )
                 preview = self.summarize_preview(mapper_ctx, reports_data)
-                artifact = build_artifact_payload(
-                    kind=OUTPUT_KIND_FUNDAMENTAL_ANALYSIS,
-                    summary=f"Fundamental Analysis: Data fetched for {resolved_ticker}",
-                    preview=preview,
-                    reference=None,
+                artifact = self.build_progress_artifact(
+                    f"Fundamental Analysis: Data fetched for {resolved_ticker}",
+                    preview,
                 )
             else:
                 logger.warning(
@@ -252,14 +253,10 @@ class FundamentalOrchestrator:
             financial_reports: list[JSONObject] = []
             selection_reports: list[FundamentalSelectionReport] = []
             if reports_artifact_id is not None:
-                loaded_models = await self.load_financial_report_models(
-                    reports_artifact_id
-                )
-                if loaded_models is not None:
-                    selection_reports = project_selection_reports_from_models(
-                        loaded_models
-                    )
-                    financial_reports = financial_report_models_to_json(loaded_models)
+                loaded_reports = await self.load_financial_reports(reports_artifact_id)
+                if loaded_reports is not None:
+                    selection_reports = project_selection_reports(loaded_reports)
+                    financial_reports = loaded_reports
 
             selection = select_valuation_model_fn(profile, selection_reports)
             model = selection.model
@@ -348,14 +345,11 @@ class FundamentalOrchestrator:
             if reports_artifact_id is None:
                 raise ValueError("Missing financial_reports_artifact_id for valuation")
 
-            reports_models = await self.load_financial_report_models(
-                reports_artifact_id
-            )
-            if reports_models is None:
+            reports_raw = await self.load_financial_reports(reports_artifact_id)
+            if reports_raw is None:
                 raise ValueError(
                     "Missing financial reports artifact data for valuation"
                 )
-            reports_raw = financial_report_models_to_json(reports_models)
             if not reports_raw:
                 raise ValueError("Empty financial reports data for valuation")
 
@@ -404,9 +398,3 @@ class FundamentalOrchestrator:
                 update=self.build_valuation_error_update(str(exc)),
                 goto="END",
             )
-
-
-fundamental_orchestrator = FundamentalOrchestrator(
-    port=fundamental_artifact_port,
-    summarize_preview=summarize_fundamental_for_preview,
-)

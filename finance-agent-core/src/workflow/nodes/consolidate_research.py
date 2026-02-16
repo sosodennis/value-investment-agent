@@ -2,7 +2,7 @@ import traceback
 
 from langgraph.types import Command
 
-from src.common.tools.logger import get_logger
+from src.shared.kernel.tools.logger import get_logger
 
 from ..state import AgentState
 

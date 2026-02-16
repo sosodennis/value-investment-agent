@@ -11,7 +11,7 @@ Current phase: `Closed (Phase 7 completed)`
 ### 2026-02-12
 
 Completed:
-1. 建立升級計劃文檔：`/Users/denniswong/Desktop/Project/value-investment-agent/docs/monorepo-contract-upgrade-plan.md`
+1. 建立升級計劃文檔：`/Users/denniswong/Desktop/Project/value-investment-agent/docs/archive/monorepo-contract-upgrade-plan.md`
 2. 建立本 progress 文檔
 3. Backend 關鍵端點加入 `response_model` 並加強型別 normalize：
    - `/history/{thread_id}`

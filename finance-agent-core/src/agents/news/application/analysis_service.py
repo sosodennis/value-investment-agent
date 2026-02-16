@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 
+from src.agents.news.application.parsers import parse_structured_llm_output
 from src.agents.news.application.ports import (
     ChainLike,
     FinbertAnalyzerLike,
@@ -10,10 +11,9 @@ from src.agents.news.application.ports import (
     LLMLike,
     NewsArtifactTextReaderPort,
 )
-from src.agents.news.interface.parsers import parse_structured_llm_output
-from src.agents.news.interface.prompt_formatters import build_analysis_chain_payload
-from src.common.tools.logger import get_logger
-from src.common.types import JSONObject
+from src.agents.news.application.prompt_formatters import build_analysis_chain_payload
+from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.types import JSONObject
 
 logger = get_logger(__name__)
 
@@ -44,7 +44,7 @@ def build_analysis_chains(
     return AnalysisChains(basic=basic_chain, finbert=finbert_chain)
 
 
-def run_analysis_with_fallback(
+def run_analysis_with_resilience(
     *,
     chains: AnalysisChains,
     chain_payload: JSONObject,
@@ -59,7 +59,7 @@ def run_analysis_with_fallback(
         except Exception:
             result = chains.basic.invoke(chain_payload)
             return parse_structured_llm_output(
-                result, context="news basic analysis fallback response"
+                result, context="news basic analysis degraded-path response"
             ), True
 
     result = chains.basic.invoke(chain_payload)
@@ -112,7 +112,7 @@ async def analyze_news_items(
                 content_to_analyze=content_to_analyze,
                 finbert_summary=finbert_summary,
             )
-            analysis_payload, _used_fallback = run_analysis_with_fallback(
+            analysis_payload, _used_degraded_path = run_analysis_with_resilience(
                 chains=chains,
                 chain_payload=chain_payload,
                 prefer_finbert_chain=finbert_result is not None,

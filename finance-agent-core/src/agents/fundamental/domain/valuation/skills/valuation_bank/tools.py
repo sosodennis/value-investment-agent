@@ -1,4 +1,4 @@
-from src.common.traceable import TraceableField
+from src.shared.kernel.traceable import TraceableField
 
 from ...engine.graphs.bank_ddm import create_bank_graph
 from .schemas import BankParams

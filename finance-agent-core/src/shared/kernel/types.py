@@ -4,7 +4,7 @@ from typing import Literal, TypeAlias
 
 from typing_extensions import TypedDict
 
-from src.common.contracts import AgentOutputKind
+from src.shared.kernel.contracts import AgentOutputKind
 
 JSONScalar: TypeAlias = str | int | float | bool | None
 JSONValue: TypeAlias = JSONScalar | list["JSONValue"] | dict[str, "JSONValue"]

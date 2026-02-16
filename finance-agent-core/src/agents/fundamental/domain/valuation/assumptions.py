@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from src.common.traceable import ManualProvenance, TraceableField
+from src.shared.kernel.traceable import ManualProvenance, TraceableField
 
 # Enterprise-grade policy note:
 # - Do NOT silently assume values in production.

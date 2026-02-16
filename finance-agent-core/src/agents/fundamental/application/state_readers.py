@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from src.shared.domain.market_identity import CompanyProfile
+from src.shared.cross_agent.domain.market_identity import CompanyProfile
 
 
 @dataclass(frozen=True)

@@ -1,0 +1,1 @@
+"""Cross-agent shared package."""

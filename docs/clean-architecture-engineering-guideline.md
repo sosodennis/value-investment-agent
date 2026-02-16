@@ -86,7 +86,7 @@ Canonical (active):
 Historical (reference only, may contain phased context):
 1. `docs/clean-architecture-agent-workflow-blueprint.md`
 2. `docs/fullstack-change-control-playbook.md`
-3. `docs/monorepo-contract-upgrade-plan.md`
-4. `docs/monorepo-contract-upgrade-progress.md`
-5. `docs/deep-refactor-master-plan-2026-02-13.md`
-6. `docs/deep-refactor-progress-2026-02-13.md`
+3. `docs/archive/monorepo-contract-upgrade-plan.md`
+4. `docs/archive/monorepo-contract-upgrade-progress.md`
+5. `docs/archive/deep-refactor-master-plan-2026-02-13.md`
+6. `docs/archive/deep-refactor-progress-2026-02-13.md`

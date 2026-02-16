@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import textwrap
 
-from src.common.traceable import ComputedProvenance, ManualProvenance, XBRLProvenance
+from src.shared.kernel.traceable import (
+    ComputedProvenance,
+    ManualProvenance,
+    XBRLProvenance,
+)
 
 
 def _wrap_text(text: str, width: int = 40) -> str:

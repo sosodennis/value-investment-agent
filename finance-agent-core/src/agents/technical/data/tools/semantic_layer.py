@@ -9,9 +9,9 @@ from __future__ import annotations
 
 from langchain_core.prompts import ChatPromptTemplate
 
-from src.common.tools.llm import get_llm
-from src.common.tools.logger import get_logger
-from src.common.types import JSONObject
+from src.infrastructure.llm.provider import get_llm
+from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.types import JSONObject
 
 logger = get_logger(__name__)
 

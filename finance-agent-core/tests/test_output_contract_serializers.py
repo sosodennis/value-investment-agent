@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from src.interface.canonical_serializers import (
-    canonicalize_debate_artifact_data,
-    canonicalize_fundamental_artifact_data,
-    canonicalize_news_artifact_data,
-    canonicalize_technical_artifact_data,
+from src.agents.debate.interface.contracts import parse_debate_artifact_model
+from src.agents.fundamental.interface.contracts import (
+    parse_fundamental_artifact_model,
+)
+from src.agents.news.interface.contracts import parse_news_artifact_model
+from src.agents.technical.interface.contracts import (
+    parse_technical_artifact_model,
 )
 
 
@@ -45,7 +47,7 @@ def test_canonicalize_fundamental_artifact_normalizes_reports() -> None:
         ],
     }
 
-    normalized = canonicalize_fundamental_artifact_data(payload)
+    normalized = parse_fundamental_artifact_model(payload)
 
     assert normalized["company_name"] == "AAPL"
     assert normalized["sector"] == "Unknown"
@@ -94,7 +96,7 @@ def test_canonicalize_technical_artifact_normalizes_enums_and_series() -> None:
         },
     }
 
-    normalized = canonicalize_technical_artifact_data(payload)
+    normalized = parse_technical_artifact_model(payload)
 
     assert normalized["frac_diff_metrics"]["memory_strength"] == "balanced"
     assert normalized["signal_state"]["statistical_state"] == "anomaly"
@@ -130,7 +132,7 @@ def test_canonicalize_technical_artifact_rejects_invalid_risk_level() -> None:
     }
 
     with pytest.raises(TypeError, match="risk_level"):
-        canonicalize_technical_artifact_data(payload)
+        parse_technical_artifact_model(payload)
 
 
 def test_canonicalize_news_artifact_normalizes_enums() -> None:
@@ -182,7 +184,7 @@ def test_canonicalize_news_artifact_normalizes_enums() -> None:
         "key_themes": ["AI demand"],
     }
 
-    normalized = canonicalize_news_artifact_data(payload)
+    normalized = parse_news_artifact_model(payload)
     item = normalized["news_items"][0]
     assert normalized["overall_sentiment"] == "bullish"
     assert item["categories"] == ["trusted_news", "bullish"]
@@ -232,7 +234,7 @@ def test_canonicalize_debate_artifact_normalizes_and_filters_optional() -> None:
         ],
     }
 
-    normalized = canonicalize_debate_artifact_data(payload)
+    normalized = parse_debate_artifact_model(payload)
     assert normalized["risk_profile"] == "GROWTH_TECH"
     assert normalized["final_verdict"] == "LONG"
     assert normalized["scenario_analysis"]["bull_case"]["price_implication"] == "SURGE"

@@ -1,8 +1,8 @@
 from langchain_core.messages import AIMessageChunk
 from pydantic import BaseModel
 
-from src.interface.adapters import adapt_langgraph_event, create_interrupt_event
-from src.interface.protocol import PROTOCOL_VERSION, AgentEvent
+from src.interface.events.adapters import adapt_langgraph_event, create_interrupt_event
+from src.interface.events.protocol import PROTOCOL_VERSION, AgentEvent
 
 
 def test_agent_event_serialization():

@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from src.interface.protocol import PROTOCOL_VERSION, AgentEvent
+from src.interface.events.protocol import PROTOCOL_VERSION, AgentEvent
 
 
 def _load_supported_fixture_sets() -> list[tuple[str, list[dict[str, object]]]]:

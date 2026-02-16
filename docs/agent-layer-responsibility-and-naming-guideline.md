@@ -74,7 +74,7 @@ Forbidden:
 
 1. `domain` imports:
    - same-agent `domain`
-   - `src/common/**`
+   - `src/shared/kernel/**`
    - never from `application/data/interface/workflow`
 2. `application` imports:
    - same-agent `domain`

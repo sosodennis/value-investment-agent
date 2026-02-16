@@ -49,7 +49,7 @@ Every cross-stack change must guarantee:
    - Generated from OpenAPI:
      `frontend/src/types/generated/api-contract.ts`
 3. SSE behavior source:
-   - Backend protocol model: `finance-agent-core/src/interface/protocol.py`
+   - Backend protocol model: `finance-agent-core/src/interface/events/protocol.py`
    - Shared fixtures: `contracts/fixtures/*.json`
    - Fixture manifest: `contracts/fixtures/manifest.json`
 

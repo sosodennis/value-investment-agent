@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from src.common.types import JSONObject
+from src.shared.kernel.types import JSONObject
 
 
 class ChainLike(Protocol):

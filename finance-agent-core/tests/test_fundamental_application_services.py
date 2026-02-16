@@ -36,6 +36,20 @@ def test_build_valuation_success_update_includes_output_and_artifact() -> None:
             "company_name": "GameStop",
             "selected_model": "dcf_standard",
         },
+        build_valuation_artifact_fn=lambda ticker,
+        model_type,
+        reports_artifact_id,
+        preview: {
+            "kind": "fundamental_analysis.output",
+            "version": "v1",
+            "summary": f"估值完成: {ticker or 'UNKNOWN'} ({model_type})",
+            "preview": preview,
+            "reference": {
+                "artifact_id": reports_artifact_id,
+                "download_url": f"/api/artifacts/{reports_artifact_id}",
+                "type": "financial_reports",
+            },
+        },
     )
 
     fa = update["fundamental_analysis"]
@@ -59,6 +73,20 @@ def test_build_valuation_success_update_keeps_zero_intrinsic_value() -> None:
         calculation_metrics={"intrinsic_value": 0.0, "equity_value": 42.5},
         assumptions=[],
         summarize_preview=lambda _ctx, _reports: {},
+        build_valuation_artifact_fn=lambda _ticker,
+        _model_type,
+        reports_artifact_id,
+        preview: {
+            "kind": "fundamental_analysis.output",
+            "version": "v1",
+            "summary": "ok",
+            "preview": preview,
+            "reference": {
+                "artifact_id": reports_artifact_id,
+                "download_url": f"/api/artifacts/{reports_artifact_id}",
+                "type": "financial_reports",
+            },
+        },
     )
 
     fa = update["fundamental_analysis"]

@@ -2,7 +2,7 @@
 SEC XBRL extraction and mapping utilities.
 """
 
-from src.common.traceable import (
+from src.shared.kernel.traceable import (
     ComputedProvenance,
     ManualProvenance,
     TraceableField,

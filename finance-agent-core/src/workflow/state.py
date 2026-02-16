@@ -9,7 +9,7 @@ from langchain_core.messages import AnyMessage
 from langgraph.graph import add_messages
 from typing_extensions import TypedDict
 
-from src.common.types import AgentOutputArtifactPayload, JSONObject
+from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
 
 # 注意：我們不再需要從 pydantic 導入 BaseModel 用於 State
 # 也不再需要 AgentOutputArtifact，因為它只存在於 Adapter 層

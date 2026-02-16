@@ -5,7 +5,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMe
 from pydantic import BaseModel
 from sqlalchemy import desc, select
 
-from src.common.types import JSONObject, JSONValue
+from src.shared.kernel.types import JSONObject, JSONValue
 
 from ..infrastructure.database import AsyncSessionLocal
 from ..infrastructure.models import ChatMessage

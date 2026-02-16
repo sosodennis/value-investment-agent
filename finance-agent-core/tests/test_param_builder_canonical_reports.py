@@ -3,7 +3,7 @@ from __future__ import annotations
 from src.agents.fundamental.domain.valuation.param_builder import (
     build_params,
 )
-from src.interface.canonical_serializers import normalize_financial_reports
+from src.agents.fundamental.interface.contracts import parse_financial_reports_model
 
 
 def _tf(value: float | str) -> dict[str, object]:
@@ -73,8 +73,8 @@ def test_build_params_accepts_canonicalized_financial_reports() -> None:
         },
     ]
 
-    canonical_reports = normalize_financial_reports(
-        raw_reports, "test.financial_reports"
+    canonical_reports = parse_financial_reports_model(
+        raw_reports, context="test.financial_reports"
     )
     result = build_params("saas", "EXM", canonical_reports)
 

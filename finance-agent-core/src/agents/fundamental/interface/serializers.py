@@ -2,24 +2,24 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from src.agents.fundamental.interface.contracts import FundamentalPreviewInputModel
-from src.common.contracts import (
+from src.agents.fundamental.interface.contracts import (
+    FundamentalPreviewInputModel,
+    parse_financial_reports_model,
+    parse_fundamental_artifact_model,
+)
+from src.interface.events.schemas import ArtifactReference, build_artifact_payload
+from src.shared.kernel.contracts import (
     ARTIFACT_KIND_FINANCIAL_REPORTS,
     OUTPUT_KIND_FUNDAMENTAL_ANALYSIS,
 )
-from src.common.types import AgentOutputArtifactPayload, JSONObject
-from src.interface.canonical_serializers import (
-    canonicalize_fundamental_artifact_data,
-    normalize_financial_reports,
-)
-from src.interface.schemas import ArtifactReference, build_artifact_payload
+from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
 
 
 def normalize_model_selection_reports(
     financial_reports: list[JSONObject],
 ) -> list[JSONObject]:
-    return normalize_financial_reports(
-        financial_reports, "model_selection.financial_reports"
+    return parse_financial_reports_model(
+        financial_reports, context="model_selection.financial_reports"
     )
 
 
@@ -33,7 +33,7 @@ def build_model_selection_report_payload(
     reasoning: str,
     normalized_reports: list[JSONObject],
 ) -> JSONObject:
-    return canonicalize_fundamental_artifact_data(
+    return parse_fundamental_artifact_model(
         {
             "ticker": ticker,
             "model_type": model_type,

@@ -1,4 +1,4 @@
-from src.interface.mappers import NodeOutputMapper
+from src.interface.events.mappers import NodeOutputMapper
 
 
 def _artifact(kind: str) -> dict[str, object]:

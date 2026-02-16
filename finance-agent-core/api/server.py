@@ -20,18 +20,18 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command
 
-from src.common.tools.logger import get_logger
-from src.common.types import InterruptResumePayload, JSONObject
 from src.infrastructure.database import init_db
-from src.interface.adapters import adapt_langgraph_event, create_interrupt_event
-from src.interface.artifact_api_models import (
+from src.interface.artifacts.artifact_api_models import (
     ArtifactApiResponse,
     validate_artifact_api_response,
 )
-from src.interface.protocol import AgentEvent
-from src.interface.schemas import AgentOutputArtifact
+from src.interface.events.adapters import adapt_langgraph_event, create_interrupt_event
+from src.interface.events.protocol import AgentEvent
+from src.interface.events.schemas import AgentOutputArtifact
 from src.services.artifact_manager import artifact_manager
 from src.services.history import history_service
+from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.types import InterruptResumePayload, JSONObject
 from src.workflow.graph import get_graph
 from src.workflow.interrupts import InterruptValue
 
@@ -444,7 +444,7 @@ async def get_thread_history(request: Request, thread_id: str):
 
         # Dynamic Agent Output Discovery (Standardization Phase 1)
         # Use Mapper instead of raw loop
-        from src.interface.mappers import NodeOutputMapper
+        from src.interface.events.mappers import NodeOutputMapper
 
         agent_outputs = NodeOutputMapper.map_all_outputs(snapshot.values)
         node_statuses = _normalize_statuses(snapshot.values.get("node_statuses"))
@@ -474,7 +474,7 @@ async def get_agent_statuses(request: Request, thread_id: str):
     try:
         graph = request.app.state.graph
         snapshot = await graph.aget_state(config)
-        from src.interface.mappers import NodeOutputMapper
+        from src.interface.events.mappers import NodeOutputMapper
 
         agent_outputs = NodeOutputMapper.map_all_outputs(snapshot.values)
         node_statuses = _normalize_statuses(snapshot.values.get("node_statuses"))

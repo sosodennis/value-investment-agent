@@ -8,7 +8,7 @@ from typing import TypeVar
 
 from pydantic import BaseModel, ValidationError
 
-from src.common.types import JSONObject, JSONValue
+from src.shared.kernel.types import JSONObject, JSONValue
 
 TModel = TypeVar("TModel", bound=BaseModel)
 
@@ -127,3 +127,17 @@ def validate_and_dump(
     if not isinstance(dumped, dict):
         raise TypeError(f"{context} must serialize to object")
     return dumped
+
+
+def validate_list_and_dump(
+    model_type: type[TModel], value: object, context: str, *, exclude_none: bool = False
+) -> list[JSONObject]:
+    if not isinstance(value, list):
+        raise TypeError(f"{context} must be a list")
+    output: list[JSONObject] = []
+    for index, item in enumerate(value):
+        parsed = validate_and_dump(
+            model_type, item, f"{context}[{index}]", exclude_none=exclude_none
+        )
+        output.append(parsed)
+    return output

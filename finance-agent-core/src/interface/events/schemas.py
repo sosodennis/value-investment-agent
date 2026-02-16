@@ -2,8 +2,8 @@ from typing import cast
 
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
-from src.common.contracts import AGENT_OUTPUT_VERSION
-from src.common.types import (
+from src.shared.kernel.contracts import AGENT_OUTPUT_VERSION
+from src.shared.kernel.types import (
     AgentOutputArtifactPayload,
     AgentOutputKind,
     ArtifactReferencePayload,

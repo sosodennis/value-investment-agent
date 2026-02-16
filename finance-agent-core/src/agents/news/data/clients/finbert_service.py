@@ -1,8 +1,8 @@
 import re
 from dataclasses import asdict, dataclass
 
-from src.common.tools.logger import get_logger
-from src.common.types import JSONObject
+from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.types import JSONObject
 
 logger = get_logger(__name__)
 

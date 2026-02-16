@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from src.agents.news.application.parsers import parse_selector_selected_urls
 from src.agents.news.application.ports import ChainLike
-from src.agents.news.interface.parsers import parse_selector_selected_urls
-from src.agents.news.interface.prompt_formatters import (
-    format_selector_input as format_selector_input_interface,
+from src.agents.news.application.prompt_formatters import (
+    format_selector_input as format_selector_input_application,
 )
-from src.common.types import JSONObject
+from src.shared.kernel.types import JSONObject
 
 
 @dataclass(frozen=True)
@@ -17,7 +17,7 @@ class SelectorExecutionResult:
     error_message: str
 
 
-def build_selector_fallback_indices(raw_results: list[JSONObject]) -> list[int]:
+def build_selector_degraded_indices(raw_results: list[JSONObject]) -> list[int]:
     return list(range(min(3, len(raw_results))))
 
 
@@ -28,10 +28,10 @@ def normalize_selected_indices(
 
 
 def format_selector_input(cleaned_results: list[JSONObject]) -> str:
-    return format_selector_input_interface(cleaned_results)
+    return format_selector_input_application(cleaned_results)
 
 
-def run_selector_with_fallback(
+def run_selector_with_resilience(
     *,
     chain: ChainLike,
     ticker: str | None,
@@ -57,7 +57,7 @@ def run_selector_with_fallback(
         )
     except Exception as exc:
         return SelectorExecutionResult(
-            selected_indices=build_selector_fallback_indices(raw_results),
+            selected_indices=build_selector_degraded_indices(raw_results),
             is_degraded=True,
             error_message=str(exc),
         )

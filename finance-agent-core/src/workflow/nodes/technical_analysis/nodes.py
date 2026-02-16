@@ -4,7 +4,8 @@ from langchain_core.messages import AIMessage
 from langgraph.graph import END
 from langgraph.types import Command
 
-from src.agents.technical.application import technical_orchestrator
+from src.agents.technical.application.orchestrator import TechnicalOrchestrator
+from src.agents.technical.data.ports import technical_artifact_port
 from src.agents.technical.data.tools import (
     CombinedBacktester,
     WalkForwardOptimizer,
@@ -22,9 +23,49 @@ from src.agents.technical.data.tools import (
     generate_interpretation,
 )
 from src.agents.technical.domain.policies import assemble_semantic_tags
+from src.agents.technical.interface.mappers import summarize_ta_for_preview
 from src.agents.technical.interface.serializers import build_full_report_payload
+from src.interface.events.schemas import ArtifactReference, build_artifact_payload
+from src.shared.kernel.contracts import (
+    ARTIFACT_KIND_TA_FULL_REPORT,
+    OUTPUT_KIND_TECHNICAL_ANALYSIS,
+)
 
 from .subgraph_state import TechnicalAnalysisState
+
+
+def _build_progress_artifact(
+    summary: str, preview: dict[str, object]
+) -> dict[str, object]:
+    return build_artifact_payload(
+        kind=OUTPUT_KIND_TECHNICAL_ANALYSIS,
+        summary=summary,
+        preview=preview,
+        reference=None,
+    )
+
+
+def _build_semantic_output_artifact(
+    summary: str, preview: dict[str, object], report_id: str
+) -> dict[str, object]:
+    return build_artifact_payload(
+        kind=OUTPUT_KIND_TECHNICAL_ANALYSIS,
+        summary=summary,
+        preview=preview,
+        reference=ArtifactReference(
+            artifact_id=report_id,
+            download_url=f"/api/artifacts/{report_id}",
+            type=ARTIFACT_KIND_TA_FULL_REPORT,
+        ),
+    )
+
+
+technical_orchestrator = TechnicalOrchestrator(
+    port=technical_artifact_port,
+    summarize_preview=summarize_ta_for_preview,
+    build_progress_artifact=_build_progress_artifact,
+    build_semantic_output_artifact=_build_semantic_output_artifact,
+)
 
 
 def _resolve_goto(target: str) -> str:

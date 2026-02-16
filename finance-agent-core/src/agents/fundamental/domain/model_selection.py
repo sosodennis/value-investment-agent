@@ -10,8 +10,8 @@ from typing import Literal
 
 from src.agents.fundamental.domain.entities import FundamentalSelectionReport
 from src.agents.fundamental.domain.rules import calculate_cagr
-from src.common.tools.logger import get_logger
-from src.shared.domain.market_identity import CompanyProfile
+from src.shared.cross_agent.domain.market_identity import CompanyProfile
+from src.shared.kernel.tools.logger import get_logger
 
 from .models import ValuationModel
 

@@ -3,7 +3,11 @@ from collections.abc import Callable
 
 import networkx as nx
 
-from src.common.traceable import ComputedProvenance, ManualProvenance, TraceableField
+from src.shared.kernel.traceable import (
+    ComputedProvenance,
+    ManualProvenance,
+    TraceableField,
+)
 
 Scalar = float | int
 Vector = list[float]

@@ -26,7 +26,7 @@ from src.agents.technical.domain.services import (
     safe_float,
 )
 from src.agents.technical.interface.serializers import build_full_report_payload
-from src.interface.artifact_api_models import (
+from src.interface.artifacts.artifact_data_models import (
     PriceSeriesArtifactData,
     TechnicalChartArtifactData,
 )
@@ -67,9 +67,9 @@ def test_serialize_fracdiff_outputs_converts_series_and_indicators() -> None:
     assert result.fracdiff_series["2025-01-01"] == 1.25
     assert result.fracdiff_series["2025-01-02"] is None
     assert result.z_score_series["2025-01-02"] == -1.2
-    assert result.bollinger["state"] == "INSIDE"
-    assert result.stat_strength["value"] == 88.1
-    assert result.obv["state"] == "BULLISH"
+    assert result.bollinger.state == "INSIDE"
+    assert result.stat_strength.value == 88.1
+    assert result.obv.state == "BULLISH"
 
 
 def test_build_full_report_payload_derives_states() -> None:

@@ -8,13 +8,8 @@ from src.agents.technical.application.semantic_service import (
     SemanticPipelineResult,
     semantic_tags_to_dict,
 )
-from src.common.contracts import (
-    ARTIFACT_KIND_TA_FULL_REPORT,
-    OUTPUT_KIND_TECHNICAL_ANALYSIS,
-)
-from src.common.tools.logger import get_logger
-from src.common.types import AgentOutputArtifactPayload, JSONObject
-from src.interface.schemas import ArtifactReference, build_artifact_payload
+from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
 
 logger = get_logger(__name__)
 
@@ -49,6 +44,7 @@ async def build_semantic_report_update(
     technical_context: JSONObject,
     summarize_preview: Callable[[JSONObject], JSONObject],
     pipeline_result: SemanticPipelineResult,
+    build_output_artifact: Callable[[str, JSONObject, str], AgentOutputArtifactPayload],
 ) -> JSONObject:
     try:
         preview = summarize_preview(technical_context)
@@ -57,19 +53,13 @@ async def build_semantic_report_update(
             produced_by="technical_analysis.semantic_translate",
             key_prefix=f"ta_{ticker}_{int(time.time())}",
         )
-        reference = ArtifactReference(
-            artifact_id=report_id,
-            download_url=f"/api/artifacts/{report_id}",
-            type=ARTIFACT_KIND_TA_FULL_REPORT,
-        )
-        artifact: AgentOutputArtifactPayload = build_artifact_payload(
-            kind=OUTPUT_KIND_TECHNICAL_ANALYSIS,
-            summary=(
+        artifact = build_output_artifact(
+            (
                 f"Technical Analysis: {pipeline_result.semantic_finalize_result.direction} "
                 f"(d={pipeline_result.semantic_finalize_result.opt_d:.2f})"
             ),
-            preview=preview,
-            reference=reference,
+            preview,
+            report_id,
         )
         ta_update = dict(pipeline_result.semantic_finalize_result.ta_update)
         ta_update["artifact"] = artifact

@@ -6,7 +6,7 @@ from edgar import Company, set_identity
 from pydantic import BaseModel, Field
 from tabulate import tabulate
 
-from src.common.tools.logger import get_logger
+from src.shared.kernel.tools.logger import get_logger
 
 # Set SEC identity
 set_identity("ValueInvestmentAgent research@example.com")

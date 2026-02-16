@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
-from src.interface.adapters import adapt_langgraph_event
-from src.interface.mappers import NodeOutputMapper
+from src.interface.events.adapters import adapt_langgraph_event
+from src.interface.events.mappers import NodeOutputMapper
 
 # ... (Previous tests remain, I will append the new test case) ...
 
@@ -29,7 +29,9 @@ def test_on_chain_end_status_behavior():
 
     # Execute
     # We patch NodeOutputMapper to return a dummy payload so we get a state.update event
-    with patch("src.interface.mappers.NodeOutputMapper.transform") as mock_transform:
+    with patch(
+        "src.interface.events.mappers.NodeOutputMapper.transform"
+    ) as mock_transform:
         mock_transform.return_value = {"updated": "data"}
 
         events = adapt_langgraph_event(event, thread_id, seq_id, run_id)
@@ -52,7 +54,7 @@ def test_on_chain_end_status_behavior():
     ), f"Expected 0 status updates, found: {[e.data for e in status_updates]}"
 
 
-@patch("src.interface.adapters.get_agent_name")
+@patch("src.interface.events.adapters.get_agent_name")
 def test_explicit_status_update_via_state_with_mapper(mock_get_agent_name):
     """
     Test that NodeOutputMapper correctly passes through node_statuses.

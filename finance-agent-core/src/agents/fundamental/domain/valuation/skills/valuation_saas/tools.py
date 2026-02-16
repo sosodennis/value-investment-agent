@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.common.traceable import TraceableField
+from src.shared.kernel.traceable import TraceableField
 
 from ...engine.graphs.saas_fcff import create_saas_graph
 from .schemas import SaaSParams

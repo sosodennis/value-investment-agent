@@ -19,7 +19,7 @@ from src.agents.news.application.fetch_service import (
 from src.agents.news.application.ports import LLMLike
 from src.agents.news.application.selection_service import (
     format_selector_input,
-    run_selector_with_fallback,
+    run_selector_with_resilience,
 )
 from src.agents.news.application.state_readers import (
     aggregator_ticker_from_state,
@@ -40,20 +40,14 @@ from src.agents.news.application.state_updates import (
     build_search_node_success_update,
     build_selector_node_update,
 )
-from src.agents.news.data.ports import NewsArtifactPort, news_artifact_port
+from src.agents.news.data.ports import NewsArtifactPort
 from src.agents.news.domain.services import (
     aggregate_news_items,
     build_news_summary_message,
 )
-from src.agents.news.interface.mappers import summarize_news_for_preview
-from src.agents.news.interface.serializers import build_news_report_payload
-from src.common.contracts import (
-    ARTIFACT_KIND_NEWS_ANALYSIS_REPORT,
-    OUTPUT_KIND_FINANCIAL_NEWS_RESEARCH,
-)
-from src.common.tools.logger import get_logger
-from src.common.types import JSONObject
-from src.interface.schemas import ArtifactReference, build_artifact_payload
+from src.agents.news.interface.contracts import parse_news_artifact_model
+from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.types import JSONObject
 
 logger = get_logger(__name__)
 
@@ -69,6 +63,10 @@ class NewsNodeResult:
 class NewsOrchestrator:
     port: NewsArtifactPort
     summarize_preview: Callable[[JSONObject, list[JSONObject] | None], JSONObject]
+    build_news_report_payload: Callable[[str, list[JSONObject], object], JSONObject]
+    build_output_artifact: Callable[
+        [str, JSONObject, str | None], dict[str, object] | None
+    ]
 
     async def run_search(
         self,
@@ -129,11 +127,10 @@ class NewsOrchestrator:
             "article_count_display": f"找到 {len(cleaned_results)} 篇新聞",
             "top_headlines": [r.get("title") for r in cleaned_results[:3]],
         }
-        artifact = build_artifact_payload(
-            kind=OUTPUT_KIND_FINANCIAL_NEWS_RESEARCH,
-            summary=f"News Research: Found {len(cleaned_results)} articles for {ticker}",
-            preview=preview,
-            reference=None,
+        artifact = self.build_output_artifact(
+            f"News Research: Found {len(cleaned_results)} articles for {ticker}",
+            preview,
+            None,
         )
 
         return NewsNodeResult(
@@ -175,7 +172,7 @@ class NewsOrchestrator:
             [("system", selector_system_prompt), ("user", selector_user_prompt)]
         )
         chain = prompt | llm
-        selector_result = run_selector_with_fallback(
+        selector_result = run_selector_with_resilience(
             chain=chain,
             ticker=ticker,
             formatted_results=formatted_results,
@@ -260,7 +257,7 @@ class NewsOrchestrator:
             full_contents = await fetch_all()
         except Exception as exc:
             logger.error(
-                f"Async fetch failed: {exc}. Falling back to empty contents.",
+                f"Async fetch failed: {exc}. Entering degraded path with empty contents.",
                 exc_info=True,
             )
             full_contents = [None] * len(articles_to_fetch)
@@ -385,8 +382,6 @@ class NewsOrchestrator:
     async def run_aggregator(
         self,
         state: Mapping[str, object],
-        *,
-        canonicalize_news_artifact_data_fn: Callable[[object], JSONObject],
     ) -> NewsNodeResult:
         news_items_id = news_items_artifact_id_from_state(state)
 
@@ -401,12 +396,12 @@ class NewsOrchestrator:
         logger.info(f"--- [News Research] Aggregating results for {ticker} ---")
 
         aggregation = aggregate_news_items(news_item_entities, ticker=ticker)
-        report_payload = build_news_report_payload(
-            ticker=ticker,
-            news_items=news_items,
-            aggregation=aggregation,
+        report_payload = self.build_news_report_payload(
+            ticker,
+            news_items,
+            aggregation,
         )
-        report_data = canonicalize_news_artifact_data_fn(report_payload)
+        report_data = parse_news_artifact_model(report_payload)
 
         timestamp = int(time.time())
         try:
@@ -421,19 +416,10 @@ class NewsOrchestrator:
 
         try:
             preview = self.summarize_preview(report_payload, news_items)
-            reference = None
-            if report_id:
-                reference = ArtifactReference(
-                    artifact_id=report_id,
-                    download_url=f"/api/artifacts/{report_id}",
-                    type=ARTIFACT_KIND_NEWS_ANALYSIS_REPORT,
-                )
-
-            artifact = build_artifact_payload(
-                kind=OUTPUT_KIND_FINANCIAL_NEWS_RESEARCH,
-                summary=f"News Research: {aggregation.sentiment_label.upper()} ({aggregation.weighted_score:.2f})",
-                preview=preview,
-                reference=reference,
+            artifact = self.build_output_artifact(
+                f"News Research: {aggregation.sentiment_label.upper()} ({aggregation.weighted_score:.2f})",
+                preview,
+                report_id,
             )
         except Exception as exc:
             logger.error(f"Failed to generate news artifact: {exc}")
@@ -454,9 +440,3 @@ class NewsOrchestrator:
                 ticker=ticker, result=aggregation
             ),
         )
-
-
-news_orchestrator = NewsOrchestrator(
-    port=news_artifact_port,
-    summarize_preview=summarize_news_for_preview,
-)

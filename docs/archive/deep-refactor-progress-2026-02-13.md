@@ -1,7 +1,7 @@
 # Deep Refactor Progress Tracker (Summary)
 Date: 2026-02-13
 Status: Historical summary (non-normative)
-Plan Reference: `docs/deep-refactor-master-plan-2026-02-13.md`
+Plan Reference: `docs/archive/deep-refactor-master-plan-2026-02-13.md`
 
 This is the concise summary.
 Full execution log is archived at:

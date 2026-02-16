@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from src.agents.fundamental.interface.contracts import FinancialReportModel
-from src.common.types import JSONObject
+from src.shared.kernel.types import JSONObject
 
 
 class IFundamentalReportRepo(Protocol):
@@ -15,6 +14,6 @@ class IFundamentalReportRepo(Protocol):
         key_prefix: str | None = None,
     ) -> str: ...
 
-    async def load_financial_report_models(
+    async def load_financial_reports(
         self, artifact_id: str
-    ) -> list[FinancialReportModel] | None: ...
+    ) -> list[JSONObject] | None: ...

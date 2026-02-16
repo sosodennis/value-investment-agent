@@ -6,16 +6,16 @@ Uses LLM to extract intent (Company, Model Preference) from user query.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
+from typing import Protocol
 
 from dotenv import find_dotenv, load_dotenv
 from langchain_core.prompts import ChatPromptTemplate
 
 from src.agents.intent.domain.extraction_policies import heuristic_extract_intent
 from src.agents.intent.domain.models import TickerCandidate
-from src.agents.intent.interface.contracts import IntentExtraction, SearchExtraction
-from src.agents.intent.interface.mappers import to_ticker_candidate
-from src.common.tools.llm import get_llm
-from src.common.tools.logger import get_logger
+from src.infrastructure.llm.provider import get_llm
+from src.shared.kernel.tools.logger import get_logger
 
 # Load environment variables
 load_dotenv(find_dotenv())
@@ -23,9 +23,32 @@ load_dotenv(find_dotenv())
 logger = get_logger(__name__)
 
 
-def _heuristic_extract(query: str) -> IntentExtraction:
+class _IntentExtractionLike(Protocol):
+    company_name: str | None
+    ticker: str | None
+    is_valuation_request: bool
+    reasoning: str | None
+
+    def model_dump(self, *, mode: str = "python") -> dict[str, object]: ...
+
+
+class _SearchCandidateLike(Protocol):
+    symbol: str
+    name: str
+    exchange: str | None
+    type: str | None
+    confidence: float
+
+
+class _SearchExtractionLike(Protocol):
+    candidates: list[_SearchCandidateLike]
+
+
+def _heuristic_extract(
+    query: str, *, intent_model_factory: Callable[..., _IntentExtractionLike]
+) -> _IntentExtractionLike:
     heuristic = heuristic_extract_intent(query)
-    return IntentExtraction(
+    return intent_model_factory(
         company_name=heuristic.company_name,
         ticker=heuristic.ticker,
         is_valuation_request=heuristic.is_valuation_request,
@@ -56,7 +79,11 @@ def deduplicate_candidates(candidates: list[TickerCandidate]) -> list[TickerCand
 
 
 def extract_candidates_from_search(
-    query: str, search_results: str
+    query: str,
+    search_results: str,
+    *,
+    search_extraction_model_type: type[object],
+    to_ticker_candidate_fn: Callable[[object], TickerCandidate],
 ) -> list[TickerCandidate]:
     """
     Extract potential ticker symbols and company names from search results using LLM.
@@ -83,18 +110,22 @@ def extract_candidates_from_search(
             ]
         )
 
-        chain = prompt | llm.with_structured_output(SearchExtraction)
+        chain = prompt | llm.with_structured_output(search_extraction_model_type)
         response = chain.invoke({"query": query, "search_results": search_results})
-
-        return [to_ticker_candidate(candidate) for candidate in response.candidates]
+        candidates_raw = getattr(response, "candidates", None)
+        if not isinstance(candidates_raw, list):
+            raise TypeError("search extraction output shape is invalid")
+        return [to_ticker_candidate_fn(candidate) for candidate in candidates_raw]
     except Exception as exc:
         logger.warning(f"LLM Search Extraction failed: {exc}. Returning empty list.")
         return []
 
 
-def extract_intent(query: str) -> IntentExtraction:
+def extract_intent(
+    query: str, *, intent_model_type: type[_IntentExtractionLike]
+) -> _IntentExtractionLike:
     """
-    Extract intent from user query using LLM with heuristic fallback.
+    Extract intent from user query using LLM with heuristic resilience path.
     """
     try:
         llm = get_llm(timeout=30)
@@ -120,9 +151,25 @@ Return the IntentExtraction object.
             ]
         )
 
-        chain = prompt | llm.with_structured_output(IntentExtraction)
+        chain = prompt | llm.with_structured_output(intent_model_type)
         response = chain.invoke({"query": query})
+        model_dump = getattr(response, "model_dump", None)
+        if not callable(model_dump):
+            raise TypeError("intent extraction output shape is invalid")
+        dumped = model_dump(mode="json")
+        if not isinstance(dumped, dict):
+            raise TypeError("intent extraction output shape is invalid")
+        required_fields = {
+            "company_name",
+            "ticker",
+            "is_valuation_request",
+            "reasoning",
+        }
+        if not required_fields.issubset(dumped.keys()):
+            raise TypeError("intent extraction output shape is invalid")
         return response
     except Exception as exc:
-        logger.warning(f"LLM Extraction failed: {exc}. Using fallback.")
-        return _heuristic_extract(query)
+        logger.warning(
+            "LLM Extraction failed: %s. Using heuristic resilience path.", exc
+        )
+        return _heuristic_extract(query, intent_model_factory=intent_model_type)
