@@ -17,7 +17,7 @@ async def test_data_fetch_node_error():
     }
 
     with patch(
-        "src.workflow.nodes.technical_analysis.nodes.fetch_daily_ohlcv"
+        "src.agents.technical.application.factory.fetch_daily_ohlcv"
     ) as mock_fetch:
         mock_fetch.side_effect = Exception("YF API Error")
 
@@ -57,7 +57,7 @@ async def test_fracdiff_compute_node_crash():
         }
 
         with patch(
-            "src.workflow.nodes.technical_analysis.nodes.calculate_rolling_fracdiff"
+            "src.agents.technical.application.factory.calculate_rolling_fracdiff"
         ) as mock_calc:
             mock_calc.side_effect = Exception("Math Error")
 
@@ -81,7 +81,7 @@ async def test_semantic_translate_node_error():
 
     # Simulate Assembler Crash
     with patch(
-        "src.workflow.nodes.technical_analysis.nodes.assemble_semantic_tags"
+        "src.agents.technical.application.factory.assemble_semantic_tags"
     ) as mock_assemble:
         mock_assemble.side_effect = Exception("Assembler Crash")
 

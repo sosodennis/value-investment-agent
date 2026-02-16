@@ -1,10 +1,11 @@
-from .extraction_policies import HeuristicIntent, heuristic_extract_intent
-from .models import TickerCandidate
-from .policies import should_request_clarification
+"""Intent domain layer."""
+
+from .prompt_builder import (
+    build_intent_extraction_system_prompt,
+    build_search_extraction_system_prompt,
+)
 
 __all__ = [
-    "HeuristicIntent",
-    "TickerCandidate",
-    "heuristic_extract_intent",
-    "should_request_clarification",
+    "build_intent_extraction_system_prompt",
+    "build_search_extraction_system_prompt",
 ]

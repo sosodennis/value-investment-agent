@@ -2,13 +2,17 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from typing import Protocol, cast
+from typing import Protocol
 
+from src.agents.news.interface.contracts import (
+    FinancialNewsItemModel,
+    NewsSearchResultItemModel,
+)
 from src.shared.kernel.types import JSONObject
 
 
 class _ModelDumpLike(Protocol):
-    def model_dump(self, *, mode: str) -> object: ...
+    def model_dump(self, *, mode: str) -> JSONObject: ...
 
 
 def _extract_json_payload(content: str, *, context: str) -> object:
@@ -43,12 +47,32 @@ def parse_selector_selected_urls(content: str, *, context: str) -> list[str]:
     return urls
 
 
-def parse_structured_llm_output(value: object, *, context: str) -> JSONObject:
-    model_dump = getattr(value, "model_dump", None)
-    if not callable(model_dump):
-        raise TypeError(f"{context} output must implement model_dump(mode='json')")
-
-    dumped = cast(_ModelDumpLike, value).model_dump(mode="json")
+def parse_structured_llm_output(value: _ModelDumpLike, *, context: str) -> JSONObject:
+    dumped = value.model_dump(mode="json")
     if not isinstance(dumped, dict):
         raise TypeError(f"{context} output must serialize to JSON object")
-    return cast(JSONObject, dumped)
+    return dumped
+
+
+def parse_news_search_result_items(
+    values: list[object], *, context: str
+) -> list[NewsSearchResultItemModel]:
+    parsed_items: list[NewsSearchResultItemModel] = []
+    for index, value in enumerate(values):
+        try:
+            parsed_items.append(NewsSearchResultItemModel.model_validate(value))
+        except Exception as exc:
+            raise TypeError(f"{context}[{index}] failed validation") from exc
+    return parsed_items
+
+
+def parse_news_items(
+    values: list[object], *, context: str
+) -> list[FinancialNewsItemModel]:
+    parsed_items: list[FinancialNewsItemModel] = []
+    for index, value in enumerate(values):
+        try:
+            parsed_items.append(FinancialNewsItemModel.model_validate(value))
+        except Exception as exc:
+            raise TypeError(f"{context}[{index}] failed validation") from exc
+    return parsed_items

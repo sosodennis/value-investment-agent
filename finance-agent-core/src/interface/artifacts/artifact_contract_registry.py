@@ -20,19 +20,6 @@ def _get_spec(kind: str, *, context: str) -> ArtifactContractSpec:
     return spec
 
 
-def parse_artifact_data_model(
-    kind: str,
-    value: object,
-    *,
-    context: str,
-) -> BaseModel:
-    spec = _get_spec(kind, context=context)
-    try:
-        return spec.model.model_validate(value)
-    except ValidationError as exc:
-        raise TypeError(f"{context} validation failed: {exc}") from exc
-
-
 def parse_artifact_data_model_as(
     kind: str,
     value: object,
@@ -40,7 +27,11 @@ def parse_artifact_data_model_as(
     model: type[_ModelT],
     context: str,
 ) -> _ModelT:
-    parsed = parse_artifact_data_model(kind, value, context=context)
+    spec = _get_spec(kind, context=context)
+    try:
+        parsed = spec.model.model_validate(value)
+    except ValidationError as exc:
+        raise TypeError(f"{context} validation failed: {exc}") from exc
     if not isinstance(parsed, model):
         raise TypeError(
             f"{context} parsed model type mismatch: got {type(parsed)!r}, expected {model!r}"
@@ -64,12 +55,3 @@ def parse_artifact_data_json(
     if not isinstance(dumped, dict):
         raise TypeError(f"{context} must serialize to object")
     return cast(JSONObject, dumped)
-
-
-def canonicalize_artifact_data_by_kind(
-    kind: str,
-    value: object,
-    *,
-    context: str,
-) -> JSONObject:
-    return parse_artifact_data_json(kind, value, context=context)

@@ -1,0 +1,1 @@
+"""Debate application package."""

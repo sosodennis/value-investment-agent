@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from typing import Protocol
 
 from src.agents.fundamental.application.dto import FundamentalAppContextDTO
@@ -11,6 +11,13 @@ from src.agents.fundamental.domain.services import (
     build_latest_health_context,
     extract_equity_value_from_metrics,
     resolve_calculator_model_type,
+)
+from src.agents.fundamental.interface.mappers import (
+    build_mapper_context as build_fundamental_mapper_context,
+)
+from src.agents.fundamental.interface.serializers import (
+    ModelSelectionLike,
+    serialize_model_selection_details,
 )
 from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
 
@@ -23,85 +30,52 @@ def build_mapper_context(
     model_type: str | None = None,
     valuation_summary: str | None = None,
 ) -> FundamentalAppContextDTO:
-    ticker = resolved_ticker or "UNKNOWN"
-    company_name = ticker
-    sector: str | None = None
-    industry: str | None = None
-
-    profile = intent_ctx.get("company_profile")
-    if isinstance(profile, dict):
-        name_raw = profile.get("name")
-        sector_raw = profile.get("sector")
-        industry_raw = profile.get("industry")
-        if isinstance(name_raw, str) and name_raw:
-            company_name = name_raw
-        sector = sector_raw if isinstance(sector_raw, str) else None
-        industry = industry_raw if isinstance(industry_raw, str) else None
-
-    return FundamentalAppContextDTO(
-        ticker=ticker,
+    return build_fundamental_mapper_context(
+        intent_ctx,
+        resolved_ticker,
         status=status,
-        company_name=company_name,
-        sector=sector,
-        industry=industry,
         model_type=model_type,
         valuation_summary=valuation_summary,
     )
 
 
-class _SelectionSignals(Protocol):
-    sector: str
-    industry: str
-    sic: int | None
-    revenue_cagr: float | None
-    is_profitable: bool | None
-    net_income: float | None
-    operating_cash_flow: float | None
-    total_equity: float | None
-    data_coverage: dict[str, bool]
+def build_selection_details(selection: ModelSelectionLike) -> JSONObject:
+    return serialize_model_selection_details(selection)
 
 
-class _SelectionCandidate(Protocol):
-    model: _SelectionModel
-    score: float
-    reasons: tuple[str, ...]
-    missing_fields: tuple[str, ...]
+class _BuildModelSelectionReportPayloadFn(Protocol):
+    def __call__(
+        self,
+        *,
+        ticker: str,
+        model_type: str,
+        company_name: str,
+        sector: str,
+        industry: str,
+        reasoning: str,
+        normalized_reports: list[JSONObject],
+    ) -> JSONObject: ...
 
 
-class _SelectionModel(Protocol):
-    value: str
+class _BuildModelSelectionArtifactFn(Protocol):
+    def __call__(
+        self,
+        *,
+        ticker: str,
+        report_id: str,
+        preview: JSONObject,
+    ) -> AgentOutputArtifactPayload: ...
 
 
-class _ModelSelectionLike(Protocol):
-    signals: _SelectionSignals
-    candidates: Sequence[_SelectionCandidate]
-
-
-def build_selection_details(selection: _ModelSelectionLike) -> dict[str, object]:
-    signals = selection.signals
-    candidates = selection.candidates
-    return {
-        "signals": {
-            "sector": signals.sector,
-            "industry": signals.industry,
-            "sic": signals.sic,
-            "revenue_cagr": signals.revenue_cagr,
-            "is_profitable": signals.is_profitable,
-            "net_income": signals.net_income,
-            "operating_cash_flow": signals.operating_cash_flow,
-            "total_equity": signals.total_equity,
-            "data_coverage": signals.data_coverage,
-        },
-        "candidates": [
-            {
-                "model": c.model.value,
-                "score": c.score,
-                "reasons": list(c.reasons),
-                "missing_fields": list(c.missing_fields),
-            }
-            for c in candidates
-        ],
-    }
+class _BuildValuationArtifactFn(Protocol):
+    def __call__(
+        self,
+        *,
+        ticker: str | None,
+        model_type: str,
+        reports_artifact_id: str,
+        preview: JSONObject,
+    ) -> AgentOutputArtifactPayload: ...
 
 
 def enrich_reasoning_with_health_context(
@@ -127,12 +101,8 @@ async def build_and_store_model_selection_artifact(
     normalize_model_selection_reports_fn: Callable[
         [list[JSONObject]], list[JSONObject]
     ],
-    build_model_selection_report_payload_fn: Callable[
-        [str, str, str, str, str, str, list[JSONObject]], JSONObject
-    ],
-    build_model_selection_artifact_fn: Callable[
-        [str, str, JSONObject], AgentOutputArtifactPayload
-    ],
+    build_model_selection_report_payload_fn: _BuildModelSelectionReportPayloadFn,
+    build_model_selection_artifact_fn: _BuildModelSelectionArtifactFn,
 ) -> tuple[AgentOutputArtifactPayload | None, str | None]:
     if not resolved_ticker:
         return None, None
@@ -148,13 +118,13 @@ async def build_and_store_model_selection_artifact(
     preview = summarize_preview(mapper_ctx, normalized_reports)
 
     full_report_data = build_model_selection_report_payload_fn(
-        resolved_ticker,
-        model_type,
-        mapper_ctx.company_name,
-        mapper_ctx.sector or "Unknown",
-        mapper_ctx.industry or "Unknown",
-        reasoning,
-        normalized_reports,
+        ticker=resolved_ticker,
+        model_type=model_type,
+        company_name=mapper_ctx.company_name,
+        sector=mapper_ctx.sector or "Unknown",
+        industry=mapper_ctx.industry or "Unknown",
+        reasoning=reasoning,
+        normalized_reports=normalized_reports,
     )
 
     timestamp = int(time.time())
@@ -164,7 +134,11 @@ async def build_and_store_model_selection_artifact(
         key_prefix=f"fa_{resolved_ticker}_{timestamp}",
     )
 
-    artifact = build_model_selection_artifact_fn(resolved_ticker, report_id, preview)
+    artifact = build_model_selection_artifact_fn(
+        ticker=resolved_ticker,
+        report_id=report_id,
+        preview=preview,
+    )
     return artifact, report_id
 
 
@@ -207,9 +181,7 @@ def build_valuation_success_update(
     summarize_preview: Callable[
         [FundamentalAppContextDTO, list[JSONObject]], JSONObject
     ],
-    build_valuation_artifact_fn: Callable[
-        [str | None, str, str, JSONObject], AgentOutputArtifactPayload
-    ],
+    build_valuation_artifact_fn: _BuildValuationArtifactFn,
 ) -> JSONObject:
     fa_update = fundamental.copy()
     fa_update["extraction_output"] = {"params": params_dump}
@@ -233,7 +205,10 @@ def build_valuation_success_update(
         }
     )
     artifact = build_valuation_artifact_fn(
-        ticker, model_type, reports_artifact_id, preview
+        ticker=ticker,
+        model_type=model_type,
+        reports_artifact_id=reports_artifact_id,
+        preview=preview,
     )
     fa_update["artifact"] = artifact
     return {

@@ -4,6 +4,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 
 import pandas as pd
+from langchain_core.messages import AIMessage
 
 from src.agents.technical.application.report_service import (
     build_semantic_report_update,
@@ -23,7 +24,6 @@ from src.agents.technical.application.state_updates import (
     build_semantic_error_update,
     build_semantic_success_update,
 )
-from src.agents.technical.application.view_models import build_fracdiff_preview
 from src.agents.technical.data.mappers import serialize_fracdiff_outputs
 from src.agents.technical.data.ports import TechnicalArtifactPort
 from src.agents.technical.domain.models import (
@@ -31,6 +31,10 @@ from src.agents.technical.domain.models import (
     SemanticTagPolicyResult,
 )
 from src.agents.technical.domain.services import safe_float
+from src.agents.technical.interface.serializers import (
+    build_data_fetch_preview,
+    build_fracdiff_progress_preview,
+)
 from src.shared.kernel.tools.logger import get_logger
 from src.shared.kernel.types import JSONObject
 
@@ -101,14 +105,10 @@ class TechnicalOrchestrator:
             key_prefix=resolved_ticker,
         )
 
-        preview = {
-            "ticker": resolved_ticker,
-            "latest_price_display": f"${df['price'].iloc[-1]:,.2f}",
-            "signal_display": "📊 FETCHING DATA...",
-            "z_score_display": "Z: N/A",
-            "optimal_d_display": "d=N/A",
-            "strength_display": "Strength: N/A",
-        }
+        preview = build_data_fetch_preview(
+            ticker=resolved_ticker,
+            latest_price=df["price"].iloc[-1],
+        )
         artifact = self.build_progress_artifact(
             f"Technical Analysis: Data fetched for {resolved_ticker}",
             preview,
@@ -215,7 +215,7 @@ class TechnicalOrchestrator:
             )
 
         ticker_value = resolved_ticker_from_state(state) or "N/A"
-        preview = build_fracdiff_preview(
+        preview = build_fracdiff_progress_preview(
             ticker=ticker_value,
             latest_price=prices.iloc[-1],
             z_score=z_score,
@@ -313,6 +313,16 @@ class TechnicalOrchestrator:
                 build_output_artifact=self.build_semantic_output_artifact,
             )
             success_update = build_semantic_success_update(ta_update)
+            success_update.update["messages"] = [
+                AIMessage(
+                    content="",
+                    additional_kwargs={
+                        "type": "technical_analysis",
+                        "agent_id": "technical_analysis",
+                        "status": "done",
+                    },
+                )
+            ]
             return TechnicalNodeResult(update=success_update.update, goto="END")
         except Exception as exc:
             logger.error(

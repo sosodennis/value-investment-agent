@@ -1,3 +1,1 @@
-from .orchestrator import FundamentalOrchestrator
-
-__all__ = ["FundamentalOrchestrator"]
+"""Fundamental application package."""

@@ -17,7 +17,7 @@ async def test_financial_health_node_error_log():
     }
 
     with patch(
-        "src.workflow.nodes.fundamental_analysis.nodes.fetch_financial_data"
+        "src.agents.fundamental.application.factory.fetch_financial_data"
     ) as mock_fetch:
         mock_fetch.side_effect = Exception("Network Timeout")
 
@@ -47,7 +47,7 @@ async def test_model_selection_node_error_log():
     }
 
     with patch(
-        "src.workflow.nodes.fundamental_analysis.nodes.select_valuation_model"
+        "src.agents.fundamental.application.factory.select_valuation_model"
     ) as mock_select:
         mock_select.side_effect = Exception("Selection Logic Error")
 

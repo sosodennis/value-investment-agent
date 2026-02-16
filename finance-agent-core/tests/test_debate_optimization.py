@@ -17,11 +17,11 @@ async def test_debate_aggregator_caches_reports():
 
     with (
         patch(
-            "src.workflow.nodes.debate.nodes._prepare_debate_reports",
+            "src.agents.debate.application.orchestrator.prepare_debate_reports",
             new_mock=AsyncMock(),
         ) as mock_prepare,
         patch(
-            "src.workflow.nodes.debate.nodes._compress_reports",
+            "src.agents.debate.application.orchestrator.DebateOrchestrator._compress_reports",
             return_value="compressed_data",
         ) as mock_compress,
     ):
@@ -47,10 +47,10 @@ async def test_agent_uses_cached_reports():
 
     with (
         patch(
-            "src.workflow.nodes.debate.nodes._prepare_debate_reports",
+            "src.agents.debate.application.report_service.prepare_debate_reports",
             new_mock=AsyncMock(),
         ) as mock_prepare,
-        patch("src.workflow.nodes.debate.nodes.get_llm") as mock_get_llm,
+        patch("src.agents.debate.application.factory.get_llm") as mock_get_llm,
     ):
         mock_llm = AsyncMock()
         mock_llm.ainvoke.return_value = MagicMock(content="thesis")
@@ -81,7 +81,7 @@ async def test_agent_fallbacks_if_no_cache():
             "src.agents.debate.application.report_service.compress_reports",
             return_value="data",
         ) as mock_compress,
-        patch("src.workflow.nodes.debate.nodes.get_llm") as mock_get_llm,
+        patch("src.agents.debate.application.factory.get_llm") as mock_get_llm,
     ):
         mock_llm = AsyncMock()
         mock_llm.ainvoke.return_value = MagicMock(content="thesis")

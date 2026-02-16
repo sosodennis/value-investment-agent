@@ -26,7 +26,7 @@ def consolidate_research_node(state: AgentState) -> Command:
                     "consolidate_research": "done",
                 }
             },
-            goto="prepare_debate",
+            goto="debate_agent",
         )
 
     except Exception as e:

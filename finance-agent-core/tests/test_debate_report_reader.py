@@ -70,6 +70,7 @@ def test_load_debate_source_data_reads_all_three_sources() -> None:
         )
 
     assert len(source.financial_reports) == 1
+    assert isinstance(source.financial_reports[0], dict)
     assert source.news_items == []
     assert source.technical_payload is not None
     assert source.technical_payload.get("ticker") == "AAPL"

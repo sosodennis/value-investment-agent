@@ -37,10 +37,6 @@ def get_company_profile(ticker: str) -> CompanyProfile | None:
         return None
 
 
-def validate_ticker(ticker: str) -> bool:
-    return get_company_profile(ticker) is not None
-
-
 def search_ticker(query: str, limit: int = 5) -> list[TickerCandidate]:
     try:
         search = yf.Search(query)

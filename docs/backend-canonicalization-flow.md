@@ -29,6 +29,7 @@ Applies to:
 1. Nodes (`workflow/nodes/*/nodes.py`)
 - 只負責產生 domain raw data。
 - 存檔前必須呼叫對應 agent interface parser（例如 `parse_news_artifact_model(...)`）。
+- state update / interrupt 需要 JSON payload 時，必須透過 agent interface serializer / mapper 產生，不在 node 內直接序列化 domain VO。
 - 讀取 artifact 必須透過 per-agent ports（`agents/*/data/ports.py`），不直接做 `dict/list` shape fallback。
 - Cross-agent 讀取必須以 `artifact.reference.artifact_id` 為唯一來源，不可回退到舊 state mirror id。
 

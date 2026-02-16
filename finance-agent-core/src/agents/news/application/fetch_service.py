@@ -4,7 +4,13 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
-from src.agents.news.application.ports import NewsArtifactArticleWriterPort
+from src.agents.news.application.ports import (
+    NewsArtifactArticleWriterPort,
+    NewsItemFactoryLike,
+    SourceFactoryLike,
+)
+from src.agents.news.interface.contracts import NewsSearchResultItemModel
+from src.agents.news.interface.parsers import parse_news_search_result_items
 from src.shared.kernel.tools.logger import get_logger
 from src.shared.kernel.types import JSONObject
 
@@ -18,9 +24,9 @@ class FetchBuildResult:
 
 
 def build_articles_to_fetch(
-    raw_results: list[JSONObject], selected_indices: list[int]
-) -> list[JSONObject]:
-    selected: list[JSONObject] = []
+    raw_results: list[NewsSearchResultItemModel], selected_indices: list[int]
+) -> list[NewsSearchResultItemModel]:
+    selected: list[NewsSearchResultItemModel] = []
     for idx in selected_indices:
         if idx >= len(raw_results):
             continue
@@ -29,9 +35,9 @@ def build_articles_to_fetch(
 
 
 def build_cleaned_search_results(results: list[dict[str, object]]) -> list[JSONObject]:
-    cleaned_results: list[JSONObject] = []
+    candidates: list[JSONObject] = []
     for result in results:
-        cleaned_results.append(
+        candidates.append(
             {
                 "title": result.get("title", ""),
                 "source": result.get("source", ""),
@@ -43,7 +49,11 @@ def build_cleaned_search_results(results: list[dict[str, object]]) -> list[JSONO
                 ),
             }
         )
-    return cleaned_results
+    parsed = parse_news_search_result_items(
+        candidates,
+        context="news search results",
+    )
+    return [item.model_dump(mode="json") for item in parsed]
 
 
 def parse_published_at(date_value: object) -> datetime | None:
@@ -57,32 +67,29 @@ def parse_published_at(date_value: object) -> datetime | None:
 
 def build_news_item_payload(
     *,
-    result: JSONObject,
+    result: NewsSearchResultItemModel,
     full_content: str | None,
     content_id: str | None,
     generated_id: str,
     reliability_score: float,
-    item_factory: Callable[..., object],
-    source_factory: Callable[..., object],
+    item_factory: NewsItemFactoryLike,
+    source_factory: SourceFactoryLike,
 ) -> JSONObject:
-    url = str(result.get("link") or "")
-    title = str(result.get("title") or "")
-    source_name = (
-        str(result.get("source"))
-        if result.get("source")
-        else (title.split(" - ")[-1] if " - " in title else "Unknown")
+    url = result.link
+    title = result.title
+    source_name = result.source or (
+        title.split(" - ")[-1] if " - " in title else "Unknown"
     )
     source_domain = url.split("//")[-1].split("/")[0] if url else "unknown"
-    categories_raw = result.get("categories", [])
-    categories = categories_raw if isinstance(categories_raw, list) else []
+    categories = [item for item in result.categories if item]
 
     item = item_factory(
         id=generated_id,
         url=url,
         title=title,
-        snippet=str(result.get("snippet", "")),
+        snippet=result.snippet,
         full_content=None,
-        published_at=parse_published_at(result.get("date")),
+        published_at=parse_published_at(result.date),
         source=source_factory(
             name=source_name,
             domain=source_domain,
@@ -91,6 +98,8 @@ def build_news_item_payload(
         categories=categories,
     )
     payload = item.model_dump(mode="json")
+    if not isinstance(payload, dict):
+        raise TypeError("news item factory output must serialize to JSON object")
     payload["content_id"] = content_id
     payload["full_content"] = full_content
     return payload
@@ -98,23 +107,23 @@ def build_news_item_payload(
 
 async def build_news_items_from_fetch_results(
     *,
-    articles_to_fetch: list[JSONObject],
+    articles_to_fetch: list[NewsSearchResultItemModel],
     full_contents: list[str | None],
     ticker: str | None,
     timestamp: int,
     port: NewsArtifactArticleWriterPort,
     generate_news_id_fn: Callable[[str | None, str | None], str],
     get_source_reliability_fn: Callable[[str], float],
-    item_factory: Callable[..., object],
-    source_factory: Callable[..., object],
+    item_factory: NewsItemFactoryLike,
+    source_factory: SourceFactoryLike,
 ) -> FetchBuildResult:
     news_items: list[JSONObject] = []
     article_errors: list[str] = []
 
     ticker_value = ticker or "UNKNOWN"
     for index, result in enumerate(articles_to_fetch):
-        url = result.get("link")
-        title = result.get("title")
+        url = result.link
+        title = result.title
         full_content = full_contents[index] if index < len(full_contents) else None
 
         content_id: str | None = None
@@ -134,13 +143,8 @@ async def build_news_items_from_fetch_results(
                 result=result,
                 full_content=full_content,
                 content_id=content_id,
-                generated_id=generate_news_id_fn(
-                    url if isinstance(url, str) else None,
-                    title if isinstance(title, str) else None,
-                ),
-                reliability_score=(
-                    get_source_reliability_fn(url) if isinstance(url, str) else 0.5
-                ),
+                generated_id=generate_news_id_fn(url, title),
+                reliability_score=get_source_reliability_fn(url) if url else 0.5,
                 item_factory=item_factory,
                 source_factory=source_factory,
             )

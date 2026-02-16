@@ -1,5 +1,4 @@
 from src.interface.artifacts.artifact_contract_registry import (
-    canonicalize_artifact_data_by_kind,
     parse_artifact_data_json,
     parse_artifact_data_model_as,
 )
@@ -46,7 +45,7 @@ def test_parse_artifact_data_model_as_routes_kind_to_model() -> None:
 
 
 def test_canonicalize_financial_reports_uses_model_validation_only() -> None:
-    canonical = canonicalize_artifact_data_by_kind(
+    canonical = parse_artifact_data_json(
         ARTIFACT_KIND_FINANCIAL_REPORTS,
         {
             "ticker": "AAPL",
@@ -74,7 +73,7 @@ def test_canonicalize_financial_reports_uses_model_validation_only() -> None:
 
 
 def test_canonicalize_debate_uses_domain_normalization() -> None:
-    canonical = canonicalize_artifact_data_by_kind(
+    canonical = parse_artifact_data_json(
         ARTIFACT_KIND_DEBATE_FINAL_REPORT,
         {
             "scenario_analysis": {

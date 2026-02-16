@@ -20,7 +20,7 @@ async def test_immediate_status_emission():
     mock_debate_state.debate.history = []
 
     # Mock LLM to avoid API calls
-    with patch("src.workflow.nodes.debate.nodes.get_llm") as mock_get_llm:
+    with patch("src.agents.debate.application.factory.get_llm") as mock_get_llm:
         mock_llm = MagicMock()
         mock_get_llm.return_value = mock_llm
 

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Protocol
 
 from src.shared.kernel.types import JSONObject
 
 
 class ChainLike(Protocol):
-    def invoke(self, payload: object) -> object: ...
+    def invoke(self, payload: object) -> ModelDumpLike: ...
 
 
 class ModelDumpLike(Protocol):
@@ -14,7 +15,7 @@ class ModelDumpLike(Protocol):
 
 
 class LLMLike(Protocol):
-    def with_structured_output(self, schema: type[object]) -> object: ...
+    def with_structured_output(self, schema: type[object]) -> ChainLike: ...
 
 
 class FinbertResultLike(Protocol):
@@ -43,3 +44,29 @@ class NewsArtifactArticleWriterPort(Protocol):
         produced_by: str,
         key_prefix: str,
     ) -> str | None: ...
+
+
+class SourceFactoryLike(Protocol):
+    def __call__(
+        self,
+        *,
+        name: str,
+        domain: str,
+        reliability_score: float,
+        author: str | None = None,
+    ) -> object: ...
+
+
+class NewsItemFactoryLike(Protocol):
+    def __call__(
+        self,
+        *,
+        id: str,
+        url: str,
+        title: str,
+        snippet: str,
+        full_content: str | None,
+        published_at: datetime | None,
+        source: object,
+        categories: list[str],
+    ) -> ModelDumpLike: ...

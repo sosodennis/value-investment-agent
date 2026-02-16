@@ -13,8 +13,9 @@ async def test_r1_bull_node_error_resilience():
         "intent_extraction": {"resolved_ticker": "AAPL"},
     }
 
-    # Mock _execute_bull_agent to fail
-    with patch("src.workflow.nodes.debate.nodes._execute_bull_agent") as mock_exec:
+    with patch(
+        "src.agents.debate.application.orchestrator.execute_bull_round"
+    ) as mock_exec:
         mock_exec.side_effect = Exception("Bull Agent Timeout")
 
         command = await r1_bull_node(state)
@@ -38,7 +39,7 @@ async def test_verdict_node_error_log():
         "history": [AIMessage(content="Arg1", name="GrowthHunter")],
     }
 
-    with patch("src.workflow.nodes.debate.nodes.get_llm") as mock_llm:
+    with patch("src.agents.debate.application.factory.get_llm") as mock_llm:
         # Simulate LLM failure
         mock_chain = MagicMock()
         mock_chain.ainvoke.side_effect = Exception("Verdict Generation Error")

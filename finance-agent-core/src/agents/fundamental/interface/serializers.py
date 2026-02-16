@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from typing import Protocol
 
 from src.agents.fundamental.interface.contracts import (
     FundamentalPreviewInputModel,
@@ -15,12 +16,67 @@ from src.shared.kernel.contracts import (
 from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
 
 
+class _SelectionSignalsLike(Protocol):
+    sector: str
+    industry: str
+    sic: int | None
+    revenue_cagr: float | None
+    is_profitable: bool | None
+    net_income: float | None
+    operating_cash_flow: float | None
+    total_equity: float | None
+    data_coverage: dict[str, bool]
+
+
+class _SelectionModelLike(Protocol):
+    value: str
+
+
+class _SelectionCandidateLike(Protocol):
+    model: _SelectionModelLike
+    score: float
+    reasons: tuple[str, ...]
+    missing_fields: tuple[str, ...]
+
+
+class ModelSelectionLike(Protocol):
+    signals: _SelectionSignalsLike
+    candidates: Sequence[_SelectionCandidateLike]
+
+
 def normalize_model_selection_reports(
     financial_reports: list[JSONObject],
 ) -> list[JSONObject]:
     return parse_financial_reports_model(
         financial_reports, context="model_selection.financial_reports"
     )
+
+
+def serialize_model_selection_details(selection: ModelSelectionLike) -> JSONObject:
+    signals = selection.signals
+    candidates = selection.candidates
+    return {
+        "signals": {
+            "sector": signals.sector,
+            "industry": signals.industry,
+            "sic": signals.sic,
+            "revenue_cagr": signals.revenue_cagr,
+            "is_profitable": signals.is_profitable,
+            "net_income": signals.net_income,
+            "operating_cash_flow": signals.operating_cash_flow,
+            "total_equity": signals.total_equity,
+            "data_coverage": signals.data_coverage,
+        },
+        "candidates": [
+            {
+                "model": c.model.value,
+                "score": c.score,
+                "reasons": list(c.reasons),
+                "missing_fields": list(c.missing_fields),
+            }
+            for c in candidates
+        ],
+    }
 
 
 def build_model_selection_report_payload(

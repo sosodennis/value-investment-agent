@@ -38,7 +38,7 @@ Forbidden:
 Owns use-case orchestration for one agent.
 
 Allowed:
-1. Workflow-facing orchestration (`*Orchestrator`, `use_cases`).
+1. Workflow-facing orchestration (`*Orchestrator`, `*_service`).
 2. Calls domain rules and data ports.
 3. Builds command/update payloads for workflow transitions.
 
@@ -102,14 +102,15 @@ Forbidden:
 2. `domain/services.py`: pure business rules.
 3. `domain/policies.py`: thresholds/quotas/selection policies.
 4. `application/orchestrator.py`: workflow-facing orchestration.
-5. `application/use_cases.py`: reusable application flows.
+5. `application/*_service.py`: reusable application flows.
 6. `application/view_models.py`: UI-facing intermediate view state.
 7. `data/ports.py`: typed port adapters.
 8. `data/clients/*.py`: external provider clients.
 9. `interface/contracts.py`: Pydantic public artifact models.
 10. `interface/mappers.py`: `summarize_<agent>_for_preview(...)`.
 11. `interface/formatters.py`: display formatting only.
-12. `interface/prompts.py`: LLM prompts (if agent-specific).
+12. `interface/serializers.py`: boundary payload assembly (domain/app DTO -> JSON-ready state/interrupt/API payload).
+13. `interface/prompt_renderers.py`: LLM runtime message rendering (if agent-specific).
 
 Avoid generic names like `structures.py` in new code.
 Prefer explicit role names: `contracts.py`, `models.py`, `policies.py`.
@@ -133,6 +134,10 @@ Before adding a new class/function, answer:
 3. Is this reading/writing artifacts or external APIs? -> `data`.
 4. Is this shape validation/serialization/mapping for boundaries? -> `interface`.
 5. Is this LangGraph node wiring only? -> `workflow`.
+
+Boundary payload rule:
+1. Workflow state updates and interrupt payloads are boundary payloads.
+2. Domain VO/entity -> JSON mapping belongs to `interface/serializers.py` (or `interface/mappers.py` for lightweight cases), not in `workflow/nodes`.
 
 If unclear, do not place into `workflow` by default.
 Resolve by this document first, then place.

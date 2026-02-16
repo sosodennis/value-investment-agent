@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 
-from src.agents.news.application.parsers import parse_structured_llm_output
 from src.agents.news.application.ports import (
     ChainLike,
     FinbertAnalyzerLike,
@@ -11,7 +10,8 @@ from src.agents.news.application.ports import (
     LLMLike,
     NewsArtifactTextReaderPort,
 )
-from src.agents.news.application.prompt_formatters import build_analysis_chain_payload
+from src.agents.news.interface.parsers import parse_structured_llm_output
+from src.agents.news.interface.prompt_renderers import build_analysis_chain_payload
 from src.shared.kernel.tools.logger import get_logger
 from src.shared.kernel.types import JSONObject
 

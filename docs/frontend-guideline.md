@@ -84,5 +84,7 @@ When backend API schema changed:
 
 ## 8. Detailed Reference
 
-1. `docs/fullstack-change-control-playbook.md`
-2. `docs/archive/monorepo-contract-upgrade-progress.md`
+1. `docs/clean-architecture-engineering-guideline.md`
+2. `docs/backend-guideline.md`
+3. `docs/backend-canonicalization-flow.md`
+4. `docs/README.md`

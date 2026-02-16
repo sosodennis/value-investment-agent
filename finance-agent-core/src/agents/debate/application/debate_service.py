@@ -46,7 +46,11 @@ MAX_CHAR_HISTORY = PROMPT_MAX_CHAR_HISTORY
 
 
 class _LLMLike(Protocol):
-    async def ainvoke(self, messages: object) -> object: ...
+    async def ainvoke(self, messages: object) -> _LLMResponseLike: ...
+
+
+class _LLMResponseLike(Protocol):
+    content: object
 
 
 async def extract_debate_facts(
@@ -148,7 +152,7 @@ async def execute_bull_round(
 
     log_messages(messages, "BULL_AGENT", round_num)
     response = await llm.ainvoke(messages)
-    response_text = str(getattr(response, "content", ""))
+    response_text = str(response.content)
     log_llm_response("BULL_AGENT", round_num, response_text)
 
     return {
@@ -200,7 +204,7 @@ async def execute_bear_round(
 
     log_messages(messages, "BEAR_AGENT", round_num)
     response = await llm.ainvoke(messages)
-    response_text = str(getattr(response, "content", ""))
+    response_text = str(response.content)
     log_llm_response("BEAR_AGENT", round_num, response_text)
 
     return {
@@ -254,7 +258,7 @@ async def execute_moderator_round(
 
     log_messages(messages, "MODERATOR_CRITIQUE", round_num)
     response = await llm.ainvoke(messages)
-    response_text = str(getattr(response, "content", ""))
+    response_text = str(response.content)
     log_llm_response("MODERATOR_CRITIQUE", round_num, response_text)
 
     return {

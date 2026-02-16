@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from src.agents.news.application.parsers import parse_selector_selected_urls
 from src.agents.news.application.ports import ChainLike
-from src.agents.news.application.prompt_formatters import (
-    format_selector_input as format_selector_input_application,
+from src.agents.news.interface.parsers import parse_selector_selected_urls
+from src.agents.news.interface.prompt_renderers import (
+    format_selector_input as format_selector_input_interface,
 )
 from src.shared.kernel.types import JSONObject
 
@@ -28,7 +28,7 @@ def normalize_selected_indices(
 
 
 def format_selector_input(cleaned_results: list[JSONObject]) -> str:
-    return format_selector_input_application(cleaned_results)
+    return format_selector_input_interface(cleaned_results)
 
 
 def run_selector_with_resilience(

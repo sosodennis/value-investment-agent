@@ -9,10 +9,8 @@ from src.agents.debate.application.prompt_runtime import (
     compress_reports,
     log_compressed_reports,
 )
-from src.agents.debate.domain.services import (
-    compress_financial_data,
-    compress_news_data,
-    compress_ta_data,
+from src.agents.debate.interface.serializers import (
+    build_compressed_report_payload as serialize_compressed_report_payload,
 )
 from src.shared.kernel.tools.logger import get_logger
 
@@ -36,24 +34,10 @@ def build_compressed_report_payload(
         technical_artifact_id or "none",
     )
 
-    return {
-        "financials": {
-            "data": compress_financial_data(source_data.financial_reports),
-            "source_weight": "HIGH",
-            "rationale": "Primary source: SEC XBRL filings (audited, regulatory-grade data)",
-        },
-        "news": {
-            "data": compress_news_data({"news_items": source_data.news_items}),
-            "source_weight": "MEDIUM",
-            "rationale": "Secondary source: Curated financial news (editorial bias possible)",
-        },
-        "technical_analysis": {
-            "data": compress_ta_data(source_data.technical_payload),
-            "source_weight": "HIGH",
-            "rationale": "Quantitative source: Fractional differentiation analysis (statistical signals)",
-        },
-        "ticker": ticker,
-    }
+    return serialize_compressed_report_payload(
+        ticker=ticker,
+        source_data=source_data,
+    )
 
 
 async def prepare_debate_reports(

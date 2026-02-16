@@ -81,12 +81,7 @@ Canonical (active):
 2. `docs/backend-guideline.md`
 3. `docs/frontend-guideline.md`
 4. `docs/agent-layer-responsibility-and-naming-guideline.md`
-5. `docs/README.md` (document authority index)
-
-Historical (reference only, may contain phased context):
-1. `docs/clean-architecture-agent-workflow-blueprint.md`
-2. `docs/fullstack-change-control-playbook.md`
-3. `docs/archive/monorepo-contract-upgrade-plan.md`
-4. `docs/archive/monorepo-contract-upgrade-progress.md`
-5. `docs/archive/deep-refactor-master-plan-2026-02-13.md`
-6. `docs/archive/deep-refactor-progress-2026-02-13.md`
+5. `docs/prompt-refactor-guideline.md`
+6. `docs/simple-triad-layer-alignment-2026-02-16.md`
+7. `docs/next-refactor-pending-2026-02-16.md`
+8. `docs/README.md` (document authority index)

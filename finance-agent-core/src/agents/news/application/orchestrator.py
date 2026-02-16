@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.messages import AIMessage
 
 from src.agents.news.application.analysis_service import (
     analyze_news_items,
@@ -16,7 +17,11 @@ from src.agents.news.application.fetch_service import (
     build_cleaned_search_results,
     build_news_items_from_fetch_results,
 )
-from src.agents.news.application.ports import LLMLike
+from src.agents.news.application.ports import (
+    LLMLike,
+    NewsItemFactoryLike,
+    SourceFactoryLike,
+)
 from src.agents.news.application.selection_service import (
     format_selector_input,
     run_selector_with_resilience,
@@ -46,6 +51,20 @@ from src.agents.news.domain.services import (
     build_news_summary_message,
 )
 from src.agents.news.interface.contracts import parse_news_artifact_model
+from src.agents.news.interface.parsers import (
+    parse_news_items,
+    parse_news_search_result_items,
+)
+from src.agents.news.interface.prompt_renderers import (
+    build_analyst_chat_prompts,
+    build_selector_chat_prompt,
+)
+from src.agents.news.interface.serializers import build_search_progress_preview
+from src.shared.kernel.tools.incident_logging import (
+    CONTRACT_KIND_ARTIFACT_JSON,
+    build_replay_diagnostics,
+    log_boundary_event,
+)
 from src.shared.kernel.tools.logger import get_logger
 from src.shared.kernel.types import JSONObject
 
@@ -56,7 +75,6 @@ logger = get_logger(__name__)
 class NewsNodeResult:
     update: dict[str, object]
     goto: str
-    summary_message: str | None = None
 
 
 @dataclass(frozen=True)
@@ -121,12 +139,10 @@ class NewsOrchestrator:
             logger.error(f"Failed to save search artifact: {exc}")
             search_artifact_id = None
 
-        preview: JSONObject = {
-            "status_label": "搜尋完成",
-            "sentiment_display": "⚖️ PENDING ANALYSIS",
-            "article_count_display": f"找到 {len(cleaned_results)} 篇新聞",
-            "top_headlines": [r.get("title") for r in cleaned_results[:3]],
-        }
+        preview = build_search_progress_preview(
+            article_count=len(cleaned_results),
+            cleaned_results=cleaned_results,
+        )
         artifact = self.build_output_artifact(
             f"News Research: Found {len(cleaned_results)} articles for {ticker}",
             preview,
@@ -161,6 +177,11 @@ class NewsOrchestrator:
             formatted_results, raw_results = await self.port.load_search_context(
                 search_artifact_id
             )
+            parsed_results = parse_news_search_result_items(
+                list(raw_results),
+                context="news selector search results",
+            )
+            raw_results = [item.model_dump(mode="json") for item in parsed_results]
         except Exception as exc:
             logger.error(f"Failed to retrieve search artifact: {exc}")
 
@@ -168,8 +189,9 @@ class NewsOrchestrator:
 
         logger.info(f"--- [News Research] Selecting top articles for {ticker} ---")
         llm = get_llm_fn()
-        prompt = ChatPromptTemplate.from_messages(
-            [("system", selector_system_prompt), ("user", selector_user_prompt)]
+        prompt = build_selector_chat_prompt(
+            system_prompt=selector_system_prompt,
+            user_prompt=selector_user_prompt,
         )
         chain = prompt | llm
         selector_result = run_selector_with_resilience(
@@ -218,8 +240,8 @@ class NewsOrchestrator:
         fetch_clean_text_async_fn: Callable[[str], Awaitable[str | None]],
         generate_news_id_fn: Callable[[str, str], str],
         get_source_reliability_fn: Callable[[str], float],
-        item_factory: type[object],
-        source_factory: type[object],
+        item_factory: NewsItemFactoryLike,
+        source_factory: SourceFactoryLike,
     ) -> NewsNodeResult:
         search_id = search_artifact_id_from_state(state)
         selection_id = selection_artifact_id_from_state(state)
@@ -242,12 +264,16 @@ class NewsOrchestrator:
             f"--- [News Research] Fetching {len(selected_indices)} articles content ---"
         )
 
-        articles_to_fetch = build_articles_to_fetch(raw_results, selected_indices)
+        parsed_results = parse_news_search_result_items(
+            list(raw_results),
+            context="news fetch search results",
+        )
+        articles_to_fetch = build_articles_to_fetch(parsed_results, selected_indices)
 
         async def fetch_all() -> list[str | None]:
             tasks = [
-                fetch_clean_text_async_fn(str(res.get("link")))
-                if isinstance(res.get("link"), str)
+                fetch_clean_text_async_fn(res.link)
+                if res.link
                 else asyncio.sleep(0, result=None)
                 for res in articles_to_fetch
             ]
@@ -314,6 +340,11 @@ class NewsOrchestrator:
         article_errors: list[str] = []
         try:
             news_items = await self.port.load_news_items_data(news_items_id)
+            parsed_news_items = parse_news_items(
+                list(news_items),
+                context="news analyst items",
+            )
+            news_items = [item.model_dump(mode="json") for item in parsed_news_items]
         except Exception as exc:
             logger.error(f"Failed to retrieve news items: {exc}")
             article_errors.append(f"Failed to retrieve news items: {str(exc)}")
@@ -327,14 +358,10 @@ class NewsOrchestrator:
         finbert_analyzer = get_finbert_analyzer_fn()
         llm = get_llm_fn()
 
-        prompt_basic = ChatPromptTemplate.from_messages(
-            [("system", analyst_system_prompt), ("user", analyst_user_prompt_basic)]
-        )
-        prompt_finbert = ChatPromptTemplate.from_messages(
-            [
-                ("system", analyst_system_prompt),
-                ("user", analyst_user_prompt_with_finbert),
-            ]
+        prompt_basic, prompt_finbert = build_analyst_chat_prompts(
+            system_prompt=analyst_system_prompt,
+            user_prompt_basic=analyst_user_prompt_basic,
+            user_prompt_with_finbert=analyst_user_prompt_with_finbert,
         )
 
         try:
@@ -388,6 +415,11 @@ class NewsOrchestrator:
         news_items: list[dict] = []
         try:
             news_items = await self.port.load_news_items_data(news_items_id)
+            parsed_news_items = parse_news_items(
+                list(news_items),
+                context="news aggregator items",
+            )
+            news_items = [item.model_dump(mode="json") for item in parsed_news_items]
         except Exception as exc:
             logger.error(f"Failed to retrieve news items for aggregation: {exc}")
 
@@ -395,13 +427,58 @@ class NewsOrchestrator:
         ticker = aggregator_ticker_from_state(state)
         logger.info(f"--- [News Research] Aggregating results for {ticker} ---")
 
-        aggregation = aggregate_news_items(news_item_entities, ticker=ticker)
-        report_payload = self.build_news_report_payload(
-            ticker,
-            news_items,
-            aggregation,
-        )
-        report_data = parse_news_artifact_model(report_payload)
+        try:
+            aggregation = aggregate_news_items(news_item_entities, ticker=ticker)
+            report_payload = self.build_news_report_payload(
+                ticker=ticker,
+                news_items=news_items,
+                aggregation=aggregation,
+            )
+            report_data = parse_news_artifact_model(report_payload)
+        except Exception as exc:
+            log_boundary_event(
+                logger,
+                node="news.aggregator",
+                artifact_id=None,
+                contract_kind=CONTRACT_KIND_ARTIFACT_JSON,
+                error_code="NEWS_REPORT_PAYLOAD_BUILD_FAILED",
+                state=state,
+                detail={
+                    "exception": str(exc),
+                    "ticker": ticker,
+                    "news_items_count": len(news_items),
+                },
+                level=logging.ERROR,
+            )
+            return NewsNodeResult(
+                update={
+                    "financial_news_research": {
+                        "status": "error",
+                        "sentiment_summary": "unknown",
+                        "sentiment_score": 0.0,
+                        "article_count": len(news_items),
+                        "report_id": None,
+                        "top_headlines": [],
+                    },
+                    "current_node": "aggregator_node",
+                    "internal_progress": {"aggregator_node": "error"},
+                    "node_statuses": {"financial_news_research": "error"},
+                    "error_logs": [
+                        {
+                            "node": "aggregator_node",
+                            "error": f"Failed to build news report payload: {str(exc)}",
+                            "severity": "error",
+                            "error_code": "NEWS_REPORT_PAYLOAD_BUILD_FAILED",
+                            "contract_kind": CONTRACT_KIND_ARTIFACT_JSON,
+                            "artifact_id": None,
+                            "diagnostics": build_replay_diagnostics(
+                                state, node="news.aggregator"
+                            ),
+                        }
+                    ],
+                },
+                goto="END",
+            )
 
         timestamp = int(time.time())
         try:
@@ -413,6 +490,16 @@ class NewsOrchestrator:
         except Exception as exc:
             logger.error(f"Failed to save final report artifact: {exc}")
             report_id = None
+            log_boundary_event(
+                logger,
+                node="news.aggregator",
+                artifact_id=None,
+                contract_kind=CONTRACT_KIND_ARTIFACT_JSON,
+                error_code="NEWS_REPORT_SAVE_FAILED",
+                state=state,
+                detail={"exception": str(exc), "ticker": ticker},
+                level=logging.ERROR,
+            )
 
         try:
             preview = self.summarize_preview(report_payload, news_items)
@@ -425,18 +512,39 @@ class NewsOrchestrator:
             logger.error(f"Failed to generate news artifact: {exc}")
             artifact = None
 
+        log_boundary_event(
+            logger,
+            node="news.aggregator",
+            artifact_id=report_id,
+            contract_kind=CONTRACT_KIND_ARTIFACT_JSON,
+            error_code="OK",
+            state=state,
+            detail={
+                "ticker": ticker,
+                "news_items_count": len(news_items),
+                "sentiment_label": aggregation.sentiment_label,
+            },
+        )
+        summary_message = build_news_summary_message(ticker=ticker, result=aggregation)
+        update = build_aggregator_node_update(
+            status="success",
+            sentiment_summary=aggregation.sentiment_label,
+            sentiment_score=aggregation.weighted_score,
+            article_count=len(news_items),
+            report_id=report_id,
+            top_headlines=aggregation.top_headlines,
+            artifact=artifact,
+        )
+        update["messages"] = [
+            AIMessage(
+                content=summary_message,
+                additional_kwargs={
+                    "type": "text",
+                    "agent_id": "financial_news_research",
+                },
+            )
+        ]
         return NewsNodeResult(
-            update=build_aggregator_node_update(
-                status="success",
-                sentiment_summary=aggregation.sentiment_label,
-                sentiment_score=aggregation.weighted_score,
-                article_count=len(news_items),
-                report_id=report_id,
-                top_headlines=aggregation.top_headlines,
-                artifact=artifact,
-            ),
+            update=update,
             goto="END",
-            summary_message=build_news_summary_message(
-                ticker=ticker, result=aggregation
-            ),
         )

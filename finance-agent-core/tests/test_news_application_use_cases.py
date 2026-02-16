@@ -5,7 +5,6 @@ import asyncio
 from src.agents.news.application.analysis_service import (
     AnalysisChains,
     analyze_news_items,
-    build_analysis_chain_payload,
     build_analysis_chains,
     run_analysis_with_resilience,
 )
@@ -35,7 +34,12 @@ from src.agents.news.domain.services import (
     aggregate_news_items,
     build_news_summary_message,
 )
-from src.agents.news.interface.contracts import FinancialNewsItemModel, SourceInfoModel
+from src.agents.news.interface.contracts import (
+    FinancialNewsItemModel,
+    NewsSearchResultItemModel,
+    SourceInfoModel,
+)
+from src.agents.news.interface.prompt_renderers import build_analysis_chain_payload
 
 
 def test_aggregate_news_items_computes_weighted_sentiment_and_themes() -> None:
@@ -80,21 +84,38 @@ def test_build_news_summary_message_renders_expected_shape() -> None:
 
 
 def test_build_articles_to_fetch_filters_out_of_range_indices() -> None:
-    raw = [{"title": "A"}, {"title": "B"}]
+    raw = [
+        NewsSearchResultItemModel(
+            title="A",
+            source="Reuters",
+            snippet="s",
+            link="https://x.com/a",
+            date="2026-02-13",
+            categories=["general"],
+        ),
+        NewsSearchResultItemModel(
+            title="B",
+            source="Reuters",
+            snippet="s",
+            link="https://x.com/b",
+            date="2026-02-13",
+            categories=["general"],
+        ),
+    ]
     selected = build_articles_to_fetch(raw, [0, 2, 1])
-    assert [item["title"] for item in selected] == ["A", "B"]
+    assert [item.title for item in selected] == ["A", "B"]
 
 
 def test_build_news_item_payload_creates_canonical_item() -> None:
     payload = build_news_item_payload(
-        result={
-            "title": "Test - Reuters",
-            "link": "https://example.com/x",
-            "snippet": "snippet",
-            "date": "2026-02-13T10:00:00",
-            "categories": ["general"],
-            "source": "Reuters",
-        },
+        result=NewsSearchResultItemModel(
+            title="Test - Reuters",
+            link="https://example.com/x",
+            snippet="snippet",
+            date="2026-02-13T10:00:00",
+            categories=["general"],
+            source="Reuters",
+        ),
         full_content="full",
         content_id="artifact-x",
         generated_id="id-x",
@@ -300,14 +321,14 @@ def test_build_news_items_from_fetch_results_creates_items() -> None:
     result = asyncio.run(
         build_news_items_from_fetch_results(
             articles_to_fetch=[
-                {
-                    "title": "News - Reuters",
-                    "link": "https://x.com/a",
-                    "snippet": "snippet",
-                    "date": "2026-02-13T10:00:00",
-                    "categories": ["general"],
-                    "source": "Reuters",
-                }
+                NewsSearchResultItemModel(
+                    title="News - Reuters",
+                    link="https://x.com/a",
+                    snippet="snippet",
+                    date="2026-02-13T10:00:00",
+                    categories=["general"],
+                    source="Reuters",
+                )
             ],
             full_contents=["full text"],
             ticker="GME",

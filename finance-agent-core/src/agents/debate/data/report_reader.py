@@ -33,7 +33,13 @@ async def _load_financial_reports(artifact_id: str | None) -> list[JSONObject]:
         model=FinancialReportsArtifactData,
         context=f"artifact {artifact_id} {ARTIFACT_KIND_FINANCIAL_REPORTS}",
     )
-    return payload.financial_reports
+    dumped = payload.model_dump(mode="json", exclude_none=True)
+    financial_reports = dumped.get("financial_reports")
+    if not isinstance(financial_reports, list):
+        raise TypeError(
+            f"artifact {artifact_id} {ARTIFACT_KIND_FINANCIAL_REPORTS} missing financial_reports list"
+        )
+    return cast(list[JSONObject], financial_reports)
 
 
 async def _load_news_items(artifact_id: str | None) -> list[JSONObject]:

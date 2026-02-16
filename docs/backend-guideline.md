@@ -35,12 +35,18 @@ Constants:
 1. Use `src/shared/kernel/contracts.py` for artifact kinds/output kinds/version constants.
 2. Do not hardcode contract literal strings in new logic.
 
+For workflow state / interrupt payloads:
+1. Domain objects must be converted through `src/agents/*/interface/{mappers,serializers}.py` before entering workflow state or interrupt payloads.
+2. Workflow nodes must not call `model_dump()` / `model_validate()` directly on domain entities/value objects.
+3. If a node needs JSON-ready payload, it should call an application entrypoint that internally uses interface serializers.
+
 ## 3. Workflow Node Rules
 
 1. No direct `artifact_manager.get_artifact_data(...)` in workflow nodes.
 2. No legacy fallback to old mirror state IDs for cross-agent consumption.
 3. No `resolved_ticker -> state.ticker` compatibility fallback in core decision paths.
 4. Missing required contract field should fail fast with explicit error.
+5. No domain-to-DTO mapping logic inline in nodes; place in interface serializers/mappers and invoke via application orchestration.
 
 ## 4. Type Rules
 
@@ -123,5 +129,17 @@ Constants:
 ## 10. Detailed Reference
 
 1. `docs/backend-canonicalization-flow.md` (detailed canonicalization and artifact flow)
-2. `docs/fundamental-reference-architecture.md` (concrete package-boundary example)
-3. `docs/agent-layer-responsibility-and-naming-guideline.md` (authoritative agent-layer ownership + naming)
+2. `docs/agent-layer-responsibility-and-naming-guideline.md` (authoritative agent-layer ownership + naming)
+3. `docs/simple-triad-layer-alignment-2026-02-16.md` (strict boundary and incident alignment note)
+4. `docs/next-refactor-pending-2026-02-16.md` (current refactor backlog)
+5. `docs/developer-workflow-checklist.md` (developer execution checklist and incident triage)
+
+## 11. Boundary Observability Policy (Mandatory)
+
+1. Incident-prone boundary nodes must emit unified logs with these keys:
+   - `node`
+   - `artifact_id`
+   - `contract_kind`
+   - `error_code`
+2. Use shared helper `src/shared/kernel/tools/incident_logging.py` for consistency.
+3. Non-`OK` boundary events must include replay diagnostics snapshot (`replay`) so incidents can be localized quickly.

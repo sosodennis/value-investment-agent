@@ -1,8 +1,9 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from src.workflow.nodes.financial_news_research.nodes import (
+    aggregator_node,
     analyst_node,
     fetch_node,
     search_node,
@@ -20,7 +21,7 @@ async def test_search_node_error_log():
     }
 
     with patch(
-        "src.workflow.nodes.financial_news_research.nodes.news_search_multi_timeframe"
+        "src.agents.news.application.factory.news_search_multi_timeframe"
     ) as mock_search:
         mock_search.side_effect = Exception("Search API Error")
 
@@ -45,9 +46,7 @@ async def test_selector_node_error_log():
     ) as mock_get:
         mock_get.return_value = {"raw_results": [], "formatted_results": ""}
 
-        with patch(
-            "src.workflow.nodes.financial_news_research.nodes.get_llm"
-        ) as mock_llm:
+        with patch("src.agents.news.application.factory.get_llm") as mock_llm:
             # Simulate LLM failure
             mock_chain = MagicMock()
             mock_chain.invoke.side_effect = Exception("LLM Timeout")
@@ -106,11 +105,9 @@ async def test_analyst_node_error_log():
         "src.services.artifact_manager.artifact_manager.get_artifact_data",
         side_effect=mock_get_artifact_data,
     ):
-        with patch(
-            "src.workflow.nodes.financial_news_research.nodes.get_llm"
-        ) as mock_llm:
+        with patch("src.agents.news.application.factory.get_llm") as mock_llm:
             with patch(
-                "src.workflow.nodes.financial_news_research.nodes.get_finbert_analyzer"
+                "src.agents.news.application.factory.get_finbert_analyzer"
             ) as mock_finbert:
                 # Ensure finbert doesn't crash test
                 mock_finbert.return_value.is_available.return_value = False
@@ -137,3 +134,45 @@ async def test_analyst_node_error_log():
                 )
                 assert "Failed to analyze" in command.update["error_logs"][0]["error"]
                 assert command.goto == "aggregator_node"
+
+
+@pytest.mark.asyncio
+async def test_aggregator_node_payload_build_failure_returns_error_update() -> None:
+    state = {
+        "ticker": "AAPL",
+        "financial_news_research": {"news_items_artifact_id": "news-items-1"},
+    }
+
+    with (
+        patch(
+            "src.agents.news.application.factory.news_workflow_runner.orchestrator.port.load_news_items_data",
+            new=AsyncMock(
+                return_value=[
+                    {
+                        "id": "n1",
+                        "url": "https://example.com/story",
+                        "title": "Sample",
+                        "snippet": "Sample",
+                        "source": {
+                            "name": "Reuters",
+                            "domain": "reuters.com",
+                            "reliability_score": 0.9,
+                        },
+                    }
+                ]
+            ),
+        ),
+        patch(
+            "src.agents.news.application.orchestrator.parse_news_artifact_model",
+            side_effect=RuntimeError("payload boom"),
+        ),
+    ):
+        command = await aggregator_node(state)
+
+    assert command.goto == "__end__"
+    assert command.update["internal_progress"]["aggregator_node"] == "error"
+    assert command.update["node_statuses"]["financial_news_research"] == "error"
+    assert (
+        command.update["error_logs"][0]["error_code"]
+        == "NEWS_REPORT_PAYLOAD_BUILD_FAILED"
+    )

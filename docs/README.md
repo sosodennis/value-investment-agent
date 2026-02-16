@@ -1,38 +1,26 @@
 # Documentation Index
-Date: 2026-02-13
+Date: 2026-02-16
+Status: Active
 
-This index defines document authority and usage.
+This folder keeps only active rules and one pending backlog for the next refactor.
 
-## 1. Canonical (Active, Normative)
+## 1. Canonical Rules
 
-Use these as the single source of truth for current development rules:
+1. `/Users/denniswong/Desktop/Project/value-investment-agent/docs/clean-architecture-engineering-guideline.md`
+2. `/Users/denniswong/Desktop/Project/value-investment-agent/docs/backend-guideline.md`
+3. `/Users/denniswong/Desktop/Project/value-investment-agent/docs/backend-canonicalization-flow.md`
+4. `/Users/denniswong/Desktop/Project/value-investment-agent/docs/frontend-guideline.md`
+5. `/Users/denniswong/Desktop/Project/value-investment-agent/docs/agent-layer-responsibility-and-naming-guideline.md`
+6. `/Users/denniswong/Desktop/Project/value-investment-agent/docs/prompt-refactor-guideline.md`
+7. `/Users/denniswong/Desktop/Project/value-investment-agent/docs/simple-triad-layer-alignment-2026-02-16.md`
+8. `/Users/denniswong/Desktop/Project/value-investment-agent/docs/developer-workflow-checklist.md`
 
-1. `docs/clean-architecture-engineering-guideline.md`
-2. `docs/backend-guideline.md`
-3. `docs/frontend-guideline.md`
-4. `docs/agent-layer-responsibility-and-naming-guideline.md`
-5. `docs/fundamental-reference-architecture.md`
+## 2. Pending Backlog
 
-## 2. Working Assessment (Current Snapshot)
+1. `/Users/denniswong/Desktop/Project/value-investment-agent/docs/next-refactor-pending-2026-02-16.md`
 
-Useful for current state understanding, but subordinate to canonical rules:
+## 3. Usage Rules
 
-1. `docs/agent-cross-review-2026-02-13.md`
-2. `docs/refactor-workstreams-progress-2026-02-13.md`
-3. `docs/legacy-code-elimination-plan-2026-02-16.md`
-4. `docs/legacy-code-audit-register-2026-02-16.md`
-
-## 3. Historical (Non-Normative, Audit Trace)
-
-These files preserve migration history and may contain old file names or pre-cutover structure:
-
-1. `docs/clean-architecture-agent-workflow-blueprint.md`
-2. `docs/fullstack-change-control-playbook.md`
-3. `docs/sub-agent-boundary-audit-2026-02-13.md`
-4. `docs/archive/README.md`
-
-## 4. Interpretation Rules
-
-1. If a historical doc conflicts with canonical docs, canonical docs win.
-2. Do not implement new behavior from historical documents directly.
-3. Update this index whenever document authority changes.
+1. If two docs conflict, section 1 has higher priority.
+2. Pending items must be tracked only in the backlog file from section 2.
+3. Completed/audit history is kept in git history; do not recreate deleted historical docs unless explicitly requested.

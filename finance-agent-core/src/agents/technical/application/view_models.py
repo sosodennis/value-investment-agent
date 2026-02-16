@@ -1,30 +1,6 @@
 from __future__ import annotations
 
-from src.agents.technical.domain.services import safe_float
 from src.shared.kernel.types import JSONObject
-
-
-def build_fracdiff_preview(
-    *,
-    ticker: str,
-    latest_price: object,
-    z_score: object,
-    optimal_d: object,
-    statistical_strength: object,
-) -> JSONObject:
-    latest_price_num = safe_float(latest_price) or 0.0
-    z_score_num = safe_float(z_score) or 0.0
-    optimal_d_num = safe_float(optimal_d) or 0.0
-    strength_num = safe_float(statistical_strength) or 0.0
-
-    return {
-        "ticker": ticker,
-        "latest_price_display": f"${latest_price_num:,.2f}",
-        "signal_display": "🧬 COMPUTING...",
-        "z_score_display": f"Z: {z_score_num:+.2f}",
-        "optimal_d_display": f"d={optimal_d_num:.2f}",
-        "strength_display": f"Strength: {strength_num:.1f}",
-    }
 
 
 def derive_ta_preview_view_model(ctx: JSONObject) -> JSONObject:
