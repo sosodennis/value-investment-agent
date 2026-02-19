@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 
 import yfinance as yf
@@ -7,7 +8,7 @@ from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
 
 from src.agents.intent.domain.models import TickerCandidate
 from src.shared.cross_agent.domain.market_identity import CompanyProfile
-from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.tools.logger import get_logger, log_event
 
 logger = get_logger(__name__)
 
@@ -21,7 +22,14 @@ def get_company_profile(ticker: str) -> CompanyProfile | None:
         info = stock.info
 
         if not info or "symbol" not in info:
-            logger.warning(f"No profile found for ticker: {ticker}")
+            log_event(
+                logger,
+                event="intent_profile_not_found",
+                message="company profile not found",
+                level=logging.WARNING,
+                error_code="INTENT_PROFILE_NOT_FOUND",
+                fields={"ticker": ticker},
+            )
             return None
 
         return CompanyProfile(
@@ -62,8 +70,15 @@ def search_ticker(query: str, limit: int = 5) -> list[TickerCandidate]:
 
         if candidates:
             return candidates
-    except Exception as e:
-        logger.error(f"yfinance.Search failed: {e}")
+    except Exception as exc:
+        log_event(
+            logger,
+            event="intent_yfinance_search_failed",
+            message="yfinance ticker search failed",
+            level=logging.ERROR,
+            error_code="INTENT_YFINANCE_SEARCH_FAILED",
+            fields={"query": query, "exception": str(exc)},
+        )
 
     return []
 
@@ -74,7 +89,12 @@ def web_search(query: str) -> str:
             if "share class" not in query.lower():
                 query += " share classes tickers"
 
-        logger.info(f"Executing optimized search query: {query}")
+        log_event(
+            logger,
+            event="intent_web_search_started",
+            message="intent web search started",
+            fields={"query": query},
+        )
 
         search = DuckDuckGoSearchAPIWrapper(
             max_results=7,
@@ -95,6 +115,13 @@ def web_search(query: str) -> str:
             formatted_output.append(f"[{i}] Source: {title}\\nContent: {snippet}\\n")
 
         return "\\n---\\n".join(formatted_output)
-    except Exception as e:
-        logger.error(f"Web search failed: {e}")
-        return f"Web search currently unavailable. Error: {str(e)}"
+    except Exception as exc:
+        log_event(
+            logger,
+            event="intent_web_search_failed",
+            message="intent web search failed",
+            level=logging.ERROR,
+            error_code="INTENT_WEB_SEARCH_FAILED",
+            fields={"query": query, "exception": str(exc)},
+        )
+        return f"Web search currently unavailable. Error: {str(exc)}"

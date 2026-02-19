@@ -18,6 +18,7 @@ from src.agents.debate.application.debate_service import (
 from src.agents.debate.application.ports import DebateSourceReaderPort
 from src.agents.debate.application.prompt_runtime import (
     get_trimmed_history,
+    hash_text,
     log_llm_config,
     log_llm_response,
     log_messages,
@@ -40,7 +41,7 @@ from src.shared.kernel.tools.incident_logging import (
     build_replay_diagnostics,
     log_boundary_event,
 )
-from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
 
 logger = get_logger(__name__)
@@ -126,11 +127,16 @@ class DebateOrchestrator:
 
         reports = await prepare_debate_reports(state, source_reader=self.source_reader)
         compressed_reports = self._compress_reports(reports)
-        self._log_compressed_reports(
-            stage="debate_aggregator",
-            ticker=ticker,
-            compressed_reports=compressed_reports,
-            source="computed",
+        log_event(
+            logger,
+            event="debate_aggregator_reports_prepared",
+            message="debate aggregator prepared compressed reports",
+            fields={
+                "ticker": ticker,
+                "compressed_chars": len(compressed_reports),
+                "compressed_hash": hash_text(compressed_reports),
+                "source": "computed",
+            },
         )
         log_boundary_event(
             logger,
@@ -197,15 +203,27 @@ class DebateOrchestrator:
                 goto="END",
             )
 
-        logger.info("FACT_EXTRACTION_START ticker=%s", ticker)
+        log_event(
+            logger,
+            event="debate_fact_extraction_started",
+            message="debate fact extraction started",
+            fields={"ticker": ticker},
+        )
         extracted = await extract_debate_facts(state, source_reader=self.source_reader)
         artifact_id = await self.artifact_port.save_facts_bundle(
             data=extracted.bundle_payload,
             produced_by="debate.fact_extractor",
             key_prefix=extracted.ticker,
         )
-        logger.info(
-            "FACT_EXTRACTION_DONE ticker=%s facts=%d", ticker, len(extracted.facts)
+        log_event(
+            logger,
+            event="debate_fact_extraction_completed",
+            message="debate fact extraction completed",
+            fields={
+                "ticker": ticker,
+                "facts_count": len(extracted.facts),
+                "artifact_id": artifact_id,
+            },
         )
         log_boundary_event(
             logger,
@@ -259,7 +277,18 @@ class DebateOrchestrator:
                 goto=success_goto,
             )
         except Exception as exc:
-            logger.error("%s failed: %s", node_name, exc)
+            log_event(
+                logger,
+                event="debate_bull_round_failed",
+                message="debate bull round failed",
+                level=logging.ERROR,
+                error_code="DEBATE_BULL_ROUND_FAILED",
+                fields={
+                    "node": node_name,
+                    "round_num": round_num,
+                    "exception": str(exc),
+                },
+            )
             error_msg = f"Bull Agent failed in Round {round_num}: {str(exc)}"
             return DebateNodeResult(
                 update={
@@ -307,7 +336,18 @@ class DebateOrchestrator:
                 goto=success_goto,
             )
         except Exception as exc:
-            logger.error("%s failed: %s", node_name, exc)
+            log_event(
+                logger,
+                event="debate_bear_round_failed",
+                message="debate bear round failed",
+                level=logging.ERROR,
+                error_code="DEBATE_BEAR_ROUND_FAILED",
+                fields={
+                    "node": node_name,
+                    "round_num": round_num,
+                    "exception": str(exc),
+                },
+            )
             error_msg = f"Bear Agent failed in Round {round_num}: {str(exc)}"
             return DebateNodeResult(
                 update={
@@ -366,7 +406,18 @@ class DebateOrchestrator:
                 goto=success_goto,
             )
         except Exception as exc:
-            logger.error("%s failed: %s", node_name, exc)
+            log_event(
+                logger,
+                event="debate_moderator_round_failed",
+                message="debate moderator round failed",
+                level=logging.ERROR,
+                error_code="DEBATE_MODERATOR_ROUND_FAILED",
+                fields={
+                    "node": node_name,
+                    "round_num": round_num,
+                    "exception": str(exc),
+                },
+            )
             error_msg = f"Moderator failed in Round {round_num}: {str(exc)}"
             return DebateNodeResult(
                 update={
@@ -386,6 +437,13 @@ class DebateOrchestrator:
     async def run_verdict(self, state: Mapping[str, object]) -> DebateNodeResult:
         ticker = resolved_ticker_from_state(state)
         if ticker is None:
+            log_event(
+                logger,
+                event="debate_verdict_missing_ticker",
+                message="debate verdict missing resolved ticker",
+                level=logging.ERROR,
+                error_code="DEBATE_MISSING_TICKER",
+            )
             return DebateNodeResult(
                 update={
                     "internal_progress": {"verdict": "error"},
@@ -402,6 +460,12 @@ class DebateOrchestrator:
             )
 
         try:
+            log_event(
+                logger,
+                event="debate_verdict_started",
+                message="debate verdict started",
+                fields={"ticker": ticker},
+            )
             llm = self.get_llm_fn()
             log_llm_config("VERDICT", 3, llm)
 
@@ -459,6 +523,12 @@ class DebateOrchestrator:
                 produced_by="debate.verdict",
                 key_prefix=ticker,
             )
+            log_event(
+                logger,
+                event="debate_verdict_completed",
+                message="debate verdict completed",
+                fields={"ticker": ticker, "report_id": report_id},
+            )
 
             artifact = self._build_final_artifact(conclusion_data, report_id=report_id)
             debate_update = build_debate_success_update(
@@ -476,7 +546,14 @@ class DebateOrchestrator:
                 goto="END",
             )
         except Exception as exc:
-            logger.error("❌ Error in Verdict Node: %s", str(exc))
+            log_event(
+                logger,
+                event="debate_verdict_failed",
+                message="debate verdict failed",
+                level=logging.ERROR,
+                error_code="DEBATE_VERDICT_FAILED",
+                fields={"ticker": ticker, "exception": str(exc)},
+            )
             return DebateNodeResult(
                 update={
                     "internal_progress": {"verdict": "error"},
@@ -497,14 +574,6 @@ class DebateOrchestrator:
         from src.agents.debate.application.prompt_runtime import compress_reports
 
         return compress_reports(reports)
-
-    @staticmethod
-    def _log_compressed_reports(
-        *, stage: str, ticker: str, compressed_reports: str, source: str
-    ) -> None:
-        from src.agents.debate.application.prompt_runtime import log_compressed_reports
-
-        log_compressed_reports(stage, ticker, compressed_reports, source)
 
     @staticmethod
     def _build_verdict_prompt(*, ticker: str, history_text: str) -> str:
@@ -539,7 +608,14 @@ class DebateOrchestrator:
             )
             return self.build_output_artifact_fn(summary, preview, None)
         except Exception as exc:
-            logger.error("Failed to generate debate progress artifact: %s", exc)
+            log_event(
+                logger,
+                event="debate_progress_artifact_failed",
+                message="failed to generate debate progress artifact",
+                level=logging.ERROR,
+                error_code="DEBATE_PROGRESS_ARTIFACT_FAILED",
+                fields={"exception": str(exc)},
+            )
             return None
 
     def _build_final_artifact(
@@ -556,5 +632,12 @@ class DebateOrchestrator:
                 report_id,
             )
         except Exception as exc:
-            logger.error("Failed to generate debate artifact: %s", exc)
+            log_event(
+                logger,
+                event="debate_output_artifact_failed",
+                message="failed to generate debate output artifact",
+                level=logging.ERROR,
+                error_code="DEBATE_OUTPUT_ARTIFACT_FAILED",
+                fields={"exception": str(exc)},
+            )
             return None

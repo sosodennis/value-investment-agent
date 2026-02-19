@@ -1,10 +1,11 @@
+import logging
 import os
 
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.graph import END, START, StateGraph
 from psycopg_pool import AsyncConnectionPool
 
-from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.tools.logger import get_logger, log_event
 
 from .nodes.consolidate_research import consolidate_research_node
 from .nodes.debate.graph import build_debate_subgraph
@@ -99,8 +100,11 @@ async def get_graph():
             pg_db = os.environ.get("POSTGRES_DB", "langgraph")
 
             db_uri = f"postgresql://{pg_user}:{pg_pass}@{pg_host}:{pg_port}/{pg_db}"
-            logger.info(
-                f"--- Graph: Connecting to Postgres at {pg_host}:{pg_port}/{pg_db} ---"
+            log_event(
+                logger,
+                event="workflow_graph_postgres_connecting",
+                message="workflow graph connecting to postgres",
+                fields={"host": pg_host, "port": pg_port, "database": pg_db},
             )
 
             # Create connection pool
@@ -116,7 +120,15 @@ async def get_graph():
 
             # Compile
             _compiled_graph = builder.compile(checkpointer=_saver)
-        except Exception:
+        except Exception as exc:
+            log_event(
+                logger,
+                event="workflow_graph_build_failed",
+                message="workflow graph build failed",
+                level=logging.ERROR,
+                error_code="WORKFLOW_GRAPH_BUILD_FAILED",
+                fields={"exception": str(exc)},
+            )
             raise
 
     return _compiled_graph

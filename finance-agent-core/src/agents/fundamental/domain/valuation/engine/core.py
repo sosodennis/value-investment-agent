@@ -3,6 +3,7 @@ from collections.abc import Callable
 
 import networkx as nx
 
+from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.traceable import (
     ComputedProvenance,
     ManualProvenance,
@@ -14,6 +15,7 @@ Vector = list[float]
 TraceScalar = TraceableField[float]
 TraceVector = TraceableField[list[float]]
 CalcValue = Scalar | Vector | TraceScalar | TraceVector
+logger = get_logger(__name__)
 
 
 class CalculationGraph:
@@ -45,7 +47,23 @@ class CalculationGraph:
     def validate(self):
         """Check for cycles and missing dependencies."""
         if not nx.is_directed_acyclic_graph(self.graph):
+            log_event(
+                logger,
+                event="calculation_graph_validate_failed",
+                message="calculation graph validation failed due to cycle",
+                fields={"graph_name": self.name},
+            )
             raise ValueError(f"Graph {self.name} contains cycles.")
+        log_event(
+            logger,
+            event="calculation_graph_validated",
+            message="calculation graph validated",
+            fields={
+                "graph_name": self.name,
+                "node_count": self.graph.number_of_nodes(),
+                "edge_count": self.graph.number_of_edges(),
+            },
+        )
 
     def calculate(
         self, inputs: dict[str, CalcValue], trace: bool = False
@@ -55,6 +73,17 @@ class CalculationGraph:
         :param inputs: Dictionary of input values for leaf nodes.
         :return: Dictionary containing all calculated values.
         """
+        log_event(
+            logger,
+            event="calculation_graph_started",
+            message="calculation graph execution started",
+            fields={
+                "graph_name": self.name,
+                "trace": trace,
+                "input_count": len(inputs),
+            },
+        )
+
         if trace:
             results: dict[str, CalcValue] = {
                 k: self._to_traceable(k, v) for k, v in inputs.items()
@@ -66,6 +95,12 @@ class CalculationGraph:
         try:
             execution_order = list(nx.topological_sort(self.graph))
         except nx.NetworkXUnfeasible as e:
+            log_event(
+                logger,
+                event="calculation_graph_topology_failed",
+                message="calculation graph execution failed due to cycle",
+                fields={"graph_name": self.name},
+            )
             raise ValueError("Graph contains cycles, cannot execute.") from e
 
         for node in execution_order:
@@ -80,6 +115,16 @@ class CalculationGraph:
                 trace_inputs: dict[str, TraceableField] = {}
                 for param in sig.parameters:
                     if param not in results:
+                        log_event(
+                            logger,
+                            event="calculation_graph_missing_dependency",
+                            message="calculation graph missing dependency",
+                            fields={
+                                "graph_name": self.name,
+                                "node": node,
+                                "dependency": param,
+                            },
+                        )
                         raise ValueError(
                             f"Missing dependency '{param}' for node '{node}'"
                         )
@@ -96,6 +141,16 @@ class CalculationGraph:
                 try:
                     output = func(**args)
                 except Exception as e:
+                    log_event(
+                        logger,
+                        event="calculation_graph_node_failed",
+                        message="calculation graph node execution failed",
+                        fields={
+                            "graph_name": self.name,
+                            "node": node,
+                            "exception": str(e),
+                        },
+                    )
                     raise RuntimeError(
                         f"Error calculating node '{node}': {str(e)}"
                     ) from e
@@ -104,6 +159,12 @@ class CalculationGraph:
                 # If it's not a function calculation, it SHOULD have been in inputs
                 pass
 
+        log_event(
+            logger,
+            event="calculation_graph_completed",
+            message="calculation graph execution completed",
+            fields={"graph_name": self.name, "result_count": len(results)},
+        )
         return results
 
     def get_inputs(self) -> list[str]:

@@ -13,7 +13,7 @@ from src.shared.kernel.tools.incident_logging import (
     build_replay_diagnostics,
     log_boundary_event,
 )
-from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
 
 logger = get_logger(__name__)
@@ -207,8 +207,12 @@ class IntentOrchestrator:
     def run_extraction(self, state: Mapping[str, object]) -> IntentNodeResult:
         user_query = state.get("user_query")
         if not isinstance(user_query, str) or not user_query.strip():
-            logger.warning(
-                "--- Intent Extraction: No query provided, requesting clarification ---"
+            log_event(
+                logger,
+                event="intent_extraction_missing_query",
+                message="intent extraction missing query; switching to clarification",
+                level=logging.WARNING,
+                error_code="INTENT_QUERY_MISSING",
             )
             return IntentNodeResult(
                 update={
@@ -225,8 +229,11 @@ class IntentOrchestrator:
             )
 
         try:
-            logger.info(
-                "--- Intent Extraction: Extracting intent from: %s ---", user_query
+            log_event(
+                logger,
+                event="intent_extraction_started",
+                message="intent extraction started",
+                fields={"query_length": len(user_query)},
             )
             intent = self.extract_intent(user_query)
             return IntentNodeResult(
@@ -242,7 +249,14 @@ class IntentOrchestrator:
                 goto="searching",
             )
         except Exception as exc:
-            logger.error("Intent extraction failed: %s", exc)
+            log_event(
+                logger,
+                event="intent_extraction_failed",
+                message="intent extraction failed",
+                level=logging.ERROR,
+                error_code="INTENT_EXTRACTION_FAILED",
+                fields={"exception": str(exc)},
+            )
             return IntentNodeResult(
                 update={
                     "intent_extraction": {"status": "clarifying"},
@@ -274,8 +288,12 @@ class IntentOrchestrator:
             user_query=state.get("user_query"),
         )
         if not search_queries:
-            logger.warning(
-                "--- Intent Extraction: Search query missing, requesting clarification ---"
+            log_event(
+                logger,
+                event="intent_search_query_missing",
+                message="intent search query missing; switching to clarification",
+                level=logging.WARNING,
+                error_code="INTENT_SEARCH_QUERY_MISSING",
             )
             return IntentNodeResult(
                 update={
@@ -287,13 +305,25 @@ class IntentOrchestrator:
             )
 
         try:
-            logger.info(
-                "--- Intent Extraction: Searching for queries: %s ---", search_queries
+            log_event(
+                logger,
+                event="intent_search_started",
+                message="intent ticker search started",
+                fields={
+                    "search_query_count": len(search_queries),
+                    "search_queries": search_queries,
+                },
             )
             final_candidates = self.search_candidates(search_queries)
-            logger.info(
-                "Final candidates: %s",
-                [candidate.symbol for candidate in final_candidates],
+            candidate_symbols = [candidate.symbol for candidate in final_candidates]
+            log_event(
+                logger,
+                event="intent_search_completed",
+                message="intent ticker search completed",
+                fields={
+                    "candidate_count": len(final_candidates),
+                    "candidate_symbols": candidate_symbols,
+                },
             )
             log_boundary_event(
                 logger,
@@ -304,9 +334,7 @@ class IntentOrchestrator:
                 state=state,
                 detail={
                     "candidate_count": len(final_candidates),
-                    "candidate_symbols": [
-                        candidate.symbol for candidate in final_candidates
-                    ],
+                    "candidate_symbols": candidate_symbols,
                 },
             )
             return IntentNodeResult(
@@ -333,7 +361,14 @@ class IntentOrchestrator:
                 detail={"exception": str(exc)},
                 level=logging.ERROR,
             )
-            logger.error("Ticker search failed: %s", exc)
+            log_event(
+                logger,
+                event="intent_search_failed",
+                message="intent ticker search failed",
+                level=logging.ERROR,
+                error_code="INTENT_SEARCH_FAILED",
+                fields={"exception": str(exc)},
+            )
             return IntentNodeResult(
                 update={
                     "intent_extraction": {"status": "clarifying"},
@@ -368,8 +403,12 @@ class IntentOrchestrator:
         intent_ctx = intent_ctx_raw if isinstance(intent_ctx_raw, Mapping) else {}
         candidates = intent_ctx.get("ticker_candidates") or []
         if not isinstance(candidates, list) or not candidates:
-            logger.warning(
-                "--- Intent Extraction: No candidates found, requesting clarification ---"
+            log_event(
+                logger,
+                event="intent_decision_no_candidates",
+                message="intent decision found no candidates; switching to clarification",
+                level=logging.WARNING,
+                error_code="INTENT_CANDIDATES_MISSING",
             )
             return IntentNodeResult(
                 update={
@@ -397,8 +436,13 @@ class IntentOrchestrator:
                         ],
                     },
                 )
-                logger.warning(
-                    "--- Intent Extraction: Ambiguity detected, requesting clarification ---"
+                log_event(
+                    logger,
+                    event="intent_decision_ambiguous",
+                    message="intent decision detected ambiguity; requesting clarification",
+                    level=logging.WARNING,
+                    error_code="INTENT_TICKER_AMBIGUOUS",
+                    fields={"candidate_count": len(candidate_objs)},
                 )
                 return IntentNodeResult(
                     update={
@@ -413,14 +457,21 @@ class IntentOrchestrator:
                 )
 
             resolved_ticker = candidate_objs[0].symbol
-            logger.info(
-                "--- Intent Extraction: Ticker resolved to %s ---", resolved_ticker
+            log_event(
+                logger,
+                event="intent_decision_resolved",
+                message="intent decision resolved ticker",
+                fields={"resolved_ticker": resolved_ticker},
             )
             profile = self.resolve_profile(resolved_ticker)
             if not profile:
-                logger.warning(
-                    "--- Intent Extraction: Could not fetch profile for %s, requesting clarification ---",
-                    resolved_ticker,
+                log_event(
+                    logger,
+                    event="intent_decision_profile_missing",
+                    message="intent decision could not resolve company profile",
+                    level=logging.WARNING,
+                    error_code="INTENT_PROFILE_MISSING",
+                    fields={"resolved_ticker": resolved_ticker},
                 )
                 return IntentNodeResult(
                     update={
@@ -465,7 +516,14 @@ class IntentOrchestrator:
                 detail={"exception": str(exc)},
                 level=logging.ERROR,
             )
-            logger.error("Decision logic failed: %s", exc)
+            log_event(
+                logger,
+                event="intent_decision_failed",
+                message="intent decision failed",
+                level=logging.ERROR,
+                error_code="INTENT_DECISION_FAILED",
+                fields={"exception": str(exc)},
+            )
             return IntentNodeResult(
                 update={
                     "intent_extraction": {"status": "clarifying"},

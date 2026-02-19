@@ -1,3 +1,5 @@
+from src.shared.kernel.tools.logger import get_logger, log_event
+
 from ..valuation_bank.schemas import BankParams
 from ..valuation_ev_ebitda.schemas import EVEbitdaParams
 from ..valuation_ev_revenue.schemas import EVRevenueParams
@@ -6,11 +8,31 @@ from ..valuation_reit_ffo.schemas import ReitFfoParams
 from ..valuation_residual_income.schemas import ResidualIncomeParams
 from ..valuation_saas.schemas import SaaSParams
 
+logger = get_logger(__name__)
+
 
 class AuditResult:
     def __init__(self, passed: bool, messages: list[str]):
         self.passed = passed
         self.messages = messages
+
+
+def _finalize_audit(model_type: str, messages: list[str]) -> AuditResult:
+    fail_count = len([m for m in messages if m.startswith("FAIL:")])
+    warn_count = len([m for m in messages if m.startswith("WARN:")])
+    passed = fail_count == 0
+    log_event(
+        logger,
+        event="valuation_audit_completed",
+        message="valuation audit completed",
+        fields={
+            "model_type": model_type,
+            "passed": passed,
+            "fail_count": fail_count,
+            "warn_count": warn_count,
+        },
+    )
+    return AuditResult(passed, messages)
 
 
 def audit_saas_params(params: SaaSParams) -> AuditResult:
@@ -30,8 +52,7 @@ def audit_saas_params(params: SaaSParams) -> AuditResult:
     if all(s == 0 for s in params.sbc_rates):
         messages.append("WARN: SBC rates are all 0%. This is unusual for SaaS.")
 
-    passed = len([m for m in messages if "FAIL" in m]) == 0
-    return AuditResult(passed, messages)
+    return _finalize_audit("saas", messages)
 
 
 def audit_bank_params(params: BankParams) -> AuditResult:
@@ -45,8 +66,7 @@ def audit_bank_params(params: BankParams) -> AuditResult:
     if params.cost_of_equity < 0.06:
         messages.append(f"FAIL: Cost of Equity {params.cost_of_equity} is too low.")
 
-    passed = len([m for m in messages if "FAIL" in m]) == 0
-    return AuditResult(passed, messages)
+    return _finalize_audit("bank", messages)
 
 
 def audit_ev_revenue_params(params: EVRevenueParams) -> AuditResult:
@@ -59,8 +79,7 @@ def audit_ev_revenue_params(params: EVRevenueParams) -> AuditResult:
     if params.shares_outstanding <= 0:
         messages.append("FAIL: Shares outstanding must be positive.")
 
-    passed = len([m for m in messages if "FAIL" in m]) == 0
-    return AuditResult(passed, messages)
+    return _finalize_audit("ev_revenue", messages)
 
 
 def audit_ev_ebitda_params(params: EVEbitdaParams) -> AuditResult:
@@ -73,8 +92,7 @@ def audit_ev_ebitda_params(params: EVEbitdaParams) -> AuditResult:
     if params.shares_outstanding <= 0:
         messages.append("FAIL: Shares outstanding must be positive.")
 
-    passed = len([m for m in messages if "FAIL" in m]) == 0
-    return AuditResult(passed, messages)
+    return _finalize_audit("ev_ebitda", messages)
 
 
 def audit_reit_ffo_params(params: ReitFfoParams) -> AuditResult:
@@ -87,8 +105,7 @@ def audit_reit_ffo_params(params: ReitFfoParams) -> AuditResult:
     if params.shares_outstanding <= 0:
         messages.append("FAIL: Shares outstanding must be positive.")
 
-    passed = len([m for m in messages if "FAIL" in m]) == 0
-    return AuditResult(passed, messages)
+    return _finalize_audit("reit_ffo", messages)
 
 
 def audit_residual_income_params(params: ResidualIncomeParams) -> AuditResult:
@@ -105,8 +122,7 @@ def audit_residual_income_params(params: ResidualIncomeParams) -> AuditResult:
     if params.shares_outstanding <= 0:
         messages.append("FAIL: Shares outstanding must be positive.")
 
-    passed = len([m for m in messages if "FAIL" in m]) == 0
-    return AuditResult(passed, messages)
+    return _finalize_audit("residual_income", messages)
 
 
 def audit_eva_params(params: EvaParams) -> AuditResult:
@@ -123,5 +139,4 @@ def audit_eva_params(params: EvaParams) -> AuditResult:
     if params.shares_outstanding <= 0:
         messages.append("FAIL: Shares outstanding must be positive.")
 
-    passed = len([m for m in messages if "FAIL" in m]) == 0
-    return AuditResult(passed, messages)
+    return _finalize_audit("eva", messages)

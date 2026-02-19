@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass
 
 from src.agents.news.application.ports import (
@@ -12,7 +13,7 @@ from src.agents.news.application.ports import (
 )
 from src.agents.news.interface.parsers import parse_structured_llm_output
 from src.agents.news.interface.prompt_renderers import build_analysis_chain_payload
-from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import JSONObject
 
 logger = get_logger(__name__)
@@ -90,7 +91,14 @@ async def analyze_news_items(
                     if isinstance(full_text, str):
                         content_to_analyze = full_text
                 except Exception as exc:
-                    logger.warning("Could not load full content for analysis: %s", exc)
+                    log_event(
+                        logger,
+                        event="news_analysis_full_content_load_failed",
+                        message="failed to load full content for analysis; falling back to snippet",
+                        level=logging.WARNING,
+                        error_code="NEWS_ANALYSIS_CONTENT_LOAD_FAILED",
+                        fields={"content_id": content_id, "exception": str(exc)},
+                    )
 
             finbert_result: FinbertResultLike | None = None
             finbert_summary: JSONObject | None = None
@@ -120,11 +128,18 @@ async def analyze_news_items(
             item["analysis"] = analysis_payload
             item["analysis"]["source"] = "llm"
         except Exception as exc:
-            logger.error(
-                "--- [News Research] ❌ Analysis FAILED for article %s: %s ---",
-                index + 1,
-                exc,
-                exc_info=True,
+            log_event(
+                logger,
+                event="news_analysis_item_failed",
+                message="news item analysis failed",
+                level=logging.ERROR,
+                error_code="NEWS_ANALYSIS_ITEM_FAILED",
+                fields={
+                    "index": index + 1,
+                    "ticker": ticker_value,
+                    "title": item.get("title"),
+                    "exception": str(exc),
+                },
             )
             article_errors.append(
                 f"Analysis failed for {item.get('title', 'Unknown')}: {exc}"

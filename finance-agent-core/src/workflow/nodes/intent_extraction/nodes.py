@@ -3,11 +3,14 @@ Intent Extraction Nodes.
 Handles extraction, searching, decision, and clarification for ticker resolution.
 """
 
+import logging
+from collections.abc import Mapping
+
 from langgraph.graph import END
 from langgraph.types import Command, interrupt
 
 from src.agents.intent.application.factory import intent_orchestrator
-from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.tools.logger import get_logger, log_event
 
 from .subgraph_state import IntentExtractionState
 
@@ -40,15 +43,30 @@ def clarification_node(state: IntentExtractionState) -> Command:
     """
     Triggers an interrupt to ask the user to select a ticker or provide clarification.
     """
-    logger.warning(
-        "--- Intent Extraction: Ticker Ambiguity Detected. Waiting for user input... ---"
+    log_event(
+        logger,
+        event="intent_clarification_waiting_for_user",
+        message="ticker ambiguity detected; waiting for user clarification",
+        level=logging.WARNING,
+        error_code="INTENT_CLARIFICATION_REQUIRED",
     )
 
     interrupt_payload_dump, candidates_raw = (
         intent_orchestrator.build_clarification_interrupt_payload(state)
     )
     user_input = interrupt(interrupt_payload_dump)
-    logger.info(f"--- Intent Extraction: Received user input: {user_input} ---")
+    payload_keys: list[str] = []
+    if isinstance(user_input, Mapping):
+        payload_keys = sorted(str(key) for key in user_input.keys())
+    log_event(
+        logger,
+        event="intent_clarification_input_received",
+        message="intent clarification input received",
+        fields={
+            "payload_type": type(user_input).__name__,
+            "payload_keys": payload_keys,
+        },
+    )
 
     resolution_update = intent_orchestrator.build_clarification_resolution_update(
         user_input=user_input,
@@ -62,6 +80,12 @@ def clarification_node(state: IntentExtractionState) -> Command:
         )
 
     # If even fallback fails, retry extraction
-    logger.warning("--- Intent Extraction: Resolution failed, retrying extraction ---")
+    log_event(
+        logger,
+        event="intent_clarification_resolution_failed_retrying",
+        message="intent clarification resolution failed; retrying extraction",
+        level=logging.WARNING,
+        error_code="INTENT_CLARIFICATION_RETRY",
+    )
     result = intent_orchestrator.build_clarification_retry_update()
     return Command(update=result.update, goto=result.goto)

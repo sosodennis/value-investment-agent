@@ -1,8 +1,9 @@
+import logging
 from datetime import date
 
 from edgar import set_identity
 
-from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.traceable import (
     ComputedProvenance,
     ManualProvenance,
@@ -27,7 +28,12 @@ def fetch_financial_data(ticker: str, years: int = 3) -> list[FinancialReport]:
     Returns a list of FinancialReport objects containing Base and Extension models.
     """
     reports = []
-    logger.info(f"Fetching financial data for {ticker} (Last {years} years)...")
+    log_event(
+        logger,
+        event="fundamental_xbrl_fetch_started",
+        message="xbrl financial data fetch started",
+        fields={"ticker": ticker, "years": years},
+    )
 
     current_year = date.today().year
     start_year = current_year - 1
@@ -37,23 +43,68 @@ def fetch_financial_data(ticker: str, years: int = 3) -> list[FinancialReport]:
 
     while len(reports) < years and attempt_year > (start_year - years - 5):
         try:
-            logger.info(f"Attempting to fetch report for FY{attempt_year}...")
+            log_event(
+                logger,
+                event="fundamental_xbrl_year_attempt",
+                message="xbrl yearly report fetch attempt",
+                fields={"ticker": ticker, "attempt_year": attempt_year},
+            )
             report = FinancialReportFactory.create_report(ticker, attempt_year)
 
             actual_year = report.base.fiscal_year.value
 
             if actual_year in fetched_years:
-                logger.info(
-                    f"ℹ️ Skipping duplicate report for FY{actual_year} (requested FY{attempt_year})"
+                log_event(
+                    logger,
+                    event="fundamental_xbrl_duplicate_skipped",
+                    message="duplicate xbrl report skipped",
+                    level=logging.WARNING,
+                    error_code="FUNDAMENTAL_XBRL_DUPLICATE",
+                    fields={
+                        "ticker": ticker,
+                        "actual_year": actual_year,
+                        "attempt_year": attempt_year,
+                    },
                 )
             else:
                 reports.append(report)
                 fetched_years.add(actual_year)
-                logger.info(f"✅ Successfully fetched report for FY{actual_year}")
-        except ValueError as ve:
-            logger.warning(f"⚠️ Report not found for FY{attempt_year}: {ve}")
-        except Exception as e:
-            logger.error(f"❌ Error fetching report for FY{attempt_year}: {e}")
+                log_event(
+                    logger,
+                    event="fundamental_xbrl_year_success",
+                    message="xbrl yearly report fetched",
+                    fields={
+                        "ticker": ticker,
+                        "actual_year": actual_year,
+                        "attempt_year": attempt_year,
+                    },
+                )
+        except ValueError as exc:
+            log_event(
+                logger,
+                event="fundamental_xbrl_year_not_found",
+                message="xbrl yearly report not found",
+                level=logging.WARNING,
+                error_code="FUNDAMENTAL_XBRL_NOT_FOUND",
+                fields={
+                    "ticker": ticker,
+                    "attempt_year": attempt_year,
+                    "exception": str(exc),
+                },
+            )
+        except Exception as exc:
+            log_event(
+                logger,
+                event="fundamental_xbrl_year_failed",
+                message="xbrl yearly report fetch failed",
+                level=logging.ERROR,
+                error_code="FUNDAMENTAL_XBRL_FETCH_FAILED",
+                fields={
+                    "ticker": ticker,
+                    "attempt_year": attempt_year,
+                    "exception": str(exc),
+                },
+            )
 
         attempt_year -= 1
 

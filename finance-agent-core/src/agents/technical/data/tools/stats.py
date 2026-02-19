@@ -4,7 +4,9 @@ import numpy as np
 import pandas as pd
 from scipy.stats import norm
 
-logger = logging.getLogger(__name__)
+from src.shared.kernel.tools.logger import get_logger, log_event
+
+logger = get_logger(__name__)
 
 
 def compute_z_score(fd_series: pd.Series, lookback: int = 126) -> float:
@@ -19,7 +21,13 @@ def compute_z_score(fd_series: pd.Series, lookback: int = 126) -> float:
     std = recent_values.std()
 
     if std == 0:
-        logger.warning("⚠️  Zero standard deviation in FracDiff series")
+        log_event(
+            logger,
+            event="technical_zscore_zero_std",
+            message="technical z-score fallback due to zero standard deviation",
+            level=logging.WARNING,
+            error_code="TECHNICAL_ZSCORE_ZERO_STD",
+        )
         return 0.0
 
     latest_value = fd_series.iloc[-1]
@@ -38,8 +46,11 @@ def calculate_rolling_z_score(fd_series: pd.Series, lookback: int = 126) -> pd.S
     z_score_series = (fd_series - rolling_mean) / rolling_std
     z_score_series = z_score_series.fillna(0.0).replace([np.inf, -np.inf], 0.0)
 
-    logger.info(
-        f"✅ Generated rolling Z-score series with {len(z_score_series)} values"
+    log_event(
+        logger,
+        event="technical_zscore_rolling_completed",
+        message="technical rolling z-score computation completed",
+        fields={"rows": len(z_score_series)},
     )
     return z_score_series
 

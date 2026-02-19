@@ -2,16 +2,23 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
 from src.agents.debate.application.state_readers import get_last_message_from_role
-from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.tools.logger import get_logger, log_event
 
 logger = get_logger(__name__)
 
 MAX_CHAR_HISTORY = 32000
 MAX_CHAR_REPORTS = 50000
+LOG_LLM_PAYLOADS = os.getenv("LOG_LLM_PAYLOADS", "false").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 
 def hash_text(text: str) -> str:
@@ -33,7 +40,12 @@ def compress_reports(
     if len(compressed) <= max_chars:
         return compressed
 
-    logger.warning("⚠️ Truncating analyst reports: %d -> %d", len(compressed), max_chars)
+    log_event(
+        logger,
+        event="debate_reports_truncated",
+        message="debate reports truncated by max chars",
+        fields={"original_chars": len(compressed), "max_chars": max_chars},
+    )
     return compressed[:max_chars] + "\n\n[... TRUNCATED DUE TO TOKEN LIMITS ...]"
 
 
@@ -55,13 +67,17 @@ def get_trimmed_history(
 
     total_chars = sum(len(str(msg.content)) for msg in history)
     trimmed_chars = sum(len(str(msg.content)) for msg in trimmed)
-    logger.info(
-        "DEBATE_HISTORY_TRIM total_messages=%d total_chars=%d trimmed_messages=%d trimmed_chars=%d max_chars=%d",
-        len(history),
-        total_chars,
-        len(trimmed),
-        trimmed_chars,
-        max_chars,
+    log_event(
+        logger,
+        event="debate_history_trimmed",
+        message="debate history trimmed for token budget",
+        fields={
+            "total_messages": len(history),
+            "total_chars": total_chars,
+            "trimmed_messages": len(trimmed),
+            "trimmed_chars": trimmed_chars,
+            "max_chars": max_chars,
+        },
     )
     return trimmed
 
@@ -69,7 +85,22 @@ def get_trimmed_history(
 def log_messages(
     messages: list[BaseMessage], agent_name: str, round_num: int = 0
 ) -> None:
-    """Log full message content for audit/debugging."""
+    """Log prompt metadata by default; full prompt text is opt-in."""
+    if not LOG_LLM_PAYLOADS:
+        total_chars = sum(len(str(msg.content)) for msg in messages)
+        log_event(
+            logger,
+            event="debate_prompt_metadata",
+            message="debate prompt metadata",
+            fields={
+                "agent": agent_name,
+                "round_num": round_num,
+                "message_count": len(messages),
+                "chars": total_chars,
+            },
+        )
+        return
+
     log_header = f"PROMPT SENT TO {agent_name}"
     if round_num:
         log_header += f" (Round {round_num})"
@@ -88,33 +119,29 @@ def log_messages(
         content = msg.content
         formatted_msg += f"[{i + 1}] {role} Message:\n{content}\n" + "-" * 30 + "\n"
     formatted_msg += "=" * 50
-    logger.info(formatted_msg)
+    log_event(
+        logger,
+        event="debate_prompt_payload",
+        message="debate prompt payload",
+        fields={"agent": agent_name, "round_num": round_num, "payload": formatted_msg},
+    )
 
 
 def log_llm_config(agent_name: str, round_num: int, llm: object) -> None:
     model = getattr(llm, "model_name", None) or getattr(llm, "model", None) or "unknown"
     temperature = getattr(llm, "temperature", None)
     timeout = getattr(llm, "timeout", None)
-    logger.info(
-        "DEBATE_LLM_CONFIG agent=%s round=%d model=%s temperature=%s timeout=%s",
-        agent_name,
-        round_num,
-        model,
-        temperature,
-        timeout,
-    )
-
-
-def log_compressed_reports(
-    stage: str, ticker: str | None, compressed_reports: str, source: str
-) -> None:
-    logger.info(
-        "DEBATE_REPORTS stage=%s ticker=%s source=%s chars=%d hash=%s",
-        stage,
-        ticker or "unknown",
-        source,
-        len(compressed_reports),
-        hash_text(compressed_reports),
+    log_event(
+        logger,
+        event="debate_llm_config",
+        message="debate llm config",
+        fields={
+            "agent": agent_name,
+            "round_num": round_num,
+            "model": model,
+            "temperature": temperature,
+            "timeout": timeout,
+        },
     )
 
 
@@ -126,31 +153,44 @@ def log_debate_context(
     opponent_last_arg: str,
     judge_feedback: str,
 ) -> None:
-    logger.info(
-        "DEBATE_CONTEXT agent=%s round=%d history_messages=%d my_last_arg_chars=%d opponent_last_arg_chars=%d judge_feedback_chars=%d",
-        agent_name,
-        round_num,
-        len(history),
-        len(my_last_arg or ""),
-        len(opponent_last_arg or ""),
-        len(judge_feedback or ""),
+    log_event(
+        logger,
+        event="debate_context_metrics",
+        message="debate context metrics",
+        fields={
+            "agent": agent_name,
+            "round_num": round_num,
+            "history_messages": len(history),
+            "my_last_arg_chars": len(my_last_arg or ""),
+            "opponent_last_arg_chars": len(opponent_last_arg or ""),
+            "judge_feedback_chars": len(judge_feedback or ""),
+        },
     )
 
 
 def log_llm_response(agent_name: str, round_num: int, response_text: str) -> None:
-    logger.info(
-        "DEBATE_OUTPUT agent=%s round=%d chars=%d hash=%s",
-        agent_name,
-        round_num,
-        len(response_text),
-        hash_text(response_text),
+    log_event(
+        logger,
+        event="debate_llm_output_metadata",
+        message="debate llm output metadata",
+        fields={
+            "agent": agent_name,
+            "round_num": round_num,
+            "chars": len(response_text),
+            "hash": hash_text(response_text),
+        },
     )
-    logger.info(
-        "DEBATE_OUTPUT_TEXT agent=%s round=%d\n%s",
-        agent_name,
-        round_num,
-        response_text,
-    )
+    if LOG_LLM_PAYLOADS:
+        log_event(
+            logger,
+            event="debate_llm_output_payload",
+            message="debate llm output payload",
+            fields={
+                "agent": agent_name,
+                "round_num": round_num,
+                "payload": response_text,
+            },
+        )
 
 
 def build_bull_round_messages(

@@ -1,7 +1,4 @@
-import logging
 from urllib.parse import urlparse
-
-logger = logging.getLogger(__name__)
 
 # Reliability mapping for financial news sources
 SOURCE_RELIABILITY_MAP = {

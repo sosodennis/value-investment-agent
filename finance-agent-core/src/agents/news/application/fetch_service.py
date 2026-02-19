@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -11,7 +12,7 @@ from src.agents.news.application.ports import (
 )
 from src.agents.news.interface.contracts import NewsSearchResultItemModel
 from src.agents.news.interface.parsers import parse_news_search_result_items
-from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import JSONObject
 
 logger = get_logger(__name__)
@@ -135,7 +136,14 @@ async def build_news_items_from_fetch_results(
                     key_prefix=f"news_{ticker_value}_{timestamp}_{index}",
                 )
             except Exception as exc:
-                logger.error("Failed to save artifact for %s: %s", url, exc)
+                log_event(
+                    logger,
+                    event="news_fetch_article_artifact_save_failed",
+                    message="failed to save news article text artifact",
+                    level=logging.ERROR,
+                    error_code="NEWS_ARTICLE_ARTIFACT_SAVE_FAILED",
+                    fields={"url": url, "ticker": ticker_value, "exception": str(exc)},
+                )
                 article_errors.append(f"Failed to save article content artifact: {exc}")
 
         try:
@@ -150,10 +158,13 @@ async def build_news_items_from_fetch_results(
             )
             news_items.append(item_dict)
         except Exception as exc:
-            logger.error(
-                "--- [News Research] ❌ Failed to create news item for URL %s: %s ---",
-                url,
-                exc,
+            log_event(
+                logger,
+                event="news_fetch_item_build_failed",
+                message="failed to build canonical news item",
+                level=logging.ERROR,
+                error_code="NEWS_ITEM_BUILD_FAILED",
+                fields={"url": url, "ticker": ticker_value, "exception": str(exc)},
             )
             article_errors.append(f"Failed to build canonical news item: {exc}")
 

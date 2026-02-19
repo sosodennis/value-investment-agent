@@ -1,8 +1,8 @@
-import traceback
+import logging
 
 from langgraph.types import Command
 
-from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.tools.logger import get_logger, log_event
 
 from ..state import AgentState
 
@@ -16,8 +16,10 @@ def consolidate_research_node(state: AgentState) -> Command:
     This node acts as a barrier/join point for parallel execution.
     """
     try:
-        logger.info(
-            "--- Consolidate Research: Framework synchronization complete. Proceeding to debate. ---"
+        log_event(
+            logger,
+            event="workflow_consolidate_research_completed",
+            message="consolidate research completed; proceeding to debate",
         )
 
         return Command(
@@ -29,10 +31,13 @@ def consolidate_research_node(state: AgentState) -> Command:
             goto="debate_agent",
         )
 
-    except Exception as e:
-        logger.error(
-            f"❌ consolidate_research_node: ERROR - {type(e).__name__}: {str(e)}"
+    except Exception as exc:
+        log_event(
+            logger,
+            event="workflow_consolidate_research_failed",
+            message="consolidate research failed",
+            level=logging.ERROR,
+            error_code="WORKFLOW_CONSOLIDATE_RESEARCH_FAILED",
+            fields={"exception": str(exc), "exception_type": type(exc).__name__},
         )
-
-        logger.error(f"consolidate_research_node: Traceback:\n{traceback.format_exc()}")
         raise

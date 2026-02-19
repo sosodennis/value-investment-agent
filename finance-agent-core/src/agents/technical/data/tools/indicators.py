@@ -1,12 +1,8 @@
-import logging
-
 import numpy as np
 import pandas as pd
 from statsmodels.tsa.stattools import adfuller
 
 from .fracdiff import frac_diff_ffd
-
-logger = logging.getLogger(__name__)
 
 
 def calculate_fd_bollinger(

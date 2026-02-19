@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import useSWR from 'swr';
+import { clientLogger } from '@/lib/logger';
 import { parseApiErrorMessage } from '@/types/protocol';
 import {
     ArtifactKind,
@@ -28,11 +29,15 @@ const fetchArtifact = async <T>(
     context: string,
     expectedKind?: ArtifactKind
 ): Promise<T> => {
-    console.log(`[useArtifact] Fetching: ${url}`);
+    clientLogger.debug('artifact.fetch.start', { url, context, expectedKind });
     try {
         const res = await fetch(url);
         if (!res.ok) {
-            console.error(`[useArtifact] HTTP Error: ${res.status} ${res.statusText}`);
+            clientLogger.error('artifact.fetch.http_error', {
+                url,
+                status: res.status,
+                statusText: res.statusText,
+            });
             throw new Error(await readErrorMessage(res));
         }
         const data: unknown = await res.json();
@@ -42,10 +47,19 @@ const fetchArtifact = async <T>(
             expectedKind
         );
         const parsed = parser(envelope.data, `${context}.data`);
-        console.log(`[useArtifact] Success:`, envelope);
+        clientLogger.debug('artifact.fetch.success', {
+            url,
+            context,
+            kind: envelope.kind,
+            version: envelope.version,
+        });
         return parsed;
     } catch (err) {
-        console.error(`[useArtifact] Fetch Error:`, err);
+        clientLogger.error('artifact.fetch.error', {
+            url,
+            context,
+            error: err instanceof Error ? err.message : String(err),
+        });
         throw err;
     }
 };

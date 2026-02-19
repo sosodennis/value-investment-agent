@@ -18,9 +18,9 @@ from src.agents.news.domain.policies import (
     build_search_tasks,
     build_site_query,
 )
+from src.shared.kernel.tools.logger import get_logger, log_event
 
-# Use the same logger setup as in the original __init__.py
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 SearchResult = dict[str, object]
 FormattedResult = dict[str, object]
@@ -57,9 +57,15 @@ def _fetch_one_sync(task: SearchTask) -> list[SearchResult]:
         for attempt in range(max_retries):
             try:
                 if attempt == 0:
-                    print(
-                        f"--- [Search] Querying: {query[:60]}... ({task.time_param}) ---",
-                        flush=True,
+                    log_event(
+                        logger,
+                        event="news_search_query_started",
+                        message="news search query started",
+                        fields={
+                            "tag": task.tag,
+                            "timeframe": task.time_param,
+                            "query_preview": query[:60],
+                        },
                     )
 
                 with DDGS() as ddgs:
@@ -67,9 +73,17 @@ def _fetch_one_sync(task: SearchTask) -> list[SearchResult]:
                     results_list = _run_query(ddgs, query, task.time_param, task.limit)
                     search_end = time.perf_counter()
 
-                    print(
-                        f"--- [Search Latency] {search_end - search_start:.2f}s for query: {query[:50]}... ({task.time_param}) ---",
-                        flush=True,
+                    log_event(
+                        logger,
+                        event="news_search_query_completed",
+                        message="news search query completed",
+                        fields={
+                            "tag": task.tag,
+                            "timeframe": task.time_param,
+                            "seconds": round(search_end - search_start, 3),
+                            "query_preview": query[:50],
+                            "result_count": len(results_list),
+                        },
                     )
 
                     if not results_list:
@@ -82,8 +96,11 @@ def _fetch_one_sync(task: SearchTask) -> list[SearchResult]:
 
             except Exception as e:
                 if _is_no_results_error(e):
-                    logger.info(
-                        f"Search returned no results for tag='{task.tag}' query='{query[:80]}'"
+                    log_event(
+                        logger,
+                        event="news_search_query_no_results",
+                        message="news search query returned no results",
+                        fields={"tag": task.tag, "query_preview": query[:80]},
                     )
                     break
 
@@ -93,8 +110,13 @@ def _fetch_one_sync(task: SearchTask) -> list[SearchResult]:
                 time.sleep(1)  # Brief pause before retry
 
     if last_error is not None:
-        logger.warning(
-            f"Search failed for tag='{task.tag}' after retries: {last_error}"
+        log_event(
+            logger,
+            event="news_search_query_failed",
+            message="news search query failed after retries",
+            level=logging.WARNING,
+            error_code="NEWS_SEARCH_QUERY_FAILED",
+            fields={"tag": task.tag, "exception": str(last_error)},
         )
     return []
 
@@ -209,7 +231,12 @@ def _log_distribution(formatted_results: list[FormattedResult]) -> None:
         cats = r.get("categories") or ["general"]
         for tag in cats:
             final_counts[tag] = final_counts.get(tag, 0) + 1
-    logger.info(f"--- [Search] Final Balanced Distribution: {final_counts} ---")
+    log_event(
+        logger,
+        event="news_search_distribution",
+        message="news search category distribution computed",
+        fields={"counts": final_counts},
+    )
 
 
 def _extract_domain(link: str) -> str:
@@ -311,8 +338,11 @@ async def news_search_multi_timeframe(
     base_term = build_base_term(ticker, company_name)
     tasks_config = build_search_tasks(base_term, q_tier1, q_tier2)
 
-    print(
-        f"--- [Search] Starting diversified parallel search for {ticker} (Company: {company_name}) ---"
+    log_event(
+        logger,
+        event="news_search_multi_timeframe_started",
+        message="news multi-timeframe search started",
+        fields={"ticker": ticker, "company_name": company_name},
     )
 
     # === Rate Limit Protection ===
@@ -328,8 +358,16 @@ async def news_search_multi_timeframe(
     formatted_results = _format_results(final_results)
     formatted_results = _sort_results(formatted_results)
 
-    logger.info(
-        f"--- [Search] Combined: {len(all_raw_results)} -> Unique: {len(unique_map)} -> Balanced: {len(formatted_results)} ---"
+    log_event(
+        logger,
+        event="news_search_multi_timeframe_completed",
+        message="news multi-timeframe search completed",
+        fields={
+            "ticker": ticker,
+            "raw_count": len(all_raw_results),
+            "unique_count": len(unique_map),
+            "balanced_count": len(formatted_results),
+        },
     )
 
     _log_distribution(formatted_results)

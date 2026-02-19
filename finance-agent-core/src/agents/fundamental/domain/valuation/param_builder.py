@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.traceable import (
     ComputedProvenance,
     ManualProvenance,
@@ -23,6 +24,7 @@ from .report_contract import (
 )
 
 TraceInput = TraceableField[float] | TraceableField[list[float]]
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -41,29 +43,65 @@ def build_params(
     ticker: str | None,
     reports_raw: list[FinancialReport | dict[str, object]] | None,
 ) -> ParamBuildResult:
+    log_event(
+        logger,
+        event="valuation_params_build_started",
+        message="valuation parameter build started",
+        fields={
+            "model_type": model_type,
+            "ticker": ticker,
+            "input_reports_count": len(reports_raw or []),
+        },
+    )
     reports = parse_financial_reports(reports_raw or [])
     if not reports:
+        log_event(
+            logger,
+            event="valuation_params_build_failed",
+            message="valuation parameter build failed due to missing reports",
+            fields={"model_type": model_type, "ticker": ticker},
+        )
         raise ValueError("No SEC XBRL financial reports available")
 
     reports_sorted = sorted(reports, key=_report_year, reverse=True)
     latest = reports_sorted[0]
 
     if model_type == "saas":
-        return _build_saas_params(ticker, latest, reports_sorted)
-    if model_type == "bank":
-        return _build_bank_params(ticker, latest, reports_sorted)
-    if model_type == "ev_revenue":
-        return _build_ev_revenue_params(ticker, latest)
-    if model_type == "ev_ebitda":
-        return _build_ev_ebitda_params(ticker, latest)
-    if model_type == "reit_ffo":
-        return _build_reit_ffo_params(ticker, latest)
-    if model_type == "residual_income":
-        return _build_residual_income_params(ticker, latest)
-    if model_type == "eva":
-        return _build_eva_params(ticker, latest)
+        result = _build_saas_params(ticker, latest, reports_sorted)
+    elif model_type == "bank":
+        result = _build_bank_params(ticker, latest, reports_sorted)
+    elif model_type == "ev_revenue":
+        result = _build_ev_revenue_params(ticker, latest)
+    elif model_type == "ev_ebitda":
+        result = _build_ev_ebitda_params(ticker, latest)
+    elif model_type == "reit_ffo":
+        result = _build_reit_ffo_params(ticker, latest)
+    elif model_type == "residual_income":
+        result = _build_residual_income_params(ticker, latest)
+    elif model_type == "eva":
+        result = _build_eva_params(ticker, latest)
+    else:
+        log_event(
+            logger,
+            event="valuation_params_build_failed",
+            message="valuation parameter build failed due to unsupported model",
+            fields={"model_type": model_type, "ticker": ticker},
+        )
+        raise ValueError(f"Unsupported model type for SEC XBRL builder: {model_type}")
 
-    raise ValueError(f"Unsupported model type for SEC XBRL builder: {model_type}")
+    log_event(
+        logger,
+        event="valuation_params_build_completed",
+        message="valuation parameter build completed",
+        fields={
+            "model_type": model_type,
+            "ticker": ticker,
+            "missing_count": len(result.missing),
+            "assumptions_count": len(result.assumptions),
+            "trace_input_count": len(result.trace_inputs),
+        },
+    )
+    return result
 
 
 def _report_year(report: FinancialReport) -> int:

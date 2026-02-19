@@ -1,7 +1,8 @@
+import logging
 import re
 from dataclasses import asdict, dataclass
 
-from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import JSONObject
 
 logger = get_logger(__name__)
@@ -57,22 +58,47 @@ class FinBERTAnalyzer:
             from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
-            logger.info(f"Loading FinBERT model: {FINBERT_MODEL_NAME} on {self.device}")
+            log_event(
+                logger,
+                event="news_finbert_load_started",
+                message="finbert model load started",
+                fields={"model": FINBERT_MODEL_NAME, "device": self.device},
+            )
             self.tokenizer = AutoTokenizer.from_pretrained(FINBERT_MODEL_NAME)
             self.model = AutoModelForSequenceClassification.from_pretrained(
                 FINBERT_MODEL_NAME
             ).to(self.device)
             self.model.eval()
-            return True
-        except ImportError as e:
-            self.load_error = (
-                f"Missing dependencies: {e}. Please install transformers and torch."
+            log_event(
+                logger,
+                event="news_finbert_load_completed",
+                message="finbert model load completed",
+                fields={"model": FINBERT_MODEL_NAME, "device": self.device},
             )
-            logger.warning(f"FinBERT disabled: {self.load_error}")
+            return True
+        except ImportError as exc:
+            self.load_error = (
+                f"Missing dependencies: {exc}. Please install transformers and torch."
+            )
+            log_event(
+                logger,
+                event="news_finbert_load_disabled",
+                message="finbert disabled due to missing dependencies",
+                level=logging.WARNING,
+                error_code="NEWS_FINBERT_DEPENDENCY_MISSING",
+                fields={"error": self.load_error},
+            )
             return False
-        except Exception as e:
-            self.load_error = str(e)
-            logger.error(f"Failed to load FinBERT model: {e}")
+        except Exception as exc:
+            self.load_error = str(exc)
+            log_event(
+                logger,
+                event="news_finbert_load_failed",
+                message="finbert model load failed",
+                level=logging.ERROR,
+                error_code="NEWS_FINBERT_LOAD_FAILED",
+                fields={"error": self.load_error},
+            )
             return False
 
     def is_available(self) -> bool:
@@ -122,8 +148,15 @@ class FinBERTAnalyzer:
                 all_scores=all_scores,
                 has_numbers=self._contains_numbers(text),
             )
-        except Exception as e:
-            logger.warning(f"FinBERT inference error: {e}")
+        except Exception as exc:
+            log_event(
+                logger,
+                event="news_finbert_inference_failed",
+                message="finbert inference failed",
+                level=logging.WARNING,
+                error_code="NEWS_FINBERT_INFERENCE_FAILED",
+                fields={"error": str(exc)},
+            )
             return None
 
     def should_skip_llm(self, result: FinBERTResult, threshold: float = 0.85) -> bool:

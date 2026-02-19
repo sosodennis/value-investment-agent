@@ -2,6 +2,7 @@
 Market Data Service for CAPM-based Hurdle Rate Calculation.
 """
 
+import logging
 from datetime import datetime, timedelta
 from functools import lru_cache
 
@@ -10,7 +11,7 @@ import pandas as pd
 import yfinance as yf
 
 # Use the project's custom logger
-from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.tools.logger import get_logger, log_event
 
 logger = get_logger(__name__)
 
@@ -63,7 +64,14 @@ def _fetch_price_series(
         )
 
         if raw_data.empty:
-            logger.warning(f"⚠️ No data returned for {ticker}")
+            log_event(
+                logger,
+                event="debate_market_price_series_empty",
+                message="market price series returned empty",
+                level=logging.WARNING,
+                error_code="DEBATE_MARKET_DATA_EMPTY",
+                fields={"ticker": ticker},
+            )
             return None
 
         cols = raw_data.columns
@@ -89,8 +97,15 @@ def _fetch_price_series(
 
         return data.dropna()
 
-    except Exception as e:
-        logger.warning(f"⚠️ Data fetch error for {ticker}: {e}")
+    except Exception as exc:
+        log_event(
+            logger,
+            event="debate_market_price_series_failed",
+            message="market price series fetch failed",
+            level=logging.WARNING,
+            error_code="DEBATE_MARKET_DATA_FETCH_FAILED",
+            fields={"ticker": ticker, "exception": str(exc)},
+        )
         return None
 
 
@@ -106,7 +121,12 @@ def get_stock_beta(
         end_date = datetime.now()
         start_date = end_date - timedelta(days=lookback_days)
 
-        logger.info(f"📊 Fetching beta data for {ticker} vs {benchmark}...")
+        log_event(
+            logger,
+            event="debate_beta_fetch_started",
+            message="beta data fetch started",
+            fields={"ticker": ticker, "benchmark": benchmark},
+        )
 
         stock_prices = _fetch_price_series(ticker, start_date, end_date)
         benchmark_prices = _fetch_price_series(benchmark, start_date, end_date)
@@ -116,7 +136,14 @@ def get_stock_beta(
 
         df_combined = pd.concat([stock_prices, benchmark_prices], axis=1, join="inner")
         if len(df_combined) < 30:
-            logger.warning(f"⚠️ Insufficient overlapping data points for {ticker}")
+            log_event(
+                logger,
+                event="debate_beta_insufficient_data",
+                message="insufficient overlapping data points for beta",
+                level=logging.WARNING,
+                error_code="DEBATE_BETA_DATA_INSUFFICIENT",
+                fields={"ticker": ticker, "points": len(df_combined)},
+            )
             return None
 
         returns = df_combined.pct_change().dropna()
@@ -130,11 +157,23 @@ def get_stock_beta(
             return None
 
         beta = covariance / market_variance
-        logger.info(f"✅ Calculated Beta for {ticker}: {beta:.2f}")
+        log_event(
+            logger,
+            event="debate_beta_calculated",
+            message="beta calculated",
+            fields={"ticker": ticker, "beta": float(beta)},
+        )
         return float(beta)
 
     except Exception:
-        logger.error(f"❌ Beta calculation failed for {ticker}", exc_info=True)
+        log_event(
+            logger,
+            event="debate_beta_calculation_failed",
+            message="beta calculation failed",
+            level=logging.ERROR,
+            error_code="DEBATE_BETA_CALC_FAILED",
+            fields={"ticker": ticker},
+        )
         return None
 
 
@@ -153,13 +192,29 @@ def calculate_capm_hurdle(
     if beta is None:
         beta = STATIC_BETA_MAP.get(risk_profile.upper(), 1.5)
         data_source = "STATIC_FALLBACK"
-        logger.warning(f"⚠️ Using static Beta ({beta}) for {ticker}")
+        log_event(
+            logger,
+            event="debate_capm_static_beta_used",
+            message="capm used static beta fallback",
+            level=logging.WARNING,
+            error_code="DEBATE_CAPM_STATIC_BETA",
+            fields={"ticker": ticker, "risk_profile": risk_profile, "beta": beta},
+        )
 
     annual_hurdle = risk_free_rate + (beta * market_risk_premium)
     quarterly_hurdle = annual_hurdle / 4.0
 
-    logger.info(
-        f"📈 CAPM: {ticker} | Hurdle: {quarterly_hurdle:.1%} (Q) | Beta: {beta:.2f} [{data_source}]"
+    log_event(
+        logger,
+        event="debate_capm_hurdle_calculated",
+        message="capm hurdle calculated",
+        fields={
+            "ticker": ticker,
+            "risk_profile": risk_profile,
+            "quarterly_hurdle": float(quarterly_hurdle),
+            "beta": float(beta),
+            "data_source": data_source,
+        },
     )
     return float(quarterly_hurdle), float(beta), data_source
 
@@ -179,12 +234,22 @@ def get_current_risk_free_rate() -> float:
         annual_yield_decimal = annual_yield_percent / 100.0
 
         quarterly_yield = annual_yield_decimal / 4.0
-        logger.info(f"📊 Dynamic Risk-Free Rate fetched: {quarterly_yield:.4%} (Q)")
+        log_event(
+            logger,
+            event="debate_risk_free_rate_fetched",
+            message="dynamic risk free rate fetched",
+            fields={"quarterly_rate": float(quarterly_yield)},
+        )
         return float(quarterly_yield)
 
-    except Exception as e:
-        logger.warning(
-            f"⚠️ Failed to fetch dynamic risk-free rate: {e}. Using fallback."
+    except Exception as exc:
+        log_event(
+            logger,
+            event="debate_risk_free_rate_fetch_failed",
+            message="failed to fetch dynamic risk free rate; using fallback",
+            level=logging.WARNING,
+            error_code="DEBATE_RISK_FREE_FETCH_FAILED",
+            fields={"exception": str(exc)},
         )
         return DEFAULT_RISK_FREE_RATE / 4.0
 
@@ -214,7 +279,14 @@ def get_dynamic_payoff_map(
         prices = _fetch_price_series(ticker, start_date, end_date)
 
         if prices is None or len(prices) < 60:
-            logger.warning(f"⚠️ Insufficient volatility data for {ticker}")
+            log_event(
+                logger,
+                event="debate_payoff_insufficient_data",
+                message="insufficient volatility data; using payoff fallback",
+                level=logging.WARNING,
+                error_code="DEBATE_PAYOFF_DATA_INSUFFICIENT",
+                fields={"ticker": ticker},
+            )
             return fallback_map
 
         returns = prices.pct_change().dropna()
@@ -233,12 +305,26 @@ def get_dynamic_payoff_map(
             "CRASH": float(sector_crash),
         }
 
-        logger.info(
-            f"💰 {ticker} Vol Map: Q_Vol={quarterly_vol:.1%} | "
-            f"Surge={dynamic_map['SURGE']} Crash={dynamic_map['CRASH']}"
+        log_event(
+            logger,
+            event="debate_payoff_map_calculated",
+            message="dynamic payoff map calculated",
+            fields={
+                "ticker": ticker,
+                "quarterly_vol": float(quarterly_vol),
+                "surge": dynamic_map["SURGE"],
+                "crash": dynamic_map["CRASH"],
+            },
         )
         return dynamic_map
 
     except Exception:
-        logger.error(f"❌ Payoff map generation failed for {ticker}", exc_info=True)
+        log_event(
+            logger,
+            event="debate_payoff_map_failed",
+            message="dynamic payoff map generation failed",
+            level=logging.ERROR,
+            error_code="DEBATE_PAYOFF_MAP_FAILED",
+            fields={"ticker": ticker},
+        )
         return fallback_map

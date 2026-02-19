@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Generic, TypeVar
 
 from pydantic import BaseModel
 
+from src.shared.kernel.tools.logger import get_logger, log_event
+
 T = TypeVar("T")
+logger = get_logger(__name__)
 
 
 class SourceType(str, Enum):
@@ -52,14 +56,50 @@ class TraceableFieldBase(BaseModel):
         p = self.provenance
 
         if isinstance(p, XBRLProvenance):
-            print(f"{indent}- {self.name}: {val_str} [XBRL: {p.concept}]")
+            log_event(
+                logger,
+                event="traceable_field_explained",
+                message="traceable field explained",
+                level=logging.INFO,
+                fields={
+                    "indent": indent,
+                    "field_name": self.name,
+                    "value": val_str,
+                    "provenance_type": "XBRL",
+                    "concept": p.concept,
+                },
+            )
         elif isinstance(p, ComputedProvenance):
-            print(f"{indent}- {self.name}: {val_str} [Calc: {p.expression}]")
+            log_event(
+                logger,
+                event="traceable_field_explained",
+                message="traceable field explained",
+                level=logging.INFO,
+                fields={
+                    "indent": indent,
+                    "field_name": self.name,
+                    "value": val_str,
+                    "provenance_type": "CALCULATION",
+                    "expression": p.expression,
+                },
+            )
             for _, field in p.inputs.items():
                 if isinstance(field, TraceableFieldBase):
                     field.explain(level + 1)
         elif isinstance(p, ManualProvenance):
-            print(f"{indent}- {self.name}: {val_str} [MANUAL: {p.description}]")
+            log_event(
+                logger,
+                event="traceable_field_explained",
+                message="traceable field explained",
+                level=logging.INFO,
+                fields={
+                    "indent": indent,
+                    "field_name": self.name,
+                    "value": val_str,
+                    "provenance_type": "MANUAL",
+                    "description": p.description,
+                },
+            )
 
 
 if TYPE_CHECKING:

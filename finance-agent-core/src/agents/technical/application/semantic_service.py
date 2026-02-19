@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -11,7 +12,7 @@ from src.agents.technical.domain.models import (
     SemanticTagPolicyInput,
     SemanticTagPolicyResult,
 )
-from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import JSONObject
 
 logger = get_logger(__name__)
@@ -134,9 +135,13 @@ async def assemble_backtest_context(
             chart_data=chart_data,
         )
     except Exception as exc:
-        logger.warning(
-            "Backtesting failed: %s. Proceeding without statistical verification.",
-            exc,
+        log_event(
+            logger,
+            event="technical_semantic_backtest_context_failed",
+            message="technical semantic backtest context failed; proceeding without statistical verification",
+            level=logging.WARNING,
+            error_code="TECHNICAL_SEMANTIC_BACKTEST_CONTEXT_FAILED",
+            fields={"exception": str(exc)},
         )
         return BacktestContextResult(
             backtest_context="",

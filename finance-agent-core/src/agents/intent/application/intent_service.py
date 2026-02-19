@@ -5,6 +5,7 @@ Uses LLM to extract intent (Company, Model Preference) from user query.
 
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import Callable
 from typing import Protocol
@@ -22,7 +23,7 @@ from src.agents.intent.interface.prompt_renderers import (
     build_search_extraction_chat_prompt,
 )
 from src.infrastructure.llm.provider import get_llm
-from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.tools.logger import get_logger, log_event
 
 # Load environment variables
 load_dotenv(find_dotenv())
@@ -109,7 +110,14 @@ def extract_candidates_from_search(
             raise TypeError("search extraction output shape is invalid")
         return [to_ticker_candidate_fn(candidate) for candidate in candidates_raw]
     except Exception as exc:
-        logger.warning(f"LLM Search Extraction failed: {exc}. Returning empty list.")
+        log_event(
+            logger,
+            event="intent_search_extraction_failed",
+            message="llm search extraction failed; returning empty candidates",
+            level=logging.WARNING,
+            error_code="INTENT_SEARCH_EXTRACTION_FAILED",
+            fields={"exception": str(exc)},
+        )
         return []
 
 
@@ -141,7 +149,12 @@ def extract_intent(
             raise TypeError("intent extraction output shape is invalid")
         return response
     except Exception as exc:
-        logger.warning(
-            "LLM Extraction failed: %s. Using heuristic resilience path.", exc
+        log_event(
+            logger,
+            event="intent_extraction_failed_fallback_heuristic",
+            message="llm intent extraction failed; using heuristic fallback",
+            level=logging.WARNING,
+            error_code="INTENT_EXTRACTION_FALLBACK_HEURISTIC",
+            fields={"exception": str(exc)},
         )
         return _heuristic_extract(query, intent_model_factory=intent_model_type)

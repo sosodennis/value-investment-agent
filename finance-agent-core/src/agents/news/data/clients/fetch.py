@@ -4,7 +4,9 @@ import time
 
 import trafilatura
 
-logger = logging.getLogger(__name__)
+from src.shared.kernel.tools.logger import get_logger, log_event
+
+logger = get_logger(__name__)
 
 
 def fetch_clean_text(url: str, max_chars: int = 6000) -> str | None:
@@ -15,10 +17,22 @@ def fetch_clean_text(url: str, max_chars: int = 6000) -> str | None:
     url = url.rstrip(":")
 
     try:
-        print(f"--- [Tool: fetch_clean_text] Fetching URL: {url} ---")
+        log_event(
+            logger,
+            event="news_fetch_sync_started",
+            message="news sync fetch started",
+            fields={"url": url},
+        )
         downloaded = trafilatura.fetch_url(url)
         if not downloaded:
-            logger.warning(f"Failed to fetch URL: {url}")
+            log_event(
+                logger,
+                event="news_fetch_sync_failed",
+                message="news sync fetch failed due to empty download",
+                level=logging.WARNING,
+                error_code="NEWS_FETCH_SYNC_DOWNLOAD_EMPTY",
+                fields={"url": url},
+            )
             return None
 
         text = trafilatura.extract(
@@ -29,16 +43,32 @@ def fetch_clean_text(url: str, max_chars: int = 6000) -> str | None:
         )
 
         if not text:
-            logger.warning(f"Failed to extract text from URL: {url}")
+            log_event(
+                logger,
+                event="news_fetch_sync_failed",
+                message="news sync fetch failed due to empty extraction",
+                level=logging.WARNING,
+                error_code="NEWS_FETCH_SYNC_EXTRACT_EMPTY",
+                fields={"url": url},
+            )
             return None
 
-        print(
-            f"--- [Tool: fetch_clean_text] Successfully extracted {len(text)} chars from {url} ---",
-            flush=True,
+        log_event(
+            logger,
+            event="news_fetch_sync_completed",
+            message="news sync fetch completed",
+            fields={"url": url, "chars": len(text)},
         )
         return text[:max_chars]
-    except Exception as e:
-        logger.error(f"Error fetching/cleaning text from {url}: {e}")
+    except Exception as exc:
+        log_event(
+            logger,
+            event="news_fetch_sync_failed",
+            message="news sync fetch failed",
+            level=logging.ERROR,
+            error_code="NEWS_FETCH_SYNC_FAILED",
+            fields={"url": url, "exception": str(exc)},
+        )
         return None
 
 
@@ -60,16 +90,24 @@ async def fetch_clean_text_async(url: str, max_chars: int = 6000) -> str | None:
     try:
         # 1. Async download (true non-blocking)
         dl_start = time.perf_counter()
+        log_event(
+            logger,
+            event="news_fetch_async_started",
+            message="news async fetch started",
+            fields={"url": url},
+        )
         async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
-            print(f"--- [Fetch Async] 🚀 Requesting: {url} ---", flush=True)
             resp = await client.get(url, headers=headers)
 
             if resp.status_code != 200:
-                print(
-                    f"--- [Fetch Latency] ❌ FAILED: Status {resp.status_code} for {url} ---",
-                    flush=True,
+                log_event(
+                    logger,
+                    event="news_fetch_async_failed",
+                    message="news async fetch failed due to non-200 response",
+                    level=logging.WARNING,
+                    error_code="NEWS_FETCH_ASYNC_HTTP_STATUS",
+                    fields={"url": url, "status_code": resp.status_code},
                 )
-                logger.warning(f"Failed to fetch {url}: Status {resp.status_code}")
                 return None
 
             html_content = resp.text
@@ -87,34 +125,51 @@ async def fetch_clean_text_async(url: str, max_chars: int = 6000) -> str | None:
         parse_end = time.perf_counter()
 
         if not text:
-            print(
-                f"--- [Fetch Latency] ❌ FAILED: Extraction returned empty for {url} ---"
+            log_event(
+                logger,
+                event="news_fetch_async_failed",
+                message="news async fetch failed due to empty extraction",
+                level=logging.WARNING,
+                error_code="NEWS_FETCH_ASYNC_EXTRACT_EMPTY",
+                fields={"url": url},
             )
-            logger.warning(f"Failed to extract text from {url}")
             return None
 
         total_duration = parse_end - dl_start
         dl_duration = dl_end - dl_start
         parse_duration = parse_end - parse_start
 
-        print(
-            f"--- [Fetch Latency] {total_duration:.2f}s for {url} (Download: {dl_duration:.2f}s, Parse: {parse_duration:.2f}s) ---",
-            flush=True,
+        log_event(
+            logger,
+            event="news_fetch_async_completed",
+            message="news async fetch completed",
+            fields={
+                "url": url,
+                "chars": len(text),
+                "total_seconds": round(total_duration, 3),
+                "download_seconds": round(dl_duration, 3),
+                "parse_seconds": round(parse_duration, 3),
+            },
         )
-        print(f"--- [Fetch Async] ✅ Extracted {len(text)} chars ---", flush=True)
         return text[:max_chars]
 
-    except httpx.RequestError as e:
-        print(
-            f"--- [Fetch Latency] ❌ FAILED: Network error for {url}: {e} ---",
-            flush=True,
+    except httpx.RequestError as exc:
+        log_event(
+            logger,
+            event="news_fetch_async_network_failed",
+            message="news async fetch failed due to network error",
+            level=logging.ERROR,
+            error_code="NEWS_FETCH_ASYNC_NETWORK_FAILED",
+            fields={"url": url, "exception": str(exc)},
         )
-        logger.error(f"Network error fetching {url}: {e}")
         return None
-    except Exception as e:
-        print(
-            f"--- [Fetch Latency] ❌ FAILED: Unexpected error for {url}: {e} ---",
-            flush=True,
+    except Exception as exc:
+        log_event(
+            logger,
+            event="news_fetch_async_failed",
+            message="news async fetch failed",
+            level=logging.ERROR,
+            error_code="NEWS_FETCH_ASYNC_FAILED",
+            fields={"url": url, "exception": str(exc)},
         )
-        logger.error(f"Parsing error for {url}: {e}")
         return None

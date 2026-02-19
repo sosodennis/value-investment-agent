@@ -7,12 +7,14 @@ This module only translates semantic tags into natural-language narration.
 
 from __future__ import annotations
 
+import logging
+
 from src.agents.technical.domain.prompt_builder import build_interpretation_prompt_spec
 from src.agents.technical.interface.prompt_renderers import (
     build_interpretation_chat_prompt,
 )
 from src.infrastructure.llm.provider import get_llm
-from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import JSONObject
 
 logger = get_logger(__name__)
@@ -26,7 +28,12 @@ async def generate_interpretation(
 ) -> str:
     risk_level = str(tags_dict.get("risk_level", "medium"))
     try:
-        logger.info("--- TA: Generating LLM interpretation ---")
+        log_event(
+            logger,
+            event="technical_llm_interpretation_started",
+            message="technical llm interpretation started",
+            fields={"ticker": ticker},
+        )
         prompt_spec = build_interpretation_prompt_spec()
 
         prompt = build_interpretation_chat_prompt(
@@ -56,9 +63,21 @@ async def generate_interpretation(
         )
 
         interpretation = str(response.content).strip()
-        logger.info("✅ Generated interpretation: %s...", interpretation)
+        log_event(
+            logger,
+            event="technical_llm_interpretation_completed",
+            message="technical llm interpretation completed",
+            fields={"ticker": ticker, "interpretation_preview": interpretation[:120]},
+        )
         return interpretation
     except Exception as exc:
-        logger.error("❌ LLM interpretation failed: %s", exc)
+        log_event(
+            logger,
+            event="technical_llm_interpretation_failed",
+            message="technical llm interpretation failed",
+            level=logging.ERROR,
+            error_code="TECHNICAL_LLM_INTERPRETATION_FAILED",
+            fields={"ticker": ticker, "exception": str(exc)},
+        )
         z_score = tags_dict.get("z_score", "N/A")
         return f"Technical analysis complete. Z-Score: {z_score}, Risk: {risk_level}"

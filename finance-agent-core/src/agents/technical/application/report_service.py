@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Callable
 from typing import Protocol
@@ -8,7 +9,7 @@ from src.agents.technical.application.semantic_service import (
     SemanticPipelineResult,
     semantic_tags_to_dict,
 )
-from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
 
 logger = get_logger(__name__)
@@ -65,7 +66,14 @@ async def build_semantic_report_update(
         ta_update["artifact"] = artifact
         return ta_update
     except Exception as exc:
-        logger.error(f"Failed to generate artifact in node: {exc}")
+        log_event(
+            logger,
+            event="technical_semantic_report_artifact_failed",
+            message="technical semantic report artifact generation failed",
+            level=logging.ERROR,
+            error_code="TECHNICAL_SEMANTIC_ARTIFACT_FAILED",
+            fields={"ticker": ticker, "exception": str(exc)},
+        )
         tags_dict = semantic_tags_to_dict(pipeline_result.tags_result)
         return _fallback_ta_update(
             tags_dict=tags_dict,

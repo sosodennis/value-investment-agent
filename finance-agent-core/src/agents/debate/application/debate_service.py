@@ -38,7 +38,7 @@ from src.agents.debate.domain.fact_builders import (
     summarize_facts_by_source,
 )
 from src.agents.debate.domain.models import EvidenceFact, FactBundle
-from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.tools.logger import get_logger, log_event
 
 logger = get_logger(__name__)
 
@@ -233,11 +233,16 @@ async def execute_moderator_round(
     bull_thesis = str(debate_map.get("bull_thesis") or "")
     bear_thesis = str(debate_map.get("bear_thesis") or "")
     similarity, is_sycophantic = detector.check_consensus(bull_thesis, bear_thesis)
-    logger.info(
-        "DEBATE_SYCOPHANCY_CHECK round=%d similarity=%.4f threshold=0.8 flagged=%s",
-        round_num,
-        similarity,
-        is_sycophantic,
+    log_event(
+        logger,
+        event="debate_sycophancy_checked",
+        message="debate sycophancy check completed",
+        fields={
+            "round_num": round_num,
+            "similarity": similarity,
+            "threshold": 0.8,
+            "flagged": is_sycophantic,
+        },
     )
 
     compressed_reports = await get_debate_reports_text(

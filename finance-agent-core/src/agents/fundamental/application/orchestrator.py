@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
@@ -38,7 +39,7 @@ from src.agents.fundamental.interface.serializers import (
     serialize_model_selection_details,
 )
 from src.shared.cross_agent.domain.market_identity import CompanyProfile
-from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
 
 logger = get_logger(__name__)
@@ -166,17 +167,23 @@ class FundamentalOrchestrator:
         intent_state = read_intent_state(state)
         resolved_ticker = intent_state.resolved_ticker
         if resolved_ticker is None:
-            logger.error(
-                "--- Fundamental Analysis: No resolved ticker available, cannot proceed ---"
+            log_event(
+                logger,
+                event="fundamental_financial_health_missing_ticker",
+                message="fundamental financial health missing resolved ticker",
+                level=logging.ERROR,
+                error_code="FUNDAMENTAL_TICKER_MISSING",
             )
             return FundamentalNodeResult(
                 update=build_financial_health_missing_ticker_update(),
                 goto="END",
             )
 
-        logger.info(
-            "--- Fundamental Analysis: Fetching financial health data for %s ---",
-            resolved_ticker,
+        log_event(
+            logger,
+            event="fundamental_financial_health_started",
+            message="fundamental financial health started",
+            fields={"ticker": resolved_ticker},
         )
         try:
             financial_reports_raw = fetch_financial_data_fn(resolved_ticker)
@@ -204,9 +211,13 @@ class FundamentalOrchestrator:
                     preview,
                 )
             else:
-                logger.warning(
-                    "Could not fetch financial data for %s, proceeding without it",
-                    resolved_ticker,
+                log_event(
+                    logger,
+                    event="fundamental_financial_health_empty_reports",
+                    message="financial health reports unavailable; continuing without reports",
+                    level=logging.WARNING,
+                    error_code="FUNDAMENTAL_REPORTS_UNAVAILABLE",
+                    fields={"ticker": resolved_ticker},
                 )
 
             return FundamentalNodeResult(
@@ -217,7 +228,14 @@ class FundamentalOrchestrator:
                 goto="model_selection",
             )
         except Exception as exc:
-            logger.error("Financial Health Node Failed: %s", exc, exc_info=True)
+            log_event(
+                logger,
+                event="fundamental_financial_health_failed",
+                message="fundamental financial health failed",
+                level=logging.ERROR,
+                error_code="FUNDAMENTAL_FINANCIAL_HEALTH_FAILED",
+                fields={"exception": str(exc), "ticker": resolved_ticker},
+            )
             return FundamentalNodeResult(
                 update=build_node_error_update(
                     node="financial_health",
@@ -240,8 +258,13 @@ class FundamentalOrchestrator:
             resolved_ticker = intent_state.resolved_ticker
 
             if profile is None:
-                logger.warning(
-                    "--- Fundamental Analysis: Missing company profile, cannot select model ---"
+                log_event(
+                    logger,
+                    event="fundamental_model_selection_profile_missing",
+                    message="fundamental model selection missing company profile",
+                    level=logging.WARNING,
+                    error_code="FUNDAMENTAL_PROFILE_MISSING",
+                    fields={"ticker": resolved_ticker},
                 )
                 return FundamentalNodeResult(
                     update=build_model_selection_waiting_update(),
@@ -285,7 +308,14 @@ class FundamentalOrchestrator:
                     financial_reports=financial_reports,
                 )
             except Exception as exc:
-                logger.error("Failed to generate model selection artifact: %s", exc)
+                log_event(
+                    logger,
+                    event="fundamental_model_selection_artifact_failed",
+                    message="fundamental model selection artifact generation failed",
+                    level=logging.ERROR,
+                    error_code="FUNDAMENTAL_MODEL_ARTIFACT_FAILED",
+                    fields={"exception": str(exc), "ticker": resolved_ticker},
+                )
                 artifact, report_id = None, None
 
             fa_update: JSONObject = {
@@ -306,7 +336,14 @@ class FundamentalOrchestrator:
                 goto="calculation",
             )
         except Exception as exc:
-            logger.error("Model Selection Node Failed: %s", exc, exc_info=True)
+            log_event(
+                logger,
+                event="fundamental_model_selection_failed",
+                message="fundamental model selection failed",
+                level=logging.ERROR,
+                error_code="FUNDAMENTAL_MODEL_SELECTION_FAILED",
+                fields={"exception": str(exc)},
+            )
             return FundamentalNodeResult(
                 update=build_node_error_update(
                     node="model_selection",
@@ -324,7 +361,11 @@ class FundamentalOrchestrator:
         ],
         get_skill_fn: Callable[[str], object | None],
     ) -> FundamentalNodeResult:
-        logger.info("--- Fundamental Analysis: Running valuation calculation ---")
+        log_event(
+            logger,
+            event="fundamental_valuation_started",
+            message="fundamental valuation started",
+        )
         try:
             fundamental_state = read_fundamental_state(state)
             fundamental = fundamental_state.context
@@ -358,21 +399,32 @@ class FundamentalOrchestrator:
             build_result = build_params_fn(model_type, ticker, reports_raw)
 
             if build_result.assumptions:
-                logger.warning(
-                    "Controlled assumptions applied for %s: %s",
-                    model_type,
-                    "; ".join(build_result.assumptions),
+                log_event(
+                    logger,
+                    event="fundamental_valuation_assumptions_applied",
+                    message="controlled valuation assumptions applied",
+                    level=logging.WARNING,
+                    error_code="FUNDAMENTAL_ASSUMPTIONS_APPLIED",
+                    fields={
+                        "model_type": model_type,
+                        "assumption_count": len(build_result.assumptions),
+                        "assumptions": build_result.assumptions,
+                    },
                 )
 
             if build_result.missing:
-                logger.error(
-                    "--- Fundamental Analysis: Missing valuation inputs for ticker=%s model=%s missing=%s assumptions=%s ---",
-                    ticker or "unknown",
-                    model_type,
-                    ", ".join(build_result.missing),
-                    "; ".join(build_result.assumptions)
-                    if build_result.assumptions
-                    else "none",
+                log_event(
+                    logger,
+                    event="fundamental_valuation_missing_inputs",
+                    message="fundamental valuation missing required inputs",
+                    level=logging.ERROR,
+                    error_code="FUNDAMENTAL_VALUATION_INPUTS_MISSING",
+                    fields={
+                        "ticker": ticker,
+                        "model_type": model_type,
+                        "missing_inputs": build_result.missing,
+                        "assumptions": build_result.assumptions,
+                    },
                 )
                 return FundamentalNodeResult(
                     update=self.build_valuation_missing_inputs_update(
@@ -410,7 +462,14 @@ class FundamentalOrchestrator:
                 goto="END",
             )
         except Exception as exc:
-            logger.error("Valuation Node Failed: %s", exc, exc_info=True)
+            log_event(
+                logger,
+                event="fundamental_valuation_failed",
+                message="fundamental valuation failed",
+                level=logging.ERROR,
+                error_code="FUNDAMENTAL_VALUATION_FAILED",
+                fields={"exception": str(exc)},
+            )
             return FundamentalNodeResult(
                 update=self.build_valuation_error_update(str(exc)),
                 goto="END",

@@ -16,7 +16,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.tools.logger import get_logger, log_event
 
 logger = get_logger(__name__)
 
@@ -108,10 +108,16 @@ class MeanReversionStrategy(BaseStrategy):
         signal[exit_mask] = 0  # Exit to Cash
 
         # [Logging]
-        logger.info(
-            f"Strategy [{self.name}] Analysis: "
-            f"Z={ctx.z_score.iloc[-1]:.2f} | "
-            f"Signals Generated: Entries={(signal == -1).sum()}, Exits={(signal == 0).sum()}"
+        log_event(
+            logger,
+            event="technical_strategy_signal_generated",
+            message="technical strategy generated signals",
+            fields={
+                "strategy": self.name,
+                "latest_z_score": float(ctx.z_score.iloc[-1]),
+                "entry_count": int((signal == -1).sum()),
+                "exit_count": int((signal == 0).sum()),
+            },
         )
         return signal
 
@@ -147,10 +153,17 @@ class MomentumExhaustionStrategy(BaseStrategy):
         signal[exit_mask] = 0  # Exit to Cash
 
         # [Logging]
-        logger.info(
-            f"Strategy [{self.name}] Analysis: "
-            f"Z={ctx.z_score.iloc[-1]:.2f}, Prob={ctx.stat_strength.iloc[-1]:.1f}% | "
-            f"Signals Generated: Entries={entry_mask.sum()}, Exits={(signal == 0).sum()}"
+        log_event(
+            logger,
+            event="technical_strategy_signal_generated",
+            message="technical strategy generated signals",
+            fields={
+                "strategy": self.name,
+                "latest_z_score": float(ctx.z_score.iloc[-1]),
+                "latest_probability": float(ctx.stat_strength.iloc[-1]),
+                "entry_count": int(entry_mask.sum()),
+                "exit_count": int((signal == 0).sum()),
+            },
         )
         return signal
 
@@ -187,10 +200,18 @@ class PerfectStormStrategy(BaseStrategy):
         signal[exit_mask] = 0  # Stricter exit for this setup
 
         # [Logging]
-        logger.info(
-            f"Strategy [{self.name}] Analysis: "
-            f"Z={ctx.z_score.iloc[-1]:.2f}, OBV_Z={ctx.obv_z.iloc[-1]:.2f}, Price={ctx.prices.iloc[-1]:.2f} | "
-            f"Signals Generated: Entries={entry_mask.sum()}, Exits={exit_mask.sum()}"
+        log_event(
+            logger,
+            event="technical_strategy_signal_generated",
+            message="technical strategy generated signals",
+            fields={
+                "strategy": self.name,
+                "latest_z_score": float(ctx.z_score.iloc[-1]),
+                "latest_obv_z": float(ctx.obv_z.iloc[-1]),
+                "latest_price": float(ctx.prices.iloc[-1]),
+                "entry_count": int(entry_mask.sum()),
+                "exit_count": int(exit_mask.sum()),
+            },
         )
         return signal
 
@@ -250,10 +271,19 @@ class HealthyTrendFollowingStrategy(BaseStrategy):
         total_entries = entry_mask.sum()
         total_exits = exit_mask.sum()
 
-        logger.info(
-            f"Strategy [{self.name}] Analysis: "
-            f"Price={latest_price:.2f}, Z={latest_z:.2f}, Prob={latest_prob:.1f}%, MA20={latest_ma:.2f} | "
-            f"Signals Generated: Entries={total_entries}, Exits={total_exits}"
+        log_event(
+            logger,
+            event="technical_strategy_signal_generated",
+            message="technical strategy generated signals",
+            fields={
+                "strategy": self.name,
+                "latest_price": float(latest_price),
+                "latest_z_score": float(latest_z),
+                "latest_probability": float(latest_prob),
+                "latest_ma20": float(latest_ma) if pd.notna(latest_ma) else None,
+                "entry_count": int(total_entries),
+                "exit_count": int(total_exits),
+            },
         )
 
         return signal

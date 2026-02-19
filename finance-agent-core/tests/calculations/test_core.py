@@ -1,6 +1,6 @@
 import pytest
 
-from src.engine.core import CalculationGraph
+from src.agents.fundamental.domain.valuation.engine.core import CalculationGraph
 
 
 def test_add_node_no_func():

@@ -10,12 +10,13 @@ Key Features:
 3. Transaction Costs: Simulates slippage and commissions for realism.
 """
 
+import logging
 from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
 
-from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.tools.logger import get_logger, log_event
 
 from .strategies import ALL_STRATEGIES, StrategyContext
 
@@ -97,7 +98,6 @@ class CombinedBacktester:
             bb_upper=self.bb_upper,
             bb_lower=self.bb_lower,
         )
-        # logger.info(f"Strategy Context Generated: {self.ctx}")
 
         # Register strategies (easy to extend by adding to ALL_STRATEGIES)
         self.strategies = ALL_STRATEGIES
@@ -345,8 +345,11 @@ class WalkForwardOptimizer:
                 - selection_log: List of strategy selections per period
                 - full_backtest_results: Original full backtest results
         """
-        logger.info(
-            f"Starting Walk-Forward Analysis (train={train_window}, test={test_window})"
+        log_event(
+            logger,
+            event="technical_wfa_started",
+            message="technical walk-forward analysis started",
+            fields={"train_window": train_window, "test_window": test_window},
         )
 
         # 1. Pre-calculate all strategies' full-period returns (vectorized, one-time)
@@ -355,7 +358,13 @@ class WalkForwardOptimizer:
         # Check if any strategies generated trades
         valid_strategies = {k: v for k, v in full_results.items() if v.total_trades > 0}
         if not valid_strategies:
-            logger.warning("No strategies generated trades. WFA aborted.")
+            log_event(
+                logger,
+                event="technical_wfa_no_trades",
+                message="technical walk-forward analysis aborted due to zero trades",
+                level=logging.WARNING,
+                error_code="TECHNICAL_WFA_NO_TRADES",
+            )
             return None
 
         # 2. Prepare timeline
@@ -364,8 +373,16 @@ class WalkForwardOptimizer:
 
         # Check minimum data requirement
         if n_days < train_window + test_window:
-            logger.warning(
-                f"Insufficient data for WFA. Need {train_window + test_window} days, have {n_days}."
+            log_event(
+                logger,
+                event="technical_wfa_insufficient_data",
+                message="technical walk-forward analysis aborted due to insufficient data",
+                level=logging.WARNING,
+                error_code="TECHNICAL_WFA_INSUFFICIENT_DATA",
+                fields={
+                    "required_days": train_window + test_window,
+                    "available_days": n_days,
+                },
             )
             return None
 
@@ -446,8 +463,16 @@ class WalkForwardOptimizer:
         else:
             sharpe = 0.0
 
-        logger.info(
-            f"WFA Complete: Sharpe={sharpe:.2f}, Total Return={total_ret*100:.1f}%, Max DD={max_dd*100:.1f}%"
+        log_event(
+            logger,
+            event="technical_wfa_completed",
+            message="technical walk-forward analysis completed",
+            fields={
+                "wfa_sharpe": float(sharpe),
+                "wfa_total_return": float(total_ret),
+                "wfa_max_drawdown": float(max_dd),
+                "selection_count": len(selection_log),
+            },
         )
 
         return {

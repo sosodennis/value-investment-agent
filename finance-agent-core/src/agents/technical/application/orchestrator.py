@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 
@@ -35,7 +36,7 @@ from src.agents.technical.interface.serializers import (
     build_data_fetch_preview,
     build_fracdiff_progress_preview,
 )
-from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import JSONObject
 
 logger = get_logger(__name__)
@@ -62,25 +63,50 @@ class TechnicalOrchestrator:
     ) -> TechnicalNodeResult:
         resolved_ticker = resolved_ticker_from_state(state)
         if resolved_ticker is None:
-            logger.error("--- TA: No resolved ticker available, cannot proceed ---")
+            log_event(
+                logger,
+                event="technical_data_fetch_missing_ticker",
+                message="technical data fetch skipped due to missing resolved ticker",
+                level=logging.ERROR,
+                error_code="TECHNICAL_TICKER_MISSING",
+            )
             return TechnicalNodeResult(
                 update=build_data_fetch_error_update("No resolved ticker available"),
                 goto="END",
             )
 
-        logger.info(f"--- TA: Fetching data for {resolved_ticker} ---")
+        log_event(
+            logger,
+            event="technical_data_fetch_started",
+            message="technical data fetch started",
+            fields={"ticker": resolved_ticker},
+        )
 
         try:
             df = fetch_daily_ohlcv_fn(resolved_ticker)
         except Exception as exc:
-            logger.error(f"--- TA: Data fetch failed for {resolved_ticker}: {exc} ---")
+            log_event(
+                logger,
+                event="technical_data_fetch_failed",
+                message="technical data fetch failed",
+                level=logging.ERROR,
+                error_code="TECHNICAL_DATA_FETCH_FAILED",
+                fields={"ticker": resolved_ticker, "exception": str(exc)},
+            )
             return TechnicalNodeResult(
                 update=build_data_fetch_error_update(f"Data fetch failed: {str(exc)}"),
                 goto="END",
             )
 
         if df is None or df.empty:
-            logger.warning(f"⚠️  Could not fetch data for {resolved_ticker}")
+            log_event(
+                logger,
+                event="technical_data_fetch_empty",
+                message="technical data fetch returned empty frame",
+                level=logging.WARNING,
+                error_code="TECHNICAL_DATA_EMPTY",
+                fields={"ticker": resolved_ticker},
+            )
             return TechnicalNodeResult(
                 update=build_data_fetch_error_update(
                     "Empty data returned from provider"
@@ -137,13 +163,21 @@ class TechnicalOrchestrator:
         calculate_fd_macd_fn: Callable[..., JSONObject],
         calculate_fd_obv_fn: Callable[..., JSONObject],
     ) -> TechnicalNodeResult:
-        logger.info("--- TA: Computing Rolling FracDiff ---")
+        log_event(
+            logger,
+            event="technical_fracdiff_started",
+            message="technical fracdiff computation started",
+        )
 
         technical_context = technical_state_from_state(state)
         price_artifact_id = technical_context.price_artifact_id
         if price_artifact_id is None:
-            logger.error(
-                "--- TA: No price artifact ID available for FracDiff computation ---"
+            log_event(
+                logger,
+                event="technical_fracdiff_missing_price_artifact_id",
+                message="technical fracdiff failed due to missing price artifact id",
+                level=logging.ERROR,
+                error_code="TECHNICAL_PRICE_ARTIFACT_ID_MISSING",
             )
             return TechnicalNodeResult(
                 update=build_fracdiff_error_update("Missing price artifact ID"),
@@ -153,8 +187,13 @@ class TechnicalOrchestrator:
         try:
             price_data = await self.port.load_price_series(price_artifact_id)
             if price_data is None:
-                logger.error(
-                    f"--- TA: Price artifact {price_artifact_id} not found ---"
+                log_event(
+                    logger,
+                    event="technical_fracdiff_price_artifact_not_found",
+                    message="technical fracdiff failed due to missing price artifact",
+                    level=logging.ERROR,
+                    error_code="TECHNICAL_PRICE_ARTIFACT_NOT_FOUND",
+                    fields={"price_artifact_id": price_artifact_id},
                 )
                 return TechnicalNodeResult(
                     update=build_fracdiff_error_update(
@@ -206,8 +245,13 @@ class TechnicalOrchestrator:
                 key_prefix=key_prefix if isinstance(key_prefix, str) else None,
             )
         except Exception as exc:
-            logger.error(
-                f"--- TA: FracDiff computation crash: {exc} ---", exc_info=True
+            log_event(
+                logger,
+                event="technical_fracdiff_failed",
+                message="technical fracdiff computation failed",
+                level=logging.ERROR,
+                error_code="TECHNICAL_FRACDIFF_FAILED",
+                fields={"exception": str(exc)},
             )
             return TechnicalNodeResult(
                 update=build_fracdiff_error_update(f"Computation crashed: {str(exc)}"),
@@ -261,13 +305,23 @@ class TechnicalOrchestrator:
         wfa_optimizer_factory: type[object],
         format_wfa_for_llm_fn: Callable[[object], str],
     ) -> TechnicalNodeResult:
-        logger.info("--- TA: Generating semantic interpretation ---")
+        log_event(
+            logger,
+            event="technical_semantic_translate_started",
+            message="technical semantic translation started",
+        )
 
         ctx_raw = state.get("technical_analysis", {})
         ctx = ctx_raw if isinstance(ctx_raw, Mapping) else {}
         ticker = resolved_ticker_from_state(state)
         if ticker is None:
-            logger.error("--- TA: Missing resolved ticker for semantic translation ---")
+            log_event(
+                logger,
+                event="technical_semantic_translate_missing_ticker",
+                message="technical semantic translation failed due to missing ticker",
+                level=logging.ERROR,
+                error_code="TECHNICAL_SEMANTIC_TICKER_MISSING",
+            )
             error_update = build_semantic_error_update(
                 "Missing intent_extraction.resolved_ticker"
             )
@@ -277,7 +331,13 @@ class TechnicalOrchestrator:
         optimal_d = technical_context.optimal_d
         z_score = technical_context.z_score_latest
         if optimal_d is None or z_score is None:
-            logger.error("--- TA: No FracDiff metrics available for translation ---")
+            log_event(
+                logger,
+                event="technical_semantic_translate_missing_metrics",
+                message="technical semantic translation failed due to missing fracdiff metrics",
+                level=logging.ERROR,
+                error_code="TECHNICAL_SEMANTIC_METRICS_MISSING",
+            )
             error_update = build_semantic_error_update(
                 "No FracDiff metrics available for translation"
             )
@@ -323,10 +383,21 @@ class TechnicalOrchestrator:
                     },
                 )
             ]
+            log_event(
+                logger,
+                event="technical_semantic_translate_completed",
+                message="technical semantic translation completed",
+                fields={"ticker": ticker},
+            )
             return TechnicalNodeResult(update=success_update.update, goto="END")
         except Exception as exc:
-            logger.error(
-                f"--- TA: Semantic translation failed: {exc} ---", exc_info=True
+            log_event(
+                logger,
+                event="technical_semantic_translate_failed",
+                message="technical semantic translation failed",
+                level=logging.ERROR,
+                error_code="TECHNICAL_SEMANTIC_TRANSLATION_FAILED",
+                fields={"ticker": ticker, "exception": str(exc)},
             )
             error_update = build_semantic_error_update(
                 f"Semantic translation failed: {str(exc)}"

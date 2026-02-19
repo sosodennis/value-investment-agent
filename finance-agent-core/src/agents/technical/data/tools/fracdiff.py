@@ -4,7 +4,9 @@ import numpy as np
 import pandas as pd
 from statsmodels.tsa.stattools import adfuller
 
-logger = logging.getLogger(__name__)
+from src.shared.kernel.tools.logger import get_logger, log_event
+
+logger = get_logger(__name__)
 
 
 def get_weights_ffd(d: float, thres: float = 1e-4) -> np.ndarray:
@@ -44,8 +46,12 @@ def find_optimal_d(
     Find minimum d value that achieves ADF stationarity using LOG-PRICES and FFD.
     """
     if (prices <= 0).any():
-        logger.warning(
-            "⚠️ Detected zero or negative prices. Filtering them out for log transform."
+        log_event(
+            logger,
+            event="technical_fracdiff_non_positive_price_filtered",
+            message="technical fracdiff filtered non-positive prices before log transform",
+            level=logging.WARNING,
+            error_code="TECHNICAL_FRACDIFF_NON_POSITIVE_PRICE",
         )
         prices = prices[prices > 0]
 
@@ -80,7 +86,14 @@ def find_optimal_d(
 
     # Fallback logic
     if optimal_d is None:
-        logger.warning("⚠️  No d achieved stationarity, using d=1.0 (Log-Return)")
+        log_event(
+            logger,
+            event="technical_fracdiff_stationarity_fallback",
+            message="technical fracdiff using fallback d due to no stationary candidate",
+            level=logging.WARNING,
+            error_code="TECHNICAL_FRACDIFF_STATIONARITY_FALLBACK",
+            fields={"fallback_d": 1.0},
+        )
         optimal_d = 1.0
         fd_series = frac_diff_ffd(log_prices, 1.0)
         result = adfuller(fd_series.values, regression="c")
@@ -99,8 +112,11 @@ def calculate_rolling_fracdiff(
     """
     Correct way to apply FracDiff: simulated time flow with NO look-ahead bias.
     """
-    logger.info(
-        f"--- TA: Calculating rolling FracDiff (window={lookback_window}, step={recalc_step}) ---"
+    log_event(
+        logger,
+        event="technical_fracdiff_rolling_started",
+        message="technical rolling fracdiff computation started",
+        fields={"lookback_window": lookback_window, "recalc_step": recalc_step},
     )
 
     results = {}
@@ -133,6 +149,11 @@ def calculate_rolling_fracdiff(
             results[current_date] = fd_val_series.iloc[-1]
 
     fd_series = pd.Series(results)
-    logger.info(f"✅ Generated rolling FracDiff series with {len(fd_series)} values")
+    log_event(
+        logger,
+        event="technical_fracdiff_rolling_completed",
+        message="technical rolling fracdiff computation completed",
+        fields={"rows": len(fd_series)},
+    )
 
     return fd_series, current_d, win_len, st_stat, st_pval

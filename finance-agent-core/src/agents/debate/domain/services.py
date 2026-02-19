@@ -3,10 +3,11 @@ Utility functions for debate agent enhancements.
 Includes CAPM-based hurdle rate calculation and report compression policies.
 """
 
+import logging
 from enum import Enum
 from typing import Protocol
 
-from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.tools.logger import get_logger, log_event
 
 logger = get_logger(__name__)
 
@@ -108,10 +109,13 @@ def calculate_pragmatic_verdict(
         direction = "NEUTRAL"
         bias = "UNCERTAIN"
         conviction = 30
-        logger.warning(
-            f"⚠️ Data Quality Issue detected for {ticker}: "
-            f"Near-zero downside (r_bear={r_bear:.4f}, r_base={r_base:.4f}). "
-            f"Forcing NEUTRAL verdict."
+        log_event(
+            logger,
+            event="debate_pragmatic_verdict_data_quality_issue",
+            message="data quality issue detected; forcing neutral verdict",
+            level=logging.WARNING,
+            error_code="DEBATE_DATA_QUALITY_ISSUE",
+            fields={"ticker": ticker, "r_bear": r_bear, "r_base": r_base},
         )
     else:
         if rr_ratio > 2.0 and alpha > 0:

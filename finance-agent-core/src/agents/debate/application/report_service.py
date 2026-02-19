@@ -7,12 +7,12 @@ from src.agents.debate.application.dto import DebateSourceData
 from src.agents.debate.application.ports import DebateSourceReaderPort
 from src.agents.debate.application.prompt_runtime import (
     compress_reports,
-    log_compressed_reports,
+    hash_text,
 )
 from src.agents.debate.interface.serializers import (
     build_compressed_report_payload as serialize_compressed_report_payload,
 )
-from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.tools.logger import get_logger, log_event
 
 logger = get_logger(__name__)
 
@@ -24,14 +24,18 @@ def build_compressed_report_payload(
     news_artifact_id: str | None,
     technical_artifact_id: str | None,
 ) -> dict[str, object]:
-    logger.info(
-        "DEBATE_REPORT_INPUT ticker=%s financials=%d news_items=%d ta_present=%s news_artifact_id=%s ta_artifact_id=%s",
-        ticker or "unknown",
-        len(source_data.financial_reports),
-        len(source_data.news_items),
-        source_data.technical_payload is not None,
-        news_artifact_id or "none",
-        technical_artifact_id or "none",
+    log_event(
+        logger,
+        event="debate_report_input_built",
+        message="debate report input built",
+        fields={
+            "ticker": ticker or "unknown",
+            "financials_count": len(source_data.financial_reports),
+            "news_items_count": len(source_data.news_items),
+            "ta_present": source_data.technical_payload is not None,
+            "news_artifact_id": news_artifact_id or "none",
+            "ta_artifact_id": technical_artifact_id or "none",
+        },
     )
 
     return serialize_compressed_report_payload(
@@ -68,10 +72,32 @@ async def get_debate_reports_text(
 ) -> str:
     artifact_context = build_debate_artifact_context(state)
     if artifact_context.cached_reports is not None:
-        log_compressed_reports(stage, ticker, artifact_context.cached_reports, "cached")
+        log_event(
+            logger,
+            event="debate_reports_compressed",
+            message="debate reports compressed",
+            fields={
+                "stage": stage,
+                "ticker": ticker,
+                "source": "cached",
+                "chars": len(artifact_context.cached_reports),
+                "hash": hash_text(artifact_context.cached_reports),
+            },
+        )
         return artifact_context.cached_reports
 
     reports = await prepare_debate_reports(state, source_reader=source_reader)
     compressed_reports = compress_reports(reports)
-    log_compressed_reports(stage, ticker, compressed_reports, "computed")
+    log_event(
+        logger,
+        event="debate_reports_compressed",
+        message="debate reports compressed",
+        fields={
+            "stage": stage,
+            "ticker": ticker,
+            "source": "computed",
+            "chars": len(compressed_reports),
+            "hash": hash_text(compressed_reports),
+        },
+    )
     return compressed_reports

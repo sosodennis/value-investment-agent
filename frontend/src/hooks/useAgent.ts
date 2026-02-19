@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { clientLogger } from '@/lib/logger';
 import { InterruptResumePayload } from '../types/interrupts';
 import {
     Message,
@@ -77,7 +78,11 @@ export function useAgent(assistantId: string = 'agent') {
                             const event = parseAgentEvent(parsed, 'stream event');
                             processEvent(event);
                         } catch (e) {
-                            console.error('Error parsing SSE data:', line, e);
+                            clientLogger.error('stream.parse_error', {
+                                line,
+                                error: e instanceof Error ? e.message : String(e),
+                                threadId,
+                            });
                             throw e;
                         }
                     }

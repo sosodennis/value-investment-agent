@@ -4,6 +4,7 @@ import json
 import logging
 from collections.abc import Mapping
 
+from src.shared.kernel.tools.logger import log_event
 from src.shared.kernel.types import JSONObject
 
 CONTRACT_KIND_WORKFLOW_STATE = "workflow_state"
@@ -84,9 +85,16 @@ def log_boundary_event(
     if state is not None:
         payload["replay"] = build_replay_diagnostics(state, node=node)
 
-    logger.log(
-        level,
-        "BOUNDARY_EVENT %s",
-        json.dumps(payload, sort_keys=True, ensure_ascii=True, default=str),
+    log_event(
+        logger,
+        event="BOUNDARY_EVENT",
+        message="boundary_event",
+        level=level,
+        error_code=error_code,
+        fields={
+            "payload": json.loads(
+                json.dumps(payload, sort_keys=True, ensure_ascii=True, default=str)
+            )
+        },
     )
     return payload

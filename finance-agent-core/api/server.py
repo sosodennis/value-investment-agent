@@ -30,7 +30,12 @@ from src.interface.events.protocol import AgentEvent
 from src.interface.events.schemas import AgentOutputArtifact
 from src.services.artifact_manager import artifact_manager
 from src.services.history import history_service
-from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.tools.logger import (
+    bind_log_context,
+    clear_log_context,
+    get_logger,
+    log_context,
+)
 from src.shared.kernel.types import InterruptResumePayload, JSONObject
 from src.workflow.graph import get_graph
 from src.workflow.interrupts import InterruptValue
@@ -125,6 +130,18 @@ event_replay_buffers: dict[str, list[str]] = defaultdict(list)
 thread_sequences: dict[str, int] = defaultdict(lambda: 1)
 
 
+@app.middleware("http")
+async def attach_request_context(request: Request, call_next):
+    request_id = request.headers.get("x-request-id", str(uuid.uuid4()))
+    bind_log_context(request_id=request_id)
+    try:
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        return response
+    finally:
+        clear_log_context()
+
+
 def build_agent_lookup(graph: CompiledStateGraph) -> dict[str, str]:
     """
     Recursively traverse the graph to build a node_name -> agent_id map.
@@ -179,63 +196,67 @@ async def event_generator(
     seq_counter = thread_sequences[thread_id]
     run_id = str(uuid.uuid4())
     logger.info(
-        f"📡 [Server] Starting event_generator for {thread_id} at seq {seq_counter}..."
+        "server_event_generator_started thread_id=%s seq=%d", thread_id, seq_counter
     )
 
-    try:
-        # State for token batching
-        batch_state = {"buffer": [], "last_event": None}
+    with log_context(
+        thread_id=thread_id,
+        run_id=run_id,
+        node="server.event_generator",
+    ):
+        try:
+            # State for token batching
+            batch_state = {"buffer": [], "last_event": None}
 
-        async def flush_deltas():
-            nonlocal seq_counter
-            last_delta = batch_state["last_event"]
-            delta_buffer = batch_state["buffer"]
+            async def flush_deltas():
+                nonlocal seq_counter
+                last_delta = batch_state["last_event"]
+                delta_buffer = batch_state["buffer"]
 
-            if not last_delta or not delta_buffer:
-                return
+                if not last_delta or not delta_buffer:
+                    return
 
-            # Combine all buffered contents
-            combined_content = "".join(delta_buffer)
-            # Update the last delta event with combined content
-            last_delta.data["content"] = combined_content
-            last_delta.seq_id = seq_counter
+                # Combine all buffered contents
+                combined_content = "".join(delta_buffer)
+                # Update the last delta event with combined content
+                last_delta.data["content"] = combined_content
+                last_delta.seq_id = seq_counter
 
-            msg = f"data: {last_delta.model_dump_json()}\n\n"
-            # Silence high-frequency logs by using DEBUG level
-            logger.debug(
-                f"📤 [Server] Dispatching batched tokens ({len(delta_buffer)}) from {last_delta.source}"
-            )
-
-            event_replay_buffers[thread_id].append(msg)
-            if len(event_replay_buffers[thread_id]) > 50:
-                event_replay_buffers[thread_id].pop(0)
-
-            for q in running_queues[thread_id][:]:
-                await q.put(msg)
-
-            seq_counter += 1
-            thread_sequences[thread_id] = seq_counter
-            batch_state["buffer"].clear()
-            batch_state["last_event"] = None
-
-        # 1. Stream refined events using adapter
-        async for event in graph.astream_events(
-            input_data, config=config, version="v2"
-        ):
-            # logger.debug(f"🔍 [Server] Raw Event: {event['event']} | Name: {event.get('name')} | Metadata: {event.get('metadata')}")
-            # Check for batching/flushing BEFORE adapting the next event
-            # to ensure we don't use a duplicate seq_id
-
-            # Handle token batching logic
-            if event["event"] == "on_chat_model_stream":
-                agent_events = adapt_langgraph_event(
-                    event, thread_id, seq_counter, run_id
+                msg = f"data: {last_delta.model_dump_json()}\n\n"
+                # Silence high-frequency logs by using DEBUG level
+                logger.debug(
+                    "server_dispatch_token_batch count=%d source=%s",
+                    len(delta_buffer),
+                    last_delta.source,
                 )
 
-                # We expect only ONE event for token streaming usually, but let's be robust
-                for agent_event in agent_events:
-                    if agent_event.type == "content.delta":
-                        # Flush if source changed or buffer reached threshold
+                event_replay_buffers[thread_id].append(msg)
+                if len(event_replay_buffers[thread_id]) > 50:
+                    event_replay_buffers[thread_id].pop(0)
+
+                for q in running_queues[thread_id][:]:
+                    await q.put(msg)
+
+                seq_counter += 1
+                thread_sequences[thread_id] = seq_counter
+                batch_state["buffer"].clear()
+                batch_state["last_event"] = None
+
+            # 1. Stream refined events using adapter
+            async for event in graph.astream_events(
+                input_data, config=config, version="v2"
+            ):
+                # Handle token batching logic.
+                if event["event"] == "on_chat_model_stream":
+                    agent_events = adapt_langgraph_event(
+                        event, thread_id, seq_counter, run_id
+                    )
+
+                    for agent_event in agent_events:
+                        if agent_event.type != "content.delta":
+                            continue
+
+                        # Flush if source changed or buffer reached threshold.
                         last_event = batch_state["last_event"]
                         if last_event and (
                             last_event.source != agent_event.source
@@ -249,20 +270,78 @@ async def event_generator(
                         batch_state["buffer"].append(
                             agent_event.data.get("content", "")
                         )
-                continue  # Wait for more tokens
+                    continue
 
-            # If it's not a stream chunk, or it's a stream chunk from a new source:
-            # First, flush any pending deltas
+                # Non-stream chunk: flush pending deltas first.
+                await flush_deltas()
+
+                # Then adapt current event with the fresh seq_counter.
+                agent_events = adapt_langgraph_event(
+                    event, thread_id, seq_counter, run_id
+                )
+                for agent_event in agent_events:
+                    msg = f"data: {agent_event.model_dump_json()}\n\n"
+                    logger.info(
+                        "server_dispatch_event seq=%d type=%s source=%s",
+                        seq_counter,
+                        agent_event.type,
+                        agent_event.source,
+                    )
+
+                    event_replay_buffers[thread_id].append(msg)
+                    if len(event_replay_buffers[thread_id]) > 50:
+                        event_replay_buffers[thread_id].pop(0)
+
+                    for q in running_queues[thread_id][:]:
+                        await q.put(msg)
+
+                    seq_counter += 1
+                    thread_sequences[thread_id] = seq_counter
+
+            # Final flush after stream ends.
             await flush_deltas()
 
-            # Now adapt the current event with the fresh seq_counter
-            agent_events = adapt_langgraph_event(event, thread_id, seq_counter, run_id)
+            # 2. Check for interrupts after graph pauses.
+            snapshot = await graph.aget_state(config)
+            if snapshot.next:
+                for task in snapshot.tasks:
+                    if not task.interrupts:
+                        continue
+                    for interrupt_item in task.interrupts:
+                        agent_id = agent_lookup.get(task.name)
+                        source = agent_id or task.name
 
-            for agent_event in agent_events:
-                msg = f"data: {agent_event.model_dump_json()}\n\n"
-                logger.info(
-                    f"📤 [Server] Dispatching event {seq_counter}: {agent_event.type} from {agent_event.source}"
+                        agent_event = create_interrupt_event(
+                            interrupt_item.value,
+                            thread_id,
+                            seq_counter,
+                            run_id,
+                            source=source,
+                        )
+                        msg = f"data: {agent_event.model_dump_json()}\n\n"
+                        logger.info(
+                            "server_dispatch_interrupt seq=%d source=%s",
+                            seq_counter,
+                            source,
+                        )
+
+                        event_replay_buffers[thread_id].append(msg)
+                        for q in running_queues[thread_id][:]:
+                            await q.put(msg)
+                        seq_counter += 1
+                        thread_sequences[thread_id] = seq_counter
+            else:
+                # 3. Workflow completed successfully.
+                done_event = AgentEvent(
+                    thread_id=thread_id,
+                    run_id=run_id,
+                    seq_id=seq_counter,
+                    type="lifecycle.status",
+                    source="System",
+                    data={"status": "done"},
                 )
+                msg = f"data: {done_event.model_dump_json()}\n\n"
+                logger.info("server_dispatch_done seq=%d", seq_counter)
 
                 event_replay_buffers[thread_id].append(msg)
                 if len(event_replay_buffers[thread_id]) > 50:
@@ -274,102 +353,40 @@ async def event_generator(
                 seq_counter += 1
                 thread_sequences[thread_id] = seq_counter
 
-            # Internal housekeeping: save AI messages to history
-            # if event["event"] == "on_chat_model_end":
-            #     output = event["data"]["output"]
-            #     if isinstance(output, BaseMessage):
-            #         try:
-            #             await history_service.save_message(thread_id, output)
-            #         except Exception as e:
-            #             logger.error(f"❌ [Server] history save failed: {e}")
-
-        # Final flush after the stream ends
-        await flush_deltas()
-
-        # 2. Check for interrupts after graph pauses
-        snapshot = await graph.aget_state(config)
-        if snapshot.next:
-            for task in snapshot.tasks:
-                if task.interrupts:
-                    for i in task.interrupts:
-                        # Resolve the internal node name to a high-level agent ID if possible
-                        # Resolve the internal node name to a high-level agent ID
-                        # using the runtime lookup map (Zero Config)
-                        agent_id = agent_lookup.get(task.name)
-                        source = agent_id or task.name
-
-                        agent_event = create_interrupt_event(
-                            i.value, thread_id, seq_counter, run_id, source=source
-                        )
-                        msg = f"data: {agent_event.model_dump_json()}\n\n"
-                        logger.info(
-                            f"📤 [Server] Dispatching interrupt: {agent_event.type}"
-                        )
-
-                        event_replay_buffers[thread_id].append(msg)
-                        for q in running_queues[thread_id][:]:
-                            await q.put(msg)
-                        seq_counter += 1
-                        thread_sequences[thread_id] = seq_counter
-        else:
-            # 3. Workflow Completed Successfully
-            # If there are no next steps, the graph execution has finished.
-            done_event = AgentEvent(
+        except Exception as exc:
+            logger.error(
+                "server_event_generator_error thread_id=%s error=%s",
+                thread_id,
+                str(exc),
+                exc_info=True,
+            )
+            error_event = AgentEvent(
                 thread_id=thread_id,
                 run_id=run_id,
                 seq_id=seq_counter,
-                type="lifecycle.status",
+                type="error",
                 source="System",
-                data={"status": "done"},
+                data={"message": str(exc)},
             )
-            msg = f"data: {done_event.model_dump_json()}\n\n"
-            logger.info(
-                f"📤 [Server] Dispatching event {seq_counter}: lifecycle.status=done"
-            )
-
-            event_replay_buffers[thread_id].append(msg)
-            if len(event_replay_buffers[thread_id]) > 50:
-                event_replay_buffers[thread_id].pop(0)
-
+            msg = f"data: {error_event.model_dump_json()}\n\n"
             for q in running_queues[thread_id][:]:
                 await q.put(msg)
+        finally:
+            # Signal EOF to all queues.
+            for q in running_queues[thread_id][:]:
+                await q.put(None)
 
-            seq_counter += 1
-            thread_sequences[thread_id] = seq_counter
+            # Keep buffer for pending GETs.
+            await asyncio.sleep(2)
 
-    except Exception as e:
-        logger.error(f"❌ [Server] Error in {thread_id}: {str(e)}")
-        import traceback
-
-        logger.error(f"Traceback: {traceback.format_exc()}")
-
-        error_event = AgentEvent(
-            thread_id=thread_id,
-            run_id=run_id,
-            seq_id=seq_counter,
-            type="error",
-            source="System",
-            data={"message": str(e)},
-        )
-        msg = f"data: {error_event.model_dump_json()}\n\n"
-        for q in running_queues[thread_id][:]:
-            await q.put(msg)
-    finally:
-        # Signal EOF to all queues
-        for q in running_queues[thread_id][:]:
-            await q.put(None)
-
-        # Keep buffer for a few seconds to let pending GETs finish
-        await asyncio.sleep(2)
-
-        # Cleanup
-        if thread_id in active_tasks:
-            del active_tasks[thread_id]
-        if thread_id in running_queues:
-            del running_queues[thread_id]
-        if thread_id in event_replay_buffers:
-            del event_replay_buffers[thread_id]
-        logger.info(f"🏁 [Server] Task for {thread_id} finished.")
+            # Cleanup.
+            if thread_id in active_tasks:
+                del active_tasks[thread_id]
+            if thread_id in running_queues:
+                del running_queues[thread_id]
+            if thread_id in event_replay_buffers:
+                del event_replay_buffers[thread_id]
+            logger.info("server_task_finished thread_id=%s", thread_id)
 
 
 @app.get("/history/{thread_id}", response_model=list[MessageResponse])

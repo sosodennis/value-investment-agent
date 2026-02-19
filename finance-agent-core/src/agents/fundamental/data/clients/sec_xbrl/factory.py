@@ -1,6 +1,7 @@
+import logging
 from typing import TypeVar
 
-from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.traceable import (
     ComputedProvenance,
     ManualProvenance,
@@ -50,8 +51,12 @@ class BaseFinancialModelFactory:
         for config in configs:
             results = extractor.search(config)
             if not results:
-                logger.debug(
-                    "No XBRL matches for %s using %s", name, config.concept_regex
+                log_event(
+                    logger,
+                    event="fundamental_xbrl_field_no_matches",
+                    message="no xbrl matches for field under config",
+                    level=logging.DEBUG,
+                    fields={"field_name": name, "concept_regex": config.concept_regex},
                 )
                 continue
 
@@ -60,11 +65,16 @@ class BaseFinancialModelFactory:
 
                 # Skip empty values
                 if raw_val is None:
-                    logger.debug(
-                        "Skip empty value for %s tag=%s period=%s",
-                        name,
-                        res.concept,
-                        res.period_key,
+                    log_event(
+                        logger,
+                        event="fundamental_xbrl_field_skip_empty",
+                        message="skip empty xbrl value",
+                        level=logging.DEBUG,
+                        fields={
+                            "field_name": name,
+                            "concept": res.concept,
+                            "period_key": res.period_key,
+                        },
                     )
                     continue
 
@@ -72,13 +82,20 @@ class BaseFinancialModelFactory:
                     scale = BaseFinancialModelFactory._parse_scale(res.scale)
                     parsed = BaseFinancialModelFactory._parse_numeric(raw_val, scale)
                     if parsed is None:
-                        logger.debug(
-                            "Skip non-numeric for %s tag=%s period=%s statement=%s value=%s",
-                            name,
-                            res.concept,
-                            res.period_key,
-                            res.statement,
-                            BaseFinancialModelFactory._preview_value(raw_val),
+                        log_event(
+                            logger,
+                            event="fundamental_xbrl_field_skip_non_numeric",
+                            message="skip non-numeric xbrl value",
+                            level=logging.DEBUG,
+                            fields={
+                                "field_name": name,
+                                "concept": res.concept,
+                                "period_key": res.period_key,
+                                "statement": res.statement,
+                                "value_preview": BaseFinancialModelFactory._preview_value(
+                                    raw_val
+                                ),
+                            },
                         )
                         continue
                     val = parsed
@@ -86,21 +103,34 @@ class BaseFinancialModelFactory:
                     try:
                         val = target_type(raw_val)
                     except (ValueError, TypeError):
-                        logger.debug(
-                            "Skip non-castable for %s tag=%s period=%s value=%s",
-                            name,
-                            res.concept,
-                            res.period_key,
-                            BaseFinancialModelFactory._preview_value(raw_val),
+                        log_event(
+                            logger,
+                            event="fundamental_xbrl_field_skip_non_castable",
+                            message="skip non-castable xbrl value",
+                            level=logging.DEBUG,
+                            fields={
+                                "field_name": name,
+                                "concept": res.concept,
+                                "period_key": res.period_key,
+                                "value_preview": BaseFinancialModelFactory._preview_value(
+                                    raw_val
+                                ),
+                            },
                         )
                         continue
 
-                logger.info(
-                    "XBRL hit: %s tag=%s period=%s value=%s",
-                    name,
-                    res.concept,
-                    res.period_key,
-                    BaseFinancialModelFactory._preview_value(raw_val),
+                log_event(
+                    logger,
+                    event="fundamental_xbrl_field_hit",
+                    message="xbrl field hit",
+                    fields={
+                        "field_name": name,
+                        "concept": res.concept,
+                        "period_key": res.period_key,
+                        "value_preview": BaseFinancialModelFactory._preview_value(
+                            raw_val
+                        ),
+                    },
                 )
 
                 # Create Provenance

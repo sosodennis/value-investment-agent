@@ -5,13 +5,14 @@ Implements an enterprise-grade model registry with scoring based on sector,
 industry, SIC, financial signals, and data coverage.
 """
 
+import logging
 from dataclasses import dataclass
 from typing import Literal
 
 from src.agents.fundamental.domain.entities import FundamentalSelectionReport
 from src.agents.fundamental.domain.rules import calculate_cagr
 from src.shared.cross_agent.domain.market_identity import CompanyProfile
-from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.tools.logger import get_logger, log_event
 
 from .models import ValuationModel
 
@@ -330,7 +331,13 @@ def select_valuation_model(
 
     candidates = tuple(_evaluate_spec(spec, signals) for spec in MODEL_SPECS)
     if not candidates:
-        logger.warning("No model candidates generated; defaulting to DCF_STANDARD.")
+        log_event(
+            logger,
+            event="fundamental_model_candidates_missing",
+            message="no model candidates generated; defaulting to dcf_standard",
+            level=logging.WARNING,
+            error_code="FUNDAMENTAL_MODEL_DEFAULTED",
+        )
         return ModelSelectionResult(
             model=ValuationModel.DCF_STANDARD,
             reasoning="No model candidates generated; defaulting to standard DCF.",

@@ -1,3 +1,4 @@
+import logging
 import re
 from dataclasses import dataclass
 
@@ -6,7 +7,7 @@ from edgar import Company, set_identity
 from pydantic import BaseModel, Field
 from tabulate import tabulate
 
-from src.shared.kernel.tools.logger import get_logger
+from src.shared.kernel.tools.logger import get_logger, log_event
 
 # Set SEC identity
 set_identity("ValueInvestmentAgent research@example.com")
@@ -99,14 +100,19 @@ class SearchStats:
 
     def log(self, logger) -> None:
         for rej in self.rejections:
-            logger.debug(
-                "Reject %s tag=%s period=%s statement=%s unit=%s value=%s",
-                rej.reason,
-                rej.concept,
-                rej.period_key,
-                rej.statement_type,
-                rej.unit,
-                rej.value_preview,
+            log_event(
+                logger,
+                event="fundamental_xbrl_search_rejection",
+                message="xbrl row rejected by filters",
+                level=logging.DEBUG,
+                fields={
+                    "reason": rej.reason,
+                    "concept": rej.concept,
+                    "period_key": rej.period_key,
+                    "statement_type": rej.statement_type,
+                    "unit": rej.unit,
+                    "value_preview": rej.value_preview,
+                },
             )
 
 
@@ -121,7 +127,12 @@ class SECReportExtractor:
         self._load_report_data()
 
     def _load_report_data(self):
-        logger.info(">>> 初始化 %s %s 財年數據...", self.ticker, self.fiscal_year)
+        log_event(
+            logger,
+            event="fundamental_xbrl_report_load_started",
+            message="xbrl report data initialization started",
+            fields={"ticker": self.ticker, "fiscal_year": self.fiscal_year},
+        )
         company = Company(self.ticker)
         self.standard_industrial_classification_code = company.sic
         # 智慧對齊：考慮申報時差 [1, 2]
@@ -155,7 +166,12 @@ class SECReportExtractor:
         )
         if dei_mask.any():
             self.actual_date = str(self.df[dei_mask].iloc[0]["value"])[:10]
-            logger.info("[*] 鎖定報表截止日: %s", self.actual_date)
+            log_event(
+                logger,
+                event="fundamental_xbrl_report_anchor_date_locked",
+                message="xbrl report anchor date locked",
+                fields={"ticker": self.ticker, "actual_date": self.actual_date},
+            )
 
         # 預先識別維度列
         self.real_dim_cols = self._identify_dimension_columns(self.df.columns)
@@ -219,7 +235,17 @@ class SECReportExtractor:
 
         matches = self.df[mask].copy()
         if matches.empty:
-            logger.debug("[-] 找不到匹配結果。")
+            log_event(
+                logger,
+                event="fundamental_xbrl_search_no_matches",
+                message="xbrl search returned no matches",
+                level=logging.DEBUG,
+                fields={
+                    "ticker": self.ticker,
+                    "concept_regex": config.concept_regex,
+                    "search_type": config.type_name,
+                },
+            )
             return []
 
         # 3. 格式化結果
@@ -349,8 +375,13 @@ class SECReportExtractor:
         matches = self.df[mask].copy()
 
         if matches.empty:
-            print(
-                "[-] 驚人！連原始數據都找不到。可能使用了不同的 Tag (如 AssetsCurrent?)"
+            log_event(
+                logger,
+                event="fundamental_xbrl_asset_debug_no_rows",
+                message="asset debug query returned no rows; tag may differ",
+                level=logging.WARNING,
+                error_code="FUNDAMENTAL_XBRL_ASSET_DEBUG_EMPTY",
+                fields={"ticker": self.ticker, "tag": tag},
             )
             return
 
@@ -360,11 +391,29 @@ class SECReportExtractor:
         )
 
         # 3. 打印結果
-        print(f"[*] 找到 {len(matches)} 筆 Assets 數據。")
-        print(f"[*] 污染數據的維度欄位 (Culprits): {active_dim_cols}")
+        log_event(
+            logger,
+            event="fundamental_xbrl_asset_debug_summary",
+            message="asset debug summary generated",
+            fields={
+                "ticker": self.ticker,
+                "rows": len(matches),
+                "active_dimensions": active_dim_cols,
+            },
+        )
 
         display_cols = ["period_end", "value"] + active_dim_cols
-        print(tabulate(matches[display_cols], headers="keys", tablefmt="fancy_grid"))
+        log_event(
+            logger,
+            event="fundamental_xbrl_asset_debug_table",
+            message="asset debug table generated",
+            fields={
+                "ticker": self.ticker,
+                "table": tabulate(
+                    matches[display_cols], headers="keys", tablefmt="fancy_grid"
+                ),
+            },
+        )
 
     @staticmethod
     def _value_preview(value: object, max_len: int = 80) -> str | None:
