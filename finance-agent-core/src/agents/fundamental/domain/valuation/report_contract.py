@@ -98,6 +98,8 @@ TRACEABLE_FIELD_LABELS: dict[str, str] = {
     "cogs": "Cost of Goods Sold (COGS)",
     "rd_expense": "R&D Expense",
     "sga_expense": "SG&A Expense",
+    "selling_expense": "Selling Expense",
+    "ga_expense": "G&A Expense",
     "capex": "Capital Expenditures (CapEx)",
     "loans_and_leases": "Loans and Leases",
     "deposits": "Deposits",
@@ -108,6 +110,7 @@ TRACEABLE_FIELD_LABELS: dict[str, str] = {
     "tier1_capital_ratio": "Tier 1 Capital Ratio",
     "real_estate_assets": "Real Estate Assets (at cost)",
     "accumulated_depreciation": "Accumulated Depreciation",
+    "gain_on_sale": "Gain on Sale of Properties",
     "ffo": "FFO (Funds From Operations)",
 }
 

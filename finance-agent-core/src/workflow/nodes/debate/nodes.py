@@ -5,18 +5,13 @@ from langgraph.types import Command
 
 from src.agents.debate.application.factory import debate_workflow_runner
 from src.agents.debate.application.orchestrator import DebateNodeResult
+from src.workflow.command_adapter import command_from_fanout_result
 
 from .subgraph_state import DebateState
 
 
-def _resolve_goto(goto: str | list[str]) -> str | list[str]:
-    if isinstance(goto, list):
-        return [END if node == "END" else node for node in goto]
-    return END if goto == "END" else goto
-
-
 def _to_command(result: DebateNodeResult) -> Command:
-    return Command(update=result.update, goto=_resolve_goto(result.goto))
+    return command_from_fanout_result(result, end_node=END)
 
 
 async def debate_aggregator_node(state: DebateState) -> Command:

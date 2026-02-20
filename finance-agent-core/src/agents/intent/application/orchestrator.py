@@ -15,6 +15,7 @@ from src.shared.kernel.tools.incident_logging import (
 )
 from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
+from src.shared.kernel.workflow_contracts import WorkflowNodeResult
 
 logger = get_logger(__name__)
 
@@ -586,7 +587,4 @@ class IntentOrchestrator:
         )
 
 
-@dataclass(frozen=True)
-class IntentNodeResult:
-    update: dict[str, object]
-    goto: str
+IntentNodeResult = WorkflowNodeResult

@@ -1,6 +1,7 @@
 import logging
 import re
 from dataclasses import dataclass
+from datetime import date
 
 import pandas as pd
 from edgar import Company, set_identity
@@ -26,6 +27,7 @@ class SearchConfig:
     period_type: str | None = None  # "instant" or "duration"
     unit_whitelist: list[str] | None = None
     unit_blacklist: list[str] | None = None
+    respect_anchor_date: bool = True
 
 
 class SearchType:
@@ -38,6 +40,7 @@ class SearchType:
         period_type: str | None = None,
         unit_whitelist: list[str] | None = None,
         unit_blacklist: list[str] | None = None,
+        respect_anchor_date: bool = True,
     ) -> SearchConfig:
         return SearchConfig(
             concept_regex=concept_regex,
@@ -46,6 +49,7 @@ class SearchType:
             period_type=period_type,
             unit_whitelist=unit_whitelist,
             unit_blacklist=unit_blacklist,
+            respect_anchor_date=respect_anchor_date,
         )
 
     @staticmethod
@@ -56,6 +60,7 @@ class SearchType:
         period_type: str | None = None,
         unit_whitelist: list[str] | None = None,
         unit_blacklist: list[str] | None = None,
+        respect_anchor_date: bool = True,
     ) -> SearchConfig:
         return SearchConfig(
             concept_regex=concept_regex,
@@ -65,6 +70,7 @@ class SearchType:
             period_type=period_type,
             unit_whitelist=unit_whitelist,
             unit_blacklist=unit_blacklist,
+            respect_anchor_date=respect_anchor_date,
         )
 
 
@@ -198,7 +204,7 @@ class SECReportExtractor:
                 processed_regex, flags=re.IGNORECASE, na=False
             )
 
-        if self.actual_date:
+        if self.actual_date and config.respect_anchor_date:
             date_mask = (self.df["period_end"] == self.actual_date) | (
                 self.df["period_key"].str.contains(self.actual_date, na=False)
             )
@@ -323,16 +329,23 @@ class SECReportExtractor:
                 )
             if not (statement_ok and period_ok and unit_ok):
                 continue
-            key = (str(row.get("concept")), str(row.get("value")))
-            if key in seen:
-                continue
-            seen.add(key)
-
             dim_detail = {
                 col.split("_")[-1]: row[col]
                 for col in self.real_dim_cols
                 if pd.notna(row[col])
             }
+            dim_key = tuple(sorted((str(k), str(v)) for k, v in dim_detail.items()))
+            key = (
+                str(row.get("concept")),
+                str(row.get("period_key")),
+                normalized_unit,
+                dim_key,
+                str(row.get("value")),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+
             dim_str = (
                 "\n".join([f"{k}: {v}" for k, v in dim_detail.items()])
                 if dim_detail
@@ -361,6 +374,10 @@ class SECReportExtractor:
             )
 
         stats.log(logger)
+        final_rows.sort(
+            key=lambda row: self._period_sort_key(row.period_key),
+            reverse=True,
+        )
         return final_rows
 
     def sic_code(self):
@@ -449,6 +466,31 @@ class SECReportExtractor:
         return period_key.lower().startswith(period_type)
 
     @staticmethod
+    def _period_sort_key(period_key: str) -> date:
+        # period_key examples:
+        # - instant_2025-12-31
+        # - duration_2025-01-01_2025-12-31
+        if period_key.startswith("instant_"):
+            candidate = period_key.removeprefix("instant_")
+            parsed = SECReportExtractor._parse_date(candidate)
+            if parsed:
+                return parsed
+        if period_key.startswith("duration_"):
+            parts = period_key.removeprefix("duration_").split("_")
+            if len(parts) == 2:
+                parsed = SECReportExtractor._parse_date(parts[1])
+                if parsed:
+                    return parsed
+        return date.min
+
+    @staticmethod
+    def _parse_date(text: str) -> date | None:
+        try:
+            return date.fromisoformat(text)
+        except ValueError:
+            return None
+
+    @staticmethod
     def _unit_matches(
         normalized_unit: str | None,
         unit_whitelist: list[str] | None,
@@ -475,6 +517,9 @@ class SECReportExtractor:
         text = unit.strip()
         if ":" in text:
             text = text.split(":")[-1]
+        # Some filings use unit refs like "U_USD" / "U_shares".
+        if text.lower().startswith("u_"):
+            text = text[2:]
         return text.lower()
 
     def _extract_unit(self, row: pd.Series) -> str | None:

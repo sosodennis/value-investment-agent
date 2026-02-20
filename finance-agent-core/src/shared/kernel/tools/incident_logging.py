@@ -4,12 +4,24 @@ import json
 import logging
 from collections.abc import Mapping
 
+from src.shared.kernel.boundary_contracts import (
+    CONTRACT_KIND_ARTIFACT_JSON,
+    CONTRACT_KIND_INTERRUPT_PAYLOAD,
+    CONTRACT_KIND_WORKFLOW_STATE,
+    BoundaryContractKind,
+    BoundaryEventPayload,
+    BoundaryReplayDiagnostics,
+)
 from src.shared.kernel.tools.logger import log_event
 from src.shared.kernel.types import JSONObject
 
-CONTRACT_KIND_WORKFLOW_STATE = "workflow_state"
-CONTRACT_KIND_ARTIFACT_JSON = "artifact_json"
-CONTRACT_KIND_INTERRUPT_PAYLOAD = "interrupt_payload"
+__all__ = [
+    "CONTRACT_KIND_WORKFLOW_STATE",
+    "CONTRACT_KIND_ARTIFACT_JSON",
+    "CONTRACT_KIND_INTERRUPT_PAYLOAD",
+    "build_replay_diagnostics",
+    "log_boundary_event",
+]
 
 
 def _is_artifact_ref_key(key: str) -> bool:
@@ -43,11 +55,13 @@ def _string_map(value: object) -> dict[str, str]:
     return output
 
 
-def build_replay_diagnostics(state: Mapping[str, object], *, node: str) -> JSONObject:
+def build_replay_diagnostics(
+    state: Mapping[str, object], *, node: str
+) -> BoundaryReplayDiagnostics:
     messages = state.get("messages")
     message_count = len(messages) if isinstance(messages, list) else 0
 
-    replay: JSONObject = {
+    replay: BoundaryReplayDiagnostics = {
         "node": node,
         "current_node": (
             state.get("current_node")
@@ -68,13 +82,13 @@ def log_boundary_event(
     *,
     node: str,
     artifact_id: str | None,
-    contract_kind: str,
+    contract_kind: BoundaryContractKind,
     error_code: str,
     state: Mapping[str, object] | None = None,
     detail: JSONObject | None = None,
     level: int = logging.INFO,
-) -> JSONObject:
-    payload: JSONObject = {
+) -> BoundaryEventPayload:
+    payload: BoundaryEventPayload = {
         "node": node,
         "artifact_id": artifact_id,
         "contract_kind": contract_kind,

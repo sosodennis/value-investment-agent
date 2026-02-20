@@ -28,3 +28,6 @@
 
 1. `traceable`：審計與血緣（資料來源、計算公式、人工覆寫）。
 2. `contracts/types`：跨層通用常數與型別別名。
+3. `boundary_contracts`：邊界事件/診斷 payload 的共用契約（非 agent 專屬）。
+4. `workflow_contracts`：workflow runner/node 回傳結果共用契約。
+5. `workflow_routing`：與業務無關的 workflow 路由小工具（例如 END sentinel 解析）。

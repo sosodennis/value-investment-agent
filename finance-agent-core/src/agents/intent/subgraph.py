@@ -1,12 +1,17 @@
 """
-Intent Extraction Subgraph.
+Intent Extraction subgraph entrypoint owned by the intent agent package.
 """
 
 from langchain_core.runnables import RunnableLambda
 from langgraph.graph import START, StateGraph
 
-from .nodes import clarification_node, decision_node, extraction_node, searching_node
-from .subgraph_state import (
+from src.workflow.nodes.intent_extraction.nodes import (
+    clarification_node,
+    decision_node,
+    extraction_node,
+    searching_node,
+)
+from src.workflow.nodes.intent_extraction.subgraph_state import (
     IntentExtractionInput,
     IntentExtractionOutput,
     IntentExtractionState,
@@ -15,11 +20,10 @@ from .subgraph_state import (
 
 def build_intent_extraction_subgraph():
     """Build and return the intent_extraction subgraph."""
-    # 1. Build Subgraph
     builder = StateGraph(
         IntentExtractionState,
-        input=IntentExtractionInput,
-        output=IntentExtractionOutput,
+        input_schema=IntentExtractionInput,
+        output_schema=IntentExtractionOutput,
     )
     builder.add_node(
         "extraction",
@@ -42,7 +46,4 @@ def build_intent_extraction_subgraph():
         metadata={"agent_id": "intent_extraction"},
     )
     builder.add_edge(START, "extraction")
-
-    # 2. Compile
-    # Note: No checkpointer passed here; it will be inherited from the parent graph
     return builder.compile()

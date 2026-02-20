@@ -237,6 +237,16 @@ class IndustrialExtension(BaseModel):
         value=None,
         provenance=ManualProvenance(description="Initial state"),
     )
+    selling_expense: TraceableField[float] = TraceableField(
+        name="Selling Expense",
+        value=None,
+        provenance=ManualProvenance(description="Initial state"),
+    )
+    ga_expense: TraceableField[float] = TraceableField(
+        name="G&A Expense",
+        value=None,
+        provenance=ManualProvenance(description="Initial state"),
+    )
     capex: TraceableField[float] = TraceableField(
         name="Capital Expenditures (CapEx)",
         value=None,
@@ -310,6 +320,11 @@ class RealEstateExtension(BaseModel):
     )
     depreciation_and_amortization: TraceableField[float] = TraceableField(
         name="Depreciation & Amortization",
+        value=None,
+        provenance=ManualProvenance(description="Initial state"),
+    )
+    gain_on_sale: TraceableField[float] = TraceableField(
+        name="Gain on Sale of Properties",
         value=None,
         provenance=ManualProvenance(description="Initial state"),
     )

@@ -79,3 +79,6 @@ line-ending = "auto"
 pythonpath = ["."]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+    "integration: live external dependency test (network/SEC API)",
+]

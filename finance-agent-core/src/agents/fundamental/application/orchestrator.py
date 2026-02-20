@@ -41,14 +41,12 @@ from src.agents.fundamental.interface.serializers import (
 from src.shared.cross_agent.domain.market_identity import CompanyProfile
 from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
+from src.shared.kernel.workflow_contracts import WorkflowNodeResult
 
 logger = get_logger(__name__)
 
 
-@dataclass(frozen=True)
-class FundamentalNodeResult:
-    update: dict[str, object]
-    goto: str
+FundamentalNodeResult = WorkflowNodeResult
 
 
 @dataclass(frozen=True)

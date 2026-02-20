@@ -1,8 +1,8 @@
 # Documentation Index
-Date: 2026-02-16
+Date: 2026-02-19
 Status: Active
 
-This folder keeps only active rules and one pending backlog for the next refactor.
+This folder keeps active rules, architecture decisions, and one pending backlog for the next refactor.
 
 ## 1. Canonical Rules
 
@@ -15,12 +15,16 @@ This folder keeps only active rules and one pending backlog for the next refacto
 7. `/Users/denniswong/Desktop/Project/value-investment-agent/docs/simple-triad-layer-alignment-2026-02-16.md`
 8. `/Users/denniswong/Desktop/Project/value-investment-agent/docs/developer-workflow-checklist.md`
 
-## 2. Pending Backlog
+## 2. Architecture Decisions
 
-1. `/Users/denniswong/Desktop/Project/value-investment-agent/docs/next-refactor-pending-2026-02-16.md`
+1. `/Users/denniswong/Desktop/Project/value-investment-agent/docs/agent-centric-subgraph-shared-kernel-adr-2026-02-19.md`
 
-## 3. Usage Rules
+## 3. Pending Backlog
+
+1. `/Users/denniswong/Desktop/Project/value-investment-agent/docs/next-refactor-pending-2026-02-19.md`
+
+## 4. Usage Rules
 
 1. If two docs conflict, section 1 has higher priority.
-2. Pending items must be tracked only in the backlog file from section 2.
+2. Pending items must be tracked only in the backlog file from section 3.
 3. Completed/audit history is kept in git history; do not recreate deleted historical docs unless explicitly requested.

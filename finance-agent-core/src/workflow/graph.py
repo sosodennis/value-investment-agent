@@ -5,14 +5,14 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.graph import END, START, StateGraph
 from psycopg_pool import AsyncConnectionPool
 
+from src.agents.debate.subgraph import build_debate_subgraph
+from src.agents.fundamental.subgraph import build_fundamental_subgraph
+from src.agents.intent.subgraph import build_intent_extraction_subgraph
+from src.agents.news.subgraph import build_financial_news_subgraph
+from src.agents.technical.subgraph import build_technical_subgraph
 from src.shared.kernel.tools.logger import get_logger, log_event
 
 from .nodes.consolidate_research import consolidate_research_node
-from .nodes.debate.graph import build_debate_subgraph
-from .nodes.financial_news_research.graph import build_financial_news_subgraph
-from .nodes.fundamental_analysis.graph import build_fundamental_subgraph
-from .nodes.intent_extraction.graph import build_intent_extraction_subgraph
-from .nodes.technical_analysis.graph import build_technical_subgraph
 from .state import AgentState
 
 logger = get_logger(__name__)

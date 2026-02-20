@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.workflow.nodes.debate.nodes import verdict_node
-from src.workflow.nodes.fundamental_analysis.graph import model_selection_node
+from src.workflow.nodes.fundamental_analysis.nodes import model_selection_node
 
 
 @pytest.mark.anyio
@@ -71,7 +71,7 @@ async def test_immediate_status_emission():
     # model_selection_node returns a Command object
     # We need to inspect command.update
 
-    result = model_selection_node(mock_fa_state)
+    result = await model_selection_node(mock_fa_state)
 
     # Command object has .update attribute
     if hasattr(result, "update"):

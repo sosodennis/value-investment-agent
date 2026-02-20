@@ -27,6 +27,9 @@ This checklist is mandatory for agent refactor and boundary-sensitive changes.
 3. For incident-prone boundaries, log with unified schema:
    - required keys: `node`, `artifact_id`, `contract_kind`, `error_code`
    - include `replay` diagnostics snapshot.
+4. For workflow node `Command` assembly:
+   - use `src/workflow/command_adapter.py` (no duplicated per-node `goto == "END"` conversion)
+   - use `src/shared/kernel/workflow_routing.py` for END sentinel normalization
 
 ## 3. Incident 5-Minute Triage
 
@@ -36,6 +39,7 @@ This checklist is mandatory for agent refactor and boundary-sensitive changes.
    - `workflow_state`
    - `interrupt_payload`
    - `artifact_json`
+   (canonical kind/source: `src/shared/kernel/boundary_contracts.py`)
 4. Use `replay.artifact_refs` and `replay.current_node` to replay the failing boundary input.
 5. Verify whether failure is:
    - model/dict mixed flow

@@ -11,32 +11,29 @@ from langgraph.types import Command, interrupt
 
 from src.agents.intent.application.factory import intent_orchestrator
 from src.shared.kernel.tools.logger import get_logger, log_event
+from src.workflow.command_adapter import command_from_result, command_from_update
 
 from .subgraph_state import IntentExtractionState
 
 logger = get_logger(__name__)
 
 
-def _resolve_goto(goto: str) -> str:
-    return END if goto == "END" else goto
-
-
 def extraction_node(state: IntentExtractionState) -> Command:
     """Extract company and model from user query."""
     result = intent_orchestrator.run_extraction(state)
-    return Command(update=result.update, goto=_resolve_goto(result.goto))
+    return command_from_result(result, end_node=END)
 
 
 def searching_node(state: IntentExtractionState) -> Command:
     """Search for the ticker based on extracted intent."""
     result = intent_orchestrator.run_searching(state)
-    return Command(update=result.update, goto=_resolve_goto(result.goto))
+    return command_from_result(result, end_node=END)
 
 
 def decision_node(state: IntentExtractionState) -> Command:
     """Decide if ticker is resolved or needs clarification."""
     result = intent_orchestrator.run_decision(state)
-    return Command(update=result.update, goto=_resolve_goto(result.goto))
+    return command_from_result(result, end_node=END)
 
 
 def clarification_node(state: IntentExtractionState) -> Command:
@@ -74,10 +71,7 @@ def clarification_node(state: IntentExtractionState) -> Command:
         interrupt_payload_dump=interrupt_payload_dump,
     )
     if resolution_update is not None:
-        return Command(
-            update=resolution_update,
-            goto=END,
-        )
+        return command_from_update(resolution_update, goto="END", end_node=END)
 
     # If even fallback fails, retry extraction
     log_event(
@@ -88,4 +82,4 @@ def clarification_node(state: IntentExtractionState) -> Command:
         error_code="INTENT_CLARIFICATION_RETRY",
     )
     result = intent_orchestrator.build_clarification_retry_update()
-    return Command(update=result.update, goto=result.goto)
+    return command_from_result(result, end_node=END)

@@ -28,6 +28,8 @@ INDUSTRIAL_EXTENSION_KEYS: tuple[str, ...] = (
     "cogs",
     "rd_expense",
     "sga_expense",
+    "selling_expense",
+    "ga_expense",
     "capex",
 )
 
@@ -46,6 +48,7 @@ REAL_ESTATE_EXTENSION_KEYS: tuple[str, ...] = (
     "real_estate_assets",
     "accumulated_depreciation",
     "depreciation_and_amortization",
+    "gain_on_sale",
     "ffo",
 )
 

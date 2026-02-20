@@ -83,5 +83,7 @@ Canonical (active):
 4. `docs/agent-layer-responsibility-and-naming-guideline.md`
 5. `docs/prompt-refactor-guideline.md`
 6. `docs/simple-triad-layer-alignment-2026-02-16.md`
-7. `docs/next-refactor-pending-2026-02-16.md`
-8. `docs/README.md` (document authority index)
+7. `docs/developer-workflow-checklist.md`
+8. `docs/agent-centric-subgraph-shared-kernel-adr-2026-02-19.md`
+9. `docs/next-refactor-pending-2026-02-19.md`
+10. `docs/README.md` (document authority index)

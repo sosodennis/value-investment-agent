@@ -106,6 +106,8 @@ class IndustrialExtensionModel(BaseModel):
     cogs: TraceableFieldModel | None = None
     rd_expense: TraceableFieldModel | None = None
     sga_expense: TraceableFieldModel | None = None
+    selling_expense: TraceableFieldModel | None = None
+    ga_expense: TraceableFieldModel | None = None
     capex: TraceableFieldModel | None = None
 
 
@@ -126,6 +128,7 @@ class RealEstateExtensionModel(BaseModel):
     real_estate_assets: TraceableFieldModel | None = None
     accumulated_depreciation: TraceableFieldModel | None = None
     depreciation_and_amortization: TraceableFieldModel | None = None
+    gain_on_sale: TraceableFieldModel | None = None
     ffo: TraceableFieldModel | None = None
 
 

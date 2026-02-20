@@ -43,6 +43,7 @@ from src.shared.kernel.tools.incident_logging import (
 )
 from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
+from src.shared.kernel.workflow_contracts import WorkflowFanoutNodeResult
 
 logger = get_logger(__name__)
 
@@ -71,10 +72,7 @@ class _DynamicPayoffMapProvider(Protocol):
     def __call__(self, ticker: str | None, risk_profile: str) -> dict[str, float]: ...
 
 
-@dataclass(frozen=True)
-class DebateNodeResult:
-    update: dict[str, object]
-    goto: str | list[str]
+DebateNodeResult = WorkflowFanoutNodeResult
 
 
 @dataclass(frozen=True)

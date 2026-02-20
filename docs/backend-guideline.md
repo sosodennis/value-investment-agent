@@ -18,6 +18,10 @@ Rule:
 3. Domain logic must not live in `src/workflow/**`.
 4. Example end-state entrypoint:
    - `src/agents/fundamental/application/orchestrator.py`
+5. Workflow `Command` construction should use shared adapters/helpers, not per-node duplicated mapping logic.
+6. Subgraph builder ownership belongs to agent packages:
+   - canonical path: `src/agents/*/subgraph.py`
+   - do not add or reintroduce `src/workflow/nodes/*/graph.py` wrappers
 
 ## 2. Mandatory Contract Path
 
@@ -47,6 +51,9 @@ For workflow state / interrupt payloads:
 3. No `resolved_ticker -> state.ticker` compatibility fallback in core decision paths.
 4. Missing required contract field should fail fast with explicit error.
 5. No domain-to-DTO mapping logic inline in nodes; place in interface serializers/mappers and invoke via application orchestration.
+6. Node result (`update/goto`) -> `Command` mapping must go through shared helpers:
+   - `src/workflow/command_adapter.py`
+   - `src/shared/kernel/workflow_routing.py`
 
 ## 4. Type Rules
 
@@ -68,6 +75,13 @@ For workflow state / interrupt payloads:
 8. Domain ports:
    - Shared generic port: `src/shared/cross_agent/data/typed_artifact_port.py`
    - Per-agent concrete ports: `src/agents/*/data/ports.py`
+9. Boundary event contract:
+   - `src/shared/kernel/boundary_contracts.py`
+10. Workflow result/routing shared contracts:
+   - `src/shared/kernel/workflow_contracts.py`
+   - `src/shared/kernel/workflow_routing.py`
+11. Workflow command adapter:
+   - `src/workflow/command_adapter.py`
 
 ## 6. Standard Backend Change Recipes
 
@@ -131,8 +145,9 @@ For workflow state / interrupt payloads:
 1. `docs/backend-canonicalization-flow.md` (detailed canonicalization and artifact flow)
 2. `docs/agent-layer-responsibility-and-naming-guideline.md` (authoritative agent-layer ownership + naming)
 3. `docs/simple-triad-layer-alignment-2026-02-16.md` (strict boundary and incident alignment note)
-4. `docs/next-refactor-pending-2026-02-16.md` (current refactor backlog)
-5. `docs/developer-workflow-checklist.md` (developer execution checklist and incident triage)
+4. `docs/agent-centric-subgraph-shared-kernel-adr-2026-02-19.md` (current architecture decision for next-phase ownership)
+5. `docs/next-refactor-pending-2026-02-19.md` (current refactor backlog)
+6. `docs/developer-workflow-checklist.md` (developer execution checklist and incident triage)
 
 ## 11. Boundary Observability Policy (Mandatory)
 
@@ -142,4 +157,7 @@ For workflow state / interrupt payloads:
    - `contract_kind`
    - `error_code`
 2. Use shared helper `src/shared/kernel/tools/incident_logging.py` for consistency.
-3. Non-`OK` boundary events must include replay diagnostics snapshot (`replay`) so incidents can be localized quickly.
+3. Boundary payload shape must follow shared contract:
+   - `src/shared/kernel/boundary_contracts.py::BoundaryEventPayload`
+   - `src/shared/kernel/boundary_contracts.py::BoundaryReplayDiagnostics`
+4. Non-`OK` boundary events must include replay diagnostics snapshot (`replay`) so incidents can be localized quickly.
