@@ -72,6 +72,27 @@ class ModelSelectionResult:
     signals: SelectionSignals
 
 
+@dataclass(frozen=True)
+class ScoringWeights:
+    sector_match: float = 2.0
+    industry_match: float = 2.5
+    sic_match: float = 3.0
+    profitable_bonus: float = 1.0
+    unprofitable_penalty: float = 2.5
+    profitability_unknown_penalty: float = 0.5
+    profitable_mismatch_penalty: float = 0.5
+    preprofit_fit_bonus: float = 1.0
+    preprofit_preference_bonus: float = 0.5
+    high_growth_threshold: float = 0.15
+    high_growth_bonus: float = 1.5
+    low_growth_threshold: float = 0.05
+    low_growth_penalty: float = 0.5
+    coverage_ratio_multiplier: float = 1.5
+
+
+DEFAULT_SCORING_WEIGHTS = ScoringWeights()
+
+
 MODEL_SPECS: tuple[ModelSpec, ...] = (
     ModelSpec(
         model=ValuationModel.DDM,
@@ -254,46 +275,51 @@ def _collect_signals(
     )
 
 
-def _evaluate_spec(spec: ModelSpec, signals: SelectionSignals) -> ModelCandidate:
+def _evaluate_spec(
+    spec: ModelSpec,
+    signals: SelectionSignals,
+    *,
+    weights: ScoringWeights = DEFAULT_SCORING_WEIGHTS,
+) -> ModelCandidate:
     score = spec.base_score
     reasons: list[str] = []
 
     if _matches_keywords(signals.sector, spec.sector_keywords):
-        score += 2.0
+        score += weights.sector_match
         reasons.append("Sector match")
     if _matches_keywords(signals.industry, spec.industry_keywords):
-        score += 2.5
+        score += weights.industry_match
         reasons.append("Industry match")
     if _in_sic_ranges(signals.sic, spec.sic_ranges):
-        score += 3.0
+        score += weights.sic_match
         reasons.append("SIC match")
 
     if spec.requires_profitability is True:
         if signals.is_profitable is True:
-            score += 1.0
+            score += weights.profitable_bonus
             reasons.append("Profitable")
         elif signals.is_profitable is False:
-            score -= 2.5
+            score -= weights.unprofitable_penalty
             reasons.append("Not profitable")
         else:
-            score -= 0.5
+            score -= weights.profitability_unknown_penalty
             reasons.append("Profitability unknown")
     elif spec.requires_profitability is False:
         if signals.is_profitable is False:
-            score += 1.0
+            score += weights.preprofit_fit_bonus
             reasons.append("Pre-profit fit")
         elif signals.is_profitable is True:
-            score -= 0.5
+            score -= weights.profitable_mismatch_penalty
             reasons.append("Profitable mismatch")
 
     if spec.prefers_preprofit and signals.is_profitable is False:
-        score += 0.5
+        score += weights.preprofit_preference_bonus
     if spec.prefers_high_growth and signals.revenue_cagr is not None:
-        if signals.revenue_cagr >= 0.15:
-            score += 1.5
+        if signals.revenue_cagr >= weights.high_growth_threshold:
+            score += weights.high_growth_bonus
             reasons.append("High growth")
-        elif signals.revenue_cagr <= 0.05:
-            score -= 0.5
+        elif signals.revenue_cagr <= weights.low_growth_threshold:
+            score -= weights.low_growth_penalty
             reasons.append("Low growth")
 
     missing = []
@@ -306,7 +332,7 @@ def _evaluate_spec(spec: ModelSpec, signals: SelectionSignals) -> ModelCandidate
 
     if spec.required_fields:
         coverage_ratio = available / len(spec.required_fields)
-        score += coverage_ratio * 1.5
+        score += coverage_ratio * weights.coverage_ratio_multiplier
         if missing:
             reasons.append("Partial data coverage")
         else:
@@ -323,13 +349,17 @@ def _evaluate_spec(spec: ModelSpec, signals: SelectionSignals) -> ModelCandidate
 def select_valuation_model(
     profile: CompanyProfile,
     financial_reports: list[FundamentalSelectionReport] | None = None,
+    *,
+    weights: ScoringWeights = DEFAULT_SCORING_WEIGHTS,
 ) -> ModelSelectionResult:
     """
     Select the appropriate valuation model based on company characteristics and data coverage.
     """
     signals = _collect_signals(profile, financial_reports)
 
-    candidates = tuple(_evaluate_spec(spec, signals) for spec in MODEL_SPECS)
+    candidates = tuple(
+        _evaluate_spec(spec, signals, weights=weights) for spec in MODEL_SPECS
+    )
     if not candidates:
         log_event(
             logger,

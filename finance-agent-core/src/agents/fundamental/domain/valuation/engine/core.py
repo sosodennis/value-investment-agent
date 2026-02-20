@@ -29,6 +29,7 @@ class CalculationGraph:
         self.name = name
         self.graph = nx.DiGraph()
         self.functions: dict[str, Callable[..., CalcValue]] = {}
+        self.node_dependencies: dict[str, tuple[str, ...]] = {}
 
     def add_node(self, name: str, func: Callable[..., CalcValue] | None = None):
         """
@@ -39,9 +40,10 @@ class CalculationGraph:
         self.graph.add_node(name)
         if func:
             self.functions[name] = func
-            # Inspect function signature to determine dependencies
-            sig = inspect.signature(func)
-            for param in sig.parameters:
+            # Cache dependencies once to avoid repeated inspect.signature at runtime.
+            params = tuple(inspect.signature(func).parameters.keys())
+            self.node_dependencies[name] = params
+            for param in params:
                 self.graph.add_edge(param, name)
 
     def validate(self):
@@ -109,11 +111,15 @@ class CalculationGraph:
 
             if node in self.functions:
                 func = self.functions[node]
+                params = self.node_dependencies.get(node)
+                if params is None:
+                    params = tuple(inspect.signature(func).parameters.keys())
+                    self.node_dependencies[node] = params
+
                 # Gather arguments
-                sig = inspect.signature(func)
                 args: dict[str, CalcValue] = {}
                 trace_inputs: dict[str, TraceableField] = {}
-                for param in sig.parameters:
+                for param in params:
                     if param not in results:
                         log_event(
                             logger,

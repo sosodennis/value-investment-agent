@@ -21,6 +21,7 @@ def test_add_node_with_func():
 
     assert "calc_b" in graph.graph.nodes
     assert "calc_b" in graph.functions
+    assert graph.node_dependencies["calc_b"] == ("x",)
     assert graph.graph.has_edge("x", "calc_b")  # dependency detected via param name
 
 

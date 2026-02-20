@@ -191,53 +191,10 @@ class SECReportExtractor:
             return []
 
         # 1. 標籤與日期初步過濾
-        if self._is_plain_tag(config.concept_regex):
-            pattern = re.escape(config.concept_regex) + r"$"
-            mask = self.df["concept"].str.match(pattern, flags=re.IGNORECASE, na=False)
-        else:
-            processed_regex = (
-                config.concept_regex
-                if ":" in config.concept_regex
-                else f".*:{config.concept_regex}$"
-            )
-            mask = self.df["concept"].str.contains(
-                processed_regex, flags=re.IGNORECASE, na=False
-            )
+        mask = self._build_base_mask(config)
 
-        if self.actual_date and config.respect_anchor_date:
-            date_mask = (self.df["period_end"] == self.actual_date) | (
-                self.df["period_key"].str.contains(self.actual_date, na=False)
-            )
-            mask = mask & date_mask
-
-        # Statement/period/unit filters are applied later to capture rejection reasons.
-
-        # 2. 應用 SearchType 過濾邏輯 [5, 6]
-        if self.real_dim_cols:
-            dim_df = self.df[self.real_dim_cols]
-            dim_str = dim_df.astype(str).apply(lambda s: s.str.strip().str.lower())
-            empty_tokens = {"", "none", "none (total)", "total"}
-            empty_mask = dim_df.isna() | dim_str.isin(empty_tokens)
-            is_consolidated_series = empty_mask.all(axis=1)
-        else:
-            is_consolidated_series = pd.Series(True, index=self.df.index)
-
-        if config.type_name == "CONSOLIDATED":
-            mask = mask & is_consolidated_series
-        else:
-            mask = mask & (~is_consolidated_series)
-            # 如果是維度搜尋且有 dimension_regex，執行維度內搜尋 [7, 8]
-            if config.dimension_regex and self.real_dim_cols:
-                dim_mask = (
-                    self.df[self.real_dim_cols]
-                    .apply(
-                        lambda x: x.astype(str).str.contains(
-                            config.dimension_regex, flags=re.IGNORECASE, na=False
-                        )
-                    )
-                    .any(axis=1)
-                )
-                mask = mask & dim_mask
+        # 2. 應用 SearchType 過濾邏輯
+        mask = self._apply_search_type_mask(mask, config)
 
         matches = self.df[mask].copy()
         if matches.empty:
@@ -256,32 +213,112 @@ class SECReportExtractor:
 
         # 3. 格式化結果
         stats = SearchStats()
-        final_rows = []
-        seen: set[tuple[str, str]] = set()
+        final_rows = self._filter_and_format_results(matches, config, stats)
+        stats.log(logger)
+        final_rows.sort(
+            key=lambda row: self._period_sort_key(row.period_key),
+            reverse=True,
+        )
+        return final_rows
 
-        for _, row in matches.iterrows():
-            unit = self._extract_unit(row)
+    def _build_base_mask(self, config: SearchConfig) -> pd.Series:
+        if self._is_plain_tag(config.concept_regex):
+            pattern = re.escape(config.concept_regex) + r"$"
+            mask = self.df["concept"].str.match(pattern, flags=re.IGNORECASE, na=False)
+        else:
+            processed_regex = (
+                config.concept_regex
+                if ":" in config.concept_regex
+                else f".*:{config.concept_regex}$"
+            )
+            mask = self.df["concept"].str.contains(
+                processed_regex, flags=re.IGNORECASE, na=False
+            )
+
+        if self.actual_date and config.respect_anchor_date:
+            date_mask = (self.df["period_end"] == self.actual_date) | (
+                self.df["period_key"].str.contains(self.actual_date, na=False)
+            )
+            return mask & date_mask
+        return mask
+
+    def _apply_search_type_mask(
+        self,
+        base_mask: pd.Series,
+        config: SearchConfig,
+    ) -> pd.Series:
+        # Statement/period/unit filters are applied later to capture rejection reasons.
+        if self.real_dim_cols:
+            dim_df = self.df[self.real_dim_cols]
+            dim_str = dim_df.astype(str).apply(lambda s: s.str.strip().str.lower())
+            empty_tokens = {"", "none", "none (total)", "total"}
+            empty_mask = dim_df.isna() | dim_str.isin(empty_tokens)
+            is_consolidated_series = empty_mask.all(axis=1)
+        else:
+            is_consolidated_series = pd.Series(True, index=self.df.index)
+
+        if config.type_name == "CONSOLIDATED":
+            return base_mask & is_consolidated_series
+
+        mask = base_mask & (~is_consolidated_series)
+        if config.dimension_regex and self.real_dim_cols:
+            dim_mask = (
+                self.df[self.real_dim_cols]
+                .apply(
+                    lambda x: x.astype(str).str.contains(
+                        config.dimension_regex, flags=re.IGNORECASE, na=False
+                    )
+                )
+                .any(axis=1)
+            )
+            mask = mask & dim_mask
+        return mask
+
+    def _filter_and_format_results(
+        self,
+        matches: pd.DataFrame,
+        config: SearchConfig,
+        stats: SearchStats,
+    ) -> list[SECExtractResult]:
+        final_rows: list[SECExtractResult] = []
+        seen: set[tuple[str, str, str | None, tuple[tuple[str, str], ...], str]] = set()
+
+        statement_tokens = (
+            [token for token in config.statement_types if token]
+            if config.statement_types
+            else []
+        )
+        has_statement_type = "statement_type" in matches.columns
+        has_unit_filter = bool(config.unit_whitelist or config.unit_blacklist)
+        columns = list(matches.columns)
+        column_index = {column: index for index, column in enumerate(columns)}
+
+        for row in matches.itertuples(index=False, name=None):
+            concept = str(self._tuple_get(row, column_index, "concept") or "")
+            period_key = str(self._tuple_get(row, column_index, "period_key") or "")
+            statement_value = self._tuple_get(row, column_index, "statement_type")
+            raw_value = self._tuple_get(row, column_index, "value")
+
+            unit = self._extract_unit_from_tuple(row, column_index)
             normalized_unit = self._normalize_unit(unit) if unit else None
 
             statement_ok = True
-            statement_tokens = (
-                [t for t in config.statement_types if t]
-                if config.statement_types
-                else []
-            )
-            if statement_tokens and "statement_type" in self.df.columns:
+            if statement_tokens and has_statement_type:
                 statement_ok = self._statement_matches(
-                    row.get("statement_type"), statement_tokens
+                    statement_value, statement_tokens
                 )
 
+            row_period_type = self._tuple_get(row, column_index, "period_type")
             period_ok = True
             if config.period_type:
-                period_ok = self._period_matches(row, config.period_type)
+                period_ok = self._period_matches_values(
+                    period_key=period_key,
+                    row_period_type=row_period_type,
+                    period_type=config.period_type,
+                )
 
             unit_ok = True
-            if (
-                config.unit_whitelist or config.unit_blacklist
-            ) and self._unit_columns_present():
+            if has_unit_filter and self._unit_columns_present():
                 unit_ok = self._unit_matches(
                     normalized_unit,
                     config.unit_whitelist,
@@ -292,92 +329,85 @@ class SECReportExtractor:
                 stats.add(
                     Rejection(
                         reason="statement_mismatch",
-                        concept=str(row.get("concept")),
-                        period_key=str(row.get("period_key")),
-                        statement_type=str(row.get("statement_type"))
-                        if pd.notna(row.get("statement_type"))
-                        else None,
+                        concept=concept,
+                        period_key=period_key,
+                        statement_type=(
+                            str(statement_value) if pd.notna(statement_value) else None
+                        ),
                         unit=str(unit) if unit is not None else None,
-                        value_preview=self._value_preview(row.get("value")),
+                        value_preview=self._value_preview(raw_value),
                     )
                 )
             if not period_ok:
                 stats.add(
                     Rejection(
                         reason="period_mismatch",
-                        concept=str(row.get("concept")),
-                        period_key=str(row.get("period_key")),
-                        statement_type=str(row.get("statement_type"))
-                        if pd.notna(row.get("statement_type"))
-                        else None,
+                        concept=concept,
+                        period_key=period_key,
+                        statement_type=(
+                            str(statement_value) if pd.notna(statement_value) else None
+                        ),
                         unit=str(unit) if unit is not None else None,
-                        value_preview=self._value_preview(row.get("value")),
+                        value_preview=self._value_preview(raw_value),
                     )
                 )
             if not unit_ok:
                 stats.add(
                     Rejection(
                         reason="unit_mismatch",
-                        concept=str(row.get("concept")),
-                        period_key=str(row.get("period_key")),
-                        statement_type=str(row.get("statement_type"))
-                        if pd.notna(row.get("statement_type"))
-                        else None,
+                        concept=concept,
+                        period_key=period_key,
+                        statement_type=(
+                            str(statement_value) if pd.notna(statement_value) else None
+                        ),
                         unit=str(unit) if unit is not None else None,
-                        value_preview=self._value_preview(row.get("value")),
+                        value_preview=self._value_preview(raw_value),
                     )
                 )
             if not (statement_ok and period_ok and unit_ok):
                 continue
-            dim_detail = {
-                col.split("_")[-1]: row[col]
-                for col in self.real_dim_cols
-                if pd.notna(row[col])
-            }
+
+            dim_detail = self._extract_dimension_detail_from_tuple(
+                row, column_index, self.real_dim_cols
+            )
             dim_key = tuple(sorted((str(k), str(v)) for k, v in dim_detail.items()))
-            key = (
-                str(row.get("concept")),
-                str(row.get("period_key")),
+            dedup_key = (
+                concept,
+                period_key,
                 normalized_unit,
                 dim_key,
-                str(row.get("value")),
+                str(raw_value),
             )
-            if key in seen:
+            if dedup_key in seen:
                 continue
-            seen.add(key)
+            seen.add(dedup_key)
 
-            dim_str = (
+            dimensions = (
                 "\n".join([f"{k}: {v}" for k, v in dim_detail.items()])
                 if dim_detail
                 else "None (Total)"
             )
-
-            # Safe access for optional columns
-            label = row.get("label")
-            statement = row.get("statement_type")
+            label = self._tuple_get(row, column_index, "label")
+            decimals = self._tuple_get(row, column_index, "decimals")
+            scale = self._tuple_get(row, column_index, "scale")
 
             final_rows.append(
                 SECExtractResult(
-                    concept=row["concept"],
-                    value=str(row["value"]),
-                    label=label if pd.notna(label) else None,
-                    statement=str(statement) if pd.notna(statement) else None,
-                    period_key=str(row["period_key"]),
-                    dimensions=dim_str,
+                    concept=concept,
+                    value=str(raw_value),
+                    label=str(label) if pd.notna(label) else None,
+                    statement=str(statement_value)
+                    if pd.notna(statement_value)
+                    else None,
+                    period_key=period_key,
+                    dimensions=dimensions,
                     dimension_detail=dim_detail,
                     unit=str(unit) if unit is not None else None,
-                    decimals=str(row.get("decimals"))
-                    if pd.notna(row.get("decimals"))
-                    else None,
-                    scale=str(row.get("scale")) if pd.notna(row.get("scale")) else None,
+                    decimals=str(decimals) if pd.notna(decimals) else None,
+                    scale=str(scale) if pd.notna(scale) else None,
                 )
             )
 
-        stats.log(logger)
-        final_rows.sort(
-            key=lambda row: self._period_sort_key(row.period_key),
-            reverse=True,
-        )
         return final_rows
 
     def sic_code(self):
@@ -459,11 +489,22 @@ class SECReportExtractor:
 
     @staticmethod
     def _period_matches(row: pd.Series, period_type: str) -> bool:
-        period_type = period_type.lower()
-        if "period_type" in row and pd.notna(row.get("period_type")):
-            return str(row.get("period_type")).lower() == period_type
-        period_key = str(row.get("period_key") or "")
-        return period_key.lower().startswith(period_type)
+        return SECReportExtractor._period_matches_values(
+            period_key=str(row.get("period_key") or ""),
+            row_period_type=row.get("period_type"),
+            period_type=period_type,
+        )
+
+    @staticmethod
+    def _period_matches_values(
+        period_key: str,
+        row_period_type: object,
+        period_type: str,
+    ) -> bool:
+        expected = period_type.lower()
+        if row_period_type is not None and pd.notna(row_period_type):
+            return str(row_period_type).lower() == expected
+        return str(period_key).lower().startswith(expected)
 
     @staticmethod
     def _period_sort_key(period_key: str) -> date:
@@ -527,6 +568,41 @@ class SECReportExtractor:
             if key in row and pd.notna(row[key]):
                 return str(row[key])
         return None
+
+    @staticmethod
+    def _tuple_get(
+        row: tuple[object, ...],
+        column_index: dict[str, int],
+        key: str,
+    ) -> object | None:
+        index = column_index.get(key)
+        if index is None:
+            return None
+        return row[index]
+
+    @staticmethod
+    def _extract_unit_from_tuple(
+        row: tuple[object, ...],
+        column_index: dict[str, int],
+    ) -> str | None:
+        for key in ("unit", "unit_ref", "unit_ref_id", "unit_id", "unit_key"):
+            value = SECReportExtractor._tuple_get(row, column_index, key)
+            if value is not None and pd.notna(value):
+                return str(value)
+        return None
+
+    @staticmethod
+    def _extract_dimension_detail_from_tuple(
+        row: tuple[object, ...],
+        column_index: dict[str, int],
+        real_dim_cols: list[str],
+    ) -> dict[str, object]:
+        details: dict[str, object] = {}
+        for column in real_dim_cols:
+            value = SECReportExtractor._tuple_get(row, column_index, column)
+            if value is not None and pd.notna(value):
+                details[column.split("_")[-1]] = value
+        return details
 
     @staticmethod
     def _is_plain_tag(tag: str) -> bool:
