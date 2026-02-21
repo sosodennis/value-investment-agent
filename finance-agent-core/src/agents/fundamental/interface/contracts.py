@@ -251,6 +251,8 @@ class FundamentalPreviewInputModel(BaseModel):
     model_type: OptionalFundamentalText = None
     valuation_summary: OptionalFundamentalText = None
     valuation_score: OptionalFundamentalNumber = None
+    assumption_breakdown: dict[str, object] | None = None
+    data_freshness: dict[str, object] | None = None
 
 
 def parse_financial_reports_model(

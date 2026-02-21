@@ -68,3 +68,20 @@ def test_summarize_fundamental_for_preview_small_numbers():
     preview = summarize_fundamental_for_preview(ctx, financial_reports)
     assert preview["key_metrics"]["Revenue"] == "$500,000"
     assert preview["key_metrics"]["Net Income"] == "$50,000"
+
+
+def test_summarize_fundamental_for_preview_includes_new_contract_fields():
+    ctx = FundamentalPreviewInputModel(
+        ticker="AAPL",
+        company_name="Apple Inc.",
+        sector="Technology",
+        industry="Consumer Electronics",
+        status="calculated",
+        assumption_breakdown={"total_assumptions": 1},
+        data_freshness={"market_data": {"provider": "yfinance"}},
+    )
+
+    preview = summarize_fundamental_for_preview(ctx)
+
+    assert preview["assumption_breakdown"]["total_assumptions"] == 1
+    assert preview["data_freshness"]["market_data"]["provider"] == "yfinance"

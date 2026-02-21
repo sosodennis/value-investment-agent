@@ -14,6 +14,8 @@ class FundamentalAppContextDTO:
     industry: str | None = None
     model_type: str | None = None
     valuation_summary: str | None = None
+    assumption_breakdown: JSONObject | None = None
+    data_freshness: JSONObject | None = None
 
 
 @dataclass(frozen=True)

@@ -30,14 +30,42 @@ def test_build_valuation_success_update_includes_output_and_artifact() -> None:
         intent_ctx={},
         ticker="GME",
         model_type="dcf_standard",
-        reports_raw=[],
+        reports_raw=[
+            {
+                "base": {
+                    "fiscal_year": {"value": 2025},
+                    "period_end_date": {"value": "2025-12-31"},
+                }
+            }
+        ],
         reports_artifact_id="artifact-123",
         params_dump={"wacc": 0.1},
-        calculation_metrics={"intrinsic_value": 42.5},
-        assumptions=[],
+        calculation_metrics={
+            "intrinsic_value": 42.5,
+            "equity_value": 4250.0,
+            "upside_potential": 0.15,
+            "details": {
+                "distribution_summary": {
+                    "summary": {
+                        "percentile_5": 30.0,
+                        "median": 42.5,
+                        "percentile_95": 60.0,
+                    },
+                    "diagnostics": {
+                        "configured_iterations": 1000,
+                        "executed_iterations": 500,
+                        "effective_window": 166,
+                        "stopped_early": True,
+                    },
+                }
+            },
+        },
+        assumptions=["wacc defaulted to 10.00%"],
         summarize_preview=lambda _ctx, _reports: {
             "company_name": "GameStop",
             "selected_model": "dcf_standard",
+            "assumption_breakdown": _ctx.assumption_breakdown,
+            "data_freshness": _ctx.data_freshness,
         },
         build_valuation_artifact_fn=lambda ticker,
         model_type,
@@ -53,6 +81,16 @@ def test_build_valuation_success_update_includes_output_and_artifact() -> None:
                 "type": "financial_reports",
             },
         },
+        build_metadata={
+            "data_freshness": {
+                "market_data": {
+                    "provider": "yfinance",
+                    "as_of": "2026-02-20T00:00:00Z",
+                    "missing_fields": ["target_mean_price"],
+                },
+                "shares_outstanding_source": "market_data",
+            }
+        },
     )
 
     fa = update["fundamental_analysis"]
@@ -61,6 +99,20 @@ def test_build_valuation_success_update_includes_output_and_artifact() -> None:
     assert fa["calculation_output"]["metrics"]["intrinsic_value"] == 42.5
     assert fa["artifact"]["kind"] == "fundamental_analysis.output"
     assert fa["artifact"]["reference"]["artifact_id"] == "artifact-123"
+    preview = fa["artifact"]["preview"]
+    assert isinstance(preview, dict)
+    assert "distribution_summary" in preview
+    assert preview["distribution_scenarios"]["base"]["price"] == 42.5
+    assert preview["equity_value"] == 4250.0
+    assert preview["intrinsic_value"] == 42.5
+    assert preview["upside_potential"] == 0.15
+    assert preview["assumption_breakdown"]["total_assumptions"] == 1
+    assert preview["assumption_breakdown"]["monte_carlo"]["executed_iterations"] == 500
+    assert preview["assumption_breakdown"]["monte_carlo"]["effective_window"] == 166
+    assert preview["assumption_breakdown"]["monte_carlo"]["stopped_early"] is True
+    assert preview["data_freshness"]["financial_statement"]["fiscal_year"] == 2025
+    assert preview["data_freshness"]["market_data"]["provider"] == "yfinance"
+    assert preview["data_freshness"]["shares_outstanding_source"] == "market_data"
     assert update["node_statuses"]["fundamental_analysis"] == "done"
 
 
@@ -98,7 +150,47 @@ def test_build_valuation_success_update_keeps_zero_intrinsic_value() -> None:
     assert isinstance(artifact, dict)
     preview = artifact["preview"]
     assert isinstance(preview, dict)
-    assert preview["equity_value"] == 0.0
+    assert preview["equity_value"] == 42.5
+    assert preview["intrinsic_value"] == 0.0
+
+
+def test_build_valuation_success_update_derives_missing_valuation_metrics() -> None:
+    update = build_valuation_success_update(
+        fundamental={},
+        intent_ctx={},
+        ticker="JPM",
+        model_type="bank",
+        reports_raw=[],
+        reports_artifact_id="artifact-derivation",
+        params_dump={"shares_outstanding": 100.0, "current_price": 50.0},
+        calculation_metrics={"equity_value": "7500"},
+        assumptions=[],
+        summarize_preview=lambda _ctx, _reports: {},
+        build_valuation_artifact_fn=lambda ticker,
+        model_type,
+        reports_artifact_id,
+        preview: {
+            "kind": "fundamental_analysis.output",
+            "version": "v1",
+            "summary": f"ok:{ticker}:{model_type}",
+            "preview": preview,
+            "reference": {
+                "artifact_id": reports_artifact_id,
+                "download_url": f"/api/artifacts/{reports_artifact_id}",
+                "type": "financial_reports",
+            },
+        },
+    )
+
+    fa = update["fundamental_analysis"]
+    assert isinstance(fa, dict)
+    artifact = fa["artifact"]
+    assert isinstance(artifact, dict)
+    preview = artifact["preview"]
+    assert isinstance(preview, dict)
+    assert preview["equity_value"] == 7500.0
+    assert preview["intrinsic_value"] == 75.0
+    assert preview["upside_potential"] == 0.5
 
 
 def test_build_valuation_error_update_sets_calculation_error() -> None:

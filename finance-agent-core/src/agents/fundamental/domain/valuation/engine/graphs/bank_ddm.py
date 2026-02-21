@@ -56,6 +56,8 @@ def calculate_dividends(
 def calculate_pv(
     dividends: list[float], cost_of_equity: float, terminal_growth: float
 ) -> float:
+    if cost_of_equity <= terminal_growth:
+        raise ValueError("Cost of equity must be greater than terminal growth")
     # PV of Dividends + Terminal Value
     pv = 0.0
     for t, d in enumerate(dividends):
@@ -68,6 +70,19 @@ def calculate_pv(
     pv_tv = tv / ((1 + cost_of_equity) ** last_period)
 
     return pv + pv_tv
+
+
+def calculate_cost_of_equity(
+    risk_free_rate: float,
+    beta: float,
+    market_risk_premium: float,
+    cost_of_equity_override: float | None = None,
+) -> float:
+    if cost_of_equity_override is not None:
+        if cost_of_equity_override <= 0:
+            raise ValueError("Cost of equity override must be positive")
+        return cost_of_equity_override
+    return risk_free_rate + (beta * market_risk_premium)
 
 
 def create_bank_graph() -> CalculationGraph:
@@ -85,6 +100,9 @@ def create_bank_graph() -> CalculationGraph:
 
     # calculate_dividends(net_income, required_capital, initial_capital)
     graph.add_node("dividends", calculate_dividends)
+
+    # calculate_cost_of_equity(risk_free_rate, beta, market_risk_premium, cost_of_equity_override)
+    graph.add_node("cost_of_equity", calculate_cost_of_equity)
 
     # calculate_pv(dividends, cost_of_equity, terminal_growth)
     graph.add_node("equity_value", calculate_pv)

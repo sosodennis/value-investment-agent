@@ -25,12 +25,64 @@ describe('parseFinancialPreview', () => {
         const parsed = parseFinancialPreview({
             ticker: 'AAPL',
             valuation_score: 82,
+            equity_value: 1230000000000,
+            intrinsic_value: 210.5,
+            upside_potential: 0.182,
             key_metrics: {
                 ROE: '16.5%',
             },
             signal_state: {
                 risk_level: 'low',
                 z_score: 2.1,
+            },
+            distribution_summary: {
+                summary: {
+                    percentile_5: 120,
+                    median: 150,
+                    percentile_95: 190,
+                },
+                diagnostics: {
+                    converged: true,
+                    iterations: 10000,
+                },
+            },
+            distribution_scenarios: {
+                bear: { label: 'P5 (Bear)', price: 120 },
+                base: { label: 'P50 (Base)', price: 150 },
+                bull: { label: 'P95 (Bull)', price: 190 },
+            },
+            assumption_breakdown: {
+                total_assumptions: 2,
+                assumptions: [
+                    {
+                        statement: 'wacc defaulted to 10.00%',
+                        category: 'default',
+                        severity: 'high',
+                    },
+                ],
+                key_parameters: {
+                    wacc: 0.1,
+                    terminal_growth: 0.03,
+                },
+                monte_carlo: {
+                    enabled: true,
+                    iterations: 10000,
+                    executed_iterations: 5000,
+                    effective_window: 250,
+                    stopped_early: true,
+                },
+            },
+            data_freshness: {
+                financial_statement: {
+                    fiscal_year: 2025,
+                    period_end_date: '2025-12-31',
+                },
+                market_data: {
+                    provider: 'yfinance',
+                    as_of: '2026-02-20T00:00:00Z',
+                    missing_fields: ['target_mean_price'],
+                },
+                shares_outstanding_source: 'market_data',
             },
             financial_reports: [
                 {
@@ -43,8 +95,18 @@ describe('parseFinancialPreview', () => {
 
         expect(parsed?.ticker).toBe('AAPL');
         expect(parsed?.valuation_score).toBe(82);
+        expect(parsed?.equity_value).toBe(1230000000000);
+        expect(parsed?.intrinsic_value).toBe(210.5);
+        expect(parsed?.upside_potential).toBe(0.182);
         expect(parsed?.key_metrics?.ROE).toBe('16.5%');
         expect(parsed?.signal_state?.risk_level).toBe('low');
+        expect(parsed?.distribution_summary?.summary.median).toBe(150);
+        expect(parsed?.distribution_scenarios?.bull?.price).toBe(190);
+        expect(parsed?.assumption_breakdown?.total_assumptions).toBe(2);
+        expect(parsed?.assumption_breakdown?.monte_carlo?.executed_iterations).toBe(5000);
+        expect(parsed?.assumption_breakdown?.monte_carlo?.effective_window).toBe(250);
+        expect(parsed?.assumption_breakdown?.monte_carlo?.stopped_early).toBe(true);
+        expect(parsed?.data_freshness?.market_data?.provider).toBe('yfinance');
         expect(parsed?.financial_reports).toHaveLength(1);
     });
 
@@ -76,6 +138,29 @@ describe('parseFinancialPreview', () => {
 
         expect(parsed?.ticker).toBeUndefined();
         expect(parsed?.valuation_score).toBe(80);
+    });
+
+    it('accepts nullable and non-finite diagnostics values by skipping them', () => {
+        const parsed = parseFinancialPreview({
+            distribution_summary: {
+                summary: {
+                    percentile_5: 120,
+                    median: 150,
+                    percentile_95: 190,
+                },
+                diagnostics: {
+                    converged: false,
+                    iterations: 300,
+                    median_delta: null,
+                    tolerance: Number.NaN,
+                },
+            },
+        });
+
+        expect(parsed?.distribution_summary?.diagnostics?.converged).toBe(false);
+        expect(parsed?.distribution_summary?.diagnostics?.iterations).toBe(300);
+        expect(parsed?.distribution_summary?.diagnostics?.median_delta).toBeUndefined();
+        expect(parsed?.distribution_summary?.diagnostics?.tolerance).toBeUndefined();
     });
 
     it('accepts backend report shape without period_end_date/currency and with industry_type', () => {

@@ -8,10 +8,14 @@ from src.agents.fundamental.application.orchestrator import (
     FundamentalNodeResult,
     FundamentalOrchestrator,
 )
+from src.agents.fundamental.data.clients.market_data import market_data_client
 from src.agents.fundamental.data.clients.sec_xbrl.utils import fetch_financial_data
 from src.agents.fundamental.data.ports import fundamental_artifact_port
 from src.agents.fundamental.domain.model_selection import select_valuation_model
-from src.agents.fundamental.domain.valuation.param_builder import build_params
+from src.agents.fundamental.domain.valuation.param_builder import (
+    ParamBuildResult,
+    build_params,
+)
 from src.agents.fundamental.domain.valuation.registry import SkillRegistry
 from src.agents.fundamental.interface.contracts import (
     FundamentalPreviewInputModel,
@@ -41,6 +45,8 @@ def _summarize_preview(
             selected_model=ctx.model_type,
             model_type=ctx.model_type,
             valuation_summary=ctx.valuation_summary,
+            assumption_breakdown=ctx.assumption_breakdown,
+            data_freshness=ctx.data_freshness,
         ),
         reports,
     )
@@ -93,9 +99,26 @@ class FundamentalWorkflowRunner:
         )
 
     async def run_valuation(self, state: Mapping[str, object]) -> FundamentalNodeResult:
+        def _build_params_with_market_data(
+            model_type: str,
+            ticker: str | None,
+            reports_raw: list[dict[str, object]],
+        ) -> ParamBuildResult:
+            market_snapshot: dict[str, object] | None = None
+            if ticker:
+                market_snapshot = market_data_client.get_market_snapshot(
+                    ticker
+                ).to_mapping()
+            return build_params(
+                model_type,
+                ticker,
+                reports_raw,
+                market_snapshot=market_snapshot,
+            )
+
         return await self.orchestrator.run_valuation(
             state,
-            build_params_fn=build_params,
+            build_params_fn=_build_params_with_market_data,
             get_skill_fn=SkillRegistry.get_skill,
         )
 

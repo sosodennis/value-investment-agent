@@ -151,6 +151,28 @@ Sprint 3 小計：`4.5` 人日
 `FA-305`
 - 文檔可支援新成員從 0 到可執行驗證流程。
 
+### FA-304 直接執行任務（Next）
+
+目標：把 `FA-303` 產生的 JSON 報表，轉成可讀的 Markdown regression 摘要，供評審與回歸判斷。
+
+1. 輸入來源（固定）
+- `finance-agent-core/reports/fundamental_backtest_report.json`
+
+2. 輸出檔案（新增）
+- `finance-agent-core/reports/fundamental_backtest_regression_summary.md`
+
+3. 報表內容規格（MVP）
+- Executive Summary：`total_cases`, `ok`, `errors`, `drift_count`, `issue_count`
+- Drift Table：欄位為 `case_id`, `metric_path`, `baseline`, `current`, `abs_diff`, `rel_diff`
+- Failed Cases：列出 `status=error` 的 case 與錯誤訊息
+- Issues：列出 baseline 對不上或缺 metric path 的問題
+- Decision Block：`PASS`（無 drift/issue/error）或 `FAIL`
+
+4. 驗收標準（FA-304）
+- 可由單一命令重建 Markdown 報表（不需手動編輯）。
+- Markdown 與同批 JSON 報表一致（摘要數字與 drift 明細一致）。
+- 若 `drift_count > 0` 或 `errors > 0` 或 `issue_count > 0`，Decision 必須為 `FAIL`。
+
 ---
 
 ## 優先級定義

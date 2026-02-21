@@ -35,4 +35,6 @@ def derive_fundamental_preview_view_model(
         "valuation_score": ctx.get("valuation_score"),
         "status": ctx.get("status", "done"),
         "metrics": metrics,
+        "assumption_breakdown": ctx.get("assumption_breakdown"),
+        "data_freshness": ctx.get("data_freshness"),
     }

@@ -137,6 +137,7 @@ class FundamentalOrchestrator:
         params_dump: JSONObject,
         calculation_metrics: JSONObject,
         assumptions: list[str],
+        build_metadata: JSONObject | None = None,
     ) -> JSONObject:
         return build_valuation_success_update(
             fundamental=fundamental,
@@ -150,6 +151,7 @@ class FundamentalOrchestrator:
             assumptions=assumptions,
             summarize_preview=self.summarize_preview,
             build_valuation_artifact_fn=self.build_valuation_artifact,
+            build_metadata=build_metadata,
         )
 
     def build_valuation_error_update(self, error: str) -> JSONObject:
@@ -444,6 +446,24 @@ class FundamentalOrchestrator:
                 calc_func(params_obj),
                 context=f"{model_type} valuation calculation result",
             )
+            calculation_error = result.get("error")
+            if isinstance(calculation_error, str) and calculation_error:
+                log_event(
+                    logger,
+                    event="fundamental_valuation_calculation_error",
+                    message="valuation calculator returned error payload",
+                    level=logging.ERROR,
+                    error_code="FUNDAMENTAL_VALUATION_CALCULATION_ERROR",
+                    fields={
+                        "ticker": ticker,
+                        "model_type": model_type,
+                        "error": calculation_error,
+                    },
+                )
+                return FundamentalNodeResult(
+                    update=self.build_valuation_error_update(calculation_error),
+                    goto="END",
+                )
 
             return FundamentalNodeResult(
                 update=self.build_valuation_success_update(
@@ -456,6 +476,7 @@ class FundamentalOrchestrator:
                     params_dump=params_dump,
                     calculation_metrics=result,
                     assumptions=build_result.assumptions,
+                    build_metadata=build_result.metadata,
                 ),
                 goto="END",
             )

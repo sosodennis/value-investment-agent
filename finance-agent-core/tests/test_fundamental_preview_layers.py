@@ -6,7 +6,12 @@ from src.agents.fundamental.interface.formatters import format_fundamental_previ
 
 def test_derive_fundamental_preview_view_model_extracts_metrics() -> None:
     view_model = derive_fundamental_preview_view_model(
-        {"ticker": "TSLA", "model_type": "saas"},
+        {
+            "ticker": "TSLA",
+            "model_type": "saas",
+            "assumption_breakdown": {"total_assumptions": 2},
+            "data_freshness": {"market_data": {"provider": "yfinance"}},
+        },
         [
             {
                 "base": {
@@ -23,6 +28,8 @@ def test_derive_fundamental_preview_view_model_extracts_metrics() -> None:
     assert metrics["net_income_raw"] == 15000000000
     assert metrics["total_assets_raw"] == 200000000000
     assert metrics["roe_ratio"] == 0.3
+    assert view_model["assumption_breakdown"]["total_assumptions"] == 2
+    assert view_model["data_freshness"]["market_data"]["provider"] == "yfinance"
 
 
 def test_format_fundamental_preview_formats_currency_and_roe() -> None:
@@ -41,9 +48,17 @@ def test_format_fundamental_preview_formats_currency_and_roe() -> None:
                 "total_assets_raw": 200000000000,
                 "roe_ratio": 0.3,
             },
+            "assumption_breakdown": {
+                "total_assumptions": 2,
+            },
+            "data_freshness": {
+                "market_data": {"provider": "yfinance"},
+            },
         }
     )
     assert preview["key_metrics"]["Revenue"] == "$100.0B"
     assert preview["key_metrics"]["Net Income"] == "$15.0B"
     assert preview["key_metrics"]["Total Assets"] == "$200.0B"
     assert preview["key_metrics"]["ROE"] == "30.0%"
+    assert preview["assumption_breakdown"]["total_assumptions"] == 2
+    assert preview["data_freshness"]["market_data"]["provider"] == "yfinance"

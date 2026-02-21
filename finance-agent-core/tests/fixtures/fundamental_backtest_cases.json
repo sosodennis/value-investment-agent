@@ -1,0 +1,150 @@
+{
+  "cases": [
+    {
+      "id": "saas_mc_seeded",
+      "model": "saas",
+      "required_metrics": [
+        "intrinsic_value",
+        "equity_value",
+        "enterprise_value",
+        "distribution_summary.median"
+      ],
+      "params": {
+        "ticker": "SAAS",
+        "rationale": "golden backtest case",
+        "initial_revenue": 100.0,
+        "growth_rates": [
+          0.15,
+          0.14,
+          0.12,
+          0.1,
+          0.08
+        ],
+        "operating_margins": [
+          0.1,
+          0.12,
+          0.14,
+          0.16,
+          0.18
+        ],
+        "tax_rate": 0.21,
+        "da_rates": [
+          0.03,
+          0.03,
+          0.03,
+          0.03,
+          0.03
+        ],
+        "capex_rates": [
+          0.05,
+          0.05,
+          0.05,
+          0.05,
+          0.05
+        ],
+        "wc_rates": [
+          0.01,
+          0.01,
+          0.01,
+          0.01,
+          0.01
+        ],
+        "sbc_rates": [
+          0.02,
+          0.02,
+          0.02,
+          0.02,
+          0.02
+        ],
+        "wacc": 0.1,
+        "terminal_growth": 0.025,
+        "shares_outstanding": 100.0,
+        "cash": 10.0,
+        "total_debt": 5.0,
+        "preferred_stock": 0.0,
+        "monte_carlo_iterations": 60,
+        "monte_carlo_seed": 123
+      }
+    },
+    {
+      "id": "bank_capm_mc_seeded",
+      "model": "bank",
+      "required_metrics": [
+        "equity_value",
+        "cost_of_equity",
+        "distribution_summary.median"
+      ],
+      "params": {
+        "ticker": "BNK",
+        "rationale": "golden backtest case",
+        "initial_net_income": 100.0,
+        "income_growth_rates": [
+          0.05,
+          0.05,
+          0.05
+        ],
+        "rwa_intensity": 0.05,
+        "tier1_target_ratio": 0.12,
+        "initial_capital": 200.0,
+        "risk_free_rate": 0.04,
+        "beta": 1.1,
+        "market_risk_premium": 0.05,
+        "cost_of_equity_strategy": "capm",
+        "terminal_growth": 0.02,
+        "monte_carlo_iterations": 60,
+        "monte_carlo_seed": 123
+      }
+    },
+    {
+      "id": "reit_affo_mc_seeded",
+      "model": "reit_ffo",
+      "required_metrics": [
+        "intrinsic_value",
+        "equity_value",
+        "enterprise_value",
+        "distribution_summary.median"
+      ],
+      "params": {
+        "ticker": "REIT",
+        "rationale": "golden backtest case",
+        "ffo": 100.0,
+        "ffo_multiple": 10.0,
+        "depreciation_and_amortization": 20.0,
+        "maintenance_capex_ratio": 0.8,
+        "cash": 10.0,
+        "total_debt": 50.0,
+        "preferred_stock": 0.0,
+        "shares_outstanding": 10.0,
+        "monte_carlo_iterations": 60,
+        "monte_carlo_seed": 321
+      }
+    },
+    {
+      "id": "bank_override_deterministic",
+      "model": "bank",
+      "required_metrics": [
+        "equity_value",
+        "cost_of_equity"
+      ],
+      "params": {
+        "ticker": "BNK",
+        "rationale": "golden deterministic case",
+        "initial_net_income": 100.0,
+        "income_growth_rates": [
+          0.05,
+          0.05,
+          0.05
+        ],
+        "rwa_intensity": 0.05,
+        "tier1_target_ratio": 0.12,
+        "initial_capital": 200.0,
+        "risk_free_rate": 0.04,
+        "beta": 1.1,
+        "market_risk_premium": 0.05,
+        "cost_of_equity_strategy": "override",
+        "cost_of_equity_override": 0.2,
+        "terminal_growth": 0.02
+      }
+    }
+  ]
+}

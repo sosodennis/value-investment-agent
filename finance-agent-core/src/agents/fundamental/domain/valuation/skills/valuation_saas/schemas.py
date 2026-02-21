@@ -52,3 +52,32 @@ class SaaSParams(BaseValuationParams):
     terminal_growth_fcfe: float | None = Field(
         None, description="Terminal growth rate for FCFE DCF (e.g., 0.03)"
     )
+
+    monte_carlo_iterations: int = Field(
+        0, ge=0, description="Monte Carlo iteration count (0 disables MC)"
+    )
+    monte_carlo_seed: int | None = Field(
+        None, description="Optional random seed for deterministic Monte Carlo runs"
+    )
+    growth_shock_std: float = Field(
+        0.03, gt=0, description="Std dev for growth shock in Monte Carlo"
+    )
+    margin_shock_std: float = Field(
+        0.02, gt=0, description="Std dev for operating margin shock in Monte Carlo"
+    )
+    wacc_std: float = Field(0.015, gt=0, description="Std dev for WACC in Monte Carlo")
+    terminal_growth_std: float = Field(
+        0.005, gt=0, description="Std dev for terminal growth in Monte Carlo"
+    )
+    corr_growth_margin: float = Field(
+        -0.35,
+        ge=-0.99,
+        le=0.99,
+        description="Correlation between growth and margin shocks",
+    )
+    corr_wacc_terminal_growth: float = Field(
+        0.30,
+        ge=-0.99,
+        le=0.99,
+        description="Correlation between WACC and terminal growth",
+    )

@@ -3,6 +3,12 @@ from __future__ import annotations
 from src.shared.kernel.traceable import TraceableField
 
 from ...engine.graphs.reit_ffo import create_reit_ffo_graph
+from ...engine.monte_carlo import (
+    CorrelationGroup,
+    DistributionSpec,
+    MonteCarloConfig,
+    MonteCarloEngine,
+)
 from .schemas import ReitFfoParams
 
 
@@ -32,14 +38,82 @@ def _apply_trace_inputs(
     return merged
 
 
+def _run_reit_monte_carlo(
+    *,
+    graph,
+    base_inputs: dict[str, float],
+    params: ReitFfoParams,
+) -> dict[str, object]:
+    config = MonteCarloConfig(
+        iterations=params.monte_carlo_iterations,
+        seed=params.monte_carlo_seed,
+    )
+    engine = MonteCarloEngine(config=config)
+
+    base_cap_rate = 1.0 / params.ffo_multiple
+    distributions: dict[str, DistributionSpec] = {
+        "occupancy_rate": DistributionSpec(
+            kind="triangular",
+            left=params.occupancy_rate_left,
+            mode=params.occupancy_rate_mode,
+            right=params.occupancy_rate_right,
+            min_bound=0.50,
+            max_bound=1.00,
+        ),
+        "cap_rate": DistributionSpec(
+            kind="normal",
+            mean=base_cap_rate,
+            std=params.cap_rate_std,
+            min_bound=0.02,
+            max_bound=0.25,
+        ),
+    }
+    correlation_groups = (
+        CorrelationGroup(
+            variables=("occupancy_rate", "cap_rate"),
+            matrix=(
+                (1.0, params.corr_occupancy_cap_rate),
+                (params.corr_occupancy_cap_rate, 1.0),
+            ),
+        ),
+    )
+
+    base_numeric_inputs = {
+        "occupancy_rate": params.occupancy_rate_mode,
+        "cap_rate": base_cap_rate,
+    }
+
+    def evaluate(sampled: dict[str, float]) -> float:
+        iter_inputs = dict(base_inputs)
+        occupancy_rate = sampled["occupancy_rate"]
+        cap_rate = sampled["cap_rate"]
+        iter_inputs["ffo"] = params.ffo * occupancy_rate
+        iter_inputs["ffo_multiple"] = 1.0 / cap_rate
+        raw_result = graph.calculate(iter_inputs)
+        return float(_unwrap(raw_result.get("intrinsic_value", 0.0)))
+
+    result = engine.run(
+        base_inputs=base_numeric_inputs,
+        distributions=distributions,
+        evaluator=evaluate,
+        correlation_groups=correlation_groups,
+    )
+    return {
+        "summary": result.summary,
+        "diagnostics": result.diagnostics,
+    }
+
+
 def calculate_reit_ffo_valuation(
     params: ReitFfoParams,
 ) -> dict[str, float | str | dict[str, object]]:
     graph = create_reit_ffo_graph()
 
-    inputs = {
+    raw_inputs = {
         "ffo": params.ffo,
         "ffo_multiple": params.ffo_multiple,
+        "depreciation_and_amortization": params.depreciation_and_amortization,
+        "maintenance_capex_ratio": params.maintenance_capex_ratio,
         "cash": params.cash,
         "total_debt": params.total_debt,
         "preferred_stock": params.preferred_stock,
@@ -47,7 +121,7 @@ def calculate_reit_ffo_valuation(
     }
 
     try:
-        inputs = _apply_trace_inputs(inputs, params.trace_inputs)
+        inputs = _apply_trace_inputs(raw_inputs, params.trace_inputs)
         results = graph.calculate(inputs, trace=True)
         intrinsic_value = float(_unwrap(results.get("intrinsic_value", 0.0)))
         current_price = params.current_price or 0.0
@@ -57,8 +131,18 @@ def calculate_reit_ffo_valuation(
 
         details = {
             "ffo": params.ffo,
+            "affo": float(_unwrap(results.get("affo", 0.0))),
             "ffo_multiple": params.ffo_multiple,
+            "maintenance_capex": float(_unwrap(results.get("maintenance_capex", 0.0))),
+            "maintenance_capex_ratio": params.maintenance_capex_ratio,
         }
+        if params.monte_carlo_iterations > 0:
+            details["distribution_summary"] = _run_reit_monte_carlo(
+                graph=graph,
+                # Keep Monte Carlo sampling on raw numeric inputs.
+                base_inputs=raw_inputs,
+                params=params,
+            )
 
         return {
             "ticker": params.ticker,

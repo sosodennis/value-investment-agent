@@ -1,7 +1,7 @@
 # ==========================================
 # Stage 1: Dependencies
 # ==========================================
-FROM node:20-alpine AS deps
+FROM node:20-bookworm-slim AS deps
 WORKDIR /app
 
 # Install dependencies based on the preferred package manager
@@ -11,7 +11,7 @@ RUN npm ci --only=production
 # ==========================================
 # Stage 2: Builder
 # ==========================================
-FROM node:20-alpine AS builder
+FROM node:20-bookworm-slim AS builder
 WORKDIR /app
 
 # Copy dependencies from deps stage
@@ -29,7 +29,7 @@ RUN npm run build
 # ==========================================
 # Stage 3: Runner (Production)
 # ==========================================
-FROM node:20-alpine AS runner
+FROM node:20-bookworm-slim AS runner
 WORKDIR /app
 
 # Set production environment

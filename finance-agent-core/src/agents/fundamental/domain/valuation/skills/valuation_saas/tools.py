@@ -1,8 +1,16 @@
 from __future__ import annotations
 
+from typing import cast
+
 from src.shared.kernel.traceable import TraceableField
 
 from ...engine.graphs.saas_fcff import create_saas_graph
+from ...engine.monte_carlo import (
+    CorrelationGroup,
+    DistributionSpec,
+    MonteCarloConfig,
+    MonteCarloEngine,
+)
 from .schemas import SaaSParams
 
 CalcDetails = dict[str, float | list[float] | dict[str, float | list[float]]]
@@ -59,6 +67,124 @@ def _unwrap(value: float | list[float] | TraceableField) -> float | list[float]:
     return float(value)
 
 
+def _clamp(value: float, lower: float, upper: float) -> float:
+    return max(lower, min(upper, value))
+
+
+def _shift_series(
+    values: list[float], shock: float, lower: float, upper: float
+) -> list[float]:
+    return [_clamp(v + shock, lower, upper) for v in values]
+
+
+def _run_saas_monte_carlo(
+    *,
+    graph,
+    base_inputs: dict[str, float | list[float]],
+    params: SaaSParams,
+) -> dict[str, object]:
+    config = MonteCarloConfig(
+        iterations=params.monte_carlo_iterations,
+        seed=params.monte_carlo_seed,
+    )
+    engine = MonteCarloEngine(config=config)
+
+    distributions: dict[str, DistributionSpec] = {
+        "growth_shock": DistributionSpec(
+            kind="normal",
+            mean=0.0,
+            std=params.growth_shock_std,
+            min_bound=-0.30,
+            max_bound=0.30,
+        ),
+        "margin_shock": DistributionSpec(
+            kind="normal",
+            mean=0.0,
+            std=params.margin_shock_std,
+            min_bound=-0.20,
+            max_bound=0.20,
+        ),
+        "wacc": DistributionSpec(
+            kind="normal",
+            mean=params.wacc,
+            std=params.wacc_std,
+            min_bound=0.03,
+            max_bound=0.30,
+        ),
+        "terminal_growth": DistributionSpec(
+            kind="normal",
+            mean=params.terminal_growth,
+            std=params.terminal_growth_std,
+            min_bound=-0.02,
+            max_bound=0.06,
+        ),
+    }
+
+    correlation_groups = (
+        CorrelationGroup(
+            variables=("growth_shock", "margin_shock"),
+            matrix=(
+                (1.0, params.corr_growth_margin),
+                (params.corr_growth_margin, 1.0),
+            ),
+        ),
+        CorrelationGroup(
+            variables=("wacc", "terminal_growth"),
+            matrix=(
+                (1.0, params.corr_wacc_terminal_growth),
+                (params.corr_wacc_terminal_growth, 1.0),
+            ),
+        ),
+    )
+
+    base_numeric_inputs = {
+        "growth_shock": 0.0,
+        "margin_shock": 0.0,
+        "wacc": float(params.wacc),
+        "terminal_growth": float(params.terminal_growth),
+    }
+
+    def evaluate(sampled: dict[str, float]) -> float:
+        iter_inputs = dict(base_inputs)
+        growth_shock = sampled["growth_shock"]
+        margin_shock = sampled["margin_shock"]
+        iter_inputs["growth_rates"] = _shift_series(
+            cast(list[float], base_inputs["growth_rates"]),
+            growth_shock,
+            -0.80,
+            1.50,
+        )
+        iter_inputs["operating_margins"] = _shift_series(
+            cast(list[float], base_inputs["operating_margins"]),
+            margin_shock,
+            -0.50,
+            0.70,
+        )
+
+        sampled_wacc = sampled["wacc"]
+        sampled_terminal = sampled["terminal_growth"]
+        if sampled_terminal >= sampled_wacc:
+            sampled_terminal = sampled_wacc - 0.001
+
+        iter_inputs["wacc"] = sampled_wacc
+        iter_inputs["terminal_growth"] = sampled_terminal
+
+        raw_result = graph.calculate(iter_inputs)
+        raw_intrinsic = raw_result.get("intrinsic_value", 0.0)
+        return float(_unwrap(raw_intrinsic))
+
+    result = engine.run(
+        base_inputs=base_numeric_inputs,
+        distributions=distributions,
+        evaluator=evaluate,
+        correlation_groups=correlation_groups,
+    )
+    return {
+        "summary": result.summary,
+        "diagnostics": result.diagnostics,
+    }
+
+
 def _apply_trace_inputs(
     inputs: dict[str, object],
     trace_inputs: dict[str, TraceableField],
@@ -78,7 +204,7 @@ def calculate_saas_valuation(params: SaaSParams) -> CalcResult:
     """
     graph = create_saas_graph()
 
-    inputs = {
+    raw_inputs = {
         "initial_revenue": params.initial_revenue,
         "growth_rates": params.growth_rates,
         "operating_margins": params.operating_margins,
@@ -96,7 +222,7 @@ def calculate_saas_valuation(params: SaaSParams) -> CalcResult:
     }
 
     try:
-        inputs = _apply_trace_inputs(inputs, params.trace_inputs)
+        inputs = _apply_trace_inputs(raw_inputs, params.trace_inputs)
         results = graph.calculate(inputs, trace=True)
         intrinsic_value_raw = results.get("intrinsic_value", 0.0)
         intrinsic_value = float(_unwrap(intrinsic_value_raw))
@@ -124,6 +250,15 @@ def calculate_saas_valuation(params: SaaSParams) -> CalcResult:
                 params.required_return,
                 params.terminal_growth_fcfe,
                 params.shares_outstanding,
+            )
+
+        if params.monte_carlo_iterations > 0:
+            details["distribution_summary"] = _run_saas_monte_carlo(
+                graph=graph,
+                # MC evaluator requires plain numeric/list inputs.
+                # TraceableField wrappers are only for deterministic trace output.
+                base_inputs=raw_inputs,
+                params=params,
             )
 
         return {

@@ -63,8 +63,22 @@ def audit_bank_params(params: BankParams) -> AuditResult:
             f"FAIL: Terminal growth {params.terminal_growth} exceeds 4% GDP cap."
         )
 
-    if params.cost_of_equity < 0.06:
-        messages.append(f"FAIL: Cost of Equity {params.cost_of_equity} is too low.")
+    manual_cost_of_equity = (
+        params.cost_of_equity_override
+        if params.cost_of_equity_override is not None
+        else params.cost_of_equity
+    )
+    if params.cost_of_equity_strategy == "override" and manual_cost_of_equity is None:
+        messages.append("FAIL: Override strategy requires cost_of_equity_override.")
+
+    cost_of_equity = manual_cost_of_equity
+    if cost_of_equity is None:
+        cost_of_equity = params.risk_free_rate + (
+            params.beta * params.market_risk_premium
+        )
+
+    if cost_of_equity < 0.06:
+        messages.append(f"FAIL: Cost of Equity {cost_of_equity} is too low.")
 
     return _finalize_audit("bank", messages)
 
@@ -102,6 +116,10 @@ def audit_reit_ffo_params(params: ReitFfoParams) -> AuditResult:
         messages.append("FAIL: FFO must be positive.")
     if params.ffo_multiple <= 0:
         messages.append("FAIL: FFO multiple must be positive.")
+    if params.maintenance_capex_ratio < 0:
+        messages.append("FAIL: Maintenance CapEx ratio cannot be negative.")
+    if params.depreciation_and_amortization < 0:
+        messages.append("FAIL: Depreciation and amortization cannot be negative.")
     if params.shares_outstanding <= 0:
         messages.append("FAIL: Shares outstanding must be positive.")
 

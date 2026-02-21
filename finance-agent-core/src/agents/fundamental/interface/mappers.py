@@ -16,6 +16,8 @@ def build_mapper_context(
     status: str,
     model_type: str | None = None,
     valuation_summary: str | None = None,
+    assumption_breakdown: JSONObject | None = None,
+    data_freshness: JSONObject | None = None,
 ) -> FundamentalAppContextDTO:
     ticker = resolved_ticker or "UNKNOWN"
     company_name = ticker
@@ -40,6 +42,8 @@ def build_mapper_context(
         industry=industry,
         model_type=model_type,
         valuation_summary=valuation_summary,
+        assumption_breakdown=assumption_breakdown,
+        data_freshness=data_freshness,
     )
 
 

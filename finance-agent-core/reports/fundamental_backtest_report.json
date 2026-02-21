@@ -1,0 +1,85 @@
+{
+  "baseline_path": "/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/tests/fixtures/fundamental_backtest_baseline.json",
+  "dataset_path": "/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/tests/fixtures/fundamental_backtest_cases.json",
+  "drifts": [],
+  "generated_at": "2026-02-20T17:37:09+00:00",
+  "issues": [],
+  "results": [
+    {
+      "id": "saas_mc_seeded",
+      "metrics": {
+        "distribution_summary": {
+          "max": 5.000820893045764,
+          "mean": 2.896008814119855,
+          "median": 2.8275034624766593,
+          "min": 1.28688309660517,
+          "percentile_5": 1.9101676372725516,
+          "percentile_95": 4.244998939917876,
+          "std": 0.721748653307489
+        },
+        "enterprise_value": 268.9049437442796,
+        "equity_value": 273.9049437442796,
+        "intrinsic_value": 2.739049437442796,
+        "upside_potential": 0.0
+      },
+      "model": "saas",
+      "status": "ok"
+    },
+    {
+      "id": "bank_capm_mc_seeded",
+      "metrics": {
+        "cost_of_equity": 0.095,
+        "distribution_summary": {
+          "max": 1672.4298704567464,
+          "mean": 1270.0612328145921,
+          "median": 1257.095706791085,
+          "min": 935.5276749435574,
+          "percentile_5": 1054.656011689321,
+          "percentile_95": 1630.1912120964673,
+          "std": 166.01719799162544
+        },
+        "equity_value": 1270.0193907549885
+      },
+      "model": "bank",
+      "status": "ok"
+    },
+    {
+      "id": "reit_affo_mc_seeded",
+      "metrics": {
+        "distribution_summary": {
+          "max": 93.6396569038984,
+          "mean": 68.5453640535755,
+          "median": 67.92957804386964,
+          "min": 45.20282486190511,
+          "percentile_5": 51.33331164693213,
+          "percentile_95": 86.82944325603596,
+          "std": 10.857575716789604
+        },
+        "enterprise_value": 840.0,
+        "equity_value": 800.0,
+        "intrinsic_value": 80.0,
+        "upside_potential": 0.0
+      },
+      "model": "reit_ffo",
+      "status": "ok"
+    },
+    {
+      "id": "bank_override_deterministic",
+      "metrics": {
+        "cost_of_equity": 0.2,
+        "equity_value": 507.55208333333337
+      },
+      "model": "bank",
+      "status": "ok"
+    }
+  ],
+  "summary": {
+    "baseline_updated": false,
+    "drift_count": 0,
+    "drifted_case_count": 0,
+    "errors": 0,
+    "issue_count": 0,
+    "ok": 4,
+    "total_cases": 4
+  }
+}
