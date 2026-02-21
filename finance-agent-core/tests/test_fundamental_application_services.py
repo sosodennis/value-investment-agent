@@ -39,7 +39,7 @@ def test_build_valuation_success_update_includes_output_and_artifact() -> None:
             }
         ],
         reports_artifact_id="artifact-123",
-        params_dump={"wacc": 0.1},
+        params_dump={"wacc": 0.1, "current_price": 39.0},
         calculation_metrics={
             "intrinsic_value": 42.5,
             "equity_value": 4250.0,
@@ -107,6 +107,7 @@ def test_build_valuation_success_update_includes_output_and_artifact() -> None:
     assert preview["intrinsic_value"] == 42.5
     assert preview["upside_potential"] == 0.15
     assert preview["assumption_breakdown"]["total_assumptions"] == 1
+    assert preview["assumption_breakdown"]["key_parameters"]["current_price"] == 39.0
     assert preview["assumption_breakdown"]["monte_carlo"]["executed_iterations"] == 500
     assert preview["assumption_breakdown"]["monte_carlo"]["effective_window"] == 166
     assert preview["assumption_breakdown"]["monte_carlo"]["stopped_early"] is True
@@ -191,6 +192,100 @@ def test_build_valuation_success_update_derives_missing_valuation_metrics() -> N
     assert preview["equity_value"] == 7500.0
     assert preview["intrinsic_value"] == 75.0
     assert preview["upside_potential"] == 0.5
+
+
+def test_build_valuation_success_update_converts_total_distribution_to_per_share() -> (
+    None
+):
+    update = build_valuation_success_update(
+        fundamental={},
+        intent_ctx={},
+        ticker="JPM",
+        model_type="bank",
+        reports_raw=[],
+        reports_artifact_id="artifact-dist-convert",
+        params_dump={"shares_outstanding": 100.0, "current_price": 50.0},
+        calculation_metrics={
+            "details": {
+                "distribution_summary": {
+                    "metric_type": "equity_value_total",
+                    "summary": {
+                        "percentile_5": 7000.0,
+                        "median": 7500.0,
+                        "percentile_95": 8000.0,
+                    },
+                }
+            }
+        },
+        assumptions=[],
+        summarize_preview=lambda _ctx, _reports: {},
+        build_valuation_artifact_fn=lambda ticker,
+        model_type,
+        reports_artifact_id,
+        preview: {
+            "kind": "fundamental_analysis.output",
+            "version": "v1",
+            "summary": f"ok:{ticker}:{model_type}",
+            "preview": preview,
+            "reference": {
+                "artifact_id": reports_artifact_id,
+                "download_url": f"/api/artifacts/{reports_artifact_id}",
+                "type": "financial_reports",
+            },
+        },
+    )
+
+    preview = update["fundamental_analysis"]["artifact"]["preview"]
+    assert preview["intrinsic_value"] == 75.0
+    assert preview["distribution_scenarios"]["bear"]["price"] == 70.0
+    assert preview["distribution_scenarios"]["base"]["price"] == 75.0
+    assert preview["distribution_scenarios"]["bull"]["price"] == 80.0
+
+
+def test_build_valuation_success_update_skips_total_distribution_without_shares() -> (
+    None
+):
+    update = build_valuation_success_update(
+        fundamental={},
+        intent_ctx={},
+        ticker="JPM",
+        model_type="bank",
+        reports_raw=[],
+        reports_artifact_id="artifact-dist-missing-shares",
+        params_dump={},
+        calculation_metrics={
+            "details": {
+                "distribution_summary": {
+                    "metric_type": "equity_value_total",
+                    "summary": {
+                        "percentile_5": 7000.0,
+                        "median": 7500.0,
+                        "percentile_95": 8000.0,
+                    },
+                }
+            }
+        },
+        assumptions=[],
+        summarize_preview=lambda _ctx, _reports: {},
+        build_valuation_artifact_fn=lambda ticker,
+        model_type,
+        reports_artifact_id,
+        preview: {
+            "kind": "fundamental_analysis.output",
+            "version": "v1",
+            "summary": f"ok:{ticker}:{model_type}",
+            "preview": preview,
+            "reference": {
+                "artifact_id": reports_artifact_id,
+                "download_url": f"/api/artifacts/{reports_artifact_id}",
+                "type": "financial_reports",
+            },
+        },
+    )
+
+    preview = update["fundamental_analysis"]["artifact"]["preview"]
+    assert preview.get("distribution_scenarios") is None
+    assert preview.get("intrinsic_value") is None
 
 
 def test_build_valuation_error_update_sets_calculation_error() -> None:

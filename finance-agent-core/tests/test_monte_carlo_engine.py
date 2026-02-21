@@ -99,6 +99,8 @@ def test_monte_carlo_engine_supports_correlated_non_normal_distributions() -> No
     )
 
     assert "median" in result.summary
+    assert "percentile_25" in result.summary
+    assert "percentile_75" in result.summary
     assert result.summary["min"] <= result.summary["median"] <= result.summary["max"]
 
 

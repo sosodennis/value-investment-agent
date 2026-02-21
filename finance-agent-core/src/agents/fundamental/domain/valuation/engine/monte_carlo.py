@@ -285,6 +285,8 @@ class MonteCarloEngine:
             "median": float(np.median(outcomes)),
             "std": float(np.std(outcomes)),
             "percentile_5": float(np.percentile(outcomes, 5)),
+            "percentile_25": float(np.percentile(outcomes, 25)),
+            "percentile_75": float(np.percentile(outcomes, 75)),
             "percentile_95": float(np.percentile(outcomes, 95)),
             "min": float(np.min(outcomes)),
             "max": float(np.max(outcomes)),

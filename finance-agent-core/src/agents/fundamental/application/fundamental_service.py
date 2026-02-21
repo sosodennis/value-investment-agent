@@ -194,6 +194,7 @@ def build_valuation_success_update(
         fa_update["assumptions"] = assumptions
 
     distribution_summary = _extract_distribution_summary(calculation_metrics)
+    shares_outstanding = _coerce_float(params_dump.get("shares_outstanding"))
     (
         equity_value_raw,
         intrinsic_value_raw,
@@ -203,7 +204,10 @@ def build_valuation_success_update(
         params_dump=params_dump,
         distribution_summary=distribution_summary,
     )
-    distribution_scenarios = _build_distribution_scenarios(distribution_summary)
+    distribution_scenarios = _build_distribution_scenarios(
+        distribution_summary,
+        shares_outstanding=shares_outstanding,
+    )
     assumption_breakdown = _build_assumption_breakdown(
         assumptions=assumptions,
         params_dump=params_dump,
@@ -303,6 +307,7 @@ def _build_assumption_breakdown(
         "market_risk_premium",
         "maintenance_capex_ratio",
         "cost_of_equity_strategy",
+        "current_price",
     )
     key_parameters: JSONObject = {}
     for field in key_parameter_fields:
@@ -504,6 +509,8 @@ def _extract_numeric_metric(
 
 def _build_distribution_scenarios(
     distribution_summary: JSONObject | None,
+    *,
+    shares_outstanding: float | None,
 ) -> JSONObject | None:
     if distribution_summary is None:
         return None
@@ -511,20 +518,26 @@ def _build_distribution_scenarios(
     if not isinstance(summary, dict):
         return None
 
-    bear = summary.get("percentile_5")
-    base = summary.get("median")
-    bull = summary.get("percentile_95")
+    bear = _coerce_float(summary.get("percentile_5"))
+    base = _coerce_float(summary.get("median"))
+    bull = _coerce_float(summary.get("percentile_95"))
     if not (
-        isinstance(bear, int | float)
-        and isinstance(base, int | float)
-        and isinstance(bull, int | float)
+        isinstance(bear, float) and isinstance(base, float) and isinstance(bull, float)
     ):
         return None
 
+    metric_type = _extract_distribution_metric_type(distribution_summary)
+    if metric_type in {"equity_value_total", "equity_value"}:
+        if shares_outstanding is None or shares_outstanding <= 0:
+            return None
+        bear = bear / shares_outstanding
+        base = base / shares_outstanding
+        bull = bull / shares_outstanding
+
     return {
-        "bear": {"label": "P5 (Bear)", "price": float(bear)},
-        "base": {"label": "P50 (Base)", "price": float(base)},
-        "bull": {"label": "P95 (Bull)", "price": float(bull)},
+        "bear": {"label": "P5 (Bear)", "price": bear},
+        "base": {"label": "P50 (Base)", "price": base},
+        "bull": {"label": "P95 (Bull)", "price": bull},
     }
 
 
@@ -549,7 +562,14 @@ def _resolve_preview_valuation_metrics(
     if intrinsic_value is None and distribution_summary is not None:
         summary_raw = distribution_summary.get("summary")
         if isinstance(summary_raw, Mapping):
-            intrinsic_value = _coerce_float(summary_raw.get("median"))
+            median = _coerce_float(summary_raw.get("median"))
+            if median is not None:
+                metric_type = _extract_distribution_metric_type(distribution_summary)
+                if metric_type in {"equity_value_total", "equity_value"}:
+                    if shares_outstanding is not None and shares_outstanding > 0:
+                        intrinsic_value = median / shares_outstanding
+                else:
+                    intrinsic_value = median
 
     if (
         intrinsic_value is None
@@ -590,4 +610,13 @@ def _coerce_float(value: object) -> float | None:
             return None
     if isinstance(value, Mapping):
         return _coerce_float(value.get("value"))
+    return None
+
+
+def _extract_distribution_metric_type(
+    distribution_summary: Mapping[str, object],
+) -> str | None:
+    raw = distribution_summary.get("metric_type")
+    if isinstance(raw, str) and raw:
+        return raw
     return None

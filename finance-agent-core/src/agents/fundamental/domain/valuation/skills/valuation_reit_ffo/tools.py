@@ -99,6 +99,7 @@ def _run_reit_monte_carlo(
         correlation_groups=correlation_groups,
     )
     return {
+        "metric_type": "intrinsic_value_per_share",
         "summary": result.summary,
         "diagnostics": result.diagnostics,
     }

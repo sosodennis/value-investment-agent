@@ -72,6 +72,12 @@ def calculate_pv(
     return pv + pv_tv
 
 
+def calculate_intrinsic_value(equity_value: float, shares_outstanding: float) -> float:
+    if shares_outstanding <= 0:
+        raise ValueError("Shares outstanding must be positive")
+    return equity_value / shares_outstanding
+
+
 def calculate_cost_of_equity(
     risk_free_rate: float,
     beta: float,
@@ -106,5 +112,6 @@ def create_bank_graph() -> CalculationGraph:
 
     # calculate_pv(dividends, cost_of_equity, terminal_growth)
     graph.add_node("equity_value", calculate_pv)
+    graph.add_node("intrinsic_value", calculate_intrinsic_value)
 
     return graph

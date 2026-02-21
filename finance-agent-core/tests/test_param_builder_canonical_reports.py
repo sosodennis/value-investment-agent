@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from src.agents.fundamental.domain.valuation.param_builder import (
     build_params,
 )
@@ -83,6 +85,7 @@ def _raw_bank_reports() -> list[dict[str, object]]:
                 "total_assets": _tf(2000.0),
                 "total_equity": _tf(300.0),
                 "net_income": _tf(30.0),
+                "shares_outstanding": _tf(10.0),
             },
             "extension": {
                 "risk_weighted_assets": _tf(1200.0),
@@ -96,6 +99,40 @@ def _raw_bank_reports() -> list[dict[str, object]]:
                 "total_assets": _tf(1800.0),
                 "total_equity": _tf(280.0),
                 "net_income": _tf(25.0),
+                "shares_outstanding": _tf(10.0),
+            },
+            "extension": {
+                "risk_weighted_assets": _tf(1100.0),
+                "tier1_capital_ratio": _tf(0.11),
+            },
+        },
+    ]
+
+
+def _raw_bank_reports_with_latest_rwa_outlier() -> list[dict[str, object]]:
+    return [
+        {
+            "industry_type": "FinancialServices",
+            "base": {
+                "fiscal_year": _tf("2024"),
+                "total_assets": _tf(2000.0),
+                "total_equity": _tf(300.0),
+                "net_income": _tf(30.0),
+                "shares_outstanding": _tf(10.0),
+            },
+            "extension": {
+                "risk_weighted_assets": _tf(20.0),
+                "tier1_capital_ratio": _tf(0.12),
+            },
+        },
+        {
+            "industry_type": "FinancialServices",
+            "base": {
+                "fiscal_year": _tf("2023"),
+                "total_assets": _tf(1800.0),
+                "total_equity": _tf(280.0),
+                "net_income": _tf(25.0),
+                "shares_outstanding": _tf(10.0),
             },
             "extension": {
                 "risk_weighted_assets": _tf(1100.0),
@@ -205,11 +242,27 @@ def test_build_params_bank_includes_capm_inputs() -> None:
     assert result.params["risk_free_rate"] == 0.041
     assert result.params["beta"] == 1.25
     assert result.params["market_risk_premium"] == 0.05
+    assert result.params["rwa_intensity"] == 30.0 / 1200.0
+    assert result.params["shares_outstanding"] == 10.0
     assert result.params["cost_of_equity_strategy"] == "capm"
     assert result.params["terminal_growth"] == 0.02
     assert result.params["monte_carlo_iterations"] == 300
     assert result.params["monte_carlo_seed"] == 42
     assert "terminal_growth defaulted to 2.00%" in result.assumptions
+
+
+def test_build_params_bank_rorwa_outlier_uses_historical_median() -> None:
+    canonical_reports = parse_financial_reports_model(
+        _raw_bank_reports_with_latest_rwa_outlier(),
+        context="test.financial_reports.bank.outlier",
+    )
+    result = build_params("bank", "BNK", canonical_reports)
+
+    assert result.params["rwa_intensity"] == 25.0 / 1100.0
+    assert (
+        "rwa_intensity fallback to historical median RoRWA (latest RWA discontinuity)"
+        in result.assumptions
+    )
 
 
 def test_build_params_reit_supports_configurable_maintenance_capex_ratio() -> None:
@@ -242,3 +295,12 @@ def test_build_params_can_disable_monte_carlo_via_env(monkeypatch) -> None:
 
     assert result.params["monte_carlo_iterations"] == 0
     assert "monte_carlo disabled by policy" in result.assumptions
+
+
+def test_build_params_raises_for_unsupported_model() -> None:
+    canonical_reports = parse_financial_reports_model(
+        _raw_reports(), context="test.financial_reports"
+    )
+
+    with pytest.raises(ValueError, match="Unsupported model type for SEC XBRL builder"):
+        build_params("unsupported_model", "EXM", canonical_reports)

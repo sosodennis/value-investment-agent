@@ -38,7 +38,9 @@ describe('parseFinancialPreview', () => {
             distribution_summary: {
                 summary: {
                     percentile_5: 120,
+                    percentile_25: 138,
                     median: 150,
+                    percentile_75: 168,
                     percentile_95: 190,
                 },
                 diagnostics: {
@@ -101,6 +103,8 @@ describe('parseFinancialPreview', () => {
         expect(parsed?.key_metrics?.ROE).toBe('16.5%');
         expect(parsed?.signal_state?.risk_level).toBe('low');
         expect(parsed?.distribution_summary?.summary.median).toBe(150);
+        expect(parsed?.distribution_summary?.summary.percentile_25).toBe(138);
+        expect(parsed?.distribution_summary?.summary.percentile_75).toBe(168);
         expect(parsed?.distribution_scenarios?.bull?.price).toBe(190);
         expect(parsed?.assumption_breakdown?.total_assumptions).toBe(2);
         expect(parsed?.assumption_breakdown?.monte_carlo?.executed_iterations).toBe(5000);

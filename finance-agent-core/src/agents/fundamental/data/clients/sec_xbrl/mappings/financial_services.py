@@ -4,7 +4,7 @@ from ..extractor import SearchType
 from ..mapping import (
     BS_STATEMENT_TOKENS,
     IS_STATEMENT_TOKENS,
-    PURE_UNITS,
+    RATIO_UNITS,
     USD_UNITS,
     FieldSpec,
     XbrlMappingRegistry,
@@ -167,17 +167,17 @@ def register_financial_services_fields(registry: XbrlMappingRegistry) -> None:
                 SearchType.CONSOLIDATED(
                     "us-gaap:Tier1CapitalRatio",
                     period_type="instant",
-                    unit_whitelist=PURE_UNITS,
+                    unit_whitelist=RATIO_UNITS,
                 ),
                 SearchType.CONSOLIDATED(
                     "us-gaap:Tier1RiskBasedCapitalRatio",
                     period_type="instant",
-                    unit_whitelist=PURE_UNITS,
+                    unit_whitelist=RATIO_UNITS,
                 ),
                 SearchType.CONSOLIDATED(
                     "us-gaap:TierOneRiskBasedCapitalToRiskWeightedAssets",
                     period_type="instant",
-                    unit_whitelist=PURE_UNITS,
+                    unit_whitelist=RATIO_UNITS,
                 ),
             ],
         ),

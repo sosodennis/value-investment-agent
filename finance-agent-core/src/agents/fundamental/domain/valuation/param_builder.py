@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from math import sqrt
 
@@ -14,20 +14,20 @@ from src.shared.kernel.traceable import (
 from src.shared.kernel.types import JSONObject
 
 from .assumptions import (
-    DEFAULT_DA_RATE,
     DEFAULT_HIGH_GROWTH_TRIGGER,
     DEFAULT_LONG_RUN_GROWTH_TARGET,
-    DEFAULT_TERMINAL_GROWTH,
-    DEFAULT_WACC,
-    assume_rate,
     blend_growth_rate,
     project_growth_rate_series,
 )
+from .param_builders.bank import build_bank_payload
+from .param_builders.context import BuilderContext
+from .param_builders.eva import build_eva_payload
+from .param_builders.multiples import build_ev_ebitda_payload, build_ev_revenue_payload
+from .param_builders.reit import build_reit_payload
+from .param_builders.residual_income import build_residual_income_payload
+from .param_builders.saas import build_saas_payload
 from .report_contract import (
     FinancialReport,
-    FinancialServicesExtension,
-    IndustrialExtension,
-    RealEstateExtension,
     parse_financial_reports,
 )
 
@@ -42,6 +42,12 @@ class ParamBuildResult:
     missing: list[str]
     assumptions: list[str]
     metadata: JSONObject = field(default_factory=dict)
+
+
+ModelParamBuilder = Callable[
+    [str | None, FinancialReport, list[FinancialReport], Mapping[str, object] | None],
+    ParamBuildResult,
+]
 
 
 PROJECTION_YEARS = 5
@@ -80,31 +86,8 @@ def build_params(
     reports_sorted = sorted(reports, key=_report_year, reverse=True)
     latest = reports_sorted[0]
 
-    if model_type == "saas":
-        result = _build_saas_params(
-            ticker, latest, reports_sorted, market_snapshot=market_snapshot
-        )
-    elif model_type == "bank":
-        result = _build_bank_params(
-            ticker, latest, reports_sorted, market_snapshot=market_snapshot
-        )
-    elif model_type == "ev_revenue":
-        result = _build_ev_revenue_params(
-            ticker, latest, market_snapshot=market_snapshot
-        )
-    elif model_type == "ev_ebitda":
-        result = _build_ev_ebitda_params(
-            ticker, latest, market_snapshot=market_snapshot
-        )
-    elif model_type == "reit_ffo":
-        result = _build_reit_ffo_params(ticker, latest, market_snapshot=market_snapshot)
-    elif model_type == "residual_income":
-        result = _build_residual_income_params(
-            ticker, latest, market_snapshot=market_snapshot
-        )
-    elif model_type == "eva":
-        result = _build_eva_params(ticker, latest, market_snapshot=market_snapshot)
-    else:
+    model_builder = _get_model_builder(model_type)
+    if model_builder is None:
         log_event(
             logger,
             event="valuation_params_build_failed",
@@ -112,6 +95,12 @@ def build_params(
             fields={"model_type": model_type, "ticker": ticker},
         )
         raise ValueError(f"Unsupported model type for SEC XBRL builder: {model_type}")
+    result = model_builder(
+        ticker,
+        latest,
+        reports_sorted,
+        market_snapshot=market_snapshot,
+    )
 
     log_event(
         logger,
@@ -398,7 +387,6 @@ def _env_int(name: str, default: int, *, minimum: int | None = None) -> int:
 
 
 def _resolve_monte_carlo_controls(
-    *,
     market_snapshot: Mapping[str, object] | None,
     assumptions: list[str],
 ) -> tuple[int, int | None]:
@@ -485,7 +473,6 @@ def _build_result_metadata(
 
 
 def _resolve_shares_outstanding(
-    *,
     filing_shares_tf: TraceableField[float],
     market_snapshot: Mapping[str, object] | None,
     assumptions: list[str],
@@ -514,7 +501,6 @@ def _resolve_shares_outstanding(
 
 
 def _build_saas_growth_rates(
-    *,
     revenue_series: list[TraceableField[float]],
     market_snapshot: Mapping[str, object] | None,
     assumptions: list[str],
@@ -587,217 +573,23 @@ def _build_saas_params(
     *,
     market_snapshot: Mapping[str, object] | None,
 ) -> ParamBuildResult:
-    missing: list[str] = []
-    assumptions: list[str] = []
-    base = latest.base
-    extension = (
-        latest.extension if isinstance(latest.extension, IndustrialExtension) else None
-    )
-
-    revenue_tf = base.total_revenue
-    shares_tf = _resolve_shares_outstanding(
-        filing_shares_tf=base.shares_outstanding,
+    context = _builder_context()
+    payload = build_saas_payload(
+        ticker=ticker,
+        latest=latest,
+        reports=reports,
         market_snapshot=market_snapshot,
-        assumptions=assumptions,
+        deps=context.saas_deps(),
     )
-    market_shares = _market_float(market_snapshot, "shares_outstanding")
-    shares_source = (
-        "market_data" if market_shares is not None and market_shares > 0 else "filing"
-    )
-    cash_tf = base.cash_and_equivalents
-    debt_tf = base.total_debt
-    preferred_tf = base.preferred_stock
-
-    operating_income_tf = base.operating_income
-    tax_expense_tf = base.income_tax_expense
-    income_before_tax_tf = base.income_before_tax
-    da_tf = base.depreciation_and_amortization
-    sbc_tf = base.share_based_compensation
-    capex_tf = extension.capex if extension else None
-
-    current_assets_tf = base.current_assets
-    current_liabilities_tf = base.current_liabilities
-
-    margin_tf = _ratio(
-        "Operating Margin",
-        operating_income_tf,
-        revenue_tf,
-        "OperatingIncome / Revenue",
-    )
-    tax_rate_tf = _ratio(
-        "Tax Rate",
-        tax_expense_tf,
-        income_before_tax_tf,
-        "IncomeTaxExpense / IncomeBeforeTax",
-    )
-    da_rate_tf = _ratio(
-        "D&A Rate",
-        da_tf,
-        revenue_tf,
-        "DepreciationAndAmortization / Revenue",
-    )
-    if da_rate_tf.value is None:
-        da_rate_tf = assume_rate(
-            "D&A Rate",
-            DEFAULT_DA_RATE,
-            "Policy default D&A rate (preview only; requires analyst review)",
-        )
-        assumptions.append(f"da_rates defaulted to {DEFAULT_DA_RATE:.2%}")
-    capex_rate_tf = (
-        _ratio("CapEx Rate", capex_tf, revenue_tf, "CapEx / Revenue")
-        if capex_tf is not None
-        else _missing_field("CapEx Rate", "Missing CapEx for CapEx Rate")
-    )
-    sbc_rate_tf = _ratio(
-        "SBC Rate",
-        sbc_tf,
-        revenue_tf,
-        "ShareBasedCompensation / Revenue",
-    )
-
-    wc_latest = _subtract(
-        "Working Capital (Latest)",
-        current_assets_tf,
-        current_liabilities_tf,
-        "CurrentAssets - CurrentLiabilities",
-    )
-    wc_prev = None
-    if len(reports) > 1:
-        prev = reports[1]
-        wc_prev = _subtract(
-            "Working Capital (Previous)",
-            prev.base.current_assets,
-            prev.base.current_liabilities,
-            "Prev CurrentAssets - Prev CurrentLiabilities",
-        )
-
-    if (
-        wc_prev is not None
-        and wc_prev.value is not None
-        and wc_latest.value is not None
-    ):
-        wc_delta = _subtract(
-            "Working Capital Delta",
-            wc_latest,
-            wc_prev,
-            "WorkingCapitalLatest - WorkingCapitalPrevious",
-        )
-        wc_rate_tf = _ratio(
-            "WC Rate",
-            wc_delta,
-            revenue_tf,
-            "ChangeInWC / Revenue",
-        )
-    else:
-        wc_rate_tf = _missing_field("WC Rate", "Missing working capital history")
-
-    revenue_series = [r.base.total_revenue for r in reports]
-    growth_rates_tf = _build_saas_growth_rates(
-        revenue_series=revenue_series,
-        market_snapshot=market_snapshot,
-        assumptions=assumptions,
-    )
-
-    operating_margins_tf = _repeat_rate(
-        "Operating Margins", margin_tf, PROJECTION_YEARS
-    )
-    da_rates_tf = _repeat_rate("D&A Rates", da_rate_tf, PROJECTION_YEARS)
-    capex_rates_tf = _repeat_rate("CapEx Rates", capex_rate_tf, PROJECTION_YEARS)
-    wc_rates_tf = _repeat_rate("WC Rates", wc_rate_tf, PROJECTION_YEARS)
-    sbc_rates_tf = _repeat_rate("SBC Rates", sbc_rate_tf, PROJECTION_YEARS)
-
-    initial_revenue = _value_or_missing(revenue_tf, "initial_revenue", missing)
-    shares_outstanding = _value_or_missing(shares_tf, "shares_outstanding", missing)
-    cash = _value_or_missing(cash_tf, "cash", missing)
-    total_debt = _value_or_missing(debt_tf, "total_debt", missing)
-    preferred_stock = _value_or_missing(preferred_tf, "preferred_stock", missing)
-    current_price = _market_float(market_snapshot, "current_price")
-    monte_carlo_iterations, monte_carlo_seed = _resolve_monte_carlo_controls(
-        market_snapshot=market_snapshot,
-        assumptions=assumptions,
-    )
-
-    if growth_rates_tf.value is None:
-        missing.append("growth_rates")
-    if operating_margins_tf.value is None:
-        missing.append("operating_margins")
-    if tax_rate_tf.value is None:
-        missing.append("tax_rate")
-    if da_rates_tf.value is None:
-        missing.append("da_rates")
-    if capex_rates_tf.value is None:
-        missing.append("capex_rates")
-    if wc_rates_tf.value is None:
-        missing.append("wc_rates")
-    if sbc_rates_tf.value is None:
-        missing.append("sbc_rates")
-
-    # Enterprise-grade note: defaults are only for preview; require analyst review in production.
-    wacc_tf = assume_rate(
-        "WACC",
-        DEFAULT_WACC,
-        "Policy default WACC (preview only; requires analyst review)",
-    )
-    terminal_growth_tf = assume_rate(
-        "Terminal Growth",
-        DEFAULT_TERMINAL_GROWTH,
-        "Policy default terminal growth (preview only; requires analyst review)",
-    )
-    assumptions.append(f"wacc defaulted to {DEFAULT_WACC:.2%}")
-    assumptions.append(f"terminal_growth defaulted to {DEFAULT_TERMINAL_GROWTH:.2%}")
-
-    trace_inputs: dict[str, TraceInput] = {
-        "initial_revenue": revenue_tf,
-        "growth_rates": growth_rates_tf,
-        "operating_margins": operating_margins_tf,
-        "tax_rate": tax_rate_tf,
-        "da_rates": da_rates_tf,
-        "capex_rates": capex_rates_tf,
-        "wc_rates": wc_rates_tf,
-        "sbc_rates": sbc_rates_tf,
-        "wacc": wacc_tf,
-        "terminal_growth": terminal_growth_tf,
-        "cash": cash_tf,
-        "total_debt": debt_tf,
-        "preferred_stock": preferred_tf,
-        "shares_outstanding": shares_tf,
-    }
-
-    rationale = "Derived from SEC XBRL (financial reports) with computed rates."
-    if assumptions:
-        rationale += " Controlled assumptions applied: " + "; ".join(assumptions)
-
-    params = {
-        "ticker": ticker or "UNKNOWN",
-        "rationale": rationale,
-        "initial_revenue": initial_revenue,
-        "growth_rates": growth_rates_tf.value,
-        "operating_margins": operating_margins_tf.value,
-        "tax_rate": tax_rate_tf.value,
-        "da_rates": da_rates_tf.value,
-        "capex_rates": capex_rates_tf.value,
-        "wc_rates": wc_rates_tf.value,
-        "sbc_rates": sbc_rates_tf.value,
-        "wacc": wacc_tf.value,
-        "terminal_growth": terminal_growth_tf.value,
-        "shares_outstanding": shares_outstanding,
-        "cash": cash,
-        "total_debt": total_debt,
-        "preferred_stock": preferred_stock,
-        "current_price": current_price,
-        "monte_carlo_iterations": monte_carlo_iterations,
-        "monte_carlo_seed": monte_carlo_seed,
-    }
-
     return ParamBuildResult(
-        params=params,
-        trace_inputs=trace_inputs,
-        missing=_dedupe_missing(missing),
-        assumptions=assumptions,
+        params=payload.params,
+        trace_inputs=payload.trace_inputs,
+        missing=_dedupe_missing(payload.missing),
+        assumptions=payload.assumptions,
         metadata=_build_result_metadata(
             latest=latest,
             market_snapshot=market_snapshot,
-            shares_source=shares_source,
+            shares_source=payload.shares_source,
         ),
     )
 
@@ -808,63 +600,36 @@ def _build_ev_revenue_params(
     *,
     market_snapshot: Mapping[str, object] | None,
 ) -> ParamBuildResult:
-    missing: list[str] = []
-    assumptions: list[str] = []
-    base = latest.base
-
-    revenue_tf = base.total_revenue
-    shares_tf = _resolve_shares_outstanding(
-        filing_shares_tf=base.shares_outstanding,
+    context = _builder_context()
+    payload = build_ev_revenue_payload(
+        ticker=ticker,
+        latest=latest,
         market_snapshot=market_snapshot,
-        assumptions=assumptions,
+        deps=context.multiples_deps(),
     )
-    market_shares = _market_float(market_snapshot, "shares_outstanding")
-    shares_source = (
-        "market_data" if market_shares is not None and market_shares > 0 else "filing"
-    )
-    cash_tf = base.cash_and_equivalents
-    debt_tf = base.total_debt
-    preferred_tf = base.preferred_stock
-
-    revenue = _value_or_missing(revenue_tf, "revenue", missing)
-    shares_outstanding = _value_or_missing(shares_tf, "shares_outstanding", missing)
-    cash = _value_or_missing(cash_tf, "cash", missing)
-    total_debt = _value_or_missing(debt_tf, "total_debt", missing)
-    preferred_stock = _value_or_missing(preferred_tf, "preferred_stock", missing)
-    current_price = _market_float(market_snapshot, "current_price")
-
-    missing.append("ev_revenue_multiple")
-
-    trace_inputs: dict[str, TraceInput] = {
-        "target_metric": revenue_tf,
-        "cash": cash_tf,
-        "total_debt": debt_tf,
-        "preferred_stock": preferred_tf,
-        "shares_outstanding": shares_tf,
-    }
-
-    params = {
-        "ticker": ticker or "UNKNOWN",
-        "rationale": "Derived from SEC XBRL (financial reports).",
-        "revenue": revenue,
-        "ev_revenue_multiple": None,
-        "cash": cash,
-        "total_debt": total_debt,
-        "preferred_stock": preferred_stock,
-        "shares_outstanding": shares_outstanding,
-        "current_price": current_price,
-    }
-
     return ParamBuildResult(
-        params=params,
-        trace_inputs=trace_inputs,
-        missing=_dedupe_missing(missing),
-        assumptions=assumptions,
+        params=payload.params,
+        trace_inputs=payload.trace_inputs,
+        missing=_dedupe_missing(payload.missing),
+        assumptions=payload.assumptions,
         metadata=_build_result_metadata(
             latest=latest,
             market_snapshot=market_snapshot,
-            shares_source=shares_source,
+            shares_source=payload.shares_source,
         ),
+    )
+
+
+def _build_ev_revenue_route(
+    ticker: str | None,
+    latest: FinancialReport,
+    _reports: list[FinancialReport],
+    market_snapshot: Mapping[str, object] | None,
+) -> ParamBuildResult:
+    return _build_ev_revenue_params(
+        ticker=ticker,
+        latest=latest,
+        market_snapshot=market_snapshot,
     )
 
 
@@ -874,63 +639,36 @@ def _build_ev_ebitda_params(
     *,
     market_snapshot: Mapping[str, object] | None,
 ) -> ParamBuildResult:
-    missing: list[str] = []
-    assumptions: list[str] = []
-    base = latest.base
-
-    ebitda_tf = base.ebitda
-    shares_tf = _resolve_shares_outstanding(
-        filing_shares_tf=base.shares_outstanding,
+    context = _builder_context()
+    payload = build_ev_ebitda_payload(
+        ticker=ticker,
+        latest=latest,
         market_snapshot=market_snapshot,
-        assumptions=assumptions,
+        deps=context.multiples_deps(),
     )
-    market_shares = _market_float(market_snapshot, "shares_outstanding")
-    shares_source = (
-        "market_data" if market_shares is not None and market_shares > 0 else "filing"
-    )
-    cash_tf = base.cash_and_equivalents
-    debt_tf = base.total_debt
-    preferred_tf = base.preferred_stock
-
-    ebitda = _value_or_missing(ebitda_tf, "ebitda", missing)
-    shares_outstanding = _value_or_missing(shares_tf, "shares_outstanding", missing)
-    cash = _value_or_missing(cash_tf, "cash", missing)
-    total_debt = _value_or_missing(debt_tf, "total_debt", missing)
-    preferred_stock = _value_or_missing(preferred_tf, "preferred_stock", missing)
-    current_price = _market_float(market_snapshot, "current_price")
-
-    missing.append("ev_ebitda_multiple")
-
-    trace_inputs: dict[str, TraceInput] = {
-        "target_metric": ebitda_tf,
-        "cash": cash_tf,
-        "total_debt": debt_tf,
-        "preferred_stock": preferred_tf,
-        "shares_outstanding": shares_tf,
-    }
-
-    params = {
-        "ticker": ticker or "UNKNOWN",
-        "rationale": "Derived from SEC XBRL (financial reports).",
-        "ebitda": ebitda,
-        "ev_ebitda_multiple": None,
-        "cash": cash,
-        "total_debt": total_debt,
-        "preferred_stock": preferred_stock,
-        "shares_outstanding": shares_outstanding,
-        "current_price": current_price,
-    }
-
     return ParamBuildResult(
-        params=params,
-        trace_inputs=trace_inputs,
-        missing=_dedupe_missing(missing),
-        assumptions=assumptions,
+        params=payload.params,
+        trace_inputs=payload.trace_inputs,
+        missing=_dedupe_missing(payload.missing),
+        assumptions=payload.assumptions,
         metadata=_build_result_metadata(
             latest=latest,
             market_snapshot=market_snapshot,
-            shares_source=shares_source,
+            shares_source=payload.shares_source,
         ),
+    )
+
+
+def _build_ev_ebitda_route(
+    ticker: str | None,
+    latest: FinancialReport,
+    _reports: list[FinancialReport],
+    market_snapshot: Mapping[str, object] | None,
+) -> ParamBuildResult:
+    return _build_ev_ebitda_params(
+        ticker=ticker,
+        latest=latest,
+        market_snapshot=market_snapshot,
     )
 
 
@@ -940,96 +678,36 @@ def _build_reit_ffo_params(
     *,
     market_snapshot: Mapping[str, object] | None,
 ) -> ParamBuildResult:
-    missing: list[str] = []
-    assumptions: list[str] = []
-    base = latest.base
-    extension = (
-        latest.extension if isinstance(latest.extension, RealEstateExtension) else None
-    )
-
-    ffo_tf = extension.ffo if extension else None
-    shares_tf = _resolve_shares_outstanding(
-        filing_shares_tf=base.shares_outstanding,
+    context = _builder_context()
+    payload = build_reit_payload(
+        ticker=ticker,
+        latest=latest,
         market_snapshot=market_snapshot,
-        assumptions=assumptions,
+        deps=context.reit_deps(),
     )
-    market_shares = _market_float(market_snapshot, "shares_outstanding")
-    shares_source = (
-        "market_data" if market_shares is not None and market_shares > 0 else "filing"
-    )
-    cash_tf = base.cash_and_equivalents
-    debt_tf = base.total_debt
-    preferred_tf = base.preferred_stock
-    depreciation_tf = base.depreciation_and_amortization
-
-    ffo = _value_or_missing(ffo_tf, "ffo", missing)
-    shares_outstanding = _value_or_missing(shares_tf, "shares_outstanding", missing)
-    cash = _value_or_missing(cash_tf, "cash", missing)
-    total_debt = _value_or_missing(debt_tf, "total_debt", missing)
-    preferred_stock = _value_or_missing(preferred_tf, "preferred_stock", missing)
-    current_price = _market_float(market_snapshot, "current_price")
-    monte_carlo_iterations, monte_carlo_seed = _resolve_monte_carlo_controls(
-        market_snapshot=market_snapshot,
-        assumptions=assumptions,
-    )
-    depreciation_and_amortization = _to_float(depreciation_tf.value)
-    if depreciation_and_amortization is None:
-        depreciation_and_amortization = 0.0
-        assumptions.append("depreciation_and_amortization defaulted to 0.0 for AFFO")
-
-    maintenance_capex_ratio = _market_float(market_snapshot, "maintenance_capex_ratio")
-    if maintenance_capex_ratio is None:
-        maintenance_capex_ratio = DEFAULT_MAINTENANCE_CAPEX_RATIO
-        assumptions.append(
-            "maintenance_capex_ratio defaulted to "
-            f"{DEFAULT_MAINTENANCE_CAPEX_RATIO:.2f}"
-        )
-
-    missing.append("ffo_multiple")
-
-    trace_inputs: dict[str, TraceInput] = {
-        "ffo": ffo_tf if ffo_tf is not None else _missing_field("FFO", "Missing FFO"),
-        "cash": cash_tf,
-        "total_debt": debt_tf,
-        "preferred_stock": preferred_tf,
-        "shares_outstanding": shares_tf,
-        "depreciation_and_amortization": depreciation_tf,
-        "maintenance_capex_ratio": TraceableField(
-            name="Maintenance CapEx Ratio",
-            value=maintenance_capex_ratio,
-            provenance=ManualProvenance(
-                description="Configurable REIT maintenance capex heuristic ratio",
-                author="ValuationPolicy",
-            ),
-        ),
-    }
-
-    params = {
-        "ticker": ticker or "UNKNOWN",
-        "rationale": "Derived from SEC XBRL (financial reports).",
-        "ffo": ffo,
-        "ffo_multiple": None,
-        "depreciation_and_amortization": depreciation_and_amortization,
-        "maintenance_capex_ratio": maintenance_capex_ratio,
-        "cash": cash,
-        "total_debt": total_debt,
-        "preferred_stock": preferred_stock,
-        "shares_outstanding": shares_outstanding,
-        "current_price": current_price,
-        "monte_carlo_iterations": monte_carlo_iterations,
-        "monte_carlo_seed": monte_carlo_seed,
-    }
-
     return ParamBuildResult(
-        params=params,
-        trace_inputs=trace_inputs,
-        missing=_dedupe_missing(missing),
-        assumptions=assumptions,
+        params=payload.params,
+        trace_inputs=payload.trace_inputs,
+        missing=_dedupe_missing(payload.missing),
+        assumptions=payload.assumptions,
         metadata=_build_result_metadata(
             latest=latest,
             market_snapshot=market_snapshot,
-            shares_source=shares_source,
+            shares_source=payload.shares_source,
         ),
+    )
+
+
+def _build_reit_route(
+    ticker: str | None,
+    latest: FinancialReport,
+    _reports: list[FinancialReport],
+    market_snapshot: Mapping[str, object] | None,
+) -> ParamBuildResult:
+    return _build_reit_ffo_params(
+        ticker=ticker,
+        latest=latest,
+        market_snapshot=market_snapshot,
     )
 
 
@@ -1040,134 +718,23 @@ def _build_bank_params(
     *,
     market_snapshot: Mapping[str, object] | None,
 ) -> ParamBuildResult:
-    missing: list[str] = []
-    assumptions: list[str] = []
-    base = latest.base
-    extension = (
-        latest.extension
-        if isinstance(latest.extension, FinancialServicesExtension)
-        else None
-    )
-
-    net_income_tf = base.net_income
-    total_equity_tf = base.total_equity
-    rwa_tf = extension.risk_weighted_assets if extension else None
-    tier1_tf = extension.tier1_capital_ratio if extension else None
-
-    income_series = [r.base.net_income for r in reports]
-    income_growth_tf = _growth_rates_from_series(
-        "Net Income Growth Rates", income_series, PROJECTION_YEARS
-    )
-
-    rwa_intensity_tf = (
-        _ratio(
-            "RWA Intensity",
-            rwa_tf,
-            base.total_assets,
-            "RiskWeightedAssets / TotalAssets",
-        )
-        if rwa_tf is not None
-        else _missing_field("RWA Intensity", "Missing Risk-Weighted Assets")
-    )
-
-    initial_net_income = _value_or_missing(net_income_tf, "initial_net_income", missing)
-    initial_capital = _value_or_missing(total_equity_tf, "initial_capital", missing)
-
-    if income_growth_tf.value is None:
-        missing.append("income_growth_rates")
-    if rwa_intensity_tf.value is None:
-        missing.append("rwa_intensity")
-    if tier1_tf is None or tier1_tf.value is None:
-        missing.append("tier1_target_ratio")
-
-    risk_free_rate = _market_float(market_snapshot, "risk_free_rate")
-    if risk_free_rate is None:
-        risk_free_rate = 0.042
-        assumptions.append("risk_free_rate defaulted to 4.2%")
-
-    beta = _market_float(market_snapshot, "beta")
-    if beta is None:
-        beta = 1.0
-        assumptions.append("beta defaulted to 1.0")
-
-    market_risk_premium = DEFAULT_MARKET_RISK_PREMIUM
-    assumptions.append(
-        f"market_risk_premium defaulted to {DEFAULT_MARKET_RISK_PREMIUM:.2%}"
-    )
-
-    terminal_growth_tf = assume_rate(
-        "Terminal Growth",
-        DEFAULT_TERMINAL_GROWTH,
-        "Policy default terminal growth (preview only; requires analyst review)",
-    )
-    assumptions.append(f"terminal_growth defaulted to {DEFAULT_TERMINAL_GROWTH:.2%}")
-    monte_carlo_iterations, monte_carlo_seed = _resolve_monte_carlo_controls(
+    context = _builder_context()
+    payload = build_bank_payload(
+        ticker=ticker,
+        latest=latest,
+        reports=reports,
         market_snapshot=market_snapshot,
-        assumptions=assumptions,
+        deps=context.bank_deps(),
     )
-
-    trace_inputs: dict[str, TraceInput] = {
-        "initial_net_income": net_income_tf,
-        "income_growth_rates": income_growth_tf,
-        "rwa_intensity": rwa_intensity_tf,
-        "tier1_target_ratio": tier1_tf
-        if tier1_tf is not None
-        else _missing_field("Tier1 Target Ratio", "Missing Tier 1 ratio"),
-        "initial_capital": total_equity_tf,
-        "risk_free_rate": TraceableField(
-            name="Risk-Free Rate",
-            value=risk_free_rate,
-            provenance=ManualProvenance(
-                description="Market-derived risk-free rate for CAPM",
-                author="MarketDataClient",
-            ),
-        ),
-        "beta": TraceableField(
-            name="Beta",
-            value=beta,
-            provenance=ManualProvenance(
-                description="Market-derived equity beta for CAPM",
-                author="MarketDataClient",
-            ),
-        ),
-        "market_risk_premium": TraceableField(
-            name="Market Risk Premium",
-            value=market_risk_premium,
-            provenance=ManualProvenance(
-                description="Policy market risk premium for CAPM",
-                author="ValuationPolicy",
-            ),
-        ),
-        "terminal_growth": terminal_growth_tf,
-    }
-
-    params = {
-        "ticker": ticker or "UNKNOWN",
-        "rationale": "Derived from SEC XBRL (financial reports).",
-        "initial_net_income": initial_net_income,
-        "income_growth_rates": income_growth_tf.value,
-        "rwa_intensity": rwa_intensity_tf.value,
-        "tier1_target_ratio": tier1_tf.value if tier1_tf is not None else None,
-        "initial_capital": initial_capital,
-        "risk_free_rate": risk_free_rate,
-        "beta": beta,
-        "market_risk_premium": market_risk_premium,
-        "cost_of_equity_strategy": "capm",
-        "cost_of_equity": None,
-        "cost_of_equity_override": None,
-        "terminal_growth": terminal_growth_tf.value,
-        "monte_carlo_iterations": monte_carlo_iterations,
-        "monte_carlo_seed": monte_carlo_seed,
-    }
-
     return ParamBuildResult(
-        params=params,
-        trace_inputs=trace_inputs,
-        missing=_dedupe_missing(missing),
-        assumptions=assumptions,
+        params=payload.params,
+        trace_inputs=payload.trace_inputs,
+        missing=_dedupe_missing(payload.missing),
+        assumptions=payload.assumptions,
         metadata=_build_result_metadata(
             latest=latest,
             market_snapshot=market_snapshot,
+            shares_source=payload.shares_source,
         ),
     )
 
@@ -1178,54 +745,36 @@ def _build_residual_income_params(
     *,
     market_snapshot: Mapping[str, object] | None,
 ) -> ParamBuildResult:
-    missing: list[str] = []
-    assumptions: list[str] = []
-    base = latest.base
-
-    book_value_tf = base.total_equity
-    shares_tf = _resolve_shares_outstanding(
-        filing_shares_tf=base.shares_outstanding,
+    context = _builder_context()
+    payload = build_residual_income_payload(
+        ticker=ticker,
+        latest=latest,
         market_snapshot=market_snapshot,
-        assumptions=assumptions,
+        deps=context.residual_income_deps(),
     )
-    market_shares = _market_float(market_snapshot, "shares_outstanding")
-    shares_source = (
-        "market_data" if market_shares is not None and market_shares > 0 else "filing"
-    )
-
-    current_book_value = _value_or_missing(book_value_tf, "current_book_value", missing)
-    shares_outstanding = _value_or_missing(shares_tf, "shares_outstanding", missing)
-    current_price = _market_float(market_snapshot, "current_price")
-
-    missing.extend(["projected_residual_incomes", "required_return", "terminal_growth"])
-
-    trace_inputs: dict[str, TraceInput] = {
-        "current_book_value": book_value_tf,
-        "shares_outstanding": shares_tf,
-    }
-
-    params = {
-        "ticker": ticker or "UNKNOWN",
-        "rationale": "Derived from SEC XBRL (financial reports).",
-        "current_book_value": current_book_value,
-        "projected_residual_incomes": None,
-        "required_return": None,
-        "terminal_growth": None,
-        "terminal_residual_income": None,
-        "shares_outstanding": shares_outstanding,
-        "current_price": current_price,
-    }
-
     return ParamBuildResult(
-        params=params,
-        trace_inputs=trace_inputs,
-        missing=_dedupe_missing(missing),
-        assumptions=assumptions,
+        params=payload.params,
+        trace_inputs=payload.trace_inputs,
+        missing=_dedupe_missing(payload.missing),
+        assumptions=payload.assumptions,
         metadata=_build_result_metadata(
             latest=latest,
             market_snapshot=market_snapshot,
-            shares_source=shares_source,
+            shares_source=payload.shares_source,
         ),
+    )
+
+
+def _build_residual_income_route(
+    ticker: str | None,
+    latest: FinancialReport,
+    _reports: list[FinancialReport],
+    market_snapshot: Mapping[str, object] | None,
+) -> ParamBuildResult:
+    return _build_residual_income_params(
+        ticker=ticker,
+        latest=latest,
+        market_snapshot=market_snapshot,
     )
 
 
@@ -1235,85 +784,66 @@ def _build_eva_params(
     *,
     market_snapshot: Mapping[str, object] | None,
 ) -> ParamBuildResult:
-    missing: list[str] = []
-    assumptions: list[str] = []
-    base = latest.base
-
-    equity_tf = base.total_equity
-    debt_tf = base.total_debt
-    cash_tf = base.cash_and_equivalents
-    shares_tf = _resolve_shares_outstanding(
-        filing_shares_tf=base.shares_outstanding,
+    context = _builder_context()
+    payload = build_eva_payload(
+        ticker=ticker,
+        latest=latest,
         market_snapshot=market_snapshot,
-        assumptions=assumptions,
+        deps=context.eva_deps(),
     )
-    market_shares = _market_float(market_snapshot, "shares_outstanding")
-    shares_source = (
-        "market_data" if market_shares is not None and market_shares > 0 else "filing"
-    )
-    preferred_tf = base.preferred_stock
-
-    if equity_tf.value is None or debt_tf.value is None or cash_tf.value is None:
-        invested_capital_tf = _missing_field(
-            "Invested Capital", "Missing equity, debt, or cash"
-        )
-    else:
-        invested_capital_tf = _computed_field(
-            name="Invested Capital",
-            value=(
-                float(equity_tf.value) + float(debt_tf.value) - float(cash_tf.value)
-            ),
-            op_code="INVESTED_CAPITAL",
-            expression="TotalEquity + TotalDebt - Cash",
-            inputs={
-                "Total Equity": equity_tf,
-                "Total Debt": debt_tf,
-                "Cash": cash_tf,
-            },
-        )
-
-    current_invested_capital = _value_or_missing(
-        invested_capital_tf, "current_invested_capital", missing
-    )
-    shares_outstanding = _value_or_missing(shares_tf, "shares_outstanding", missing)
-    cash = _value_or_missing(cash_tf, "cash", missing)
-    total_debt = _value_or_missing(debt_tf, "total_debt", missing)
-    preferred_stock = _value_or_missing(preferred_tf, "preferred_stock", missing)
-    current_price = _market_float(market_snapshot, "current_price")
-
-    missing.extend(["projected_evas", "wacc", "terminal_growth"])
-
-    trace_inputs: dict[str, TraceInput] = {
-        "current_invested_capital": invested_capital_tf,
-        "cash": cash_tf,
-        "total_debt": debt_tf,
-        "preferred_stock": preferred_tf,
-        "shares_outstanding": shares_tf,
-    }
-
-    params = {
-        "ticker": ticker or "UNKNOWN",
-        "rationale": "Derived from SEC XBRL (financial reports).",
-        "current_invested_capital": current_invested_capital,
-        "projected_evas": None,
-        "wacc": None,
-        "terminal_growth": None,
-        "terminal_eva": None,
-        "cash": cash,
-        "total_debt": total_debt,
-        "preferred_stock": preferred_stock,
-        "shares_outstanding": shares_outstanding,
-        "current_price": current_price,
-    }
-
     return ParamBuildResult(
-        params=params,
-        trace_inputs=trace_inputs,
-        missing=_dedupe_missing(missing),
-        assumptions=assumptions,
+        params=payload.params,
+        trace_inputs=payload.trace_inputs,
+        missing=_dedupe_missing(payload.missing),
+        assumptions=payload.assumptions,
         metadata=_build_result_metadata(
             latest=latest,
             market_snapshot=market_snapshot,
-            shares_source=shares_source,
+            shares_source=payload.shares_source,
         ),
+    )
+
+
+def _build_eva_route(
+    ticker: str | None,
+    latest: FinancialReport,
+    _reports: list[FinancialReport],
+    market_snapshot: Mapping[str, object] | None,
+) -> ParamBuildResult:
+    return _build_eva_params(
+        ticker=ticker,
+        latest=latest,
+        market_snapshot=market_snapshot,
+    )
+
+
+def _get_model_builder(model_type: str) -> ModelParamBuilder | None:
+    return {
+        "saas": _build_saas_params,
+        "bank": _build_bank_params,
+        "ev_revenue": _build_ev_revenue_route,
+        "ev_ebitda": _build_ev_ebitda_route,
+        "reit_ffo": _build_reit_route,
+        "residual_income": _build_residual_income_route,
+        "eva": _build_eva_route,
+    }.get(model_type)
+
+
+def _builder_context() -> BuilderContext:
+    return BuilderContext(
+        projection_years=PROJECTION_YEARS,
+        default_market_risk_premium=DEFAULT_MARKET_RISK_PREMIUM,
+        default_maintenance_capex_ratio=DEFAULT_MAINTENANCE_CAPEX_RATIO,
+        resolve_shares_outstanding=_resolve_shares_outstanding,
+        resolve_monte_carlo_controls=_resolve_monte_carlo_controls,
+        market_float=_market_float,
+        value_or_missing=_value_or_missing,
+        ratio=_ratio,
+        subtract=_subtract,
+        build_saas_growth_rates=_build_saas_growth_rates,
+        repeat_rate=_repeat_rate,
+        missing_field=_missing_field,
+        to_float=_to_float,
+        computed_field=_computed_field,
+        growth_rates_from_series=_growth_rates_from_series,
     )

@@ -91,6 +91,7 @@
         "market_risk_premium": 0.05,
         "cost_of_equity_strategy": "capm",
         "terminal_growth": 0.02,
+        "shares_outstanding": 100.0,
         "monte_carlo_iterations": 60,
         "monte_carlo_seed": 123
       }
@@ -143,7 +144,8 @@
         "market_risk_premium": 0.05,
         "cost_of_equity_strategy": "override",
         "cost_of_equity_override": 0.2,
-        "terminal_growth": 0.02
+        "terminal_growth": 0.02,
+        "shares_outstanding": 100.0
       }
     }
   ]

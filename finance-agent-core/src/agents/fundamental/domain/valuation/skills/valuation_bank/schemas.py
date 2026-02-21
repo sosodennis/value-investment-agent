@@ -33,6 +33,12 @@ class BankParams(BaseValuationParams):
         None, description="Manual override for cost of equity"
     )
     terminal_growth: float = Field(..., description="Terminal growth rate")
+    shares_outstanding: float = Field(
+        ..., gt=0, description="Latest shares outstanding"
+    )
+    current_price: float | None = Field(
+        None, ge=0, description="Current market price per share (optional)"
+    )
     monte_carlo_iterations: int = Field(
         0, ge=0, description="Monte Carlo iteration count (0 disables MC)"
     )

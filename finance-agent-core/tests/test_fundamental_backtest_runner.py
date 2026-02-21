@@ -44,6 +44,7 @@ def test_compare_with_baseline_has_no_drift_for_identical_payload(
                 "cost_of_equity_strategy": "override",
                 "cost_of_equity_override": 0.2,
                 "terminal_growth": 0.02,
+                "shares_outstanding": 100.0,
             },
             required_metrics=("equity_value", "cost_of_equity"),
         ),
@@ -111,6 +112,7 @@ def test_compare_with_baseline_detects_drift(tmp_path: Path) -> None:
                 "cost_of_equity_strategy": "override",
                 "cost_of_equity_override": 0.2,
                 "terminal_growth": 0.02,
+                "shares_outstanding": 100.0,
             },
             required_metrics=("cost_of_equity",),
         )

@@ -23,6 +23,7 @@ class ResolvedFieldSpec:
 USD_UNITS = ["usd"]
 SHARES_UNITS = ["shares"]
 PURE_UNITS = ["pure"]
+RATIO_UNITS = ["pure", "number"]
 
 BS_STATEMENT_TOKENS = ["balance", "financial position"]
 IS_STATEMENT_TOKENS = ["income", "operation", "earning"]

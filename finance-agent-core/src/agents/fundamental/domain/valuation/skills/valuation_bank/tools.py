@@ -129,7 +129,7 @@ def _run_bank_monte_carlo(
         iter_inputs["terminal_growth"] = sampled_terminal
 
         raw_result = graph.calculate(iter_inputs)
-        return float(_unwrap(raw_result.get("equity_value", 0.0)))
+        return float(_unwrap(raw_result.get("intrinsic_value", 0.0)))
 
     result = engine.run(
         base_inputs=base_numeric_inputs,
@@ -138,9 +138,22 @@ def _run_bank_monte_carlo(
         correlation_groups=correlation_groups,
     )
     return {
+        "metric_type": "intrinsic_value_per_share",
         "summary": result.summary,
         "diagnostics": result.diagnostics,
     }
+
+
+def _validate_bank_inputs(params: BankParams) -> str | None:
+    if params.shares_outstanding <= 0:
+        return "shares_outstanding must be positive for per-share valuation"
+    if params.initial_capital <= 0:
+        return "initial_capital must be positive"
+    if params.rwa_intensity <= 0 or params.rwa_intensity > 0.20:
+        return "rwa_intensity must be in (0, 0.20]"
+    if params.tier1_target_ratio <= 0 or params.tier1_target_ratio > 0.30:
+        return "tier1_target_ratio must be in (0, 0.30]"
+    return None
 
 
 def calculate_bank_valuation(
@@ -150,6 +163,10 @@ def calculate_bank_valuation(
     Executes the Bank DDM Valuation Graph.
     """
     graph = create_bank_graph()
+
+    validation_error = _validate_bank_inputs(params)
+    if validation_error is not None:
+        return {"error": validation_error}
 
     manual_cost = (
         params.cost_of_equity_override
@@ -173,11 +190,17 @@ def calculate_bank_valuation(
         "market_risk_premium": params.market_risk_premium,
         "cost_of_equity_override": cost_of_equity_override,
         "terminal_growth": params.terminal_growth,
+        "shares_outstanding": params.shares_outstanding,
     }
 
     try:
         inputs = _apply_trace_inputs(raw_inputs, params.trace_inputs)
         results = graph.calculate(inputs, trace=True)
+        intrinsic_value = float(_unwrap(results.get("intrinsic_value", 0.0)))
+        current_price = params.current_price or 0.0
+        upside = 0.0
+        if current_price > 0:
+            upside = (intrinsic_value - current_price) / current_price
         details: dict[str, object] = {"trace": results}
         if params.monte_carlo_iterations > 0:
             details["distribution_summary"] = _run_bank_monte_carlo(
@@ -189,7 +212,10 @@ def calculate_bank_valuation(
         return {
             "ticker": params.ticker,
             "equity_value": float(_unwrap(results.get("equity_value", 0.0))),
+            "intrinsic_value": intrinsic_value,
+            "upside_potential": upside,
             "cost_of_equity": float(_unwrap(results.get("cost_of_equity", 0.0))),
+            "shares_outstanding_used": params.shares_outstanding,
             "details": details,
             "trace": results,
         }

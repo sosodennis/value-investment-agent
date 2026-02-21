@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from src.agents.fundamental.data.clients.sec_xbrl.extractor import SearchConfig
 from src.agents.fundamental.data.clients.sec_xbrl.factory import (
     BaseFinancialModelFactory,
     FinancialReportFactory,
@@ -76,6 +77,48 @@ def test_financial_services_extension_uses_financial_registry(monkeypatch) -> No
     assert all(industry == "Financial Services" for industry, _issuer in seen)
     assert all(issuer == "JPM" for _industry, issuer in seen)
     assert extension.loans_and_leases.value == 1.0
+
+
+def test_financial_services_tier1_fallback_supports_number_unit(monkeypatch) -> None:
+    captured_tier1_configs: list[SearchConfig] = []
+
+    class DummyExtractor:
+        ticker = "JPM"
+
+    def fake_resolve(
+        _field_key: str, *, industry: str | None = None, issuer: str | None = None
+    ):
+        return None
+
+    def capture_extract(
+        _extractor,
+        configs,
+        name: str,
+        target_type=float,
+    ) -> TraceableField:
+        if name == "Tier 1 Capital Ratio":
+            captured_tier1_configs.extend(configs)
+        value = 1.0 if target_type is float else "ok"
+        return TraceableField(
+            name=name,
+            value=value,
+            provenance=ManualProvenance(description="test"),
+        )
+
+    monkeypatch.setattr(REGISTRY, "resolve", fake_resolve)
+    monkeypatch.setattr(
+        BaseFinancialModelFactory, "_extract_field", staticmethod(capture_extract)
+    )
+
+    FinancialReportFactory._create_financial_services_extension(DummyExtractor())
+
+    assert captured_tier1_configs
+    concepts = [cfg.concept_regex for cfg in captured_tier1_configs]
+    assert "us-gaap:TierOneRiskBasedCapitalToRiskWeightedAssets" in concepts
+    assert any(
+        cfg.unit_whitelist is not None and "number" in cfg.unit_whitelist
+        for cfg in captured_tier1_configs
+    )
 
 
 def test_real_estate_extension_exposes_gain_on_sale(monkeypatch) -> None:

@@ -21,6 +21,8 @@ export interface ParsedDistributionMetrics {
     median?: number;
     std?: number;
     percentile_5?: number;
+    percentile_25?: number;
+    percentile_75?: number;
     percentile_95?: number;
     min?: number;
     max?: number;
@@ -492,6 +494,8 @@ const parseDistributionMetrics = (
         'median',
         'std',
         'percentile_5',
+        'percentile_25',
+        'percentile_75',
         'percentile_95',
         'min',
         'max',

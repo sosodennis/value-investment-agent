@@ -29,7 +29,7 @@ IS_STATEMENT_TOKENS = ["income", "operation", "earning"]
 CF_STATEMENT_TOKENS = ["cash"]
 USD_UNITS = ["usd"]
 SHARES_UNITS = ["shares"]
-PURE_UNITS = ["pure"]
+RATIO_UNITS = ["pure", "number"]
 
 TotalDebtPolicy = Literal["include_finance_leases", "exclude_finance_leases"]
 DEFAULT_TOTAL_DEBT_POLICY: TotalDebtPolicy = "include_finance_leases"
@@ -2281,8 +2281,14 @@ class FinancialReportFactory:
             extractor,
             R("tier1_capital_ratio")
             or [
-                C("us-gaap:Tier1CapitalRatio", None, "instant", PURE_UNITS),
-                C("us-gaap:Tier1RiskBasedCapitalRatio", None, "instant", PURE_UNITS),
+                C("us-gaap:Tier1CapitalRatio", None, "instant", RATIO_UNITS),
+                C("us-gaap:Tier1RiskBasedCapitalRatio", None, "instant", RATIO_UNITS),
+                C(
+                    "us-gaap:TierOneRiskBasedCapitalToRiskWeightedAssets",
+                    None,
+                    "instant",
+                    RATIO_UNITS,
+                ),
             ],
             "Tier 1 Capital Ratio",
             target_type=float,

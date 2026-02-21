@@ -31,11 +31,13 @@ def test_bank_valuation_uses_capm_when_strategy_is_capm() -> None:
         market_risk_premium=0.05,
         cost_of_equity_strategy="capm",
         terminal_growth=0.02,
+        shares_outstanding=100.0,
     )
 
     result = calculate_bank_valuation(params)
     assert "error" not in result
     assert result["cost_of_equity"] == pytest.approx(0.095)
+    assert result["intrinsic_value"] == pytest.approx(result["equity_value"] / 100.0)
 
 
 def test_bank_valuation_uses_manual_override_strategy() -> None:
@@ -53,6 +55,7 @@ def test_bank_valuation_uses_manual_override_strategy() -> None:
         cost_of_equity_strategy="override",
         cost_of_equity_override=0.20,
         terminal_growth=0.02,
+        shares_outstanding=100.0,
     )
 
     result = calculate_bank_valuation(params)
@@ -74,6 +77,7 @@ def test_bank_valuation_includes_distribution_summary_when_mc_enabled() -> None:
         market_risk_premium=0.05,
         cost_of_equity_strategy="capm",
         terminal_growth=0.02,
+        shares_outstanding=100.0,
         monte_carlo_iterations=300,
         monte_carlo_seed=123,
     )
@@ -89,6 +93,7 @@ def test_bank_valuation_includes_distribution_summary_when_mc_enabled() -> None:
     assert "percentile_5" in summary
     assert "median" in summary
     assert "percentile_95" in summary
+    assert distribution.get("metric_type") == "intrinsic_value_per_share"
 
 
 def test_bank_valuation_monte_carlo_handles_traceable_growth_inputs() -> None:
@@ -105,6 +110,7 @@ def test_bank_valuation_monte_carlo_handles_traceable_growth_inputs() -> None:
         market_risk_premium=0.05,
         cost_of_equity_strategy="capm",
         terminal_growth=0.02,
+        shares_outstanding=100.0,
         monte_carlo_iterations=200,
         monte_carlo_seed=123,
         trace_inputs={
@@ -122,6 +128,26 @@ def test_bank_valuation_monte_carlo_handles_traceable_growth_inputs() -> None:
     assert isinstance(details, dict)
     distribution = details.get("distribution_summary")
     assert isinstance(distribution, dict)
+
+
+def test_bank_valuation_fails_closed_for_invalid_inputs() -> None:
+    params = BankParams(
+        ticker="BNK",
+        rationale="test",
+        initial_net_income=100.0,
+        income_growth_rates=[0.05, 0.05, 0.05],
+        rwa_intensity=0.40,
+        tier1_target_ratio=0.12,
+        initial_capital=200.0,
+        risk_free_rate=0.04,
+        beta=1.1,
+        market_risk_premium=0.05,
+        cost_of_equity_strategy="capm",
+        terminal_growth=0.02,
+        shares_outstanding=100.0,
+    )
+    result = calculate_bank_valuation(params)
+    assert result.get("error") == "rwa_intensity must be in (0, 0.20]"
 
 
 def test_reit_valuation_uses_affo_like_adjustment() -> None:

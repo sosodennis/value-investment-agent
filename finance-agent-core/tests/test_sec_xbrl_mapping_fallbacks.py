@@ -78,6 +78,17 @@ def test_total_debt_including_leases_mapping_includes_current_maturities_tag() -
     )
 
 
+def test_tier1_capital_ratio_mapping_accepts_number_unit() -> None:
+    spec = REGISTRY.get("tier1_capital_ratio")
+    assert spec is not None
+    concepts = [cfg.concept_regex for cfg in spec.configs]
+    assert "us-gaap:TierOneRiskBasedCapitalToRiskWeightedAssets" in concepts
+    assert any(
+        cfg.unit_whitelist is not None and "number" in cfg.unit_whitelist
+        for cfg in spec.configs
+    )
+
+
 def test_financial_extension_mapping_includes_credit_loss_and_interest_operating() -> (
     None
 ):
