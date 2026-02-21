@@ -68,10 +68,20 @@ export interface ParsedDataFreshnessMarketData {
     missing_fields?: string[];
 }
 
+export interface ParsedDataFreshnessTimeAlignment {
+    status?: string;
+    policy?: string;
+    lag_days?: number;
+    threshold_days?: number;
+    market_as_of?: string;
+    filing_period_end?: string;
+}
+
 export interface ParsedDataFreshness {
     financial_statement?: ParsedDataFreshnessFinancialStatement;
     market_data?: ParsedDataFreshnessMarketData;
     shares_outstanding_source?: string;
+    time_alignment?: ParsedDataFreshnessTimeAlignment;
 }
 
 export interface ParsedFinancialPreview {
@@ -740,6 +750,48 @@ const parseDataFreshness = (
     );
     if (sharesOutstandingSource !== undefined) {
         parsed.shares_outstanding_source = sharesOutstandingSource;
+    }
+
+    const timeAlignmentRaw = record.time_alignment;
+    if (timeAlignmentRaw !== undefined && timeAlignmentRaw !== null) {
+        const timeAlignmentRecord = toRecord(
+            timeAlignmentRaw,
+            `${context}.time_alignment`
+        );
+        const status = parseNullableOptionalString(
+            timeAlignmentRecord.status,
+            `${context}.time_alignment.status`
+        );
+        const policy = parseNullableOptionalString(
+            timeAlignmentRecord.policy,
+            `${context}.time_alignment.policy`
+        );
+        const lagDays = parseNullableOptionalNumber(
+            timeAlignmentRecord.lag_days,
+            `${context}.time_alignment.lag_days`
+        );
+        const thresholdDays = parseNullableOptionalNumber(
+            timeAlignmentRecord.threshold_days,
+            `${context}.time_alignment.threshold_days`
+        );
+        const marketAsOf = parseNullableOptionalString(
+            timeAlignmentRecord.market_as_of,
+            `${context}.time_alignment.market_as_of`
+        );
+        const filingPeriodEnd = parseNullableOptionalString(
+            timeAlignmentRecord.filing_period_end,
+            `${context}.time_alignment.filing_period_end`
+        );
+        const timeAlignment: ParsedDataFreshnessTimeAlignment = {};
+        if (status !== undefined) timeAlignment.status = status;
+        if (policy !== undefined) timeAlignment.policy = policy;
+        if (lagDays !== undefined) timeAlignment.lag_days = lagDays;
+        if (thresholdDays !== undefined) timeAlignment.threshold_days = thresholdDays;
+        if (marketAsOf !== undefined) timeAlignment.market_as_of = marketAsOf;
+        if (filingPeriodEnd !== undefined) {
+            timeAlignment.filing_period_end = filingPeriodEnd;
+        }
+        parsed.time_alignment = timeAlignment;
     }
     return parsed;
 };

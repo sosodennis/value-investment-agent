@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from datetime import UTC, date, datetime
 from math import sqrt
 
 from src.shared.kernel.tools.logger import get_logger, log_event
@@ -55,6 +56,8 @@ DEFAULT_MARKET_RISK_PREMIUM = 0.05
 DEFAULT_MAINTENANCE_CAPEX_RATIO = 0.8
 DEFAULT_MONTE_CARLO_ITERATIONS = 300
 DEFAULT_MONTE_CARLO_SEED = 42
+DEFAULT_TIME_ALIGNMENT_MAX_DAYS = 365
+DEFAULT_TIME_ALIGNMENT_POLICY = "warn"
 
 
 def build_params(
@@ -99,6 +102,11 @@ def build_params(
         ticker,
         latest,
         reports_sorted,
+        market_snapshot=market_snapshot,
+    )
+    result = _apply_time_alignment_guard(
+        result=result,
+        latest=latest,
         market_snapshot=market_snapshot,
     )
 
@@ -384,6 +392,118 @@ def _env_int(name: str, default: int, *, minimum: int | None = None) -> int:
     if minimum is not None and parsed < minimum:
         return minimum
     return parsed
+
+
+def _env_text(name: str, default: str) -> str:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    normalized = value.strip().lower()
+    return normalized if normalized else default
+
+
+def _parse_iso_datetime(raw: object) -> datetime | None:
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    text = raw.strip()
+    if text.endswith("Z"):
+        text = f"{text[:-1]}+00:00"
+
+    try:
+        parsed = datetime.fromisoformat(text)
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=UTC)
+        return parsed.astimezone(UTC)
+    except ValueError:
+        pass
+
+    try:
+        parsed_date = date.fromisoformat(text[:10])
+    except ValueError:
+        return None
+    return datetime.combine(parsed_date, datetime.min.time(), tzinfo=UTC)
+
+
+def _merge_metadata(base: JSONObject, extra: JSONObject) -> JSONObject:
+    merged: JSONObject = dict(base)
+    for key, value in extra.items():
+        existing = merged.get(key)
+        if isinstance(existing, dict) and isinstance(value, Mapping):
+            nested = dict(existing)
+            nested.update(dict(value))
+            merged[key] = nested
+        else:
+            merged[key] = value
+    return merged
+
+
+def _apply_time_alignment_guard(
+    *,
+    result: ParamBuildResult,
+    latest: FinancialReport,
+    market_snapshot: Mapping[str, object] | None,
+) -> ParamBuildResult:
+    if market_snapshot is None:
+        return result
+
+    as_of_raw = market_snapshot.get("as_of")
+    period_end_raw = latest.base.period_end_date.value
+    as_of_dt = _parse_iso_datetime(as_of_raw)
+    period_end_dt = _parse_iso_datetime(period_end_raw)
+    if as_of_dt is None or period_end_dt is None:
+        return result
+
+    threshold_days = _env_int(
+        "FUNDAMENTAL_TIME_ALIGNMENT_MAX_DAYS",
+        DEFAULT_TIME_ALIGNMENT_MAX_DAYS,
+        minimum=0,
+    )
+    policy = _env_text(
+        "FUNDAMENTAL_TIME_ALIGNMENT_POLICY", DEFAULT_TIME_ALIGNMENT_POLICY
+    )
+    snapshot_threshold = _to_int(market_snapshot.get("time_alignment_max_days"))
+    snapshot_policy = _market_text(market_snapshot, "time_alignment_policy")
+    if snapshot_threshold is not None and snapshot_threshold >= 0:
+        threshold_days = snapshot_threshold
+    if snapshot_policy in {"warn", "reject"}:
+        policy = snapshot_policy
+    if policy not in {"warn", "reject"}:
+        policy = DEFAULT_TIME_ALIGNMENT_POLICY
+
+    lag_days = int((as_of_dt.date() - period_end_dt.date()).days)
+    status = "aligned"
+    assumptions = list(result.assumptions)
+    if lag_days > threshold_days:
+        status = "high_risk"
+        assumptions.append(
+            "high-risk: market_data_as_of exceeds filing_period_end by "
+            f"{lag_days} days (threshold={threshold_days}, policy={policy})"
+        )
+        if policy == "reject":
+            raise ValueError(
+                "Time-alignment guard rejected valuation: "
+                f"market_data_as_of lag={lag_days} days > threshold={threshold_days}"
+            )
+
+    time_alignment: JSONObject = {
+        "status": status,
+        "policy": policy,
+        "lag_days": lag_days,
+        "threshold_days": threshold_days,
+        "market_as_of": as_of_dt.isoformat(),
+        "filing_period_end": period_end_dt.date().isoformat(),
+    }
+    metadata = _merge_metadata(
+        result.metadata,
+        {"data_freshness": {"time_alignment": time_alignment}},
+    )
+    return ParamBuildResult(
+        params=result.params,
+        trace_inputs=result.trace_inputs,
+        missing=result.missing,
+        assumptions=assumptions,
+        metadata=metadata,
+    )
 
 
 def _resolve_monte_carlo_controls(

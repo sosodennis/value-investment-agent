@@ -611,6 +611,33 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                                 Shares Source: {dataFreshness.shares_outstanding_source}
                                             </div>
                                         )}
+                                        {dataFreshness.time_alignment?.status && (
+                                            <div>
+                                                Time Alignment Status:{' '}
+                                                <span
+                                                    className={
+                                                        dataFreshness.time_alignment.status === 'high_risk'
+                                                            ? 'text-rose-300 font-semibold'
+                                                            : 'text-emerald-300 font-semibold'
+                                                    }
+                                                >
+                                                    {dataFreshness.time_alignment.status}
+                                                </span>
+                                            </div>
+                                        )}
+                                        {typeof dataFreshness.time_alignment?.lag_days === 'number' && (
+                                            <div>
+                                                Time Alignment Lag: {Math.round(dataFreshness.time_alignment.lag_days)} days
+                                                {typeof dataFreshness.time_alignment?.threshold_days === 'number'
+                                                    ? ` (threshold ${Math.round(dataFreshness.time_alignment.threshold_days)} days)`
+                                                    : ''}
+                                            </div>
+                                        )}
+                                        {dataFreshness.time_alignment?.policy && (
+                                            <div>
+                                                Time Alignment Policy: {dataFreshness.time_alignment.policy}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             )}

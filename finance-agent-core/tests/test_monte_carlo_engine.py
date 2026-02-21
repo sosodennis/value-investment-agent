@@ -58,7 +58,9 @@ def test_monte_carlo_engine_applies_bounds() -> None:
 
 
 def test_monte_carlo_engine_rejects_non_psd_covariance() -> None:
-    engine = MonteCarloEngine(MonteCarloConfig(iterations=100, seed=1))
+    engine = MonteCarloEngine(
+        MonteCarloConfig(iterations=100, seed=1, psd_repair_policy="error")
+    )
     distributions = {
         "a": DistributionSpec(kind="normal", mean=0.0, std=1.0),
         "b": DistributionSpec(kind="normal", mean=0.0, std=1.0),
@@ -77,6 +79,30 @@ def test_monte_carlo_engine_rejects_non_psd_covariance() -> None:
             evaluator=lambda sampled: sampled["a"] + sampled["b"],
             correlation_groups=correlation_groups,
         )
+
+
+def test_monte_carlo_engine_repairs_non_psd_covariance_by_default() -> None:
+    engine = MonteCarloEngine(MonteCarloConfig(iterations=300, seed=1))
+    distributions = {
+        "a": DistributionSpec(kind="normal", mean=0.0, std=1.0),
+        "b": DistributionSpec(kind="normal", mean=0.0, std=1.0),
+    }
+    correlation_groups = (
+        CorrelationGroup(
+            variables=("a", "b"),
+            matrix=((1.0, 1.2), (1.2, 1.0)),
+        ),
+    )
+    result = engine.run(
+        base_inputs={},
+        distributions=distributions,
+        evaluator=lambda sampled: sampled["a"] + sampled["b"],
+        correlation_groups=correlation_groups,
+    )
+
+    assert result.diagnostics["psd_repaired"] is True
+    assert result.diagnostics["psd_repaired_groups"] == 1
+    assert result.diagnostics["psd_repair_failed_groups"] == 0
 
 
 def test_monte_carlo_engine_supports_correlated_non_normal_distributions() -> None:

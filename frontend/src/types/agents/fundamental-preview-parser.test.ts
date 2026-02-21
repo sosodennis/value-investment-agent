@@ -85,6 +85,14 @@ describe('parseFinancialPreview', () => {
                     missing_fields: ['target_mean_price'],
                 },
                 shares_outstanding_source: 'market_data',
+                time_alignment: {
+                    status: 'high_risk',
+                    policy: 'warn',
+                    lag_days: 420,
+                    threshold_days: 365,
+                    market_as_of: '2026-02-20T00:00:00+00:00',
+                    filing_period_end: '2024-12-31',
+                },
             },
             financial_reports: [
                 {
@@ -111,6 +119,8 @@ describe('parseFinancialPreview', () => {
         expect(parsed?.assumption_breakdown?.monte_carlo?.effective_window).toBe(250);
         expect(parsed?.assumption_breakdown?.monte_carlo?.stopped_early).toBe(true);
         expect(parsed?.data_freshness?.market_data?.provider).toBe('yfinance');
+        expect(parsed?.data_freshness?.time_alignment?.status).toBe('high_risk');
+        expect(parsed?.data_freshness?.time_alignment?.lag_days).toBe(420);
         expect(parsed?.financial_reports).toHaveLength(1);
     });
 

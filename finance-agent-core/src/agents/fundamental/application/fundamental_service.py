@@ -212,6 +212,7 @@ def build_valuation_success_update(
         assumptions=assumptions,
         params_dump=params_dump,
         calculation_metrics=calculation_metrics,
+        build_metadata=build_metadata,
     )
     data_freshness = _build_data_freshness(
         reports_raw=reports_raw,
@@ -278,6 +279,7 @@ def _build_assumption_breakdown(
     assumptions: list[str],
     params_dump: JSONObject,
     calculation_metrics: JSONObject,
+    build_metadata: JSONObject | None = None,
 ) -> JSONObject:
     assumption_items: list[JSONObject] = []
     for statement in assumptions:
@@ -290,6 +292,9 @@ def _build_assumption_breakdown(
         elif "blended" in normalized:
             category = "blended"
             severity = "medium"
+        elif "high-risk" in normalized or "time-alignment" in normalized:
+            category = "risk"
+            severity = "high"
 
         assumption_items.append(
             {
@@ -339,6 +344,13 @@ def _build_assumption_breakdown(
                 "stopped_early",
                 "converged",
                 "sufficient_window",
+                "psd_repaired",
+                "psd_repaired_groups",
+                "psd_repair_failed_groups",
+                "psd_repair_clip_used",
+                "psd_repair_higham_used",
+                "psd_min_eigen_before",
+                "psd_min_eigen_after",
             )
             for field in mc_diagnostic_fields:
                 value = diagnostics.get(field)
@@ -348,6 +360,23 @@ def _build_assumption_breakdown(
                     monte_carlo[field] = value
                 elif isinstance(value, float):
                     monte_carlo[field] = value
+
+    if isinstance(build_metadata, Mapping):
+        data_freshness_raw = build_metadata.get("data_freshness")
+        if isinstance(data_freshness_raw, Mapping):
+            time_alignment_raw = data_freshness_raw.get("time_alignment")
+            if isinstance(time_alignment_raw, Mapping):
+                for field in (
+                    "status",
+                    "policy",
+                    "lag_days",
+                    "threshold_days",
+                    "market_as_of",
+                    "filing_period_end",
+                ):
+                    value = time_alignment_raw.get(field)
+                    if isinstance(value, str | int | float | bool):
+                        key_parameters[f"time_alignment_{field}"] = value
 
     return {
         "total_assumptions": len(assumption_items),
@@ -397,6 +426,30 @@ def _build_data_freshness(
         shares_source = metadata_freshness.get("shares_outstanding_source")
         if isinstance(shares_source, str) and shares_source:
             payload["shares_outstanding_source"] = shares_source
+
+        time_alignment_raw = metadata_freshness.get("time_alignment")
+        if isinstance(time_alignment_raw, Mapping):
+            time_alignment: JSONObject = {}
+            status = time_alignment_raw.get("status")
+            policy = time_alignment_raw.get("policy")
+            lag_days = time_alignment_raw.get("lag_days")
+            threshold_days = time_alignment_raw.get("threshold_days")
+            market_as_of = time_alignment_raw.get("market_as_of")
+            filing_period_end = time_alignment_raw.get("filing_period_end")
+            if isinstance(status, str) and status:
+                time_alignment["status"] = status
+            if isinstance(policy, str) and policy:
+                time_alignment["policy"] = policy
+            if isinstance(lag_days, int):
+                time_alignment["lag_days"] = lag_days
+            if isinstance(threshold_days, int):
+                time_alignment["threshold_days"] = threshold_days
+            if isinstance(market_as_of, str) and market_as_of:
+                time_alignment["market_as_of"] = market_as_of
+            if isinstance(filing_period_end, str) and filing_period_end:
+                time_alignment["filing_period_end"] = filing_period_end
+            if time_alignment:
+                payload["time_alignment"] = time_alignment
 
     if not payload:
         return None

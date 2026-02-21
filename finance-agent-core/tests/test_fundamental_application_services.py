@@ -56,6 +56,10 @@ def test_build_valuation_success_update_includes_output_and_artifact() -> None:
                         "executed_iterations": 500,
                         "effective_window": 166,
                         "stopped_early": True,
+                        "psd_repaired": True,
+                        "psd_repaired_groups": 1,
+                        "psd_min_eigen_before": -0.12,
+                        "psd_min_eigen_after": 1e-8,
                     },
                 }
             },
@@ -89,6 +93,14 @@ def test_build_valuation_success_update_includes_output_and_artifact() -> None:
                     "missing_fields": ["target_mean_price"],
                 },
                 "shares_outstanding_source": "market_data",
+                "time_alignment": {
+                    "status": "high_risk",
+                    "policy": "warn",
+                    "lag_days": 420,
+                    "threshold_days": 365,
+                    "market_as_of": "2026-02-20T00:00:00+00:00",
+                    "filing_period_end": "2024-12-31",
+                },
             }
         },
     )
@@ -108,12 +120,23 @@ def test_build_valuation_success_update_includes_output_and_artifact() -> None:
     assert preview["upside_potential"] == 0.15
     assert preview["assumption_breakdown"]["total_assumptions"] == 1
     assert preview["assumption_breakdown"]["key_parameters"]["current_price"] == 39.0
+    assert (
+        preview["assumption_breakdown"]["key_parameters"]["time_alignment_status"]
+        == "high_risk"
+    )
+    assert (
+        preview["assumption_breakdown"]["key_parameters"]["time_alignment_lag_days"]
+        == 420
+    )
     assert preview["assumption_breakdown"]["monte_carlo"]["executed_iterations"] == 500
     assert preview["assumption_breakdown"]["monte_carlo"]["effective_window"] == 166
     assert preview["assumption_breakdown"]["monte_carlo"]["stopped_early"] is True
+    assert preview["assumption_breakdown"]["monte_carlo"]["psd_repaired"] is True
+    assert preview["assumption_breakdown"]["monte_carlo"]["psd_repaired_groups"] == 1
     assert preview["data_freshness"]["financial_statement"]["fiscal_year"] == 2025
     assert preview["data_freshness"]["market_data"]["provider"] == "yfinance"
     assert preview["data_freshness"]["shares_outstanding_source"] == "market_data"
+    assert preview["data_freshness"]["time_alignment"]["status"] == "high_risk"
     assert update["node_statuses"]["fundamental_analysis"] == "done"
 
 

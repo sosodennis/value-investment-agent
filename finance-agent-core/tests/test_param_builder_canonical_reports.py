@@ -22,6 +22,7 @@ def _raw_reports() -> list[dict[str, object]]:
             "base": {
                 "fiscal_year": _tf("2024"),
                 "fiscal_period": _tf("FY"),
+                "period_end_date": _tf("2024-12-31"),
                 "company_name": _tf("Example Inc."),
                 "cik": _tf("0000000001"),
                 "sic_code": _tf("7372"),
@@ -50,6 +51,7 @@ def _raw_reports() -> list[dict[str, object]]:
             "base": {
                 "fiscal_year": _tf("2023"),
                 "fiscal_period": _tf("FY"),
+                "period_end_date": _tf("2023-12-31"),
                 "company_name": _tf("Example Inc."),
                 "cik": _tf("0000000001"),
                 "sic_code": _tf("7372"),
@@ -304,3 +306,48 @@ def test_build_params_raises_for_unsupported_model() -> None:
 
     with pytest.raises(ValueError, match="Unsupported model type for SEC XBRL builder"):
         build_params("unsupported_model", "EXM", canonical_reports)
+
+
+def test_build_params_time_alignment_warns_when_market_data_is_stale() -> None:
+    canonical_reports = parse_financial_reports_model(
+        _raw_reports(), context="test.financial_reports.time_alignment"
+    )
+    result = build_params(
+        "saas",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "as_of": "2026-06-30T00:00:00Z",
+            "time_alignment_max_days": 180,
+            "time_alignment_policy": "warn",
+        },
+    )
+
+    assert any(
+        "high-risk: market_data_as_of exceeds filing_period_end" in a
+        for a in result.assumptions
+    )
+    freshness = result.metadata.get("data_freshness")
+    assert isinstance(freshness, dict)
+    time_alignment = freshness.get("time_alignment")
+    assert isinstance(time_alignment, dict)
+    assert time_alignment.get("status") == "high_risk"
+    assert time_alignment.get("policy") == "warn"
+
+
+def test_build_params_time_alignment_reject_policy_raises_error() -> None:
+    canonical_reports = parse_financial_reports_model(
+        _raw_reports(), context="test.financial_reports.time_alignment.reject"
+    )
+
+    with pytest.raises(ValueError, match="Time-alignment guard rejected valuation"):
+        build_params(
+            "saas",
+            "EXM",
+            canonical_reports,
+            market_snapshot={
+                "as_of": "2026-06-30T00:00:00Z",
+                "time_alignment_max_days": 180,
+                "time_alignment_policy": "reject",
+            },
+        )

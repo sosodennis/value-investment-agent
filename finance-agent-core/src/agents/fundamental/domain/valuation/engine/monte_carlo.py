@@ -37,6 +37,11 @@ class MonteCarloConfig:
     convergence_window: int = 250
     dynamic_window_min: int = 50
     convergence_tolerance: float = 0.002
+    psd_repair_policy: Literal["error", "clip", "higham"] = "clip"
+    psd_eigen_floor: float = 1e-8
+    psd_tolerance: float = -1e-10
+    higham_max_iterations: int = 50
+    higham_tolerance: float = 1e-9
 
 
 @dataclass(frozen=True)
@@ -59,6 +64,12 @@ class MonteCarloEngine:
             raise ValueError("dynamic_window_min must be > 1")
         if config.convergence_tolerance <= 0:
             raise ValueError("convergence_tolerance must be positive")
+        if config.psd_eigen_floor <= 0:
+            raise ValueError("psd_eigen_floor must be positive")
+        if config.higham_max_iterations <= 0:
+            raise ValueError("higham_max_iterations must be positive")
+        if config.higham_tolerance <= 0:
+            raise ValueError("higham_tolerance must be positive")
         self._config = config
 
     def run(
@@ -74,7 +85,7 @@ class MonteCarloEngine:
         batch_size = self._config.batch_size
 
         rng = np.random.default_rng(self._config.seed)
-        sampled = self._sample_variables(
+        sampled, sampling_diagnostics = self._sample_variables(
             rng=rng,
             distributions=distributions,
             correlation_groups=correlation_groups,
@@ -110,6 +121,7 @@ class MonteCarloEngine:
         diagnostics["configured_iterations"] = max_iterations
         diagnostics["executed_iterations"] = executed_iterations
         diagnostics["stopped_early"] = executed_iterations < max_iterations
+        diagnostics.update(sampling_diagnostics)
         return MonteCarloResult(summary=summary, diagnostics=diagnostics)
 
     def _sample_variables(
@@ -119,12 +131,21 @@ class MonteCarloEngine:
         distributions: Mapping[str, DistributionSpec],
         correlation_groups: tuple[CorrelationGroup, ...],
         iterations: int,
-    ) -> dict[str, np.ndarray]:
+    ) -> tuple[dict[str, np.ndarray], dict[str, float | bool | int]]:
         sampled: dict[str, np.ndarray] = {}
+        diagnostics: dict[str, float | bool | int] = {
+            "psd_repaired": False,
+            "psd_repaired_groups": 0,
+            "psd_repair_failed_groups": 0,
+            "psd_min_eigen_before": 0.0,
+            "psd_min_eigen_after": 0.0,
+            "psd_repair_clip_used": False,
+            "psd_repair_higham_used": False,
+        }
         grouped_vars: set[str] = set()
 
         for group in correlation_groups:
-            group_samples = self._sample_correlation_group(
+            group_samples, group_diag = self._sample_correlation_group(
                 rng=rng,
                 group=group,
                 distributions=distributions,
@@ -132,13 +153,36 @@ class MonteCarloEngine:
             )
             sampled.update(group_samples)
             grouped_vars.update(group.variables)
+            if bool(group_diag["psd_repaired"]):
+                diagnostics["psd_repaired"] = True
+                diagnostics["psd_repaired_groups"] = (
+                    int(diagnostics["psd_repaired_groups"]) + 1
+                )
+            if bool(group_diag["psd_repair_failed"]):
+                diagnostics["psd_repair_failed_groups"] = (
+                    int(diagnostics["psd_repair_failed_groups"]) + 1
+                )
+            diagnostics["psd_repair_clip_used"] = bool(
+                diagnostics["psd_repair_clip_used"]
+            ) or bool(group_diag["psd_repair_clip_used"])
+            diagnostics["psd_repair_higham_used"] = bool(
+                diagnostics["psd_repair_higham_used"]
+            ) or bool(group_diag["psd_repair_higham_used"])
+            diagnostics["psd_min_eigen_before"] = min(
+                float(diagnostics["psd_min_eigen_before"]),
+                float(group_diag["psd_min_eigen_before"]),
+            )
+            diagnostics["psd_min_eigen_after"] = min(
+                float(diagnostics["psd_min_eigen_after"]),
+                float(group_diag["psd_min_eigen_after"]),
+            )
 
         for name, spec in distributions.items():
             if name in grouped_vars:
                 continue
             sampled[name] = self._sample_distribution(rng, spec, iterations)
 
-        return sampled
+        return sampled, diagnostics
 
     def _sample_correlation_group(
         self,
@@ -147,7 +191,7 @@ class MonteCarloEngine:
         group: CorrelationGroup,
         distributions: Mapping[str, DistributionSpec],
         iterations: int,
-    ) -> dict[str, np.ndarray]:
+    ) -> tuple[dict[str, np.ndarray], dict[str, float | bool | int]]:
         size = len(group.variables)
         if size == 0:
             raise ValueError("correlation group cannot be empty")
@@ -173,19 +217,107 @@ class MonteCarloEngine:
         if not np.allclose(np.diag(corr), 1.0):
             raise ValueError("correlation matrix diagonal must be 1")
 
-        min_eigen = float(np.min(np.linalg.eigvalsh(corr)))
-        if min_eigen < -1e-10:
-            raise ValueError(
-                f"covariance matrix is not PSD; minimum eigenvalue={min_eigen:.6g}"
-            )
+        corr_psd, psd_diag = self._ensure_correlation_psd(corr)
 
         draws = rng.multivariate_normal(
-            np.zeros(size, dtype=float), corr, size=iterations
+            np.zeros(size, dtype=float), corr_psd, size=iterations
         )
         output: dict[str, np.ndarray] = {}
         for idx, var in enumerate(group.variables):
             output[var] = self._transform_standard_normal(draws[:, idx], specs[idx])
-        return output
+        return output, psd_diag
+
+    def _ensure_correlation_psd(
+        self, corr: np.ndarray
+    ) -> tuple[np.ndarray, dict[str, float | bool | int]]:
+        sym = self._symmetrize(corr)
+        min_before = float(np.min(np.linalg.eigvalsh(sym)))
+        diagnostics: dict[str, float | bool | int] = {
+            "psd_repaired": False,
+            "psd_repair_failed": False,
+            "psd_repair_clip_used": False,
+            "psd_repair_higham_used": False,
+            "psd_min_eigen_before": min_before,
+            "psd_min_eigen_after": min_before,
+        }
+        if min_before >= self._config.psd_tolerance:
+            return sym, diagnostics
+
+        policy = self._config.psd_repair_policy
+        if policy == "error":
+            diagnostics["psd_repair_failed"] = True
+            raise ValueError(
+                f"covariance matrix is not PSD; minimum eigenvalue={min_before:.6g}"
+            )
+
+        diagnostics["psd_repaired"] = True
+        if policy == "higham":
+            repaired = self._nearest_correlation_higham(sym)
+            diagnostics["psd_repair_higham_used"] = True
+        else:
+            repaired = self._nearest_correlation_clip(sym)
+            diagnostics["psd_repair_clip_used"] = True
+
+        min_after = float(np.min(np.linalg.eigvalsh(repaired)))
+        diagnostics["psd_min_eigen_after"] = min_after
+        if min_after < self._config.psd_tolerance:
+            diagnostics["psd_repair_failed"] = True
+            raise ValueError(
+                "unable to repair covariance matrix to PSD; "
+                f"minimum eigenvalue after repair={min_after:.6g}"
+            )
+        return repaired, diagnostics
+
+    @staticmethod
+    def _symmetrize(matrix: np.ndarray) -> np.ndarray:
+        return (matrix + matrix.T) / 2.0
+
+    def _project_psd(self, matrix: np.ndarray) -> np.ndarray:
+        eigvals, eigvecs = np.linalg.eigh(self._symmetrize(matrix))
+        eigvals = np.maximum(eigvals, self._config.psd_eigen_floor)
+        projected = (eigvecs * eigvals) @ eigvecs.T
+        return self._symmetrize(projected)
+
+    @staticmethod
+    def _project_unit_diagonal(matrix: np.ndarray) -> np.ndarray:
+        projected = matrix.copy()
+        np.fill_diagonal(projected, 1.0)
+        return projected
+
+    def _normalize_to_correlation(self, matrix: np.ndarray) -> np.ndarray:
+        diag = np.diag(matrix)
+        safe_diag = np.where(diag > 0, diag, 1.0)
+        scale = np.sqrt(safe_diag)
+        normalized = matrix / np.outer(scale, scale)
+        normalized = self._symmetrize(normalized)
+        return self._project_unit_diagonal(normalized)
+
+    def _nearest_correlation_clip(self, corr: np.ndarray) -> np.ndarray:
+        clipped = self._project_psd(corr)
+        normalized = self._normalize_to_correlation(clipped)
+        # A second PSD projection mitigates tiny numerical negatives after normalize.
+        repaired = self._project_psd(normalized)
+        return self._normalize_to_correlation(repaired)
+
+    def _nearest_correlation_higham(self, corr: np.ndarray) -> np.ndarray:
+        # Higham nearest correlation via alternating projections with Dykstra correction.
+        y = self._symmetrize(corr)
+        delta_s = np.zeros_like(y)
+
+        for _ in range(self._config.higham_max_iterations):
+            y_prev = y
+            r = y - delta_s
+            x = self._project_psd(r)
+            delta_s = x - r
+            y = self._project_unit_diagonal(x)
+            y = self._symmetrize(y)
+            diff = np.linalg.norm(y - y_prev, ord="fro")
+            denom = max(np.linalg.norm(y, ord="fro"), 1.0)
+            if (diff / denom) <= self._config.higham_tolerance:
+                break
+
+        repaired = self._project_psd(y)
+        return self._normalize_to_correlation(repaired)
 
     @staticmethod
     def _sample_distribution(

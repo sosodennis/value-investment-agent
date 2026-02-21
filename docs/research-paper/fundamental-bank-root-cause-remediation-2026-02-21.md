@@ -18,6 +18,8 @@ The current Fundamental valuation pipeline surfaced extreme Bank_DDM outputs (JP
 3. Ensure Monte Carlo distribution used by UI is explicitly per-share.
 4. Add bank-specific fail-closed validation to prevent non-economic outputs from entering preview.
 5. Preserve existing model behavior for SaaS/REIT/EVA while tightening contract clarity.
+6. Harden Monte Carlo against non-PSD correlation inputs with auditable diagnostics.
+7. Add time-alignment guard between market data `as_of` and filing `period_end_date`.
 
 ## 3. Scope
 
@@ -70,6 +72,36 @@ If violated, return explicit error; do not produce valuation preview.
 
 Bank param builder now performs additional continuity checks on latest `Risk-Weighted Assets` against historical median. If discontinuity is detected, it falls back to historical median RoRWA policy path.
 
+### 4.6 Monte Carlo nearest-PSD repair path
+
+- Added automatic nearest-PSD repair policy in MC engine:
+  - `error` (strict fail)
+  - `clip` (eigenvalue clipping; default)
+  - `higham` (alternating projection)
+- Added diagnostics visibility for audit/frontend:
+  - `psd_repaired`
+  - `psd_repaired_groups`
+  - `psd_repair_failed_groups`
+  - `psd_repair_clip_used`
+  - `psd_repair_higham_used`
+  - `psd_min_eigen_before`
+  - `psd_min_eigen_after`
+
+### 4.7 Time-alignment guard
+
+- Added guard logic comparing:
+  - market data `as_of`
+  - latest filing `period_end_date`
+- Configurable threshold/policy:
+  - threshold days (default 365)
+  - policy `warn` | `reject`
+- On breach:
+  - `warn`: append high-risk assumption and metadata
+  - `reject`: raise explicit error, abort valuation parameter build
+- Exposed to output payload:
+  - `data_freshness.time_alignment.*`
+  - `assumption_breakdown.key_parameters.time_alignment_*`
+
 ## 5. Acceptance Criteria
 
 1. Bank valuation API returns `intrinsic_value` and `equity_value` consistently.
@@ -77,6 +109,8 @@ Bank param builder now performs additional continuity checks on latest `Risk-Wei
 3. Preview/UI no longer renders trillion-level per-share numbers caused by unit mismatch.
 4. Invalid bank parameters fail with explicit errors.
 5. Existing unit tests pass and new bank semantics tests are added.
+6. Non-PSD correlation matrices are auto-repaired (or failed per policy) with diagnostics.
+7. Time-alignment breaches are visible in assumptions/report and enforceable by policy.
 
 ## 6. Implementation Checklist
 
@@ -88,6 +122,9 @@ Bank param builder now performs additional continuity checks on latest `Risk-Wei
 - [x] Add distribution `metric_type` for bank MC summary.
 - [x] Harden preview distribution scenario mapping by metric semantics.
 - [x] Add RWA discontinuity defense in bank param build flow.
+- [x] Add nearest-PSD repair path in Monte Carlo engine + diagnostics.
+- [x] Add time-alignment guard with warn/reject policy.
+- [x] Expose PSD and time-alignment diagnostics in assumption breakdown/report payload.
 - [x] Update/add tests and fixtures.
 - [x] Run lint + targeted tests and record results.
 
@@ -101,9 +138,17 @@ Bank param builder now performs additional continuity checks on latest `Risk-Wei
 
 ### Tests
 - Command:
-  - `uv run --project finance-agent-core python -m pytest finance-agent-core/tests/test_bank_reit_strategyized_models.py finance-agent-core/tests/test_fundamental_application_services.py finance-agent-core/tests/test_param_builder_canonical_reports.py finance-agent-core/tests/test_fundamental_backtest_runner.py -q`
+  - `uv run --project finance-agent-core python -m pytest finance-agent-core/tests/test_monte_carlo_engine.py finance-agent-core/tests/test_param_builder_canonical_reports.py finance-agent-core/tests/test_fundamental_application_services.py finance-agent-core/tests/test_bank_reit_strategyized_models.py finance-agent-core/tests/test_fundamental_backtest_runner.py -q`
 - Result:
-  - `26 passed, 2 warnings`
+  - `35 passed, 2 warnings`
+
+### Frontend Contract
+- Commands:
+  - `npm --prefix frontend test -- src/types/agents/fundamental-preview-parser.test.ts`
+  - `npm --prefix frontend run typecheck`
+- Result:
+  - parser test passed (`8 passed`)
+  - typecheck passed
 
 ## 8. Change Log (Implemented)
 
@@ -123,6 +168,10 @@ Bank param builder now performs additional continuity checks on latest `Risk-Wei
    - Added `metric_type=intrinsic_value_per_share` in SaaS and REIT MC summaries.
 6. **Tests/fixtures**
    - Updated bank tests and backtest fixtures for new required field and semantic behavior.
+7. **Monte Carlo robustness**
+   - Implemented nearest-PSD repair path with selectable policy and diagnostics emission.
+8. **Time-alignment governance**
+   - Implemented `warn/reject` guard and surfaced risk status into assumptions and report freshness payload.
 
 ## 9. Remaining TODO / Enhancement
 
