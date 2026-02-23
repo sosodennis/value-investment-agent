@@ -351,6 +351,12 @@ def _build_assumption_breakdown(
                 "psd_repair_higham_used",
                 "psd_min_eigen_before",
                 "psd_min_eigen_after",
+                "corr_diagnostics_available",
+                "corr_pairs_total",
+                "corr_pearson_mae",
+                "corr_pearson_max_abs_error",
+                "corr_spearman_mae",
+                "corr_spearman_max_abs_error",
             )
             for field in mc_diagnostic_fields:
                 value = diagnostics.get(field)

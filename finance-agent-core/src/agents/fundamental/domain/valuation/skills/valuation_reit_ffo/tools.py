@@ -89,7 +89,7 @@ def _run_reit_monte_carlo(
         cap_rate = sampled["cap_rate"]
         iter_inputs["ffo"] = params.ffo * occupancy_rate
         iter_inputs["ffo_multiple"] = 1.0 / cap_rate
-        raw_result = graph.calculate(iter_inputs)
+        raw_result = graph.calculate(iter_inputs, emit_lifecycle_events=False)
         return float(_unwrap(raw_result.get("intrinsic_value", 0.0)))
 
     result = engine.run(

@@ -132,6 +132,7 @@ class MonteCarloEngine:
         correlation_groups: tuple[CorrelationGroup, ...],
         iterations: int,
     ) -> tuple[dict[str, np.ndarray], dict[str, float | bool | int]]:
+        self._validate_correlation_group_variables(correlation_groups)
         sampled: dict[str, np.ndarray] = {}
         diagnostics: dict[str, float | bool | int] = {
             "psd_repaired": False,
@@ -141,6 +142,12 @@ class MonteCarloEngine:
             "psd_min_eigen_after": 0.0,
             "psd_repair_clip_used": False,
             "psd_repair_higham_used": False,
+            "corr_diagnostics_available": False,
+            "corr_pairs_total": 0,
+            "corr_pearson_mae": 0.0,
+            "corr_pearson_max_abs_error": 0.0,
+            "corr_spearman_mae": 0.0,
+            "corr_spearman_max_abs_error": 0.0,
         }
         grouped_vars: set[str] = set()
 
@@ -176,6 +183,30 @@ class MonteCarloEngine:
                 float(diagnostics["psd_min_eigen_after"]),
                 float(group_diag["psd_min_eigen_after"]),
             )
+            pair_count = int(group_diag["corr_pairs_total"])
+            if pair_count > 0:
+                total_pairs = int(diagnostics["corr_pairs_total"])
+                new_total = total_pairs + pair_count
+                old_pearson_mae = float(diagnostics["corr_pearson_mae"])
+                old_spearman_mae = float(diagnostics["corr_spearman_mae"])
+                diagnostics["corr_pearson_mae"] = (
+                    (old_pearson_mae * total_pairs)
+                    + (float(group_diag["corr_pearson_mae"]) * pair_count)
+                ) / new_total
+                diagnostics["corr_spearman_mae"] = (
+                    (old_spearman_mae * total_pairs)
+                    + (float(group_diag["corr_spearman_mae"]) * pair_count)
+                ) / new_total
+                diagnostics["corr_pairs_total"] = new_total
+                diagnostics["corr_diagnostics_available"] = True
+                diagnostics["corr_pearson_max_abs_error"] = max(
+                    float(diagnostics["corr_pearson_max_abs_error"]),
+                    float(group_diag["corr_pearson_max_abs_error"]),
+                )
+                diagnostics["corr_spearman_max_abs_error"] = max(
+                    float(diagnostics["corr_spearman_max_abs_error"]),
+                    float(group_diag["corr_spearman_max_abs_error"]),
+                )
 
         for name, spec in distributions.items():
             if name in grouped_vars:
@@ -225,7 +256,13 @@ class MonteCarloEngine:
         output: dict[str, np.ndarray] = {}
         for idx, var in enumerate(group.variables):
             output[var] = self._transform_standard_normal(draws[:, idx], specs[idx])
-        return output, psd_diag
+        corr_diag = self._build_correlation_diagnostics(
+            variables=group.variables,
+            target_corr=corr_psd,
+            latent_draws=draws,
+            transformed_samples=output,
+        )
+        return output, {**psd_diag, **corr_diag}
 
     def _ensure_correlation_psd(
         self, corr: np.ndarray
@@ -318,6 +355,107 @@ class MonteCarloEngine:
 
         repaired = self._project_psd(y)
         return self._normalize_to_correlation(repaired)
+
+    @staticmethod
+    def _validate_correlation_group_variables(
+        correlation_groups: tuple[CorrelationGroup, ...],
+    ) -> None:
+        seen: dict[str, int] = {}
+        repeated_across_groups: set[str] = set()
+        for group_index, group in enumerate(correlation_groups):
+            local_seen: set[str] = set()
+            for var in group.variables:
+                if var in local_seen:
+                    raise ValueError(
+                        "correlation group variables must be unique "
+                        f"(group_index={group_index}, variable={var})"
+                    )
+                local_seen.add(var)
+                if var in seen:
+                    repeated_across_groups.add(var)
+                else:
+                    seen[var] = group_index
+
+        if repeated_across_groups:
+            repeated_list = ", ".join(sorted(repeated_across_groups))
+            raise ValueError(
+                "correlated variables cannot appear in multiple groups: "
+                f"{repeated_list}"
+            )
+
+    def _build_correlation_diagnostics(
+        self,
+        *,
+        variables: tuple[str, ...],
+        target_corr: np.ndarray,
+        latent_draws: np.ndarray,
+        transformed_samples: Mapping[str, np.ndarray],
+    ) -> dict[str, float | int]:
+        pair_count = len(variables) * (len(variables) - 1) // 2
+        if pair_count <= 0:
+            return {
+                "corr_pairs_total": 0,
+                "corr_pearson_mae": 0.0,
+                "corr_pearson_max_abs_error": 0.0,
+                "corr_spearman_mae": 0.0,
+                "corr_spearman_max_abs_error": 0.0,
+            }
+
+        pearson_realized = np.corrcoef(latent_draws, rowvar=False)
+        pearson_errors = np.abs(
+            self._upper_triangle(pearson_realized - target_corr, k=1)
+        )
+
+        transformed_matrix = np.column_stack(
+            [transformed_samples[var] for var in variables]
+        )
+        spearman_realized = self._spearman_corrcoef(transformed_matrix)
+        spearman_target = self._gaussian_spearman_from_pearson(target_corr)
+        spearman_errors = np.abs(
+            self._upper_triangle(spearman_realized - spearman_target, k=1)
+        )
+
+        return {
+            "corr_pairs_total": pair_count,
+            "corr_pearson_mae": float(np.mean(pearson_errors)),
+            "corr_pearson_max_abs_error": float(np.max(pearson_errors)),
+            "corr_spearman_mae": float(np.mean(spearman_errors)),
+            "corr_spearman_max_abs_error": float(np.max(spearman_errors)),
+        }
+
+    @staticmethod
+    def _upper_triangle(matrix: np.ndarray, k: int = 1) -> np.ndarray:
+        row_idx, col_idx = np.triu_indices(matrix.shape[0], k=k)
+        return matrix[row_idx, col_idx]
+
+    @staticmethod
+    def _gaussian_spearman_from_pearson(pearson_corr: np.ndarray) -> np.ndarray:
+        clipped = np.clip(pearson_corr / 2.0, -1.0, 1.0)
+        spearman = (6.0 / np.pi) * np.arcsin(clipped)
+        spearman = (spearman + spearman.T) / 2.0
+        np.fill_diagonal(spearman, 1.0)
+        return spearman
+
+    @classmethod
+    def _spearman_corrcoef(cls, matrix: np.ndarray) -> np.ndarray:
+        ranks = np.apply_along_axis(cls._rankdata, 0, matrix)
+        return np.corrcoef(ranks, rowvar=False)
+
+    @staticmethod
+    def _rankdata(values: np.ndarray) -> np.ndarray:
+        n = len(values)
+        order = np.argsort(values, kind="mergesort")
+        sorted_values = values[order]
+        ranks = np.empty(n, dtype=float)
+        i = 0
+        while i < n:
+            j = i
+            while j + 1 < n and sorted_values[j + 1] == sorted_values[i]:
+                j += 1
+            average_rank = (i + j + 2) / 2.0
+            ranks[order[i : j + 1]] = average_rank
+            i = j + 1
+        return ranks
 
     @staticmethod
     def _sample_distribution(

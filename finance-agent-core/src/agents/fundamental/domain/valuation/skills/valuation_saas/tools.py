@@ -169,7 +169,7 @@ def _run_saas_monte_carlo(
         iter_inputs["wacc"] = sampled_wacc
         iter_inputs["terminal_growth"] = sampled_terminal
 
-        raw_result = graph.calculate(iter_inputs)
+        raw_result = graph.calculate(iter_inputs, emit_lifecycle_events=False)
         raw_intrinsic = raw_result.get("intrinsic_value", 0.0)
         return float(_unwrap(raw_intrinsic))
 

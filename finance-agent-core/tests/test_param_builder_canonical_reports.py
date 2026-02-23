@@ -288,6 +288,27 @@ def test_build_params_reit_supports_configurable_maintenance_capex_ratio() -> No
     assert result.params["monte_carlo_seed"] == 42
 
 
+def test_build_params_reit_derives_ffo_multiple_from_market_price() -> None:
+    canonical_reports = parse_financial_reports_model(
+        _raw_reit_reports(), context="test.financial_reports.reit.multiple"
+    )
+    result = build_params(
+        "reit_ffo",
+        "REIT",
+        canonical_reports,
+        market_snapshot={
+            "current_price": 12.0,
+            "shares_outstanding": 1000.0,
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+
+    assert result.params["ffo_multiple"] == pytest.approx(100.0)
+    assert "ffo_multiple implied from market price and FFO/share" in result.assumptions
+    assert "ffo_multiple" not in result.missing
+
+
 def test_build_params_can_disable_monte_carlo_via_env(monkeypatch) -> None:
     monkeypatch.setenv("FUNDAMENTAL_MONTE_CARLO_ENABLED", "false")
     canonical_reports = parse_financial_reports_model(

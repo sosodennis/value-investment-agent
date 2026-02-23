@@ -60,6 +60,10 @@ def test_build_valuation_success_update_includes_output_and_artifact() -> None:
                         "psd_repaired_groups": 1,
                         "psd_min_eigen_before": -0.12,
                         "psd_min_eigen_after": 1e-8,
+                        "corr_diagnostics_available": True,
+                        "corr_pairs_total": 1,
+                        "corr_pearson_max_abs_error": 0.03,
+                        "corr_spearman_max_abs_error": 0.02,
                     },
                 }
             },
@@ -133,6 +137,11 @@ def test_build_valuation_success_update_includes_output_and_artifact() -> None:
     assert preview["assumption_breakdown"]["monte_carlo"]["stopped_early"] is True
     assert preview["assumption_breakdown"]["monte_carlo"]["psd_repaired"] is True
     assert preview["assumption_breakdown"]["monte_carlo"]["psd_repaired_groups"] == 1
+    assert (
+        preview["assumption_breakdown"]["monte_carlo"]["corr_diagnostics_available"]
+        is True
+    )
+    assert preview["assumption_breakdown"]["monte_carlo"]["corr_pairs_total"] == 1
     assert preview["data_freshness"]["financial_statement"]["fiscal_year"] == 2025
     assert preview["data_freshness"]["market_data"]["provider"] == "yfinance"
     assert preview["data_freshness"]["shares_outstanding_source"] == "market_data"

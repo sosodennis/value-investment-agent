@@ -128,6 +128,37 @@ def test_monte_carlo_engine_supports_correlated_non_normal_distributions() -> No
     assert "percentile_25" in result.summary
     assert "percentile_75" in result.summary
     assert result.summary["min"] <= result.summary["median"] <= result.summary["max"]
+    assert result.diagnostics["corr_diagnostics_available"] is True
+    assert result.diagnostics["corr_pairs_total"] == 1
+    assert float(result.diagnostics["corr_pearson_max_abs_error"]) < 0.10
+    assert float(result.diagnostics["corr_spearman_max_abs_error"]) < 0.10
+
+
+def test_monte_carlo_engine_rejects_overlapping_correlation_groups() -> None:
+    engine = MonteCarloEngine(MonteCarloConfig(iterations=100, seed=3))
+    distributions = {
+        "a": DistributionSpec(kind="normal", mean=0.0, std=1.0),
+        "b": DistributionSpec(kind="normal", mean=0.0, std=1.0),
+        "c": DistributionSpec(kind="normal", mean=0.0, std=1.0),
+    }
+    correlation_groups = (
+        CorrelationGroup(
+            variables=("a", "b"),
+            matrix=((1.0, 0.5), (0.5, 1.0)),
+        ),
+        CorrelationGroup(
+            variables=("b", "c"),
+            matrix=((1.0, 0.3), (0.3, 1.0)),
+        ),
+    )
+
+    with pytest.raises(ValueError, match="multiple groups"):
+        engine.run(
+            base_inputs={},
+            distributions=distributions,
+            evaluator=lambda sampled: sampled["a"] + sampled["b"] + sampled["c"],
+            correlation_groups=correlation_groups,
+        )
 
 
 def test_monte_carlo_engine_diagnostics_are_json_safe_for_small_samples() -> None:

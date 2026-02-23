@@ -68,23 +68,27 @@ class CalculationGraph:
         )
 
     def calculate(
-        self, inputs: dict[str, CalcValue], trace: bool = False
+        self,
+        inputs: dict[str, CalcValue],
+        trace: bool = False,
+        emit_lifecycle_events: bool = True,
     ) -> dict[str, CalcValue]:
         """
         Execute the calculation graph.
         :param inputs: Dictionary of input values for leaf nodes.
         :return: Dictionary containing all calculated values.
         """
-        log_event(
-            logger,
-            event="calculation_graph_started",
-            message="calculation graph execution started",
-            fields={
-                "graph_name": self.name,
-                "trace": trace,
-                "input_count": len(inputs),
-            },
-        )
+        if emit_lifecycle_events:
+            log_event(
+                logger,
+                event="calculation_graph_started",
+                message="calculation graph execution started",
+                fields={
+                    "graph_name": self.name,
+                    "trace": trace,
+                    "input_count": len(inputs),
+                },
+            )
 
         if trace:
             results: dict[str, CalcValue] = {
@@ -165,12 +169,13 @@ class CalculationGraph:
                 # If it's not a function calculation, it SHOULD have been in inputs
                 pass
 
-        log_event(
-            logger,
-            event="calculation_graph_completed",
-            message="calculation graph execution completed",
-            fields={"graph_name": self.name, "result_count": len(results)},
-        )
+        if emit_lifecycle_events:
+            log_event(
+                logger,
+                event="calculation_graph_completed",
+                message="calculation graph execution completed",
+                fields={"graph_name": self.name, "result_count": len(results)},
+            )
         return results
 
     def get_inputs(self) -> list[str]:

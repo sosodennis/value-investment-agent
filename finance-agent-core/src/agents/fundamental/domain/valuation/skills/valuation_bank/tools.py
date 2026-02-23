@@ -128,7 +128,7 @@ def _run_bank_monte_carlo(
         iter_inputs["risk_free_rate"] = sampled_risk_free
         iter_inputs["terminal_growth"] = sampled_terminal
 
-        raw_result = graph.calculate(iter_inputs)
+        raw_result = graph.calculate(iter_inputs, emit_lifecycle_events=False)
         return float(_unwrap(raw_result.get("intrinsic_value", 0.0)))
 
     result = engine.run(

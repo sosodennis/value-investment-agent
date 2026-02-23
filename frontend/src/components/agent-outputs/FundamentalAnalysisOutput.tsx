@@ -155,6 +155,35 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
         typeof monteCarloMeta?.configured_iterations === 'number'
             ? monteCarloMeta.configured_iterations
             : undefined;
+    const mcCorrDiagnosticsAvailable = monteCarloMeta?.corr_diagnostics_available === true;
+    const mcCorrPairsTotal =
+        typeof monteCarloMeta?.corr_pairs_total === 'number'
+            ? monteCarloMeta.corr_pairs_total
+            : undefined;
+    const mcCorrPearsonMaxAbsError =
+        typeof monteCarloMeta?.corr_pearson_max_abs_error === 'number'
+            ? monteCarloMeta.corr_pearson_max_abs_error
+            : undefined;
+    const mcCorrSpearmanMaxAbsError =
+        typeof monteCarloMeta?.corr_spearman_max_abs_error === 'number'
+            ? monteCarloMeta.corr_spearman_max_abs_error
+            : undefined;
+    const mcCorrPearsonMae =
+        typeof monteCarloMeta?.corr_pearson_mae === 'number'
+            ? monteCarloMeta.corr_pearson_mae
+            : undefined;
+    const mcCorrSpearmanMae =
+        typeof monteCarloMeta?.corr_spearman_mae === 'number'
+            ? monteCarloMeta.corr_spearman_mae
+            : undefined;
+    const formatCorrError = (value: number | undefined): string | undefined => {
+        if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
+        return `${(value * 100).toFixed(1)}pp`;
+    };
+    const mcCorrPearsonMaxText = formatCorrError(mcCorrPearsonMaxAbsError);
+    const mcCorrSpearmanMaxText = formatCorrError(mcCorrSpearmanMaxAbsError);
+    const mcCorrPearsonMaeText = formatCorrError(mcCorrPearsonMae);
+    const mcCorrSpearmanMaeText = formatCorrError(mcCorrSpearmanMae);
     const mcAsOf = dataFreshness?.market_data?.as_of;
     const keyParamCurrentPrice = coerceFiniteNumber(
         assumptionBreakdown?.key_parameters?.current_price
@@ -891,6 +920,12 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                             {(mcExecutedIterations !== undefined ||
                                 mcConfiguredIterations !== undefined ||
                                 mcEffectiveWindow !== undefined ||
+                                (mcCorrDiagnosticsAvailable &&
+                                    (mcCorrPairsTotal !== undefined ||
+                                        mcCorrPearsonMaxText !== undefined ||
+                                        mcCorrSpearmanMaxText !== undefined ||
+                                        mcCorrPearsonMaeText !== undefined ||
+                                        mcCorrSpearmanMaeText !== undefined)) ||
                                 mcAsOf) && (
                                 <div className="text-[11px] text-slate-300">
                                     {mcExecutedIterations !== undefined && (
@@ -909,6 +944,27 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                             {' '}
                                             · early stop: {mcStoppedEarly ? 'yes' : 'no'}
                                         </span>
+                                    )}
+                                    {mcCorrDiagnosticsAvailable && (
+                                        <>
+                                            {mcCorrPairsTotal !== undefined && (
+                                                <span> · corr pairs: {Math.round(mcCorrPairsTotal)}</span>
+                                            )}
+                                            {(mcCorrPearsonMaxText || mcCorrSpearmanMaxText) && (
+                                                <span>
+                                                    {' '}
+                                                    · corr max err (P/S): {mcCorrPearsonMaxText ?? 'n/a'} /{' '}
+                                                    {mcCorrSpearmanMaxText ?? 'n/a'}
+                                                </span>
+                                            )}
+                                            {(mcCorrPearsonMaeText || mcCorrSpearmanMaeText) && (
+                                                <span>
+                                                    {' '}
+                                                    · corr MAE (P/S): {mcCorrPearsonMaeText ?? 'n/a'} /{' '}
+                                                    {mcCorrSpearmanMaeText ?? 'n/a'}
+                                                </span>
+                                            )}
+                                        </>
                                     )}
                                     {mcAsOf && <span> · as-of: {mcAsOf}</span>}
                                 </div>
