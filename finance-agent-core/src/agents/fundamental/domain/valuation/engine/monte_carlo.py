@@ -2,10 +2,15 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from math import erf, sqrt
+from math import ceil, erf, log2, sqrt
 from typing import Literal
 
 import numpy as np
+
+try:
+    from scipy.stats import qmc as scipy_qmc
+except Exception:  # pragma: no cover - optional runtime dependency guard
+    scipy_qmc = None
 
 
 @dataclass(frozen=True)
@@ -32,6 +37,8 @@ class CorrelationGroup:
 class MonteCarloConfig:
     iterations: int = 10_000
     seed: int | None = None
+    sampler_type: Literal["pseudo", "sobol", "lhs"] = "sobol"
+    sobol_scramble: bool = True
     min_iterations: int = 500
     batch_size: int = 500
     convergence_window: int = 250
@@ -47,7 +54,7 @@ class MonteCarloConfig:
 @dataclass(frozen=True)
 class MonteCarloResult:
     summary: dict[str, float]
-    diagnostics: dict[str, float | bool | int]
+    diagnostics: dict[str, float | bool | int | str]
 
 
 class MonteCarloEngine:
@@ -70,6 +77,8 @@ class MonteCarloEngine:
             raise ValueError("higham_max_iterations must be positive")
         if config.higham_tolerance <= 0:
             raise ValueError("higham_tolerance must be positive")
+        if config.sampler_type not in {"pseudo", "sobol", "lhs"}:
+            raise ValueError("sampler_type must be one of: pseudo, sobol, lhs")
         self._config = config
 
     def run(
@@ -77,7 +86,9 @@ class MonteCarloEngine:
         *,
         base_inputs: Mapping[str, float],
         distributions: Mapping[str, DistributionSpec],
-        evaluator: Callable[[dict[str, float]], float],
+        batch_evaluator: Callable[
+            [dict[str, np.ndarray], Mapping[str, float]], np.ndarray
+        ],
         correlation_groups: tuple[CorrelationGroup, ...] = (),
     ) -> MonteCarloResult:
         max_iterations = self._config.iterations
@@ -96,11 +107,20 @@ class MonteCarloEngine:
         executed_iterations = 0
         while executed_iterations < max_iterations:
             batch_end = min(executed_iterations + batch_size, max_iterations)
-            for idx in range(executed_iterations, batch_end):
-                inputs = dict(base_inputs)
-                for name, values in sampled.items():
-                    inputs[name] = float(values[idx])
-                outcomes[idx] = float(evaluator(inputs))
+            batch_length = batch_end - executed_iterations
+            sampled_batch = {
+                name: values[executed_iterations:batch_end]
+                for name, values in sampled.items()
+            }
+            batch_outcomes = np.asarray(
+                batch_evaluator(sampled_batch, base_inputs), dtype=float
+            )
+            if batch_outcomes.shape != (batch_length,):
+                raise ValueError(
+                    "batch_evaluator must return one outcome per sampled row "
+                    f"(expected={(batch_length,)}, actual={batch_outcomes.shape})"
+                )
+            outcomes[executed_iterations:batch_end] = batch_outcomes
             executed_iterations = batch_end
 
             if executed_iterations < min_iterations:
@@ -121,6 +141,7 @@ class MonteCarloEngine:
         diagnostics["configured_iterations"] = max_iterations
         diagnostics["executed_iterations"] = executed_iterations
         diagnostics["stopped_early"] = executed_iterations < max_iterations
+        diagnostics["batch_evaluator_used"] = True
         diagnostics.update(sampling_diagnostics)
         return MonteCarloResult(summary=summary, diagnostics=diagnostics)
 
@@ -131,10 +152,17 @@ class MonteCarloEngine:
         distributions: Mapping[str, DistributionSpec],
         correlation_groups: tuple[CorrelationGroup, ...],
         iterations: int,
-    ) -> tuple[dict[str, np.ndarray], dict[str, float | bool | int]]:
+    ) -> tuple[dict[str, np.ndarray], dict[str, float | bool | int | str]]:
         self._validate_correlation_group_variables(correlation_groups)
         sampled: dict[str, np.ndarray] = {}
-        diagnostics: dict[str, float | bool | int] = {
+        sampler_requested = self._config.sampler_type
+        sampler_effective, sampler_fallback_reason = self._resolve_sampler_type(
+            sampler_requested
+        )
+        diagnostics: dict[str, float | bool | int | str] = {
+            "sampler_requested": sampler_requested,
+            "sampler_type": sampler_effective,
+            "sampler_fallback_used": sampler_effective != sampler_requested,
             "psd_repaired": False,
             "psd_repaired_groups": 0,
             "psd_repair_failed_groups": 0,
@@ -149,6 +177,8 @@ class MonteCarloEngine:
             "corr_spearman_mae": 0.0,
             "corr_spearman_max_abs_error": 0.0,
         }
+        if sampler_fallback_reason is not None:
+            diagnostics["sampler_fallback_reason"] = sampler_fallback_reason
         grouped_vars: set[str] = set()
 
         for group in correlation_groups:
@@ -156,6 +186,7 @@ class MonteCarloEngine:
                 rng=rng,
                 group=group,
                 distributions=distributions,
+                sampler_type=sampler_effective,
                 iterations=iterations,
             )
             sampled.update(group_samples)
@@ -208,10 +239,20 @@ class MonteCarloEngine:
                     float(group_diag["corr_spearman_max_abs_error"]),
                 )
 
-        for name, spec in distributions.items():
-            if name in grouped_vars:
-                continue
-            sampled[name] = self._sample_distribution(rng, spec, iterations)
+        ungrouped_items = [
+            (name, spec)
+            for name, spec in distributions.items()
+            if name not in grouped_vars
+        ]
+        if ungrouped_items:
+            unit_cube = self._sample_unit_cube(
+                rng=rng,
+                iterations=iterations,
+                dimensions=len(ungrouped_items),
+                sampler_type=sampler_effective,
+            )
+            for idx, (name, spec) in enumerate(ungrouped_items):
+                sampled[name] = self._transform_unit_samples(unit_cube[:, idx], spec)
 
         return sampled, diagnostics
 
@@ -221,8 +262,9 @@ class MonteCarloEngine:
         rng: np.random.Generator,
         group: CorrelationGroup,
         distributions: Mapping[str, DistributionSpec],
+        sampler_type: Literal["pseudo", "sobol", "lhs"],
         iterations: int,
-    ) -> tuple[dict[str, np.ndarray], dict[str, float | bool | int]]:
+    ) -> tuple[dict[str, np.ndarray], dict[str, float | bool | int | str]]:
         size = len(group.variables)
         if size == 0:
             raise ValueError("correlation group cannot be empty")
@@ -250,9 +292,15 @@ class MonteCarloEngine:
 
         corr_psd, psd_diag = self._ensure_correlation_psd(corr)
 
-        draws = rng.multivariate_normal(
-            np.zeros(size, dtype=float), corr_psd, size=iterations
+        unit_cube = self._sample_unit_cube(
+            rng=rng,
+            iterations=iterations,
+            dimensions=size,
+            sampler_type=sampler_type,
         )
+        independent_normals = self._normal_ppf(unit_cube)
+        chol = np.linalg.cholesky(corr_psd)
+        draws = independent_normals @ chol.T
         output: dict[str, np.ndarray] = {}
         for idx, var in enumerate(group.variables):
             output[var] = self._transform_standard_normal(draws[:, idx], specs[idx])
@@ -457,21 +505,94 @@ class MonteCarloEngine:
             i = j + 1
         return ranks
 
-    @staticmethod
-    def _sample_distribution(
-        rng: np.random.Generator,
-        spec: DistributionSpec,
-        iterations: int,
-    ) -> np.ndarray:
-        MonteCarloEngine._validate_distribution_spec(spec)
-        if spec.kind == "normal":
-            values = rng.normal(spec.mean, spec.std, size=iterations)
-        elif spec.kind == "uniform":
-            values = rng.uniform(spec.low, spec.high, size=iterations)
-        else:
-            values = rng.triangular(spec.left, spec.mode, spec.right, size=iterations)
+    def _resolve_sampler_type(
+        self, requested: Literal["pseudo", "sobol", "lhs"]
+    ) -> tuple[Literal["pseudo", "sobol", "lhs"], str | None]:
+        if requested == "sobol" and scipy_qmc is None:
+            return "pseudo", "sobol sampler unavailable (scipy missing)"
+        return requested, None
 
-        return MonteCarloEngine._clip_bounds(values, spec.min_bound, spec.max_bound)
+    def _sample_unit_cube(
+        self,
+        *,
+        rng: np.random.Generator,
+        iterations: int,
+        dimensions: int,
+        sampler_type: Literal["pseudo", "sobol", "lhs"],
+    ) -> np.ndarray:
+        if dimensions <= 0:
+            raise ValueError("dimensions must be positive")
+        if iterations <= 0:
+            raise ValueError("iterations must be positive")
+
+        if sampler_type == "pseudo":
+            return rng.random((iterations, dimensions))
+        if sampler_type == "lhs":
+            return self._sample_lhs(
+                rng=rng, iterations=iterations, dimensions=dimensions
+            )
+        return self._sample_sobol(rng=rng, iterations=iterations, dimensions=dimensions)
+
+    @staticmethod
+    def _sample_lhs(
+        *,
+        rng: np.random.Generator,
+        iterations: int,
+        dimensions: int,
+    ) -> np.ndarray:
+        # Classic random LHS: stratify each marginal into N bins and permute per dim.
+        lower = np.arange(iterations, dtype=float) / float(iterations)
+        upper = (np.arange(iterations, dtype=float) + 1.0) / float(iterations)
+        points = rng.random((iterations, dimensions))
+        points = lower[:, None] + ((upper - lower)[:, None] * points)
+        for dim in range(dimensions):
+            permutation = rng.permutation(iterations)
+            points[:, dim] = points[permutation, dim]
+        return points
+
+    def _sample_sobol(
+        self,
+        *,
+        rng: np.random.Generator,
+        iterations: int,
+        dimensions: int,
+    ) -> np.ndarray:
+        if scipy_qmc is None:
+            # Guarded by _resolve_sampler_type, but keep safe fallback.
+            return rng.random((iterations, dimensions))
+
+        seed_value = int(rng.integers(0, np.iinfo(np.uint32).max))
+        sobol_engine = scipy_qmc.Sobol(
+            d=dimensions,
+            scramble=self._config.sobol_scramble,
+            seed=seed_value,
+        )
+        m = int(ceil(log2(max(1, iterations))))
+        sampled = sobol_engine.random_base2(m)
+        if sampled.shape[0] < iterations:
+            extra = sobol_engine.random(iterations - sampled.shape[0])
+            sampled = np.vstack([sampled, extra])
+        return sampled[:iterations]
+
+    @classmethod
+    def _transform_unit_samples(
+        cls, u: np.ndarray, spec: DistributionSpec
+    ) -> np.ndarray:
+        cls._validate_distribution_spec(spec)
+        clipped_u = np.clip(u, 1e-12, 1.0 - 1e-12)
+        if spec.kind == "normal":
+            z = cls._normal_ppf(clipped_u)
+            values = spec.mean + (spec.std * z)
+        elif spec.kind == "uniform":
+            values = spec.low + ((spec.high - spec.low) * clipped_u)
+        else:
+            values = cls._inverse_triangular_cdf(
+                clipped_u,
+                left=spec.left,
+                mode=spec.mode,
+                right=spec.right,
+            )
+        return cls._clip_bounds(values, spec.min_bound, spec.max_bound)
 
     @staticmethod
     def _clip_bounds(
@@ -534,6 +655,83 @@ class MonteCarloEngine:
             [0.5 * (1.0 + erf(float(value) / sqrt(2.0))) for value in z], dtype=float
         )
         return np.clip(u, 1e-12, 1.0 - 1e-12)
+
+    @staticmethod
+    def _normal_ppf(u: np.ndarray) -> np.ndarray:
+        # Acklam inverse-normal approximation (sufficient precision for MC sampling).
+        p = np.clip(u, 1e-12, 1.0 - 1e-12)
+        x = np.empty_like(p, dtype=float)
+
+        a = np.array(
+            [
+                -39.6968302866538,
+                220.946098424521,
+                -275.928510446969,
+                138.357751867269,
+                -30.6647980661472,
+                2.50662827745924,
+            ],
+            dtype=float,
+        )
+        b = np.array(
+            [
+                -54.4760987982241,
+                161.585836858041,
+                -155.698979859887,
+                66.8013118877197,
+                -13.2806815528857,
+            ],
+            dtype=float,
+        )
+        c = np.array(
+            [
+                -0.00778489400243029,
+                -0.322396458041136,
+                -2.40075827716184,
+                -2.54973253934373,
+                4.37466414146497,
+                2.93816398269878,
+            ],
+            dtype=float,
+        )
+        d = np.array(
+            [
+                0.00778469570904146,
+                0.32246712907004,
+                2.445134137143,
+                3.75440866190742,
+            ],
+            dtype=float,
+        )
+
+        p_low = 0.02425
+        p_high = 1.0 - p_low
+        mask_low = p < p_low
+        mask_high = p > p_high
+        mask_mid = ~(mask_low | mask_high)
+
+        if np.any(mask_low):
+            q = np.sqrt(-2.0 * np.log(p[mask_low]))
+            x[mask_low] = (
+                ((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]
+            ) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1.0)
+
+        if np.any(mask_high):
+            q = np.sqrt(-2.0 * np.log(1.0 - p[mask_high]))
+            x[mask_high] = -(
+                (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5])
+                / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1.0)
+            )
+
+        if np.any(mask_mid):
+            q = p[mask_mid] - 0.5
+            r = q * q
+            x[mask_mid] = (
+                (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5])
+                * q
+            ) / (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1.0)
+
+        return x
 
     @staticmethod
     def _inverse_triangular_cdf(

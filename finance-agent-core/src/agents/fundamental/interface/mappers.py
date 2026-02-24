@@ -18,6 +18,12 @@ def build_mapper_context(
     valuation_summary: str | None = None,
     assumption_breakdown: JSONObject | None = None,
     data_freshness: JSONObject | None = None,
+    assumption_risk_level: str | None = None,
+    data_quality_flags: list[str] | None = None,
+    time_alignment_status: str | None = None,
+    forward_signal_summary: JSONObject | None = None,
+    forward_signal_risk_level: str | None = None,
+    forward_signal_evidence_count: int | None = None,
 ) -> FundamentalAppContextDTO:
     ticker = resolved_ticker or "UNKNOWN"
     company_name = ticker
@@ -44,6 +50,12 @@ def build_mapper_context(
         valuation_summary=valuation_summary,
         assumption_breakdown=assumption_breakdown,
         data_freshness=data_freshness,
+        assumption_risk_level=assumption_risk_level,
+        data_quality_flags=data_quality_flags,
+        time_alignment_status=time_alignment_status,
+        forward_signal_summary=forward_signal_summary,
+        forward_signal_risk_level=forward_signal_risk_level,
+        forward_signal_evidence_count=forward_signal_evidence_count,
     )
 
 

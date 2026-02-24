@@ -17,11 +17,15 @@ from src.shared.kernel.types import JSONObject
 from .assumptions import (
     DEFAULT_HIGH_GROWTH_TRIGGER,
     DEFAULT_LONG_RUN_GROWTH_TARGET,
+    apply_forward_signal_policy,
     blend_growth_rate,
+    parse_forward_signals,
     project_growth_rate_series,
 )
 from .param_builders.bank import build_bank_payload
 from .param_builders.context import BuilderContext
+from .param_builders.dcf_growth import build_dcf_growth_payload
+from .param_builders.dcf_standard import build_dcf_standard_payload
 from .param_builders.eva import build_eva_payload
 from .param_builders.multiples import build_ev_ebitda_payload, build_ev_revenue_payload
 from .param_builders.reit import build_reit_payload
@@ -56,6 +60,7 @@ DEFAULT_MARKET_RISK_PREMIUM = 0.05
 DEFAULT_MAINTENANCE_CAPEX_RATIO = 0.8
 DEFAULT_MONTE_CARLO_ITERATIONS = 300
 DEFAULT_MONTE_CARLO_SEED = 42
+DEFAULT_MONTE_CARLO_SAMPLER = "sobol"
 DEFAULT_TIME_ALIGNMENT_MAX_DAYS = 365
 DEFAULT_TIME_ALIGNMENT_POLICY = "warn"
 
@@ -107,6 +112,11 @@ def build_params(
     result = _apply_time_alignment_guard(
         result=result,
         latest=latest,
+        market_snapshot=market_snapshot,
+    )
+    result = _apply_forward_signal_adjustments(
+        result=result,
+        model_type=model_type,
         market_snapshot=market_snapshot,
     )
 
@@ -345,6 +355,18 @@ def _market_text_list(
     return output
 
 
+def _market_mapping(
+    market_snapshot: Mapping[str, object] | None,
+    key: str,
+) -> Mapping[str, object] | None:
+    if market_snapshot is None:
+        return None
+    raw = market_snapshot.get(key)
+    if isinstance(raw, Mapping):
+        return raw
+    return None
+
+
 def _to_int(value: object) -> int | None:
     if isinstance(value, bool) or value is None:
         return None
@@ -509,7 +531,8 @@ def _apply_time_alignment_guard(
 def _resolve_monte_carlo_controls(
     market_snapshot: Mapping[str, object] | None,
     assumptions: list[str],
-) -> tuple[int, int | None]:
+) -> tuple[int, int | None, str]:
+    allowed_samplers = {"pseudo", "sobol", "lhs"}
     enabled = _env_bool("FUNDAMENTAL_MONTE_CARLO_ENABLED", True)
     iterations = _env_int(
         "FUNDAMENTAL_MONTE_CARLO_ITERATIONS",
@@ -521,31 +544,188 @@ def _resolve_monte_carlo_controls(
         DEFAULT_MONTE_CARLO_SEED,
         minimum=0,
     )
+    sampler = _env_text("FUNDAMENTAL_MONTE_CARLO_SAMPLER", DEFAULT_MONTE_CARLO_SAMPLER)
+    if sampler not in allowed_samplers:
+        sampler = DEFAULT_MONTE_CARLO_SAMPLER
 
     if market_snapshot is not None:
         snapshot_enabled = _to_bool(market_snapshot.get("monte_carlo_enabled"))
         snapshot_iterations = _to_int(market_snapshot.get("monte_carlo_iterations"))
         snapshot_seed = _to_int(market_snapshot.get("monte_carlo_seed"))
+        snapshot_sampler_raw = _market_text(market_snapshot, "monte_carlo_sampler")
+        snapshot_sampler = (
+            snapshot_sampler_raw.strip().lower()
+            if isinstance(snapshot_sampler_raw, str)
+            else None
+        )
         if snapshot_enabled is not None:
             enabled = snapshot_enabled
         if snapshot_iterations is not None and snapshot_iterations >= 0:
             iterations = snapshot_iterations
         if snapshot_seed is not None and snapshot_seed >= 0:
             seed = snapshot_seed
+        if snapshot_sampler in allowed_samplers:
+            sampler = snapshot_sampler
+        elif snapshot_sampler is not None:
+            assumptions.append(
+                "monte_carlo_sampler ignored invalid value "
+                f"'{snapshot_sampler_raw}', fallback to {sampler}"
+            )
 
     if not enabled:
         assumptions.append("monte_carlo disabled by policy")
-        return 0, seed
+        return 0, seed, sampler
 
     if iterations <= 0:
         assumptions.append("monte_carlo disabled (iterations <= 0)")
-        return 0, seed
+        return 0, seed, sampler
+
+    enabled_statement = f"monte_carlo enabled with iterations={iterations}" + (
+        f", seed={seed}" if seed is not None else ""
+    )
+    if sampler != DEFAULT_MONTE_CARLO_SAMPLER:
+        enabled_statement += f", sampler={sampler}"
+    assumptions.append(enabled_statement)
+    return iterations, seed, sampler
+
+
+def _apply_forward_signal_adjustments(
+    *,
+    result: ParamBuildResult,
+    model_type: str,
+    market_snapshot: Mapping[str, object] | None,
+) -> ParamBuildResult:
+    if market_snapshot is None:
+        return result
+
+    raw_signals = market_snapshot.get("forward_signals")
+    if raw_signals is None:
+        return result
+
+    signals = parse_forward_signals(raw_signals)
+    policy = apply_forward_signal_policy(signals)
+    assumptions = list(result.assumptions)
+    params = dict(result.params)
+    metadata = _merge_metadata(
+        result.metadata,
+        {"forward_signal": policy.to_summary()},
+    )
+
+    if policy.total_count == 0:
+        assumptions.append("forward_signals provided but none passed schema validation")
+        return ParamBuildResult(
+            params=params,
+            trace_inputs=result.trace_inputs,
+            missing=result.missing,
+            assumptions=assumptions,
+            metadata=metadata,
+        )
 
     assumptions.append(
-        f"monte_carlo enabled with iterations={iterations}"
-        + (f", seed={seed}" if seed is not None else "")
+        "forward_signals processed "
+        f"(accepted={policy.accepted_count}, rejected={policy.rejected_count})"
     )
-    return iterations, seed
+    if policy.risk_level == "high":
+        assumptions.append(
+            "high-risk: low-confidence forward signal(s) down-weighted by policy"
+        )
+
+    growth_applied = _apply_series_adjustment(
+        params=params,
+        field_names=("growth_rates", "income_growth_rates"),
+        adjustment=policy.growth_adjustment,
+        min_bound=-0.80,
+        max_bound=1.50,
+    )
+    if growth_applied and abs(policy.growth_adjustment_bps) > 1e-9:
+        assumptions.append(
+            "forward_signal growth adjustment applied "
+            f"({policy.growth_adjustment_bps:+.1f} bps)"
+        )
+
+    margin_applied = _apply_series_adjustment(
+        params=params,
+        field_names=("operating_margins",),
+        adjustment=policy.margin_adjustment,
+        min_bound=-0.50,
+        max_bound=0.70,
+    )
+    if margin_applied and abs(policy.margin_adjustment_bps) > 1e-9:
+        assumptions.append(
+            "forward_signal margin adjustment applied "
+            f"({policy.margin_adjustment_bps:+.1f} bps)"
+        )
+
+    if (
+        not growth_applied
+        and abs(policy.growth_adjustment_bps) > 1e-9
+        and model_type in {"saas", "dcf_standard", "dcf_growth", "bank"}
+    ):
+        assumptions.append(
+            "forward_signal growth adjustment computed but no compatible growth series found"
+        )
+    if (
+        not margin_applied
+        and abs(policy.margin_adjustment_bps) > 1e-9
+        and model_type in {"saas", "dcf_standard", "dcf_growth"}
+    ):
+        assumptions.append(
+            "forward_signal margin adjustment computed but no compatible margin series found"
+        )
+
+    log_event(
+        logger,
+        event="valuation_forward_signal_policy_applied",
+        message="forward signal policy applied to valuation params",
+        fields={
+            "model_type": model_type,
+            "signals_total": policy.total_count,
+            "signals_accepted": policy.accepted_count,
+            "signals_rejected": policy.rejected_count,
+            "growth_adjustment_bps": policy.growth_adjustment_bps,
+            "margin_adjustment_bps": policy.margin_adjustment_bps,
+            "risk_level": policy.risk_level,
+            "growth_applied": growth_applied,
+            "margin_applied": margin_applied,
+        },
+    )
+    return ParamBuildResult(
+        params=params,
+        trace_inputs=result.trace_inputs,
+        missing=result.missing,
+        assumptions=assumptions,
+        metadata=metadata,
+    )
+
+
+def _apply_series_adjustment(
+    *,
+    params: dict[str, object],
+    field_names: tuple[str, ...],
+    adjustment: float,
+    min_bound: float,
+    max_bound: float,
+) -> bool:
+    if abs(adjustment) <= 1e-12:
+        return False
+
+    for field_name in field_names:
+        raw_series = params.get(field_name)
+        if not isinstance(raw_series, list | tuple):
+            continue
+        adjusted: list[float] = []
+        valid = True
+        for value in raw_series:
+            if not isinstance(value, int | float) or isinstance(value, bool):
+                valid = False
+                break
+            shifted = float(value) + adjustment
+            adjusted.append(max(min_bound, min(max_bound, shifted)))
+        if not valid or not adjusted:
+            continue
+        params[field_name] = adjusted
+        return True
+    return False
 
 
 def _build_result_metadata(
@@ -564,6 +744,39 @@ def _build_result_metadata(
     provider = _market_text(market_snapshot, "provider")
     as_of = _market_text(market_snapshot, "as_of")
     missing_fields = _market_text_list(market_snapshot, "missing_fields")
+    quality_flags = _market_text_list(market_snapshot, "quality_flags")
+    license_note = _market_text(market_snapshot, "license_note")
+    market_datums_raw = _market_mapping(market_snapshot, "market_datums")
+    market_datums: JSONObject = {}
+    if market_datums_raw is not None:
+        for field, datum_raw in market_datums_raw.items():
+            if not isinstance(field, str) or not isinstance(datum_raw, Mapping):
+                continue
+            datum_payload: JSONObject = {}
+            value_raw = datum_raw.get("value")
+            if isinstance(value_raw, int | float):
+                datum_payload["value"] = float(value_raw)
+            elif value_raw is None:
+                datum_payload["value"] = None
+
+            source_raw = datum_raw.get("source")
+            as_of_raw = datum_raw.get("as_of")
+            quality_raw = datum_raw.get("quality_flags")
+            license_raw = datum_raw.get("license_note")
+            if isinstance(source_raw, str) and source_raw:
+                datum_payload["source"] = source_raw
+            if isinstance(as_of_raw, str) and as_of_raw:
+                datum_payload["as_of"] = as_of_raw
+            if isinstance(quality_raw, list | tuple):
+                datum_quality = [
+                    item for item in quality_raw if isinstance(item, str) and item
+                ]
+                if datum_quality:
+                    datum_payload["quality_flags"] = datum_quality
+            if isinstance(license_raw, str) and license_raw:
+                datum_payload["license_note"] = license_raw
+            if datum_payload:
+                market_datums[field] = datum_payload
 
     financial_statement: JSONObject = {}
     if fiscal_year is not None:
@@ -578,6 +791,12 @@ def _build_result_metadata(
         market_data["as_of"] = as_of
     if missing_fields:
         market_data["missing_fields"] = missing_fields
+    if quality_flags:
+        market_data["quality_flags"] = quality_flags
+    if license_note is not None:
+        market_data["license_note"] = license_note
+    if market_datums:
+        market_data["market_datums"] = market_datums
 
     data_freshness: JSONObject = {}
     if financial_statement:
@@ -700,6 +919,62 @@ def _build_saas_params(
         reports=reports,
         market_snapshot=market_snapshot,
         deps=context.saas_deps(),
+    )
+    return ParamBuildResult(
+        params=payload.params,
+        trace_inputs=payload.trace_inputs,
+        missing=_dedupe_missing(payload.missing),
+        assumptions=payload.assumptions,
+        metadata=_build_result_metadata(
+            latest=latest,
+            market_snapshot=market_snapshot,
+            shares_source=payload.shares_source,
+        ),
+    )
+
+
+def _build_dcf_standard_params(
+    ticker: str | None,
+    latest: FinancialReport,
+    reports: list[FinancialReport],
+    *,
+    market_snapshot: Mapping[str, object] | None,
+) -> ParamBuildResult:
+    context = _builder_context()
+    payload = build_dcf_standard_payload(
+        ticker=ticker,
+        latest=latest,
+        reports=reports,
+        market_snapshot=market_snapshot,
+        deps=context.dcf_standard_deps(),
+    )
+    return ParamBuildResult(
+        params=payload.params,
+        trace_inputs=payload.trace_inputs,
+        missing=_dedupe_missing(payload.missing),
+        assumptions=payload.assumptions,
+        metadata=_build_result_metadata(
+            latest=latest,
+            market_snapshot=market_snapshot,
+            shares_source=payload.shares_source,
+        ),
+    )
+
+
+def _build_dcf_growth_params(
+    ticker: str | None,
+    latest: FinancialReport,
+    reports: list[FinancialReport],
+    *,
+    market_snapshot: Mapping[str, object] | None,
+) -> ParamBuildResult:
+    context = _builder_context()
+    payload = build_dcf_growth_payload(
+        ticker=ticker,
+        latest=latest,
+        reports=reports,
+        market_snapshot=market_snapshot,
+        deps=context.dcf_growth_deps(),
     )
     return ParamBuildResult(
         params=payload.params,
@@ -939,6 +1214,8 @@ def _build_eva_route(
 
 def _get_model_builder(model_type: str) -> ModelParamBuilder | None:
     return {
+        "dcf_standard": _build_dcf_standard_params,
+        "dcf_growth": _build_dcf_growth_params,
         "saas": _build_saas_params,
         "bank": _build_bank_params,
         "ev_revenue": _build_ev_revenue_route,

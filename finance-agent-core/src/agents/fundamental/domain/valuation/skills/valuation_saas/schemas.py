@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import Field
 
 from .._template.schemas import BaseValuationParams
@@ -32,6 +34,15 @@ class SaaSParams(BaseValuationParams):
         ..., description="Weighted Average Cost of Capital (e.g., 0.10)"
     )
     terminal_growth: float = Field(..., description="Terminal growth rate (e.g., 0.03)")
+    risk_free_rate: float | None = Field(
+        None, description="Risk-free rate input used for market-aware CAPM"
+    )
+    beta: float | None = Field(
+        None, description="Equity beta input used for market-aware CAPM"
+    )
+    market_risk_premium: float | None = Field(
+        None, description="Market risk premium used for market-aware CAPM"
+    )
     shares_outstanding: float = Field(
         ..., description="Shares outstanding (in millions)"
     )
@@ -58,6 +69,9 @@ class SaaSParams(BaseValuationParams):
     )
     monte_carlo_seed: int | None = Field(
         None, description="Optional random seed for deterministic Monte Carlo runs"
+    )
+    monte_carlo_sampler: Literal["pseudo", "sobol", "lhs"] = Field(
+        "sobol", description="Monte Carlo sampler strategy"
     )
     growth_shock_std: float = Field(
         0.03, gt=0, description="Std dev for growth shock in Monte Carlo"

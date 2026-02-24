@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from src.shared.kernel.traceable import TraceableField
 
 from .bank import BankBuilderDeps
+from .dcf_growth import DCFGrowthBuilderDeps
+from .dcf_standard import DCFStandardBuilderDeps
 from .eva import EvaBuilderDeps
 from .multiples import MultiplesBuilderDeps
 from .reit import ReitBuilderDeps
@@ -24,7 +26,7 @@ class BuilderContext:
     ]
     resolve_monte_carlo_controls: Callable[
         [Mapping[str, object] | None, list[str]],
-        tuple[int, int | None],
+        tuple[int, int | None, str],
     ]
     market_float: Callable[[Mapping[str, object] | None, str], float | None]
     value_or_missing: Callable[
@@ -60,6 +62,7 @@ class BuilderContext:
     def saas_deps(self) -> SaasBuilderDeps:
         return SaasBuilderDeps(
             projection_years=self.projection_years,
+            default_market_risk_premium=self.default_market_risk_premium,
             resolve_shares_outstanding=self.resolve_shares_outstanding,
             market_float=self.market_float,
             value_or_missing=self.value_or_missing,
@@ -70,6 +73,12 @@ class BuilderContext:
             resolve_monte_carlo_controls=self.resolve_monte_carlo_controls,
             missing_field=self.missing_field,
         )
+
+    def dcf_standard_deps(self) -> DCFStandardBuilderDeps:
+        return DCFStandardBuilderDeps(saas_deps=self.saas_deps())
+
+    def dcf_growth_deps(self) -> DCFGrowthBuilderDeps:
+        return DCFGrowthBuilderDeps(saas_deps=self.saas_deps())
 
     def bank_deps(self) -> BankBuilderDeps:
         return BankBuilderDeps(

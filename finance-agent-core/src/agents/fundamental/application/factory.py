@@ -9,7 +9,7 @@ from src.agents.fundamental.application.orchestrator import (
     FundamentalOrchestrator,
 )
 from src.agents.fundamental.data.clients.market_data import market_data_client
-from src.agents.fundamental.data.clients.sec_xbrl.utils import fetch_financial_data
+from src.agents.fundamental.data.clients.sec_xbrl.utils import fetch_financial_payload
 from src.agents.fundamental.data.ports import fundamental_artifact_port
 from src.agents.fundamental.domain.model_selection import select_valuation_model
 from src.agents.fundamental.domain.valuation.param_builder import (
@@ -47,6 +47,12 @@ def _summarize_preview(
             valuation_summary=ctx.valuation_summary,
             assumption_breakdown=ctx.assumption_breakdown,
             data_freshness=ctx.data_freshness,
+            assumption_risk_level=ctx.assumption_risk_level,
+            data_quality_flags=ctx.data_quality_flags,
+            time_alignment_status=ctx.time_alignment_status,
+            forward_signal_summary=ctx.forward_signal_summary,
+            forward_signal_risk_level=ctx.forward_signal_risk_level,
+            forward_signal_evidence_count=ctx.forward_signal_evidence_count,
         ),
         reports,
     )
@@ -84,7 +90,7 @@ class FundamentalWorkflowRunner:
     ) -> FundamentalNodeResult:
         return await self.orchestrator.run_financial_health(
             state,
-            fetch_financial_data_fn=lambda ticker: fetch_financial_data(
+            fetch_financial_data_fn=lambda ticker: fetch_financial_payload(
                 ticker, years=3
             ),
             normalize_financial_reports_fn=parse_financial_reports_model,
@@ -103,12 +109,17 @@ class FundamentalWorkflowRunner:
             model_type: str,
             ticker: str | None,
             reports_raw: list[dict[str, object]],
+            forward_signals: list[dict[str, object]] | None,
         ) -> ParamBuildResult:
             market_snapshot: dict[str, object] | None = None
             if ticker:
                 market_snapshot = market_data_client.get_market_snapshot(
                     ticker
                 ).to_mapping()
+            if market_snapshot is None and isinstance(forward_signals, list):
+                market_snapshot = {}
+            if isinstance(market_snapshot, dict) and isinstance(forward_signals, list):
+                market_snapshot["forward_signals"] = forward_signals
             return build_params(
                 model_type,
                 ticker,

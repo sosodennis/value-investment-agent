@@ -30,7 +30,7 @@ export interface ParsedDistributionMetrics {
 
 export interface ParsedDistributionSummary {
     summary: ParsedDistributionMetrics;
-    diagnostics?: Record<string, number | boolean>;
+    diagnostics?: Record<string, number | boolean | string>;
 }
 
 export interface ParsedDistributionScenario {
@@ -50,11 +50,29 @@ export interface ParsedAssumptionItem {
     severity?: string;
 }
 
+export interface ParsedForwardSignalSummary {
+    signals_total?: number;
+    signals_accepted?: number;
+    signals_rejected?: number;
+    evidence_count?: number;
+    growth_adjustment_bps?: number;
+    margin_adjustment_bps?: number;
+    risk_level?: string;
+    source_types?: string[];
+    decision_count?: number;
+}
+
 export interface ParsedAssumptionBreakdown {
     total_assumptions?: number;
     assumptions?: ParsedAssumptionItem[];
     key_parameters?: Record<string, string | number | boolean>;
     monte_carlo?: Record<string, string | number | boolean>;
+    assumption_risk_level?: string;
+    data_quality_flags?: string[];
+    time_alignment_status?: string;
+    forward_signal_summary?: ParsedForwardSignalSummary;
+    forward_signal_risk_level?: string;
+    forward_signal_evidence_count?: number;
 }
 
 export interface ParsedDataFreshnessFinancialStatement {
@@ -66,6 +84,17 @@ export interface ParsedDataFreshnessMarketData {
     provider?: string;
     as_of?: string;
     missing_fields?: string[];
+    quality_flags?: string[];
+    license_note?: string;
+    market_datums?: Record<string, ParsedMarketDatumMeta>;
+}
+
+export interface ParsedMarketDatumMeta {
+    value?: number;
+    source?: string;
+    as_of?: string;
+    quality_flags?: string[];
+    license_note?: string;
 }
 
 export interface ParsedDataFreshnessTimeAlignment {
@@ -96,6 +125,12 @@ export interface ParsedFinancialPreview {
     distribution_scenarios?: ParsedDistributionScenarios;
     assumption_breakdown?: ParsedAssumptionBreakdown;
     data_freshness?: ParsedDataFreshness;
+    assumption_risk_level?: string;
+    data_quality_flags?: string[];
+    time_alignment_status?: string;
+    forward_signal_summary?: ParsedForwardSignalSummary;
+    forward_signal_risk_level?: string;
+    forward_signal_evidence_count?: number;
     financial_reports?: FinancialReport[];
 }
 
@@ -522,10 +557,10 @@ const parseDistributionMetrics = (
 const parseDiagnostics = (
     value: unknown,
     context: string
-): Record<string, number | boolean> | undefined => {
+): Record<string, number | boolean | string> | undefined => {
     if (value === undefined || value === null) return undefined;
     const record = toRecord(value, context);
-    const parsed: Record<string, number | boolean> = {};
+    const parsed: Record<string, number | boolean | string> = {};
     for (const [key, rawValue] of Object.entries(record)) {
         if (rawValue === null || rawValue === undefined) {
             continue;
@@ -540,8 +575,18 @@ const parseDiagnostics = (
             parsed[key] = rawValue;
             continue;
         }
-        if (typeof rawValue !== 'number' && typeof rawValue !== 'boolean') {
-            throw new TypeError(`${context}.${key} must be a number | boolean.`);
+        if (typeof rawValue === 'string') {
+            parsed[key] = rawValue;
+            continue;
+        }
+        if (
+            typeof rawValue !== 'number' &&
+            typeof rawValue !== 'boolean' &&
+            typeof rawValue !== 'string'
+        ) {
+            throw new TypeError(
+                `${context}.${key} must be a number | boolean | string.`
+            );
         }
     }
     return parsed;
@@ -618,6 +663,118 @@ const parseScalarRecord = (
     return parsed;
 };
 
+const parseOptionalStringArray = (
+    value: unknown,
+    context: string
+): string[] | undefined => {
+    if (value === undefined || value === null) return undefined;
+    if (!Array.isArray(value)) {
+        throw new TypeError(`${context} must be an array.`);
+    }
+    const parsed: string[] = [];
+    for (let i = 0; i < value.length; i += 1) {
+        const item = parseOptionalString(value[i], `${context}[${i}]`);
+        if (item === undefined) {
+            throw new TypeError(`${context}[${i}] must be a string.`);
+        }
+        parsed.push(item);
+    }
+    return parsed;
+};
+
+const parseForwardSignalSummary = (
+    value: unknown,
+    context: string
+): ParsedForwardSignalSummary | undefined => {
+    if (value === undefined || value === null) return undefined;
+    const record = toRecord(value, context);
+    const parsed: ParsedForwardSignalSummary = {};
+
+    const numericFields = [
+        'signals_total',
+        'signals_accepted',
+        'signals_rejected',
+        'evidence_count',
+        'growth_adjustment_bps',
+        'margin_adjustment_bps',
+    ] as const;
+    for (const field of numericFields) {
+        const parsedValue = parseNullableOptionalNumber(
+            record[field],
+            `${context}.${field}`
+        );
+        if (parsedValue !== undefined) {
+            parsed[field] = parsedValue;
+        }
+    }
+
+    const riskLevel = parseNullableOptionalString(
+        record.risk_level,
+        `${context}.risk_level`
+    );
+    if (riskLevel !== undefined) {
+        parsed.risk_level = riskLevel;
+    }
+
+    const sourceTypes = parseOptionalStringArray(
+        record.source_types,
+        `${context}.source_types`
+    );
+    if (sourceTypes !== undefined) {
+        parsed.source_types = sourceTypes;
+    }
+
+    const decisionsRaw = record.decisions;
+    if (decisionsRaw !== undefined && decisionsRaw !== null) {
+        if (!Array.isArray(decisionsRaw)) {
+            throw new TypeError(`${context}.decisions must be an array.`);
+        }
+        parsed.decision_count = decisionsRaw.length;
+    }
+
+    return parsed;
+};
+
+const parseMarketDatums = (
+    value: unknown,
+    context: string
+): Record<string, ParsedMarketDatumMeta> | undefined => {
+    if (value === undefined || value === null) return undefined;
+    const record = toRecord(value, context);
+    const parsed: Record<string, ParsedMarketDatumMeta> = {};
+    for (const [field, datumRaw] of Object.entries(record)) {
+        const datum = toRecord(datumRaw, `${context}.${field}`);
+        const meta: ParsedMarketDatumMeta = {};
+        const datumValue = parseNullableOptionalNumber(
+            datum.value,
+            `${context}.${field}.value`
+        );
+        const source = parseNullableOptionalString(
+            datum.source,
+            `${context}.${field}.source`
+        );
+        const asOf = parseNullableOptionalString(
+            datum.as_of,
+            `${context}.${field}.as_of`
+        );
+        const qualityFlags = parseOptionalStringArray(
+            datum.quality_flags,
+            `${context}.${field}.quality_flags`
+        );
+        const licenseNote = parseNullableOptionalString(
+            datum.license_note,
+            `${context}.${field}.license_note`
+        );
+        if (datumValue !== undefined) meta.value = datumValue;
+        if (source !== undefined) meta.source = source;
+        if (asOf !== undefined) meta.as_of = asOf;
+        if (qualityFlags !== undefined) meta.quality_flags = qualityFlags;
+        if (licenseNote !== undefined) meta.license_note = licenseNote;
+        parsed[field] = meta;
+    }
+    return parsed;
+};
+
 const parseAssumptionItem = (
     value: unknown,
     context: string
@@ -675,6 +832,54 @@ const parseAssumptionBreakdown = (
     if (monteCarlo !== undefined) {
         parsed.monte_carlo = monteCarlo;
     }
+
+    const assumptionRiskLevel = parseNullableOptionalString(
+        record.assumption_risk_level,
+        `${context}.assumption_risk_level`
+    );
+    if (assumptionRiskLevel !== undefined) {
+        parsed.assumption_risk_level = assumptionRiskLevel;
+    }
+
+    const dataQualityFlags = parseOptionalStringArray(
+        record.data_quality_flags,
+        `${context}.data_quality_flags`
+    );
+    if (dataQualityFlags !== undefined) {
+        parsed.data_quality_flags = dataQualityFlags;
+    }
+
+    const timeAlignmentStatus = parseNullableOptionalString(
+        record.time_alignment_status,
+        `${context}.time_alignment_status`
+    );
+    if (timeAlignmentStatus !== undefined) {
+        parsed.time_alignment_status = timeAlignmentStatus;
+    }
+
+    const forwardSignalSummary = parseForwardSignalSummary(
+        record.forward_signal_summary,
+        `${context}.forward_signal_summary`
+    );
+    if (forwardSignalSummary !== undefined) {
+        parsed.forward_signal_summary = forwardSignalSummary;
+    }
+
+    const forwardSignalRiskLevel = parseNullableOptionalString(
+        record.forward_signal_risk_level,
+        `${context}.forward_signal_risk_level`
+    );
+    if (forwardSignalRiskLevel !== undefined) {
+        parsed.forward_signal_risk_level = forwardSignalRiskLevel;
+    }
+
+    const forwardSignalEvidenceCount = parseNullableOptionalNumber(
+        record.forward_signal_evidence_count,
+        `${context}.forward_signal_evidence_count`
+    );
+    if (forwardSignalEvidenceCount !== undefined) {
+        parsed.forward_signal_evidence_count = forwardSignalEvidenceCount;
+    }
     return parsed;
 };
 
@@ -718,6 +923,7 @@ const parseDataFreshness = (
             `${context}.market_data.as_of`
         );
         const missingFieldsRaw = marketDataRecord.missing_fields;
+        const qualityFlagsRaw = marketDataRecord.quality_flags;
 
         const marketData: ParsedDataFreshnessMarketData = {};
         if (provider !== undefined) marketData.provider = provider;
@@ -741,6 +947,21 @@ const parseDataFreshness = (
             }
             marketData.missing_fields = missingFields;
         }
+        const qualityFlags = parseOptionalStringArray(
+            qualityFlagsRaw,
+            `${context}.market_data.quality_flags`
+        );
+        if (qualityFlags !== undefined) marketData.quality_flags = qualityFlags;
+        const licenseNote = parseNullableOptionalString(
+            marketDataRecord.license_note,
+            `${context}.market_data.license_note`
+        );
+        if (licenseNote !== undefined) marketData.license_note = licenseNote;
+        const marketDatums = parseMarketDatums(
+            marketDataRecord.market_datums,
+            `${context}.market_data.market_datums`
+        );
+        if (marketDatums !== undefined) marketData.market_datums = marketDatums;
         parsed.market_data = marketData;
     }
 
@@ -871,6 +1092,67 @@ export const parseFinancialPreview = (
     );
     if (dataFreshness !== undefined) {
         parsed.data_freshness = dataFreshness;
+    }
+
+    const assumptionRiskLevel = parseNullableOptionalString(
+        record.assumption_risk_level,
+        `${context}.assumption_risk_level`
+    );
+    if (assumptionRiskLevel !== undefined) {
+        parsed.assumption_risk_level = assumptionRiskLevel;
+    } else if (assumptionBreakdown?.assumption_risk_level !== undefined) {
+        parsed.assumption_risk_level = assumptionBreakdown.assumption_risk_level;
+    }
+
+    const dataQualityFlags = parseOptionalStringArray(
+        record.data_quality_flags,
+        `${context}.data_quality_flags`
+    );
+    if (dataQualityFlags !== undefined) {
+        parsed.data_quality_flags = dataQualityFlags;
+    } else if (assumptionBreakdown?.data_quality_flags !== undefined) {
+        parsed.data_quality_flags = assumptionBreakdown.data_quality_flags;
+    }
+
+    const timeAlignmentStatus = parseNullableOptionalString(
+        record.time_alignment_status,
+        `${context}.time_alignment_status`
+    );
+    if (timeAlignmentStatus !== undefined) {
+        parsed.time_alignment_status = timeAlignmentStatus;
+    } else if (assumptionBreakdown?.time_alignment_status !== undefined) {
+        parsed.time_alignment_status = assumptionBreakdown.time_alignment_status;
+    }
+
+    const forwardSignalSummary = parseForwardSignalSummary(
+        record.forward_signal_summary,
+        `${context}.forward_signal_summary`
+    );
+    if (forwardSignalSummary !== undefined) {
+        parsed.forward_signal_summary = forwardSignalSummary;
+    } else if (assumptionBreakdown?.forward_signal_summary !== undefined) {
+        parsed.forward_signal_summary = assumptionBreakdown.forward_signal_summary;
+    }
+
+    const forwardSignalRiskLevel = parseNullableOptionalString(
+        record.forward_signal_risk_level,
+        `${context}.forward_signal_risk_level`
+    );
+    if (forwardSignalRiskLevel !== undefined) {
+        parsed.forward_signal_risk_level = forwardSignalRiskLevel;
+    } else if (assumptionBreakdown?.forward_signal_risk_level !== undefined) {
+        parsed.forward_signal_risk_level = assumptionBreakdown.forward_signal_risk_level;
+    }
+
+    const forwardSignalEvidenceCount = parseNullableOptionalNumber(
+        record.forward_signal_evidence_count,
+        `${context}.forward_signal_evidence_count`
+    );
+    if (forwardSignalEvidenceCount !== undefined) {
+        parsed.forward_signal_evidence_count = forwardSignalEvidenceCount;
+    } else if (assumptionBreakdown?.forward_signal_evidence_count !== undefined) {
+        parsed.forward_signal_evidence_count =
+            assumptionBreakdown.forward_signal_evidence_count;
     }
 
     const reports = parseFinancialReports(

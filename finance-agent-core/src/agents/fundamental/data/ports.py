@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Protocol
 
 from src.agents.fundamental.interface.contracts import FinancialReportModel
 from src.interface.artifacts.artifact_data_models import FinancialReportsArtifactData
@@ -8,6 +9,33 @@ from src.services.artifact_manager import artifact_manager
 from src.shared.cross_agent.data.typed_artifact_port import TypedArtifactPort
 from src.shared.kernel.contracts import ARTIFACT_KIND_FINANCIAL_REPORTS
 from src.shared.kernel.types import JSONObject
+
+
+@dataclass(frozen=True)
+class MarketDatum:
+    value: float | None
+    source: str
+    as_of: str | None = None
+    quality_flags: tuple[str, ...] = ()
+    license_note: str | None = None
+
+    def to_mapping(self) -> JSONObject:
+        payload: JSONObject = {
+            "value": self.value,
+            "source": self.source,
+            "as_of": self.as_of,
+            "quality_flags": list(self.quality_flags),
+        }
+        if self.license_note is not None:
+            payload["license_note"] = self.license_note
+        return payload
+
+
+class MarketDataProvider(Protocol):
+    name: str
+    license_note: str
+
+    def fetch_datums(self, ticker_symbol: str) -> dict[str, MarketDatum]: ...
 
 
 @dataclass

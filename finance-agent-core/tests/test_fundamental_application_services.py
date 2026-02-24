@@ -74,6 +74,9 @@ def test_build_valuation_success_update_includes_output_and_artifact() -> None:
             "selected_model": "dcf_standard",
             "assumption_breakdown": _ctx.assumption_breakdown,
             "data_freshness": _ctx.data_freshness,
+            "forward_signal_summary": _ctx.forward_signal_summary,
+            "forward_signal_risk_level": _ctx.forward_signal_risk_level,
+            "forward_signal_evidence_count": _ctx.forward_signal_evidence_count,
         },
         build_valuation_artifact_fn=lambda ticker,
         model_type,
@@ -90,11 +93,41 @@ def test_build_valuation_success_update_includes_output_and_artifact() -> None:
             },
         },
         build_metadata={
+            "forward_signal": {
+                "signals_total": 2,
+                "signals_accepted": 1,
+                "signals_rejected": 1,
+                "evidence_count": 3,
+                "growth_adjustment_bps": 45.0,
+                "margin_adjustment_bps": -20.0,
+                "risk_level": "medium",
+                "source_types": ["mda", "manual"],
+                "decisions": [
+                    {
+                        "signal_id": "sig-1",
+                        "metric": "growth_outlook",
+                        "accepted": True,
+                        "reason": "accepted",
+                        "effective_bps": 45.0,
+                    }
+                ],
+            },
             "data_freshness": {
                 "market_data": {
                     "provider": "yfinance",
                     "as_of": "2026-02-20T00:00:00Z",
                     "missing_fields": ["target_mean_price"],
+                    "quality_flags": ["risk_free_rate:defaulted"],
+                    "license_note": "test license note",
+                    "market_datums": {
+                        "risk_free_rate": {
+                            "value": 0.042,
+                            "source": "policy_default",
+                            "as_of": "2026-02-20T00:00:00Z",
+                            "quality_flags": ["defaulted"],
+                            "license_note": "internal default",
+                        }
+                    },
                 },
                 "shares_outstanding_source": "market_data",
                 "time_alignment": {
@@ -105,7 +138,7 @@ def test_build_valuation_success_update_includes_output_and_artifact() -> None:
                     "market_as_of": "2026-02-20T00:00:00+00:00",
                     "filing_period_end": "2024-12-31",
                 },
-            }
+            },
         },
     )
 
@@ -142,8 +175,38 @@ def test_build_valuation_success_update_includes_output_and_artifact() -> None:
         is True
     )
     assert preview["assumption_breakdown"]["monte_carlo"]["corr_pairs_total"] == 1
+    assert preview["assumption_risk_level"] == "high"
+    assert preview["data_quality_flags"] == [
+        "defaults_present",
+        "market_data_missing:target_mean_price",
+        "market_data_quality:risk_free_rate:defaulted",
+        "time_alignment:high_risk",
+    ]
+    assert preview["time_alignment_status"] == "high_risk"
+    assert preview["forward_signal_summary"]["signals_total"] == 2
+    assert preview["forward_signal_risk_level"] == "medium"
+    assert preview["forward_signal_evidence_count"] == 3
+    assert preview["forward_signal_summary"]["source_types"] == ["mda", "manual"]
+    assert (
+        preview["assumption_breakdown"]["forward_signal_summary"][
+            "growth_adjustment_bps"
+        ]
+        == 45.0
+    )
     assert preview["data_freshness"]["financial_statement"]["fiscal_year"] == 2025
     assert preview["data_freshness"]["market_data"]["provider"] == "yfinance"
+    assert preview["data_freshness"]["market_data"]["quality_flags"] == [
+        "risk_free_rate:defaulted"
+    ]
+    assert (
+        preview["data_freshness"]["market_data"]["license_note"] == "test license note"
+    )
+    assert (
+        preview["data_freshness"]["market_data"]["market_datums"]["risk_free_rate"][
+            "source"
+        ]
+        == "policy_default"
+    )
     assert preview["data_freshness"]["shares_outstanding_source"] == "market_data"
     assert preview["data_freshness"]["time_alignment"]["status"] == "high_risk"
     assert update["node_statuses"]["fundamental_analysis"] == "done"
@@ -328,6 +391,9 @@ def test_build_valuation_error_update_sets_calculation_error() -> None:
 
 
 class _FakeReportRepo:
+    def __init__(self) -> None:
+        self.saved_data: dict[str, object] | None = None
+
     async def save_financial_reports(
         self,
         *,
@@ -337,6 +403,7 @@ class _FakeReportRepo:
     ) -> str:
         if not isinstance(data, dict):
             raise TypeError("data must be dict")
+        self.saved_data = data
         if produced_by != "fundamental_analysis.model_selection":
             raise AssertionError("unexpected producer")
         if key_prefix is None:
@@ -348,6 +415,7 @@ class _FakeReportRepo:
 async def test_build_and_store_model_selection_artifact_supports_keyword_serializers() -> (
     None
 ):
+    repo = _FakeReportRepo()
     artifact, report_id = await build_and_store_model_selection_artifact(
         intent_ctx={
             "company_profile": {
@@ -360,7 +428,8 @@ async def test_build_and_store_model_selection_artifact_supports_keyword_seriali
         model_type="saas",
         reasoning="Model selected",
         financial_reports=[],
-        port=_FakeReportRepo(),
+        forward_signals=[{"signal_id": "sig-1", "metric": "growth_outlook"}],
+        port=repo,
         summarize_preview=lambda ctx, _reports: {
             "company_name": ctx.company_name,
             "selected_model": ctx.model_type,
@@ -373,6 +442,7 @@ async def test_build_and_store_model_selection_artifact_supports_keyword_seriali
         sector,
         industry,
         reasoning,
+        forward_signals,
         normalized_reports: {
             "ticker": ticker,
             "model_type": model_type,
@@ -381,6 +451,7 @@ async def test_build_and_store_model_selection_artifact_supports_keyword_seriali
             "industry": industry,
             "reasoning": reasoning,
             "financial_reports": normalized_reports,
+            "forward_signals": forward_signals,
             "status": "done",
         },
         build_model_selection_artifact_fn=lambda *, ticker, report_id, preview: {
@@ -400,3 +471,7 @@ async def test_build_and_store_model_selection_artifact_supports_keyword_seriali
     assert artifact is not None
     assert artifact["reference"]["artifact_id"] == "report-1"
     assert artifact["preview"]["company_name"] == "GameStop Corp."
+    assert isinstance(repo.saved_data, dict)
+    assert repo.saved_data["forward_signals"] == [
+        {"signal_id": "sig-1", "metric": "growth_outlook"}
+    ]

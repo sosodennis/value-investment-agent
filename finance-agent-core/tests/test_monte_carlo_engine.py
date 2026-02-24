@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import numpy as np
 import pytest
 
 from src.agents.fundamental.domain.valuation.engine.monte_carlo import (
@@ -19,12 +20,12 @@ def test_monte_carlo_engine_reproducible_with_seed() -> None:
     result_a = engine.run(
         base_inputs={},
         distributions=distributions,
-        evaluator=lambda sampled: sampled["x"] * 2.0,
+        batch_evaluator=lambda sampled_batch, _base_inputs: sampled_batch["x"] * 2.0,
     )
     result_b = engine.run(
         base_inputs={},
         distributions=distributions,
-        evaluator=lambda sampled: sampled["x"] * 2.0,
+        batch_evaluator=lambda sampled_batch, _base_inputs: sampled_batch["x"] * 2.0,
     )
 
     assert result_a.summary["median"] == pytest.approx(result_b.summary["median"])
@@ -50,7 +51,7 @@ def test_monte_carlo_engine_applies_bounds() -> None:
     result = engine.run(
         base_inputs={},
         distributions=distributions,
-        evaluator=lambda sampled: sampled["x"],
+        batch_evaluator=lambda sampled_batch, _base_inputs: sampled_batch["x"],
     )
 
     assert result.summary["min"] >= -1.0
@@ -76,7 +77,8 @@ def test_monte_carlo_engine_rejects_non_psd_covariance() -> None:
         engine.run(
             base_inputs={},
             distributions=distributions,
-            evaluator=lambda sampled: sampled["a"] + sampled["b"],
+            batch_evaluator=lambda sampled_batch, _base_inputs: sampled_batch["a"]
+            + sampled_batch["b"],
             correlation_groups=correlation_groups,
         )
 
@@ -96,7 +98,8 @@ def test_monte_carlo_engine_repairs_non_psd_covariance_by_default() -> None:
     result = engine.run(
         base_inputs={},
         distributions=distributions,
-        evaluator=lambda sampled: sampled["a"] + sampled["b"],
+        batch_evaluator=lambda sampled_batch, _base_inputs: sampled_batch["a"]
+        + sampled_batch["b"],
         correlation_groups=correlation_groups,
     )
 
@@ -120,7 +123,8 @@ def test_monte_carlo_engine_supports_correlated_non_normal_distributions() -> No
     result = engine.run(
         base_inputs={},
         distributions=distributions,
-        evaluator=lambda sampled: sampled["occ"] - sampled["cap"],
+        batch_evaluator=lambda sampled_batch, _base_inputs: sampled_batch["occ"]
+        - sampled_batch["cap"],
         correlation_groups=correlation_groups,
     )
 
@@ -156,7 +160,9 @@ def test_monte_carlo_engine_rejects_overlapping_correlation_groups() -> None:
         engine.run(
             base_inputs={},
             distributions=distributions,
-            evaluator=lambda sampled: sampled["a"] + sampled["b"] + sampled["c"],
+            batch_evaluator=lambda sampled_batch, _base_inputs: sampled_batch["a"]
+            + sampled_batch["b"]
+            + sampled_batch["c"],
             correlation_groups=correlation_groups,
         )
 
@@ -176,7 +182,7 @@ def test_monte_carlo_engine_diagnostics_are_json_safe_for_small_samples() -> Non
     result = engine.run(
         base_inputs={},
         distributions=distributions,
-        evaluator=lambda sampled: sampled["x"],
+        batch_evaluator=lambda sampled_batch, _base_inputs: sampled_batch["x"],
     )
 
     diagnostics = result.diagnostics
@@ -203,7 +209,9 @@ def test_monte_carlo_engine_stops_early_when_converged() -> None:
     result = engine.run(
         base_inputs={},
         distributions=distributions,
-        evaluator=lambda _sampled: 1.0,
+        batch_evaluator=lambda sampled_batch, _base_inputs: np.ones_like(
+            sampled_batch["x"]
+        ),
     )
 
     diagnostics = result.diagnostics
@@ -211,3 +219,77 @@ def test_monte_carlo_engine_stops_early_when_converged() -> None:
     assert diagnostics["sufficient_window"] is True
     assert diagnostics["stopped_early"] is True
     assert diagnostics["executed_iterations"] == 300
+
+
+def test_monte_carlo_engine_supports_lhs_sampler_with_diagnostics() -> None:
+    engine = MonteCarloEngine(
+        MonteCarloConfig(iterations=512, seed=23, sampler_type="lhs")
+    )
+    distributions = {
+        "x": DistributionSpec(kind="normal", mean=0.0, std=1.0),
+    }
+    result = engine.run(
+        base_inputs={},
+        distributions=distributions,
+        batch_evaluator=lambda sampled_batch, _base_inputs: sampled_batch["x"],
+    )
+
+    assert result.diagnostics["sampler_requested"] == "lhs"
+    assert result.diagnostics["sampler_type"] == "lhs"
+    assert result.diagnostics["sampler_fallback_used"] is False
+
+
+def test_monte_carlo_engine_supports_sobol_sampler_with_safe_fallback() -> None:
+    engine = MonteCarloEngine(
+        MonteCarloConfig(iterations=256, seed=31, sampler_type="sobol")
+    )
+    distributions = {
+        "x": DistributionSpec(kind="normal", mean=0.0, std=1.0),
+    }
+    result = engine.run(
+        base_inputs={},
+        distributions=distributions,
+        batch_evaluator=lambda sampled_batch, _base_inputs: sampled_batch["x"],
+    )
+
+    assert result.diagnostics["sampler_requested"] == "sobol"
+    effective = result.diagnostics["sampler_type"]
+    assert effective in {"sobol", "pseudo"}
+    if effective == "pseudo":
+        assert result.diagnostics["sampler_fallback_used"] is True
+    else:
+        assert result.diagnostics["sampler_fallback_used"] is False
+
+
+def test_monte_carlo_engine_rejects_invalid_batch_evaluator_shape() -> None:
+    engine = MonteCarloEngine(
+        MonteCarloConfig(iterations=256, seed=19, sampler_type="pseudo")
+    )
+    distributions = {
+        "x": DistributionSpec(kind="normal", mean=1.0, std=0.3),
+    }
+
+    with pytest.raises(ValueError, match="one outcome per sampled row"):
+        engine.run(
+            base_inputs={"offset": 2.0},
+            distributions=distributions,
+            batch_evaluator=lambda sampled_batch, _base_inputs: np.array(
+                [sampled_batch["x"][0]]
+            ),
+        )
+
+
+def test_monte_carlo_engine_sets_batch_diagnostics_flag() -> None:
+    engine = MonteCarloEngine(MonteCarloConfig(iterations=256, seed=7))
+    distributions = {
+        "x": DistributionSpec(kind="normal", mean=1.0, std=0.2),
+    }
+
+    result = engine.run(
+        base_inputs={"offset": 2.0},
+        distributions=distributions,
+        batch_evaluator=lambda sampled_batch, base_inputs: sampled_batch["x"]
+        + float(base_inputs["offset"]),
+    )
+
+    assert result.diagnostics["batch_evaluator_used"] is True

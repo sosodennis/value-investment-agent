@@ -16,6 +16,12 @@ class FundamentalAppContextDTO:
     valuation_summary: str | None = None
     assumption_breakdown: JSONObject | None = None
     data_freshness: JSONObject | None = None
+    assumption_risk_level: str | None = None
+    data_quality_flags: list[str] | None = None
+    time_alignment_status: str | None = None
+    forward_signal_summary: JSONObject | None = None
+    forward_signal_risk_level: str | None = None
+    forward_signal_evidence_count: int | None = None
 
 
 @dataclass(frozen=True)

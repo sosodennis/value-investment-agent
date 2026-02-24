@@ -1,5 +1,7 @@
 from .skills.auditor.rules import (
     audit_bank_params,
+    audit_dcf_growth_params,
+    audit_dcf_standard_params,
     audit_ev_ebitda_params,
     audit_ev_revenue_params,
     audit_eva_params,
@@ -9,6 +11,10 @@ from .skills.auditor.rules import (
 )
 from .skills.valuation_bank.schemas import BankParams
 from .skills.valuation_bank.tools import calculate_bank_valuation
+from .skills.valuation_dcf_growth.schemas import DCFGrowthParams
+from .skills.valuation_dcf_growth.tools import calculate_dcf_growth_valuation
+from .skills.valuation_dcf_standard.schemas import DCFStandardParams
+from .skills.valuation_dcf_standard.tools import calculate_dcf_standard_valuation
 from .skills.valuation_ev_ebitda.schemas import EVEbitdaParams
 from .skills.valuation_ev_ebitda.tools import calculate_ev_ebitda_valuation
 from .skills.valuation_ev_revenue.schemas import EVRevenueParams
@@ -27,6 +33,16 @@ from .skills.valuation_saas.tools import calculate_saas_valuation
 
 class SkillRegistry:
     SKILLS = {
+        "dcf_standard": {
+            "schema": DCFStandardParams,
+            "calculator": calculate_dcf_standard_valuation,
+            "auditor": audit_dcf_standard_params,
+        },
+        "dcf_growth": {
+            "schema": DCFGrowthParams,
+            "calculator": calculate_dcf_growth_valuation,
+            "auditor": audit_dcf_growth_params,
+        },
         "saas": {
             "schema": SaaSParams,
             "calculator": calculate_saas_valuation,

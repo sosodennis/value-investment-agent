@@ -46,6 +46,7 @@ describe('parseFinancialPreview', () => {
                 diagnostics: {
                     converged: true,
                     iterations: 10000,
+                    sampler_type: 'sobol',
                 },
             },
             distribution_scenarios: {
@@ -73,7 +74,45 @@ describe('parseFinancialPreview', () => {
                     effective_window: 250,
                     stopped_early: true,
                 },
+                assumption_risk_level: 'high',
+                data_quality_flags: [
+                    'defaults_present',
+                    'time_alignment:high_risk',
+                ],
+                time_alignment_status: 'high_risk',
+                forward_signal_summary: {
+                    signals_total: 3,
+                    signals_accepted: 2,
+                    signals_rejected: 1,
+                    evidence_count: 4,
+                    growth_adjustment_bps: 45.5,
+                    margin_adjustment_bps: -20.0,
+                    risk_level: 'medium',
+                    source_types: ['mda', 'press_release'],
+                    decisions: [{ signal_id: 'sig-1' }],
+                },
+                forward_signal_risk_level: 'medium',
+                forward_signal_evidence_count: 4,
             },
+            assumption_risk_level: 'high',
+            data_quality_flags: [
+                'defaults_present',
+                'time_alignment:high_risk',
+            ],
+            time_alignment_status: 'high_risk',
+            forward_signal_summary: {
+                signals_total: 3,
+                signals_accepted: 2,
+                signals_rejected: 1,
+                evidence_count: 4,
+                growth_adjustment_bps: 45.5,
+                margin_adjustment_bps: -20.0,
+                risk_level: 'medium',
+                source_types: ['mda', 'press_release'],
+                decisions: [{ signal_id: 'sig-1' }],
+            },
+            forward_signal_risk_level: 'medium',
+            forward_signal_evidence_count: 4,
             data_freshness: {
                 financial_statement: {
                     fiscal_year: 2025,
@@ -83,6 +122,17 @@ describe('parseFinancialPreview', () => {
                     provider: 'yfinance',
                     as_of: '2026-02-20T00:00:00Z',
                     missing_fields: ['target_mean_price'],
+                    quality_flags: ['risk_free_rate:defaulted'],
+                    license_note: 'test license note',
+                    market_datums: {
+                        risk_free_rate: {
+                            value: 0.042,
+                            source: 'policy_default',
+                            as_of: '2026-02-20T00:00:00Z',
+                            quality_flags: ['defaulted'],
+                            license_note: 'internal default',
+                        },
+                    },
                 },
                 shares_outstanding_source: 'market_data',
                 time_alignment: {
@@ -113,15 +163,68 @@ describe('parseFinancialPreview', () => {
         expect(parsed?.distribution_summary?.summary.median).toBe(150);
         expect(parsed?.distribution_summary?.summary.percentile_25).toBe(138);
         expect(parsed?.distribution_summary?.summary.percentile_75).toBe(168);
+        expect(parsed?.distribution_summary?.diagnostics?.sampler_type).toBe('sobol');
         expect(parsed?.distribution_scenarios?.bull?.price).toBe(190);
         expect(parsed?.assumption_breakdown?.total_assumptions).toBe(2);
         expect(parsed?.assumption_breakdown?.monte_carlo?.executed_iterations).toBe(5000);
         expect(parsed?.assumption_breakdown?.monte_carlo?.effective_window).toBe(250);
         expect(parsed?.assumption_breakdown?.monte_carlo?.stopped_early).toBe(true);
+        expect(parsed?.assumption_breakdown?.assumption_risk_level).toBe('high');
+        expect(parsed?.assumption_breakdown?.data_quality_flags).toEqual([
+            'defaults_present',
+            'time_alignment:high_risk',
+        ]);
+        expect(parsed?.assumption_breakdown?.time_alignment_status).toBe('high_risk');
+        expect(parsed?.assumption_risk_level).toBe('high');
+        expect(parsed?.data_quality_flags).toEqual([
+            'defaults_present',
+            'time_alignment:high_risk',
+        ]);
+        expect(parsed?.time_alignment_status).toBe('high_risk');
+        expect(parsed?.forward_signal_summary?.signals_total).toBe(3);
+        expect(parsed?.forward_signal_summary?.source_types).toEqual([
+            'mda',
+            'press_release',
+        ]);
+        expect(parsed?.forward_signal_summary?.decision_count).toBe(1);
+        expect(parsed?.forward_signal_risk_level).toBe('medium');
+        expect(parsed?.forward_signal_evidence_count).toBe(4);
         expect(parsed?.data_freshness?.market_data?.provider).toBe('yfinance');
+        expect(parsed?.data_freshness?.market_data?.quality_flags).toEqual([
+            'risk_free_rate:defaulted',
+        ]);
+        expect(parsed?.data_freshness?.market_data?.license_note).toBe('test license note');
+        expect(
+            parsed?.data_freshness?.market_data?.market_datums?.risk_free_rate?.source
+        ).toBe('policy_default');
         expect(parsed?.data_freshness?.time_alignment?.status).toBe('high_risk');
         expect(parsed?.data_freshness?.time_alignment?.lag_days).toBe(420);
         expect(parsed?.financial_reports).toHaveLength(1);
+    });
+
+    it('falls back to assumption breakdown quality fields when top-level fields are absent', () => {
+        const parsed = parseFinancialPreview({
+            assumption_breakdown: {
+                assumption_risk_level: 'medium',
+                data_quality_flags: ['defaults_present'],
+                time_alignment_status: 'warning',
+                forward_signal_summary: {
+                    signals_total: 2,
+                    source_types: ['mda'],
+                    decisions: [{ signal_id: 'sig-1' }, { signal_id: 'sig-2' }],
+                },
+                forward_signal_risk_level: 'high',
+                forward_signal_evidence_count: 5,
+            },
+        });
+
+        expect(parsed?.assumption_risk_level).toBe('medium');
+        expect(parsed?.data_quality_flags).toEqual(['defaults_present']);
+        expect(parsed?.time_alignment_status).toBe('warning');
+        expect(parsed?.forward_signal_summary?.signals_total).toBe(2);
+        expect(parsed?.forward_signal_summary?.decision_count).toBe(2);
+        expect(parsed?.forward_signal_risk_level).toBe('high');
+        expect(parsed?.forward_signal_evidence_count).toBe(5);
     });
 
     it('rejects invalid key_metrics values', () => {

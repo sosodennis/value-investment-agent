@@ -29,6 +29,7 @@ def test_saas_valuation_includes_distribution_summary_when_mc_enabled() -> None:
         preferred_stock=0.0,
         monte_carlo_iterations=300,
         monte_carlo_seed=123,
+        monte_carlo_sampler="lhs",
     )
 
     result = calculate_saas_valuation(params)
@@ -42,6 +43,10 @@ def test_saas_valuation_includes_distribution_summary_when_mc_enabled() -> None:
     assert "percentile_5" in summary
     assert "median" in summary
     assert "percentile_95" in summary
+    diagnostics = distribution.get("diagnostics")
+    assert isinstance(diagnostics, dict)
+    assert diagnostics.get("sampler_type") == "lhs"
+    assert diagnostics.get("batch_evaluator_used") is True
 
 
 def test_saas_valuation_monte_carlo_handles_traceable_inputs() -> None:

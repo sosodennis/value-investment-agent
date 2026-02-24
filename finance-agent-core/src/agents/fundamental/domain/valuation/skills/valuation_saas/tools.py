@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from typing import cast
+from collections.abc import Mapping
+
+import numpy as np
 
 from src.shared.kernel.traceable import TraceableField
 
@@ -67,25 +69,15 @@ def _unwrap(value: float | list[float] | TraceableField) -> float | list[float]:
     return float(value)
 
 
-def _clamp(value: float, lower: float, upper: float) -> float:
-    return max(lower, min(upper, value))
-
-
-def _shift_series(
-    values: list[float], shock: float, lower: float, upper: float
-) -> list[float]:
-    return [_clamp(v + shock, lower, upper) for v in values]
-
-
 def _run_saas_monte_carlo(
     *,
-    graph,
     base_inputs: dict[str, float | list[float]],
     params: SaaSParams,
 ) -> dict[str, object]:
     config = MonteCarloConfig(
         iterations=params.monte_carlo_iterations,
         seed=params.monte_carlo_seed,
+        sampler_type=params.monte_carlo_sampler,
     )
     engine = MonteCarloEngine(config=config)
 
@@ -144,39 +136,81 @@ def _run_saas_monte_carlo(
         "terminal_growth": float(params.terminal_growth),
     }
 
-    def evaluate(sampled: dict[str, float]) -> float:
-        iter_inputs = dict(base_inputs)
-        growth_shock = sampled["growth_shock"]
-        margin_shock = sampled["margin_shock"]
-        iter_inputs["growth_rates"] = _shift_series(
-            cast(list[float], base_inputs["growth_rates"]),
-            growth_shock,
+    base_growth_rates = np.asarray(base_inputs["growth_rates"], dtype=float)
+    base_operating_margins = np.asarray(base_inputs["operating_margins"], dtype=float)
+    da_rates = np.asarray(base_inputs["da_rates"], dtype=float)
+    capex_rates = np.asarray(base_inputs["capex_rates"], dtype=float)
+    wc_rates = np.asarray(base_inputs["wc_rates"], dtype=float)
+    sbc_rates = np.asarray(base_inputs["sbc_rates"], dtype=float)
+    initial_revenue = float(base_inputs["initial_revenue"])
+    tax_rate = float(base_inputs["tax_rate"])
+    cash = float(base_inputs["cash"])
+    total_debt = float(base_inputs["total_debt"])
+    preferred_stock = float(base_inputs["preferred_stock"])
+    shares_outstanding = float(base_inputs["shares_outstanding"])
+
+    def batch_evaluate(
+        sampled_batch: dict[str, np.ndarray], _base_numeric: Mapping[str, float]
+    ) -> np.ndarray:
+        growth_shock = np.asarray(sampled_batch["growth_shock"], dtype=float)
+        margin_shock = np.asarray(sampled_batch["margin_shock"], dtype=float)
+        wacc = np.asarray(sampled_batch["wacc"], dtype=float)
+        sampled_terminal = np.asarray(sampled_batch["terminal_growth"], dtype=float)
+        terminal_growth = np.minimum(sampled_terminal, wacc - 0.001)
+
+        batch_size = growth_shock.shape[0]
+        projection_years = base_growth_rates.shape[0]
+
+        growth_rates = np.clip(
+            base_growth_rates[np.newaxis, :] + growth_shock[:, np.newaxis],
             -0.80,
             1.50,
         )
-        iter_inputs["operating_margins"] = _shift_series(
-            cast(list[float], base_inputs["operating_margins"]),
-            margin_shock,
+        operating_margins = np.clip(
+            base_operating_margins[np.newaxis, :] + margin_shock[:, np.newaxis],
             -0.50,
             0.70,
         )
 
-        sampled_wacc = sampled["wacc"]
-        sampled_terminal = sampled["terminal_growth"]
-        if sampled_terminal >= sampled_wacc:
-            sampled_terminal = sampled_wacc - 0.001
+        projected_revenue = np.empty((batch_size, projection_years), dtype=float)
+        revenue_level = np.full(batch_size, initial_revenue, dtype=float)
+        for year_idx in range(projection_years):
+            revenue_level = revenue_level * (1.0 + growth_rates[:, year_idx])
+            projected_revenue[:, year_idx] = revenue_level
 
-        iter_inputs["wacc"] = sampled_wacc
-        iter_inputs["terminal_growth"] = sampled_terminal
+        ebit = projected_revenue * operating_margins
+        nopat = ebit * (1.0 - tax_rate)
+        da = projected_revenue * da_rates[np.newaxis, :]
+        capex = projected_revenue * capex_rates[np.newaxis, :]
+        sbc = projected_revenue * sbc_rates[np.newaxis, :]
+        previous_revenue = np.concatenate(
+            [
+                np.full((batch_size, 1), initial_revenue, dtype=float),
+                projected_revenue[:, :-1],
+            ],
+            axis=1,
+        )
+        delta_revenue = projected_revenue - previous_revenue
+        delta_wc = delta_revenue * wc_rates[np.newaxis, :]
+        fcff = nopat + da - capex - delta_wc + sbc
 
-        raw_result = graph.calculate(iter_inputs, emit_lifecycle_events=False)
-        raw_intrinsic = raw_result.get("intrinsic_value", 0.0)
-        return float(_unwrap(raw_intrinsic))
+        discount_years = np.arange(1, projection_years + 1, dtype=float)
+        discount_curve = np.power(
+            1.0 + wacc[:, np.newaxis], discount_years[np.newaxis, :]
+        )
+        pv_fcff = np.sum(fcff / discount_curve, axis=1)
+
+        final_fcff = fcff[:, -1]
+        terminal_value = final_fcff * (1.0 + terminal_growth) / (wacc - terminal_growth)
+        pv_terminal = terminal_value / np.power(1.0 + wacc, projection_years)
+        enterprise_value = pv_fcff + pv_terminal
+        equity_value = enterprise_value + cash - total_debt - preferred_stock
+        return equity_value / shares_outstanding
 
     result = engine.run(
         base_inputs=base_numeric_inputs,
         distributions=distributions,
-        evaluator=evaluate,
+        batch_evaluator=batch_evaluate,
         correlation_groups=correlation_groups,
     )
     return {
@@ -255,7 +289,6 @@ def calculate_saas_valuation(params: SaaSParams) -> CalcResult:
 
         if params.monte_carlo_iterations > 0:
             details["distribution_summary"] = _run_saas_monte_carlo(
-                graph=graph,
                 # MC evaluator requires plain numeric/list inputs.
                 # TraceableField wrappers are only for deterministic trace output.
                 base_inputs=raw_inputs,

@@ -30,6 +30,12 @@ def build_mapper_context(
     valuation_summary: str | None = None,
     assumption_breakdown: JSONObject | None = None,
     data_freshness: JSONObject | None = None,
+    assumption_risk_level: str | None = None,
+    data_quality_flags: list[str] | None = None,
+    time_alignment_status: str | None = None,
+    forward_signal_summary: JSONObject | None = None,
+    forward_signal_risk_level: str | None = None,
+    forward_signal_evidence_count: int | None = None,
 ) -> FundamentalAppContextDTO:
     return build_fundamental_mapper_context(
         intent_ctx,
@@ -39,6 +45,12 @@ def build_mapper_context(
         valuation_summary=valuation_summary,
         assumption_breakdown=assumption_breakdown,
         data_freshness=data_freshness,
+        assumption_risk_level=assumption_risk_level,
+        data_quality_flags=data_quality_flags,
+        time_alignment_status=time_alignment_status,
+        forward_signal_summary=forward_signal_summary,
+        forward_signal_risk_level=forward_signal_risk_level,
+        forward_signal_evidence_count=forward_signal_evidence_count,
     )
 
 
@@ -57,6 +69,7 @@ class _BuildModelSelectionReportPayloadFn(Protocol):
         industry: str,
         reasoning: str,
         normalized_reports: list[JSONObject],
+        forward_signals: list[JSONObject] | None = None,
     ) -> JSONObject: ...
 
 
@@ -97,6 +110,7 @@ async def build_and_store_model_selection_artifact(
     model_type: str,
     reasoning: str,
     financial_reports: list[JSONObject],
+    forward_signals: list[JSONObject] | None,
     port: IFundamentalReportRepo,
     summarize_preview: Callable[
         [FundamentalAppContextDTO, list[JSONObject]], JSONObject
@@ -128,6 +142,7 @@ async def build_and_store_model_selection_artifact(
         industry=mapper_ctx.industry or "Unknown",
         reasoning=reasoning,
         normalized_reports=normalized_reports,
+        forward_signals=forward_signals,
     )
 
     timestamp = int(time.time())
@@ -214,6 +229,19 @@ def build_valuation_success_update(
         calculation_metrics=calculation_metrics,
         build_metadata=build_metadata,
     )
+    assumption_risk_level = assumption_breakdown.get("assumption_risk_level")
+    data_quality_flags = assumption_breakdown.get("data_quality_flags")
+    time_alignment_status = assumption_breakdown.get("time_alignment_status")
+    forward_signal_summary = assumption_breakdown.get("forward_signal_summary")
+    forward_signal_risk_level = assumption_breakdown.get("forward_signal_risk_level")
+    forward_signal_evidence_count = assumption_breakdown.get(
+        "forward_signal_evidence_count"
+    )
+    data_quality_flags_list = (
+        [item for item in data_quality_flags if isinstance(item, str) and item]
+        if isinstance(data_quality_flags, list)
+        else None
+    )
     data_freshness = _build_data_freshness(
         reports_raw=reports_raw,
         build_metadata=build_metadata,
@@ -225,6 +253,28 @@ def build_valuation_success_update(
         model_type=model_type,
         assumption_breakdown=assumption_breakdown,
         data_freshness=data_freshness,
+        assumption_risk_level=(
+            assumption_risk_level if isinstance(assumption_risk_level, str) else None
+        ),
+        data_quality_flags=data_quality_flags_list,
+        time_alignment_status=(
+            time_alignment_status if isinstance(time_alignment_status, str) else None
+        ),
+        forward_signal_summary=(
+            forward_signal_summary
+            if isinstance(forward_signal_summary, Mapping)
+            else None
+        ),
+        forward_signal_risk_level=(
+            forward_signal_risk_level
+            if isinstance(forward_signal_risk_level, str)
+            else None
+        ),
+        forward_signal_evidence_count=(
+            int(forward_signal_evidence_count)
+            if isinstance(forward_signal_evidence_count, int | float)
+            else None
+        ),
     )
     preview = summarize_preview(app_context, reports_raw)
     preview.update(
@@ -240,6 +290,18 @@ def build_valuation_success_update(
         preview["distribution_summary"] = distribution_summary
     if distribution_scenarios is not None:
         preview["distribution_scenarios"] = distribution_scenarios
+    if isinstance(assumption_risk_level, str) and assumption_risk_level:
+        preview["assumption_risk_level"] = assumption_risk_level
+    if data_quality_flags_list is not None:
+        preview["data_quality_flags"] = data_quality_flags_list
+    if isinstance(time_alignment_status, str) and time_alignment_status:
+        preview["time_alignment_status"] = time_alignment_status
+    if isinstance(forward_signal_summary, Mapping):
+        preview["forward_signal_summary"] = dict(forward_signal_summary)
+    if isinstance(forward_signal_risk_level, str) and forward_signal_risk_level:
+        preview["forward_signal_risk_level"] = forward_signal_risk_level
+    if isinstance(forward_signal_evidence_count, int | float):
+        preview["forward_signal_evidence_count"] = int(forward_signal_evidence_count)
     artifact = build_valuation_artifact_fn(
         ticker=ticker,
         model_type=model_type,
@@ -282,6 +344,7 @@ def _build_assumption_breakdown(
     build_metadata: JSONObject | None = None,
 ) -> JSONObject:
     assumption_items: list[JSONObject] = []
+    has_high_severity = False
     for statement in assumptions:
         category = "policy"
         severity = "medium"
@@ -303,6 +366,8 @@ def _build_assumption_breakdown(
                 "severity": severity,
             }
         )
+        if severity == "high":
+            has_high_severity = True
 
     key_parameter_fields = (
         "wacc",
@@ -338,6 +403,11 @@ def _build_assumption_breakdown(
         diagnostics = distribution_summary.get("diagnostics")
         if isinstance(diagnostics, Mapping):
             mc_diagnostic_fields = (
+                "sampler_type",
+                "sampler_requested",
+                "sampler_fallback_used",
+                "sampler_fallback_reason",
+                "batch_evaluator_used",
                 "executed_iterations",
                 "configured_iterations",
                 "effective_window",
@@ -366,6 +436,8 @@ def _build_assumption_breakdown(
                     monte_carlo[field] = value
                 elif isinstance(value, float):
                     monte_carlo[field] = value
+                elif isinstance(value, str):
+                    monte_carlo[field] = value
 
     if isinstance(build_metadata, Mapping):
         data_freshness_raw = build_metadata.get("data_freshness")
@@ -384,12 +456,89 @@ def _build_assumption_breakdown(
                     if isinstance(value, str | int | float | bool):
                         key_parameters[f"time_alignment_{field}"] = value
 
-    return {
+    data_quality_flags = _collect_data_quality_flags(
+        assumptions=assumptions,
+        build_metadata=build_metadata,
+    )
+    time_alignment_status = _extract_time_alignment_status(build_metadata)
+    if time_alignment_status is not None:
+        key_parameters["time_alignment_status"] = time_alignment_status
+
+    assumption_risk_level = "high" if has_high_severity else "medium"
+    if time_alignment_status == "high_risk":
+        assumption_risk_level = "high"
+    if assumption_risk_level != "high" and data_quality_flags:
+        assumption_risk_level = "medium"
+
+    forward_signal_summary: JSONObject | None = None
+    forward_signal_risk_level: str | None = None
+    forward_signal_evidence_count: int | None = None
+    if isinstance(build_metadata, Mapping):
+        forward_signal_raw = build_metadata.get("forward_signal")
+        if isinstance(forward_signal_raw, Mapping):
+            forward_signal_payload: JSONObject = {}
+            for field in (
+                "signals_total",
+                "signals_accepted",
+                "signals_rejected",
+                "evidence_count",
+                "growth_adjustment_bps",
+                "margin_adjustment_bps",
+                "risk_level",
+                "source_types",
+                "decisions",
+            ):
+                value = forward_signal_raw.get(field)
+                if isinstance(value, bool):
+                    forward_signal_payload[field] = value
+                elif isinstance(value, int | float | str):
+                    forward_signal_payload[field] = value
+                elif isinstance(value, list):
+                    forward_signal_payload[field] = value
+            if forward_signal_payload:
+                forward_signal_summary = forward_signal_payload
+                risk_raw = forward_signal_raw.get("risk_level")
+                if isinstance(risk_raw, str) and risk_raw:
+                    forward_signal_risk_level = risk_raw
+                evidence_raw = forward_signal_raw.get("evidence_count")
+                if isinstance(evidence_raw, int):
+                    forward_signal_evidence_count = evidence_raw
+                elif isinstance(evidence_raw, float):
+                    forward_signal_evidence_count = int(evidence_raw)
+
+    if forward_signal_risk_level == "high":
+        assumption_risk_level = "high"
+    elif forward_signal_risk_level == "medium" and assumption_risk_level != "high":
+        assumption_risk_level = "medium"
+
+    if (
+        not assumptions
+        and not data_quality_flags
+        and time_alignment_status
+        not in {
+            "high_risk",
+            "warning",
+        }
+        and forward_signal_risk_level not in {"medium", "high"}
+    ):
+        assumption_risk_level = "low"
+
+    output: JSONObject = {
         "total_assumptions": len(assumption_items),
         "assumptions": assumption_items,
         "key_parameters": key_parameters,
         "monte_carlo": monte_carlo,
+        "assumption_risk_level": assumption_risk_level,
+        "data_quality_flags": data_quality_flags,
+        "time_alignment_status": time_alignment_status,
     }
+    if forward_signal_summary is not None:
+        output["forward_signal_summary"] = forward_signal_summary
+    if forward_signal_risk_level is not None:
+        output["forward_signal_risk_level"] = forward_signal_risk_level
+    if forward_signal_evidence_count is not None:
+        output["forward_signal_evidence_count"] = forward_signal_evidence_count
+    return output
 
 
 def _build_data_freshness(
@@ -416,6 +565,9 @@ def _build_data_freshness(
             provider = market_data_raw.get("provider")
             as_of = market_data_raw.get("as_of")
             missing_fields = market_data_raw.get("missing_fields")
+            quality_flags = market_data_raw.get("quality_flags")
+            license_note = market_data_raw.get("license_note")
+            market_datums_raw = market_data_raw.get("market_datums")
             if isinstance(provider, str) and provider:
                 market_data["provider"] = provider
             if isinstance(as_of, str) and as_of:
@@ -426,6 +578,47 @@ def _build_data_freshness(
                 ]
                 if normalized_missing_fields:
                     market_data["missing_fields"] = normalized_missing_fields
+            if isinstance(quality_flags, list):
+                normalized_quality_flags = [
+                    item for item in quality_flags if isinstance(item, str) and item
+                ]
+                if normalized_quality_flags:
+                    market_data["quality_flags"] = normalized_quality_flags
+            if isinstance(license_note, str) and license_note:
+                market_data["license_note"] = license_note
+            if isinstance(market_datums_raw, Mapping):
+                market_datums: JSONObject = {}
+                for field, datum_raw in market_datums_raw.items():
+                    if not isinstance(field, str) or not isinstance(datum_raw, Mapping):
+                        continue
+                    datum_payload: JSONObject = {}
+                    value_raw = datum_raw.get("value")
+                    if isinstance(value_raw, int | float):
+                        datum_payload["value"] = float(value_raw)
+                    elif value_raw is None:
+                        datum_payload["value"] = None
+                    source_raw = datum_raw.get("source")
+                    as_of_raw = datum_raw.get("as_of")
+                    quality_raw = datum_raw.get("quality_flags")
+                    license_raw = datum_raw.get("license_note")
+                    if isinstance(source_raw, str) and source_raw:
+                        datum_payload["source"] = source_raw
+                    if isinstance(as_of_raw, str) and as_of_raw:
+                        datum_payload["as_of"] = as_of_raw
+                    if isinstance(quality_raw, list):
+                        datum_quality = [
+                            item
+                            for item in quality_raw
+                            if isinstance(item, str) and item
+                        ]
+                        if datum_quality:
+                            datum_payload["quality_flags"] = datum_quality
+                    if isinstance(license_raw, str) and license_raw:
+                        datum_payload["license_note"] = license_raw
+                    if datum_payload:
+                        market_datums[field] = datum_payload
+                if market_datums:
+                    market_data["market_datums"] = market_datums
             if market_data:
                 payload["market_data"] = market_data
 
@@ -532,6 +725,68 @@ def _coerce_int(value: object) -> int | None:
         except ValueError:
             return None
     return None
+
+
+def _extract_time_alignment_status(
+    build_metadata: Mapping[str, object] | None,
+) -> str | None:
+    if not isinstance(build_metadata, Mapping):
+        return None
+    data_freshness = build_metadata.get("data_freshness")
+    if not isinstance(data_freshness, Mapping):
+        return None
+    time_alignment = data_freshness.get("time_alignment")
+    if not isinstance(time_alignment, Mapping):
+        return None
+    status = time_alignment.get("status")
+    if isinstance(status, str) and status:
+        return status
+    return None
+
+
+def _collect_data_quality_flags(
+    *,
+    assumptions: list[str],
+    build_metadata: Mapping[str, object] | None,
+) -> list[str]:
+    flags: list[str] = []
+
+    if any("defaulted" in statement.lower() for statement in assumptions):
+        flags.append("defaults_present")
+
+    if not isinstance(build_metadata, Mapping):
+        return flags
+
+    data_freshness = build_metadata.get("data_freshness")
+    if not isinstance(data_freshness, Mapping):
+        return flags
+
+    market_data = data_freshness.get("market_data")
+    if isinstance(market_data, Mapping):
+        missing_fields_raw = market_data.get("missing_fields")
+        if isinstance(missing_fields_raw, list):
+            for item in missing_fields_raw:
+                if isinstance(item, str) and item:
+                    flags.append(f"market_data_missing:{item}")
+        quality_flags_raw = market_data.get("quality_flags")
+        if isinstance(quality_flags_raw, list):
+            for item in quality_flags_raw:
+                if isinstance(item, str) and item:
+                    flags.append(f"market_data_quality:{item}")
+
+    shares_source = data_freshness.get("shares_outstanding_source")
+    if isinstance(shares_source, str) and shares_source:
+        if shares_source != "market_data":
+            flags.append(f"shares_source:{shares_source}")
+
+    time_alignment = data_freshness.get("time_alignment")
+    if isinstance(time_alignment, Mapping):
+        status = time_alignment.get("status")
+        if isinstance(status, str) and status:
+            flags.append(f"time_alignment:{status}")
+
+    # Preserve insertion order while deduplicating.
+    return list(dict.fromkeys(flags))
 
 
 def _extract_distribution_summary(

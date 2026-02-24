@@ -94,6 +94,9 @@ def test_bank_valuation_includes_distribution_summary_when_mc_enabled() -> None:
     assert "median" in summary
     assert "percentile_95" in summary
     assert distribution.get("metric_type") == "intrinsic_value_per_share"
+    diagnostics = distribution.get("diagnostics")
+    assert isinstance(diagnostics, dict)
+    assert diagnostics.get("batch_evaluator_used") is True
 
 
 def test_bank_valuation_monte_carlo_handles_traceable_growth_inputs() -> None:

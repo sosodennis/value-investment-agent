@@ -79,9 +79,24 @@ def test_summarize_fundamental_for_preview_includes_new_contract_fields():
         status="calculated",
         assumption_breakdown={"total_assumptions": 1},
         data_freshness={"market_data": {"provider": "yfinance"}},
+        assumption_risk_level="high",
+        data_quality_flags=["defaults_present", "time_alignment:high_risk"],
+        time_alignment_status="high_risk",
+        forward_signal_summary={"signals_total": 2, "signals_accepted": 1},
+        forward_signal_risk_level="medium",
+        forward_signal_evidence_count=3,
     )
 
     preview = summarize_fundamental_for_preview(ctx)
 
     assert preview["assumption_breakdown"]["total_assumptions"] == 1
     assert preview["data_freshness"]["market_data"]["provider"] == "yfinance"
+    assert preview["assumption_risk_level"] == "high"
+    assert preview["data_quality_flags"] == [
+        "defaults_present",
+        "time_alignment:high_risk",
+    ]
+    assert preview["time_alignment_status"] == "high_risk"
+    assert preview["forward_signal_summary"]["signals_total"] == 2
+    assert preview["forward_signal_risk_level"] == "medium"
+    assert preview["forward_signal_evidence_count"] == 3

@@ -37,4 +37,10 @@ def derive_fundamental_preview_view_model(
         "metrics": metrics,
         "assumption_breakdown": ctx.get("assumption_breakdown"),
         "data_freshness": ctx.get("data_freshness"),
+        "assumption_risk_level": ctx.get("assumption_risk_level"),
+        "data_quality_flags": ctx.get("data_quality_flags"),
+        "time_alignment_status": ctx.get("time_alignment_status"),
+        "forward_signal_summary": ctx.get("forward_signal_summary"),
+        "forward_signal_risk_level": ctx.get("forward_signal_risk_level"),
+        "forward_signal_evidence_count": ctx.get("forward_signal_evidence_count"),
     }

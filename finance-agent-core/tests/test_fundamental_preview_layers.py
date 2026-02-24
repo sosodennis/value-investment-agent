@@ -11,6 +11,12 @@ def test_derive_fundamental_preview_view_model_extracts_metrics() -> None:
             "model_type": "saas",
             "assumption_breakdown": {"total_assumptions": 2},
             "data_freshness": {"market_data": {"provider": "yfinance"}},
+            "assumption_risk_level": "medium",
+            "data_quality_flags": ["defaults_present"],
+            "time_alignment_status": "ok",
+            "forward_signal_summary": {"signals_total": 2, "signals_accepted": 1},
+            "forward_signal_risk_level": "medium",
+            "forward_signal_evidence_count": 3,
         },
         [
             {
@@ -30,6 +36,12 @@ def test_derive_fundamental_preview_view_model_extracts_metrics() -> None:
     assert metrics["roe_ratio"] == 0.3
     assert view_model["assumption_breakdown"]["total_assumptions"] == 2
     assert view_model["data_freshness"]["market_data"]["provider"] == "yfinance"
+    assert view_model["assumption_risk_level"] == "medium"
+    assert view_model["data_quality_flags"] == ["defaults_present"]
+    assert view_model["time_alignment_status"] == "ok"
+    assert view_model["forward_signal_summary"]["signals_total"] == 2
+    assert view_model["forward_signal_risk_level"] == "medium"
+    assert view_model["forward_signal_evidence_count"] == 3
 
 
 def test_format_fundamental_preview_formats_currency_and_roe() -> None:
@@ -54,6 +66,12 @@ def test_format_fundamental_preview_formats_currency_and_roe() -> None:
             "data_freshness": {
                 "market_data": {"provider": "yfinance"},
             },
+            "assumption_risk_level": "high",
+            "data_quality_flags": ["defaults_present"],
+            "time_alignment_status": "high_risk",
+            "forward_signal_summary": {"signals_total": 2, "signals_accepted": 1},
+            "forward_signal_risk_level": "medium",
+            "forward_signal_evidence_count": 3,
         }
     )
     assert preview["key_metrics"]["Revenue"] == "$100.0B"
@@ -62,3 +80,9 @@ def test_format_fundamental_preview_formats_currency_and_roe() -> None:
     assert preview["key_metrics"]["ROE"] == "30.0%"
     assert preview["assumption_breakdown"]["total_assumptions"] == 2
     assert preview["data_freshness"]["market_data"]["provider"] == "yfinance"
+    assert preview["assumption_risk_level"] == "high"
+    assert preview["data_quality_flags"] == ["defaults_present"]
+    assert preview["time_alignment_status"] == "high_risk"
+    assert preview["forward_signal_summary"]["signals_total"] == 2
+    assert preview["forward_signal_risk_level"] == "medium"
+    assert preview["forward_signal_evidence_count"] == 3

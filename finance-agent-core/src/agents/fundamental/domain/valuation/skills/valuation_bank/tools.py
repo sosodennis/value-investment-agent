@@ -1,4 +1,6 @@
-from typing import cast
+from collections.abc import Mapping
+
+import numpy as np
 
 from src.shared.kernel.traceable import TraceableField
 
@@ -38,19 +40,15 @@ def _apply_trace_inputs(
     return merged
 
 
-def _clamp(value: float, lower: float, upper: float) -> float:
-    return max(lower, min(upper, value))
-
-
 def _run_bank_monte_carlo(
     *,
-    graph,
     base_inputs: dict[str, float | list[float] | None],
     params: BankParams,
 ) -> dict[str, object]:
     config = MonteCarloConfig(
         iterations=params.monte_carlo_iterations,
         seed=params.monte_carlo_seed,
+        sampler_type=params.monte_carlo_sampler,
     )
     engine = MonteCarloEngine(config=config)
 
@@ -101,40 +99,80 @@ def _run_bank_monte_carlo(
         "terminal_growth": params.terminal_growth,
     }
 
-    def evaluate(sampled: dict[str, float]) -> float:
-        iter_inputs = dict(base_inputs)
+    base_growth_rates = np.asarray(base_inputs["income_growth_rates"], dtype=float)
+    initial_net_income = float(params.initial_net_income)
+    rwa_intensity = float(base_inputs["rwa_intensity"])
+    tier1_target_ratio = float(base_inputs["tier1_target_ratio"])
+    initial_capital = float(base_inputs["initial_capital"])
+    beta = float(base_inputs["beta"])
+    market_risk_premium = float(base_inputs["market_risk_premium"])
+    shares_outstanding = float(base_inputs["shares_outstanding"])
+    use_override = (
+        params.cost_of_equity_strategy == "override"
+        and params.cost_of_equity_override is not None
+    )
+    override_cost = float(params.cost_of_equity_override or 0.0)
 
-        provision_rate = sampled["provision_rate"]
-        income_growth_shock = sampled["income_growth_shock"]
-        iter_inputs["initial_net_income"] = params.initial_net_income * (
-            1.0 - provision_rate
+    def batch_evaluate(
+        sampled_batch: dict[str, np.ndarray], _base_numeric: Mapping[str, float]
+    ) -> np.ndarray:
+        provision_rate = np.asarray(sampled_batch["provision_rate"], dtype=float)
+        income_growth_shock = np.asarray(
+            sampled_batch["income_growth_shock"], dtype=float
         )
-        iter_inputs["income_growth_rates"] = [
-            _clamp(rate + income_growth_shock, -0.80, 1.50)
-            for rate in cast(list[float], base_inputs["income_growth_rates"])
-        ]
+        sampled_risk_free = np.asarray(sampled_batch["risk_free_rate"], dtype=float)
+        sampled_terminal = np.asarray(sampled_batch["terminal_growth"], dtype=float)
 
-        sampled_risk_free = sampled["risk_free_rate"]
-        sampled_terminal = sampled["terminal_growth"]
-        projected_coe = (
-            params.cost_of_equity_override
-            if params.cost_of_equity_strategy == "override"
-            and params.cost_of_equity_override is not None
-            else sampled_risk_free + (params.beta * params.market_risk_premium)
+        batch_size = provision_rate.shape[0]
+        projection_years = base_growth_rates.shape[0]
+
+        adjusted_initial_income = initial_net_income * (1.0 - provision_rate)
+        growth_rates = np.clip(
+            base_growth_rates[np.newaxis, :] + income_growth_shock[:, np.newaxis],
+            -0.80,
+            1.50,
         )
-        if sampled_terminal >= projected_coe:
-            sampled_terminal = projected_coe - 0.001
+        net_income = np.empty((batch_size, projection_years), dtype=float)
+        income_level = adjusted_initial_income.copy()
+        for year_idx in range(projection_years):
+            income_level = income_level * (1.0 + growth_rates[:, year_idx])
+            net_income[:, year_idx] = income_level
 
-        iter_inputs["risk_free_rate"] = sampled_risk_free
-        iter_inputs["terminal_growth"] = sampled_terminal
+        rwa = net_income / rwa_intensity
+        required_capital = rwa * tier1_target_ratio
+        previous_capital = np.concatenate(
+            [
+                np.full((batch_size, 1), initial_capital, dtype=float),
+                required_capital[:, :-1],
+            ],
+            axis=1,
+        )
+        delta_capital = required_capital - previous_capital
+        dividends = net_income - delta_capital
 
-        raw_result = graph.calculate(iter_inputs, emit_lifecycle_events=False)
-        return float(_unwrap(raw_result.get("intrinsic_value", 0.0)))
+        if use_override:
+            cost_of_equity = np.full(batch_size, override_cost, dtype=float)
+        else:
+            cost_of_equity = sampled_risk_free + (beta * market_risk_premium)
+        terminal_growth = np.minimum(sampled_terminal, cost_of_equity - 0.001)
+
+        discount_years = np.arange(1, projection_years + 1, dtype=float)
+        discount_curve = np.power(
+            1.0 + cost_of_equity[:, np.newaxis], discount_years[np.newaxis, :]
+        )
+        pv_dividends = np.sum(dividends / discount_curve, axis=1)
+        last_dividend = dividends[:, -1]
+        terminal_value = (
+            last_dividend * (1.0 + terminal_growth) / (cost_of_equity - terminal_growth)
+        )
+        pv_terminal = terminal_value / np.power(1.0 + cost_of_equity, projection_years)
+        equity_value = pv_dividends + pv_terminal
+        return equity_value / shares_outstanding
 
     result = engine.run(
         base_inputs=base_numeric_inputs,
         distributions=distributions,
-        evaluator=evaluate,
+        batch_evaluator=batch_evaluate,
         correlation_groups=correlation_groups,
     )
     return {
@@ -204,7 +242,6 @@ def calculate_bank_valuation(
         details: dict[str, object] = {"trace": results}
         if params.monte_carlo_iterations > 0:
             details["distribution_summary"] = _run_bank_monte_carlo(
-                graph=graph,
                 # MC evaluator expects numeric/list values (not TraceableField wrappers).
                 base_inputs=raw_inputs,
                 params=params,

@@ -1,6 +1,8 @@
 from src.shared.kernel.tools.logger import get_logger, log_event
 
 from ..valuation_bank.schemas import BankParams
+from ..valuation_dcf_growth.schemas import DCFGrowthParams
+from ..valuation_dcf_standard.schemas import DCFStandardParams
 from ..valuation_ev_ebitda.schemas import EVEbitdaParams
 from ..valuation_ev_revenue.schemas import EVRevenueParams
 from ..valuation_eva.schemas import EvaParams
@@ -53,6 +55,44 @@ def audit_saas_params(params: SaaSParams) -> AuditResult:
         messages.append("WARN: SBC rates are all 0%. This is unusual for SaaS.")
 
     return _finalize_audit("saas", messages)
+
+
+def audit_dcf_standard_params(params: DCFStandardParams) -> AuditResult:
+    messages = []
+
+    if params.terminal_growth > 0.04:
+        messages.append(
+            f"FAIL: Terminal growth {params.terminal_growth} exceeds 4% GDP cap."
+        )
+    if params.wacc < 0.05:
+        messages.append(f"FAIL: WACC {params.wacc} is unrealistically low (< 5%).")
+    if params.wacc > 0.30:
+        messages.append(f"FAIL: WACC {params.wacc} exceeds 30% guardrail.")
+    if params.terminal_growth >= params.wacc:
+        messages.append("FAIL: Terminal growth must be lower than WACC.")
+
+    return _finalize_audit("dcf_standard", messages)
+
+
+def audit_dcf_growth_params(params: DCFGrowthParams) -> AuditResult:
+    messages = []
+
+    if params.terminal_growth > 0.05:
+        messages.append(
+            f"FAIL: Terminal growth {params.terminal_growth} exceeds 5% cap."
+        )
+    if params.wacc < 0.05:
+        messages.append(f"FAIL: WACC {params.wacc} is unrealistically low (< 5%).")
+    if params.wacc > 0.35:
+        messages.append(f"FAIL: WACC {params.wacc} exceeds 35% guardrail.")
+    if params.terminal_growth >= params.wacc:
+        messages.append("FAIL: Terminal growth must be lower than WACC.")
+    if all(rate <= 0 for rate in params.growth_rates):
+        messages.append(
+            "WARN: Growth DCF has non-positive growth rates across horizon."
+        )
+
+    return _finalize_audit("dcf_growth", messages)
 
 
 def audit_bank_params(params: BankParams) -> AuditResult:

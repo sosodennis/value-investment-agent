@@ -173,6 +173,30 @@ def test_build_params_accepts_canonicalized_financial_reports() -> None:
     assert not result.missing
 
 
+def test_build_params_dcf_standard_uses_dedicated_builder_variant() -> None:
+    canonical_reports = parse_financial_reports_model(
+        _raw_reports(), context="test.financial_reports.dcf_standard"
+    )
+    result = build_params("dcf_standard", "EXM", canonical_reports)
+
+    assert result.params["model_variant"] == "dcf_standard"
+    assert "model_variant=dcf_standard routed via dedicated param builder" in "; ".join(
+        result.assumptions
+    )
+
+
+def test_build_params_dcf_growth_uses_dedicated_builder_variant() -> None:
+    canonical_reports = parse_financial_reports_model(
+        _raw_reports(), context="test.financial_reports.dcf_growth"
+    )
+    result = build_params("dcf_growth", "EXM", canonical_reports)
+
+    assert result.params["model_variant"] == "dcf_growth"
+    assert "model_variant=dcf_growth routed via dedicated param builder" in "; ".join(
+        result.assumptions
+    )
+
+
 def test_build_params_prefers_market_shares_when_available() -> None:
     canonical_reports = parse_financial_reports_model(
         _raw_reports(), context="test.financial_reports"
@@ -203,6 +227,57 @@ def test_build_params_prefers_market_shares_when_available() -> None:
     )
     assert result.params["monte_carlo_iterations"] == 300
     assert result.params["monte_carlo_seed"] == 42
+    assert result.params["monte_carlo_sampler"] == "sobol"
+
+
+def test_build_params_saas_uses_market_aware_wacc_when_available() -> None:
+    canonical_reports = parse_financial_reports_model(
+        _raw_reports(), context="test.financial_reports.saas.market_wacc"
+    )
+    result = build_params(
+        "saas",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "risk_free_rate": 0.04,
+            "beta": 1.2,
+            "consensus_growth_rate": 0.03,
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+
+    assert result.params["risk_free_rate"] == 0.04
+    assert result.params["beta"] == 1.2
+    assert result.params["market_risk_premium"] == 0.05
+    assert result.params["wacc"] == pytest.approx(0.10)
+    assert result.params["terminal_growth"] == pytest.approx(0.03)
+    assert "wacc sourced from market-aware CAPM inputs" in result.assumptions
+    assert "terminal_growth sourced from consensus_growth_rate" in result.assumptions
+
+
+def test_build_params_saas_clamps_terminal_growth_against_wacc() -> None:
+    canonical_reports = parse_financial_reports_model(
+        _raw_reports(), context="test.financial_reports.saas.terminal_clamp"
+    )
+    result = build_params(
+        "saas",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "risk_free_rate": 0.03,
+            "beta": 0.50,
+            "consensus_growth_rate": 0.20,
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+
+    assert result.params["wacc"] == pytest.approx(0.055)
+    assert result.params["terminal_growth"] == pytest.approx(0.04)
+    assert any(
+        "terminal_growth clamped from 20.00% to 4.00%" in s for s in result.assumptions
+    )
 
 
 def test_build_params_does_not_infer_shares_from_market_cap_price() -> None:
@@ -250,6 +325,7 @@ def test_build_params_bank_includes_capm_inputs() -> None:
     assert result.params["terminal_growth"] == 0.02
     assert result.params["monte_carlo_iterations"] == 300
     assert result.params["monte_carlo_seed"] == 42
+    assert result.params["monte_carlo_sampler"] == "sobol"
     assert "terminal_growth defaulted to 2.00%" in result.assumptions
 
 
@@ -286,6 +362,7 @@ def test_build_params_reit_supports_configurable_maintenance_capex_ratio() -> No
     assert result.params["depreciation_and_amortization"] == 50.0
     assert result.params["monte_carlo_iterations"] == 300
     assert result.params["monte_carlo_seed"] == 42
+    assert result.params["monte_carlo_sampler"] == "sobol"
 
 
 def test_build_params_reit_derives_ffo_multiple_from_market_price() -> None:
@@ -318,6 +395,21 @@ def test_build_params_can_disable_monte_carlo_via_env(monkeypatch) -> None:
 
     assert result.params["monte_carlo_iterations"] == 0
     assert "monte_carlo disabled by policy" in result.assumptions
+
+
+def test_build_params_can_override_monte_carlo_sampler_from_snapshot() -> None:
+    canonical_reports = parse_financial_reports_model(
+        _raw_reports(), context="test.financial_reports.mc_sampler_override"
+    )
+    result = build_params(
+        "saas",
+        "EXM",
+        canonical_reports,
+        market_snapshot={"monte_carlo_sampler": "lhs"},
+    )
+
+    assert result.params["monte_carlo_sampler"] == "lhs"
+    assert any("sampler=lhs" in statement for statement in result.assumptions)
 
 
 def test_build_params_raises_for_unsupported_model() -> None:
@@ -372,3 +464,42 @@ def test_build_params_time_alignment_reject_policy_raises_error() -> None:
                 "time_alignment_policy": "reject",
             },
         )
+
+
+def test_build_params_metadata_includes_market_datum_quality_contract() -> None:
+    canonical_reports = parse_financial_reports_model(
+        _raw_reports(), context="test.financial_reports.market_datum_contract"
+    )
+    result = build_params(
+        "saas",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "provider": "yfinance",
+            "as_of": "2026-02-23T00:00:00Z",
+            "missing_fields": ["target_mean_price"],
+            "quality_flags": ["risk_free_rate:defaulted"],
+            "license_note": "test license",
+            "market_datums": {
+                "risk_free_rate": {
+                    "value": 0.042,
+                    "source": "policy_default",
+                    "as_of": "2026-02-23T00:00:00Z",
+                    "quality_flags": ["defaulted"],
+                    "license_note": "internal default",
+                }
+            },
+        },
+    )
+
+    freshness = result.metadata.get("data_freshness")
+    assert isinstance(freshness, dict)
+    market_data = freshness.get("market_data")
+    assert isinstance(market_data, dict)
+    assert market_data.get("quality_flags") == ["risk_free_rate:defaulted"]
+    assert market_data.get("license_note") == "test license"
+    market_datums = market_data.get("market_datums")
+    assert isinstance(market_datums, dict)
+    risk_free = market_datums.get("risk_free_rate")
+    assert isinstance(risk_free, dict)
+    assert risk_free.get("source") == "policy_default"

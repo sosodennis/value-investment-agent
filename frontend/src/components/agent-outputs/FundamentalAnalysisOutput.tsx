@@ -45,6 +45,31 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
     const distributionScenarios = previewData?.distribution_scenarios;
     const assumptionBreakdown = previewData?.assumption_breakdown;
     const dataFreshness = previewData?.data_freshness;
+    const assumptionRiskLevel =
+        previewData?.assumption_risk_level ?? assumptionBreakdown?.assumption_risk_level;
+    const dataQualityFlags = (
+        previewData?.data_quality_flags ??
+        assumptionBreakdown?.data_quality_flags ??
+        []
+    ).filter((flag): flag is string => typeof flag === 'string' && flag.length > 0);
+    const timeAlignmentStatus =
+        previewData?.time_alignment_status ??
+        assumptionBreakdown?.time_alignment_status ??
+        dataFreshness?.time_alignment?.status;
+    const forwardSignalSummary =
+        previewData?.forward_signal_summary ??
+        assumptionBreakdown?.forward_signal_summary;
+    const forwardSignalRiskLevel =
+        previewData?.forward_signal_risk_level ??
+        assumptionBreakdown?.forward_signal_risk_level ??
+        forwardSignalSummary?.risk_level;
+    const forwardSignalEvidenceCount =
+        previewData?.forward_signal_evidence_count ??
+        assumptionBreakdown?.forward_signal_evidence_count ??
+        forwardSignalSummary?.evidence_count;
+    const forwardSignalSourceTypes = (forwardSignalSummary?.source_types ?? []).filter(
+        (item): item is string => typeof item === 'string' && item.length > 0
+    );
     const equityValue = previewData?.equity_value;
     const intrinsicValue = previewData?.intrinsic_value;
     const upsidePotential = previewData?.upside_potential;
@@ -139,6 +164,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
         [assumptionBreakdown]
     );
     const monteCarloMeta = assumptionBreakdown?.monte_carlo;
+    const mcEnabled = monteCarloMeta?.enabled === true;
     const mcExecutedIterations =
         typeof monteCarloMeta?.executed_iterations === 'number'
             ? monteCarloMeta.executed_iterations
@@ -154,6 +180,18 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
     const mcConfiguredIterations =
         typeof monteCarloMeta?.configured_iterations === 'number'
             ? monteCarloMeta.configured_iterations
+            : undefined;
+    const mcSamplerType =
+        typeof monteCarloMeta?.sampler_type === 'string'
+            ? monteCarloMeta.sampler_type
+            : undefined;
+    const mcPsdRepaired =
+        typeof monteCarloMeta?.psd_repaired === 'boolean'
+            ? monteCarloMeta.psd_repaired
+            : undefined;
+    const mcBatchEvaluatorUsed =
+        typeof monteCarloMeta?.batch_evaluator_used === 'boolean'
+            ? monteCarloMeta.batch_evaluator_used
             : undefined;
     const mcCorrDiagnosticsAvailable = monteCarloMeta?.corr_diagnostics_available === true;
     const mcCorrPairsTotal =
@@ -185,6 +223,27 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
     const mcCorrPearsonMaeText = formatCorrError(mcCorrPearsonMae);
     const mcCorrSpearmanMaeText = formatCorrError(mcCorrSpearmanMae);
     const mcAsOf = dataFreshness?.market_data?.as_of;
+    const assumptionRiskBadge = (() => {
+        if (assumptionRiskLevel === 'high') {
+            return {
+                label: 'Risk: High',
+                className: 'text-rose-200 border-rose-400/40 bg-rose-500/10',
+            };
+        }
+        if (assumptionRiskLevel === 'medium') {
+            return {
+                label: 'Risk: Medium',
+                className: 'text-amber-200 border-amber-400/40 bg-amber-500/10',
+            };
+        }
+        if (assumptionRiskLevel === 'low') {
+            return {
+                label: 'Risk: Low',
+                className: 'text-emerald-200 border-emerald-400/40 bg-emerald-500/10',
+            };
+        }
+        return undefined;
+    })();
     const keyParamCurrentPrice = coerceFiniteNumber(
         assumptionBreakdown?.key_parameters?.current_price
     );
@@ -448,6 +507,10 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
         const pct = value * 100;
         return `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
     }
+    function formatSignedBps(value: number): string {
+        const rounded = Math.round(value * 10) / 10;
+        return `${rounded >= 0 ? '+' : ''}${rounded.toFixed(1)} bps`;
+    }
     const distributionAccessibilitySummary = (() => {
         if (!distributionSummary) return '';
         const summaryParts: string[] = ['Valuation distribution view.'];
@@ -465,6 +528,9 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
         }
         if (typeof mcExecutedIterations === 'number') {
             summaryParts.push(`Monte Carlo executed iterations: ${Math.round(mcExecutedIterations)}.`);
+        }
+        if (typeof mcPsdRepaired === 'boolean') {
+            summaryParts.push(`PSD repair: ${mcPsdRepaired ? 'applied' : 'not required'}.`);
         }
         return summaryParts.join(' ');
     })();
@@ -569,19 +635,25 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                 <div className="tech-card p-4 space-y-3 border-amber-500/20 bg-gradient-to-br from-amber-950/20 via-slate-900/40 to-slate-950/20">
                                     <div className="flex items-center justify-between">
                                         <span className="text-label">Assumption Breakdown</span>
-                                        <span className="text-xs font-semibold text-amber-300">
-                                            {assumptionBreakdown.total_assumptions ?? 0} assumptions
-                                        </span>
+                                        <div className="flex items-center gap-2">
+                                            {assumptionRiskBadge && (
+                                                <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${assumptionRiskBadge.className}`}>
+                                                    {assumptionRiskBadge.label}
+                                                </span>
+                                            )}
+                                            <span className="text-xs font-semibold text-amber-300">
+                                                {assumptionBreakdown.total_assumptions ?? 0} assumptions
+                                            </span>
+                                        </div>
                                     </div>
                                     {typeof assumptionBreakdown.monte_carlo?.enabled === 'boolean' && (
                                         <div className="text-xs text-slate-300">
                                             Monte Carlo: {assumptionBreakdown.monte_carlo.enabled ? 'Enabled' : 'Disabled'}
+                                            {mcSamplerType ? ` (${mcSamplerType})` : ''}
                                         </div>
                                     )}
-                                    {(mcExecutedIterations !== undefined ||
-                                        mcEffectiveWindow !== undefined ||
-                                        mcStoppedEarly !== undefined) && (
-                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                    {mcEnabled && (
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
                                             {mcExecutedIterations !== undefined && (
                                                 <div className="text-[11px] text-slate-200 bg-slate-900/40 rounded px-2 py-1">
                                                     Executed: {Math.round(mcExecutedIterations)}
@@ -597,6 +669,111 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                                     Early Stop: {mcStoppedEarly ? 'Yes' : 'No'}
                                                 </div>
                                             )}
+                                            {mcPsdRepaired !== undefined && (
+                                                <div className="text-[11px] text-slate-200 bg-slate-900/40 rounded px-2 py-1">
+                                                    PSD Repair: {mcPsdRepaired ? 'Yes' : 'No'}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                    {(forwardSignalSummary || forwardSignalRiskLevel || forwardSignalEvidenceCount !== undefined) && (
+                                        <div className="space-y-2">
+                                            <div className="text-[11px] uppercase tracking-wider text-slate-400">
+                                                Forward Signal Policy
+                                            </div>
+                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                                {typeof forwardSignalSummary?.signals_total === 'number' && (
+                                                    <div className="text-[11px] text-slate-200 bg-slate-900/40 rounded px-2 py-1">
+                                                        Signals: {Math.round(forwardSignalSummary.signals_total)}
+                                                    </div>
+                                                )}
+                                                {typeof forwardSignalSummary?.signals_accepted === 'number' && (
+                                                    <div className="text-[11px] text-emerald-200 bg-slate-900/40 rounded px-2 py-1">
+                                                        Accepted: {Math.round(forwardSignalSummary.signals_accepted)}
+                                                    </div>
+                                                )}
+                                                {typeof forwardSignalSummary?.signals_rejected === 'number' && (
+                                                    <div className="text-[11px] text-rose-200 bg-slate-900/40 rounded px-2 py-1">
+                                                        Rejected: {Math.round(forwardSignalSummary.signals_rejected)}
+                                                    </div>
+                                                )}
+                                                {typeof forwardSignalEvidenceCount === 'number' && (
+                                                    <div className="text-[11px] text-slate-200 bg-slate-900/40 rounded px-2 py-1">
+                                                        Evidence: {Math.round(forwardSignalEvidenceCount)}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            {(typeof forwardSignalSummary?.growth_adjustment_bps === 'number' ||
+                                                typeof forwardSignalSummary?.margin_adjustment_bps === 'number') && (
+                                                <div className="flex flex-wrap gap-2">
+                                                    {typeof forwardSignalSummary?.growth_adjustment_bps === 'number' && (
+                                                        <span className="rounded border border-cyan-400/30 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-200">
+                                                            Growth Adj: {formatSignedBps(forwardSignalSummary.growth_adjustment_bps)}
+                                                        </span>
+                                                    )}
+                                                    {typeof forwardSignalSummary?.margin_adjustment_bps === 'number' && (
+                                                        <span className="rounded border border-cyan-400/30 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-200">
+                                                            Margin Adj: {formatSignedBps(forwardSignalSummary.margin_adjustment_bps)}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            )}
+                                            {(forwardSignalRiskLevel || forwardSignalSourceTypes.length > 0) && (
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    {forwardSignalRiskLevel && (
+                                                        <span
+                                                            className={`rounded border px-2 py-0.5 text-[11px] ${
+                                                                forwardSignalRiskLevel === 'high'
+                                                                    ? 'border-rose-400/40 bg-rose-500/10 text-rose-200'
+                                                                    : forwardSignalRiskLevel === 'medium'
+                                                                        ? 'border-amber-400/40 bg-amber-500/10 text-amber-200'
+                                                                        : 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200'
+                                                            }`}
+                                                        >
+                                                            Forward Risk: {forwardSignalRiskLevel}
+                                                        </span>
+                                                    )}
+                                                    {forwardSignalSourceTypes.map((source) => (
+                                                        <span
+                                                            key={source}
+                                                            className="rounded border border-indigo-400/30 bg-indigo-500/10 px-2 py-0.5 text-[11px] text-indigo-200"
+                                                        >
+                                                            Source: {source}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                    {dataQualityFlags.length > 0 && (
+                                        <div className="space-y-2">
+                                            <div className="text-[11px] uppercase tracking-wider text-slate-400">
+                                                Data Quality Flags
+                                            </div>
+                                            <div className="flex flex-wrap gap-2">
+                                                {dataQualityFlags.map((flag) => (
+                                                    <span
+                                                        key={flag}
+                                                        className="rounded border border-rose-400/30 bg-rose-500/10 px-2 py-0.5 text-[11px] text-rose-200"
+                                                    >
+                                                        {flag}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {timeAlignmentStatus && (
+                                        <div className="text-[11px] text-slate-300">
+                                            Time Alignment Status:{' '}
+                                            <span
+                                                className={
+                                                    timeAlignmentStatus === 'high_risk' || timeAlignmentStatus === 'warning'
+                                                        ? 'text-rose-300 font-semibold'
+                                                        : 'text-emerald-300 font-semibold'
+                                                }
+                                            >
+                                                {timeAlignmentStatus}
+                                            </span>
                                         </div>
                                     )}
                                     {assumptionHighlights.length > 0 && (
@@ -920,6 +1097,9 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                             {(mcExecutedIterations !== undefined ||
                                 mcConfiguredIterations !== undefined ||
                                 mcEffectiveWindow !== undefined ||
+                                mcPsdRepaired !== undefined ||
+                                mcBatchEvaluatorUsed !== undefined ||
+                                mcSamplerType !== undefined ||
                                 (mcCorrDiagnosticsAvailable &&
                                     (mcCorrPairsTotal !== undefined ||
                                         mcCorrPearsonMaxText !== undefined ||
@@ -944,6 +1124,18 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                             {' '}
                                             · early stop: {mcStoppedEarly ? 'yes' : 'no'}
                                         </span>
+                                    )}
+                                    {mcPsdRepaired !== undefined && (
+                                        <span> · psd repaired: {mcPsdRepaired ? 'yes' : 'no'}</span>
+                                    )}
+                                    {mcBatchEvaluatorUsed !== undefined && (
+                                        <span>
+                                            {' '}
+                                            · batch eval: {mcBatchEvaluatorUsed ? 'yes' : 'no'}
+                                        </span>
+                                    )}
+                                    {mcSamplerType !== undefined && (
+                                        <span> · sampler: {mcSamplerType}</span>
                                     )}
                                     {mcCorrDiagnosticsAvailable && (
                                         <>

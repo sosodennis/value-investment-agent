@@ -88,19 +88,21 @@ def build_model_selection_report_payload(
     industry: str,
     reasoning: str,
     normalized_reports: list[JSONObject],
+    forward_signals: list[JSONObject] | None = None,
 ) -> JSONObject:
-    return parse_fundamental_artifact_model(
-        {
-            "ticker": ticker,
-            "model_type": model_type,
-            "company_name": company_name,
-            "sector": sector,
-            "industry": industry,
-            "reasoning": reasoning,
-            "financial_reports": normalized_reports,
-            "status": "done",
-        }
-    )
+    payload: JSONObject = {
+        "ticker": ticker,
+        "model_type": model_type,
+        "company_name": company_name,
+        "sector": sector,
+        "industry": industry,
+        "reasoning": reasoning,
+        "financial_reports": normalized_reports,
+        "status": "done",
+    }
+    if isinstance(forward_signals, list):
+        payload["forward_signals"] = forward_signals
+    return parse_fundamental_artifact_model(payload)
 
 
 def build_model_selection_artifact(
@@ -133,6 +135,9 @@ def build_valuation_preview(
     model_type: str,
     reports_raw: list[JSONObject],
     equity_value: float | None,
+    assumption_risk_level: str | None,
+    data_quality_flags: list[str] | None,
+    time_alignment_status: str | None,
     summarize_preview: Callable[
         [FundamentalPreviewInputModel, list[JSONObject]], JSONObject
     ],
@@ -146,6 +151,9 @@ def build_valuation_preview(
         selected_model=model_type,
         model_type=model_type,
         valuation_summary=valuation_summary,
+        assumption_risk_level=assumption_risk_level,
+        data_quality_flags=data_quality_flags,
+        time_alignment_status=time_alignment_status,
     )
     preview = summarize_preview(preview_input, reports_raw)
     preview.update(

@@ -6,14 +6,38 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import cast
 
-import yfinance as yf
-
+from src.agents.fundamental.data.clients.market_providers import (
+    FREDMacroProvider,
+    ProviderFetch,
+    YahooFinanceProvider,
+)
+from src.agents.fundamental.data.ports import MarketDatum
 from src.shared.kernel.tools.logger import get_logger, log_event
 
 logger = get_logger(__name__)
 
 DEFAULT_RISK_FREE_RATE = 0.042
 DEFAULT_BETA = 1.0
+
+MARKET_FIELDS: tuple[str, ...] = (
+    "current_price",
+    "market_cap",
+    "shares_outstanding",
+    "beta",
+    "risk_free_rate",
+    "consensus_growth_rate",
+    "target_mean_price",
+)
+
+FIELD_SOURCE_PRIORITY: dict[str, tuple[str, ...]] = {
+    "risk_free_rate": ("fred", "yfinance"),
+    "current_price": ("yfinance",),
+    "market_cap": ("yfinance",),
+    "shares_outstanding": ("yfinance",),
+    "beta": ("yfinance",),
+    "consensus_growth_rate": ("yfinance",),
+    "target_mean_price": ("yfinance",),
+}
 
 
 @dataclass(frozen=True)
@@ -29,6 +53,9 @@ class MarketSnapshot:
     provider: str
     missing_fields: tuple[str, ...]
     source_warnings: tuple[str, ...]
+    quality_flags: tuple[str, ...]
+    license_note: str | None
+    market_datums: dict[str, dict[str, object]]
 
     def to_mapping(self) -> dict[str, object]:
         return {
@@ -43,6 +70,9 @@ class MarketSnapshot:
             "provider": self.provider,
             "missing_fields": list(self.missing_fields),
             "source_warnings": list(self.source_warnings),
+            "quality_flags": list(self.quality_flags),
+            "license_note": self.license_note,
+            "market_datums": self.market_datums,
         }
 
 
@@ -53,11 +83,14 @@ class MarketDataClient:
         ttl_seconds: int = 120,
         max_retries: int = 2,
         retry_delay_seconds: float = 0.25,
+        providers: tuple[object, ...] | None = None,
     ) -> None:
         self._ttl_seconds = ttl_seconds
         self._max_retries = max_retries
         self._retry_delay_seconds = retry_delay_seconds
         self._cache: dict[str, tuple[float, MarketSnapshot]] = {}
+        configured = providers or (YahooFinanceProvider(), FREDMacroProvider())
+        self._providers = tuple(cast(tuple[object, ...], configured))
 
     def get_market_snapshot(self, ticker_symbol: str) -> MarketSnapshot:
         symbol = ticker_symbol.strip().upper()
@@ -104,54 +137,97 @@ class MarketDataClient:
         return self._fallback_snapshot(symbol, reason="unreachable")
 
     def _fetch_once(self, ticker_symbol: str) -> MarketSnapshot:
-        ticker_info = self._safe_info(ticker_symbol)
-        tnx_info = self._safe_info("^TNX")
+        provider_results: dict[str, dict[str, MarketDatum]] = {}
+        source_warnings: list[str] = []
+        quality_flags: list[str] = []
+        license_notes: list[str] = []
 
-        current_price = self._pick_first_float(
-            ticker_info, ("currentPrice", "regularMarketPrice", "previousClose")
-        )
-        market_cap = self._to_float(ticker_info.get("marketCap"))
-        shares_outstanding = self._to_float(ticker_info.get("sharesOutstanding"))
-        beta = self._to_float(ticker_info.get("beta"))
-        if beta is None:
-            beta = DEFAULT_BETA
+        for provider in self._providers:
+            provider_name = _provider_name(provider)
+            try:
+                fetched = _provider_fetch(provider, ticker_symbol)
+            except Exception as exc:
+                source_warnings.append(f"{provider_name} fetch failed: {exc}")
+                continue
 
-        risk_free_raw = self._pick_first_float(
-            tnx_info,
-            ("regularMarketPrice", "previousClose", "currentPrice"),
-        )
-        risk_free_rate = self._normalize_rate(risk_free_raw)
-        warnings: list[str] = []
-        if risk_free_rate is None:
-            risk_free_rate = DEFAULT_RISK_FREE_RATE
-            warnings.append("risk_free_rate defaulted to 4.2%")
+            provider_results[provider_name] = fetched.datums
+            source_warnings.extend(fetched.warnings)
+            provider_license_note = _provider_license(provider)
+            if provider_license_note:
+                license_notes.append(provider_license_note)
 
-        consensus_growth_rate = self._pick_first_float(
-            ticker_info,
-            ("revenueGrowth", "earningsGrowth"),
+        selected_datums: dict[str, MarketDatum] = {}
+        for field in MARKET_FIELDS:
+            selected_datums[field] = self._select_datum(
+                field=field,
+                provider_results=provider_results,
+            )
+            quality_flags.extend(
+                f"{field}:{flag}" for flag in selected_datums[field].quality_flags
+            )
+
+        if selected_datums["beta"].value is None:
+            selected_datums["beta"] = MarketDatum(
+                value=DEFAULT_BETA,
+                source="policy_default",
+                as_of=datetime.now(timezone.utc).isoformat(),
+                quality_flags=("defaulted",),
+                license_note="Internal default policy",
+            )
+            source_warnings.append("beta defaulted to 1.0")
+            quality_flags.append("beta:defaulted")
+
+        if selected_datums["risk_free_rate"].value is None:
+            selected_datums["risk_free_rate"] = MarketDatum(
+                value=DEFAULT_RISK_FREE_RATE,
+                source="policy_default",
+                as_of=datetime.now(timezone.utc).isoformat(),
+                quality_flags=("defaulted",),
+                license_note="Internal default policy",
+            )
+            source_warnings.append("risk_free_rate defaulted to 4.2%")
+            quality_flags.append("risk_free_rate:defaulted")
+
+        primary_provider = selected_datums["current_price"].source
+        if not primary_provider or primary_provider == "unavailable":
+            primary_provider = "market_data"
+
+        as_of = selected_datums["current_price"].as_of
+        if as_of is None:
+            as_of = selected_datums["risk_free_rate"].as_of
+        if as_of is None:
+            as_of = datetime.now(timezone.utc).isoformat()
+
+        missing_fields = tuple(
+            field for field in MARKET_FIELDS if selected_datums[field].value is None
         )
-        target_mean_price = self._to_float(ticker_info.get("targetMeanPrice"))
+
+        market_datums = {
+            field: datum.to_mapping() for field, datum in selected_datums.items()
+        }
+        merged_license_note = (
+            "; ".join(dict.fromkeys(note for note in license_notes if note)) or None
+        )
+        dedup_quality_flags = tuple(
+            dict.fromkeys(flag for flag in quality_flags if flag)
+        )
+        dedup_warnings = tuple(dict.fromkeys(msg for msg in source_warnings if msg))
 
         snapshot = MarketSnapshot(
-            current_price=current_price,
-            market_cap=market_cap,
-            shares_outstanding=shares_outstanding,
-            beta=beta,
-            risk_free_rate=risk_free_rate,
-            consensus_growth_rate=consensus_growth_rate,
-            target_mean_price=target_mean_price,
-            as_of=datetime.now(timezone.utc).isoformat(),
-            provider="yfinance",
-            missing_fields=self._missing_fields(
-                current_price=current_price,
-                market_cap=market_cap,
-                shares_outstanding=shares_outstanding,
-                beta=beta,
-                risk_free_rate=risk_free_rate,
-                consensus_growth_rate=consensus_growth_rate,
-                target_mean_price=target_mean_price,
-            ),
-            source_warnings=tuple(warnings),
+            current_price=selected_datums["current_price"].value,
+            market_cap=selected_datums["market_cap"].value,
+            shares_outstanding=selected_datums["shares_outstanding"].value,
+            beta=selected_datums["beta"].value,
+            risk_free_rate=selected_datums["risk_free_rate"].value,
+            consensus_growth_rate=selected_datums["consensus_growth_rate"].value,
+            target_mean_price=selected_datums["target_mean_price"].value,
+            as_of=as_of,
+            provider=primary_provider,
+            missing_fields=missing_fields,
+            source_warnings=dedup_warnings,
+            quality_flags=dedup_quality_flags,
+            license_note=merged_license_note,
+            market_datums=market_datums,
         )
 
         log_event(
@@ -162,91 +238,44 @@ class MarketDataClient:
                 "ticker": ticker_symbol,
                 "provider": snapshot.provider,
                 "missing_fields": list(snapshot.missing_fields),
+                "quality_flags": list(snapshot.quality_flags),
             },
         )
         return snapshot
 
-    def _safe_info(self, ticker_symbol: str) -> dict[str, object]:
-        info = yf.Ticker(ticker_symbol).info
-        if not isinstance(info, dict):
-            return {}
-        return cast(dict[str, object], info)
-
-    @staticmethod
-    def _to_float(value: object) -> float | None:
-        if isinstance(value, bool) or value is None:
-            return None
-        if isinstance(value, int | float):
-            parsed = float(value)
-            if parsed != parsed:
-                return None
-            return parsed
-        if isinstance(value, str):
-            try:
-                parsed = float(value)
-            except ValueError:
-                return None
-            if parsed != parsed:
-                return None
-            return parsed
-        return None
-
-    @classmethod
-    def _pick_first_float(
-        cls,
-        source: dict[str, object],
-        keys: tuple[str, ...],
-    ) -> float | None:
-        for key in keys:
-            parsed = cls._to_float(source.get(key))
-            if parsed is not None:
-                return parsed
-        return None
-
-    @staticmethod
-    def _normalize_rate(value: float | None) -> float | None:
-        if value is None:
-            return None
-        if value < 0:
-            return None
-
-        normalized = value
-        if normalized > 1.0:
-            normalized /= 100.0
-        if normalized > 1.0:
-            normalized /= 100.0
-
-        if normalized <= 0:
-            return None
-        return normalized
-
-    @staticmethod
-    def _missing_fields(
+    def _select_datum(
+        self,
         *,
-        current_price: float | None,
-        market_cap: float | None,
-        shares_outstanding: float | None,
-        beta: float | None,
-        risk_free_rate: float | None,
-        consensus_growth_rate: float | None,
-        target_mean_price: float | None,
-    ) -> tuple[str, ...]:
-        missing: list[str] = []
-        if current_price is None:
-            missing.append("current_price")
-        if market_cap is None:
-            missing.append("market_cap")
-        if shares_outstanding is None:
-            missing.append("shares_outstanding")
-        if beta is None:
-            missing.append("beta")
-        if risk_free_rate is None:
-            missing.append("risk_free_rate")
-        if consensus_growth_rate is None:
-            missing.append("consensus_growth_rate")
-        if target_mean_price is None:
-            missing.append("target_mean_price")
-        return tuple(missing)
+        field: str,
+        provider_results: dict[str, dict[str, MarketDatum]],
+    ) -> MarketDatum:
+        preferred = FIELD_SOURCE_PRIORITY.get(field, ())
+        if not preferred:
+            preferred = tuple(provider_results.keys())
+
+        first_present: MarketDatum | None = None
+        for provider_name in preferred:
+            datums = provider_results.get(provider_name)
+            if not datums:
+                continue
+            datum = datums.get(field)
+            if datum is None:
+                continue
+            if first_present is None:
+                first_present = datum
+            if datum.value is not None:
+                return datum
+
+        if first_present is not None:
+            return first_present
+
+        return MarketDatum(
+            value=None,
+            source="unavailable",
+            as_of=datetime.now(timezone.utc).isoformat(),
+            quality_flags=("missing",),
+            license_note=None,
+        )
 
     def _fallback_snapshot(self, ticker_symbol: str, *, reason: str) -> MarketSnapshot:
         log_event(
@@ -257,6 +286,37 @@ class MarketDataClient:
             error_code="FUNDAMENTAL_MARKET_DATA_FALLBACK",
             fields={"ticker": ticker_symbol, "reason": reason},
         )
+        now = datetime.now(timezone.utc).isoformat()
+        beta = MarketDatum(
+            value=DEFAULT_BETA,
+            source="policy_default",
+            as_of=now,
+            quality_flags=("defaulted",),
+            license_note="Internal default policy",
+        )
+        risk_free = MarketDatum(
+            value=DEFAULT_RISK_FREE_RATE,
+            source="policy_default",
+            as_of=now,
+            quality_flags=("defaulted",),
+            license_note="Internal default policy",
+        )
+        unavailable = MarketDatum(
+            value=None,
+            source="unavailable",
+            as_of=now,
+            quality_flags=("missing", "fallback"),
+            license_note=None,
+        )
+        market_datums = {
+            "current_price": unavailable.to_mapping(),
+            "market_cap": unavailable.to_mapping(),
+            "shares_outstanding": unavailable.to_mapping(),
+            "beta": beta.to_mapping(),
+            "risk_free_rate": risk_free.to_mapping(),
+            "consensus_growth_rate": unavailable.to_mapping(),
+            "target_mean_price": unavailable.to_mapping(),
+        }
         return MarketSnapshot(
             current_price=None,
             market_cap=None,
@@ -265,8 +325,8 @@ class MarketDataClient:
             risk_free_rate=DEFAULT_RISK_FREE_RATE,
             consensus_growth_rate=None,
             target_mean_price=None,
-            as_of=datetime.now(timezone.utc).isoformat(),
-            provider="yfinance",
+            as_of=now,
+            provider="market_data",
             missing_fields=(
                 "current_price",
                 "market_cap",
@@ -275,7 +335,54 @@ class MarketDataClient:
                 "target_mean_price",
             ),
             source_warnings=(f"market data fallback used: {reason}",),
+            quality_flags=(
+                "current_price:missing",
+                "market_cap:missing",
+                "shares_outstanding:missing",
+                "consensus_growth_rate:missing",
+                "target_mean_price:missing",
+                "beta:defaulted",
+                "risk_free_rate:defaulted",
+            ),
+            license_note="Internal default policy",
+            market_datums=market_datums,
         )
+
+
+def _provider_name(provider: object) -> str:
+    raw = getattr(provider, "name", None)
+    if isinstance(raw, str) and raw:
+        return raw
+    return provider.__class__.__name__.lower()
+
+
+def _provider_license(provider: object) -> str | None:
+    raw = getattr(provider, "license_note", None)
+    if isinstance(raw, str) and raw:
+        return raw
+    return None
+
+
+def _provider_fetch(provider: object, ticker_symbol: str) -> ProviderFetch:
+    fetch = getattr(provider, "fetch", None)
+    if callable(fetch):
+        try:
+            result = fetch(ticker_symbol)
+        except TypeError:
+            result = fetch()
+        if isinstance(result, ProviderFetch):
+            return result
+    fetch_datums = getattr(provider, "fetch_datums", None)
+    if callable(fetch_datums):
+        datums = fetch_datums(ticker_symbol)
+        if isinstance(datums, dict):
+            normalized = {
+                key: value
+                for key, value in datums.items()
+                if isinstance(key, str) and isinstance(value, MarketDatum)
+            }
+            return ProviderFetch(datums=normalized)
+    raise TypeError(f"provider {_provider_name(provider)} has no valid fetch API")
 
 
 market_data_client = MarketDataClient()

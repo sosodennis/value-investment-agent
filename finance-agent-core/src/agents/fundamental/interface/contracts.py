@@ -204,6 +204,7 @@ class FundamentalArtifactModel(BaseModel):
     industry: FundamentalText
     reasoning: FundamentalText
     financial_reports: list[FinancialReportModel]
+    forward_signals: list[dict[str, object]] | None = None
     status: Literal["done"]
 
     @model_validator(mode="before")
@@ -253,6 +254,12 @@ class FundamentalPreviewInputModel(BaseModel):
     valuation_score: OptionalFundamentalNumber = None
     assumption_breakdown: dict[str, object] | None = None
     data_freshness: dict[str, object] | None = None
+    assumption_risk_level: OptionalFundamentalText = None
+    data_quality_flags: list[str] | None = None
+    time_alignment_status: OptionalFundamentalText = None
+    forward_signal_summary: dict[str, object] | None = None
+    forward_signal_risk_level: OptionalFundamentalText = None
+    forward_signal_evidence_count: OptionalFundamentalNumber = None
 
 
 def parse_financial_reports_model(

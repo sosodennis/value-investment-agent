@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
+
+import numpy as np
+
 from src.shared.kernel.traceable import TraceableField
 
 from ...engine.graphs.reit_ffo import create_reit_ffo_graph
@@ -40,13 +44,13 @@ def _apply_trace_inputs(
 
 def _run_reit_monte_carlo(
     *,
-    graph,
     base_inputs: dict[str, float],
     params: ReitFfoParams,
 ) -> dict[str, object]:
     config = MonteCarloConfig(
         iterations=params.monte_carlo_iterations,
         seed=params.monte_carlo_seed,
+        sampler_type=params.monte_carlo_sampler,
     )
     engine = MonteCarloEngine(config=config)
 
@@ -83,19 +87,31 @@ def _run_reit_monte_carlo(
         "cap_rate": base_cap_rate,
     }
 
-    def evaluate(sampled: dict[str, float]) -> float:
-        iter_inputs = dict(base_inputs)
-        occupancy_rate = sampled["occupancy_rate"]
-        cap_rate = sampled["cap_rate"]
-        iter_inputs["ffo"] = params.ffo * occupancy_rate
-        iter_inputs["ffo_multiple"] = 1.0 / cap_rate
-        raw_result = graph.calculate(iter_inputs, emit_lifecycle_events=False)
-        return float(_unwrap(raw_result.get("intrinsic_value", 0.0)))
+    base_ffo = float(base_inputs["ffo"])
+    depreciation_and_amortization = float(base_inputs["depreciation_and_amortization"])
+    maintenance_capex_ratio = float(base_inputs["maintenance_capex_ratio"])
+    cash = float(base_inputs["cash"])
+    total_debt = float(base_inputs["total_debt"])
+    preferred_stock = float(base_inputs["preferred_stock"])
+    shares_outstanding = float(base_inputs["shares_outstanding"])
+
+    def batch_evaluate(
+        sampled_batch: dict[str, np.ndarray], _base_numeric: Mapping[str, float]
+    ) -> np.ndarray:
+        occupancy_rate = np.asarray(sampled_batch["occupancy_rate"], dtype=float)
+        cap_rate = np.asarray(sampled_batch["cap_rate"], dtype=float)
+        cap_rate = np.maximum(cap_rate, 1e-6)
+        ffo = base_ffo * occupancy_rate
+        maintenance_capex = depreciation_and_amortization * maintenance_capex_ratio
+        affo = ffo - maintenance_capex
+        enterprise_value = affo / cap_rate
+        equity_value = enterprise_value + cash - total_debt - preferred_stock
+        return equity_value / shares_outstanding
 
     result = engine.run(
         base_inputs=base_numeric_inputs,
         distributions=distributions,
-        evaluator=evaluate,
+        batch_evaluator=batch_evaluate,
         correlation_groups=correlation_groups,
     )
     return {
@@ -139,7 +155,6 @@ def calculate_reit_ffo_valuation(
         }
         if params.monte_carlo_iterations > 0:
             details["distribution_summary"] = _run_reit_monte_carlo(
-                graph=graph,
                 # Keep Monte Carlo sampling on raw numeric inputs.
                 base_inputs=raw_inputs,
                 params=params,

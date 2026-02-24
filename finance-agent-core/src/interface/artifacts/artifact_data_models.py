@@ -16,6 +16,7 @@ class FinancialReportsArtifactData(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     financial_reports: list[FinancialReportModel]
+    forward_signals: list[dict[str, object]] | None = None
     ticker: str | None = None
     model_type: str | None = None
     company_name: str | None = None

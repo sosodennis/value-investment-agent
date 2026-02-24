@@ -11,6 +11,8 @@ from src.shared.kernel.traceable import (
 )
 
 from .factory import FinancialReportFactory
+from .forward_signals import extract_forward_signals_from_xbrl_reports
+from .forward_signals_text import extract_forward_signals_from_sec_text
 from .models import (
     FinancialReport,
     IndustrialExtension,
@@ -111,6 +113,46 @@ def fetch_financial_data(ticker: str, years: int = 3) -> list[FinancialReport]:
     _apply_cross_period_derivatives(reports)
 
     return reports
+
+
+def fetch_financial_payload(ticker: str, years: int = 3) -> dict[str, object]:
+    reports = fetch_financial_data(ticker, years=years)
+    forward_signals: list[dict[str, object]] = []
+    try:
+        xbrl_signals = extract_forward_signals_from_xbrl_reports(
+            ticker=ticker,
+            reports=reports,
+        )
+        if xbrl_signals:
+            forward_signals.extend(xbrl_signals)
+    except Exception as exc:
+        log_event(
+            logger,
+            event="fundamental_forward_signal_producer_failed",
+            message="forward signal producer failed; proceeding without signals",
+            level=logging.WARNING,
+            error_code="FUNDAMENTAL_FORWARD_SIGNAL_PRODUCER_FAILED",
+            fields={"ticker": ticker, "exception": str(exc)},
+        )
+
+    try:
+        text_signals = extract_forward_signals_from_sec_text(ticker=ticker)
+        if text_signals:
+            forward_signals.extend(text_signals)
+    except Exception as exc:
+        log_event(
+            logger,
+            event="fundamental_forward_signal_text_producer_failed",
+            message="forward signal text producer failed; proceeding without text signals",
+            level=logging.WARNING,
+            error_code="FUNDAMENTAL_FORWARD_SIGNAL_TEXT_PRODUCER_FAILED",
+            fields={"ticker": ticker, "exception": str(exc)},
+        )
+
+    return {
+        "financial_reports": reports,
+        "forward_signals": forward_signals,
+    }
 
 
 def _apply_cross_period_derivatives(reports: list[FinancialReport]) -> None:

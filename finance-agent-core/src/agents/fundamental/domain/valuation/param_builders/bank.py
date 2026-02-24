@@ -314,7 +314,11 @@ def build_bank_payload(
     )
     assumptions.append(f"terminal_growth defaulted to {DEFAULT_TERMINAL_GROWTH:.2%}")
 
-    monte_carlo_iterations, monte_carlo_seed = deps.resolve_monte_carlo_controls(
+    (
+        monte_carlo_iterations,
+        monte_carlo_seed,
+        monte_carlo_sampler,
+    ) = deps.resolve_monte_carlo_controls(
         market_snapshot,
         assumptions,
     )
@@ -379,6 +383,7 @@ def build_bank_payload(
         "terminal_growth": terminal_growth_tf.value,
         "monte_carlo_iterations": monte_carlo_iterations,
         "monte_carlo_seed": monte_carlo_seed,
+        "monte_carlo_sampler": monte_carlo_sampler,
     }
 
     return BankBuildPayload(

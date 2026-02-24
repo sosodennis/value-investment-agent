@@ -45,6 +45,9 @@ class BankParams(BaseValuationParams):
     monte_carlo_seed: int | None = Field(
         None, description="Optional seed for deterministic Monte Carlo runs"
     )
+    monte_carlo_sampler: Literal["pseudo", "sobol", "lhs"] = Field(
+        "sobol", description="Monte Carlo sampler strategy"
+    )
     provision_rate_mean: float = Field(
         0.02, ge=0, le=0.30, description="Mean bad debt provision rate for MC"
     )

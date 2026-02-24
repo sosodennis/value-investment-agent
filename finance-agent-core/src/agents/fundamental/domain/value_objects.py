@@ -4,6 +4,8 @@ from enum import Enum
 
 
 class CalculatorModelType(str, Enum):
+    DCF_STANDARD = "dcf_standard"
+    DCF_GROWTH = "dcf_growth"
     SAAS = "saas"
     BANK = "bank"
     REIT_FFO = "reit_ffo"
@@ -14,8 +16,8 @@ class CalculatorModelType(str, Enum):
 
 
 MODEL_TYPE_BY_SELECTION: dict[str, CalculatorModelType] = {
-    "dcf_growth": CalculatorModelType.SAAS,
-    "dcf_standard": CalculatorModelType.SAAS,
+    "dcf_growth": CalculatorModelType.DCF_GROWTH,
+    "dcf_standard": CalculatorModelType.DCF_STANDARD,
     "ddm": CalculatorModelType.BANK,
     "ffo": CalculatorModelType.REIT_FFO,
     "ev_revenue": CalculatorModelType.EV_REVENUE,

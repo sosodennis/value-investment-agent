@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import Field
 
 from .._template.schemas import BaseValuationParams
@@ -26,6 +28,9 @@ class ReitFfoParams(BaseValuationParams):
     )
     monte_carlo_seed: int | None = Field(
         None, description="Optional seed for deterministic Monte Carlo runs"
+    )
+    monte_carlo_sampler: Literal["pseudo", "sobol", "lhs"] = Field(
+        "sobol", description="Monte Carlo sampler strategy"
     )
     occupancy_rate_left: float = Field(
         0.70, ge=0.0, le=1.0, description="Triangular left bound for occupancy rate"

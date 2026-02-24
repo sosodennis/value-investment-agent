@@ -44,6 +44,7 @@ services:
       - REDIS_PORT=6379
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - OPENROUTER_BASE_URL=${OPENROUTER_BASE_URL}
+      - FRED_API_KEY=${FRED_API_KEY}
       # Add other necessary env vars here
     ports:
       - "8000:8000"

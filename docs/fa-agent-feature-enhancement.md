@@ -144,8 +144,9 @@
    - Gaussian-copula style transform
    - nearest-PSD (`clip/higham`)
 2. 新增 sampler strategy：
-   - pseudo-random（default）
-   - LHS / Sobol（QMC）
+   - Sobol（QMC，default）
+   - pseudo-random
+   - LHS（QMC）
 3. diagnostics 擴充：
    - `sampler`
    - `effective_sample_size`

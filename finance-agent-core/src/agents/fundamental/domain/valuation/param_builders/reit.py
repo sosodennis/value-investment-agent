@@ -127,9 +127,11 @@ def build_reit_payload(
     total_debt = deps.value_or_missing(debt_tf, "total_debt", missing)
     preferred_stock = deps.value_or_missing(preferred_tf, "preferred_stock", missing)
     current_price = deps.market_float(market_snapshot, "current_price")
-    monte_carlo_iterations, monte_carlo_seed = deps.resolve_monte_carlo_controls(
-        market_snapshot, assumptions
-    )
+    (
+        monte_carlo_iterations,
+        monte_carlo_seed,
+        monte_carlo_sampler,
+    ) = deps.resolve_monte_carlo_controls(market_snapshot, assumptions)
 
     depreciation_and_amortization = deps.to_float(depreciation_tf.value)
     if depreciation_and_amortization is None:
@@ -193,6 +195,7 @@ def build_reit_payload(
         "current_price": current_price,
         "monte_carlo_iterations": monte_carlo_iterations,
         "monte_carlo_seed": monte_carlo_seed,
+        "monte_carlo_sampler": monte_carlo_sampler,
     }
 
     return ReitBuildPayload(

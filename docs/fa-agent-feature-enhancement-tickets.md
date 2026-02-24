@@ -10,6 +10,25 @@
 
 ---
 
+## 執行進度（更新於 2026-02-24）
+
+| Ticket | 狀態 | 進度說明 |
+|---|---|---|
+| FAE-001 | ✅ Completed | 已完成 model selection -> calculator 類型映射修正（`dcf_standard`/`dcf_growth` 不再隱性映射為 `saas`），並補齊對應測試。 |
+| FAE-002 | ✅ Completed (v1) | 已新增 `valuation_dcf_standard` 獨立 skill（schema/tool）並接入 registry，auditor 增加 `dcf_standard` 專屬入口（目前公式仍沿用 SaaS FCFF graph，後續在 FAE-004/005 再差異化）。 |
+| FAE-003 | ✅ Completed (v1) | 已新增 `valuation_dcf_growth` 獨立 skill（schema/tool）並接入 registry，auditor 增加 `dcf_growth` 專屬入口（目前公式仍沿用 SaaS FCFF graph，後續在 FAE-004/005 再差異化）。 |
+| FAE-004 | ✅ Completed (v1) | 已新增 `dcf_standard.py` / `dcf_growth.py` 專屬 param builder，`param_builder` 路由已切換，不再直接綁定 `_build_saas_params`（目前內部計算仍重用 FCFF payload，後續在 FAE-005/後續票再做模型公式差異化）。 |
+| FAE-005 | ✅ Completed | `saas/dcf_standard/dcf_growth` 路徑改為 market-aware `wacc`（CAPM）與 `terminal_growth`（consensus-aware）並加 clamp 防護，新增 `risk_free_rate/beta/market_risk_premium` 參數可見性與測試覆蓋。 |
+| FAE-006 | ✅ Completed | 已將 `data_quality_flags`、`assumption_risk_level`、`time_alignment_status` 正式納入後端 preview contract（DTO/mappers/view_model/formatter/serializer）與前端 parser，並加入 fallback 解析與測試覆蓋。 |
+| FAE-007 | ✅ Completed | 已完成前端固定估值卡片與資料品質可視化；MC 開啟時顯示 `executed_iterations`/`stopped_early`/`effective_window`/`psd_repaired`，並新增元件測試覆蓋。 |
+| FAE-008 | ✅ Completed | 已完成 market provider facade（`yfinance` + `FRED macro`），並將 `quality_flags`、`license_note`、逐欄位 `market_datums` metadata 接入 valuation metadata/data freshness，含測試覆蓋。 |
+| FAE-009 | ✅ Completed | MC engine 新增 `sampler_type`（`pseudo`/`sobol`/`lhs`）、sampler diagnostics 與 fallback 訊號，並打通 SaaS/Bank/REIT 參數契約與前端 parser 顯示。 |
+| FAE-010 | ✅ Completed | MC engine 已切為 batch-only evaluator 路徑（移除 scalar evaluator 與 `FUNDAMENTAL_MONTE_CARLO_BATCH_ENABLED` 切換）；SaaS/Bank/REIT 全部使用批次計算，diagnostics 固定輸出 `batch_evaluator_used=true`。 |
+| FAE-011 | 🚧 In Progress | 已完成 `ForwardSignal` policy 主幹，並改為單一 `financial_reports_artifact_id` 載入 `financial_reports + forward_signals`（無新增 state pointer）；已接入 SEC XBRL trend-based signal producer + SEC text signal producer（10-K/10-Q/8-K，優先 MD&A/Item 區段）於 `financial_health` 寫入同一 artifact，model_selection 透傳 `forward_signals`，valuation 從同一 artifact 讀取套用；新增 FA 完成事件固定 log 欄位：`forward_signals_present/count/source`；前端 parser/UI 已可顯示 `forward_signal_summary/risk/evidence/source_types`；text producer log 已補 focused 診斷（`focused_records_total/fallback_records_total/focused_form_counts/emitted_doc_types`）。 |
+| 其餘 Tickets | ⏳ Pending | `FAE-012` 起尚未開始。 |
+
+---
+
 ## 1) Ticket 總覽（含優先級、估時、依賴）
 
 | Ticket | 標題 | Priority | 估時 | 依賴 |
@@ -23,7 +42,7 @@
 | FAE-007 | UI 固定卡片 + MC 診斷與資料品質可視化 | P1 | 2.0 | FAE-006 |
 | FAE-008 | Market data provider facade + 第二來源介面（先接 Macro/FRED） | P1 | 3.0 | FAE-006 |
 | FAE-009 | MC sampler strategy（Pseudo + QMC/Sobol/LHS） | P1 | 3.5 | - |
-| FAE-010 | MC batch evaluator 介面（先在 SaaS/Bank 落地） | P1 | 3.0 | FAE-009 |
+| FAE-010 | MC batch-only evaluator（SaaS/Bank/REIT） | P1 | 3.0 | FAE-009 |
 | FAE-011 | Forward signal contract（MD&A / earnings call）與 assumption 接口 | P1 | 2.5 | FAE-006 |
 | FAE-012 | Regression report：JSON -> Markdown + drift gate | P1 | 1.5 | FAE-006 |
 | FAE-013 | 測試補齊（unit/integration/regression） | P0 | 3.0 | FAE-001..FAE-012 |
@@ -195,8 +214,8 @@
 ---
 
 ## FAE-010（P1, 3.0d）
-**標題**：MC batch evaluator 介面（先在 SaaS/Bank 落地）
-**目標**：降低 Python per-iteration call 開銷
+**標題**：MC batch-only evaluator（SaaS/Bank/REIT）
+**目標**：以單一路徑 batch evaluator 降低 Python per-iteration call 開銷與維護成本
 
 **主要檔案**：
 - `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/agents/fundamental/domain/valuation/engine/monte_carlo.py`
@@ -205,8 +224,8 @@
 - `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/agents/fundamental/domain/valuation/skills/valuation_bank/tools.py`
 
 **驗收標準**：
-1. 新增 batch evaluator 接口，不破壞舊 evaluator。
-2. 至少在 SaaS/Bank 模型中可切換 batch 模式。
+1. MC engine 僅接受 `batch_evaluator`，不再保留 scalar evaluator。
+2. SaaS/Bank/REIT 模型全部走 batch 路徑，無雙路徑切換。
 
 ---
 
