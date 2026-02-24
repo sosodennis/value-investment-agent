@@ -50,7 +50,7 @@ def test_extract_forward_signals_from_xbrl_reports_builds_growth_and_margin_sign
     assert metrics["growth_outlook"]["direction"] == "up"
     assert metrics["margin_outlook"]["direction"] == "down"
     assert metrics["growth_outlook"]["source_type"] == "manual"
-    assert metrics["growth_outlook"]["unit"] == "bps"
+    assert metrics["growth_outlook"]["unit"] == "basis_points"
     assert isinstance(metrics["growth_outlook"]["evidence"], list)
     assert metrics["growth_outlook"]["evidence"][0]["source_url"].startswith(
         "https://www.sec.gov/edgar/search/"

@@ -615,11 +615,11 @@ class FundamentalOrchestrator:
                             "signals_rejected": forward_signal_raw.get(
                                 "signals_rejected"
                             ),
-                            "growth_adjustment_bps": forward_signal_raw.get(
-                                "growth_adjustment_bps"
+                            "growth_adjustment_basis_points": forward_signal_raw.get(
+                                "growth_adjustment_basis_points"
                             ),
-                            "margin_adjustment_bps": forward_signal_raw.get(
-                                "margin_adjustment_bps"
+                            "margin_adjustment_basis_points": forward_signal_raw.get(
+                                "margin_adjustment_basis_points"
                             ),
                             "forward_signal_risk_level": forward_signal_raw.get(
                                 "risk_level"

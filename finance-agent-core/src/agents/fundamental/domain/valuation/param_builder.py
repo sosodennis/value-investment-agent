@@ -637,10 +637,10 @@ def _apply_forward_signal_adjustments(
         min_bound=-0.80,
         max_bound=1.50,
     )
-    if growth_applied and abs(policy.growth_adjustment_bps) > 1e-9:
+    if growth_applied and abs(policy.growth_adjustment_basis_points) > 1e-9:
         assumptions.append(
             "forward_signal growth adjustment applied "
-            f"({policy.growth_adjustment_bps:+.1f} bps)"
+            f"({policy.growth_adjustment_basis_points:+.1f} basis points)"
         )
 
     margin_applied = _apply_series_adjustment(
@@ -650,15 +650,15 @@ def _apply_forward_signal_adjustments(
         min_bound=-0.50,
         max_bound=0.70,
     )
-    if margin_applied and abs(policy.margin_adjustment_bps) > 1e-9:
+    if margin_applied and abs(policy.margin_adjustment_basis_points) > 1e-9:
         assumptions.append(
             "forward_signal margin adjustment applied "
-            f"({policy.margin_adjustment_bps:+.1f} bps)"
+            f"({policy.margin_adjustment_basis_points:+.1f} basis points)"
         )
 
     if (
         not growth_applied
-        and abs(policy.growth_adjustment_bps) > 1e-9
+        and abs(policy.growth_adjustment_basis_points) > 1e-9
         and model_type in {"saas", "dcf_standard", "dcf_growth", "bank"}
     ):
         assumptions.append(
@@ -666,7 +666,7 @@ def _apply_forward_signal_adjustments(
         )
     if (
         not margin_applied
-        and abs(policy.margin_adjustment_bps) > 1e-9
+        and abs(policy.margin_adjustment_basis_points) > 1e-9
         and model_type in {"saas", "dcf_standard", "dcf_growth"}
     ):
         assumptions.append(
@@ -682,8 +682,8 @@ def _apply_forward_signal_adjustments(
             "signals_total": policy.total_count,
             "signals_accepted": policy.accepted_count,
             "signals_rejected": policy.rejected_count,
-            "growth_adjustment_bps": policy.growth_adjustment_bps,
-            "margin_adjustment_bps": policy.margin_adjustment_bps,
+            "growth_adjustment_basis_points": policy.growth_adjustment_basis_points,
+            "margin_adjustment_basis_points": policy.margin_adjustment_basis_points,
             "risk_level": policy.risk_level,
             "growth_applied": growth_applied,
             "margin_applied": margin_applied,

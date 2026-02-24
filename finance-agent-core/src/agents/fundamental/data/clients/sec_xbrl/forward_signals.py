@@ -71,7 +71,7 @@ def _build_growth_acceleration_signal(
         return []
 
     direction = "up" if acceleration > 0 else "down"
-    magnitude_bps = _clamp(abs(acceleration) * 10_000.0 * 0.5, 25.0, 220.0)
+    magnitude_basis_points = _clamp(abs(acceleration) * 10_000.0 * 0.5, 25.0, 220.0)
     growth_prev_pct = prev_growth * 100.0
     growth_curr_pct = curr_growth * 100.0
     snippet = (
@@ -84,7 +84,7 @@ def _build_growth_acceleration_signal(
             source_type="manual",
             metric="growth_outlook",
             direction=direction,
-            value=magnitude_bps,
+            value=magnitude_basis_points,
             confidence=0.62,
             ticker=ticker,
             doc_type="10-K_XBRL",
@@ -113,7 +113,7 @@ def _build_margin_delta_signal(
         return []
 
     direction = "up" if delta > 0 else "down"
-    magnitude_bps = _clamp(abs(delta) * 10_000.0 * 0.75, 25.0, 180.0)
+    magnitude_basis_points = _clamp(abs(delta) * 10_000.0 * 0.75, 25.0, 180.0)
     snippet = (
         f"Operating margin changed from FY{prev_year}: {prev_margin * 100.0:.2f}% "
         f"to FY{curr_year}: {curr_margin * 100.0:.2f}%."
@@ -124,7 +124,7 @@ def _build_margin_delta_signal(
             source_type="manual",
             metric="margin_outlook",
             direction=direction,
-            value=magnitude_bps,
+            value=magnitude_basis_points,
             confidence=0.60,
             ticker=ticker,
             doc_type="10-K_XBRL",
@@ -173,7 +173,7 @@ def _signal_payload(
         "metric": metric,
         "direction": direction,
         "value": round(value, 2),
-        "unit": "bps",
+        "unit": "basis_points",
         "confidence": confidence,
         "as_of": as_of,
         "evidence": [

@@ -98,8 +98,8 @@ def test_build_valuation_success_update_includes_output_and_artifact() -> None:
                 "signals_accepted": 1,
                 "signals_rejected": 1,
                 "evidence_count": 3,
-                "growth_adjustment_bps": 45.0,
-                "margin_adjustment_bps": -20.0,
+                "growth_adjustment_basis_points": 45.0,
+                "margin_adjustment_basis_points": -20.0,
                 "risk_level": "medium",
                 "source_types": ["mda", "manual"],
                 "decisions": [
@@ -108,7 +108,7 @@ def test_build_valuation_success_update_includes_output_and_artifact() -> None:
                         "metric": "growth_outlook",
                         "accepted": True,
                         "reason": "accepted",
-                        "effective_bps": 45.0,
+                        "effective_basis_points": 45.0,
                     }
                 ],
             },
@@ -189,7 +189,7 @@ def test_build_valuation_success_update_includes_output_and_artifact() -> None:
     assert preview["forward_signal_summary"]["source_types"] == ["mda", "manual"]
     assert (
         preview["assumption_breakdown"]["forward_signal_summary"][
-            "growth_adjustment_bps"
+            "growth_adjustment_basis_points"
         ]
         == 45.0
     )

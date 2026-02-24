@@ -340,7 +340,7 @@ async def test_run_financial_health_persists_forward_signals_in_financial_report
                     "metric": "growth_outlook",
                     "direction": "up",
                     "value": 80.0,
-                    "unit": "bps",
+                    "unit": "basis_points",
                     "confidence": 0.62,
                     "source_type": "manual",
                     "evidence": [

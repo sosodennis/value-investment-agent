@@ -507,9 +507,9 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
         const pct = value * 100;
         return `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
     }
-    function formatSignedBps(value: number): string {
+    function formatSignedBasisPoints(value: number): string {
         const rounded = Math.round(value * 10) / 10;
-        return `${rounded >= 0 ? '+' : ''}${rounded.toFixed(1)} bps`;
+        return `${rounded >= 0 ? '+' : ''}${rounded.toFixed(1)} basis points`;
     }
     const distributionAccessibilitySummary = (() => {
         if (!distributionSummary) return '';
@@ -703,17 +703,17 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                                     </div>
                                                 )}
                                             </div>
-                                            {(typeof forwardSignalSummary?.growth_adjustment_bps === 'number' ||
-                                                typeof forwardSignalSummary?.margin_adjustment_bps === 'number') && (
+                                            {(typeof forwardSignalSummary?.growth_adjustment_basis_points === 'number' ||
+                                                typeof forwardSignalSummary?.margin_adjustment_basis_points === 'number') && (
                                                 <div className="flex flex-wrap gap-2">
-                                                    {typeof forwardSignalSummary?.growth_adjustment_bps === 'number' && (
+                                                    {typeof forwardSignalSummary?.growth_adjustment_basis_points === 'number' && (
                                                         <span className="rounded border border-cyan-400/30 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-200">
-                                                            Growth Adj: {formatSignedBps(forwardSignalSummary.growth_adjustment_bps)}
+                                                            Growth adjustment: {formatSignedBasisPoints(forwardSignalSummary.growth_adjustment_basis_points)}
                                                         </span>
                                                     )}
-                                                    {typeof forwardSignalSummary?.margin_adjustment_bps === 'number' && (
+                                                    {typeof forwardSignalSummary?.margin_adjustment_basis_points === 'number' && (
                                                         <span className="rounded border border-cyan-400/30 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-200">
-                                                            Margin Adj: {formatSignedBps(forwardSignalSummary.margin_adjustment_bps)}
+                                                            Margin adjustment: {formatSignedBasisPoints(forwardSignalSummary.margin_adjustment_basis_points)}
                                                         </span>
                                                     )}
                                                 </div>

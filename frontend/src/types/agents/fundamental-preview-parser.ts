@@ -55,8 +55,8 @@ export interface ParsedForwardSignalSummary {
     signals_accepted?: number;
     signals_rejected?: number;
     evidence_count?: number;
-    growth_adjustment_bps?: number;
-    margin_adjustment_bps?: number;
+    growth_adjustment_basis_points?: number;
+    margin_adjustment_basis_points?: number;
     risk_level?: string;
     source_types?: string[];
     decision_count?: number;
@@ -695,8 +695,8 @@ const parseForwardSignalSummary = (
         'signals_accepted',
         'signals_rejected',
         'evidence_count',
-        'growth_adjustment_bps',
-        'margin_adjustment_bps',
+        'growth_adjustment_basis_points',
+        'margin_adjustment_basis_points',
     ] as const;
     for (const field of numericFields) {
         const parsedValue = parseNullableOptionalNumber(

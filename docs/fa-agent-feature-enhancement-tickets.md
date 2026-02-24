@@ -24,8 +24,10 @@
 | FAE-008 | ✅ Completed | 已完成 market provider facade（`yfinance` + `FRED macro`），並將 `quality_flags`、`license_note`、逐欄位 `market_datums` metadata 接入 valuation metadata/data freshness，含測試覆蓋。 |
 | FAE-009 | ✅ Completed | MC engine 新增 `sampler_type`（`pseudo`/`sobol`/`lhs`）、sampler diagnostics 與 fallback 訊號，並打通 SaaS/Bank/REIT 參數契約與前端 parser 顯示。 |
 | FAE-010 | ✅ Completed | MC engine 已切為 batch-only evaluator 路徑（移除 scalar evaluator 與 `FUNDAMENTAL_MONTE_CARLO_BATCH_ENABLED` 切換）；SaaS/Bank/REIT 全部使用批次計算，diagnostics 固定輸出 `batch_evaluator_used=true`。 |
-| FAE-011 | 🚧 In Progress | 已完成 `ForwardSignal` policy 主幹，並改為單一 `financial_reports_artifact_id` 載入 `financial_reports + forward_signals`（無新增 state pointer）；已接入 SEC XBRL trend-based signal producer + SEC text signal producer（10-K/10-Q/8-K，優先 MD&A/Item 區段）於 `financial_health` 寫入同一 artifact，model_selection 透傳 `forward_signals`，valuation 從同一 artifact 讀取套用；新增 FA 完成事件固定 log 欄位：`forward_signals_present/count/source`；前端 parser/UI 已可顯示 `forward_signal_summary/risk/evidence/source_types`；text producer log 已補 focused 診斷（`focused_records_total/fallback_records_total/focused_form_counts/emitted_doc_types`）。 |
-| 其餘 Tickets | ⏳ Pending | `FAE-012` 起尚未開始。 |
+| FAE-011 | ✅ Completed | 已完成 `ForwardSignal` policy 主幹，並改為單一 `financial_reports_artifact_id` 載入 `financial_reports + forward_signals`（無新增 state pointer）；已接入 SEC XBRL trend-based signal producer + SEC text signal producer（10-K/10-Q/8-K，優先 MD&A/Item 區段）於 `financial_health` 寫入同一 artifact，model_selection 透傳 `forward_signals`，valuation 從同一 artifact 讀取套用；新增 FA 完成事件固定 log 欄位：`forward_signals_present/count/source`；前端 parser/UI 已可顯示 `forward_signal_summary/risk/evidence/source_types`；text producer log 已補 focused 診斷（`focused_records_total/fallback_records_total/focused_form_counts/emitted_doc_types`）與 focused signal 診斷（`focused_signals_count/emitted_focused_doc_types`）；本次新增 section 抽取優先走 `edgartools` `obj/get_item_with_part`（10-K Item7、10-Q Part I Item2、8-K Item2.02/7.01）後再 fallback regex，並擴充 lexical 規則（negation 過濾、forward/historical 時態加權、numeric guidance 抽取與 confidence 調整）；移除縮寫欄位，`basis_points` 為唯一單位字段（不保留兼容欄位）；並補上 evidence provenance（`filing_date/accession_number/focus_strategy/rule`）與 stale filing 置信度降權。 |
+| FAE-015 | ⏳ Pending | 新增「真正」`dcf_standard` / `dcf_growth` 計算圖與參數契約，移除對 SaaS FCFF wrapper 的依賴（目前仍為 transitional implementation）。 |
+| FAE-016 | ⏳ Pending | MC 第二階段效能優化：在 batch evaluator 內進行年度遞推 kernel profiling/優化與基準測試（現況已非逐筆 evaluator loop，但仍有年度維度 hot loop）。 |
+| 其餘 Tickets | ⏳ Pending | `FAE-012` 起尚未開始（含新增 `FAE-015/016`）。 |
 
 ---
 
@@ -47,8 +49,10 @@
 | FAE-012 | Regression report：JSON -> Markdown + drift gate | P1 | 1.5 | FAE-006 |
 | FAE-013 | 測試補齊（unit/integration/regression） | P0 | 3.0 | FAE-001..FAE-012 |
 | FAE-014 | 文檔與 runbook 更新 | P1 | 1.0 | FAE-013 |
+| FAE-015 | DCF 真實引擎落地（移除 SaaS transitional wrapper） | P0 | 3.5 | FAE-004, FAE-005 |
+| FAE-016 | MC batch kernel profiling 與第二階段優化 | P1 | 2.0 | FAE-010 |
 
-總估時：`32.0` 人日（不含 TODO enhancement）
+總估時：`37.5` 人日（不含 TODO enhancement）
 
 ---
 
@@ -60,8 +64,10 @@
 4. FAE-006 -> FAE-008
 5. FAE-009 -> FAE-010
 6. FAE-006 -> FAE-011
-7. FAE-006 -> FAE-012
-8. 全部完成後執行 FAE-013 -> FAE-014
+7. FAE-004 -> FAE-015
+8. FAE-010 -> FAE-016
+9. FAE-006 -> FAE-012
+10. 全部完成後執行 FAE-013 -> FAE-014
 
 建議 Sprint 切分：
 - Sprint A（第 1-2 週）：FAE-001~FAE-006
@@ -257,6 +263,42 @@
 **驗收標準**：
 1. 可輸出 markdown summary + drift table。
 2. 有 PASS/FAIL gate 規則（drift/errors/issues）。
+
+---
+
+## FAE-015（P0, 3.5d）
+**標題**：DCF 真實引擎落地（移除 SaaS transitional wrapper）
+**目標**：讓 `dcf_standard` / `dcf_growth` 真正使用獨立 DCF 數學引擎，而非 `calculate_saas_valuation` 包裝
+
+**主要檔案**：
+- `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/agents/fundamental/domain/valuation/skills/valuation_dcf_standard/tools.py`
+- `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/agents/fundamental/domain/valuation/skills/valuation_dcf_growth/tools.py`
+- `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/agents/fundamental/domain/valuation/engine/graphs/`（新增 dcf graphs）
+- `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/agents/fundamental/domain/valuation/skills/valuation_dcf_standard/schemas.py`
+- `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/agents/fundamental/domain/valuation/skills/valuation_dcf_growth/schemas.py`
+
+**驗收標準**：
+1. `dcf_standard` / `dcf_growth` 不再呼叫 `calculate_saas_valuation`。
+2. 具備多階段收斂（growth/margin/reinvestment converging）與終值邏輯硬性邊界。
+3. 新增對應單元測試與回歸基準案例。
+
+---
+
+## FAE-016（P1, 2.0d）
+**標題**：MC batch kernel profiling 與第二階段優化
+**目標**：在已完成 batch-only evaluator 前提下，優化年度遞推 hot loop，並提供可量化效能基準
+
+**主要檔案**：
+- `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/agents/fundamental/domain/valuation/skills/valuation_saas/tools.py`
+- `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/agents/fundamental/domain/valuation/skills/valuation_bank/tools.py`
+- `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/agents/fundamental/domain/valuation/skills/valuation_reit_ffo/tools.py`
+- `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/agents/fundamental/domain/valuation/engine/monte_carlo.py`
+- `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/tests/test_monte_carlo_engine.py`
+
+**驗收標準**：
+1. 輸出 profiling 結果（至少含 1k/10k iterations 比較）。
+2. 優化後 p50 wall-time 有可驗證下降，且數值結果與舊版一致於容差內。
+3. 文件新增性能基準與再現命令。
 
 ---
 

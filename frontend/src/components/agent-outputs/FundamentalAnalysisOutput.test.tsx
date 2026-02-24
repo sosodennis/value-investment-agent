@@ -50,8 +50,8 @@ describe('FundamentalAnalysisOutput', () => {
                 signals_total: 3,
                 signals_accepted: 2,
                 signals_rejected: 1,
-                growth_adjustment_bps: 45.5,
-                margin_adjustment_bps: -20,
+                growth_adjustment_basis_points: 45.5,
+                margin_adjustment_basis_points: -20,
                 source_types: ['mda'],
             },
             forward_signal_risk_level: 'medium',
@@ -84,8 +84,12 @@ describe('FundamentalAnalysisOutput', () => {
         expect(screen.queryByText('Accepted: 2')).not.toBeNull();
         expect(screen.queryByText('Rejected: 1')).not.toBeNull();
         expect(screen.queryByText('Evidence: 4')).not.toBeNull();
-        expect(screen.queryByText('Growth Adj: +45.5 bps')).not.toBeNull();
-        expect(screen.queryByText('Margin Adj: -20.0 bps')).not.toBeNull();
+        expect(
+            screen.queryByText('Growth adjustment: +45.5 basis points')
+        ).not.toBeNull();
+        expect(
+            screen.queryByText('Margin adjustment: -20.0 basis points')
+        ).not.toBeNull();
         expect(screen.queryByText('Forward Risk: medium')).not.toBeNull();
         expect(screen.queryByText('Source: mda')).not.toBeNull();
     });

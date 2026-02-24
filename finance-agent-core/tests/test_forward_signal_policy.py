@@ -17,7 +17,7 @@ def test_parse_forward_signals_filters_invalid_items() -> None:
                 "metric": "growth_outlook",
                 "direction": "up",
                 "value": 120,
-                "unit": "bps",
+                "unit": "basis_points",
                 "confidence": 0.8,
                 "evidence": [
                     {
@@ -33,7 +33,7 @@ def test_parse_forward_signals_filters_invalid_items() -> None:
                 "metric": "growth_outlook",
                 "direction": "up",
                 "value": 50,
-                "unit": "bps",
+                "unit": "basis_points",
                 "evidence": [],
             },
         ]
@@ -51,8 +51,8 @@ def test_apply_forward_signal_policy_accepts_and_bounds_adjustment() -> None:
                 "source_type": "mda",
                 "metric": "growth_outlook",
                 "direction": "up",
-                "value": 500,  # should be clipped by policy max bps
-                "unit": "bps",
+                "value": 500,  # should be clipped by policy max basis points
+                "unit": "basis_points",
                 "confidence": 0.95,
                 "evidence": [
                     {
@@ -69,7 +69,7 @@ def test_apply_forward_signal_policy_accepts_and_bounds_adjustment() -> None:
     assert result.total_count == 1
     assert result.accepted_count == 1
     assert result.rejected_count == 0
-    assert result.growth_adjustment_bps == pytest.approx(300.0)
+    assert result.growth_adjustment_basis_points == pytest.approx(300.0)
     assert result.growth_adjustment == pytest.approx(0.03)
     assert result.risk_level == "low"
     assert result.source_types == ("mda",)
@@ -84,7 +84,7 @@ def test_apply_forward_signal_policy_marks_low_confidence_high_risk() -> None:
                 "metric": "margin_outlook",
                 "direction": "down",
                 "value": 100,
-                "unit": "bps",
+                "unit": "basis_points",
                 "confidence": 0.40,
                 "evidence": [
                     {
@@ -100,7 +100,7 @@ def test_apply_forward_signal_policy_marks_low_confidence_high_risk() -> None:
 
     assert result.total_count == 1
     assert result.accepted_count == 1
-    assert result.margin_adjustment_bps < 0
+    assert result.margin_adjustment_basis_points < 0
     assert result.risk_level == "high"
     assert result.source_types == ("news",)
     assert result.decisions[0].risk_tag == "low_confidence"
