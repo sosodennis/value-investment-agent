@@ -112,6 +112,8 @@ def _run_bank_monte_carlo(
         and params.cost_of_equity_override is not None
     )
     override_cost = float(params.cost_of_equity_override or 0.0)
+    projection_years = base_growth_rates.shape[0]
+    discount_years = np.arange(1, projection_years + 1, dtype=float)
 
     def batch_evaluate(
         sampled_batch: dict[str, np.ndarray], _base_numeric: Mapping[str, float]
@@ -124,7 +126,6 @@ def _run_bank_monte_carlo(
         sampled_terminal = np.asarray(sampled_batch["terminal_growth"], dtype=float)
 
         batch_size = provision_rate.shape[0]
-        projection_years = base_growth_rates.shape[0]
 
         adjusted_initial_income = initial_net_income * (1.0 - provision_rate)
         growth_rates = np.clip(
@@ -135,18 +136,14 @@ def _run_bank_monte_carlo(
         net_income = np.empty((batch_size, projection_years), dtype=float)
         income_level = adjusted_initial_income.copy()
         for year_idx in range(projection_years):
-            income_level = income_level * (1.0 + growth_rates[:, year_idx])
+            income_level *= 1.0 + growth_rates[:, year_idx]
             net_income[:, year_idx] = income_level
 
         rwa = net_income / rwa_intensity
         required_capital = rwa * tier1_target_ratio
-        previous_capital = np.concatenate(
-            [
-                np.full((batch_size, 1), initial_capital, dtype=float),
-                required_capital[:, :-1],
-            ],
-            axis=1,
-        )
+        previous_capital = np.empty_like(required_capital)
+        previous_capital[:, 0] = initial_capital
+        previous_capital[:, 1:] = required_capital[:, :-1]
         delta_capital = required_capital - previous_capital
         dividends = net_income - delta_capital
 
@@ -156,7 +153,6 @@ def _run_bank_monte_carlo(
             cost_of_equity = sampled_risk_free + (beta * market_risk_premium)
         terminal_growth = np.minimum(sampled_terminal, cost_of_equity - 0.001)
 
-        discount_years = np.arange(1, projection_years + 1, dtype=float)
         discount_curve = np.power(
             1.0 + cost_of_equity[:, np.newaxis], discount_years[np.newaxis, :]
         )

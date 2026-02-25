@@ -148,6 +148,8 @@ def _run_saas_monte_carlo(
     total_debt = float(base_inputs["total_debt"])
     preferred_stock = float(base_inputs["preferred_stock"])
     shares_outstanding = float(base_inputs["shares_outstanding"])
+    projection_years = base_growth_rates.shape[0]
+    discount_years = np.arange(1, projection_years + 1, dtype=float)
 
     def batch_evaluate(
         sampled_batch: dict[str, np.ndarray], _base_numeric: Mapping[str, float]
@@ -159,7 +161,6 @@ def _run_saas_monte_carlo(
         terminal_growth = np.minimum(sampled_terminal, wacc - 0.001)
 
         batch_size = growth_shock.shape[0]
-        projection_years = base_growth_rates.shape[0]
 
         growth_rates = np.clip(
             base_growth_rates[np.newaxis, :] + growth_shock[:, np.newaxis],
@@ -175,7 +176,7 @@ def _run_saas_monte_carlo(
         projected_revenue = np.empty((batch_size, projection_years), dtype=float)
         revenue_level = np.full(batch_size, initial_revenue, dtype=float)
         for year_idx in range(projection_years):
-            revenue_level = revenue_level * (1.0 + growth_rates[:, year_idx])
+            revenue_level *= 1.0 + growth_rates[:, year_idx]
             projected_revenue[:, year_idx] = revenue_level
 
         ebit = projected_revenue * operating_margins
@@ -183,18 +184,13 @@ def _run_saas_monte_carlo(
         da = projected_revenue * da_rates[np.newaxis, :]
         capex = projected_revenue * capex_rates[np.newaxis, :]
         sbc = projected_revenue * sbc_rates[np.newaxis, :]
-        previous_revenue = np.concatenate(
-            [
-                np.full((batch_size, 1), initial_revenue, dtype=float),
-                projected_revenue[:, :-1],
-            ],
-            axis=1,
-        )
+        previous_revenue = np.empty_like(projected_revenue)
+        previous_revenue[:, 0] = initial_revenue
+        previous_revenue[:, 1:] = projected_revenue[:, :-1]
         delta_revenue = projected_revenue - previous_revenue
         delta_wc = delta_revenue * wc_rates[np.newaxis, :]
         fcff = nopat + da - capex - delta_wc + sbc
 
-        discount_years = np.arange(1, projection_years + 1, dtype=float)
         discount_curve = np.power(
             1.0 + wacc[:, np.newaxis], discount_years[np.newaxis, :]
         )
