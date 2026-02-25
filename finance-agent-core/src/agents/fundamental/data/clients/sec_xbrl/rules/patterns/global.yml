@@ -1,0 +1,84 @@
+version: 1
+metrics:
+  growth_outlook:
+    positive:
+      - raised guidance
+      - raised full-year guidance
+      - updated full-year guidance
+      - reaffirms prior guidance
+      - near the high end of guidance range
+      - expect higher revenue
+      - expects higher revenue
+      - expects revenue growth
+      - expects sales growth
+      - revenue expected to be between
+      - net sales are expected to be between
+      - revenue is expected to be
+      - sales are expected to be
+      - revenue guidance of
+      - revenue growth
+      - sales growth
+      - demand growth
+      - bookings growth
+      - demand remains strong
+      - demand continues to be strong
+      - demand indications
+      - growth to continue
+      - continued growth
+      - growth is expected
+      - backlog growth
+    negative:
+      - lowered guidance
+      - lowered full-year guidance
+      - near the low end of guidance range
+      - reduced full-year guidance
+      - demand uncertainty
+      - demand variability
+      - demand slowdown
+      - demand softness
+      - order softness
+      - reduced outlook
+      - supply constrained
+      - slower growth
+      - growth deceleration
+      - revenue headwind
+      - foreign exchange headwind
+      - fx headwind
+    forward_only: true
+  margin_outlook:
+    positive:
+      - margin expansion
+      - gross margin expansion
+      - gross margin improvement
+      - gross margins are expected to improve
+      - operating margins are expected to improve
+      - operating income margin expansion
+      - operating leverage
+      - cost discipline
+      - pricing power
+      - favorable product mix
+      - fulfillment network efficiencies
+      - productivity savings
+      - efficiency gains
+    negative:
+      - margin pressure
+      - margin pressure driven by
+      - gross margin pressure
+      - operating margin pressure
+      - net interest margin will be compressed
+      - deposit margin compression
+      - cost inflation
+      - higher input costs
+      - higher component costs
+      - higher operating costs
+      - costs to build and maintain infrastructure
+      - reduce operating margins
+      - downward pressure on gross margins
+      - gross margins will be subject to downward pressure
+      - gross margins will be subject to volatility and downward pressure
+      - gross margin volatility
+      - margin headwind
+      - higher depreciation and amortization expense
+      - cost of sales to increase
+      - profitability pressure
+    forward_only: true

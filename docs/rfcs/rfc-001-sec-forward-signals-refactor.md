@@ -67,29 +67,31 @@ flowchart LR
     H --> I["Valuation Policy"]
 ```
 
-## 5. Module Plan (Clean Architecture Naming)
+## 5. Module Plan (Clean Architecture Aligned)
 
-Keep `sec_xbrl` as the data-layer client package and split by responsibility:
+Layering decision:
 
-1. `application/` (use-case orchestration inside this client)
-   - `forward_signal_pipeline.py`: pipeline orchestration only.
-2. `domain/` (business rules local to this bounded context)
-   - `signal_models.py`: typed signal/evidence models.
-   - `scoring.py`: deterministic confidence/value scoring.
-3. `data_layer/` (adapters and external dependencies)
-   - `filing_fetcher.py`: SEC fetch + rate limit + retry policy.
-   - `filing_section_selector.py`: section extraction with ordered strategies.
-   - `sentence_pipeline.py`: text normalization + segmentation.
-   - `fls_filter.py`: forward-looking sentence classifier adapter.
-   - `hybrid_retriever.py`: BM25 + dense retrieval + fusion.
-   - `matchers/`: regex/lemma/dependency matcher implementations.
-4. `rules/` (data configuration consumed by data-layer matchers)
-   - `schema.py`: Pydantic schema for rule and lexicon files.
-   - `loader.py`: validation + merge (global + sector overlays).
-   - `patterns/`: rule files.
-   - `lexicons/`: global and sector lexicon files.
+1. `fundamental/domain` holds business policy and scoring rules.
+2. `fundamental/application` orchestrates use cases.
+3. `fundamental/data/clients/sec_xbrl` is a data adapter package (provider implementation).
 
-`forward_signals_text.py` stays as a compatibility façade and delegates to `application/forward_signal_pipeline.py`.
+Inside `sec_xbrl`, split by adapter responsibility without adding nested `data_layer/`:
+
+1. `provider.py`
+   - Thin adapter façade with stable public API.
+   - No heavy matching/scoring logic.
+2. `forward_signals_text.py`
+   - SEC text extraction pipeline orchestration (temporary, to be decomposed).
+3. `forward_signals.py`
+   - Deterministic XBRL trend-based signal producer.
+4. Adapter modules:
+   - `filing_fetcher.py`, `filing_section_selector.py`, `sentence_pipeline.py`, `fls_filter.py`, `hybrid_retriever.py`.
+5. `matchers/`
+   - `regex_signal_extractor.py`, `lemma_signal_matcher.py`, `dependency_signal_matcher.py`.
+6. `rules/`
+   - `schema.py`, `loader.py`, `patterns/`, `lexicons/`.
+
+`__init__.py` exports from `provider.py` to preserve compatibility.
 
 ## 6. Contract Strategy
 
@@ -175,6 +177,48 @@ Breaking behaviors:
 5. PR-5: tests and benchmark (Done 2026-02-25)
    - Update fixtures and add quality/perf checks.
 
+### Wrapper Sunset Plan
+
+Current temporary wrappers:
+
+1. `sec_xbrl/provider.py` as stable adapter entrypoint.
+
+Removed in refactor phases:
+
+1. Legacy import shims removed:
+   - `regex_signal_extractor.py`
+   - `lemma_signal_matcher.py`
+   - `dependency_signal_matcher.py`
+   - `signal_pattern_catalog.py`
+2. Internal compatibility wrappers removed from `forward_signals_text.py`:
+   - `_fetch_recent_filing_text_records(...)`
+   - `_group_records_for_signals(...)`
+
+Removal policy:
+
+1. Keep wrappers through P0/P1 while structure stabilizes and tests are green.
+2. Start removal in P2 only after:
+   - zero external imports of legacy shim paths (codebase + scripts),
+   - CI eval gate passes on fixed benchmark set,
+   - one full release cycle in dev/staging without wrapper-only regressions.
+3. Remove in this order:
+   - internal function wrappers in `forward_signals_text.py` (Done),
+   - legacy module import shims (Done),
+   - final `provider.py` only if upstream `application` port has fully replaced direct client imports.
+
+Current status:
+
+1. `fundamental/application/factory.py` now injects `IFundamentalFinancialPayloadProvider`.
+2. `application` imports `sec_xbrl.provider.fetch_financial_payload` only; direct `sec_xbrl.utils` import is removed.
+3. Runtime signal catalog now loads from `rules/*.yml` via `rules/loader.py`; legacy hardcoded phrase catalog body has been removed.
+
+Enforcement guards:
+
+1. Legacy shim import guard test:
+   - `finance-agent-core/tests/test_sec_xbrl_legacy_import_guard.py`
+2. Provider entrypoint import guard test (outside `sec_xbrl` package):
+   - `finance-agent-core/tests/test_sec_xbrl_provider_import_guard.py`
+
 ## 11. Sector Lexicon Skeleton (Data-Driven Rules)
 
 Purpose:
@@ -245,19 +289,19 @@ Loader behavior:
 
 Decision:
 
-1. Keep `rules/` physically inside the `sec_xbrl` data-layer package.
+1. Keep `rules/` physically inside `sec_xbrl` adapter package.
 2. Treat rules as internal assets of the SEC text extraction pipeline.
 
 Rationale:
 
-1. Highest cohesion: only this data-layer pipeline consumes these files.
+1. Highest cohesion: only this SEC adapter pipeline consumes these files.
 2. Clear ownership: SEC forward-signal team owns matcher logic + rule assets together.
 3. Lower accidental coupling: domain/application layers depend on interfaces and typed outputs, not rule file formats.
 
 Boundary guardrails:
 
 1. `domain/` and upper layers must not read YAML directly.
-2. Only `rules/loader.py` exposes typed config objects to data-layer matchers.
+2. Only `rules/loader.py` exposes typed config objects to matcher modules.
 3. If another client needs shared rules later, extract to a separate `shared_rules` package intentionally (not by ad-hoc imports).
 
 ### Benchmark Command (PR-5)

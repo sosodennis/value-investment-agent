@@ -14,8 +14,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.agents.fundamental.data.clients.sec_xbrl.forward_signals_text import (
-    FilingTextRecord,
+from src.agents.fundamental.data.clients.sec_xbrl import (
     extract_forward_signals_from_sec_text,
 )
 
@@ -35,8 +34,21 @@ class ExpectedSignal:
 class EvalCase:
     case_id: str
     ticker: str
-    records: list[FilingTextRecord]
+    records: list[BenchmarkFilingRecord]
     expected_signals: list[ExpectedSignal]
+
+
+@dataclass(frozen=True)
+class BenchmarkFilingRecord:
+    form: str
+    source_type: str
+    text: str
+    period: str | None = None
+    accession_number: str | None = None
+    filing_date: str | None = None
+    cik: str | None = None
+    focus_text: str | None = None
+    focus_strategy: str | None = None
 
 
 @dataclass(frozen=True)
@@ -81,7 +93,7 @@ def _load_eval_cases(path: Path) -> list[EvalCase]:
     cases: list[EvalCase] = []
     for raw_case in payload:
         records = [
-            FilingTextRecord(
+            BenchmarkFilingRecord(
                 form=str(raw_record["form"]),
                 source_type=str(raw_record["source_type"]),
                 text=str(raw_record["text"]),

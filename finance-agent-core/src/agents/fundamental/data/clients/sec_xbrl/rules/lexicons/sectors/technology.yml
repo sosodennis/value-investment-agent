@@ -1,0 +1,37 @@
+version: 1
+extends: global
+forward_cues:
+  - demand visibility
+  - capacity commitments
+  - platform momentum
+  - product transition
+signals:
+  growth_outlook:
+    aliases:
+      - installed base expansion
+      - installed base growth
+      - demand for devices
+      - services revenue growth
+      - cloud workload growth
+      - cloud demand growth
+      - ai services demand
+      - datacenter demand
+      - capacity ramp
+      - supply constrained demand
+      - macroeconomic headwind
+      - foreign exchange headwind
+  margin_outlook:
+    aliases:
+      - cloud mix shift
+      - unfavorable mix shift
+      - favorable mix shift
+      - datacenter pricing pressure
+      - ad load headwind
+      - technology and infrastructure costs
+      - platform infrastructure costs
+      - compute cost
+      - component cost pressure
+      - gross margin pressure
+      - gross margin volatility
+      - depreciation and amortization
+      - server useful life

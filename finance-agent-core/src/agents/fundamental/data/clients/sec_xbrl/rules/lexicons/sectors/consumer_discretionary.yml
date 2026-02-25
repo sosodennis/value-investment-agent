@@ -1,0 +1,22 @@
+version: 1
+extends: global
+forward_cues:
+  - net sales are expected to be between
+  - spending plans
+signals:
+  growth_outlook:
+    aliases:
+      - net sales growth
+      - ecommerce demand
+      - unit growth
+      - subscription growth
+      - advertising sales growth
+      - fulfillment capacity
+  margin_outlook:
+    aliases:
+      - fulfillment network efficiencies
+      - transportation costs
+      - promotional pricing
+      - shipping costs
+      - cost of sales
+      - fulfillment costs

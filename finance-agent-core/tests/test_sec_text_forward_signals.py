@@ -4,16 +4,18 @@ from datetime import date, datetime, timedelta
 from unittest.mock import patch
 
 from src.agents.fundamental.data.clients.sec_xbrl.forward_signals_text import (
-    FilingTextRecord,
     _extract_focus_text_from_filing,
     _normalize_text,
     extract_forward_signals_from_sec_text,
 )
-from src.agents.fundamental.data.clients.sec_xbrl.regex_signal_extractor import (
+from src.agents.fundamental.data.clients.sec_xbrl.matchers.regex_signal_extractor import (
     MetricRegexHits,
     PatternHit,
 )
-from src.agents.fundamental.data.clients.sec_xbrl.utils import fetch_financial_payload
+from src.agents.fundamental.data.clients.sec_xbrl.provider import (
+    fetch_financial_payload,
+)
+from src.agents.fundamental.data.clients.sec_xbrl.text_record import FilingTextRecord
 
 
 def test_extract_forward_signals_from_sec_text_emits_structured_signals() -> None:
@@ -88,6 +90,39 @@ def test_extract_forward_signals_from_sec_text_returns_empty_without_patterns() 
         fetch_records_fn=lambda _ticker, _limit: records,
     )
     assert signals == []
+
+
+def test_extract_forward_signals_from_sec_text_captures_margin_downward_pressure() -> (
+    None
+):
+    records = [
+        FilingTextRecord(
+            form="10-Q",
+            source_type="mda",
+            period="Q1 2026",
+            text=(
+                "As a result, the company believes gross margins will be subject to "
+                "volatility and downward pressure in the coming quarters."
+            ),
+        )
+    ]
+
+    signals = extract_forward_signals_from_sec_text(
+        ticker="AAPL",
+        fetch_records_fn=lambda _ticker, _limit: records,
+    )
+
+    margin_signal = next(
+        (
+            item
+            for item in signals
+            if item.get("metric") == "margin_outlook"
+            and item.get("direction") == "down"
+        ),
+        None,
+    )
+    assert margin_signal is not None
+    assert margin_signal["source_type"] == "mda"
 
 
 def test_extract_forward_signals_from_sec_text_prefers_mda_section_for_10k() -> None:
@@ -501,7 +536,12 @@ def test_extract_forward_signals_from_sec_text_enriches_evidence_provenance() ->
         "000032019325000073/0000320193-25-000073-index.html"
     )
     assert evidence["focus_strategy"] == "edgartools_part_item"
-    assert evidence["rule"] in {"lexical_pattern", "numeric_guidance"}
+    assert evidence["rule"] in {
+        "lexical_pattern",
+        "lemma_pattern",
+        "dependency_pattern",
+        "numeric_guidance",
+    }
 
 
 def test_extract_forward_signals_from_sec_text_applies_staleness_penalty() -> None:

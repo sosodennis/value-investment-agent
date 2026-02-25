@@ -1,0 +1,78 @@
+version: 1
+forward_cues:
+  - expect
+  - expects
+  - expected
+  - is expected to
+  - are expected to
+  - anticipate
+  - anticipates
+  - outlook
+  - guidance
+  - guide
+  - guidance range
+  - forecast
+  - project
+  - target
+  - plan
+  - intends
+  - believes
+  - sees
+  - we expect
+  - continue to expect
+  - likely
+  - may
+  - could
+  - should
+  - will continue
+signals:
+  growth_outlook:
+    aliases:
+      - revenue growth
+      - revenue outlook
+      - revenue headwind
+      - top line growth
+      - top-line growth
+      - demand growth
+      - demand softness
+      - net sales growth
+      - sales outlook
+      - sales growth
+      - bookings growth
+      - backlog growth
+      - order growth
+      - customer demand
+      - demand indications
+      - volume growth
+      - foreign exchange headwind
+      - fx headwind
+      - services revenue growth
+      - updated full-year guidance
+      - high end of guidance range
+      - low end of guidance range
+  margin_outlook:
+    aliases:
+      - gross margin
+      - gross margins
+      - operating margin
+      - operating margins
+      - margin pressure
+      - gross margin pressure
+      - operating margin pressure
+      - margin expansion
+      - margin compression
+      - margin headwind
+      - margin volatility
+      - profitability
+      - operating leverage
+      - pricing power
+      - product mix
+      - mix shift
+      - cost discipline
+      - cost inflation
+      - input costs
+      - component costs
+      - operating costs
+      - cost of sales
+      - depreciation and amortization expense
+      - funding costs

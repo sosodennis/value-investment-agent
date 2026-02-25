@@ -120,6 +120,7 @@ def fetch_financial_data(ticker: str, years: int = 3) -> list[FinancialReport]:
 
 def fetch_financial_payload(ticker: str, years: int = 3) -> dict[str, object]:
     reports = fetch_financial_data(ticker, years=years)
+    rules_sector = _infer_rules_sector_from_reports(reports)
     forward_signals: list[dict[str, object]] = []
     try:
         xbrl_signals = extract_forward_signals_from_xbrl_reports(
@@ -139,7 +140,10 @@ def fetch_financial_payload(ticker: str, years: int = 3) -> dict[str, object]:
         )
 
     try:
-        text_signals = extract_forward_signals_from_sec_text(ticker=ticker)
+        text_signals = extract_forward_signals_from_sec_text(
+            ticker=ticker,
+            rules_sector=rules_sector,
+        )
         if text_signals:
             forward_signals.extend(text_signals)
     except Exception as exc:
@@ -156,6 +160,16 @@ def fetch_financial_payload(ticker: str, years: int = 3) -> dict[str, object]:
         "financial_reports": reports,
         "forward_signals": forward_signals,
     }
+
+
+def _infer_rules_sector_from_reports(reports: list[FinancialReport]) -> str | None:
+    for report in reports:
+        normalized_type = str(report.industry_type or "").strip().lower()
+        if not normalized_type:
+            continue
+        if "financial" in normalized_type:
+            return "financials"
+    return None
 
 
 def _apply_cross_period_derivatives(reports: list[FinancialReport]) -> None:

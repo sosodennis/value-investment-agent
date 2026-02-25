@@ -21,11 +21,11 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command
 
-from src.agents.fundamental.data.clients.sec_xbrl.dependency_signal_matcher import (
-    warmup_dependency_matcher,
-)
 from src.agents.fundamental.data.clients.sec_xbrl.fls_filter import (
     warmup_forward_looking_filter,
+)
+from src.agents.fundamental.data.clients.sec_xbrl.matchers.dependency_signal_matcher import (
+    warmup_dependency_matcher,
 )
 from src.agents.news.data.clients.finbert_service import get_finbert_analyzer
 from src.infrastructure.database import init_db

@@ -7,9 +7,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from src.agents.fundamental.data.clients.sec_xbrl.forward_signals_text import (
-    FilingTextRecord,
     extract_forward_signals_from_sec_text,
 )
+from src.agents.fundamental.data.clients.sec_xbrl.text_record import FilingTextRecord
 
 
 @dataclass(frozen=True)

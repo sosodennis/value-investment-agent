@@ -1,0 +1,24 @@
+version: 1
+extends: global
+forward_cues:
+  - net interest income outlook
+  - funding cost outlook
+signals:
+  growth_outlook:
+    aliases:
+      - net interest income
+      - loan growth
+      - deposit growth
+      - fee income growth
+      - client asset growth
+      - balance growth
+  margin_outlook:
+    aliases:
+      - net interest margin
+      - net interest margin expansion
+      - net interest margin compression
+      - deposit margin compression
+      - funding costs
+      - cost of funds
+      - provision for credit losses
+      - charge-off rate

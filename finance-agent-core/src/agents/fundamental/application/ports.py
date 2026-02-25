@@ -17,3 +17,7 @@ class IFundamentalReportRepo(Protocol):
     async def load_financial_reports(
         self, artifact_id: str
     ) -> list[JSONObject] | None: ...
+
+
+class IFundamentalFinancialPayloadProvider(Protocol):
+    def __call__(self, ticker: str, *, years: int = 3) -> JSONObject: ...

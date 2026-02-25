@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from functools import lru_cache
 
-from .signal_pattern_catalog import MetricPatternSet
+from ..rules.signal_pattern_catalog import MetricPatternSet
 
 _NEGATION_PATTERN = re.compile(
     r"\b(?:no|not|never|without|lack of|did not|does not|can't|cannot|unlikely)\b",

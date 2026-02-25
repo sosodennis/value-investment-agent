@@ -8,8 +8,13 @@ from src.agents.fundamental.application.orchestrator import (
     FundamentalNodeResult,
     FundamentalOrchestrator,
 )
+from src.agents.fundamental.application.ports import (
+    IFundamentalFinancialPayloadProvider,
+)
 from src.agents.fundamental.data.clients.market_data import market_data_client
-from src.agents.fundamental.data.clients.sec_xbrl.utils import fetch_financial_payload
+from src.agents.fundamental.data.clients.sec_xbrl.provider import (
+    fetch_financial_payload,
+)
 from src.agents.fundamental.data.ports import fundamental_artifact_port
 from src.agents.fundamental.domain.model_selection import select_valuation_model
 from src.agents.fundamental.domain.valuation.param_builder import (
@@ -84,14 +89,16 @@ def build_fundamental_orchestrator() -> FundamentalOrchestrator:
 @dataclass(frozen=True)
 class FundamentalWorkflowRunner:
     orchestrator: FundamentalOrchestrator
+    fetch_financial_payload_fn: IFundamentalFinancialPayloadProvider
+    financial_payload_years: int = 3
 
     async def run_financial_health(
         self, state: Mapping[str, object]
     ) -> FundamentalNodeResult:
         return await self.orchestrator.run_financial_health(
             state,
-            fetch_financial_data_fn=lambda ticker: fetch_financial_payload(
-                ticker, years=3
+            fetch_financial_data_fn=lambda ticker: self.fetch_financial_payload_fn(
+                ticker, years=self.financial_payload_years
             ),
             normalize_financial_reports_fn=parse_financial_reports_model,
         )
@@ -135,7 +142,10 @@ class FundamentalWorkflowRunner:
 
 
 def build_fundamental_workflow_runner() -> FundamentalWorkflowRunner:
-    return FundamentalWorkflowRunner(orchestrator=build_fundamental_orchestrator())
+    return FundamentalWorkflowRunner(
+        orchestrator=build_fundamental_orchestrator(),
+        fetch_financial_payload_fn=fetch_financial_payload,
+    )
 
 
 fundamental_workflow_runner = build_fundamental_workflow_runner()
