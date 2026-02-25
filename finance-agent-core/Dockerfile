@@ -28,6 +28,11 @@ COPY pyproject.toml uv.lock ./
 # Install dependencies using uv
 RUN uv sync --frozen --no-dev --no-install-project
 
+# Install spaCy dependency model used by the dependency matcher layer.
+# Use uv pip directly to avoid relying on pip being bundled in the venv.
+RUN uv pip install --python /opt/venv/bin/python \
+    https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
+
 # Pre-bake Hugging Face models into image layer.
 # Runtime cache may be bind-mounted; entrypoint will seed from this baked cache.
 RUN mkdir -p "${HF_BAKED_CACHE}" "${HF_HOME}"

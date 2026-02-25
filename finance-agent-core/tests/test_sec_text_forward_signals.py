@@ -1,12 +1,17 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from unittest.mock import patch
 
 from src.agents.fundamental.data.clients.sec_xbrl.forward_signals_text import (
     FilingTextRecord,
     _extract_focus_text_from_filing,
+    _normalize_text,
     extract_forward_signals_from_sec_text,
+)
+from src.agents.fundamental.data.clients.sec_xbrl.regex_signal_extractor import (
+    MetricRegexHits,
+    PatternHit,
 )
 from src.agents.fundamental.data.clients.sec_xbrl.utils import fetch_financial_payload
 
@@ -214,8 +219,12 @@ def test_extract_forward_signals_from_sec_text_logs_focus_diagnostics() -> None:
     assert fields["pipeline_metric_queries_total"] == 2
     assert fields["pipeline_analysis_sentences_total"] >= 1
     assert fields["pipeline_retrieval_sentences_by_metric"]["growth_outlook"] >= 0
+    assert fields["pipeline_8k_sections_selected_total"] >= 0
+    assert fields["pipeline_8k_noise_paragraphs_skipped_total"] >= 0
     assert fields["pipeline_split_ms_total"] >= 0.0
     assert fields["pipeline_fls_ms_total"] >= 0.0
+    assert fields["pipeline_pattern_lemma_hits_total"] >= 0
+    assert fields["pipeline_pattern_dependency_hits_total"] >= 0
     assert fields["pipeline_fls_model_load_ms_total"] >= 0.0
     assert fields["pipeline_fls_inference_ms_total"] >= 0.0
     assert fields["pipeline_fls_sentences_scored_total"] >= 0
@@ -313,6 +322,156 @@ def test_extract_forward_signals_from_sec_text_handles_negation_and_numeric_guid
     assert growth_signal["confidence"] > 0.60
 
 
+def test_extract_forward_signals_from_sec_text_matches_lemma_variants() -> None:
+    records = [
+        FilingTextRecord(
+            form="10-Q",
+            source_type="mda",
+            period="Q4 2025",
+            text=(
+                "Management is expecting sales to accelerate next year. "
+                "Management expects margins to improve with operating leverage."
+            ),
+        )
+    ]
+
+    signals = extract_forward_signals_from_sec_text(
+        ticker="AAPL",
+        fetch_records_fn=lambda _ticker, _limit: records,
+    )
+    assert signals
+
+    growth_signal = next(
+        (
+            item
+            for item in signals
+            if item.get("source_type") == "mda"
+            and item.get("metric") == "growth_outlook"
+        ),
+        None,
+    )
+    margin_signal = next(
+        (
+            item
+            for item in signals
+            if item.get("source_type") == "mda"
+            and item.get("metric") == "margin_outlook"
+        ),
+        None,
+    )
+    assert growth_signal is not None
+    assert margin_signal is not None
+    assert growth_signal["direction"] == "up"
+    assert margin_signal["direction"] == "up"
+    assert any(
+        isinstance(item, dict) and item.get("rule") == "lemma_pattern"
+        for item in growth_signal.get("evidence", [])
+    )
+
+
+def test_extract_forward_signals_from_sec_text_tracks_8k_section_diagnostics() -> None:
+    records = [
+        FilingTextRecord(
+            form="8-K",
+            source_type="press_release",
+            period="Q4 2025",
+            text=(
+                "FORM 8-K. Item 8.01 Other Events. Management raised guidance and "
+                "expects higher revenue for 2026. "
+                "SIGNATURES Pursuant to the requirements of the Securities Exchange Act, "
+                "the registrant has duly caused this report to be signed."
+            ),
+        )
+    ]
+
+    with patch(
+        "src.agents.fundamental.data.clients.sec_xbrl.forward_signals_text.log_event"
+    ) as mock_log:
+        signals = extract_forward_signals_from_sec_text(
+            ticker="AAPL",
+            fetch_records_fn=lambda _ticker, _limit: records,
+        )
+
+    assert signals
+    completion_call = next(
+        call
+        for call in mock_log.call_args_list
+        if call.kwargs["event"] == "fundamental_forward_signal_text_producer_completed"
+    )
+    fields = completion_call.kwargs["fields"]
+    assert fields["pipeline_8k_sections_selected_total"] >= 1
+    assert fields["pipeline_8k_noise_paragraphs_skipped_total"] >= 1
+
+
+def test_extract_forward_signals_from_sec_text_accepts_dependency_hits() -> None:
+    records = [
+        FilingTextRecord(
+            form="10-K",
+            source_type="mda",
+            period="FY2025",
+            text="General discussion without direct phrase guidance.",
+        )
+    ]
+
+    def _dependency_stub(
+        *, text: str, metric: str
+    ) -> tuple[list[PatternHit], list[PatternHit]]:
+        if metric != "growth_outlook":
+            return [], []
+        return (
+            [
+                PatternHit(
+                    pattern="dependency_growth_outlook_up",
+                    start=0,
+                    end=min(len(text), 25),
+                    weighted_score=1.15,
+                    is_forward=True,
+                    is_historical=False,
+                    rule="dependency_pattern",
+                )
+            ],
+            [],
+        )
+
+    with (
+        patch(
+            "src.agents.fundamental.data.clients.sec_xbrl.forward_signals_text.find_metric_dependency_hits",
+            side_effect=_dependency_stub,
+        ),
+        patch(
+            "src.agents.fundamental.data.clients.sec_xbrl.forward_signals_text.log_event"
+        ) as mock_log,
+    ):
+        signals = extract_forward_signals_from_sec_text(
+            ticker="AAPL",
+            fetch_records_fn=lambda _ticker, _limit: records,
+        )
+
+    growth_signal = next(
+        (
+            item
+            for item in signals
+            if item.get("source_type") == "mda"
+            and item.get("metric") == "growth_outlook"
+        ),
+        None,
+    )
+    assert growth_signal is not None
+    assert growth_signal["direction"] == "up"
+    assert any(
+        isinstance(item, dict) and item.get("rule") == "dependency_pattern"
+        for item in growth_signal.get("evidence", [])
+    )
+    completion_call = next(
+        call
+        for call in mock_log.call_args_list
+        if call.kwargs["event"] == "fundamental_forward_signal_text_producer_completed"
+    )
+    fields = completion_call.kwargs["fields"]
+    assert fields["pipeline_pattern_dependency_hits_total"] >= 1
+    assert fields["pipeline_pattern_dependency_hits_by_metric"]["growth_outlook"] >= 1
+
+
 def test_extract_forward_signals_from_sec_text_enriches_evidence_provenance() -> None:
     records = [
         FilingTextRecord(
@@ -375,6 +534,81 @@ def test_extract_forward_signals_from_sec_text_applies_staleness_penalty() -> No
     assert fresh_signals and stale_signals
     assert stale_signals[0]["confidence"] < fresh_signals[0]["confidence"]
     assert stale_signals[0]["median_filing_age_days"] > 900
+
+
+def test_extract_forward_signals_from_sec_text_deduplicates_similar_evidence() -> None:
+    text = "Management expects higher revenue and raised guidance for next fiscal year."
+    start = text.index("expects")
+    end = start + len("expects higher revenue")
+    hit_primary = PatternHit(
+        pattern="expects higher revenue",
+        start=start,
+        end=end,
+        weighted_score=1.2,
+        is_forward=True,
+        is_historical=False,
+        rule="dependency_pattern",
+    )
+    hit_shifted = PatternHit(
+        pattern="higher revenue and raised",
+        start=start + 2,
+        end=end + 2,
+        weighted_score=1.2,
+        is_forward=True,
+        is_historical=False,
+        rule="dependency_pattern",
+    )
+    records = [
+        FilingTextRecord(
+            form="10-K",
+            source_type="mda",
+            period="FY2025",
+            filing_date="2025-11-03",
+            accession_number="0000320193-25-000073",
+            cik="0000320193",
+            text=text,
+        )
+    ]
+    with (
+        patch(
+            "src.agents.fundamental.data.clients.sec_xbrl.forward_signals_text.extract_metric_regex_hits",
+            return_value=MetricRegexHits(
+                up_hits=[hit_primary, hit_shifted],
+                down_hits=[],
+                numeric_hits=[],
+            ),
+        ),
+        patch(
+            "src.agents.fundamental.data.clients.sec_xbrl.forward_signals_text.find_metric_lemma_hits",
+            return_value=([], []),
+        ),
+        patch(
+            "src.agents.fundamental.data.clients.sec_xbrl.forward_signals_text.find_metric_dependency_hits",
+            return_value=([], []),
+        ),
+    ):
+        signals = extract_forward_signals_from_sec_text(
+            ticker="AAPL",
+            fetch_records_fn=lambda _ticker, _limit: records,
+        )
+    growth_signal = next(
+        (
+            item
+            for item in signals
+            if item.get("source_type") == "mda"
+            and item.get("metric") == "growth_outlook"
+        ),
+        None,
+    )
+    assert growth_signal is not None
+    evidence = growth_signal["evidence"]
+    assert isinstance(evidence, list)
+    assert len(evidence) == 1
+
+
+def test_normalize_text_converts_date_and_datetime_values() -> None:
+    assert _normalize_text(date(2025, 11, 3)) == "2025-11-03"
+    assert _normalize_text(datetime(2025, 11, 3, 14, 35, 0)) == "2025-11-03"
 
 
 def test_extract_focus_text_from_filing_prefers_part_aware_item_for_10q() -> None:

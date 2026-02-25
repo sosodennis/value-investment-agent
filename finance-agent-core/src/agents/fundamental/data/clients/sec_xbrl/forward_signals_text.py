@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 import time
 from collections import Counter
@@ -15,10 +16,23 @@ from pydantic import ValidationError
 from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import JSONObject
 
+from .dependency_signal_matcher import find_metric_dependency_hits
 from .filing_fetcher import call_with_sec_retry
+from .filing_section_selector import is_8k_form, refine_8k_analysis_text
 from .fls_filter import filter_forward_looking_sentences_with_stats
 from .hybrid_retriever import retrieve_relevant_sentences_batch
+from .lemma_signal_matcher import find_metric_lemma_hits
+from .regex_signal_extractor import (
+    contains_numeric_guidance_cue,
+    extract_metric_regex_hits,
+    has_forward_tense_cue,
+)
 from .sentence_pipeline import join_sentences, split_text_into_sentences
+from .signal_pattern_catalog import (
+    FORWARD_SIGNAL_PATTERN_CATALOG,
+    METRIC_RETRIEVAL_QUERY,
+    build_fls_skip_signal_phrases,
+)
 from .signal_schema import ForwardSignalEvidencePayload, ForwardSignalPayload
 
 logger = get_logger(__name__)
@@ -36,86 +50,34 @@ _FORM_SOURCE_TYPE: dict[str, str] = {
     "8-K": "press_release",
 }
 
-_METRIC_RETRIEVAL_QUERY: dict[str, str] = {
-    "growth_outlook": (
-        "expected revenue growth sales guidance demand acceleration outlook forecast"
-    ),
-    "margin_outlook": (
-        "operating margin gross margin profitability cost inflation pricing outlook guidance"
-    ),
-}
-
-_SIGNAL_PATTERNS: dict[str, dict[str, tuple[str, ...]]] = {
-    "growth_outlook": {
-        "up": (
-            "raised guidance",
-            "increase guidance",
-            "strong demand",
-            "accelerating growth",
-            "record backlog",
-            "expect higher revenue",
-        ),
-        "down": (
-            "lowered guidance",
-            "decelerating growth",
-            "soft demand",
-            "declining demand",
-            "revenue headwind",
-            "expect lower revenue",
-        ),
-    },
-    "margin_outlook": {
-        "up": (
-            "margin expansion",
-            "operating leverage",
-            "cost discipline",
-            "pricing power",
-            "improved margin",
-        ),
-        "down": (
-            "margin pressure",
-            "cost inflation",
-            "higher input costs",
-            "margin compression",
-            "weaker margin",
-        ),
-    },
-}
-
 _SOURCE_WEIGHT: dict[str, float] = {"mda": 1.0, "press_release": 0.75}
 _SIGNAL_MIN_SCORE = 1.0
 _SIGNAL_STALE_WARNING_DAYS = 540
 _SIGNAL_STALE_HIGH_RISK_DAYS = 900
-_NEGATION_PATTERN = re.compile(
-    r"\b(?:no|not|never|without|lack of|did not|does not|can't|cannot|unlikely)\b",
-    re.IGNORECASE,
-)
-_FORWARD_TENSE_PATTERN = re.compile(
-    r"\b(?:will|expects?|expecting|guidance|outlook|forecast|project(?:s|ed)?|"
-    r"anticipat(?:e|es|ed)|target(?:s|ed)?)\b",
-    re.IGNORECASE,
-)
-_HISTORICAL_TENSE_PATTERN = re.compile(
-    r"\b(?:last year|prior year|previous quarter|for the year ended|was|were|had been)\b",
-    re.IGNORECASE,
-)
-_NUMERIC_GUIDANCE_PATTERN = re.compile(
-    r"\b(?P<direction>raise(?:d)?|increase(?:d)?|lower(?:ed)?|decrease(?:d)?|"
-    r"reduc(?:e|ed)|improv(?:e|ed)|expand(?:ed)?|compress(?:ed)?)"
-    r"[^.]{0,80}?\b(?:guidance|outlook|revenue|sales|growth|margin|operating margin)\b"
-    r"[^.]{0,40}?\b(?:by|to)\s+(?P<value>\d+(?:\.\d+)?)\s*"
-    r"(?P<unit>%|percent|percentage points?|bps|basis points?)",
-    re.IGNORECASE,
-)
 _FLS_SKIP_SIGNAL_PHRASES: tuple[str, ...] = tuple(
-    sorted(
-        {
-            phrase.lower()
-            for metric_patterns in _SIGNAL_PATTERNS.values()
-            for direction_phrases in metric_patterns.values()
-            for phrase in direction_phrases
-        }
-    )
+    build_fls_skip_signal_phrases(FORWARD_SIGNAL_PATTERN_CATALOG)
+)
+
+
+def _env_int(name: str, default: int, *, minimum: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        parsed = int(raw)
+    except ValueError:
+        return default
+    return max(minimum, parsed)
+
+
+_DEBUG_RETRIEVAL_PREVIEW_ENABLED = os.getenv(
+    "SEC_TEXT_DEBUG_RETRIEVAL_SENTENCES", "0"
+).strip().lower() in {"1", "true", "yes"}
+_DEBUG_RETRIEVAL_PREVIEW_LIMIT = _env_int(
+    "SEC_TEXT_DEBUG_RETRIEVAL_SENTENCES_LIMIT", 3, minimum=0
+)
+_DEBUG_RETRIEVAL_PREVIEW_CHARS = _env_int(
+    "SEC_TEXT_DEBUG_RETRIEVAL_SENTENCE_CHARS", 200, minimum=80
 )
 
 
@@ -144,16 +106,6 @@ class _MetricSignalAccumulator:
     filing_age_days_samples: list[int]
 
 
-@dataclass(frozen=True)
-class _PatternHit:
-    pattern: str
-    start: int
-    end: int
-    weighted_score: float
-    is_forward: bool
-    is_historical: bool
-
-
 @dataclass
 class _TextPipelineDiagnostics:
     records_processed: int = 0
@@ -163,10 +115,16 @@ class _TextPipelineDiagnostics:
     retrieval_corpus_sentences_total: int = 0
     metric_queries_total: int = 0
     metric_retrieved_sentences_total: int = 0
+    eight_k_sections_selected_total: int = 0
+    eight_k_noise_sentences_skipped_total: int = 0
     lexical_hits_total: int = 0
+    lemma_hits_total: int = 0
+    dependency_hits_total: int = 0
     numeric_hits_total: int = 0
     retrieval_sentences_by_metric: Counter[str] = field(default_factory=Counter)
     lexical_hits_by_metric: Counter[str] = field(default_factory=Counter)
+    lemma_hits_by_metric: Counter[str] = field(default_factory=Counter)
+    dependency_hits_by_metric: Counter[str] = field(default_factory=Counter)
     numeric_hits_by_metric: Counter[str] = field(default_factory=Counter)
     split_ms_total: float = 0.0
     fls_ms_total: float = 0.0
@@ -181,6 +139,7 @@ class _TextPipelineDiagnostics:
     fls_fast_skip_sentences_total: int = 0
     retrieval_ms_total: float = 0.0
     pattern_ms_total: float = 0.0
+    retrieval_preview_by_metric: dict[str, list[str]] = field(default_factory=dict)
 
 
 def extract_forward_signals_from_sec_text(
@@ -464,6 +423,15 @@ def _group_records_for_signals(
             form=record.form, text=record.text
         )
         analysis_text = focused_section or record.text
+        if is_8k_form(record.form):
+            refined_8k = refine_8k_analysis_text(analysis_text)
+            analysis_text = refined_8k.text or analysis_text
+            pipeline_diag.eight_k_sections_selected_total += (
+                refined_8k.sections_selected
+            )
+            pipeline_diag.eight_k_noise_sentences_skipped_total += (
+                refined_8k.noise_sentences_skipped
+            )
         split_started = time.perf_counter()
         analysis_sentences = split_text_into_sentences(analysis_text)
         pipeline_diag.split_ms_total += (time.perf_counter() - split_started) * 1000.0
@@ -507,9 +475,9 @@ def _group_records_for_signals(
             accession_number=record.accession_number,
             cik=record.cik,
         )
-        metric_order = list(_SIGNAL_PATTERNS.keys())
+        metric_order = list(FORWARD_SIGNAL_PATTERN_CATALOG.keys())
         metric_queries = [
-            _METRIC_RETRIEVAL_QUERY.get(metric, metric.replace("_", " "))
+            METRIC_RETRIEVAL_QUERY.get(metric, metric.replace("_", " "))
             for metric in metric_order
         ]
         pipeline_diag.metric_queries_total += len(metric_order)
@@ -524,30 +492,60 @@ def _group_records_for_signals(
         ) * 1000.0
         record_has_signal_candidates = False
         for idx, metric in enumerate(metric_order):
-            patterns = _SIGNAL_PATTERNS[metric]
+            patterns = FORWARD_SIGNAL_PATTERN_CATALOG[metric]
             metric_sentences = (
                 metric_retrieval_results[idx]
                 if idx < len(metric_retrieval_results)
                 else []
             )
+            if (
+                _DEBUG_RETRIEVAL_PREVIEW_ENABLED
+                and _DEBUG_RETRIEVAL_PREVIEW_LIMIT > 0
+                and metric not in pipeline_diag.retrieval_preview_by_metric
+                and metric_sentences
+            ):
+                previews = [
+                    _preview_sentence(sentence)
+                    for sentence in metric_sentences[:_DEBUG_RETRIEVAL_PREVIEW_LIMIT]
+                ]
+                pipeline_diag.retrieval_preview_by_metric[metric] = [
+                    item for item in previews if item
+                ]
             pipeline_diag.metric_retrieved_sentences_total += len(metric_sentences)
             pipeline_diag.retrieval_sentences_by_metric[metric] += len(metric_sentences)
             metric_text = join_sentences(metric_sentences) or analysis_text
             pattern_started = time.perf_counter()
-            up_hits = _find_pattern_hits(metric_text, patterns["up"])
-            down_hits = _find_pattern_hits(metric_text, patterns["down"])
-            numeric_hits = _find_numeric_guidance_hits(
+            regex_hits = extract_metric_regex_hits(
                 analysis_text=metric_text,
                 metric=metric,
+                metric_text=metric_text,
+                patterns=patterns,
             )
+            lemma_up_hits, lemma_down_hits = find_metric_lemma_hits(
+                text=metric_text,
+                metric=metric,
+            )
+            dependency_up_hits, dependency_down_hits = find_metric_dependency_hits(
+                text=metric_text,
+                metric=metric,
+            )
+            up_hits = regex_hits.up_hits + lemma_up_hits + dependency_up_hits
+            down_hits = regex_hits.down_hits + lemma_down_hits + dependency_down_hits
+            numeric_hits = regex_hits.numeric_hits
             pipeline_diag.pattern_ms_total += (
                 time.perf_counter() - pattern_started
             ) * 1000.0
-            lexical_hit_count = len(up_hits) + len(down_hits)
+            lexical_hit_count = len(regex_hits.up_hits) + len(regex_hits.down_hits)
+            lemma_hit_count = len(lemma_up_hits) + len(lemma_down_hits)
+            dependency_hit_count = len(dependency_up_hits) + len(dependency_down_hits)
             numeric_hit_count = len(numeric_hits)
             pipeline_diag.lexical_hits_total += lexical_hit_count
+            pipeline_diag.lemma_hits_total += lemma_hit_count
+            pipeline_diag.dependency_hits_total += dependency_hit_count
             pipeline_diag.numeric_hits_total += numeric_hit_count
             pipeline_diag.lexical_hits_by_metric[metric] += lexical_hit_count
+            pipeline_diag.lemma_hits_by_metric[metric] += lemma_hit_count
+            pipeline_diag.dependency_hits_by_metric[metric] += dependency_hit_count
             pipeline_diag.numeric_hits_by_metric[metric] += numeric_hit_count
             if not up_hits and not down_hits and not numeric_hits:
                 continue
@@ -592,7 +590,8 @@ def _group_records_for_signals(
                 snippet = _extract_snippet(metric_text, hit.start, hit.end)
                 if not snippet:
                     continue
-                evidence.append(
+                _append_unique_evidence(
+                    evidence,
                     {
                         "text_snippet": snippet,
                         "source_url": source_url,
@@ -601,8 +600,8 @@ def _group_records_for_signals(
                         "filing_date": record.filing_date,
                         "accession_number": record.accession_number,
                         "focus_strategy": record.focus_strategy,
-                        "rule": "lexical_pattern",
-                    }
+                        "rule": hit.rule,
+                    },
                 )
                 if len(evidence) >= 5:
                     break
@@ -619,7 +618,8 @@ def _group_records_for_signals(
                     )
                     if not snippet:
                         continue
-                    evidence.append(
+                    _append_unique_evidence(
+                        evidence,
                         {
                             "text_snippet": snippet,
                             "source_url": source_url,
@@ -632,7 +632,7 @@ def _group_records_for_signals(
                             "value_basis_points": round(
                                 numeric_hit.value_basis_points, 2
                             ),
-                        }
+                        },
                     )
                     if len(evidence) >= 5:
                         break
@@ -705,15 +705,33 @@ def _build_pipeline_diagnostics_fields(
         "pipeline_metric_retrieved_sentences_total": (
             pipeline_diag.metric_retrieved_sentences_total
         ),
+        "pipeline_8k_sections_selected_total": (
+            pipeline_diag.eight_k_sections_selected_total
+        ),
+        "pipeline_8k_noise_paragraphs_skipped_total": (
+            pipeline_diag.eight_k_noise_sentences_skipped_total
+        ),
         "pipeline_avg_retrieved_sentences_per_query": round(
             avg_retrieved_sentences_per_query, 4
         ),
         "pipeline_lexical_hits_total": pipeline_diag.lexical_hits_total,
+        "pipeline_pattern_regex_hits_total": pipeline_diag.lexical_hits_total,
+        "pipeline_pattern_lemma_hits_total": pipeline_diag.lemma_hits_total,
+        "pipeline_pattern_dependency_hits_total": pipeline_diag.dependency_hits_total,
         "pipeline_numeric_hits_total": pipeline_diag.numeric_hits_total,
         "pipeline_retrieval_sentences_by_metric": dict(
             pipeline_diag.retrieval_sentences_by_metric
         ),
         "pipeline_lexical_hits_by_metric": dict(pipeline_diag.lexical_hits_by_metric),
+        "pipeline_pattern_regex_hits_by_metric": dict(
+            pipeline_diag.lexical_hits_by_metric
+        ),
+        "pipeline_pattern_lemma_hits_by_metric": dict(
+            pipeline_diag.lemma_hits_by_metric
+        ),
+        "pipeline_pattern_dependency_hits_by_metric": dict(
+            pipeline_diag.dependency_hits_by_metric
+        ),
         "pipeline_numeric_hits_by_metric": dict(pipeline_diag.numeric_hits_by_metric),
         "pipeline_split_ms_total": round(pipeline_diag.split_ms_total, 3),
         "pipeline_fls_ms_total": round(pipeline_diag.fls_ms_total, 3),
@@ -739,6 +757,16 @@ def _build_pipeline_diagnostics_fields(
         "pipeline_fls_fast_skip_ratio": round(fast_skip_ratio, 4),
         "pipeline_retrieval_ms_total": round(pipeline_diag.retrieval_ms_total, 3),
         "pipeline_pattern_ms_total": round(pipeline_diag.pattern_ms_total, 3),
+        **(
+            {
+                "pipeline_metric_retrieval_preview_by_metric": (
+                    pipeline_diag.retrieval_preview_by_metric
+                )
+            }
+            if _DEBUG_RETRIEVAL_PREVIEW_ENABLED
+            and bool(pipeline_diag.retrieval_preview_by_metric)
+            else {}
+        ),
     }
 
 
@@ -775,110 +803,13 @@ def _should_fast_skip_fls(analysis_sentences: list[str]) -> bool:
         if not normalized:
             continue
         lowered = normalized.lower()
-        if _FORWARD_TENSE_PATTERN.search(normalized):
+        if has_forward_tense_cue(normalized):
             return False
-        if _NUMERIC_GUIDANCE_PATTERN.search(normalized):
+        if contains_numeric_guidance_cue(normalized):
             return False
         if any(phrase in lowered for phrase in _FLS_SKIP_SIGNAL_PHRASES):
             return False
     return True
-
-
-def _find_pattern_hits(text: str, patterns: tuple[str, ...]) -> list[_PatternHit]:
-    normalized = text.lower()
-    hits: list[_PatternHit] = []
-    for pattern in patterns:
-        compiled = re.compile(rf"\b{re.escape(pattern.lower())}\b")
-        match_count = 0
-        for match in compiled.finditer(normalized):
-            context_left = max(0, match.start() - 70)
-            context_right = min(len(normalized), match.end() + 90)
-            context = normalized[context_left:context_right]
-            if _NEGATION_PATTERN.search(context):
-                continue
-            is_forward = _FORWARD_TENSE_PATTERN.search(context) is not None
-            is_historical = _HISTORICAL_TENSE_PATTERN.search(context) is not None
-            weighted_score = 1.0
-            if is_forward:
-                weighted_score *= 1.2
-            if is_historical and not is_forward:
-                weighted_score *= 0.7
-            hits.append(
-                _PatternHit(
-                    pattern=pattern,
-                    start=match.start(),
-                    end=match.end(),
-                    weighted_score=weighted_score,
-                    is_forward=is_forward,
-                    is_historical=is_historical,
-                )
-            )
-            match_count += 1
-            if match_count >= 2:
-                break
-    return hits
-
-
-@dataclass(frozen=True)
-class _NumericGuidanceHit:
-    direction: str
-    start: int
-    end: int
-    value_basis_points: float
-    score: float
-
-
-def _find_numeric_guidance_hits(
-    *,
-    analysis_text: str,
-    metric: str,
-) -> list[_NumericGuidanceHit]:
-    text_lower = analysis_text.lower()
-    hits: list[_NumericGuidanceHit] = []
-    for match in _NUMERIC_GUIDANCE_PATTERN.finditer(text_lower):
-        snippet = text_lower[match.start() : match.end()]
-        if metric == "growth_outlook" and not any(
-            token in snippet for token in ("revenue", "sales", "growth", "guidance")
-        ):
-            continue
-        if metric == "margin_outlook" and "margin" not in snippet:
-            continue
-        direction = _normalize_guidance_direction(match.group("direction"))
-        value_basis_points = _parse_numeric_guidance_value(
-            value_text=match.group("value"),
-            unit_text=match.group("unit"),
-        )
-        if value_basis_points <= 0:
-            continue
-        score = _clamp(value_basis_points / 85.0, 0.5, 3.5)
-        hits.append(
-            _NumericGuidanceHit(
-                direction=direction,
-                start=match.start(),
-                end=match.end(),
-                value_basis_points=value_basis_points,
-                score=score,
-            )
-        )
-    return hits[:3]
-
-
-def _normalize_guidance_direction(direction_text: str) -> str:
-    normalized = direction_text.lower()
-    if normalized.startswith(("raise", "increase", "improv", "expand")):
-        return "up"
-    return "down"
-
-
-def _parse_numeric_guidance_value(*, value_text: str, unit_text: str) -> float:
-    try:
-        value = float(value_text)
-    except ValueError:
-        return 0.0
-    unit = unit_text.lower().strip()
-    if unit in {"%", "percent", "percentage point", "percentage points"}:
-        return value * 100.0
-    return value
 
 
 def _extract_snippet(text: str, start: int, end: int, radius: int = 70) -> str | None:
@@ -890,6 +821,77 @@ def _extract_snippet(text: str, start: int, end: int, radius: int = 70) -> str |
     if len(snippet) > 220:
         return snippet[:217] + "..."
     return snippet
+
+
+def _append_unique_evidence(
+    evidence: list[dict[str, object]],
+    candidate: dict[str, object],
+) -> None:
+    snippet_raw = candidate.get("text_snippet")
+    if not isinstance(snippet_raw, str) or not snippet_raw:
+        return
+    if _has_duplicate_evidence(evidence, candidate):
+        return
+    evidence.append(candidate)
+
+
+def _has_duplicate_evidence(
+    evidence: list[dict[str, object]],
+    candidate: dict[str, object],
+) -> bool:
+    candidate_scope = _evidence_scope(candidate)
+    candidate_norm = _normalize_evidence_snippet(candidate.get("text_snippet"))
+    if not candidate_norm:
+        return False
+    for existing in evidence:
+        if _evidence_scope(existing) != candidate_scope:
+            continue
+        existing_norm = _normalize_evidence_snippet(existing.get("text_snippet"))
+        if not existing_norm:
+            continue
+        if candidate_norm == existing_norm:
+            return True
+        if (
+            len(candidate_norm) >= 80
+            and len(existing_norm) >= 80
+            and (candidate_norm in existing_norm or existing_norm in candidate_norm)
+        ):
+            return True
+    return False
+
+
+def _evidence_scope(
+    candidate: dict[str, object],
+) -> tuple[str | None, str | None, str | None]:
+    accession_raw = candidate.get("accession_number")
+    accession = (
+        accession_raw if isinstance(accession_raw, str) and accession_raw else None
+    )
+    source_url_raw = candidate.get("source_url")
+    source_url = (
+        source_url_raw if isinstance(source_url_raw, str) and source_url_raw else None
+    )
+    doc_type_raw = candidate.get("doc_type")
+    doc_type = doc_type_raw if isinstance(doc_type_raw, str) and doc_type_raw else None
+    return accession, source_url, doc_type
+
+
+def _normalize_evidence_snippet(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    lowered = value.lower()
+    lowered = re.sub(r"\s+", " ", lowered)
+    normalized = re.sub(r"[^a-z0-9]+", " ", lowered).strip()
+    return normalized or None
+
+
+def _preview_sentence(sentence: str) -> str | None:
+    normalized = " ".join(sentence.split())
+    if not normalized:
+        return None
+    if len(normalized) <= _DEBUG_RETRIEVAL_PREVIEW_CHARS:
+        return normalized
+    return normalized[: _DEBUG_RETRIEVAL_PREVIEW_CHARS - 3] + "..."
 
 
 def _extract_focus_text_with_strategy_from_filing(
@@ -973,15 +975,18 @@ def _extract_8k_focus_from_obj_with_strategy(
     candidates = [
         (_safe_call_get_item(filing_obj, "Item 2.02"), "edgartools_item_lookup"),
         (_safe_call_get_item(filing_obj, "2.02"), "edgartools_item_lookup"),
+        (_safe_call_get_item(filing_obj, "Item 8.01"), "edgartools_item_lookup"),
+        (_safe_call_get_item(filing_obj, "8.01"), "edgartools_item_lookup"),
         (_safe_call_get_item(filing_obj, "Item 7.01"), "edgartools_item_lookup"),
         (_safe_call_get_item(filing_obj, "7.01"), "edgartools_item_lookup"),
         (
             _safe_call_get_item_from_sections(
                 filing_obj,
-                keys=("item_202", "item_701"),
+                keys=("item_202", "item_801", "item_701"),
             ),
             "edgartools_sections_lookup",
         ),
+        (_safe_call_exhibit_99_text(filing_obj), "edgartools_exhibit_99"),
         (_safe_call_press_release_text(filing_obj), "edgartools_press_release"),
     ]
     return _pick_valid_focus_text_with_strategy(candidates, min_len=120)
@@ -1061,6 +1066,42 @@ def _safe_call_press_release_text(filing_obj: object) -> str | None:
     return None
 
 
+def _safe_call_exhibit_99_text(filing_obj: object) -> str | None:
+    try:
+        sections = getattr(filing_obj, "sections", None)
+        if isinstance(sections, dict):
+            for key, section in sections.items():
+                key_text = str(key).lower()
+                if "99" not in key_text:
+                    continue
+                if "exhibit" not in key_text and "ex99" not in key_text:
+                    continue
+                text_fn = getattr(section, "text", None)
+                if callable(text_fn):
+                    section_text = _normalize_text(text_fn())
+                    if section_text:
+                        return section_text
+        exhibits = getattr(filing_obj, "exhibits", None)
+        if isinstance(exhibits, dict):
+            for key, exhibit in exhibits.items():
+                key_text = str(key).lower()
+                if not key_text.startswith("99"):
+                    continue
+                text_attr = getattr(exhibit, "text", None)
+                if isinstance(text_attr, str):
+                    normalized = _normalize_text(text_attr)
+                    if normalized:
+                        return normalized
+                text_fn = getattr(exhibit, "text", None)
+                if callable(text_fn):
+                    normalized_fn_text = _normalize_text(text_fn())
+                    if normalized_fn_text:
+                        return normalized_fn_text
+    except Exception:
+        return None
+    return None
+
+
 def _pick_valid_focus_text_with_strategy(
     candidates: list[tuple[str | None, str]],
     *,
@@ -1122,7 +1163,12 @@ def _extract_focus_text(*, form: str, text: str) -> str | None:
         # Prefer earnings-release related sections when present.
         return _extract_between_markers(
             text,
-            start_patterns=(r"item\s+2\.02", r"item\s+7\.01"),
+            start_patterns=(
+                r"item\s+2\.02",
+                r"item\s+8\.01",
+                r"item\s+7\.01",
+                r"exhibit\s+99(?:\.\d+)?",
+            ),
             end_patterns=(r"item\s+\d+\.\d+",),
             min_len=120,
         )
@@ -1244,6 +1290,10 @@ def _safe_get_filing_text(filing: object) -> str | None:
 
 
 def _normalize_text(value: object) -> str | None:
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
     if not isinstance(value, str):
         return None
     normalized = " ".join(value.split())

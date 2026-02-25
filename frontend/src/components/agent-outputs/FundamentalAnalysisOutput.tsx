@@ -1241,7 +1241,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                         <tbody>
                                             {signal.evidence.map((item, index) => (
                                                 <tr
-                                                    key={`${signal.signal_id}-${item.accession_number ?? index}`}
+                                                    key={`${signal.signal_id}-${item.accession_number ?? 'na'}-${index}`}
                                                     className="border-t border-white/5 text-slate-200 align-top"
                                                 >
                                                     <td className="px-3 py-2 min-w-[360px]">

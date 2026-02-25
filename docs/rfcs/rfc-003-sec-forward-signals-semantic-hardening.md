@@ -1,6 +1,6 @@
 # RFC-003: SEC Forward Signals Semantic Hardening (8-K + Regex/Lemma/Dependency)
 
-- Status: Draft
+- Status: In Progress
 - Author: Codex
 - Date: 2026-02-25
 - Scope: `finance-agent-core/src/agents/fundamental/data/clients/sec_xbrl`
@@ -153,3 +153,92 @@
 2. 疊加 spaCy lemma + dependency 規則補足語義覆蓋。
 3. 針對 8-K 做章節與噪音治理。
 4. 以小型、可測試、低耦合 class 實作，優先可維護性。
+
+## 10. 實作進度（2026-02-25）
+
+已完成（P1）：
+
+1. 拆出 pattern catalog：
+   - 新增 `signal_pattern_catalog.py`
+   - 統一管理 retrieval query 與 metric pattern（growth/margin）
+2. 拆出 regex 抽取層：
+   - 新增 `regex_signal_extractor.py`
+   - 封裝 lexical hits / numeric guidance hits / cue helpers
+3. `forward_signals_text.py` 改為 orchestrator 調用新層：
+   - 移除內嵌 `_SIGNAL_PATTERNS` 與 `_find_pattern_hits` 等規則細節
+   - 保持輸出 contract 與 diagnostics 欄位不變
+
+已完成（P2）：
+
+1. 新增 `lemma_signal_matcher.py`（spaCy tokenizer + lemma-like normalization）：
+   - 以 metric/direction/cue 三元條件做保守匹配
+   - 輸出 `lemma_pattern` hits，並保留 negation/historical 抑制
+2. `forward_signals_text.py` 接入 lemma layer：
+   - 與 regex layer 合併評分（單一路徑）
+   - 新增 diagnostics：
+     - `pipeline_pattern_lemma_hits_total`
+     - `pipeline_pattern_lemma_hits_by_metric`
+3. 新增測試覆蓋 lemma 詞形變體命中場景（無需 exact phrase）
+
+已完成（P3）：
+
+1. 新增 `dependency_signal_matcher.py`（spaCy dependency parser layer）：
+   - 以 cue token 的 dependency neighborhood 抽取 metric/direction 關係
+   - 命中 evidence `rule=dependency_pattern`
+   - 缺少 spaCy dependency model 時，單一路徑下自動跳過 dependency layer 並記錄 log event
+2. `forward_signals_text.py` 接入 dependency layer：
+   - 與 regex + lemma 合併評分（單一路徑）
+   - 新增 diagnostics：
+     - `pipeline_pattern_dependency_hits_total`
+     - `pipeline_pattern_dependency_hits_by_metric`
+   - 補齊 regex 命中別名 diagnostics：
+     - `pipeline_pattern_regex_hits_total`
+     - `pipeline_pattern_regex_hits_by_metric`
+3. 新增 dependency layer 整合測試（以 stub 驗證管線接入與指標累計）
+
+已完成（P4）：
+
+1. 新增 `filing_section_selector.py`：
+   - 8-K 章節優先選擇：`Item 2.02 -> Item 8.01 -> Item 7.01 -> Exhibit 99.*`
+   - 程序性噪音句過濾（`SIGNATURE` / `INDEX` / `FORM 8-K` boilerplate）
+   - 低語義密度句過濾（最小詞數與字母密度）
+2. `forward_signals_text.py` 接入 8-K section selector：
+   - 在 record 分析前先做 8-K 文字精煉
+   - 新增 diagnostics：
+     - `pipeline_8k_sections_selected_total`
+     - `pipeline_8k_noise_paragraphs_skipped_total`
+3. 8-K focus 抽取優先策略補強：
+   - 對 filing object 新增 `Item 8.01`、`item_801`、`Exhibit 99.*` 候選
+4. 新增測試：
+   - `test_sec_text_filing_section_selector.py`
+   - `test_extract_forward_signals_from_sec_text_tracks_8k_section_diagnostics`
+
+已完成（P5-1 ~ P5-3，log 導向修正）：
+
+1. P5-1：讓 dependency layer 在容器可用
+   - `finance-agent-core/Dockerfile` build 階段安裝 `en_core_web_sm`
+   - `docker-compose.yml` 新增：
+     - `SEC_TEXT_DEPENDENCY_WARMUP=1`
+     - `SEC_TEXT_DEPENDENCY_MODEL=en_core_web_sm`
+   - `api/server.py` 新增 dependency matcher warmup，啟動即驗證可用性
+2. P5-2：加入 retrieval debug 預覽（預設關閉）
+   - `forward_signals_text.py` 新增可控 diagnostics 字段：
+     - `pipeline_metric_retrieval_preview_by_metric`
+   - 開關環境變數：
+     - `SEC_TEXT_DEBUG_RETRIEVAL_SENTENCES=1`
+     - `SEC_TEXT_DEBUG_RETRIEVAL_SENTENCES_LIMIT`（預設 3）
+     - `SEC_TEXT_DEBUG_RETRIEVAL_SENTENCE_CHARS`（預設 200）
+3. P5-3：擴充 pattern catalog（優先補 GOOG 常見措辭）
+   - growth/margin up/down pattern 與 retrieval query 擴充
+   - 覆蓋 `fx headwind`、`depreciation expense`、`top line growth` 等語句
+
+驗證結果：
+
+1. `ruff` 檢查通過（變更檔案）
+2. 測試通過：
+   - `test_sec_text_forward_signals.py`
+   - `test_sec_text_filing_section_selector.py`
+   - `test_sec_text_sentence_pipeline.py`
+   - `test_sec_text_model_loader_circuit_breaker.py`
+   - `test_sec_text_forward_signals_eval.py`
+   - `test_sec_xbrl_forward_signals.py`

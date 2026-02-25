@@ -67,26 +67,29 @@ flowchart LR
     H --> I["Valuation Policy"]
 ```
 
-## 5. Module Plan
+## 5. Module Plan (Clean Architecture Naming)
 
-Add modules under `sec_xbrl`:
+Keep `sec_xbrl` as the data-layer client package and split by responsibility:
 
-1. `signal_schema.py`
-   Pydantic models for forward signal payload and evidence.
-2. `filing_fetcher.py`
-   SEC fetch + rate limit + retry policy.
-3. `section_extractor.py`
-   Section extraction with ordered strategies.
-4. `sentence_pipeline.py`
-   Text normalization + two-stage segmentation (char pre-chunk + spaCy sentencizer).
-5. `hybrid_retriever.py`
-   BM25 + dense embeddings + RRF fusion.
-6. `signal_builder.py`
-   Deterministic conversion from evidence into signal payload.
-7. `model_registry.py`
-   Centralized singleton loaders for NLP models.
+1. `application/` (use-case orchestration inside this client)
+   - `forward_signal_pipeline.py`: pipeline orchestration only.
+2. `domain/` (business rules local to this bounded context)
+   - `signal_models.py`: typed signal/evidence models.
+   - `scoring.py`: deterministic confidence/value scoring.
+3. `data_layer/` (adapters and external dependencies)
+   - `filing_fetcher.py`: SEC fetch + rate limit + retry policy.
+   - `filing_section_selector.py`: section extraction with ordered strategies.
+   - `sentence_pipeline.py`: text normalization + segmentation.
+   - `fls_filter.py`: forward-looking sentence classifier adapter.
+   - `hybrid_retriever.py`: BM25 + dense retrieval + fusion.
+   - `matchers/`: regex/lemma/dependency matcher implementations.
+4. `rules/` (data configuration consumed by data-layer matchers)
+   - `schema.py`: Pydantic schema for rule and lexicon files.
+   - `loader.py`: validation + merge (global + sector overlays).
+   - `patterns/`: rule files.
+   - `lexicons/`: global and sector lexicon files.
 
-`forward_signals_text.py` becomes façade/orchestrator for these modules.
+`forward_signals_text.py` stays as a compatibility façade and delegates to `application/forward_signal_pipeline.py`.
 
 ## 6. Contract Strategy
 
@@ -172,6 +175,91 @@ Breaking behaviors:
 5. PR-5: tests and benchmark (Done 2026-02-25)
    - Update fixtures and add quality/perf checks.
 
+## 11. Sector Lexicon Skeleton (Data-Driven Rules)
+
+Purpose:
+
+1. Move wording variation out of Python code and into versioned configuration.
+2. Support ticker style differences via global defaults + sector overlays.
+3. Keep matcher code stable while enabling fast lexicon updates.
+
+Proposed skeleton:
+
+```text
+finance-agent-core/src/agents/fundamental/data/clients/sec_xbrl/rules/
+  schema.py
+  loader.py
+  patterns/
+    global.yml
+  lexicons/
+    global.yml
+    sectors/
+      technology.yml
+      consumer_discretionary.yml
+      financials.yml
+```
+
+Example `lexicons/global.yml`:
+
+```yaml
+version: 1
+forward_cues:
+  - expect
+  - anticipate
+  - outlook
+  - guidance
+signals:
+  growth_outlook:
+    aliases:
+      - revenue growth
+      - top line growth
+      - demand growth
+  margin_outlook:
+    aliases:
+      - gross margin
+      - operating margin
+      - margin pressure
+```
+
+Example `lexicons/sectors/technology.yml`:
+
+```yaml
+version: 1
+extends: global
+signals:
+  margin_outlook:
+    aliases:
+      - cloud mix shift
+      - datacenter pricing pressure
+      - ad load headwind
+```
+
+Loader behavior:
+
+1. Load `global.yml` first.
+2. Apply `sectors/<sector>.yml` as additive override.
+3. Validate with `schema.py`; fail fast on invalid files.
+4. Emit deterministic merged config for matchers.
+
+## 12. Rules Placement Decision (Cohesion)
+
+Decision:
+
+1. Keep `rules/` physically inside the `sec_xbrl` data-layer package.
+2. Treat rules as internal assets of the SEC text extraction pipeline.
+
+Rationale:
+
+1. Highest cohesion: only this data-layer pipeline consumes these files.
+2. Clear ownership: SEC forward-signal team owns matcher logic + rule assets together.
+3. Lower accidental coupling: domain/application layers depend on interfaces and typed outputs, not rule file formats.
+
+Boundary guardrails:
+
+1. `domain/` and upper layers must not read YAML directly.
+2. Only `rules/loader.py` exposes typed config objects to data-layer matchers.
+3. If another client needs shared rules later, extract to a separate `shared_rules` package intentionally (not by ad-hoc imports).
+
 ### Benchmark Command (PR-5)
 
 Run fixed-eval benchmark locally:
@@ -180,7 +268,7 @@ Run fixed-eval benchmark locally:
 uv run --project finance-agent-core python finance-agent-core/scripts/benchmark_sec_forward_signals.py --iterations 8
 ```
 
-## 11. Acceptance Criteria
+## 13. Acceptance Criteria
 
 1. All relevant tests pass.
 2. On fixed evaluation set:
@@ -191,7 +279,7 @@ uv run --project finance-agent-core python finance-agent-core/scripts/benchmark_
 5. Container cold start does not download models.
 6. Sentence-level evidence stays intact after chunking (no broken numeric guidance token spans).
 
-## 12. Risks and Mitigations
+## 14. Risks and Mitigations
 
 1. FinBERT label mapping mistakes
    - Read `id2label` from model config and lock with tests.

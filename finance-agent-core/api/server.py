@@ -21,6 +21,9 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command
 
+from src.agents.fundamental.data.clients.sec_xbrl.dependency_signal_matcher import (
+    warmup_dependency_matcher,
+)
 from src.agents.fundamental.data.clients.sec_xbrl.fls_filter import (
     warmup_forward_looking_filter,
 )
@@ -115,6 +118,32 @@ async def lifespan(app: FastAPI):
                 )
         except Exception as exc:
             logger.warning("⚠️ [Lifespan] FLS warmup failed: %s", str(exc))
+
+    dependency_warmup_enabled = os.getenv(
+        "SEC_TEXT_DEPENDENCY_WARMUP", "1"
+    ).strip().lower() not in {
+        "0",
+        "false",
+        "no",
+    }
+    if dependency_warmup_enabled:
+        logger.info("🚀 [Lifespan] Warming up dependency matcher cache...")
+        try:
+            dep_result = await asyncio.to_thread(warmup_dependency_matcher)
+            if bool(dep_result.get("loaded")):
+                logger.info(
+                    "✅ [Lifespan] Dependency matcher warmup completed: model=%s",
+                    dep_result.get("model", "unknown"),
+                )
+            else:
+                logger.warning(
+                    "⚠️ [Lifespan] Dependency matcher warmup skipped: %s",
+                    dep_result.get("error", "unknown error"),
+                )
+        except Exception as exc:
+            logger.warning(
+                "⚠️ [Lifespan] Dependency matcher warmup failed: %s", str(exc)
+            )
 
     logger.info("✅ [Lifespan] Initialization complete.")
     yield
