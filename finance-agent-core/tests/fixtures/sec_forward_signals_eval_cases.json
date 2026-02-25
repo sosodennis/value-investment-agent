@@ -1,0 +1,182 @@
+[
+  {
+    "case_id": "growth_up_10q",
+    "ticker": "AAPL",
+    "records": [
+      {
+        "form": "10-Q",
+        "source_type": "mda",
+        "period": "Q4 2025",
+        "filing_date": "2025-11-03",
+        "accession_number": "0000320193-25-000073",
+        "cik": "0000320193",
+        "text": "Management expects higher revenue in 2026 and raised guidance by 5% with strong demand across segments."
+      }
+    ],
+    "expected_signals": [
+      {
+        "source_type": "mda",
+        "metric": "growth_outlook",
+        "direction": "up"
+      }
+    ]
+  },
+  {
+    "case_id": "growth_down_10k",
+    "ticker": "AAPL",
+    "records": [
+      {
+        "form": "10-K",
+        "source_type": "mda",
+        "period": "FY2025",
+        "filing_date": "2025-09-27",
+        "accession_number": "0000320193-25-000059",
+        "cik": "0000320193",
+        "text": "Management outlook indicates soft demand and expects lower revenue due to a persistent revenue headwind."
+      }
+    ],
+    "expected_signals": [
+      {
+        "source_type": "mda",
+        "metric": "growth_outlook",
+        "direction": "down"
+      }
+    ]
+  },
+  {
+    "case_id": "margin_up_10k",
+    "ticker": "MSFT",
+    "records": [
+      {
+        "form": "10-K",
+        "source_type": "mda",
+        "period": "FY2025",
+        "filing_date": "2025-06-30",
+        "accession_number": "0000789019-25-000101",
+        "cik": "0000789019",
+        "text": "The outlook highlights margin expansion from operating leverage and pricing power while maintaining cost discipline."
+      }
+    ],
+    "expected_signals": [
+      {
+        "source_type": "mda",
+        "metric": "margin_outlook",
+        "direction": "up"
+      }
+    ]
+  },
+  {
+    "case_id": "margin_down_8k",
+    "ticker": "JPM",
+    "records": [
+      {
+        "form": "8-K",
+        "source_type": "press_release",
+        "period": "Q4 2025",
+        "filing_date": "2025-12-31",
+        "accession_number": "0000019617-25-000123",
+        "cik": "0000019617",
+        "text": "The earnings release cites margin pressure from cost inflation and higher input costs expected through next quarter."
+      }
+    ],
+    "expected_signals": [
+      {
+        "source_type": "press_release",
+        "metric": "margin_outlook",
+        "direction": "down"
+      }
+    ]
+  },
+  {
+    "case_id": "growth_and_margin_up",
+    "ticker": "PLD",
+    "records": [
+      {
+        "form": "10-Q",
+        "source_type": "mda",
+        "period": "Q3 2025",
+        "filing_date": "2025-10-31",
+        "accession_number": "0001045609-25-000087",
+        "cik": "0001045609",
+        "text": "Management raised guidance and expects higher revenue. The team also expects margin expansion driven by operating leverage."
+      }
+    ],
+    "expected_signals": [
+      {
+        "source_type": "mda",
+        "metric": "growth_outlook",
+        "direction": "up"
+      },
+      {
+        "source_type": "mda",
+        "metric": "margin_outlook",
+        "direction": "up"
+      }
+    ]
+  },
+  {
+    "case_id": "growth_and_margin_down",
+    "ticker": "O",
+    "records": [
+      {
+        "form": "10-Q",
+        "source_type": "mda",
+        "period": "Q3 2025",
+        "filing_date": "2025-10-30",
+        "accession_number": "0000726728-25-000045",
+        "cik": "0000726728",
+        "text": "Management lowered guidance with decelerating growth. The outlook also points to margin compression and weaker margin execution."
+      }
+    ],
+    "expected_signals": [
+      {
+        "source_type": "mda",
+        "metric": "growth_outlook",
+        "direction": "down"
+      },
+      {
+        "source_type": "mda",
+        "metric": "margin_outlook",
+        "direction": "down"
+      }
+    ]
+  },
+  {
+    "case_id": "negation_guard",
+    "ticker": "AAPL",
+    "records": [
+      {
+        "form": "10-Q",
+        "source_type": "mda",
+        "period": "Q2 2025",
+        "filing_date": "2025-05-02",
+        "accession_number": "0000320193-25-000037",
+        "cik": "0000320193",
+        "text": "Management did not raise guidance in the prior year. For 2026, management expects higher revenue with a constructive outlook."
+      }
+    ],
+    "expected_signals": [
+      {
+        "source_type": "mda",
+        "metric": "growth_outlook",
+        "direction": "up"
+      }
+    ]
+  },
+  {
+    "case_id": "no_signal_control",
+    "ticker": "AAPL",
+    "records": [
+      {
+        "form": "10-Q",
+        "source_type": "mda",
+        "period": "Q1 2025",
+        "filing_date": "2025-02-01",
+        "accession_number": "0000320193-25-000012",
+        "cik": "0000320193",
+        "text": "This filing section covers historical accounting policy updates and does not include outlook or guidance."
+      }
+    ],
+    "expected_signals": []
+  }
+]

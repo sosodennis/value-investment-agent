@@ -1,11 +1,13 @@
 import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { FundamentalAnalysisOutput } from './FundamentalAnalysisOutput';
 import { ParsedFinancialPreview } from '@/types/agents/fundamental-preview-parser';
 
+const mockUseArtifact = vi.fn();
+
 vi.mock('../../hooks/useArtifact', () => ({
-    useArtifact: () => ({ data: null, isLoading: false }),
+    useArtifact: (...args: unknown[]) => mockUseArtifact(...args),
 }));
 
 vi.mock('../FinancialTable', () => ({
@@ -13,6 +15,10 @@ vi.mock('../FinancialTable', () => ({
 }));
 
 describe('FundamentalAnalysisOutput', () => {
+    beforeEach(() => {
+        mockUseArtifact.mockReturnValue({ data: null, isLoading: false });
+    });
+
     const renderComponent = (previewData: ParsedFinancialPreview) => {
         render(
             <FundamentalAnalysisOutput
@@ -92,5 +98,67 @@ describe('FundamentalAnalysisOutput', () => {
         ).not.toBeNull();
         expect(screen.queryByText('Forward Risk: medium')).not.toBeNull();
         expect(screen.queryByText('Source: mda')).not.toBeNull();
+    });
+
+    it('renders forward signal cards and evidence table from artifact data', () => {
+        mockUseArtifact.mockReturnValue({
+            data: {
+                ticker: 'AAPL',
+                model_type: 'dcf',
+                company_name: 'Apple Inc.',
+                sector: 'Technology',
+                industry: 'Consumer Electronics',
+                reasoning: 'Strong cash flow profile',
+                status: 'done',
+                financial_reports: [],
+                forward_signals: [
+                    {
+                        signal_id: 'sig-1',
+                        source_type: 'mda',
+                        metric: 'growth_outlook',
+                        direction: 'up',
+                        value: 140,
+                        unit: 'basis_points',
+                        confidence: 0.81,
+                        as_of: '2026-02-25T06:07:32.311583+00:00',
+                        evidence: [
+                            {
+                                text_snippet:
+                                    'Management expects higher revenue and raised guidance by 5%.',
+                                source_url:
+                                    'https://www.sec.gov/Archives/edgar/data/320193/000032019325000073/0000320193-25-000073-index.html',
+                                filing_date: '2025-11-03',
+                                accession_number: '0000320193-25-000073',
+                                doc_type: '10-Q_focused',
+                                period: 'Q4 2025',
+                            },
+                        ],
+                    },
+                ],
+            },
+            isLoading: false,
+        });
+
+        render(
+            <FundamentalAnalysisOutput
+                reference={null}
+                previewData={{ ticker: 'AAPL' }}
+                resolvedTicker="AAPL"
+                status="done"
+            />
+        );
+
+        expect(screen.queryByText('Forward Signals')).not.toBeNull();
+        expect(screen.queryByText('Growth Outlook')).not.toBeNull();
+        expect(screen.getAllByText('Source: mda').length).toBeGreaterThan(0);
+        expect(screen.queryByText('2025-11-03')).not.toBeNull();
+        expect(screen.queryByText('0000320193-25-000073')).not.toBeNull();
+        expect(
+            screen
+                .getByRole('link', { name: /open filing/i })
+                .getAttribute('href')
+        ).toBe(
+            'https://www.sec.gov/Archives/edgar/data/320193/000032019325000073/0000320193-25-000073-index.html'
+        );
     });
 });

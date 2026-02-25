@@ -1,8 +1,6 @@
 import logging
 from datetime import date
 
-from edgar import set_identity
-
 from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.traceable import (
     ComputedProvenance,
@@ -11,6 +9,7 @@ from src.shared.kernel.traceable import (
 )
 
 from .factory import FinancialReportFactory
+from .filing_fetcher import call_with_sec_retry
 from .forward_signals import extract_forward_signals_from_xbrl_reports
 from .forward_signals_text import extract_forward_signals_from_sec_text
 from .models import (
@@ -19,9 +18,6 @@ from .models import (
 )
 
 logger = get_logger(__name__)
-
-# Set SEC EDGAR identity
-set_identity("ValueInvestmentAgent research@example.com")
 
 
 def fetch_financial_data(ticker: str, years: int = 3) -> list[FinancialReport]:
@@ -44,14 +40,21 @@ def fetch_financial_data(ticker: str, years: int = 3) -> list[FinancialReport]:
     attempt_year = start_year
 
     while len(reports) < years and attempt_year > (start_year - years - 5):
+        current_attempt_year = attempt_year
         try:
             log_event(
                 logger,
                 event="fundamental_xbrl_year_attempt",
                 message="xbrl yearly report fetch attempt",
-                fields={"ticker": ticker, "attempt_year": attempt_year},
+                fields={"ticker": ticker, "attempt_year": current_attempt_year},
             )
-            report = FinancialReportFactory.create_report(ticker, attempt_year)
+            report = call_with_sec_retry(
+                operation=f"create_report_{current_attempt_year}",
+                ticker=ticker,
+                execute=lambda year=current_attempt_year: FinancialReportFactory.create_report(
+                    ticker, year
+                ),
+            )
 
             actual_year = report.base.fiscal_year.value
 
@@ -65,7 +68,7 @@ def fetch_financial_data(ticker: str, years: int = 3) -> list[FinancialReport]:
                     fields={
                         "ticker": ticker,
                         "actual_year": actual_year,
-                        "attempt_year": attempt_year,
+                        "attempt_year": current_attempt_year,
                     },
                 )
             else:
@@ -78,7 +81,7 @@ def fetch_financial_data(ticker: str, years: int = 3) -> list[FinancialReport]:
                     fields={
                         "ticker": ticker,
                         "actual_year": actual_year,
-                        "attempt_year": attempt_year,
+                        "attempt_year": current_attempt_year,
                     },
                 )
         except ValueError as exc:
@@ -90,7 +93,7 @@ def fetch_financial_data(ticker: str, years: int = 3) -> list[FinancialReport]:
                 error_code="FUNDAMENTAL_XBRL_NOT_FOUND",
                 fields={
                     "ticker": ticker,
-                    "attempt_year": attempt_year,
+                    "attempt_year": current_attempt_year,
                     "exception": str(exc),
                 },
             )
@@ -103,7 +106,7 @@ def fetch_financial_data(ticker: str, years: int = 3) -> list[FinancialReport]:
                 error_code="FUNDAMENTAL_XBRL_FETCH_FAILED",
                 fields={
                     "ticker": ticker,
-                    "attempt_year": attempt_year,
+                    "attempt_year": current_attempt_year,
                     "exception": str(exc),
                 },
             )

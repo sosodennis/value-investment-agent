@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from src.shared.kernel.tools.logger import get_logger, log_event
 
 from .models import FinancialReport
+from .signal_schema import ForwardSignalEvidencePayload, ForwardSignalPayload
 
 logger = get_logger(__name__)
 
@@ -167,24 +168,25 @@ def _signal_payload(
 ) -> dict[str, object]:
     as_of = datetime.now(timezone.utc).isoformat()
     source_url = _SEC_SEARCH_URL_TEMPLATE.format(ticker=ticker)
-    return {
-        "signal_id": signal_id,
-        "source_type": source_type,
-        "metric": metric,
-        "direction": direction,
-        "value": round(value, 2),
-        "unit": "basis_points",
-        "confidence": confidence,
-        "as_of": as_of,
-        "evidence": [
-            {
-                "text_snippet": snippet,
-                "source_url": source_url,
-                "doc_type": doc_type,
-                "period": period,
-            }
+    payload = ForwardSignalPayload(
+        signal_id=signal_id,
+        source_type=source_type,
+        metric=metric,
+        direction=direction,
+        value=round(value, 2),
+        unit="basis_points",
+        confidence=confidence,
+        as_of=as_of,
+        evidence=[
+            ForwardSignalEvidencePayload(
+                text_snippet=snippet,
+                source_url=source_url,
+                doc_type=doc_type,
+                period=period,
+            )
         ],
-    }
+    )
+    return payload.model_dump(exclude_none=True)
 
 
 def _to_int(value: object) -> int | None:

@@ -142,7 +142,7 @@ Segmentation defaults:
 
 Container setup:
 
-1. Set `HF_HOME` and `TRANSFORMERS_CACHE`.
+1. Set `HF_HOME` as the canonical model cache root.
 2. Pre-download model assets at build time.
 3. Initialize spaCy runtime (sentencizer path) in image build validation step.
 4. Avoid runtime model download during startup.
@@ -161,16 +161,24 @@ Breaking behaviors:
 
 ## 10. Implementation Steps
 
-1. PR-1: schema and façade refactor
+1. PR-1: schema and façade refactor (Done 2026-02-25)
    - Add typed schemas and serialization boundaries.
-2. PR-2: fetch hardening
+2. PR-2: fetch hardening (Done 2026-02-25)
    - Add rate limiting, retry, and jitter.
-3. PR-3: retrieval pipeline
+3. PR-3: retrieval pipeline (Done 2026-02-25)
    - Add two-stage segmentation pipeline, FinBERT filter, hybrid retriever, deterministic builder.
-4. PR-4: observability and provenance
+4. PR-4: observability and provenance (Done 2026-02-25)
    - Improve deep-link evidence and structured logs.
-5. PR-5: tests and benchmark
+5. PR-5: tests and benchmark (Done 2026-02-25)
    - Update fixtures and add quality/perf checks.
+
+### Benchmark Command (PR-5)
+
+Run fixed-eval benchmark locally:
+
+```bash
+uv run --project finance-agent-core python finance-agent-core/scripts/benchmark_sec_forward_signals.py --iterations 8
+```
 
 ## 11. Acceptance Criteria
 

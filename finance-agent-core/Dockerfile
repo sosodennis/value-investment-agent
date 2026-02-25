@@ -17,12 +17,36 @@ WORKDIR /app
 # Enable venv in a separate location to avoid bind-mount interference
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
+ENV HF_BAKED_CACHE=/opt/hf-cache-baked
+ENV HF_HOME=/opt/hf-cache
+ENV HF_HUB_CACHE=/opt/hf-cache/hub
+ENV SENTENCE_TRANSFORMERS_HOME=/opt/hf-cache/hub
 
 # Copy dependency files
 COPY pyproject.toml uv.lock ./
 
 # Install dependencies using uv
 RUN uv sync --frozen --no-dev --no-install-project
+
+# Pre-bake Hugging Face models into image layer.
+# Runtime cache may be bind-mounted; entrypoint will seed from this baked cache.
+RUN mkdir -p "${HF_BAKED_CACHE}" "${HF_HOME}"
+RUN HF_HOME="${HF_BAKED_CACHE}" \
+    HF_HUB_CACHE="${HF_BAKED_CACHE}/hub" \
+    SENTENCE_TRANSFORMERS_HOME="${HF_BAKED_CACHE}/hub" \
+    python - <<'PY'
+from huggingface_hub import snapshot_download
+
+model_repos = [
+    "project-aps/finbert-finetune",
+    "yiyanghkust/finbert-fls",
+    "sentence-transformers/all-MiniLM-L6-v2",
+]
+
+for repo_id in model_repos:
+    print(f"Pre-downloading Hugging Face repo: {repo_id}", flush=True)
+    snapshot_download(repo_id=repo_id)
+PY
 
 # Copy entrypoint separately to avoid being overwritten by bind mount
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh

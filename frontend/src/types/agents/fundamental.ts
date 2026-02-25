@@ -61,6 +61,31 @@ export interface FinancialReport {
     extension_type?: 'Industrial' | 'FinancialServices' | 'RealEstate' | null;
 }
 
+export interface ForwardSignalEvidence {
+    text_snippet: string;
+    source_url: string;
+    doc_type?: string;
+    period?: string;
+    filing_date?: string;
+    accession_number?: string;
+    focus_strategy?: string;
+    rule?: string;
+    value_basis_points?: number;
+}
+
+export interface ForwardSignal {
+    signal_id: string;
+    source_type: string;
+    metric: string;
+    direction: 'up' | 'down' | 'neutral';
+    value: number;
+    unit: 'basis_points' | 'ratio';
+    confidence: number;
+    as_of: string;
+    median_filing_age_days?: number;
+    evidence: ForwardSignalEvidence[];
+}
+
 export interface FundamentalAnalysisSuccess {
     ticker: string;
     model_type: string;
@@ -69,6 +94,7 @@ export interface FundamentalAnalysisSuccess {
     industry: string;
     reasoning: string;
     financial_reports: FinancialReport[];
+    forward_signals?: ForwardSignal[];
     status: 'done';
 }
 

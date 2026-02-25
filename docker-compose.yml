@@ -42,10 +42,21 @@ services:
       - POSTGRES_DB=${POSTGRES_DB:-langgraph}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - HF_HOME=/opt/hf-cache
+      - HF_BAKED_CACHE=/opt/hf-cache-baked
+      - HF_HUB_CACHE=/opt/hf-cache/hub
+      - SENTENCE_TRANSFORMERS_HOME=/opt/hf-cache/hub
+      - HF_HUB_OFFLINE=1
+      - TRANSFORMERS_OFFLINE=1
+      - HF_LOCAL_FILES_ONLY=1
+      - NEWS_FINBERT_WARMUP=1
+      - SEC_TEXT_FLS_WARMUP=1
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - OPENROUTER_BASE_URL=${OPENROUTER_BASE_URL}
       - FRED_API_KEY=${FRED_API_KEY}
       # Add other necessary env vars here
+    volumes:
+      - hf_cache:/opt/hf-cache
     ports:
       - "8000:8000"
     depends_on:
@@ -91,6 +102,7 @@ services:
 volumes:
   pg_data:
   redis_data:
+  hf_cache:
 
 networks:
   default:

@@ -1,4 +1,5 @@
 import logging
+import os
 import re
 from dataclasses import asdict, dataclass
 
@@ -9,6 +10,11 @@ logger = get_logger(__name__)
 
 # Model chosen from research: project-aps/finbert-finetune
 FINBERT_MODEL_NAME = "project-aps/finbert-finetune"
+_HF_LOCAL_FILES_ONLY = os.getenv("HF_LOCAL_FILES_ONLY", "1").strip().lower() not in {
+    "0",
+    "false",
+    "no",
+}
 
 
 @dataclass
@@ -62,11 +68,19 @@ class FinBERTAnalyzer:
                 logger,
                 event="news_finbert_load_started",
                 message="finbert model load started",
-                fields={"model": FINBERT_MODEL_NAME, "device": self.device},
+                fields={
+                    "model": FINBERT_MODEL_NAME,
+                    "device": self.device,
+                    "local_files_only": _HF_LOCAL_FILES_ONLY,
+                },
             )
-            self.tokenizer = AutoTokenizer.from_pretrained(FINBERT_MODEL_NAME)
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                FINBERT_MODEL_NAME,
+                local_files_only=_HF_LOCAL_FILES_ONLY,
+            )
             self.model = AutoModelForSequenceClassification.from_pretrained(
-                FINBERT_MODEL_NAME
+                FINBERT_MODEL_NAME,
+                local_files_only=_HF_LOCAL_FILES_ONLY,
             ).to(self.device)
             self.model.eval()
             log_event(

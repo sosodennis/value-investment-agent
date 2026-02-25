@@ -38,6 +38,10 @@ dependencies = [
     "statsmodels>=0.13.0,<0.14.0",
     "scikit-learn>=1.0.0",
     "asyncpg>=0.31.0",
+    "spacy>=3.8.0",
+    "rank-bm25>=0.2.2",
+    "sentence-transformers>=2.7.0",
+    "langchain-text-splitters>=0.3.0",
 ]
 
 [tool.setuptools]

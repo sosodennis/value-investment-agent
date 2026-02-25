@@ -1,5 +1,5 @@
 import React, { memo, useMemo, useState } from 'react';
-import { LayoutPanelTop, BarChart3, ChartArea } from 'lucide-react';
+import { LayoutPanelTop, BarChart3, ChartArea, ExternalLink } from 'lucide-react';
 import {
     Area,
     AreaChart,
@@ -13,6 +13,7 @@ import {
 import { FinancialTable } from '../FinancialTable';
 import { AgentStatus, ArtifactReference } from '@/types/agents';
 import { parseFundamentalArtifact } from '@/types/agents/artifact-parsers';
+import { ForwardSignal } from '@/types/agents/fundamental';
 import { ParsedFinancialPreview } from '@/types/agents/fundamental-preview-parser';
 import { useArtifact } from '../../hooks/useArtifact';
 import { AgentLoadingState } from './AgentLoadingState';
@@ -39,6 +40,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
 
     const hasPreview = !!previewData;
     const reports = artifactData?.financial_reports ?? previewData?.financial_reports ?? [];
+    const forwardSignals: ForwardSignal[] = artifactData?.forward_signals ?? [];
     const valuationScore = previewData?.valuation_score;
     const previewKeyMetrics = previewData?.key_metrics ?? {};
     const distributionSummary = previewData?.distribution_summary?.summary;
@@ -511,6 +513,24 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
         const rounded = Math.round(value * 10) / 10;
         return `${rounded >= 0 ? '+' : ''}${rounded.toFixed(1)} basis points`;
     }
+    const formatSignalValue = (value: number, unit: 'basis_points' | 'ratio'): string => {
+        if (unit === 'basis_points') {
+            const rounded = Math.round(value * 10) / 10;
+            return `${rounded >= 0 ? '+' : ''}${rounded.toFixed(1)} bps`;
+        }
+        return `${value >= 0 ? '+' : ''}${value.toFixed(3)}`;
+    };
+    const formatSignalMetric = (metric: string): string => {
+        if (metric === 'growth_outlook') return 'Growth Outlook';
+        if (metric === 'margin_outlook') return 'Margin Outlook';
+        return metric.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+    };
+    const formatSignalDate = (value: string | undefined): string => {
+        if (!value) return 'N/A';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return value;
+        return date.toISOString().slice(0, 10);
+    };
     const distributionAccessibilitySummary = (() => {
         if (!distributionSummary) return '';
         const summaryParts: string[] = ['Valuation distribution view.'];
@@ -1163,6 +1183,102 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                             )}
                         </div>
                     )}
+                </div>
+            )}
+
+            {forwardSignals.length > 0 && (
+                <div className="tech-card p-4 space-y-4 border-cyan-500/25 bg-gradient-to-br from-cyan-950/20 via-slate-900/40 to-slate-950/20">
+                    <div className="flex items-center justify-between">
+                        <span className="text-label">Forward Signals</span>
+                        <span className="text-xs text-slate-300">
+                            {forwardSignals.length} extracted signals
+                        </span>
+                    </div>
+                    <div className="space-y-4">
+                        {forwardSignals.map((signal) => (
+                            <div
+                                key={signal.signal_id}
+                                className="rounded-lg border border-white/10 bg-slate-950/50 p-3 space-y-3"
+                            >
+                                <div className="flex flex-wrap items-center gap-2 justify-between">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span className="text-sm font-semibold text-white">
+                                            {formatSignalMetric(signal.metric)}
+                                        </span>
+                                        <span
+                                            className={`rounded border px-2 py-0.5 text-[11px] ${
+                                                signal.direction === 'up'
+                                                    ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200'
+                                                    : signal.direction === 'down'
+                                                        ? 'border-rose-400/40 bg-rose-500/10 text-rose-200'
+                                                        : 'border-slate-400/40 bg-slate-500/10 text-slate-200'
+                                            }`}
+                                        >
+                                            {signal.direction.toUpperCase()}
+                                        </span>
+                                        <span className="rounded border border-indigo-400/30 bg-indigo-500/10 px-2 py-0.5 text-[11px] text-indigo-200">
+                                            Source: {signal.source_type}
+                                        </span>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-3 text-xs text-slate-200">
+                                        <span>Value: {formatSignalValue(signal.value, signal.unit)}</span>
+                                        <span>
+                                            Confidence: {(signal.confidence * 100).toFixed(1)}%
+                                        </span>
+                                        <span>As-of: {formatSignalDate(signal.as_of)}</span>
+                                    </div>
+                                </div>
+                                <div className="overflow-x-auto rounded border border-white/10">
+                                    <table className="w-full text-left text-xs">
+                                        <thead className="bg-slate-900/70 text-slate-300">
+                                            <tr>
+                                                <th className="px-3 py-2 font-semibold">Evidence</th>
+                                                <th className="px-3 py-2 font-semibold">Filing Date</th>
+                                                <th className="px-3 py-2 font-semibold">Accession</th>
+                                                <th className="px-3 py-2 font-semibold">Link</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {signal.evidence.map((item, index) => (
+                                                <tr
+                                                    key={`${signal.signal_id}-${item.accession_number ?? index}`}
+                                                    className="border-t border-white/5 text-slate-200 align-top"
+                                                >
+                                                    <td className="px-3 py-2 min-w-[360px]">
+                                                        <div>{item.text_snippet}</div>
+                                                        {(item.doc_type || item.period) && (
+                                                            <div className="mt-1 text-[11px] text-slate-400">
+                                                                {[item.doc_type, item.period]
+                                                                    .filter(Boolean)
+                                                                    .join(' · ')}
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-3 py-2 whitespace-nowrap">
+                                                        {formatSignalDate(item.filing_date)}
+                                                    </td>
+                                                    <td className="px-3 py-2 whitespace-nowrap font-mono text-[11px]">
+                                                        {item.accession_number ?? 'N/A'}
+                                                    </td>
+                                                    <td className="px-3 py-2 whitespace-nowrap">
+                                                        <a
+                                                            href={item.source_url}
+                                                            target="_blank"
+                                                            rel="noreferrer noopener"
+                                                            className="inline-flex items-center gap-1 text-cyan-300 hover:text-cyan-200 underline"
+                                                        >
+                                                            Open Filing
+                                                            <ExternalLink size={12} />
+                                                        </a>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             )}
 

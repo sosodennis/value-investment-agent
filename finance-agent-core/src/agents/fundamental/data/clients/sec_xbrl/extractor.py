@@ -10,6 +10,8 @@ from tabulate import tabulate
 
 from src.shared.kernel.tools.logger import get_logger, log_event
 
+from .filing_fetcher import call_with_sec_retry
+
 # Set SEC identity
 set_identity("ValueInvestmentAgent research@example.com")
 
@@ -139,11 +141,25 @@ class SECReportExtractor:
             message="xbrl report data initialization started",
             fields={"ticker": self.ticker, "fiscal_year": self.fiscal_year},
         )
-        company = Company(self.ticker)
-        self.standard_industrial_classification_code = company.sic
+        company = call_with_sec_retry(
+            operation="company_init",
+            ticker=self.ticker,
+            execute=lambda: Company(self.ticker),
+        )
+        self.standard_industrial_classification_code = call_with_sec_retry(
+            operation="company_sic",
+            ticker=self.ticker,
+            execute=lambda: company.sic,
+        )
         # 智慧對齊：考慮申報時差 [1, 2]
-        filings = company.get_filings(
-            form="10-K", year=[self.fiscal_year, self.fiscal_year + 1], amendments=False
+        filings = call_with_sec_retry(
+            operation=f"get_filings_10-K_{self.fiscal_year}",
+            ticker=self.ticker,
+            execute=lambda: company.get_filings(
+                form="10-K",
+                year=[self.fiscal_year, self.fiscal_year + 1],
+                amendments=False,
+            ),
         )
 
         target_filing = next(
@@ -160,7 +176,11 @@ class SECReportExtractor:
             raise ValueError(f"找不到 {self.ticker} 報告。")
 
         # 解析 XBRL 並快取至記憶體 [3, 4]
-        xb = target_filing.xbrl()
+        xb = call_with_sec_retry(
+            operation=f"filing_xbrl_{self.fiscal_year}",
+            ticker=self.ticker,
+            execute=target_filing.xbrl,
+        )
         if not xb:
             raise ValueError(f"No XBRL data found for {self.ticker}")
 

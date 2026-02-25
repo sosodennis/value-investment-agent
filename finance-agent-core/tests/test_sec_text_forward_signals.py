@@ -210,6 +210,67 @@ def test_extract_forward_signals_from_sec_text_logs_focus_diagnostics() -> None:
     assert "10-K_focused" in fields["emitted_doc_types"]
     assert fields["focused_signals_count"] >= 1
     assert fields["emitted_focused_doc_types"] == ["10-K_focused"]
+    assert fields["pipeline_records_processed"] == 1
+    assert fields["pipeline_metric_queries_total"] == 2
+    assert fields["pipeline_analysis_sentences_total"] >= 1
+    assert fields["pipeline_retrieval_sentences_by_metric"]["growth_outlook"] >= 0
+    assert fields["pipeline_split_ms_total"] >= 0.0
+    assert fields["pipeline_fls_ms_total"] >= 0.0
+    assert fields["pipeline_fls_model_load_ms_total"] >= 0.0
+    assert fields["pipeline_fls_inference_ms_total"] >= 0.0
+    assert fields["pipeline_fls_sentences_scored_total"] >= 0
+    assert fields["pipeline_fls_prefilter_selected_total"] >= 0
+    assert fields["pipeline_fls_batches_total"] >= 0
+    assert fields["pipeline_fls_cache_hits_total"] >= 0
+    assert fields["pipeline_fls_cache_misses_total"] >= 0
+    assert fields["pipeline_fls_fast_skip_records_total"] >= 0
+    assert fields["pipeline_fls_fast_skip_sentences_total"] >= 0
+    assert fields["pipeline_fls_fast_skip_ratio"] >= 0.0
+    assert fields["pipeline_retrieval_ms_total"] >= 0.0
+    assert fields["pipeline_pattern_ms_total"] >= 0.0
+
+
+def test_extract_forward_signals_from_sec_text_fast_skips_fls_without_cues() -> None:
+    records = [
+        FilingTextRecord(
+            form="10-K",
+            source_type="mda",
+            period="FY2025",
+            text=(
+                "This section describes historical accounting treatments and "
+                "prior-period operating structure updates for fiscal year 2024."
+            ),
+        )
+    ]
+
+    with (
+        patch(
+            "src.agents.fundamental.data.clients.sec_xbrl.forward_signals_text.filter_forward_looking_sentences_with_stats",
+            side_effect=AssertionError(
+                "FLS should be skipped when no cues are present"
+            ),
+        ),
+        patch(
+            "src.agents.fundamental.data.clients.sec_xbrl.forward_signals_text.log_event"
+        ) as mock_log,
+    ):
+        signals = extract_forward_signals_from_sec_text(
+            ticker="AAPL",
+            fetch_records_fn=lambda _ticker, _limit: records,
+        )
+
+    assert signals == []
+    completion_call = next(
+        call
+        for call in mock_log.call_args_list
+        if call.kwargs["event"] == "fundamental_forward_signal_text_producer_no_signal"
+    )
+    fields = completion_call.kwargs["fields"]
+    assert fields["pipeline_records_processed"] == 1
+    assert fields["pipeline_fls_fast_skip_records_total"] == 1
+    assert fields["pipeline_fls_fast_skip_sentences_total"] >= 1
+    assert fields["pipeline_fls_fast_skip_ratio"] == 1.0
+    assert fields["pipeline_fls_ms_total"] == 0.0
 
 
 def test_extract_forward_signals_from_sec_text_handles_negation_and_numeric_guidance() -> (
@@ -259,7 +320,8 @@ def test_extract_forward_signals_from_sec_text_enriches_evidence_provenance() ->
             source_type="mda",
             period="Q4 2025",
             filing_date="2025-11-03",
-            accession_number="0000000000-25-000001",
+            accession_number="0000320193-25-000073",
+            cik="0000320193",
             focus_strategy="edgartools_part_item",
             text=(
                 "Management expects higher revenue and raised guidance by 4% for 2026."
@@ -274,7 +336,11 @@ def test_extract_forward_signals_from_sec_text_enriches_evidence_provenance() ->
     assert signals
     evidence = signals[0]["evidence"][0]
     assert evidence["filing_date"] == "2025-11-03"
-    assert evidence["accession_number"] == "0000000000-25-000001"
+    assert evidence["accession_number"] == "0000320193-25-000073"
+    assert (
+        evidence["source_url"] == "https://www.sec.gov/Archives/edgar/data/320193/"
+        "000032019325000073/0000320193-25-000073-index.html"
+    )
     assert evidence["focus_strategy"] == "edgartools_part_item"
     assert evidence["rule"] in {"lexical_pattern", "numeric_guidance"}
 

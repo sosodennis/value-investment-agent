@@ -39,11 +39,38 @@ describe('artifact parsers', () => {
                     },
                 },
             ],
+            forward_signals: [
+                {
+                    signal_id: 'sig-1',
+                    source_type: 'mda',
+                    metric: 'growth_outlook',
+                    direction: 'up',
+                    value: 120,
+                    unit: 'basis_points',
+                    confidence: 0.74,
+                    as_of: '2026-02-25T06:07:32.311583+00:00',
+                    evidence: [
+                        {
+                            text_snippet:
+                                'Management expects higher revenue and raised guidance.',
+                            source_url:
+                                'https://www.sec.gov/Archives/edgar/data/320193/000032019325000073/0000320193-25-000073-index.html',
+                            filing_date: '2025-11-03',
+                            accession_number: '0000320193-25-000073',
+                        },
+                    ],
+                },
+            ],
         });
 
         expect(parsed.ticker).toBe('AAPL');
         expect(parsed.status).toBe('done');
         expect(parsed.financial_reports).toHaveLength(1);
+        expect(parsed.forward_signals).toHaveLength(1);
+        expect(parsed.forward_signals?.[0]?.metric).toBe('growth_outlook');
+        expect(parsed.forward_signals?.[0]?.evidence[0]?.accession_number).toBe(
+            '0000320193-25-000073'
+        );
     });
 
     it('normalizes nullable textual fields in fundamental artifact', () => {
@@ -98,6 +125,22 @@ describe('artifact parsers', () => {
                 financial_reports: [],
             })
         ).toThrowError('fundamental artifact.status must be done.');
+    });
+
+    it('rejects invalid forward signals shape in fundamental artifact', () => {
+        expect(() =>
+            parseFundamentalArtifact({
+                ticker: 'AAPL',
+                model_type: 'dcf',
+                company_name: 'Apple Inc.',
+                sector: 'Technology',
+                industry: 'Consumer Electronics',
+                reasoning: 'Strong cash flow profile',
+                status: 'done',
+                financial_reports: [],
+                forward_signals: {},
+            })
+        ).toThrowError('fundamental artifact.forward_signals must be an array.');
     });
 
     it('parses news artifact', () => {

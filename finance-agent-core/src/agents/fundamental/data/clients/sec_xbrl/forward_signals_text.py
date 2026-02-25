@@ -1,25 +1,48 @@
 from __future__ import annotations
 
+import logging
 import re
+import time
 from collections import Counter
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from statistics import median
 
 from edgar import Company
+from pydantic import ValidationError
 
 from src.shared.kernel.tools.logger import get_logger, log_event
+from src.shared.kernel.types import JSONObject
+
+from .filing_fetcher import call_with_sec_retry
+from .fls_filter import filter_forward_looking_sentences_with_stats
+from .hybrid_retriever import retrieve_relevant_sentences_batch
+from .sentence_pipeline import join_sentences, split_text_into_sentences
+from .signal_schema import ForwardSignalEvidencePayload, ForwardSignalPayload
 
 logger = get_logger(__name__)
 
 _SEC_SEARCH_URL_TEMPLATE = "https://www.sec.gov/edgar/search/#/entityName={ticker}"
+_SEC_ARCHIVES_INDEX_URL_TEMPLATE = (
+    "https://www.sec.gov/Archives/edgar/data/"
+    "{cik}/{accession_no_dash}/{accession}-index.html"
+)
 _TEXT_MAX_CHARS = 120_000
 
 _FORM_SOURCE_TYPE: dict[str, str] = {
     "10-K": "mda",
     "10-Q": "mda",
     "8-K": "press_release",
+}
+
+_METRIC_RETRIEVAL_QUERY: dict[str, str] = {
+    "growth_outlook": (
+        "expected revenue growth sales guidance demand acceleration outlook forecast"
+    ),
+    "margin_outlook": (
+        "operating margin gross margin profitability cost inflation pricing outlook guidance"
+    ),
 }
 
 _SIGNAL_PATTERNS: dict[str, dict[str, tuple[str, ...]]] = {
@@ -84,6 +107,16 @@ _NUMERIC_GUIDANCE_PATTERN = re.compile(
     r"(?P<unit>%|percent|percentage points?|bps|basis points?)",
     re.IGNORECASE,
 )
+_FLS_SKIP_SIGNAL_PHRASES: tuple[str, ...] = tuple(
+    sorted(
+        {
+            phrase.lower()
+            for metric_patterns in _SIGNAL_PATTERNS.values()
+            for direction_phrases in metric_patterns.values()
+            for phrase in direction_phrases
+        }
+    )
+)
 
 
 @dataclass(frozen=True)
@@ -95,6 +128,7 @@ class FilingTextRecord:
     period: str | None = None
     accession_number: str | None = None
     filing_date: str | None = None
+    cik: str | None = None
     focus_strategy: str | None = None
 
 
@@ -120,6 +154,35 @@ class _PatternHit:
     is_historical: bool
 
 
+@dataclass
+class _TextPipelineDiagnostics:
+    records_processed: int = 0
+    records_with_signal_candidates: int = 0
+    analysis_sentences_total: int = 0
+    forward_sentences_total: int = 0
+    retrieval_corpus_sentences_total: int = 0
+    metric_queries_total: int = 0
+    metric_retrieved_sentences_total: int = 0
+    lexical_hits_total: int = 0
+    numeric_hits_total: int = 0
+    retrieval_sentences_by_metric: Counter[str] = field(default_factory=Counter)
+    lexical_hits_by_metric: Counter[str] = field(default_factory=Counter)
+    numeric_hits_by_metric: Counter[str] = field(default_factory=Counter)
+    split_ms_total: float = 0.0
+    fls_ms_total: float = 0.0
+    fls_model_load_ms_total: float = 0.0
+    fls_inference_ms_total: float = 0.0
+    fls_sentences_scored_total: int = 0
+    fls_prefilter_selected_total: int = 0
+    fls_batches_total: int = 0
+    fls_cache_hits_total: int = 0
+    fls_cache_misses_total: int = 0
+    fls_fast_skip_records_total: int = 0
+    fls_fast_skip_sentences_total: int = 0
+    retrieval_ms_total: float = 0.0
+    pattern_ms_total: float = 0.0
+
+
 def extract_forward_signals_from_sec_text(
     *,
     ticker: str,
@@ -131,7 +194,7 @@ def extract_forward_signals_from_sec_text(
     if not records:
         return []
 
-    grouped = _group_records_for_signals(ticker=ticker, records=records)
+    grouped, pipeline_diag = _group_records_for_signals(ticker=ticker, records=records)
     focus_diag = _summarize_focus_usage(records)
     signals: list[dict[str, object]] = []
     for source_type, metrics in grouped.items():
@@ -186,20 +249,32 @@ def extract_forward_signals_from_sec_text(
                 f"sec_text_{source_type}_{metric}_"
                 f"{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
             )
-            signals.append(
-                {
-                    "signal_id": signal_id,
-                    "source_type": source_type,
-                    "metric": metric,
-                    "direction": direction,
-                    "value": round(value_basis_points, 2),
-                    "unit": "basis_points",
-                    "confidence": round(confidence, 4),
-                    "as_of": datetime.now(UTC).isoformat(),
-                    "median_filing_age_days": median_filing_age_days,
-                    "evidence": evidence,
-                }
+            payload = _build_forward_signal_payload(
+                signal_id=signal_id,
+                source_type=source_type,
+                metric=metric,
+                direction=direction,
+                value_basis_points=value_basis_points,
+                confidence=confidence,
+                median_filing_age_days=median_filing_age_days,
+                evidence=evidence,
             )
+            if payload is None:
+                log_event(
+                    logger,
+                    event="fundamental_forward_signal_text_payload_invalid",
+                    message="forward signal text payload failed validation and was skipped",
+                    level=logging.WARNING,
+                    error_code="FUNDAMENTAL_FORWARD_SIGNAL_TEXT_PAYLOAD_INVALID",
+                    fields={
+                        "ticker": ticker,
+                        "source_type": source_type,
+                        "metric": metric,
+                        "signal_id": signal_id,
+                    },
+                )
+                continue
+            signals.append(payload)
 
     if signals:
         emitted_doc_types = sorted(
@@ -249,6 +324,7 @@ def extract_forward_signals_from_sec_text(
                 "emitted_doc_types": emitted_doc_types,
                 "emitted_focused_doc_types": emitted_focused_doc_types,
                 "focused_signals_count": focused_signals_count,
+                **_build_pipeline_diagnostics_fields(pipeline_diag),
             },
         )
     else:
@@ -263,27 +339,70 @@ def extract_forward_signals_from_sec_text(
                 "fallback_records_total": focus_diag["fallback_records_total"],
                 "focused_form_counts": focus_diag["focused_form_counts"],
                 "fallback_form_counts": focus_diag["fallback_form_counts"],
+                **_build_pipeline_diagnostics_fields(pipeline_diag),
             },
         )
     return signals
+
+
+def _build_forward_signal_payload(
+    *,
+    signal_id: str,
+    source_type: str,
+    metric: str,
+    direction: str,
+    value_basis_points: float,
+    confidence: float,
+    median_filing_age_days: int | None,
+    evidence: list[JSONObject],
+) -> dict[str, object] | None:
+    try:
+        validated_evidence = [
+            ForwardSignalEvidencePayload.model_validate(item) for item in evidence
+        ]
+        payload = ForwardSignalPayload(
+            signal_id=signal_id,
+            source_type=source_type,
+            metric=metric,
+            direction=direction,
+            value=round(value_basis_points, 2),
+            unit="basis_points",
+            confidence=round(confidence, 4),
+            as_of=datetime.now(UTC).isoformat(),
+            median_filing_age_days=median_filing_age_days,
+            evidence=validated_evidence,
+        )
+        return payload.model_dump()
+    except ValidationError:
+        return None
 
 
 def _fetch_recent_filing_text_records(
     ticker: str,
     max_filings_per_form: int,
 ) -> list[FilingTextRecord]:
-    company = Company(ticker)
+    company = call_with_sec_retry(
+        operation="company_init",
+        ticker=ticker,
+        execute=lambda: Company(ticker),
+    )
+    company_cik = _normalize_cik(getattr(company, "cik", None))
     current_year = date.today().year
     years = [current_year - offset for offset in range(3)]
 
     records: list[FilingTextRecord] = []
     for form, source_type in _FORM_SOURCE_TYPE.items():
+        current_form = form
         try:
-            filings = company.get_filings(
-                form=form,
-                year=years,
-                amendments=False,
-                trigger_full_load=False,
+            filings = call_with_sec_retry(
+                operation=f"get_filings_{current_form}",
+                ticker=ticker,
+                execute=lambda form=current_form: company.get_filings(
+                    form=form,
+                    year=years,
+                    amendments=False,
+                    trigger_full_load=False,
+                ),
             )
             if filings is None:
                 continue
@@ -295,7 +414,7 @@ def _fetch_recent_filing_text_records(
                 message="failed to fetch sec text filings for form",
                 fields={
                     "ticker": ticker,
-                    "form": form,
+                    "form": current_form,
                     "exception": str(exc),
                 },
             )
@@ -325,6 +444,7 @@ def _fetch_recent_filing_text_records(
                         getattr(filing, "accession_number", None)
                     ),
                     filing_date=_normalize_text(getattr(filing, "filing_date", None)),
+                    cik=_normalize_cik(getattr(filing, "cik", None)) or company_cik,
                     focus_strategy=focus_strategy,
                 )
             )
@@ -335,23 +455,103 @@ def _group_records_for_signals(
     *,
     ticker: str,
     records: list[FilingTextRecord],
-) -> dict[str, dict[str, _MetricSignalAccumulator]]:
+) -> tuple[dict[str, dict[str, _MetricSignalAccumulator]], _TextPipelineDiagnostics]:
     grouped: dict[str, dict[str, _MetricSignalAccumulator]] = {}
+    pipeline_diag = _TextPipelineDiagnostics()
     for record in records:
+        pipeline_diag.records_processed += 1
         focused_section = record.focus_text or _extract_focus_text(
             form=record.form, text=record.text
         )
         analysis_text = focused_section or record.text
+        split_started = time.perf_counter()
+        analysis_sentences = split_text_into_sentences(analysis_text)
+        pipeline_diag.split_ms_total += (time.perf_counter() - split_started) * 1000.0
+        fls_stats: dict[str, float | int] = {}
+        if _should_fast_skip_fls(analysis_sentences):
+            forward_sentences = []
+            pipeline_diag.fls_fast_skip_records_total += 1
+            pipeline_diag.fls_fast_skip_sentences_total += len(analysis_sentences)
+        else:
+            fls_started = time.perf_counter()
+            forward_sentences, fls_stats = filter_forward_looking_sentences_with_stats(
+                analysis_sentences
+            )
+            pipeline_diag.fls_ms_total += (time.perf_counter() - fls_started) * 1000.0
+            pipeline_diag.fls_model_load_ms_total += _as_float(
+                fls_stats.get("model_load_ms")
+            )
+            pipeline_diag.fls_inference_ms_total += _as_float(
+                fls_stats.get("inference_ms")
+            )
+            pipeline_diag.fls_sentences_scored_total += _as_int(
+                fls_stats.get("sentences_scored")
+            )
+            pipeline_diag.fls_prefilter_selected_total += _as_int(
+                fls_stats.get("prefilter_selected")
+            )
+            pipeline_diag.fls_batches_total += _as_int(fls_stats.get("batches"))
+            pipeline_diag.fls_cache_hits_total += _as_int(fls_stats.get("cache_hits"))
+            pipeline_diag.fls_cache_misses_total += _as_int(
+                fls_stats.get("cache_misses")
+            )
+        retrieval_corpus = (
+            forward_sentences if forward_sentences else analysis_sentences
+        )
+        pipeline_diag.analysis_sentences_total += len(analysis_sentences)
+        pipeline_diag.forward_sentences_total += len(forward_sentences)
+        pipeline_diag.retrieval_corpus_sentences_total += len(retrieval_corpus)
         doc_type = _build_doc_type(record.form, used_focus=focused_section is not None)
-        for metric, patterns in _SIGNAL_PATTERNS.items():
-            up_hits = _find_pattern_hits(analysis_text, patterns["up"])
-            down_hits = _find_pattern_hits(analysis_text, patterns["down"])
+        source_url = _build_sec_source_url(
+            ticker=ticker,
+            accession_number=record.accession_number,
+            cik=record.cik,
+        )
+        metric_order = list(_SIGNAL_PATTERNS.keys())
+        metric_queries = [
+            _METRIC_RETRIEVAL_QUERY.get(metric, metric.replace("_", " "))
+            for metric in metric_order
+        ]
+        pipeline_diag.metric_queries_total += len(metric_order)
+        retrieval_started = time.perf_counter()
+        metric_retrieval_results = retrieve_relevant_sentences_batch(
+            queries=metric_queries,
+            corpus=retrieval_corpus,
+            top_k=24,
+        )
+        pipeline_diag.retrieval_ms_total += (
+            time.perf_counter() - retrieval_started
+        ) * 1000.0
+        record_has_signal_candidates = False
+        for idx, metric in enumerate(metric_order):
+            patterns = _SIGNAL_PATTERNS[metric]
+            metric_sentences = (
+                metric_retrieval_results[idx]
+                if idx < len(metric_retrieval_results)
+                else []
+            )
+            pipeline_diag.metric_retrieved_sentences_total += len(metric_sentences)
+            pipeline_diag.retrieval_sentences_by_metric[metric] += len(metric_sentences)
+            metric_text = join_sentences(metric_sentences) or analysis_text
+            pattern_started = time.perf_counter()
+            up_hits = _find_pattern_hits(metric_text, patterns["up"])
+            down_hits = _find_pattern_hits(metric_text, patterns["down"])
             numeric_hits = _find_numeric_guidance_hits(
-                analysis_text=analysis_text,
+                analysis_text=metric_text,
                 metric=metric,
             )
+            pipeline_diag.pattern_ms_total += (
+                time.perf_counter() - pattern_started
+            ) * 1000.0
+            lexical_hit_count = len(up_hits) + len(down_hits)
+            numeric_hit_count = len(numeric_hits)
+            pipeline_diag.lexical_hits_total += lexical_hit_count
+            pipeline_diag.numeric_hits_total += numeric_hit_count
+            pipeline_diag.lexical_hits_by_metric[metric] += lexical_hit_count
+            pipeline_diag.numeric_hits_by_metric[metric] += numeric_hit_count
             if not up_hits and not down_hits and not numeric_hits:
                 continue
+            record_has_signal_candidates = True
 
             source_bucket = grouped.setdefault(record.source_type, {})
             existing = source_bucket.get(metric)
@@ -389,13 +589,13 @@ def _group_records_for_signals(
                     forward_hit_count += 1
                 if hit.is_historical:
                     historical_hit_count += 1
-                snippet = _extract_snippet(analysis_text, hit.start, hit.end)
+                snippet = _extract_snippet(metric_text, hit.start, hit.end)
                 if not snippet:
                     continue
                 evidence.append(
                     {
                         "text_snippet": snippet,
-                        "source_url": _SEC_SEARCH_URL_TEMPLATE.format(ticker=ticker),
+                        "source_url": source_url,
                         "doc_type": doc_type,
                         "period": record.period or "N/A",
                         "filing_date": record.filing_date,
@@ -415,16 +615,14 @@ def _group_records_for_signals(
                     else:
                         down_score += numeric_hit.score * weight
                     snippet = _extract_snippet(
-                        analysis_text, numeric_hit.start, numeric_hit.end
+                        metric_text, numeric_hit.start, numeric_hit.end
                     )
                     if not snippet:
                         continue
                     evidence.append(
                         {
                             "text_snippet": snippet,
-                            "source_url": _SEC_SEARCH_URL_TEMPLATE.format(
-                                ticker=ticker
-                            ),
+                            "source_url": source_url,
                             "doc_type": doc_type,
                             "period": record.period or "N/A",
                             "filing_date": record.filing_date,
@@ -449,7 +647,9 @@ def _group_records_for_signals(
                 numeric_basis_points_samples=numeric_basis_points_samples,
                 filing_age_days_samples=filing_age_days_samples,
             )
-    return grouped
+        if record_has_signal_candidates:
+            pipeline_diag.records_with_signal_candidates += 1
+    return grouped, pipeline_diag
 
 
 def _summarize_focus_usage(records: list[FilingTextRecord]) -> dict[str, object]:
@@ -471,11 +671,117 @@ def _summarize_focus_usage(records: list[FilingTextRecord]) -> dict[str, object]
     }
 
 
+def _build_pipeline_diagnostics_fields(
+    pipeline_diag: _TextPipelineDiagnostics,
+) -> dict[str, object]:
+    forward_sentence_ratio = (
+        pipeline_diag.forward_sentences_total / pipeline_diag.analysis_sentences_total
+        if pipeline_diag.analysis_sentences_total > 0
+        else 0.0
+    )
+    avg_retrieved_sentences_per_query = (
+        pipeline_diag.metric_retrieved_sentences_total
+        / pipeline_diag.metric_queries_total
+        if pipeline_diag.metric_queries_total > 0
+        else 0.0
+    )
+    fast_skip_ratio = (
+        pipeline_diag.fls_fast_skip_records_total / pipeline_diag.records_processed
+        if pipeline_diag.records_processed > 0
+        else 0.0
+    )
+    return {
+        "pipeline_records_processed": pipeline_diag.records_processed,
+        "pipeline_records_with_signal_candidates": (
+            pipeline_diag.records_with_signal_candidates
+        ),
+        "pipeline_analysis_sentences_total": pipeline_diag.analysis_sentences_total,
+        "pipeline_forward_sentences_total": pipeline_diag.forward_sentences_total,
+        "pipeline_retrieval_corpus_sentences_total": (
+            pipeline_diag.retrieval_corpus_sentences_total
+        ),
+        "pipeline_forward_sentence_ratio": round(forward_sentence_ratio, 4),
+        "pipeline_metric_queries_total": pipeline_diag.metric_queries_total,
+        "pipeline_metric_retrieved_sentences_total": (
+            pipeline_diag.metric_retrieved_sentences_total
+        ),
+        "pipeline_avg_retrieved_sentences_per_query": round(
+            avg_retrieved_sentences_per_query, 4
+        ),
+        "pipeline_lexical_hits_total": pipeline_diag.lexical_hits_total,
+        "pipeline_numeric_hits_total": pipeline_diag.numeric_hits_total,
+        "pipeline_retrieval_sentences_by_metric": dict(
+            pipeline_diag.retrieval_sentences_by_metric
+        ),
+        "pipeline_lexical_hits_by_metric": dict(pipeline_diag.lexical_hits_by_metric),
+        "pipeline_numeric_hits_by_metric": dict(pipeline_diag.numeric_hits_by_metric),
+        "pipeline_split_ms_total": round(pipeline_diag.split_ms_total, 3),
+        "pipeline_fls_ms_total": round(pipeline_diag.fls_ms_total, 3),
+        "pipeline_fls_model_load_ms_total": round(
+            pipeline_diag.fls_model_load_ms_total, 3
+        ),
+        "pipeline_fls_inference_ms_total": round(
+            pipeline_diag.fls_inference_ms_total, 3
+        ),
+        "pipeline_fls_sentences_scored_total": (
+            pipeline_diag.fls_sentences_scored_total
+        ),
+        "pipeline_fls_prefilter_selected_total": (
+            pipeline_diag.fls_prefilter_selected_total
+        ),
+        "pipeline_fls_batches_total": pipeline_diag.fls_batches_total,
+        "pipeline_fls_cache_hits_total": pipeline_diag.fls_cache_hits_total,
+        "pipeline_fls_cache_misses_total": pipeline_diag.fls_cache_misses_total,
+        "pipeline_fls_fast_skip_records_total": pipeline_diag.fls_fast_skip_records_total,
+        "pipeline_fls_fast_skip_sentences_total": (
+            pipeline_diag.fls_fast_skip_sentences_total
+        ),
+        "pipeline_fls_fast_skip_ratio": round(fast_skip_ratio, 4),
+        "pipeline_retrieval_ms_total": round(pipeline_diag.retrieval_ms_total, 3),
+        "pipeline_pattern_ms_total": round(pipeline_diag.pattern_ms_total, 3),
+    }
+
+
+def _as_float(value: object) -> float:
+    if isinstance(value, bool):
+        return float(int(value))
+    if isinstance(value, int | float):
+        return float(value)
+    return 0.0
+
+
+def _as_int(value: object) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    return 0
+
+
 def _record_used_focus(record: FilingTextRecord) -> bool:
     if isinstance(record.focus_text, str) and record.focus_text:
         return True
     inferred_focus = _extract_focus_text(form=record.form, text=record.text)
     return isinstance(inferred_focus, str) and bool(inferred_focus)
+
+
+def _should_fast_skip_fls(analysis_sentences: list[str]) -> bool:
+    if not analysis_sentences:
+        return True
+    for sentence in analysis_sentences:
+        normalized = sentence.strip()
+        if not normalized:
+            continue
+        lowered = normalized.lower()
+        if _FORWARD_TENSE_PATTERN.search(normalized):
+            return False
+        if _NUMERIC_GUIDANCE_PATTERN.search(normalized):
+            return False
+        if any(phrase in lowered for phrase in _FLS_SKIP_SIGNAL_PHRASES):
+            return False
+    return True
 
 
 def _find_pattern_hits(text: str, patterns: tuple[str, ...]) -> list[_PatternHit]:
@@ -869,6 +1175,45 @@ def _build_doc_type(form: str, *, used_focus: bool) -> str:
     return form
 
 
+def _build_sec_source_url(
+    *,
+    ticker: str,
+    accession_number: str | None,
+    cik: str | None,
+) -> str:
+    filing_url = _build_sec_filing_index_url(
+        accession_number=accession_number,
+        cik=cik,
+    )
+    if filing_url is not None:
+        return filing_url
+    return _SEC_SEARCH_URL_TEMPLATE.format(ticker=ticker)
+
+
+def _build_sec_filing_index_url(
+    *,
+    accession_number: str | None,
+    cik: str | None,
+) -> str | None:
+    normalized_accession = _normalize_accession_number(accession_number)
+    if normalized_accession is None:
+        return None
+    accession_no_dash = normalized_accession.replace("-", "")
+    if not accession_no_dash.isdigit():
+        return None
+    cik_digits = _normalize_cik(cik)
+    if cik_digits is None:
+        cik_digits = normalized_accession.split("-", maxsplit=1)[0]
+    cik_path = cik_digits.lstrip("0")
+    if not cik_path:
+        return None
+    return _SEC_ARCHIVES_INDEX_URL_TEMPLATE.format(
+        cik=cik_path,
+        accession_no_dash=accession_no_dash,
+        accession=normalized_accession,
+    )
+
+
 def _safe_get_filing(filings: object, index: int) -> object | None:
     try:
         getter = getattr(filings, "get", None)
@@ -903,6 +1248,36 @@ def _normalize_text(value: object) -> str | None:
         return None
     normalized = " ".join(value.split())
     return normalized if normalized else None
+
+
+def _normalize_accession_number(value: str | None) -> str | None:
+    if not isinstance(value, str):
+        return None
+    stripped = value.strip()
+    if not stripped:
+        return None
+    accession_match = re.search(r"(\d{10}-\d{2}-\d{6})", stripped)
+    if accession_match is not None:
+        return accession_match.group(1)
+    digits = re.sub(r"\D", "", stripped)
+    if len(digits) != 18:
+        return None
+    return f"{digits[:10]}-{digits[10:12]}-{digits[12:]}"
+
+
+def _normalize_cik(value: object) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, int):
+        if value < 0:
+            return None
+        return str(value)
+    if isinstance(value, str):
+        digits = re.sub(r"\D", "", value)
+        if not digits:
+            return None
+        return digits
+    return None
 
 
 def _clamp(value: float, minimum: float, maximum: float) -> float:

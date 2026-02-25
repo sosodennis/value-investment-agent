@@ -18,7 +18,11 @@ import {
     SentimentLabel,
     SourceInfo,
 } from './news';
-import { FundamentalAnalysisSuccess } from './fundamental';
+import {
+    ForwardSignal,
+    ForwardSignalEvidence,
+    FundamentalAnalysisSuccess,
+} from './fundamental';
 import { parseFinancialPreview } from './fundamental-preview-parser';
 import {
     ConfluenceEvidence,
@@ -81,6 +85,97 @@ const parseNullableOptionalString = (
 ): string | null | undefined => {
     if (value === undefined || value === null) return value;
     return parseString(value, context);
+};
+
+const parseForwardSignalDirection = (
+    value: unknown,
+    context: string
+): 'up' | 'down' | 'neutral' => {
+    if (value === 'up' || value === 'down' || value === 'neutral') {
+        return value;
+    }
+    throw new TypeError(`${context} must be up | down | neutral.`);
+};
+
+const parseSignalUnit = (
+    value: unknown,
+    context: string
+): 'basis_points' | 'ratio' => {
+    if (value === 'basis_points' || value === 'ratio') {
+        return value;
+    }
+    throw new TypeError(`${context} must be basis_points | ratio.`);
+};
+
+const parseForwardSignalEvidence = (
+    value: unknown,
+    context: string
+): ForwardSignalEvidence => {
+    const record = toRecord(value, context);
+    const docType = parseNullableOptionalString(record.doc_type, `${context}.doc_type`);
+    const period = parseNullableOptionalString(record.period, `${context}.period`);
+    const filingDate = parseNullableOptionalString(
+        record.filing_date,
+        `${context}.filing_date`
+    );
+    const accessionNumber = parseNullableOptionalString(
+        record.accession_number,
+        `${context}.accession_number`
+    );
+    const focusStrategy = parseNullableOptionalString(
+        record.focus_strategy,
+        `${context}.focus_strategy`
+    );
+    const rule = parseNullableOptionalString(record.rule, `${context}.rule`);
+    const valueBasisPoints = parseNullableOptionalNumber(
+        record.value_basis_points,
+        `${context}.value_basis_points`
+    );
+
+    return {
+        text_snippet: parseString(record.text_snippet, `${context}.text_snippet`),
+        source_url: parseString(record.source_url, `${context}.source_url`),
+        ...(typeof docType === 'string' ? { doc_type: docType } : {}),
+        ...(typeof period === 'string' ? { period } : {}),
+        ...(typeof filingDate === 'string' ? { filing_date: filingDate } : {}),
+        ...(typeof accessionNumber === 'string'
+            ? { accession_number: accessionNumber }
+            : {}),
+        ...(typeof focusStrategy === 'string' ? { focus_strategy: focusStrategy } : {}),
+        ...(typeof rule === 'string' ? { rule } : {}),
+        ...(typeof valueBasisPoints === 'number'
+            ? { value_basis_points: valueBasisPoints }
+            : {}),
+    };
+};
+
+const parseForwardSignal = (value: unknown, context: string): ForwardSignal => {
+    const record = toRecord(value, context);
+    if (!Array.isArray(record.evidence)) {
+        throw new TypeError(`${context}.evidence must be an array.`);
+    }
+    return {
+        signal_id: parseString(record.signal_id, `${context}.signal_id`),
+        source_type: parseString(record.source_type, `${context}.source_type`),
+        metric: parseString(record.metric, `${context}.metric`),
+        direction: parseForwardSignalDirection(record.direction, `${context}.direction`),
+        value: parseNumber(record.value, `${context}.value`),
+        unit: parseSignalUnit(record.unit, `${context}.unit`),
+        confidence: parseNumber(record.confidence, `${context}.confidence`),
+        as_of: parseString(record.as_of, `${context}.as_of`),
+        ...(() => {
+            const medianFilingAgeDays = parseNullableOptionalNumber(
+                record.median_filing_age_days,
+                `${context}.median_filing_age_days`
+            );
+            return typeof medianFilingAgeDays === 'number'
+                ? { median_filing_age_days: medianFilingAgeDays }
+                : {};
+        })(),
+        evidence: record.evidence.map((item, idx) =>
+            parseForwardSignalEvidence(item, `${context}.evidence[${idx}]`)
+        ),
+    };
 };
 
 const parseStringArray = (value: unknown, context: string): string[] => {
@@ -702,6 +797,17 @@ export const parseFundamentalArtifact = (
         record.reasoning,
         `${context}.reasoning`
     );
+    const forwardSignals = (() => {
+        if (record.forward_signals === undefined || record.forward_signals === null) {
+            return undefined;
+        }
+        if (!Array.isArray(record.forward_signals)) {
+            throw new TypeError(`${context}.forward_signals must be an array.`);
+        }
+        return record.forward_signals.map((item, idx) =>
+            parseForwardSignal(item, `${context}.forward_signals[${idx}]`)
+        );
+    })();
 
     return {
         ticker,
@@ -711,6 +817,7 @@ export const parseFundamentalArtifact = (
         industry: industry ?? 'Unknown',
         reasoning: reasoning ?? '',
         financial_reports: parsed.financial_reports,
+        ...(forwardSignals ? { forward_signals: forwardSignals } : {}),
         status: 'done',
     };
 };
