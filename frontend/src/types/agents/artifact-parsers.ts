@@ -131,9 +131,56 @@ const parseForwardSignalEvidence = (
         record.value_basis_points,
         `${context}.value_basis_points`
     );
+    const sourceLocatorRecord =
+        record.source_locator === undefined || record.source_locator === null
+            ? undefined
+            : toRecord(record.source_locator, `${context}.source_locator`);
+    const sourceLocator =
+        sourceLocatorRecord === undefined
+            ? undefined
+            : (() => {
+                  const textScope = parseString(
+                      sourceLocatorRecord.text_scope,
+                      `${context}.source_locator.text_scope`
+                  );
+                  if (textScope !== 'metric_text') {
+                      throw new TypeError(
+                          `${context}.source_locator.text_scope must be metric_text.`
+                      );
+                  }
+                  const charStart = parseNumber(
+                      sourceLocatorRecord.char_start,
+                      `${context}.source_locator.char_start`
+                  );
+                  const charEnd = parseNumber(
+                      sourceLocatorRecord.char_end,
+                      `${context}.source_locator.char_end`
+                  );
+                  if (!Number.isInteger(charStart) || charStart < 0) {
+                      throw new TypeError(
+                          `${context}.source_locator.char_start must be an integer >= 0.`
+                      );
+                  }
+                  if (!Number.isInteger(charEnd) || charEnd <= 0) {
+                      throw new TypeError(
+                          `${context}.source_locator.char_end must be an integer > 0.`
+                      );
+                  }
+                  if (charEnd < charStart) {
+                      throw new TypeError(
+                          `${context}.source_locator.char_end must be >= char_start.`
+                      );
+                  }
+                  return {
+                      text_scope: 'metric_text' as const,
+                      char_start: charStart,
+                      char_end: charEnd,
+                  };
+              })();
 
     return {
-        text_snippet: parseString(record.text_snippet, `${context}.text_snippet`),
+        preview_text: parseString(record.preview_text, `${context}.preview_text`),
+        full_text: parseString(record.full_text, `${context}.full_text`),
         source_url: parseString(record.source_url, `${context}.source_url`),
         ...(typeof docType === 'string' ? { doc_type: docType } : {}),
         ...(typeof period === 'string' ? { period } : {}),
@@ -146,6 +193,7 @@ const parseForwardSignalEvidence = (
         ...(typeof valueBasisPoints === 'number'
             ? { value_basis_points: valueBasisPoints }
             : {}),
+        ...(sourceLocator ? { source_locator: sourceLocator } : {}),
     };
 };
 

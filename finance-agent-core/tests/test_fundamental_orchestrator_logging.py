@@ -345,7 +345,8 @@ async def test_run_financial_health_persists_forward_signals_in_financial_report
                     "source_type": "manual",
                     "evidence": [
                         {
-                            "text_snippet": "Revenue growth accelerated.",
+                            "preview_text": "Revenue growth accelerated.",
+                            "full_text": "Revenue growth accelerated.",
                             "source_url": "https://www.sec.gov/edgar/search/#/entityName=AAPL",
                         }
                     ],

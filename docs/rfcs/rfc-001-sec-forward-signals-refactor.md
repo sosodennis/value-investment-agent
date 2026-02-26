@@ -119,6 +119,57 @@ Internal rules:
    - `doc_type`
    - filing-level `source_url`
 
+### Evidence Payload V2 (Breaking Change, 2026-02-26)
+
+Decision:
+
+1. Replace `evidence[].text_snippet` with `evidence[].preview_text` and `evidence[].full_text`.
+2. Add `evidence[].source_locator` for traceable extraction offsets.
+3. No backward compatibility shim for `text_snippet`.
+
+New evidence shape:
+
+```json
+{
+  "preview_text": "string (short UI preview, may contain ...)",
+  "full_text": "string (full stored snippet, no UI truncation semantics)",
+  "source_url": "string",
+  "doc_type": "string|null",
+  "period": "string|null",
+  "filing_date": "string|null",
+  "accession_number": "string|null",
+  "focus_strategy": "string|null",
+  "rule": "string|null",
+  "value_basis_points": "number|null",
+  "source_locator": {
+    "text_scope": "metric_text",
+    "char_start": 0,
+    "char_end": 10
+  }
+}
+```
+
+Rationale:
+
+1. Avoid ambiguous hard-cut snippets shown as if they are complete statements.
+2. Preserve full evidence text for audit/debug while keeping UI compact.
+3. Keep provenance explicit and machine-auditable via locator offsets.
+4. Ensure evidence text is cut on token boundaries, not in the middle of words.
+
+Evidence text slicing policy:
+
+1. `full_text` is extracted from a context window around matched offsets.
+2. Window boundaries are aligned to word boundaries before normalization.
+3. If truncation is needed, truncate on word boundary (never mid-token).
+4. `preview_text` is a UI summary derived from `full_text`; `full_text` remains the canonical snippet.
+
+Rollout steps:
+
+1. Backend schema and producer update (required first).
+2. Domain parser update (`assumptions.py`) to consume V2 evidence.
+3. Frontend type/parser/output update to render `preview_text` and expandable `full_text`.
+4. Test suite updates for new contract.
+
 ## 7. Core Rules
 
 1. `source_type` must stay in downstream supported set.
@@ -156,7 +207,7 @@ Container setup:
 
 Compatibility:
 
-1. Upstream/downstream integration remains contract-compatible at payload key level.
+1. No backward compatibility for evidence schema keys in this change set.
 2. Existing valuation policy path remains unchanged.
 
 Breaking behaviors:

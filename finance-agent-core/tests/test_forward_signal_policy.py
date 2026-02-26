@@ -21,7 +21,8 @@ def test_parse_forward_signals_filters_invalid_items() -> None:
                 "confidence": 0.8,
                 "evidence": [
                     {
-                        "text_snippet": "management expects stronger demand",
+                        "preview_text": "management expects stronger demand",
+                        "full_text": "management expects stronger demand",
                         "source_url": "https://example.com/10k",
                     }
                 ],
@@ -56,7 +57,8 @@ def test_apply_forward_signal_policy_accepts_and_bounds_adjustment() -> None:
                 "confidence": 0.95,
                 "evidence": [
                     {
-                        "text_snippet": "pipeline growth accelerating",
+                        "preview_text": "pipeline growth accelerating",
+                        "full_text": "pipeline growth accelerating",
                         "source_url": "https://example.com/10q",
                     }
                 ],
@@ -88,7 +90,8 @@ def test_apply_forward_signal_policy_marks_low_confidence_high_risk() -> None:
                 "confidence": 0.40,
                 "evidence": [
                     {
-                        "text_snippet": "short-term margin pressure",
+                        "preview_text": "short-term margin pressure",
+                        "full_text": "short-term margin pressure",
                         "source_url": "https://example.com/news",
                     }
                 ],

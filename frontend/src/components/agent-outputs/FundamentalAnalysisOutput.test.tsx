@@ -1,6 +1,6 @@
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { FundamentalAnalysisOutput } from './FundamentalAnalysisOutput';
 import { ParsedFinancialPreview } from '@/types/agents/fundamental-preview-parser';
 
@@ -123,7 +123,9 @@ describe('FundamentalAnalysisOutput', () => {
                         as_of: '2026-02-25T06:07:32.311583+00:00',
                         evidence: [
                             {
-                                text_snippet:
+                                preview_text:
+                                    'Management expects higher revenue and raised guidance by 5%.',
+                                full_text:
                                     'Management expects higher revenue and raised guidance by 5%.',
                                 source_url:
                                     'https://www.sec.gov/Archives/edgar/data/320193/000032019325000073/0000320193-25-000073-index.html',
@@ -149,6 +151,7 @@ describe('FundamentalAnalysisOutput', () => {
         );
 
         expect(screen.queryByText('Forward Signals')).not.toBeNull();
+        expect(screen.queryByText('Model: DCF (dcf)')).not.toBeNull();
         expect(screen.queryByText('Growth Outlook')).not.toBeNull();
         expect(screen.getAllByText('Source: mda').length).toBeGreaterThan(0);
         expect(screen.queryByText('2025-11-03')).not.toBeNull();
@@ -160,5 +163,63 @@ describe('FundamentalAnalysisOutput', () => {
         ).toBe(
             'https://www.sec.gov/Archives/edgar/data/320193/000032019325000073/0000320193-25-000073-index.html'
         );
+    });
+
+    it('toggles evidence preview and full text', () => {
+        mockUseArtifact.mockReturnValue({
+            data: {
+                ticker: 'NVDA',
+                model_type: 'dcf_growth',
+                company_name: 'NVIDIA Corporation',
+                sector: 'Technology',
+                industry: 'Semiconductors',
+                reasoning: 'Strong demand outlook',
+                status: 'done',
+                financial_reports: [],
+                forward_signals: [
+                    {
+                        signal_id: 'sig-expand',
+                        source_type: 'mda',
+                        metric: 'growth_outlook',
+                        direction: 'up',
+                        value: 80,
+                        unit: 'basis_points',
+                        confidence: 0.7,
+                        as_of: '2026-02-26T00:00:00+00:00',
+                        evidence: [
+                            {
+                                preview_text: 'We expect supply constraints to be a headwind...',
+                                full_text:
+                                    'We expect supply constraints to be a headwind to Gaming in the first quarter of fiscal 2027 and beyond.',
+                                source_url: 'https://www.sec.gov/',
+                            },
+                        ],
+                    },
+                ],
+            },
+            isLoading: false,
+        });
+
+        render(
+            <FundamentalAnalysisOutput
+                reference={null}
+                previewData={{ ticker: 'NVDA' }}
+                resolvedTicker="NVDA"
+                status="done"
+            />
+        );
+
+        expect(
+            screen.queryByText('We expect supply constraints to be a headwind...')
+        ).not.toBeNull();
+        expect(screen.queryByText('Model: DCF (Growth) (dcf_growth)')).not.toBeNull();
+        const expandButton = screen.getByRole('button', { name: 'Expand' });
+        fireEvent.click(expandButton);
+        expect(
+            screen.queryByText(
+                'We expect supply constraints to be a headwind to Gaming in the first quarter of fiscal 2027 and beyond.'
+            )
+        ).not.toBeNull();
+        expect(screen.getByRole('button', { name: 'Collapse' })).not.toBeNull();
     });
 });

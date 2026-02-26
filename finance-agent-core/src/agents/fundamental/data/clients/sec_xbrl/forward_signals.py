@@ -179,7 +179,8 @@ def _signal_payload(
         as_of=as_of,
         evidence=[
             ForwardSignalEvidencePayload(
-                text_snippet=snippet,
+                preview_text=snippet,
+                full_text=snippet,
                 source_url=source_url,
                 doc_type=doc_type,
                 period=period,

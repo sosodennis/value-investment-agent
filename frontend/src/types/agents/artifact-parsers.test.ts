@@ -51,7 +51,9 @@ describe('artifact parsers', () => {
                     as_of: '2026-02-25T06:07:32.311583+00:00',
                     evidence: [
                         {
-                            text_snippet:
+                            preview_text:
+                                'Management expects higher revenue and raised guidance.',
+                            full_text:
                                 'Management expects higher revenue and raised guidance.',
                             source_url:
                                 'https://www.sec.gov/Archives/edgar/data/320193/000032019325000073/0000320193-25-000073-index.html',

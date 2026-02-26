@@ -18,6 +18,21 @@ import { ParsedFinancialPreview } from '@/types/agents/fundamental-preview-parse
 import { useArtifact } from '../../hooks/useArtifact';
 import { AgentLoadingState } from './AgentLoadingState';
 
+const MODEL_LABEL_BY_TYPE: Record<string, string> = {
+    dcf_standard: 'DCF (Standard)',
+    dcf_growth: 'DCF (Growth)',
+    saas: 'SaaS DCF',
+    bank: 'Bank (DDM)',
+    reit_ffo: 'REIT (FFO)',
+    ev_revenue: 'EV/Revenue',
+    ev_ebitda: 'EV/EBITDA',
+    residual_income: 'Residual Income',
+    eva: 'EVA',
+    ddm: 'DDM',
+    ffo: 'FFO',
+    dcf: 'DCF',
+};
+
 export interface FundamentalAnalysisOutputProps {
     reference: ArtifactReference | null;
     previewData: ParsedFinancialPreview | null;
@@ -39,8 +54,19 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
     );
 
     const hasPreview = !!previewData;
+    const [expandedEvidenceRows, setExpandedEvidenceRows] = useState<Record<string, boolean>>(
+        {}
+    );
     const reports = artifactData?.financial_reports ?? previewData?.financial_reports ?? [];
     const forwardSignals: ForwardSignal[] = artifactData?.forward_signals ?? [];
+    const modelTypeRaw = artifactData?.model_type;
+    const modelTypeDisplay = useMemo(() => {
+        if (!modelTypeRaw || typeof modelTypeRaw !== 'string') return null;
+        const normalized = modelTypeRaw.trim().toLowerCase();
+        if (!normalized) return null;
+        const label = MODEL_LABEL_BY_TYPE[normalized] ?? normalized;
+        return { label, code: normalized };
+    }, [modelTypeRaw]);
     const valuationScore = previewData?.valuation_score;
     const previewKeyMetrics = previewData?.key_metrics ?? {};
     const distributionSummary = previewData?.distribution_summary?.summary;
@@ -576,13 +602,20 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                     <LayoutPanelTop size={18} className="text-indigo-400" />
                     <h3 className="text-sm font-bold text-white uppercase tracking-widest">Financial Data Matrix</h3>
                 </div>
-                {isReferenceLoading && (
-                    <AgentLoadingState
-                        type="header"
-                        title="Loading Reports..."
-                        colorClass="text-indigo-400"
-                    />
-                )}
+                <div className="flex items-center gap-2">
+                    {modelTypeDisplay && (
+                        <span className="rounded border border-indigo-400/30 bg-indigo-500/10 px-2 py-1 text-[11px] font-semibold text-indigo-200">
+                            Model: {modelTypeDisplay.label} ({modelTypeDisplay.code})
+                        </span>
+                    )}
+                    {isReferenceLoading && (
+                        <AgentLoadingState
+                            type="header"
+                            title="Loading Reports..."
+                            colorClass="text-indigo-400"
+                        />
+                    )}
+                </div>
             </div>
 
             {/* Preview Section - Valuation & Metrics */}
@@ -1239,13 +1272,34 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {signal.evidence.map((item, index) => (
+                                            {signal.evidence.map((item, index) => {
+                                                const rowKey = `${signal.signal_id}-${item.accession_number ?? 'na'}-${index}`;
+                                                const isExpanded = expandedEvidenceRows[rowKey] === true;
+                                                const canExpand = item.full_text !== item.preview_text;
+                                                const displayedText = isExpanded
+                                                    ? item.full_text
+                                                    : item.preview_text;
+                                                return (
                                                 <tr
-                                                    key={`${signal.signal_id}-${item.accession_number ?? 'na'}-${index}`}
+                                                    key={rowKey}
                                                     className="border-t border-white/5 text-slate-200 align-top"
                                                 >
                                                     <td className="px-3 py-2 min-w-[360px]">
-                                                        <div>{item.text_snippet}</div>
+                                                        <div>{displayedText}</div>
+                                                        {canExpand && (
+                                                            <button
+                                                                type="button"
+                                                                className="mt-1 text-[11px] text-cyan-300 hover:text-cyan-200 underline"
+                                                                onClick={() =>
+                                                                    setExpandedEvidenceRows((current) => ({
+                                                                        ...current,
+                                                                        [rowKey]: !isExpanded,
+                                                                    }))
+                                                                }
+                                                            >
+                                                                {isExpanded ? 'Collapse' : 'Expand'}
+                                                            </button>
+                                                        )}
                                                         {(item.doc_type || item.period) && (
                                                             <div className="mt-1 text-[11px] text-slate-400">
                                                                 {[item.doc_type, item.period]
@@ -1272,7 +1326,8 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                                         </a>
                                                     </td>
                                                 </tr>
-                                            ))}
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
                                 </div>

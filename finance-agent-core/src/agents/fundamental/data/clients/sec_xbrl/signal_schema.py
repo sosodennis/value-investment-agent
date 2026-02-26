@@ -5,10 +5,19 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class ForwardSignalSourceLocatorPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text_scope: Literal["metric_text"] = "metric_text"
+    char_start: int = Field(ge=0)
+    char_end: int = Field(gt=0)
+
+
 class ForwardSignalEvidencePayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    text_snippet: str = Field(min_length=1)
+    preview_text: str = Field(min_length=1)
+    full_text: str = Field(min_length=1)
     source_url: str = Field(min_length=1)
     doc_type: str | None = None
     period: str | None = None
@@ -17,6 +26,7 @@ class ForwardSignalEvidencePayload(BaseModel):
     focus_strategy: str | None = None
     rule: str | None = None
     value_basis_points: float | None = None
+    source_locator: ForwardSignalSourceLocatorPayload | None = None
 
 
 class ForwardSignalPayload(BaseModel):

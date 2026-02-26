@@ -68,8 +68,16 @@ class GrowthBlendResult:
 
 
 @dataclass(frozen=True)
+class ForwardSignalSourceLocator:
+    text_scope: str
+    char_start: int
+    char_end: int
+
+
+@dataclass(frozen=True)
 class ForwardSignalEvidence:
-    text_snippet: str
+    preview_text: str
+    full_text: str
     source_url: str
     doc_type: str | None = None
     period: str | None = None
@@ -77,6 +85,7 @@ class ForwardSignalEvidence:
     accession_number: str | None = None
     focus_strategy: str | None = None
     extraction_rule: str | None = None
+    source_locator: ForwardSignalSourceLocator | None = None
 
 
 @dataclass(frozen=True)
@@ -456,9 +465,12 @@ def _parse_forward_signal_evidence(raw: object) -> tuple[ForwardSignalEvidence, 
     for item in raw:
         if not isinstance(item, Mapping):
             continue
-        snippet_raw = item.get("text_snippet")
+        preview_raw = item.get("preview_text")
+        full_text_raw = item.get("full_text")
         source_url_raw = item.get("source_url")
-        if not isinstance(snippet_raw, str) or not snippet_raw.strip():
+        if not isinstance(preview_raw, str) or not preview_raw.strip():
+            continue
+        if not isinstance(full_text_raw, str) or not full_text_raw.strip():
             continue
         if not isinstance(source_url_raw, str) or not source_url_raw.strip():
             continue
@@ -492,9 +504,13 @@ def _parse_forward_signal_evidence(raw: object) -> tuple[ForwardSignalEvidence, 
             if isinstance(extraction_rule_raw, str) and extraction_rule_raw
             else None
         )
+        source_locator = _parse_forward_signal_source_locator(
+            item.get("source_locator")
+        )
         items.append(
             ForwardSignalEvidence(
-                text_snippet=snippet_raw.strip(),
+                preview_text=preview_raw.strip(),
+                full_text=full_text_raw.strip(),
                 source_url=source_url_raw.strip(),
                 doc_type=doc_type,
                 period=period,
@@ -502,9 +518,33 @@ def _parse_forward_signal_evidence(raw: object) -> tuple[ForwardSignalEvidence, 
                 accession_number=accession_number,
                 focus_strategy=focus_strategy,
                 extraction_rule=extraction_rule,
+                source_locator=source_locator,
             )
         )
     return tuple(items)
+
+
+def _parse_forward_signal_source_locator(
+    raw: object,
+) -> ForwardSignalSourceLocator | None:
+    if not isinstance(raw, Mapping):
+        return None
+    text_scope_raw = raw.get("text_scope")
+    char_start_raw = raw.get("char_start")
+    char_end_raw = raw.get("char_end")
+    if text_scope_raw != "metric_text":
+        return None
+    if not isinstance(char_start_raw, int) or char_start_raw < 0:
+        return None
+    if not isinstance(char_end_raw, int) or char_end_raw <= 0:
+        return None
+    if char_end_raw < char_start_raw:
+        return None
+    return ForwardSignalSourceLocator(
+        text_scope=text_scope_raw,
+        char_start=char_start_raw,
+        char_end=char_end_raw,
+    )
 
 
 def _normalize_text(value: object, *, default: str | None = None) -> str:

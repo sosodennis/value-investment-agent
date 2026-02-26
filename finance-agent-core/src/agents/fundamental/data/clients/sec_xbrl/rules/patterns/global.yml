@@ -48,6 +48,8 @@ metrics:
   margin_outlook:
     positive:
       - margin expansion
+      - margin accretive
+      - margin accretive opportunities
       - gross margin expansion
       - gross margin improvement
       - gross margins are expected to improve
@@ -55,11 +57,21 @@ metrics:
       - operating income margin expansion
       - operating leverage
       - cost discipline
+      - cost containment
+      - cost containment efforts
+      - sga reduction
+      - sga reductions
+      - sg&a reduction
+      - sg&a reductions
+      - reduction in sg&a
+      - reductions in sg&a
       - pricing power
       - favorable product mix
       - fulfillment network efficiencies
       - productivity savings
       - efficiency gains
+      - increased efficiency
+      - operate with increased efficiency
     negative:
       - margin pressure
       - margin pressure driven by

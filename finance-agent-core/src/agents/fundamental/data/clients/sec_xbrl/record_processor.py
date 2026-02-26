@@ -134,6 +134,10 @@ class _ExtractSnippetFn(Protocol):
     ) -> str | None: ...
 
 
+class _BuildEvidencePreviewFn(Protocol):
+    def __call__(self, full_text: str) -> str: ...
+
+
 class _AppendUniqueEvidenceFn(Protocol):
     def __call__(
         self, evidence: list[dict[str, object]], candidate: dict[str, object]
@@ -167,6 +171,7 @@ def _process_records_for_signals(
     find_metric_dependency_hits_fn: _FindMetricDependencyHitsFn,
     filing_age_days_fn: _FilingAgeDaysFn,
     extract_snippet_fn: _ExtractSnippetFn,
+    build_evidence_preview_fn: _BuildEvidencePreviewFn,
     append_unique_evidence_fn: _AppendUniqueEvidenceFn,
 ) -> tuple[dict[str, dict[str, _MetricSignalAccumulator]], _TextPipelineDiagnostics]:
     grouped: dict[str, dict[str, _MetricSignalAccumulator]] = {}
@@ -357,10 +362,12 @@ def _process_records_for_signals(
                 snippet = extract_snippet_fn(metric_text, hit.start, hit.end)
                 if not snippet:
                     continue
+                preview_text = build_evidence_preview_fn(snippet)
                 append_unique_evidence_fn(
                     evidence,
                     {
-                        "text_snippet": snippet,
+                        "preview_text": preview_text,
+                        "full_text": snippet,
                         "source_url": source_url,
                         "doc_type": doc_type,
                         "period": record.period or "N/A",
@@ -368,6 +375,11 @@ def _process_records_for_signals(
                         "accession_number": record.accession_number,
                         "focus_strategy": record.focus_strategy,
                         "rule": hit.rule,
+                        "source_locator": {
+                            "text_scope": "metric_text",
+                            "char_start": hit.start,
+                            "char_end": hit.end,
+                        },
                     },
                 )
                 if len(evidence) >= 5:
@@ -386,10 +398,12 @@ def _process_records_for_signals(
                     )
                     if not snippet:
                         continue
+                    preview_text = build_evidence_preview_fn(snippet)
                     append_unique_evidence_fn(
                         evidence,
                         {
-                            "text_snippet": snippet,
+                            "preview_text": preview_text,
+                            "full_text": snippet,
                             "source_url": source_url,
                             "doc_type": doc_type,
                             "period": record.period or "N/A",
@@ -400,6 +414,11 @@ def _process_records_for_signals(
                             "value_basis_points": round(
                                 numeric_hit.value_basis_points, 2
                             ),
+                            "source_locator": {
+                                "text_scope": "metric_text",
+                                "char_start": numeric_hit.start,
+                                "char_end": numeric_hit.end,
+                            },
                         },
                     )
                     if len(evidence) >= 5:

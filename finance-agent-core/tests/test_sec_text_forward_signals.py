@@ -3,7 +3,11 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 from unittest.mock import patch
 
+from src.agents.fundamental.data.clients.sec_xbrl.finbert_direction import (
+    FinbertDirectionReview,
+)
 from src.agents.fundamental.data.clients.sec_xbrl.forward_signals_text import (
+    _apply_finbert_direction_reviews,
     _extract_focus_text_from_filing,
     _normalize_text,
     extract_forward_signals_from_sec_text,
@@ -12,10 +16,77 @@ from src.agents.fundamental.data.clients.sec_xbrl.matchers.regex_signal_extracto
     MetricRegexHits,
     PatternHit,
 )
+from src.agents.fundamental.data.clients.sec_xbrl.pipeline_helpers import (
+    _extract_snippet,
+)
 from src.agents.fundamental.data.clients.sec_xbrl.provider import (
     fetch_financial_payload,
 )
 from src.agents.fundamental.data.clients.sec_xbrl.text_record import FilingTextRecord
+
+
+def _assert_aligned_to_token_boundaries(snippet: str, normalized_text: str) -> None:
+    start = normalized_text.index(snippet)
+    if start > 0:
+        assert normalized_text[start - 1] == " "
+    end = start + len(snippet)
+    if end < len(normalized_text):
+        assert normalized_text[end] == " "
+
+
+def test_extract_snippet_aligns_to_word_boundaries() -> None:
+    text = (
+        "Our TAC rate will continue to be affected by changes in device mix; "
+        "geographic mix; partner agreement terms; partner mix; the percentage "
+        "of queries channeled through paid access points; product mix; the "
+        "relative revenue growth rates of advertising revenues from different "
+        "channels; and revenue sharing rates."
+    )
+    start = text.index("revenue growth rates")
+    end = start + len("revenue growth rates")
+
+    snippet = _extract_snippet(text, start, end, radius=40)
+
+    assert snippet is not None
+    normalized = " ".join(text.split())
+    assert snippet in normalized
+    _assert_aligned_to_token_boundaries(snippet, normalized)
+
+
+def test_extract_snippet_prefers_sentence_boundaries() -> None:
+    text = (
+        "We continue to invest in infrastructure capacity. "
+        "Revenue growth rates are expected to improve with stronger product mix. "
+        "Operating leverage should also support margin expansion next year."
+    )
+    start = text.index("Revenue growth rates")
+    end = start + len("Revenue growth rates")
+
+    snippet = _extract_snippet(text, start, end, radius=20)
+
+    assert snippet is not None
+    normalized = " ".join(text.split())
+    assert snippet in normalized
+    assert (
+        "Revenue growth rates are expected to improve with stronger product mix."
+        in snippet
+    )
+    assert snippet[0].isupper()
+    assert snippet[-1] in ".!?"
+
+
+def test_extract_snippet_truncates_on_word_boundary() -> None:
+    text = " ".join(f"token{i}" for i in range(700))
+    start = text.index("token320")
+    end = start + len("token320")
+
+    snippet = _extract_snippet(text, start, end, radius=1_100)
+
+    assert snippet is not None
+    assert len(snippet) <= 1_200
+    normalized = " ".join(text.split())
+    assert snippet in normalized
+    _assert_aligned_to_token_boundaries(snippet, normalized)
 
 
 def test_extract_forward_signals_from_sec_text_emits_structured_signals() -> None:
@@ -180,7 +251,13 @@ def test_fetch_financial_payload_combines_xbrl_and_sec_text_signals() -> None:
                     "value": 80.0,
                     "unit": "basis_points",
                     "confidence": 0.61,
-                    "evidence": [{"text_snippet": "xbrl", "source_url": "https://sec"}],
+                    "evidence": [
+                        {
+                            "preview_text": "xbrl",
+                            "full_text": "xbrl",
+                            "source_url": "https://sec",
+                        }
+                    ],
                 }
             ],
         ),
@@ -195,7 +272,13 @@ def test_fetch_financial_payload_combines_xbrl_and_sec_text_signals() -> None:
                     "value": 60.0,
                     "unit": "basis_points",
                     "confidence": 0.59,
-                    "evidence": [{"text_snippet": "text", "source_url": "https://sec"}],
+                    "evidence": [
+                        {
+                            "preview_text": "text",
+                            "full_text": "text",
+                            "source_url": "https://sec",
+                        }
+                    ],
                 }
             ],
         ),
@@ -272,6 +355,12 @@ def test_extract_forward_signals_from_sec_text_logs_focus_diagnostics() -> None:
     assert fields["pipeline_fls_fast_skip_ratio"] >= 0.0
     assert fields["pipeline_retrieval_ms_total"] >= 0.0
     assert fields["pipeline_pattern_ms_total"] >= 0.0
+    assert fields["pipeline_finbert_direction_review_candidates_total"] >= 0
+    assert fields["pipeline_finbert_direction_reviewed_total"] >= 0
+    assert fields["pipeline_finbert_direction_accepted_total"] >= 0
+    assert fields["pipeline_finbert_direction_overrides_total"] >= 0
+    assert fields["pipeline_finbert_direction_ms_total"] >= 0.0
+    assert fields["pipeline_finbert_direction_avg_ms"] >= 0.0
 
 
 def test_extract_forward_signals_from_sec_text_fast_skips_fls_without_cues() -> None:
@@ -644,6 +733,49 @@ def test_extract_forward_signals_from_sec_text_deduplicates_similar_evidence() -
     evidence = growth_signal["evidence"]
     assert isinstance(evidence, list)
     assert len(evidence) == 1
+
+
+def test_apply_finbert_direction_reviews_overrides_signal_direction() -> None:
+    signals = [
+        {
+            "signal_id": "s1",
+            "source_type": "mda",
+            "metric": "growth_outlook",
+            "direction": "up",
+            "value": 80.0,
+            "unit": "basis_points",
+            "confidence": 0.62,
+            "evidence": [
+                {
+                    "preview_text": "preview",
+                    "full_text": "Management expects demand softness next quarter.",
+                    "source_url": "https://sec",
+                }
+            ],
+        }
+    ]
+
+    with patch(
+        "src.agents.fundamental.data.clients.sec_xbrl.forward_signals_text.review_signal_direction_with_finbert",
+        return_value=FinbertDirectionReview(
+            elapsed_ms=12.0,
+            reviewed=True,
+            accepted=True,
+            direction="down",
+            confidence=0.91,
+            label="negative",
+            reason="accepted_override_direction",
+        ),
+    ):
+        fields = _apply_finbert_direction_reviews(signals)
+
+    assert signals[0]["direction"] == "down"
+    assert signals[0]["confidence"] > 0.62
+    assert fields["pipeline_finbert_direction_overrides_total"] == 1
+    assert fields["pipeline_finbert_direction_ms_total"] == 12.0
+    assert (
+        fields["pipeline_finbert_direction_reasons"]["accepted_override_direction"] == 1
+    )
 
 
 def test_normalize_text_converts_date_and_datetime_values() -> None:

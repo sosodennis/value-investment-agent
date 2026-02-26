@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+from collections import Counter
 from collections.abc import Callable
 from datetime import UTC, date, datetime
 
@@ -15,6 +16,7 @@ from . import focus_text_extractor as _focus_text_extractor
 from .filing_fetcher import call_with_sec_retry
 from .filing_section_selector import is_8k_form, refine_8k_analysis_text
 from .filing_text_loader import _load_recent_filing_text_records
+from .finbert_direction import review_signal_direction_with_finbert
 from .fls_filter import filter_forward_looking_sentences_with_stats
 from .hybrid_retriever import retrieve_relevant_sentences_batch
 from .matchers.dependency_signal_matcher import find_metric_dependency_hits
@@ -29,6 +31,7 @@ from .pipeline_helpers import (
     _as_float,
     _as_int,
     _build_doc_type,
+    _build_evidence_preview,
     _build_sec_source_url,
     _clamp,
     _extract_snippet,
@@ -156,6 +159,7 @@ def extract_forward_signals_from_sec_text(
         find_metric_dependency_hits_fn=find_metric_dependency_hits,
         filing_age_days_fn=_filing_age_days,
         extract_snippet_fn=_extract_snippet,
+        build_evidence_preview_fn=_build_evidence_preview,
         append_unique_evidence_fn=_append_unique_evidence,
     )
     focus_diag = _summarize_focus_usage(
@@ -185,6 +189,7 @@ def extract_forward_signals_from_sec_text(
         build_forward_signal_payload_fn=_build_forward_signal_payload,
         on_payload_invalid=_on_payload_invalid,
     )
+    finbert_direction_diag = _apply_finbert_direction_reviews(signals)
 
     if signals:
         emitted_doc_types = sorted(
@@ -238,6 +243,7 @@ def extract_forward_signals_from_sec_text(
                     pipeline_diag,
                     debug_retrieval_preview_enabled=_DEBUG_RETRIEVAL_PREVIEW_ENABLED,
                 ),
+                **finbert_direction_diag,
             },
         )
     else:
@@ -256,6 +262,7 @@ def extract_forward_signals_from_sec_text(
                     pipeline_diag,
                     debug_retrieval_preview_enabled=_DEBUG_RETRIEVAL_PREVIEW_ENABLED,
                 ),
+                **finbert_direction_diag,
             },
         )
     return signals
@@ -333,3 +340,80 @@ def _preview_sentence(sentence: str) -> str | None:
     if len(normalized) <= _DEBUG_RETRIEVAL_PREVIEW_CHARS:
         return normalized
     return normalized[: _DEBUG_RETRIEVAL_PREVIEW_CHARS - 3] + "..."
+
+
+def _apply_finbert_direction_reviews(
+    signals: list[dict[str, object]],
+) -> dict[str, object]:
+    if not signals:
+        return _empty_finbert_direction_diag_fields()
+
+    total_ms = 0.0
+    reviewed_total = 0
+    accepted_total = 0
+    overrides_total = 0
+    reason_counter: Counter[str] = Counter()
+
+    for signal in signals:
+        metric_raw = signal.get("metric")
+        baseline_direction_raw = signal.get("direction")
+        evidence_raw = signal.get("evidence")
+        if not isinstance(metric_raw, str) or not isinstance(
+            baseline_direction_raw, str
+        ):
+            reason_counter["invalid_signal_shape"] += 1
+            continue
+        evidence: list[dict[str, object]] = []
+        if isinstance(evidence_raw, list):
+            evidence = [
+                item
+                for item in evidence_raw
+                if isinstance(item, dict) and bool(item.get("full_text"))
+            ]
+        review = review_signal_direction_with_finbert(
+            metric=metric_raw,
+            baseline_direction=baseline_direction_raw,
+            evidence=evidence,
+        )
+        total_ms += review.elapsed_ms
+        reason_counter[review.reason] += 1
+        if review.reviewed:
+            reviewed_total += 1
+        if not review.accepted or review.direction is None:
+            continue
+        accepted_total += 1
+        if review.direction != baseline_direction_raw:
+            overrides_total += 1
+            signal["direction"] = review.direction
+        current_confidence = signal.get("confidence")
+        if isinstance(current_confidence, int | float):
+            blended_confidence = _clamp(
+                (float(current_confidence) * 0.8) + (review.confidence * 0.2),
+                0.52,
+                0.90,
+            )
+            signal["confidence"] = round(blended_confidence, 4)
+
+    review_candidates_total = len(signals)
+    avg_ms = total_ms / review_candidates_total if review_candidates_total > 0 else 0.0
+    return {
+        "pipeline_finbert_direction_review_candidates_total": review_candidates_total,
+        "pipeline_finbert_direction_reviewed_total": reviewed_total,
+        "pipeline_finbert_direction_accepted_total": accepted_total,
+        "pipeline_finbert_direction_overrides_total": overrides_total,
+        "pipeline_finbert_direction_ms_total": round(total_ms, 3),
+        "pipeline_finbert_direction_avg_ms": round(avg_ms, 3),
+        "pipeline_finbert_direction_reasons": dict(reason_counter),
+    }
+
+
+def _empty_finbert_direction_diag_fields() -> dict[str, object]:
+    return {
+        "pipeline_finbert_direction_review_candidates_total": 0,
+        "pipeline_finbert_direction_reviewed_total": 0,
+        "pipeline_finbert_direction_accepted_total": 0,
+        "pipeline_finbert_direction_overrides_total": 0,
+        "pipeline_finbert_direction_ms_total": 0.0,
+        "pipeline_finbert_direction_avg_ms": 0.0,
+        "pipeline_finbert_direction_reasons": {},
+    }

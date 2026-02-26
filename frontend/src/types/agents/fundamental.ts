@@ -62,7 +62,8 @@ export interface FinancialReport {
 }
 
 export interface ForwardSignalEvidence {
-    text_snippet: string;
+    preview_text: string;
+    full_text: string;
     source_url: string;
     doc_type?: string;
     period?: string;
@@ -71,6 +72,11 @@ export interface ForwardSignalEvidence {
     focus_strategy?: string;
     rule?: string;
     value_basis_points?: number;
+    source_locator?: {
+        text_scope: 'metric_text';
+        char_start: number;
+        char_end: number;
+    };
 }
 
 export interface ForwardSignal {
