@@ -3,10 +3,10 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from typing import Protocol
 
-from src.agents.fundamental.application.dto import FundamentalAppContextDTO
-from src.agents.fundamental.interface.mappers import (
-    build_mapper_context as build_fundamental_mapper_context,
+from src.agents.fundamental.application.context_mapper_service import (
+    build_fundamental_app_context,
 )
+from src.agents.fundamental.application.dto import FundamentalAppContextDTO
 from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
 
 from .valuation_assumption_breakdown_service import build_assumption_breakdown
@@ -35,7 +35,7 @@ def _build_mapper_context(
     forward_signal_risk_level: str | None = None,
     forward_signal_evidence_count: int | None = None,
 ) -> FundamentalAppContextDTO:
-    return build_fundamental_mapper_context(
+    return build_fundamental_app_context(
         intent_ctx,
         resolved_ticker,
         status=status,

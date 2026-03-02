@@ -43,11 +43,18 @@ def build_default_technical_workflow_runner() -> TechnicalWorkflowRunner:
     )
 
 
-technical_workflow_runner = build_default_technical_workflow_runner()
+_technical_workflow_runner: TechnicalWorkflowRunner | None = None
+
+
+def get_technical_workflow_runner() -> TechnicalWorkflowRunner:
+    global _technical_workflow_runner
+    if _technical_workflow_runner is None:
+        _technical_workflow_runner = build_default_technical_workflow_runner()
+    return _technical_workflow_runner
 
 
 __all__ = [
     "TechnicalWorkflowRunner",
     "build_default_technical_workflow_runner",
-    "technical_workflow_runner",
+    "get_technical_workflow_runner",
 ]

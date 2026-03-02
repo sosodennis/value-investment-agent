@@ -149,6 +149,20 @@ async def run_valuation_use_case(
                     "assumptions": build_result.assumptions,
                 },
             )
+            log_event(
+                logger,
+                event="fundamental_valuation_completed",
+                message="fundamental valuation completed",
+                level=logging.ERROR,
+                fields={
+                    "ticker": ticker,
+                    "model_type": model_type,
+                    "status": "error",
+                    "is_degraded": True,
+                    "error_code": "FUNDAMENTAL_VALUATION_INPUTS_MISSING",
+                    "missing_input_count": len(build_result.missing),
+                },
+            )
             return FundamentalNodeResult(
                 update=runtime.build_valuation_missing_inputs_update(
                     fundamental=execution_context.fundamental,
@@ -169,6 +183,19 @@ async def run_valuation_use_case(
                     "ticker": ticker,
                     "model_type": model_type,
                     "error": execution_result.calculation_error,
+                },
+            )
+            log_event(
+                logger,
+                event="fundamental_valuation_completed",
+                message="fundamental valuation completed",
+                level=logging.ERROR,
+                fields={
+                    "ticker": ticker,
+                    "model_type": model_type,
+                    "status": "error",
+                    "is_degraded": True,
+                    "error_code": "FUNDAMENTAL_VALUATION_CALCULATION_ERROR",
                 },
             )
             return FundamentalNodeResult(
@@ -201,6 +228,8 @@ async def run_valuation_use_case(
             fields={
                 "ticker": ticker,
                 "model_type": model_type,
+                "status": "done",
+                "is_degraded": False,
                 **mc_completion_fields,
                 **forward_signal_completion_fields,
             },
@@ -229,6 +258,17 @@ async def run_valuation_use_case(
             level=logging.ERROR,
             error_code="FUNDAMENTAL_VALUATION_FAILED",
             fields={"exception": str(exc)},
+        )
+        log_event(
+            logger,
+            event="fundamental_valuation_completed",
+            message="fundamental valuation completed",
+            level=logging.ERROR,
+            fields={
+                "status": "error",
+                "is_degraded": True,
+                "error_code": "FUNDAMENTAL_VALUATION_FAILED",
+            },
         )
         return FundamentalNodeResult(
             update=runtime.build_valuation_error_update(str(exc)),

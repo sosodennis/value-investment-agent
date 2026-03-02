@@ -14,7 +14,7 @@ Status: In Progress
 
 1. `finance-agent-core/docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
 2. `finance-agent-core/docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-3. `finance-agent-core/docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+3. `finance-agent-core/docs/standards/refactor_lessons_and_cross_agent_playbook.md`
 
 ## 3. 執行策略
 
@@ -22,7 +22,7 @@ Status: In Progress
 2. 再做中風險拆分（大檔拆解、契約統一）。
 3. 最後收斂 legacy 路徑（移除 shim、清理 import）。
 4. 每一批完成後必做 `Lessons Review Gate`：
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 記錄 `updated` 或 `no_update`（必填）及原因
 
 ### 3.1 批次記錄模板（強制）
@@ -777,7 +777,7 @@ Completed:
    - 結果：與 blueprint/P3 一致（`param_builder.py` 主檔語義密度進一步下降，contracts owner 邊界更明確）
    - 偏離：無
 202. 跨批次經驗沉澱（新增 refactor lessons 文檔）：
-   - 新增 `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - 新增 `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 內容涵蓋：
      - fundamental refactor 中反覆出現的實作錯誤（owner ambiguity、compatibility 累積、silent fallback、layer leakage、命名責任漂移、型別契約重複、legacy import 回流、邊界測試不足）
      - 對應可執行 guardrails 與輕量 workflow
@@ -786,7 +786,7 @@ Completed:
    - 結果：與 blueprint「跨 agent 可重用命名/責任規範」方向一致，補強後續 refactor 決策一致性
    - 偏離：無
 204. 機制升級（Lessons Review Gate 制度化）：
-   - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md` 新增「每批 refactor 必做 lessons review」章節與記錄規格
+   - `docs/standards/refactor_lessons_and_cross_agent_playbook.md` 新增「每批 refactor 必做 lessons review」章節與記錄規格
    - `fundamental_refactor_execution_tracker.md` 新增：
      - 執行策略中的 mandatory gate
      - 批次記錄模板（`Lessons Review: updated|no_update` + `Reason`）
@@ -797,7 +797,7 @@ Completed:
    - `docs/backlog/backend-findings-06022026.md` 已刪除
    - `docs/backlog/frontend-findings-06022026.md` 已刪除
    - `cross_agent_class_naming_and_layer_responsibility_guideline.md` 遷移至 `docs/standards/`
-   - `fundamental_refactor_lessons_and_cross_agent_playbook.md` 遷移至 `docs/standards/`
+   - `refactor_lessons_and_cross_agent_playbook.md` 遷移至 `docs/standards/`
    - `sec_xbrl_factory_facade_owner_inventory.md` 內容併入 tracker，獨立文檔移除
 207. 計畫對齊檢查（文檔整併）：
    - 結果：與 blueprint/tracker 的「降低相容複雜度、提升可維護性」方向一致
@@ -813,7 +813,7 @@ Completed:
 210. Standards 同步更新（跨 agent 規範收斂）：
    - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
      新增「禁止 one-hop re-export alias module」規則
-   - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
      在 compatibility 章節新增具體反模式案例（`financial_payload_provider.py`）
    - `Lessons Review: updated`
    - `Reason: 本批確認 one-hop alias 會造成 owner 歧義與雙路徑維護，需升級為跨 agent 強約束。`
@@ -831,7 +831,7 @@ Completed:
 214. Standards 同步更新（canonical token 邊界）：
    - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
      新增「canonical contract 欄位不得存 source label」規則（`industry_type` 示例）
-   - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
      在 owner ambiguity 章節補上 `industry_type` 混入 source label 的反模式與 guardrail
    - `Lessons Review: updated`
    - `Reason: 本批識別到 canonical 欄位與 source routing label 混用會造成 parser 補正依賴，需上升為跨 agent 強約束。`
@@ -853,7 +853,7 @@ Completed:
 219. Standards 同步更新（interface canonical parser 規則）：
    - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
      新增「canonical 欄位不可在 interface parser 靜默正規化 source label」規則
-   - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
      Hard Rules 新增「interface parser 對 canonical 欄位不得做 source label 正規化」
    - `Lessons Review: updated`
    - `Reason: 本批將 canonical token 規則落到 interface 邊界，需明確強約束避免跨 agent 回歸。`
@@ -862,12 +862,12 @@ Completed:
    - 偏離：無
 221. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 發現缺口：`extension_type` strict canonical 要求尚未被明確列為同級硬規則
 222. Standards 先行更新（`extension_type` strict canonical）：
    - `cross_agent_class_naming_and_layer_responsibility_guideline.md`
      補上 `extension_type` 與 `industry_type` 同級規則（canonical token only；interface parser 不得靜默正規化）
-   - `fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - `refactor_lessons_and_cross_agent_playbook.md`
      補上 `extension_type` 混入 source label 的反模式描述與 hard rule
 223. P2 收斂增量（`extension_type` parser 嚴格化）：
    - `interface/contracts.py`
@@ -892,12 +892,12 @@ Completed:
    - 偏離：無
 228. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 發現缺口：尚未明確規定「source label alias 正規化 helper 的 owner 應在 boundary layer」
 229. Standards 先行更新（normalization helper owner 規則）：
    - `cross_agent_class_naming_and_layer_responsibility_guideline.md`
      新增「source label alias normalization helper 應只在 infrastructure/interface」
-   - `fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - `refactor_lessons_and_cross_agent_playbook.md`
      補上「alias 規則放在 domain shared module 會造成 layer 污染」反模式與 guardrail
 230. P2 收尾增量（`report_semantics` helper owner 收斂）：
    - 新增 `infrastructure/sec_xbrl/extension_token_normalizer.py`，承接 source label -> canonical token 正規化
@@ -931,7 +931,7 @@ Completed:
    - `Reason: 本批為既有 guardrail 的測試化落地，未新增新類型反模式。`
 237. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 發現可補強點：尚未明確要求 entrypoint 主檔不得同時承載 registry/cache wiring
 238. P3 拆分增量（`param_builder.py` wiring/owner 邊界收斂）：
    - 新增 `domain/valuation/param_builder_model_registry_service.py`
@@ -948,7 +948,7 @@ Completed:
 240. Standards 同步更新（entrypoint thin-orchestrator 規則）：
    - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
      新增「entrypoint 主檔應保持精簡；registry/cache wiring 放 dedicated `*_service.py`」規則
-   - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
      在 God Module 章節補上「entrypoint 混入 registry/cache wiring」反模式與對應 guardrail
 241. 計畫對齊檢查（P3 wiring 收斂 + standards 同步）：
    - 結果：與 blueprint/P3「`param_builder.py` 收尾、owner 邊界外提」一致
@@ -957,7 +957,7 @@ Completed:
    - `Reason: 本批新增跨 agent 可復用規則（entrypoint thin-orchestrator + wiring owner 外提）。`
 242. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批「builder 內部 heuristic policy 外提」已被既有 `God Module/owner 拆分` 規則覆蓋，無需新增 standards 條目
 243. P3 拆分增量（`bank` builder heuristic owner 收斂）：
    - 新增 `domain/valuation/param_builders/bank_rorwa_policy_service.py`
@@ -973,7 +973,7 @@ Completed:
    - `Reason: 本批為既有規則（God Module 拆分/owner 外提）的直接落地，未出現新型反模式。`
 246. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 `saas.py` 的 CAPM/terminal policy owner 外提，已被既有 `entrypoint thin-orchestrator + owner service` 規則覆蓋，無需新增 standards 條目
 247. P3/P4 拆分增量（`saas` builder CAPM/terminal policy owner 收斂）：
    - 新增 `domain/valuation/param_builders/saas_capm_policy_service.py`
@@ -993,7 +993,7 @@ Completed:
    - `Reason: 本批為既有 owner 拆分規則的直接落地，未發現新的跨 agent 反模式。`
 250. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 `saas.py` 的 operating-rate heuristic/policy 外提，已被既有 `owner service 拆分 + thin orchestrator` 規則覆蓋，無需新增 standards 條目
 251. P3/P4 拆分增量（`saas` builder operating rates policy owner 收斂）：
    - 新增 `domain/valuation/param_builders/saas_operating_rates_policy_service.py`
@@ -1013,7 +1013,7 @@ Completed:
    - `Reason: 本批為既有 owner 拆分策略延續，未出現新的跨 agent 反模式。`
 254. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 `saas.py` missing/trace assembly owner 外提，已被既有 `owner service + thin orchestrator` 規則覆蓋，無需新增 standards 條目
 255. P3/P4 拆分增量（`saas` builder missing/trace assembly owner 收斂）：
    - 新增 `domain/valuation/param_builders/saas_output_assembly_service.py`
@@ -1032,7 +1032,7 @@ Completed:
    - `Reason: 本批為既有 owner 拆分規則的直接延伸，未發現新型反模式。`
 258. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 `bank.py` 的 CAPM/terminal policy owner 外提，已被既有 `owner service + thin orchestrator` 規則覆蓋，無需新增 standards 條目
 259. P3/P4 拆分增量（`bank` builder CAPM/terminal policy owner 收斂）：
    - 新增 `domain/valuation/param_builders/bank_capm_policy_service.py`
@@ -1053,18 +1053,18 @@ Completed:
    - `Reason: 本批為既有 owner 拆分策略延續，未出現新型反模式。`
 262. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 發現缺口：現有規範尚未明確禁止「由 assumptions/log 字串內容驅動控制流」的脆弱耦合模式
 263. Standards 先行更新（Narrative String Coupling 防呆）：
    - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
      新增規則：不得以 assumptions/log 文案字串驅動流程分支；應使用 typed decision 欄位
-   - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
      新增 2.9 章節（敘述字串驅動控制流）與 hard rule
    - `Lessons Review: updated`
    - `Reason: 本批 pre-check 發現新的可跨 agent 反模式（narrative string coupling），已先固化為 standards 再進入下一步重構。`
 264. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 `bank.py` 的 missing/trace assembly + shares_source typed decision 收斂，已被既有規則（含 2.9）覆蓋，無需新增 standards 條目
 265. P3/P4 拆分增量（`bank` builder output assembly owner 收斂）：
    - 新增 `domain/valuation/param_builders/bank_output_assembly_service.py`
@@ -1084,7 +1084,7 @@ Completed:
    - `Reason: 本批為已建立規則（owner 拆分 + typed decision）的直接落地，未發現新型反模式。`
 268. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 `bank.py` RoRWA 主邏輯外提已被既有規則覆蓋（owner 拆分 + typed decision），無需新增 standards 條目
 269. P3/P4 拆分增量（`bank` builder RoRWA 主邏輯 owner 收斂）：
    - `domain/valuation/param_builders/bank_rorwa_policy_service.py` 新增
@@ -1102,7 +1102,7 @@ Completed:
    - `Reason: 本批為既有 owner 拆分策略延續，未出現新的跨 agent 反模式。`
 272. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 `bank.py` params/rationale assembly owner 收斂已被既有規則覆蓋，無需新增 standards 條目
 273. P3/P4 拆分增量（`bank` builder params/rationale assembly 收斂）：
    - `domain/valuation/param_builders/bank_output_assembly_service.py` 新增 `build_bank_params(...)`
@@ -1119,7 +1119,7 @@ Completed:
    - `Reason: 本批為既有 owner 拆分規則的直接延伸，未出現新的跨 agent 反模式。`
 276. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 `saas.py` params/rationale assembly owner 收斂已被既有規則覆蓋，無需新增 standards 條目
 277. P3/P4 拆分增量（`saas` builder params/rationale assembly 收斂）：
    - `domain/valuation/param_builders/saas_output_assembly_service.py` 新增：
@@ -1138,7 +1138,7 @@ Completed:
    - `Reason: 本批為既有 owner 拆分規則延伸，未出現新的跨 agent 反模式。`
 280. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批跨 builder 共用 owner（shares_source）統整已被既有規則覆蓋，無需新增 standards 條目
 281. P3/P4 拆分增量（跨 builder `shares_source` 共用 owner 統整）：
    - 新增 `domain/valuation/param_builders/shares_source_service.py`（`resolve_shares_source(...)`）
@@ -1156,7 +1156,7 @@ Completed:
    - `Reason: 本批為既有 owner consolidation 策略落地，未新增新型反模式。`
 284. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批擴展 shares_source 共用 owner 到其他 builders，已被既有規則覆蓋，無需新增 standards 條目
 285. P3/P4 拆分增量（跨 builder shares_source 收斂擴展）：
    - `residual_income.py`、`eva.py`、`reit.py`、`multiples.py` 的 `shares_source` 判斷改為共用 `resolve_shares_source(...)`
@@ -1172,7 +1172,7 @@ Completed:
    - `Reason: 本批為既有 cross-builder consolidation 的擴展落地，未引入新的反模式。`
 288. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批聚焦 `trace_inputs/params` 共用 owner 收斂（capital-structure + base params），已被既有 `owner service + thin orchestrator` 規則覆蓋，無需新增 standards 條目
 289. P3/P4 拆分增量（跨 builder `trace_inputs/params` 共用 owner 收斂）：
    - 新增 `domain/valuation/param_builders/common_output_assembly_service.py`：
@@ -1192,7 +1192,7 @@ Completed:
    - `Reason: 本批為既有 owner consolidation 策略的直接延伸，未新增新型反模式。`
 292. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 `multiples.py` 同檔重複去重（`ev_revenue` / `ev_ebitda`）已被既有 `owner helper + thin orchestrator` 規則覆蓋，無需新增 standards 條目
 293. P3/P4 拆分增量（`multiples.py` 雙路徑重複收斂）：
    - `multiples.py` 新增同檔 owner helper：`_build_ev_multiple_payload(...)` + `EvMultipleTargetSpec`
@@ -1208,7 +1208,7 @@ Completed:
    - `Reason: 本批為既有重複收斂規則的落地，未發現新的跨 agent 反模式。`
 296. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 `reit.py` helper/assembly owner 抽離已被既有 `owner service + thin orchestrator` 規則覆蓋，無需新增 standards 條目
 297. P3/P4 拆分增量（`reit.py` helper/assembly owner 收斂）：
    - 新增 `domain/valuation/param_builders/reit_ffo_policy_service.py`，將 `ffo_multiple` 決策邏輯外提為 `resolve_reit_ffo_multiple(...)`
@@ -1226,7 +1226,7 @@ Completed:
    - `Reason: 本批為既有 owner 拆分策略延伸，未發現新型跨 agent 反模式。`
 300. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 `reit.py` fallback heuristic policy owner 抽離，已被既有 `owner policy + thin orchestrator` 規則覆蓋，無需新增 standards 條目
 301. P3/P4 拆分增量（`reit.py` fallback policy owner 收斂）：
    - 新增 `domain/valuation/param_builders/reit_fallback_policy_service.py`：
@@ -1244,7 +1244,7 @@ Completed:
    - `Reason: 本批為既有 owner 拆分策略延伸，未出現新型跨 agent 反模式。`
 304. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 `eva.py` / `residual_income.py` output assembly owner 抽離，已被既有 `owner service + thin orchestrator` 規則覆蓋，無需新增 standards 條目
 305. P3/P4 拆分增量（`eva.py` / `residual_income.py` output assembly 收斂）：
    - 新增 `domain/valuation/param_builders/eva_output_assembly_service.py`：
@@ -1266,7 +1266,7 @@ Completed:
    - `Reason: 本批為既有 owner 拆分策略延伸，未發現新型跨 agent 反模式。`
 308. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 `eva.py` invested-capital derivation policy owner 抽離，已被既有 `owner policy + thin orchestrator` 規則覆蓋，無需新增 standards 條目
 309. P3/P4 拆分增量（`eva.py` invested-capital policy owner 收斂）：
    - 新增 `domain/valuation/param_builders/eva_invested_capital_policy_service.py`：
@@ -1283,7 +1283,7 @@ Completed:
    - `Reason: 本批為既有 owner policy 拆分策略的直接延伸，未出現新型跨 agent 反模式。`
 312. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 `value_or_missing + current_price` 重複收斂屬既有 owner/consolidation 規則範圍，無需新增 standards 條目
 313. P3/P4 拆分增量（`eva.py` / `residual_income.py` value extraction 收斂）：
    - 新增 `domain/valuation/param_builders/value_extraction_service.py`：
@@ -1301,7 +1301,7 @@ Completed:
    - `Reason: 本批為既有 consolidation 策略延伸，未發現新的跨 agent 反模式。`
 316. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 `multiples.py` / `reit.py` 對接 `value_extraction_service` 屬既有 consolidation 規則範圍，無需新增 standards 條目
 317. P3/P4 拆分增量（`multiples.py` / `reit.py` value extraction 對接）：
    - `multiples.py` 在 `_build_ev_multiple_payload(...)` 導入 `extract_required_values(...)` 與 `extract_market_value(...)`
@@ -1317,7 +1317,7 @@ Completed:
    - `Reason: 本批為既有 consolidation 策略擴展，未出現新型跨 agent 反模式。`
 320. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 `bank.py` / `saas.py` 對接 `value_extraction_service` 屬既有 consolidation 規則範圍，無需新增 standards 條目
 321. P3/P4 拆分增量（`bank.py` / `saas.py` value extraction 對接）：
    - `bank.py` 在 `build_bank_payload(...)` 導入 `extract_required_values(...)` 與 `extract_market_value(...)`
@@ -1333,7 +1333,7 @@ Completed:
    - `Reason: 本批為既有 consolidation 策略擴展，未出現新的跨 agent 反模式。`
 324. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 output assembly services 的 missing-collection 去重屬既有 owner/consolidation 規則範圍，無需新增 standards 條目
 325. P3/P4 拆分增量（`*_output_assembly_service.py` missing 收斂）：
    - 新增 `domain/valuation/param_builders/missing_metrics_service.py`：
@@ -1352,7 +1352,7 @@ Completed:
    - `Reason: 本批為既有 consolidation 策略延伸，未發現新的跨 agent 反模式。`
 328. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 `build_*_params` base payload 去重屬既有 owner/consolidation 規則範圍，無需新增 standards 條目
 329. P3/P4 拆分增量（`build_*_params` base payload 收斂：bank/saas）：
    - `bank_output_assembly_service.py::build_bank_params(...)` 改為委派 `build_base_params(...)` 組裝 `ticker/rationale`
@@ -1368,7 +1368,7 @@ Completed:
    - `Reason: 本批為既有 consolidation 策略延伸，未出現新的跨 agent 反模式。`
 332. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 `saas_output_assembly_service` trace-input assembly 去重屬既有 owner/consolidation 規則範圍，無需新增 standards 條目
 333. P3/P4 拆分增量（`saas_output_assembly_service.py` trace-input assembly 收斂）：
    - `build_saas_trace_inputs(...)` 的 capital structure trace inputs（`cash/total_debt/preferred_stock/shares_outstanding`）改為委派 `build_capital_structure_trace_inputs(...)`
@@ -1383,7 +1383,7 @@ Completed:
    - `Reason: 本批為既有 output assembly consolidation 的直接延伸，未發現新的跨 agent 反模式。`
 336. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 `sec_xbrl` 預設 rationale 去重屬既有 owner/consolidation 規則範圍，無需新增 standards 條目
 337. P3/P4 拆分增量（`sec_xbrl` 預設 rationale 收斂）：
    - `common_output_assembly_service.py` 新增：
@@ -1406,7 +1406,7 @@ Completed:
    - `Reason: 本批為既有 output assembly consolidation 的延伸，未出現新的跨 agent 反模式。`
 340. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 equity-value/shares trace 組裝收斂屬既有 owner/consolidation 規則範圍，無需新增 standards 條目
 341. P3/P4 拆分增量（equity-value/shares trace 組裝收斂）：
    - `common_output_assembly_service.py` 新增：
@@ -1429,7 +1429,7 @@ Completed:
    - `Reason: 本批為既有 output assembly consolidation 的直接延伸，未發現新的跨 agent 反模式。`
 344. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 CAPM trace-input owner 收斂屬既有 owner/consolidation 規則範圍，無需新增 standards 條目
 345. P3/P4 拆分增量（CAPM trace-input owner 收斂：bank/saas）：
    - `common_output_assembly_service.py` 新增 `build_capm_market_trace_inputs(...)`
@@ -1449,7 +1449,7 @@ Completed:
    - `Reason: 本批為既有 output assembly consolidation 的延伸，未出現新的跨 agent 反模式。`
 348. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 DCF variant payload 收斂屬既有 owner/consolidation 規則範圍，無需新增 standards 條目
 349. P3/P4 拆分增量（DCF variant payload 收斂）：
    - 新增 `dcf_variant_payload_service.py`：
@@ -1469,7 +1469,7 @@ Completed:
    - `Reason: 本批為既有 consolidation 策略延伸，未出現新的跨 agent 反模式。`
 352. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 registry 的 DCF wrapper 去重屬既有 owner/consolidation 規則範圍，無需新增 standards 條目
 353. P3/P4 拆分增量（registry DCF wrapper 收斂）：
    - `param_builder_model_registry_service.py` 新增 `_build_dcf_variant_params(...)`
@@ -1488,7 +1488,7 @@ Completed:
    - `Reason: 本批為既有 consolidation 策略延伸，未出現新的跨 agent 反模式。`
 356. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 registry 的 EV multiples wrapper 去重屬既有 owner/consolidation 規則範圍，無需新增 standards 條目
 357. P3/P4 拆分增量（registry EV multiples wrapper 收斂）：
    - `param_builder_model_registry_service.py` 新增 `_build_ev_multiple_params(...)`
@@ -1507,7 +1507,7 @@ Completed:
    - `Reason: 本批為既有 consolidation 策略延伸，未出現新的跨 agent 反模式。`
 360. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 registry 的 single-report wrapper 去重屬既有 owner/consolidation 規則範圍，無需新增 standards 條目
 361. P3/P4 拆分增量（registry single-report wrapper 收斂）：
    - `param_builder_model_registry_service.py` 新增 `_build_single_report_params(...)`
@@ -1527,7 +1527,7 @@ Completed:
    - `Reason: 本批為既有 consolidation 策略延伸，未出現新的跨 agent 反模式。`
 364. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 registry 的 multi-report wrapper 去重屬既有 owner/consolidation 規則範圍，無需新增 standards 條目
 365. P3/P4 拆分增量（registry multi-report wrapper 收斂）：
    - `param_builder_model_registry_service.py` 新增 `_build_multi_report_params(...)`
@@ -1546,7 +1546,7 @@ Completed:
    - `Reason: 本批為既有 consolidation 策略延伸，未出現新的跨 agent 反模式。`
 368. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 DCF deps 類型去重屬既有 owner/consolidation 規則範圍，無需新增 standards 條目
 369. P3/P4 拆分增量（DCF deps 類型收斂）：
    - `dcf_variant_payload_service.py` 新增共用 dataclass：`DCFVariantBuilderDeps`
@@ -1565,7 +1565,7 @@ Completed:
    - `Reason: 本批為既有 consolidation 策略延伸，未出現新的跨 agent 反模式。`
 372. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 DCF deps 供應路徑去重屬既有 owner/consolidation 規則範圍，無需新增 standards 條目
 373. P3/P4 拆分增量（DCF deps 供應路徑收斂）：
    - `context.py` 新增 `dcf_variant_deps(...)`（共用 DCF deps owner）
@@ -1582,7 +1582,7 @@ Completed:
    - `Reason: 本批為既有 consolidation 策略延伸，未出現新的跨 agent 反模式。`
 376. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 registry variant dispatch mapping 收斂屬既有 owner/consolidation 規則範圍，無需新增 standards 條目
 377. P3/P4 拆分增量（registry variant dispatch mapping 收斂）：
    - `param_builder_model_registry_service.py`：
@@ -1602,7 +1602,7 @@ Completed:
    - `Reason: 本批為既有 consolidation 策略延伸，未出現新的跨 agent 反模式。`
 380. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批移除未使用 DCF deps wrapper 屬既有 owner/consolidation 規則範圍，無需新增 standards 條目
 381. P3/P4 拆分增量（移除未使用 DCF deps wrapper）：
    - `context.py` 刪除未使用方法：
@@ -1620,7 +1620,7 @@ Completed:
    - `Reason: 本批為既有 consolidation 策略延伸，未出現新的跨 agent 反模式。`
 384. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 registry mapping owner 提升屬既有 owner/consolidation 規則範圍，無需新增 standards 條目
 385. P3/P4 拆分增量（registry mapping owner 提升）：
    - `param_builder_model_registry_service.py` 新增模組常量 mapping：
@@ -1642,7 +1642,7 @@ Completed:
    - `Reason: 本批為既有 consolidation 策略延伸，未出現新的跨 agent 反模式。`
 388. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 DCF variant builder 流程收斂屬既有 owner/consolidation 規則範圍，無需新增 standards 條目
 389. P3/P4 拆分增量（DCF variant builder 流程收斂）：
    - `dcf_variant_payload_service.py` 新增 `build_dcf_variant_model_payload(...)`
@@ -1658,7 +1658,7 @@ Completed:
    - `Reason: 本批為既有 consolidation 策略延伸，未出現新的跨 agent 反模式。`
 392. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 DCF deps 命名收斂屬既有 owner/consolidation 規則範圍，無需新增 standards 條目
 393. P3/P4 拆分增量（DCF deps 命名收斂）：
    - 移除 `DCFStandardBuilderDeps` / `DCFGrowthBuilderDeps` 重複別名
@@ -1675,7 +1675,7 @@ Completed:
    - `Reason: 本批為既有 consolidation 策略延伸，未出現新的跨 agent 反模式。`
 396. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 CAPM market params 組裝收斂屬既有 owner/consolidation 規則範圍，無需新增 standards 條目
 397. P3/P4 拆分增量（CAPM market params 組裝收斂）：
    - `common_output_assembly_service.py` 新增 `build_capm_market_params(...)`，統一 CAPM market scalar params 的組裝 owner
@@ -1691,7 +1691,7 @@ Completed:
    - `Reason: 本批為既有 consolidation 策略延伸，未出現新的跨 agent 反模式。`
 400. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 Monte Carlo controls 組裝收斂屬既有 owner/consolidation 規則範圍，無需新增 standards 條目
 401. P3/P4 拆分增量（Monte Carlo controls 組裝收斂）：
    - `common_output_assembly_service.py` 新增 `build_monte_carlo_params(...)`，統一 `monte_carlo_iterations/seed/sampler` 欄位組裝 owner
@@ -1707,7 +1707,7 @@ Completed:
    - `Reason: 本批為既有 consolidation 策略延伸，未出現新的跨 agent 反模式。`
 404. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 optional trace-input fallback 收斂屬既有 owner/consolidation 規則範圍，無需新增 standards 條目
 405. P3/P4 拆分增量（optional trace-input fallback 收斂）：
    - `common_output_assembly_service.py` 新增 `resolve_optional_trace_input(...)`，統一 `TraceableField | None` 的缺值 fallback 組裝 owner
@@ -1726,7 +1726,7 @@ Completed:
    - `Reason: 本批為既有 consolidation 策略延伸，未出現新的跨 agent 反模式。`
 408. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 optional ratio-input fallback 收斂屬既有 owner/consolidation 規則範圍，無需新增 standards 條目
 409. P3/P4 拆分增量（optional ratio-input fallback 收斂）：
    - `param_builder_core_ops_service.py` 新增 `ratio_with_optional_inputs(...)`，統一 optional numerator/denominator 的 ratio fallback owner
@@ -1745,7 +1745,7 @@ Completed:
    - `Reason: 本批為既有 consolidation 策略延伸，未出現新的跨 agent 反模式。`
 412. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 CAPM market defaults 收斂屬既有 owner/consolidation 規則範圍，無需新增 standards 條目
 413. P3/P4 拆分增量（CAPM market defaults 收斂）：
    - 新增 `capm_market_defaults_service.py`：
@@ -1763,7 +1763,7 @@ Completed:
    - `Reason: 本批為既有 consolidation 策略延伸，未出現新的跨 agent 反模式。`
 416. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 shares-source one-hop wrapper 移除屬既有 owner/consolidation 規則範圍，無需新增 standards 條目
 417. P3/P4 拆分增量（shares-source one-hop wrapper 移除）：
    - `bank_output_assembly_service.py`：
@@ -1783,7 +1783,7 @@ Completed:
    - `Reason: 本批為既有 consolidation 策略延伸，未出現新的跨 agent 反模式。`
 420. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 current-price 提取 owner 收斂屬既有 owner/consolidation 規則範圍，無需新增 standards 條目
 421. P3/P4 拆分增量（current-price 提取 owner 收斂；小幅擴大範圍）：
    - `value_extraction_service.py` 新增 `extract_current_price(...)`，統一 `current_price` 市場欄位提取 owner
@@ -1805,7 +1805,7 @@ Completed:
    - `Reason: 本批為既有 consolidation 策略延伸，未出現新的跨 agent 反模式。`
 424. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 shares-source semantic entrypoint 收斂屬既有 owner/consolidation 規則範圍，無需新增 standards 條目
 425. P3/P4 拆分增量（shares-source semantic entrypoint 收斂；小幅擴大範圍）：
    - `shares_source_service.py` 新增：
@@ -1825,7 +1825,7 @@ Completed:
    - `Reason: 本批為既有 consolidation 策略延伸，未出現新的跨 agent 反模式。`
 428. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 capital-structure values 提取收斂屬既有 owner/consolidation 規則範圍，無需新增 standards 條目
 429. P3/P4 拆分增量（capital-structure values 提取收斂；小幅擴大範圍）：
    - `value_extraction_service.py` 新增：
@@ -1847,7 +1847,7 @@ Completed:
    - `Reason: 本批為既有 consolidation 策略延伸，未出現新的跨 agent 反模式。`
 432. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 filing-equity/capital-market values 收斂屬既有 owner/consolidation 規則範圍，無需新增 standards 條目
 433. P3/P4 拆分增量（filing equity/capital market values 收斂；小幅擴大範圍）：
    - `value_extraction_service.py` 新增：
@@ -1872,7 +1872,7 @@ Completed:
    - `Reason: 本批為既有 consolidation 策略延伸，未出現新的跨 agent 反模式。`
 436. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 bank xbrl-equity market extraction 收斂屬既有 owner/consolidation 規則範圍，無需新增 standards 條目
 437. P3/P4 拆分增量（bank xbrl-equity market extraction 收斂）：
    - `value_extraction_service.py` 新增：
@@ -1890,7 +1890,7 @@ Completed:
    - `Reason: 本批為既有 consolidation 策略延伸，未出現新的跨 agent 反模式。`
 440. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 extraction service 邊界/型別語義收斂屬既有 owner/consolidation 規則範圍，無需新增 standards 條目
 441. P3/P4 拆分增量（value extraction owner 邊界與型別語義收斂）：
    - `value_extraction_service.py`：
@@ -1909,7 +1909,7 @@ Completed:
    - `Reason: 本批為既有 consolidation 策略延伸，未出現新的跨 agent 反模式。`
 444. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 registry entrypoint thin 化屬既有 wiring-owner/entrypoint-boundary 規則範圍，無需新增 standards 條目
 445. P3/P4 拆分增量（registry default context wiring owner 下沉）：
    - 新增 `param_builder_default_context_service.py`：
@@ -1929,7 +1929,7 @@ Completed:
    - `Reason: 本批為既有 consolidation 與 entrypoint-thin 策略延伸，未出現新的跨 agent 反模式。`
 448. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 shares-source owner 內聚化屬既有 owner/consolidation 規則範圍，無需新增 standards 條目
 449. P3/P4 拆分增量（shares-source owner 內聚化與檔案收斂）：
    - `value_extraction_service.py`：
@@ -1947,7 +1947,7 @@ Completed:
    - `Reason: 本批為既有 consolidation 與檔案收斂策略延伸，未出現新的跨 agent 反模式。`
 452. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 registry wrapper 收斂屬既有 entrypoint-thin/wiring-owner 規則範圍，無需新增 standards 條目
 453. P3/P4 較大切片（registry wrapper consolidation / factory-based routing）：
    - `param_builder_model_registry_service.py`：
@@ -1970,7 +1970,7 @@ Completed:
    - `Reason: 本批為既有 entrypoint-thin 與 owner consolidation 策略的擴大套用，未出現新的跨 agent 反模式。`
 456. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - 結論：本批 model dispatch 下沉屬既有 entrypoint-thin / dispatch-owner 分離規則範圍，無需新增 standards 條目
 457. P3/P4 較大切片（model dispatch owner service 化）：
    - 新增 `param_builder_model_dispatch_service.py`：
@@ -1991,7 +1991,7 @@ Completed:
    - `Reason: 本批為既有 entrypoint-thin 與 owner consolidation 策略的進一步擴大，未出現新的跨 agent 反模式。`
 460. Pre-check（本批開始前 standards review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：本批 dispatch 進一步 owner 下沉屬既有 entrypoint-thin / owner-consolidation 規則範圍，無需新增 standards 條目
 461. P3/P4 較大切片（registry payload dispatch 全量下沉）：
@@ -2014,7 +2014,7 @@ Completed:
    - `Reason: 本批為既有 entrypoint-thin 與 owner consolidation 策略的擴大執行，未出現新的跨 agent 反模式。`
 464. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：本批將執行 `valuation/skills` 命名清理與 registry 語義收斂，屬既有 P4 naming cleanup 規則範圍
 465. P3/P4 較大切片（valuation `skills -> models` + registry 命名收斂）：
@@ -2053,7 +2053,7 @@ Completed:
    - `Reason: 本批主要為命名與路徑收斂，已被既有 cross-agent naming 規約覆蓋，未新增新型反模式。`
 468. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：本批聚焦移除 `valuation/models/*/tools.py` 命名，屬既有命名規約（`tools.py -> calculator.py/service.py`）範圍，無需新增 standards 條目
 469. P3/P4 較大切片（valuation model calculators 命名收斂）：
@@ -2092,7 +2092,7 @@ Completed:
    - `Reason: 本批為既有命名規約的落地執行，未新增新型反模式。`
 472. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：下一步執行 `valuation/models` 子 package 去冗餘命名（移除 `valuation_*` stutter）
 473. P3/P4 較大切片（valuation models package stutter 命名清理）：
@@ -2132,11 +2132,11 @@ Completed:
    - `Lessons Review: updated`
    - `更新文件：`
      - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-     - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+     - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - `更新重點：新增「避免 bounded context 內 package prefix stutter」規約與實作經驗。`
 476. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：本批聚焦 `models/auditor/rules.py` 去泛化命名，屬 P4 命名收斂主線
 477. P3/P4 較大切片（auditor -> audit_policies + rules.py 語義化）：
@@ -2167,11 +2167,11 @@ Completed:
    - `Lessons Review: updated`
    - `更新文件：`
      - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-     - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+     - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - `更新重點：把 generic rules.py 納入反模式，要求 policy 模組使用語義化檔名。`
 480. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：本批將 `audit policy` owner 從 `models/*` 提升到 `domain/valuation/policies/*`，對齊 domain policy 邊界
 481. P3/P4 較大切片（audit policy owner boundary 收斂）：
@@ -2205,11 +2205,11 @@ Completed:
    - `Lessons Review: updated`
    - `更新文件：`
      - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-     - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+     - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - `更新重點：新增「跨模型 policy 必須放 domain/.../policies」規約。`
 484. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：本批聚焦 runtime 結構降噪（移除 `_template` 與 runtime `SKILL.md` 殘留），屬 P4 命名/結構收斂主線
 485. P3/P4 較大切片（runtime template 殘留清理）：
@@ -2243,11 +2243,11 @@ Completed:
    - `Lessons Review: updated`
    - `更新文件：`
      - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-     - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+     - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - `更新重點：新增「runtime package 禁用 `_template` 與 `SKILL.md` 殘留」規約與實作經驗。`
 488. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：本批聚焦 valuation models contract module 命名收斂（`schemas.py -> contracts.py`），屬 P4 命名去歧義主線
 489. P3/P4 較大切片（valuation model contract module 命名收斂）：
@@ -2282,11 +2282,11 @@ Completed:
    - `Lessons Review: updated`
    - `更新文件：`
      - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-     - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+     - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - `更新重點：新增「domain model contract module 一律使用 contracts.py」規約。`
 492. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：本批聚焦 DCF standard/growth 共用計算 owner 收斂，對齊 blueprint 的 `domain/valuation/calculators` 目標
 493. P3/P4 較大切片（DCF family shared calculator owner 收斂）：
@@ -2319,11 +2319,11 @@ Completed:
    - `Lessons Review: updated`
    - `更新文件：`
      - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-     - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+     - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - `更新重點：新增「模型家族共用公式需收斂到 shared calculator owner，model calculator 保持薄封裝」規約。`
 496. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：本批擴大 `domain/valuation/calculators` 收斂，覆蓋 EV/REIT/Residual，並統一 calculator runtime support owner
 497. P3/P4 較大切片（EV + REIT + Residual calculators owner 收斂）：
@@ -2362,11 +2362,11 @@ Completed:
    - `Lessons Review: updated`
    - `更新文件：`
      - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-     - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+     - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - `更新重點：新增「calculator runtime support 函式必須集中 owner，不得各 model 重複維護」規約。`
 500. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：本批在不改變對外 API 的前提下，將 Bank/EVA/SaaS calculator 的重複 runtime support 收斂到 shared owner
 501. P3/P4 中等切片（Bank + EVA + SaaS runtime support 收斂）：
@@ -2401,7 +2401,7 @@ Completed:
    - `Reason: 本批落地的是 499 已新增規約，未出現新的反模式類型。`
 504. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：本批目標為移除 `models/*/calculator.py` 相容層，讓 registry 與測試直接依賴 `domain/valuation/calculators` canonical owner
 505. P3/P4 較大切片（remove model calculator compatibility layer）：
@@ -2440,11 +2440,11 @@ Completed:
    - `Lessons Review: updated`
    - `更新文件：`
      - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-     - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+     - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - `更新重點：新增「成熟階段移除 models calculator 相容層，registry 直接依賴 calculators canonical owner」規約。`
 508. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：本批聚焦 `param_builders/value_extraction_service.py` owner 拆分，對齊 blueprint Phase 2 的 service decomposition 與高內聚目標。
 509. P3/P4 較大切片（param_builder value extraction owner 拆分）：
@@ -2483,7 +2483,7 @@ Completed:
    - `Reason: 本批屬既有規約（避免 god module、按語義 owner 拆分）的直接落地，未出現新的反模式類型。`
 512. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：本批聚焦 `param_builder` 的 dispatch/registry owner 再收斂，對齊 blueprint 的 `builders/registry/shared` 邊界與薄 entrypoint 原則。
 513. P3/P4 較大切片（param_builder dispatch + registry owner 收斂）：
@@ -2516,7 +2516,7 @@ Completed:
    - `Reason: 本批為既有規約「entrypoint 薄化、wiring 與 owner 拆分」的落地，未出現新的反模式類型。`
 516. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：本批聚焦 application 層 `fundamental_service.py` 拆分，對齊 blueprint `application/services` 能力導向拆分與高內聚目標。
 517. P3/P4 較大切片（application fundamental_service 解耦 + service owner 收斂）：
@@ -2551,7 +2551,7 @@ Completed:
    - `Reason: 本批屬既有規約（拆分 god module、能力導向 service owner）直接落地，未出現新的反模式類型。`
 520. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：本批聚焦 `application/use_cases` 化，將 orchestrator 的 `run_*` 主流程抽離到 use-case owners，對齊 blueprint 的 application use-case 分層目標。
 521. P3/P4 較大切片（application use_cases 收斂 + orchestrator 薄化）：
@@ -2584,11 +2584,11 @@ Completed:
    - `Lessons Review: updated`
    - `更新文件：`
      - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-     - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+     - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - `更新重點：新增「application orchestrator 應作 thin delegator，run_* 流程 owner 在 application/use_cases」規約。`
 524. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：本批優先進入 infrastructure 大切片，拆 `infrastructure/sec_xbrl/mappings/base.py`，將 mapping catalog 依語義 owner 模組化，對齊 blueprint Phase 2/3「service decomposition + package re-layout」方向。
 525. P3/P4 較大切片（sec_xbrl base mapping registry owner 拆分）：
@@ -2623,11 +2623,11 @@ Completed:
    - `Lessons Review: updated`
    - `更新文件：`
      - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-     - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+     - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - `更新重點：新增「大型 mapping registry catalog 必須按語義 owner 拆分，entrypoint 只保留註冊編排」規約。`
 528. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：本批進入 `infrastructure/sec_xbrl/extractor.py` 大切片，優先做「高內聚 owner 拆分」而非單純 LOC 壓縮；保留 extractor 入口責任並將 config/result/search-processing 下沉。
 529. P3/P4 較大切片（sec_xbrl extractor owner decomposition + side-effect bootstrap 收斂）：
@@ -2665,11 +2665,11 @@ Completed:
    - `Lessons Review: updated`
    - `更新文件：`
      - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-     - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+     - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - `更新重點：新增「拆分 widely-used owner module 時，utility entrypoint 要么同批遷移 call sites、要么保留薄 wrapper」規約。`
 532. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：本批進入 `infrastructure/sec_xbrl/base_model_debt_builder.py` 大切片，採「內聚優先」拆分（config/extraction/orchestration owner）而非僅 LOC 壓縮，並避免新增長期 compatibility layer。
 533. P3/P4 較大切片（sec_xbrl debt builder owner decomposition）：
@@ -2705,11 +2705,11 @@ Completed:
    - `Lessons Review: updated`
    - `更新文件：`
      - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-     - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+     - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - `更新重點：新增「strict/relaxed fallback 分支必須共用 extraction owner，以 config transformation 切換」規約。`
 536. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：本批進入 `domain/valuation/assumptions.py` 大切片，採 capability-based policy 拆分（growth/manual/forward-signal），並以「原子遷移 call sites + 刪除舊 owner」達成無 compatibility façade 收斂。
 537. P3/P4 較大切片（domain assumptions monolith 拆分 + no-compat migration）：
@@ -2752,11 +2752,11 @@ Completed:
    - `Lessons Review: updated`
    - `更新文件：`
      - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-     - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+     - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - `更新重點：新增「domain policy monolith 不可長期存在，必須 capability-based owner 拆分並原子遷移 call sites」規約。`
 540. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：本批優先完成 `infrastructure/sec_xbrl/fls_filter.py` 大切片，採「stateful lifecycle owner + pure processing service」拆分，以提高內聚與可測性，同時維持既有 entrypoint 行為。
 541. P3/P4 較大切片（sec_xbrl fls_filter owner decomposition）：
@@ -2794,11 +2794,11 @@ Completed:
    - `Lessons Review: updated`
    - `更新文件：`
      - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-     - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+     - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - `更新重點：新增「stateful inference owner 需拆成薄 orchestrator + prefilter/inference/stats owners」規約。`
 544. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：本批進入 `domain/valuation/engine/monte_carlo.py` 大切片，採「maintainability/cohesion 優先」拆分，避免為 LOC 而犧牲責任邊界；保持外部呼叫契約不變。
 545. P3/P4 較大切片（domain monte_carlo engine owner decomposition）：
@@ -2838,11 +2838,11 @@ Completed:
    - `Lessons Review: updated`
    - `更新文件：`
      - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-     - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+     - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - `更新重點：新增「deterministic engine 不可混放 contracts + orchestration + low-level math，需拆為 contracts + thin engine + owner services」規約。`
 548. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：本批進入 `infrastructure/sec_xbrl/base_model_income_cashflow_builder.py` 大切片，採「內聚優先」拆分為 config/component/derived owners，避免為 LOC 下降而犧牲可維護性與責任邊界。
 549. P3/P4 較大切片（sec_xbrl income/cashflow builder owner decomposition）：
@@ -2883,11 +2883,11 @@ Completed:
    - `Lessons Review: updated`
    - `更新文件：`
      - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-     - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+     - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - `更新重點：新增「financial statement builder 不可混放 concept catalog + extraction + derived metrics，需拆為 config/component/derived owners」規約。`
 552. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：本批進入 `infrastructure/sec_xbrl/record_processor.py` 大切片，採「pipeline entrypoint 薄化」策略，將 record-level preparation 與 metric-level aggregation 分離，避免單檔混責任。
 553. P3/P4 較大切片（sec_xbrl record_processor owner decomposition）：
@@ -2920,11 +2920,11 @@ Completed:
    - `Lessons Review: updated`
    - `更新文件：`
      - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-     - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+     - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - `更新重點：新增「text pipeline processor 不可混放 record preparation 與 metric aggregation/evidence policy，需拆為 preparation + metric owners」規約。`
 556. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：本批進入 `domain/valuation/policies/forward_signal_policy.py` 大切片，採「policy capability owner」拆分（contracts/parser/scoring），避免 payload parsing 與 scoring 決策混檔。
 557. P3/P4 較大切片（domain forward_signal_policy owner decomposition）：
@@ -2962,11 +2962,11 @@ Completed:
    - `Lessons Review: updated`
    - `更新文件：`
      - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-     - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+     - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - `更新重點：新增「policy 模組不得混放 payload parsing + scoring/risk 決策，需拆為 parser + scoring owners」規約。`
 560. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：本批進入 `application/use_cases/run_valuation_use_case.py` 大切片，採「use-case orchestration 薄化」策略，將 context loading、execution、completion fields 拆為 owner services，避免主檔混責任。
 561. P3/P4 較大切片（application run_valuation_use_case owner decomposition）：
@@ -3001,11 +3001,11 @@ Completed:
    - `Lessons Review: updated`
    - `更新文件：`
      - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-     - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+     - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - `更新重點：新增「application run_* use-case 不可混放 context loading + execution + completion shaping，需拆為 context/execution/completion owners」規約。`
 564. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：優先完成 `infrastructure/sec_xbrl/hybrid_retriever.py` owner 拆分，將 dense model lifecycle、sparse ranking、fusion policy 與 entrypoint orchestration 分離。
 565. P3/P4 較大切片（sec_xbrl hybrid_retriever owner decomposition）：
@@ -3042,7 +3042,7 @@ Completed:
    - `原因：本批主要是 owner 拆分與 entrypoint 薄化，未引入新的反模式類型。`
 568. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：進入 `infrastructure/sec_xbrl/pipeline_helpers.py` 大切片，移除 catch-all helpers 聚合桶並改為 capability owner modules。
 569. P3/P4 較大切片（sec_xbrl pipeline_helpers capability-owner decomposition / no-compat）：
@@ -3086,11 +3086,11 @@ Completed:
    - `Lessons Review: updated`
    - `更新文件：`
      - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-     - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+     - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - `更新重點：新增「禁止 catch-all helpers 模組，需以 capability owners 直接承載並原子遷移 call sites」規約。`
 572. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：進入 `domain/model_selection.py` 大切片，採「內聚優先」拆分為 contracts/spec-catalog/signal/scoring/reasoning owners，避免主檔混責任。
 573. P3/P4 較大切片（domain model_selection capability-owner decomposition）：
@@ -3131,11 +3131,11 @@ Completed:
    - `Lessons Review: updated`
    - `更新文件：`
      - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-     - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+     - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - `更新重點：新增「model_selection 不得混放 contracts/catalog/signals/scoring/reasoning，需拆為 capability owners + thin entrypoint」規約。`
 576. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：進入 `domain/valuation/backtest.py` 大切片，採「維護性/內聚優先」拆分為 contracts/I-O/runtime/drift/report owners，避免主檔混責任。
 577. P3/P4 較大切片（domain valuation backtest capability-owner decomposition）：
@@ -3173,11 +3173,11 @@ Completed:
    - `Lessons Review: updated`
    - `更新文件：`
      - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-     - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+     - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - `更新重點：新增「backtest 不得混放 I/O/runtime/drift/report，需拆為 capability owners + thin backtest entrypoint」規約。`
 580. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：進入 `domain/valuation/calculators/dcf_variant_calculator.py` 核心大切片，採「內聚優先」拆分 validation / Monte Carlo distribution / result assembly owners，避免主檔混責任。
 581. P3/P4 核心切片（domain dcf_variant_calculator capability-owner decomposition）：
@@ -3218,11 +3218,11 @@ Completed:
    - `Lessons Review: updated`
    - `更新文件：`
      - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-     - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+     - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - `更新重點：新增「DCF variant calculator 不得混放 validation/distribution/result assembly，需拆為 capability owners + thin entrypoint」規約。`
 584. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：進入 P5 最後收尾，優先移除 implementation compatibility residue：`sec_xbrl/utils.py` 與 extractor utility static wrappers，改為 capability service 直接依賴。
 585. P5 最後收尾切片（remove utility-wrapper compatibility residue / no-compat）：
@@ -3262,11 +3262,11 @@ Completed:
    - `Lessons Review: updated`
    - `更新文件：`
      - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-     - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+     - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - `更新重點：新增「不得保留 utils/static-wrapper 類型 implementation residue，需改為 capability service 直接依賴」規約。`
 588. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：核心架構已收斂，先做 post-convergence baseline 驗證，並清理可直接修復的 runtime contract deprecation 噪音（不新增 compatibility layer）。
 589. P5 維持性驗證切片（fundamental curated baseline / fixed explicit-file execution）：
@@ -3291,7 +3291,7 @@ Completed:
    - `原因：本批為驗證基線與框架 deprecation 參數更新，未新增跨 agent 架構反模式。`
 592. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：進入 P5 維持性大切片，收斂 `valuation/param_builder*.py` + `valuation/param_builders/*` 分散邊界，整合為單一 capability package，避免後續跨 agent 複製結構反模式。
 593. P5 較大切片（valuation parameterization package convergence / no-compat）：
@@ -3329,11 +3329,11 @@ Completed:
    - `Lessons Review: updated`
    - `更新文件：`
      - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-     - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+     - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - `更新重點：新增「同一 bounded capability 不得分散在 root 前綴檔與 sibling package，需收斂為單一 canonical capability package」規約。`
 596. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：進入 P5 naming convergence 大切片，收斂 `parameterization` package 內的 `param_builder_*` module stutter；採 no-compat 原子遷移 call sites。
 597. P5 較大切片（parameterization inner naming convergence / remove module stutter）：
@@ -3371,11 +3371,11 @@ Completed:
    - `Lessons Review: updated`
    - `更新文件：`
      - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-     - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+     - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - `更新重點：新增「canonical capability package 內不得重複能力前綴命名，需使用語義 owner 模組名」規約。`
 600. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：進入 P5 較大切片，進一步收斂 `parameterization/model_builders` 內聚性：由單層平鋪改為 `per-model subpackages + shared subpackage`。
 601. P5 較大切片（model_builders package stratification / maintainability-first）：
@@ -3423,11 +3423,11 @@ Completed:
    - `Lessons Review: updated`
    - `更新文件：`
      - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-     - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+     - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - `更新重點：新增「model-builders 不得單層平鋪，需採 per-model subpackages + shared subpackage」規約。`
 604. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：進入 P3/P4 大切片，拆分 `parameterization/policy_service.py` 的混合責任，收斂為 parser/adjustment/time-alignment guard capability owners。
 605. P3/P4 較大切片（parameterization policy owner decomposition）：
@@ -3459,11 +3459,11 @@ Completed:
    - `Lessons Review: updated`
    - `更新文件：`
      - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-     - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+     - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - `更新重點：新增「policy-oriented package 不得在單檔混放 forward-signal 與 time-alignment guard 等獨立能力」規約。`
 608. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：執行「避免過度設計」的中等切片；只拆 `model_builder_factory_service.py` 的通用 adapter 責任，維持既有入口與行為，不引入額外抽象層。
 609. P3/P4 中等切片（model builder factory owner 邊界收斂 / no-overdesign）：
@@ -3493,7 +3493,7 @@ Completed:
    - `原因：本批屬既有規約落地（owner 邊界收斂與薄 factory），未新增跨 agent 新反模式。`
 612. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：改用較大切片合併重構，且以「不過度設計」為原則，同批完成 application concrete 依賴收斂 + registry import-time side effect 清理 + infrastructure provider owner 命名收斂。
 613. P3/P4 較大切片（application boundary + registry bootstrap + provider naming convergence）：
@@ -3546,11 +3546,11 @@ Completed:
    - `Lessons Review: updated`
    - `更新文件：`
      - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-     - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+     - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - `更新重點：新增「application concrete wiring 必須外置 composition module」與「registry 不得 import-time bootstrap」規約。`
 616. Pre-check（本批開始前 standards + blueprint review）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - 結論：以較大切片完成「generic module 收斂」：同批清理 domain 泛名 owner modules + infrastructure sec_xbrl 泛名 contract module，且不保留 compatibility shim。
 617. P3/P4 較大切片（generic module convergence / no-compat）：
@@ -3609,7 +3609,7 @@ Completed:
    - `Lessons Review: updated`
    - `更新文件：`
      - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-     - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+     - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - `更新重點：新增「成熟 bounded context 禁止 generic root modules（models/services/rules）」規約。`
 620. Pre-check（治理切片：blueprint 同步）：
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
@@ -3648,7 +3648,7 @@ Completed:
      - `Lessons Review: no_update`（既有規約落地，無新增反模式）。
 623. Final Hardening Pre-check（standards + backlog 收斂檢查）：
    - review `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-   - review `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+   - review `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - review `docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
    - review `docs/backlog/fundamental_refactor_execution_tracker.md`
    - 結論：進入 final hardening 驗證批次；目標是用擴大 lint + regression 覆蓋確認 fundamental 主線已達「可交付收斂」。
@@ -3689,7 +3689,7 @@ Completed:
    - `Lessons Review: updated`
    - `更新文件：`
      - `docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-     - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+     - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - `更新重點：新增「成熟能力 4+ owner modules 應升級 dedicated subpackage，避免長期 flat <capability>_* cluster」規約。`
 626. P3/P4 實作切片（一次對位：valuation backtest package 化）：
    - 目標：
@@ -3768,7 +3768,7 @@ Completed:
      - 偏離：無
    - `Lessons Review: updated`
    - `更新文件：`
-     - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+     - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - `更新重點：新增「External Parser Empty Facts」反模式與 guardrail（先同 filing forced instance fallback，再考慮跨年份 fallback）。`
 629. P5 Hardening 切片（SEC HTTP timeout runtime config 收斂）：
    - 問題背景：
@@ -3795,7 +3795,7 @@ Completed:
      - 偏離：無
    - `Lessons Review: updated`
    - `更新文件：`
-     - `docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+     - `docs/standards/refactor_lessons_and_cross_agent_playbook.md`
    - `更新重點：新增「External SDK Large-Payload Timeout」反模式與集中 runtime config 規約。`
 
 In Progress:

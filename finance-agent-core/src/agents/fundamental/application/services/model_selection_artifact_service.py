@@ -4,14 +4,14 @@ import time
 from collections.abc import Callable
 from typing import Protocol
 
+from src.agents.fundamental.application.context_mapper_service import (
+    build_fundamental_app_context,
+)
 from src.agents.fundamental.application.dto import FundamentalAppContextDTO
 from src.agents.fundamental.application.ports import IFundamentalReportRepo
 from src.agents.fundamental.domain.entities import FundamentalSelectionReport
 from src.agents.fundamental.domain.financial_health_service import (
     build_latest_health_context,
-)
-from src.agents.fundamental.interface.mappers import (
-    build_mapper_context as build_fundamental_mapper_context,
 )
 from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
 
@@ -24,7 +24,7 @@ def _build_mapper_context(
     model_type: str | None = None,
     valuation_summary: str | None = None,
 ) -> FundamentalAppContextDTO:
-    return build_fundamental_mapper_context(
+    return build_fundamental_app_context(
         intent_ctx,
         resolved_ticker,
         status=status,

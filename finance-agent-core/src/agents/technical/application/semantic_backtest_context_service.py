@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 
 import pandas as pd
@@ -54,7 +55,10 @@ async def assemble_backtest_context(
             fd_series=fd_series,
             z_score_series=z_score_series,
         )
-        rf_series = market_data_provider.fetch_risk_free_series(period="5y")
+        rf_series = await asyncio.to_thread(
+            market_data_provider.fetch_risk_free_series,
+            "5y",
+        )
 
         backtester = backtest_runtime.create_backtester(
             price_series=prices,
@@ -92,7 +96,16 @@ async def assemble_backtest_context(
             message="technical semantic backtest context failed; proceeding without statistical verification",
             level=logging.WARNING,
             error_code="TECHNICAL_SEMANTIC_BACKTEST_CONTEXT_FAILED",
-            fields={"exception": str(exc)},
+            fields={
+                "exception": str(exc),
+                "degrade_source": "semantic_backtest_context",
+                "fallback_mode": "continue_without_backtest_context",
+                "price_artifact_id": price_artifact_id,
+                "chart_artifact_id": chart_artifact_id,
+                "input_count": int(price_artifact_id is not None)
+                + int(chart_artifact_id is not None),
+                "output_count": 0,
+            },
         )
         return BacktestContextResult(
             backtest_context="",

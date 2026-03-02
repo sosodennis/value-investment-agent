@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Callable, Mapping
 from typing import Protocol
@@ -40,6 +41,12 @@ async def run_data_fetch_use_case(
     market_data_provider: ITechnicalMarketDataProvider,
 ) -> TechnicalNodeResult:
     resolved_ticker = resolved_ticker_from_state(state)
+    log_event(
+        logger,
+        event="technical_data_fetch_started",
+        message="technical data fetch started",
+        fields={"ticker": resolved_ticker},
+    )
     if resolved_ticker is None:
         log_event(
             logger,
@@ -48,20 +55,31 @@ async def run_data_fetch_use_case(
             level=logging.ERROR,
             error_code="TECHNICAL_TICKER_MISSING",
         )
+        log_event(
+            logger,
+            event="technical_data_fetch_completed",
+            message="technical data fetch completed",
+            level=logging.ERROR,
+            fields={
+                "ticker": resolved_ticker,
+                "status": "error",
+                "is_degraded": True,
+                "error_code": "TECHNICAL_TICKER_MISSING",
+                "rows": 0,
+                "artifact_written": False,
+            },
+        )
         return TechnicalNodeResult(
             update=build_data_fetch_error_update("No resolved ticker available"),
             goto="END",
         )
 
-    log_event(
-        logger,
-        event="technical_data_fetch_started",
-        message="technical data fetch started",
-        fields={"ticker": resolved_ticker},
-    )
-
     try:
-        df = market_data_provider.fetch_daily_ohlcv(resolved_ticker, period="5y")
+        df = await asyncio.to_thread(
+            market_data_provider.fetch_daily_ohlcv,
+            resolved_ticker,
+            "5y",
+        )
     except Exception as exc:
         log_event(
             logger,
@@ -70,6 +88,20 @@ async def run_data_fetch_use_case(
             level=logging.ERROR,
             error_code="TECHNICAL_DATA_FETCH_FAILED",
             fields={"ticker": resolved_ticker, "exception": str(exc)},
+        )
+        log_event(
+            logger,
+            event="technical_data_fetch_completed",
+            message="technical data fetch completed",
+            level=logging.ERROR,
+            fields={
+                "ticker": resolved_ticker,
+                "status": "error",
+                "is_degraded": True,
+                "error_code": "TECHNICAL_DATA_FETCH_FAILED",
+                "rows": 0,
+                "artifact_written": False,
+            },
         )
         return TechnicalNodeResult(
             update=build_data_fetch_error_update(f"Data fetch failed: {str(exc)}"),
@@ -83,7 +115,27 @@ async def run_data_fetch_use_case(
             message="technical data fetch returned empty frame",
             level=logging.WARNING,
             error_code="TECHNICAL_DATA_EMPTY",
-            fields={"ticker": resolved_ticker},
+            fields={
+                "ticker": resolved_ticker,
+                "degrade_source": "market_data_provider",
+                "fallback_mode": "terminate_empty_frame",
+                "input_count": 0,
+                "output_count": 0,
+            },
+        )
+        log_event(
+            logger,
+            event="technical_data_fetch_completed",
+            message="technical data fetch completed",
+            level=logging.ERROR,
+            fields={
+                "ticker": resolved_ticker,
+                "status": "error",
+                "is_degraded": True,
+                "error_code": "TECHNICAL_DATA_EMPTY",
+                "rows": 0,
+                "artifact_written": False,
+            },
         )
         return TechnicalNodeResult(
             update=build_data_fetch_error_update("Empty data returned from provider"),
@@ -114,6 +166,18 @@ async def run_data_fetch_use_case(
     artifact = runtime.build_progress_artifact(
         f"Technical Analysis: Data fetched for {resolved_ticker}",
         preview,
+    )
+    log_event(
+        logger,
+        event="technical_data_fetch_completed",
+        message="technical data fetch completed",
+        fields={
+            "ticker": resolved_ticker,
+            "status": "done",
+            "is_degraded": False,
+            "rows": len(df),
+            "artifact_written": True,
+        },
     )
 
     return TechnicalNodeResult(

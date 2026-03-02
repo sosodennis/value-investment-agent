@@ -8,8 +8,8 @@ from dataclasses import dataclass
 class TechnicalStateContext:
     price_artifact_id: str | None
     chart_data_id: str | None
-    optimal_d: object
-    z_score_latest: object
+    optimal_d: float | None
+    z_score_latest: float | None
 
 
 def _read_non_empty_string(value: object) -> str | None:
@@ -17,6 +17,14 @@ def _read_non_empty_string(value: object) -> str | None:
         return None
     normalized = value.strip()
     return normalized or None
+
+
+def _read_optional_number(value: object) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        return float(value)
+    return None
 
 
 def resolved_ticker_from_state(state: Mapping[str, object]) -> str | None:
@@ -33,6 +41,6 @@ def technical_state_from_state(state: Mapping[str, object]) -> TechnicalStateCon
             technical_ctx.get("price_artifact_id")
         ),
         chart_data_id=_read_non_empty_string(technical_ctx.get("chart_data_id")),
-        optimal_d=technical_ctx.get("optimal_d"),
-        z_score_latest=technical_ctx.get("z_score_latest"),
+        optimal_d=_read_optional_number(technical_ctx.get("optimal_d")),
+        z_score_latest=_read_optional_number(technical_ctx.get("z_score_latest")),
     )

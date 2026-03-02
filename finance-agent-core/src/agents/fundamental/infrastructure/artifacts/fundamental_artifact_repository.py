@@ -38,7 +38,7 @@ class FundamentalArtifactRepository:
         )
 
     async def load_financial_reports_payload(
-        self, artifact_id: object
+        self, artifact_id: str
     ) -> FinancialReportsArtifactData | None:
         return await self.financial_reports_port.load(
             artifact_id,
@@ -46,16 +46,14 @@ class FundamentalArtifactRepository:
         )
 
     async def load_financial_report_models(
-        self, artifact_id: object
+        self, artifact_id: str
     ) -> list[FinancialReportModel] | None:
         payload = await self.load_financial_reports_payload(artifact_id)
         if payload is None:
             return None
         return payload.financial_reports
 
-    async def load_financial_reports(
-        self, artifact_id: object
-    ) -> list[JSONObject] | None:
+    async def load_financial_reports(self, artifact_id: str) -> list[JSONObject] | None:
         payload = await self.financial_reports_port.load_json(
             artifact_id,
             context=f"artifact {artifact_id} financial_reports data",
@@ -70,7 +68,7 @@ class FundamentalArtifactRepository:
         return financial_reports
 
     async def load_financial_reports_bundle(
-        self, artifact_id: object
+        self, artifact_id: str
     ) -> tuple[list[JSONObject], list[JSONObject] | None] | None:
         payload = await self.financial_reports_port.load_json(
             artifact_id,

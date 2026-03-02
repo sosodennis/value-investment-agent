@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from src.agents.fundamental.application.report_projection_service import (
-    project_selection_reports,
-)
 from src.agents.fundamental.domain.financial_health_service import (
     extract_latest_preview_metrics,
+)
+from src.agents.fundamental.interface.report_projection_service import (
+    project_selection_reports,
 )
 from src.shared.kernel.types import JSONObject
 

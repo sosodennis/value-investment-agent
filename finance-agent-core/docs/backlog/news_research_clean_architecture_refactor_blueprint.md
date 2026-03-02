@@ -5,7 +5,7 @@ Scope: `finance-agent-core/src/agents/news`
 Status: P1-P7 completed (architecture convergence) + P8 hardening completed
 Policy baseline:
 1. `finance-agent-core/docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-2. `finance-agent-core/docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+2. `finance-agent-core/docs/standards/refactor_lessons_and_cross_agent_playbook.md`
 3. `finance-agent-core/docs/backlog/fundamental_valuation_clean_architecture_refactor_blueprint.md`
 4. `finance-agent-core/docs/backlog/technical_analysis_clean_architecture_refactor_blueprint.md`
 

@@ -1,18 +1,19 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Callable, Mapping
 from typing import Protocol
 
+from src.agents.fundamental.application.context_mapper_service import (
+    build_fundamental_app_context,
+)
 from src.agents.fundamental.application.dto import FundamentalAppContextDTO
 from src.agents.fundamental.application.state_readers import read_intent_state
 from src.agents.fundamental.application.state_updates import (
     build_financial_health_missing_ticker_update,
     build_financial_health_success_update,
     build_node_error_update,
-)
-from src.agents.fundamental.interface.mappers import (
-    build_mapper_context as build_fundamental_mapper_context,
 )
 from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
@@ -72,6 +73,12 @@ async def run_financial_health_use_case(
 ) -> FundamentalNodeResult:
     intent_state = read_intent_state(state)
     resolved_ticker = intent_state.resolved_ticker
+    log_event(
+        logger,
+        event="fundamental_financial_health_started",
+        message="fundamental financial health started",
+        fields={"ticker": resolved_ticker},
+    )
     if resolved_ticker is None:
         log_event(
             logger,
@@ -80,19 +87,29 @@ async def run_financial_health_use_case(
             level=logging.ERROR,
             error_code="FUNDAMENTAL_TICKER_MISSING",
         )
+        log_event(
+            logger,
+            event="fundamental_financial_health_completed",
+            message="fundamental financial health completed",
+            level=logging.ERROR,
+            fields={
+                "ticker": resolved_ticker,
+                "status": "error",
+                "is_degraded": True,
+                "error_code": "FUNDAMENTAL_TICKER_MISSING",
+                "reports_count": 0,
+                "forward_signal_count": 0,
+            },
+        )
         return FundamentalNodeResult(
             update=build_financial_health_missing_ticker_update(),
             goto="END",
         )
-
-    log_event(
-        logger,
-        event="fundamental_financial_health_started",
-        message="fundamental financial health started",
-        fields={"ticker": resolved_ticker},
-    )
     try:
-        financial_reports_raw = fetch_financial_data_fn(resolved_ticker)
+        financial_reports_raw = await asyncio.to_thread(
+            fetch_financial_data_fn,
+            resolved_ticker,
+        )
         reports_input, forward_signals = _extract_financial_health_payload(
             financial_reports_raw
         )
@@ -112,7 +129,7 @@ async def run_financial_health_use_case(
                 produced_by="fundamental_analysis.financial_health",
                 key_prefix=f"fa_reports_{resolved_ticker}",
             )
-            mapper_ctx = build_fundamental_mapper_context(
+            mapper_ctx = build_fundamental_app_context(
                 intent_state.context,
                 resolved_ticker,
                 status="fetching_complete",
@@ -129,9 +146,32 @@ async def run_financial_health_use_case(
                 message="financial health reports unavailable; continuing without reports",
                 level=logging.WARNING,
                 error_code="FUNDAMENTAL_REPORTS_UNAVAILABLE",
-                fields={"ticker": resolved_ticker},
+                fields={
+                    "ticker": resolved_ticker,
+                    "degrade_source": "xbrl_reports",
+                    "fallback_mode": "continue_without_reports",
+                    "input_count": 0,
+                    "output_count": 0,
+                },
             )
 
+        forward_signal_count = len(forward_signals or [])
+        reports_count = len(reports_data)
+        is_degraded = reports_count == 0
+        log_event(
+            logger,
+            event="fundamental_financial_health_completed",
+            message="fundamental financial health completed",
+            level=logging.WARNING if is_degraded else logging.INFO,
+            fields={
+                "ticker": resolved_ticker,
+                "status": "done",
+                "is_degraded": is_degraded,
+                "reports_count": reports_count,
+                "forward_signal_count": forward_signal_count,
+                "artifact_written": reports_artifact_id is not None,
+            },
+        )
         return FundamentalNodeResult(
             update=build_financial_health_success_update(
                 reports_artifact_id=reports_artifact_id,
@@ -147,6 +187,20 @@ async def run_financial_health_use_case(
             level=logging.ERROR,
             error_code="FUNDAMENTAL_FINANCIAL_HEALTH_FAILED",
             fields={"exception": str(exc), "ticker": resolved_ticker},
+        )
+        log_event(
+            logger,
+            event="fundamental_financial_health_completed",
+            message="fundamental financial health completed",
+            level=logging.ERROR,
+            fields={
+                "ticker": resolved_ticker,
+                "status": "error",
+                "is_degraded": True,
+                "error_code": "FUNDAMENTAL_FINANCIAL_HEALTH_FAILED",
+                "reports_count": 0,
+                "forward_signal_count": 0,
+            },
         )
         return FundamentalNodeResult(
             update=build_node_error_update(

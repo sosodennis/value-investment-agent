@@ -89,6 +89,18 @@ async def run_semantic_translate_use_case(
             level=logging.ERROR,
             error_code=context_error.error_code,
         )
+        log_event(
+            logger,
+            event="technical_semantic_translate_completed",
+            message="technical semantic translation completed",
+            level=logging.ERROR,
+            fields={
+                "status": "error",
+                "is_degraded": True,
+                "error_code": context_error.error_code,
+                "artifact_written": False,
+            },
+        )
         error_update = build_semantic_error_update(context_error.user_message)
         return TechnicalNodeResult(update=error_update.update, goto="END")
 
@@ -116,11 +128,19 @@ async def run_semantic_translate_use_case(
             build_output_artifact=runtime.build_semantic_output_artifact,
         )
         success_update = build_semantic_translate_success_result(ta_update)
+        is_degraded = "artifact" not in ta_update
         log_event(
             logger,
             event="technical_semantic_translate_completed",
             message="technical semantic translation completed",
-            fields={"ticker": context.ticker},
+            level=logging.WARNING if is_degraded else logging.INFO,
+            fields={
+                "ticker": context.ticker,
+                "status": "done",
+                "is_degraded": is_degraded,
+                "artifact_written": not is_degraded,
+                "semantic_tag_count": len(pipeline_result.tags_result.tags),
+            },
         )
         return TechnicalNodeResult(update=success_update.update, goto="END")
     except Exception as exc:
@@ -131,6 +151,19 @@ async def run_semantic_translate_use_case(
             level=logging.ERROR,
             error_code="TECHNICAL_SEMANTIC_TRANSLATION_FAILED",
             fields={"ticker": context.ticker, "exception": str(exc)},
+        )
+        log_event(
+            logger,
+            event="technical_semantic_translate_completed",
+            message="technical semantic translation completed",
+            level=logging.ERROR,
+            fields={
+                "ticker": context.ticker,
+                "status": "error",
+                "is_degraded": True,
+                "error_code": "TECHNICAL_SEMANTIC_TRANSLATION_FAILED",
+                "artifact_written": False,
+            },
         )
         error_update = build_semantic_error_update(
             f"Semantic translation failed: {str(exc)}"

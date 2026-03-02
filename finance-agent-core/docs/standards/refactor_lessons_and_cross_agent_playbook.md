@@ -60,6 +60,12 @@
 17. Provider 失敗語義只有 `None`
    - 症狀: 外部請求失敗只回傳 `None`，use-case 無法區分原因與影響，容易出現「狀態健康但品質下降」。
    - 做法: provider 回傳 typed failure payload（如 failure_code/http_status/reason）；use-case 依此計算 degraded 指標與錯誤摘要。
+18. Interface → Application 反向依賴
+   - 症狀: `interface` mappers/projection 依賴 `application` DTO/service，導致層邊界倒置、重構時高耦合。
+   - 做法: boundary mapping/prompt/rendering 保留在 `interface`；workflow/app context mapping owner 放在 `application`。
+19. Completion log 只覆蓋 happy path
+   - 症狀: 有 `started` 但只有成功分支有 `completed`，early return / error 分支缺 completion summary，導致節點終態不可觀測。
+   - 做法: 每個 terminal return path（success/waiting/error）都要打同一個 completion event，固定帶 `status`/`is_degraded`/`error_code`（若有）。
 
 ## 2. 標準重構切片流程（每批固定）
 

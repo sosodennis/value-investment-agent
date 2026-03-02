@@ -4,9 +4,6 @@ import logging
 from collections.abc import Callable, Mapping
 from typing import Protocol
 
-from src.agents.fundamental.application.report_projection_service import (
-    project_selection_reports,
-)
 from src.agents.fundamental.application.state_readers import (
     read_fundamental_state,
     read_intent_state,
@@ -19,6 +16,9 @@ from src.agents.fundamental.application.state_updates import (
 from src.agents.fundamental.domain.entities import FundamentalSelectionReport
 from src.agents.fundamental.domain.valuation_model_type_service import (
     resolve_calculator_model_type,
+)
+from src.agents.fundamental.interface.report_projection_service import (
+    project_selection_reports,
 )
 from src.agents.fundamental.interface.serializers import (
     serialize_model_selection_details,
@@ -67,6 +67,12 @@ async def run_model_selection_use_case(
         intent_state = read_intent_state(state)
         profile = intent_state.profile
         resolved_ticker = intent_state.resolved_ticker
+        log_event(
+            logger,
+            event="fundamental_model_selection_started",
+            message="fundamental model selection started",
+            fields={"ticker": resolved_ticker},
+        )
 
         if profile is None:
             log_event(
@@ -76,6 +82,20 @@ async def run_model_selection_use_case(
                 level=logging.WARNING,
                 error_code="FUNDAMENTAL_PROFILE_MISSING",
                 fields={"ticker": resolved_ticker},
+            )
+            log_event(
+                logger,
+                event="fundamental_model_selection_completed",
+                message="fundamental model selection completed",
+                level=logging.WARNING,
+                fields={
+                    "ticker": resolved_ticker,
+                    "status": "waiting",
+                    "is_degraded": True,
+                    "error_code": "FUNDAMENTAL_PROFILE_MISSING",
+                    "reports_count": 0,
+                    "forward_signal_count": 0,
+                },
             )
             return FundamentalNodeResult(
                 update=build_model_selection_waiting_update(),
@@ -89,11 +109,47 @@ async def run_model_selection_use_case(
         selection_reports: list[FundamentalSelectionReport] = []
         if reports_artifact_id is not None:
             bundle = await runtime.load_financial_reports_bundle(reports_artifact_id)
-            if bundle is not None:
-                loaded_reports, loaded_forward_signals = bundle
-                selection_reports = project_selection_reports(loaded_reports)
-                financial_reports = loaded_reports
-                forward_signals = loaded_forward_signals
+            if bundle is None:
+                log_event(
+                    logger,
+                    event="fundamental_model_selection_reports_artifact_not_found",
+                    message="fundamental model selection failed due to missing reports artifact payload",
+                    level=logging.ERROR,
+                    error_code="FUNDAMENTAL_REPORTS_ARTIFACT_NOT_FOUND",
+                    fields={
+                        "ticker": resolved_ticker,
+                        "reports_artifact_id": reports_artifact_id,
+                    },
+                )
+                log_event(
+                    logger,
+                    event="fundamental_model_selection_completed",
+                    message="fundamental model selection completed",
+                    level=logging.ERROR,
+                    fields={
+                        "ticker": resolved_ticker,
+                        "status": "error",
+                        "is_degraded": True,
+                        "error_code": "FUNDAMENTAL_REPORTS_ARTIFACT_NOT_FOUND",
+                        "reports_artifact_id": reports_artifact_id,
+                        "reports_count": 0,
+                        "forward_signal_count": 0,
+                    },
+                )
+                return FundamentalNodeResult(
+                    update=build_node_error_update(
+                        node="model_selection",
+                        error=(
+                            "Financial reports artifact not found: "
+                            f"{reports_artifact_id}"
+                        ),
+                    ),
+                    goto="END",
+                )
+            loaded_reports, loaded_forward_signals = bundle
+            selection_reports = project_selection_reports(loaded_reports)
+            financial_reports = loaded_reports
+            forward_signals = loaded_forward_signals
 
         selection = select_valuation_model_fn(profile, selection_reports)
         model = selection.model
@@ -129,7 +185,14 @@ async def run_model_selection_use_case(
                 message="fundamental model selection artifact generation failed",
                 level=logging.ERROR,
                 error_code="FUNDAMENTAL_MODEL_ARTIFACT_FAILED",
-                fields={"exception": str(exc), "ticker": resolved_ticker},
+                fields={
+                    "exception": str(exc),
+                    "ticker": resolved_ticker,
+                    "degrade_source": "model_selection_artifact",
+                    "fallback_mode": "continue_without_artifact",
+                    "input_count": len(financial_reports),
+                    "output_count": 0,
+                },
             )
             artifact, report_id = None, None
 
@@ -143,6 +206,24 @@ async def run_model_selection_use_case(
         if artifact is not None:
             fa_update["artifact"] = artifact
 
+        reports_count = len(financial_reports)
+        forward_signal_count = len(forward_signals or [])
+        is_degraded = artifact is None
+        log_event(
+            logger,
+            event="fundamental_model_selection_completed",
+            message="fundamental model selection completed",
+            level=logging.WARNING if is_degraded else logging.INFO,
+            fields={
+                "ticker": resolved_ticker,
+                "status": "done",
+                "is_degraded": is_degraded,
+                "model_type": model_type,
+                "reports_count": reports_count,
+                "forward_signal_count": forward_signal_count,
+                "artifact_written": artifact is not None,
+            },
+        )
         return FundamentalNodeResult(
             update=build_model_selection_success_update(
                 fa_update=fa_update,
@@ -158,6 +239,19 @@ async def run_model_selection_use_case(
             level=logging.ERROR,
             error_code="FUNDAMENTAL_MODEL_SELECTION_FAILED",
             fields={"exception": str(exc)},
+        )
+        log_event(
+            logger,
+            event="fundamental_model_selection_completed",
+            message="fundamental model selection completed",
+            level=logging.ERROR,
+            fields={
+                "status": "error",
+                "is_degraded": True,
+                "error_code": "FUNDAMENTAL_MODEL_SELECTION_FAILED",
+                "reports_count": 0,
+                "forward_signal_count": 0,
+            },
         )
         return FundamentalNodeResult(
             update=build_node_error_update(

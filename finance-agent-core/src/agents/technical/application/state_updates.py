@@ -71,7 +71,7 @@ def build_fracdiff_success_update(
     adf_statistic: float | None,
     adf_pvalue: float | None,
     bollinger: JSONObject,
-    statistical_strength_val: object,
+    statistical_strength_val: float | None,
     macd: JSONObject,
     obv: JSONObject,
     artifact: AgentOutputArtifactPayload,

@@ -9,12 +9,6 @@ from src.agents.fundamental.interface.contracts import (
 from src.shared.kernel.types import JSONObject
 
 
-def financial_report_models_to_json(
-    reports: list[FinancialReportModel],
-) -> list[JSONObject]:
-    return [report.model_dump(mode="json") for report in reports]
-
-
 def _traceable_to_float(field: TraceableFieldModel | None) -> float | None:
     if field is None:
         return None

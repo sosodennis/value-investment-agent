@@ -23,7 +23,9 @@ This is the canonical cross-agent architecture standard. Keep this file short an
    - Depends on ports/contracts, not concrete infrastructure adapters.
 3. `interface`
    - Owns boundary contracts, serialization/mapping, and prompt rendering/specs.
+   - Must not import `application` layer DTO/service owners.
    - Must not own domain policy or infrastructure I/O.
+   - If workflow/app context mapping is needed, keep the mapper owner in `application`.
 4. `infrastructure`
    - Owns provider/client/repository adapters and runtime wiring/config.
    - Repository adapters are storage gateways only; do not mix domain projection/aggregation logic into repository owners.
@@ -108,6 +110,7 @@ This is the canonical cross-agent architecture standard. Keep this file short an
 2. Every node/use-case must emit exactly one start and one completion summary log:
    - start includes key input scope (for example ticker, input count).
    - completion includes output counts and final quality flags (`is_degraded`, `status`).
+   - completion summary must be emitted on every terminal return path (success, waiting/degraded, and error), including early-return validation failures.
 3. Every degraded/error path must emit a dedicated reason log with `error_code`:
    - include `stage/source`, impact metrics (`input_count`, `output_count`, fallback size), and a short reason string.
    - do not rely on UI `error_logs` state only; backend logs must be independently diagnosable.
@@ -143,6 +146,7 @@ This is the canonical cross-agent architecture standard. Keep this file short an
 19. Any repository/read boundary silently converting missing artifact to empty payload?
 20. Any high-frequency async adapter still creating per-request client/session objects without lifecycle-managed reuse?
 21. Any external provider still returning bare `None` for degraded failures where typed failure metadata is required for state/log diagnostics?
+22. Any `interface` module importing `application` owners (DTO/services/context mappers)?
 
 ## 10. Standard Update Policy
 

@@ -29,11 +29,18 @@ def build_default_fundamental_workflow_runner() -> FundamentalWorkflowRunner:
     )
 
 
-fundamental_workflow_runner = build_default_fundamental_workflow_runner()
+_fundamental_workflow_runner: FundamentalWorkflowRunner | None = None
+
+
+def get_fundamental_workflow_runner() -> FundamentalWorkflowRunner:
+    global _fundamental_workflow_runner
+    if _fundamental_workflow_runner is None:
+        _fundamental_workflow_runner = build_default_fundamental_workflow_runner()
+    return _fundamental_workflow_runner
 
 
 __all__ = [
     "FundamentalWorkflowRunner",
     "build_default_fundamental_workflow_runner",
-    "fundamental_workflow_runner",
+    "get_fundamental_workflow_runner",
 ]

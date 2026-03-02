@@ -15,11 +15,11 @@ class IFundamentalReportRepo(Protocol):
     ) -> str: ...
 
     async def load_financial_reports(
-        self, artifact_id: object
+        self, artifact_id: str
     ) -> list[JSONObject] | None: ...
 
     async def load_financial_reports_bundle(
-        self, artifact_id: object
+        self, artifact_id: str
     ) -> tuple[list[JSONObject], list[JSONObject] | None] | None: ...
 
 

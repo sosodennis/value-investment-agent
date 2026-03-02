@@ -5,7 +5,7 @@ Scope: `finance-agent-core/src/agents/technical`
 Status: Completed (post-P14 compliance review)
 Policy baseline:
 1. `finance-agent-core/docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
-2. `finance-agent-core/docs/standards/fundamental_refactor_lessons_and_cross_agent_playbook.md`
+2. `finance-agent-core/docs/standards/refactor_lessons_and_cross_agent_playbook.md`
 
 Status update (2026-03-02):
 1. P1 started and implemented:

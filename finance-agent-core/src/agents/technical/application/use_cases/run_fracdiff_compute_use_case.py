@@ -47,10 +47,12 @@ async def run_fracdiff_compute_use_case(
     *,
     fracdiff_runtime: ITechnicalFracdiffRuntime,
 ) -> TechnicalNodeResult:
+    ticker_value = resolved_ticker_from_state(state)
     log_event(
         logger,
         event="technical_fracdiff_started",
         message="technical fracdiff computation started",
+        fields={"ticker": ticker_value},
     )
 
     technical_context = technical_state_from_state(state)
@@ -62,6 +64,20 @@ async def run_fracdiff_compute_use_case(
             message="technical fracdiff failed due to missing price artifact id",
             level=logging.ERROR,
             error_code="TECHNICAL_PRICE_ARTIFACT_ID_MISSING",
+            fields={"ticker": ticker_value},
+        )
+        log_event(
+            logger,
+            event="technical_fracdiff_completed",
+            message="technical fracdiff computation completed",
+            level=logging.ERROR,
+            fields={
+                "ticker": ticker_value,
+                "status": "error",
+                "is_degraded": True,
+                "error_code": "TECHNICAL_PRICE_ARTIFACT_ID_MISSING",
+                "artifact_written": False,
+            },
         )
         return TechnicalNodeResult(
             update=build_fracdiff_error_update("Missing price artifact ID"),
@@ -77,7 +93,24 @@ async def run_fracdiff_compute_use_case(
                 message="technical fracdiff failed due to missing price artifact",
                 level=logging.ERROR,
                 error_code="TECHNICAL_PRICE_ARTIFACT_NOT_FOUND",
-                fields={"price_artifact_id": price_artifact_id},
+                fields={
+                    "ticker": ticker_value,
+                    "price_artifact_id": price_artifact_id,
+                },
+            )
+            log_event(
+                logger,
+                event="technical_fracdiff_completed",
+                message="technical fracdiff computation completed",
+                level=logging.ERROR,
+                fields={
+                    "ticker": ticker_value,
+                    "status": "error",
+                    "is_degraded": True,
+                    "error_code": "TECHNICAL_PRICE_ARTIFACT_NOT_FOUND",
+                    "price_artifact_id": price_artifact_id,
+                    "artifact_written": False,
+                },
             )
             return TechnicalNodeResult(
                 update=build_fracdiff_error_update("Price artifact not found in store"),
@@ -104,24 +137,50 @@ async def run_fracdiff_compute_use_case(
             message="technical fracdiff computation failed",
             level=logging.ERROR,
             error_code="TECHNICAL_FRACDIFF_FAILED",
-            fields={"exception": str(exc)},
+            fields={"ticker": ticker_value, "exception": str(exc)},
+        )
+        log_event(
+            logger,
+            event="technical_fracdiff_completed",
+            message="technical fracdiff computation completed",
+            level=logging.ERROR,
+            fields={
+                "ticker": ticker_value,
+                "status": "error",
+                "is_degraded": True,
+                "error_code": "TECHNICAL_FRACDIFF_FAILED",
+                "artifact_written": False,
+            },
         )
         return TechnicalNodeResult(
             update=build_fracdiff_error_update(f"Computation crashed: {str(exc)}"),
             goto="END",
         )
 
-    ticker_value = resolved_ticker_from_state(state) or "N/A"
+    ticker_display = ticker_value or "N/A"
     preview = build_fracdiff_progress_preview(
-        ticker=ticker_value,
+        ticker=ticker_display,
         latest_price=result.latest_price,
         z_score=result.z_score_latest,
         optimal_d=result.optimal_d,
         statistical_strength=result.statistical_strength_val,
     )
     artifact = runtime.build_progress_artifact(
-        f"Technical Analysis: Patterns computed for {ticker_value}",
+        f"Technical Analysis: Patterns computed for {ticker_display}",
         preview,
+    )
+    log_event(
+        logger,
+        event="technical_fracdiff_completed",
+        message="technical fracdiff computation completed",
+        fields={
+            "ticker": ticker_value,
+            "status": "done",
+            "is_degraded": False,
+            "price_artifact_id": price_artifact_id,
+            "chart_data_id": chart_data_id,
+            "artifact_written": True,
+        },
     )
 
     return TechnicalNodeResult(
