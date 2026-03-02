@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from src.agents.fundamental.data.clients.market_data import (
+from src.agents.fundamental.infrastructure.market_data.market_data_service import (
     DEFAULT_BETA,
     DEFAULT_RISK_FREE_RATE,
-    MarketDataClient,
+    MarketDataService,
 )
-from src.agents.fundamental.data.clients.market_providers import ProviderFetch
-from src.agents.fundamental.data.ports import MarketDatum
+from src.agents.fundamental.infrastructure.market_data.provider_contracts import (
+    MarketDatum,
+    ProviderFetch,
+)
 
 
 class _StaticProvider:
@@ -40,7 +42,7 @@ class _FailingProvider:
         raise RuntimeError("network down")
 
 
-def test_market_data_client_prefers_macro_provider_for_risk_free_rate() -> None:
+def test_market_data_service_prefers_macro_provider_for_risk_free_rate() -> None:
     yahoo = _StaticProvider(
         name="yfinance",
         license_note="yahoo license",
@@ -66,8 +68,8 @@ def test_market_data_client_prefers_macro_provider_for_risk_free_rate() -> None:
         },
     )
 
-    client = MarketDataClient(ttl_seconds=120, max_retries=0, providers=(yahoo, fred))
-    snapshot = client.get_market_snapshot("EXM")
+    service = MarketDataService(ttl_seconds=120, max_retries=0, providers=(yahoo, fred))
+    snapshot = service.get_market_snapshot("EXM")
 
     assert snapshot.risk_free_rate == 0.043
     assert snapshot.current_price == 123.4
@@ -80,7 +82,7 @@ def test_market_data_client_prefers_macro_provider_for_risk_free_rate() -> None:
     assert "fred license" in snapshot.license_note
 
 
-def test_market_data_client_uses_cache_within_ttl() -> None:
+def test_market_data_service_uses_cache_within_ttl() -> None:
     yahoo = _StaticProvider(
         name="yfinance",
         license_note="yahoo license",
@@ -97,19 +99,19 @@ def test_market_data_client_uses_cache_within_ttl() -> None:
         datums={"risk_free_rate": MarketDatum(0.04, "fred", "2026-02-23")},
     )
 
-    client = MarketDataClient(ttl_seconds=120, max_retries=0, providers=(yahoo, fred))
-    _ = client.get_market_snapshot("EXM")
-    _ = client.get_market_snapshot("EXM")
+    service = MarketDataService(ttl_seconds=120, max_retries=0, providers=(yahoo, fred))
+    _ = service.get_market_snapshot("EXM")
+    _ = service.get_market_snapshot("EXM")
 
     assert yahoo.calls == 1
     assert fred.calls == 1
 
 
-def test_market_data_client_returns_policy_defaults_on_failure() -> None:
+def test_market_data_service_returns_policy_defaults_on_failure() -> None:
     failing = _FailingProvider()
 
-    client = MarketDataClient(ttl_seconds=120, max_retries=0, providers=(failing,))
-    snapshot = client.get_market_snapshot("EXM")
+    service = MarketDataService(ttl_seconds=120, max_retries=0, providers=(failing,))
+    snapshot = service.get_market_snapshot("EXM")
 
     assert snapshot.beta == DEFAULT_BETA
     assert snapshot.risk_free_rate == DEFAULT_RISK_FREE_RATE

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.agents.fundamental.data.clients.sec_xbrl.rules.signal_pattern_catalog import (
+from src.agents.fundamental.infrastructure.sec_xbrl.rules.signal_pattern_catalog import (
     FORWARD_SIGNAL_PATTERN_CATALOG,
     METRIC_RETRIEVAL_QUERY,
     load_runtime_signal_catalog,

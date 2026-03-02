@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 import pytest
 
-from src.agents.intent.domain.models import TickerCandidate
+from src.agents.intent.domain.report_contracts import TickerCandidate
 from src.workflow.nodes.intent_extraction.nodes import (
     decision_node,
     extraction_node,

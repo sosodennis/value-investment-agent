@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import pandas as pd
 
-from src.agents.fundamental.data.clients.sec_xbrl.extractor import (
+from src.agents.fundamental.infrastructure.sec_xbrl.extractor import (
     SearchType,
     SECExtractResult,
     SECReportExtractor,
 )
-from src.agents.fundamental.data.clients.sec_xbrl.factory import (
+from src.agents.fundamental.infrastructure.sec_xbrl.factory import (
     BaseFinancialModelFactory,
 )
-from src.agents.fundamental.data.clients.sec_xbrl.resolver import (
+from src.agents.fundamental.infrastructure.sec_xbrl.resolver import (
     ParsedCandidate,
     choose_best_candidate,
     rank_results,

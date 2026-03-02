@@ -54,11 +54,11 @@ def test_compute_z_score():
 
 def test_semantic_tags_mapping():
     """Test that semantic tags are correctly mapped based on thresholds."""
-    from src.agents.technical.domain.models import (
+    from src.agents.technical.domain.policies import assemble_semantic_tags
+    from src.agents.technical.domain.report_contracts import (
         SemanticConfluenceInput,
         SemanticTagPolicyInput,
     )
-    from src.agents.technical.domain.policies import assemble_semantic_tags
 
     dummy_confluence = SemanticConfluenceInput(
         bollinger_state="INSIDE",

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.agents.fundamental.domain.valuation.param_builder import (
+from src.agents.fundamental.domain.valuation.parameterization.orchestrator import (
     build_params,
 )
 from src.agents.fundamental.interface.contracts import parse_financial_reports_model
@@ -19,6 +19,7 @@ def _raw_reports() -> list[dict[str, object]]:
     return [
         {
             "industry_type": "Industrial",
+            "extension_type": "Industrial",
             "base": {
                 "fiscal_year": _tf("2024"),
                 "fiscal_period": _tf("FY"),
@@ -48,6 +49,7 @@ def _raw_reports() -> list[dict[str, object]]:
         },
         {
             "industry_type": "Industrial",
+            "extension_type": "Industrial",
             "base": {
                 "fiscal_year": _tf("2023"),
                 "fiscal_period": _tf("FY"),
@@ -82,6 +84,7 @@ def _raw_bank_reports() -> list[dict[str, object]]:
     return [
         {
             "industry_type": "FinancialServices",
+            "extension_type": "FinancialServices",
             "base": {
                 "fiscal_year": _tf("2024"),
                 "total_assets": _tf(2000.0),
@@ -96,6 +99,7 @@ def _raw_bank_reports() -> list[dict[str, object]]:
         },
         {
             "industry_type": "FinancialServices",
+            "extension_type": "FinancialServices",
             "base": {
                 "fiscal_year": _tf("2023"),
                 "total_assets": _tf(1800.0),
@@ -115,6 +119,7 @@ def _raw_bank_reports_with_latest_rwa_outlier() -> list[dict[str, object]]:
     return [
         {
             "industry_type": "FinancialServices",
+            "extension_type": "FinancialServices",
             "base": {
                 "fiscal_year": _tf("2024"),
                 "total_assets": _tf(2000.0),
@@ -129,6 +134,7 @@ def _raw_bank_reports_with_latest_rwa_outlier() -> list[dict[str, object]]:
         },
         {
             "industry_type": "FinancialServices",
+            "extension_type": "FinancialServices",
             "base": {
                 "fiscal_year": _tf("2023"),
                 "total_assets": _tf(1800.0),
@@ -148,6 +154,7 @@ def _raw_reit_reports() -> list[dict[str, object]]:
     return [
         {
             "industry_type": "RealEstate",
+            "extension_type": "RealEstate",
             "base": {
                 "fiscal_year": _tf("2024"),
                 "shares_outstanding": _tf(1000.0),

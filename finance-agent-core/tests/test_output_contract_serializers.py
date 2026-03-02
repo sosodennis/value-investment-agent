@@ -23,12 +23,13 @@ def test_canonicalize_fundamental_artifact_normalizes_reports() -> None:
         "status": "done",
         "financial_reports": [
             {
-                "industry_type": "Financial",
+                "industry_type": "FinancialServices",
+                "extension_type": "FinancialServices",
                 "base": {
                     "fiscal_year": {"value": "2024"},
                     "fiscal_period": {"value": "FY"},
-                    "period_end_date": "2024-09-28",
-                    "currency": "USD",
+                    "period_end_date": {"value": "2024-09-28"},
+                    "currency": {"value": "USD"},
                     "company_name": {"value": "Apple Inc."},
                     "cik": {"value": "0000320193"},
                     "sic_code": {"value": "3571"},
@@ -42,7 +43,7 @@ def test_canonicalize_fundamental_artifact_normalizes_reports() -> None:
                     "cash_and_equivalents": {"value": 30000000000},
                     "operating_cash_flow": {"value": 110000000000},
                 },
-                "extension": {"loans_and_leases": 1.0},
+                "extension": {"loans_and_leases": {"value": 1.0}},
             }
         ],
     }
@@ -55,6 +56,7 @@ def test_canonicalize_fundamental_artifact_normalizes_reports() -> None:
     assert normalized["reasoning"] == ""
 
     report = normalized["financial_reports"][0]
+    assert report["industry_type"] == "FinancialServices"
     assert report["extension_type"] == "FinancialServices"
     assert report["base"]["period_end_date"] == {"value": "2024-09-28"}
     assert report["base"]["currency"] == {"value": "USD"}

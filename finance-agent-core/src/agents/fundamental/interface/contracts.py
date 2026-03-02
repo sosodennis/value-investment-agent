@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 from collections.abc import Mapping
 from typing import Literal
 
@@ -14,8 +13,6 @@ from pydantic import (
 
 from src.agents.fundamental.domain.report_semantics import (
     FUNDAMENTAL_BASE_KEYS,
-    infer_extension_type_from_extension,
-    normalize_extension_type_token,
 )
 from src.interface.artifacts.artifact_model_shared import (
     as_mapping,
@@ -35,6 +32,38 @@ from .types import (
     TraceableValue,
 )
 
+CANONICAL_INDUSTRY_TYPES: tuple[str, ...] = (
+    "General",
+    "Industrial",
+    "FinancialServices",
+    "RealEstate",
+)
+CANONICAL_EXTENSION_TYPES: tuple[str, ...] = (
+    "Industrial",
+    "FinancialServices",
+    "RealEstate",
+)
+
+
+def _parse_canonical_industry_type(value: object, *, context: str) -> str | None:
+    if value is None:
+        return None
+    token = to_string(value, context).strip()
+    if token in CANONICAL_INDUSTRY_TYPES:
+        return token
+    allowed = ", ".join(CANONICAL_INDUSTRY_TYPES)
+    raise TypeError(f"{context} must be canonical token ({allowed})")
+
+
+def _parse_canonical_extension_type(value: object, *, context: str) -> str | None:
+    if value is None:
+        return None
+    token = to_string(value, context).strip()
+    if token in CANONICAL_EXTENSION_TYPES:
+        return token
+    allowed = ", ".join(CANONICAL_EXTENSION_TYPES)
+    raise TypeError(f"{context} must be canonical token ({allowed})")
+
 
 class TraceableFieldModel(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -49,13 +78,11 @@ class TraceableFieldModel(BaseModel):
     def _coerce_scalar(cls, data: object) -> object:
         if data is None:
             return None
+        if isinstance(data, Mapping):
+            return data
         if isinstance(data, bool):
             raise TypeError("traceable field cannot be boolean")
-        if isinstance(data, str | int | float):
-            if isinstance(data, float) and not math.isfinite(data):
-                return {"value": None}
-            return {"value": data}
-        return data
+        raise TypeError("traceable field must be an object")
 
     @model_serializer(mode="plain")
     def _serialize(self) -> dict[str, object]:
@@ -159,22 +186,32 @@ class FinancialReportModel(BaseModel):
         if extension_raw is not None:
             extension_map = as_mapping(extension_raw, "financial report.extension")
 
-        extension_type = normalize_extension_type_token(
-            mapping.get("extension_type"), context="financial report.extension_type"
+        extension_type = _parse_canonical_extension_type(
+            mapping.get("extension_type"),
+            context="financial report.extension_type",
         )
-        if extension_type is None and "industry_type" in mapping:
-            extension_type = normalize_extension_type_token(
-                mapping.get("industry_type"), context="financial report.industry_type"
+        industry_type = _parse_canonical_industry_type(
+            mapping.get("industry_type"),
+            context="financial report.industry_type",
+        )
+        if (
+            industry_type is not None
+            and extension_type is not None
+            and industry_type != extension_type
+        ):
+            raise TypeError(
+                "financial report.industry_type conflicts with extension_type"
             )
         if extension_type is None and extension_map is not None:
-            extension_type = infer_extension_type_from_extension(extension_map)
-            if extension_type is None:
-                raise TypeError(
-                    "financial report.extension present but extension_type is unresolved"
-                )
+            raise TypeError(
+                "financial report.extension requires extension_type in canonical payload"
+            )
 
+        resolved_industry_type = industry_type
+        if resolved_industry_type is None and extension_type is not None:
+            resolved_industry_type = extension_type
         mapping["extension_type"] = extension_type
-        mapping["industry_type"] = extension_type or "General"
+        mapping["industry_type"] = resolved_industry_type or "General"
         if extension_map is not None:
             mapping["extension"] = extension_map
         return mapping
@@ -262,15 +299,87 @@ class FundamentalPreviewInputModel(BaseModel):
     forward_signal_evidence_count: OptionalFundamentalNumber = None
 
 
+def _inject_default_provenance_into_field(
+    value: object, *, context: str
+) -> dict[str, object]:
+    if not isinstance(value, Mapping):
+        raise TypeError(f"{context} must be an object")
+    field = dict(value)
+    if "value" not in field:
+        raise TypeError(f"{context} must contain 'value'")
+    if field.get("provenance") is None:
+        field["provenance"] = {
+            "type": "MANUAL",
+            "description": "Canonicalized without explicit provenance",
+        }
+    return field
+
+
+def _inject_default_provenance_into_report(
+    report: Mapping[str, object], *, context: str
+) -> JSONObject:
+    payload: JSONObject = dict(report)
+    base_raw = payload.get("base")
+    if not isinstance(base_raw, Mapping):
+        raise TypeError(f"{context}.base must be an object")
+
+    base: JSONObject = {}
+    for key, value in base_raw.items():
+        if value is None:
+            base[key] = None
+            continue
+        if isinstance(value, Mapping):
+            base[key] = _inject_default_provenance_into_field(
+                value,
+                context=f"{context}.base.{key}",
+            )
+            continue
+        raise TypeError(f"{context}.base.{key} must be an object")
+    payload["base"] = base
+
+    extension_raw = payload.get("extension")
+    if extension_raw is None:
+        return payload
+    if not isinstance(extension_raw, Mapping):
+        raise TypeError(f"{context}.extension must be an object")
+
+    extension: JSONObject = {}
+    for key, value in extension_raw.items():
+        if value is None:
+            extension[key] = None
+            continue
+        if isinstance(value, Mapping):
+            extension[key] = _inject_default_provenance_into_field(
+                value,
+                context=f"{context}.extension.{key}",
+            )
+            continue
+        raise TypeError(f"{context}.extension.{key} must be an object")
+    payload["extension"] = extension
+    return payload
+
+
 def parse_financial_reports_model(
-    value: object, context: str = "financial reports"
+    value: object,
+    context: str = "financial reports",
+    *,
+    inject_default_provenance: bool = False,
 ) -> list[JSONObject]:
-    return validate_list_and_dump(
+    reports = validate_list_and_dump(
         FinancialReportModel,
         value,
         context,
         exclude_none=False,
     )
+    if not inject_default_provenance:
+        return reports
+    return [
+        _inject_default_provenance_into_report(
+            report,
+            context=f"{context}[{index}]",
+        )
+        for index, report in enumerate(reports)
+    ]
 
 
 def parse_fundamental_artifact_model(value: object) -> JSONObject:

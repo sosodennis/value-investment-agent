@@ -1,6 +1,6 @@
 from langchain_core.messages import AIMessage
 
-from src.agents.debate.domain.models import EvidenceFact
+from src.agents.debate.domain.report_contracts import EvidenceFact
 from src.agents.debate.interface.mappers import summarize_debate_for_preview
 from src.agents.debate.interface.serializers import (
     build_compressed_report_payload,

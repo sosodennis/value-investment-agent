@@ -16,9 +16,7 @@ async def test_financial_health_node_error_log():
         "intent_extraction": {"resolved_ticker": "AAPL"},
     }
 
-    with patch(
-        "src.agents.fundamental.application.factory.fetch_financial_data"
-    ) as mock_fetch:
+    with patch("src.agents.fundamental.wiring.fetch_financial_payload") as mock_fetch:
         mock_fetch.side_effect = Exception("Network Timeout")
 
         command = await financial_health_node(state)
@@ -95,11 +93,11 @@ async def test_model_selection_node_accepts_canonical_report_shape():
 
     with (
         patch(
-            "src.agents.fundamental.data.ports.FundamentalArtifactPort.load_financial_reports",
-            new=AsyncMock(return_value=canonical_reports),
+            "src.agents.fundamental.infrastructure.artifacts.fundamental_artifact_repository.FundamentalArtifactRepository.load_financial_reports_bundle",
+            new=AsyncMock(return_value=(canonical_reports, None)),
         ),
         patch(
-            "src.agents.fundamental.data.ports.FundamentalArtifactPort.save_financial_reports",
+            "src.agents.fundamental.infrastructure.artifacts.fundamental_artifact_repository.FundamentalArtifactRepository.save_financial_reports",
             new=AsyncMock(return_value="artifact_saved"),
         ),
     ):

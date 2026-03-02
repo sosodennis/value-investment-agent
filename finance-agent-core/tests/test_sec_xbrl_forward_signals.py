@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from src.agents.fundamental.data.clients.sec_xbrl.forward_signals import (
+from src.agents.fundamental.infrastructure.sec_xbrl.forward_signals import (
     extract_forward_signals_from_xbrl_reports,
 )
-from src.agents.fundamental.data.clients.sec_xbrl.models import (
+from src.agents.fundamental.infrastructure.sec_xbrl.report_contracts import (
     BaseFinancialModel,
     FinancialReport,
 )

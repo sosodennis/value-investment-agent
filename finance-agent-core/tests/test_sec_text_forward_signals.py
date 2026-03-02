@@ -3,26 +3,36 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 from unittest.mock import patch
 
-from src.agents.fundamental.data.clients.sec_xbrl.finbert_direction import (
+import pytest
+from pydantic import BaseModel
+
+from src.agents.fundamental.infrastructure.sec_xbrl.finbert_direction import (
     FinbertDirectionReview,
 )
-from src.agents.fundamental.data.clients.sec_xbrl.forward_signals_text import (
+from src.agents.fundamental.infrastructure.sec_xbrl.forward_signals_text import (
     _apply_finbert_direction_reviews,
     _extract_focus_text_from_filing,
     _normalize_text,
     extract_forward_signals_from_sec_text,
 )
-from src.agents.fundamental.data.clients.sec_xbrl.matchers.regex_signal_extractor import (
+from src.agents.fundamental.infrastructure.sec_xbrl.matchers.regex_signal_extractor import (
     MetricRegexHits,
     PatternHit,
 )
-from src.agents.fundamental.data.clients.sec_xbrl.pipeline_helpers import (
+from src.agents.fundamental.infrastructure.sec_xbrl.pipeline_evidence_service import (
     _extract_snippet,
 )
-from src.agents.fundamental.data.clients.sec_xbrl.provider import (
+from src.agents.fundamental.infrastructure.sec_xbrl.provider import (
     fetch_financial_payload,
 )
-from src.agents.fundamental.data.clients.sec_xbrl.text_record import FilingTextRecord
+from src.agents.fundamental.infrastructure.sec_xbrl.text_record import FilingTextRecord
+
+
+class _SyntheticFinancialReport(BaseModel):
+    base: dict[str, object]
+    industry_type: str
+    extension_type: str | None = None
+    extension: dict[str, object] | None = None
 
 
 def _assert_aligned_to_token_boundaries(snippet: str, normalized_text: str) -> None:
@@ -237,11 +247,11 @@ def test_extract_forward_signals_from_sec_text_prefers_mda_section_for_10k() -> 
 def test_fetch_financial_payload_combines_xbrl_and_sec_text_signals() -> None:
     with (
         patch(
-            "src.agents.fundamental.data.clients.sec_xbrl.utils.fetch_financial_data",
+            "src.agents.fundamental.infrastructure.sec_xbrl.financial_payload_service.fetch_financial_data",
             return_value=[],
         ),
         patch(
-            "src.agents.fundamental.data.clients.sec_xbrl.utils.extract_forward_signals_from_xbrl_reports",
+            "src.agents.fundamental.infrastructure.sec_xbrl.financial_payload_service.extract_forward_signals_from_xbrl_reports",
             return_value=[
                 {
                     "signal_id": "xbrl-growth",
@@ -262,7 +272,7 @@ def test_fetch_financial_payload_combines_xbrl_and_sec_text_signals() -> None:
             ],
         ),
         patch(
-            "src.agents.fundamental.data.clients.sec_xbrl.utils.extract_forward_signals_from_sec_text",
+            "src.agents.fundamental.infrastructure.sec_xbrl.financial_payload_service.extract_forward_signals_from_sec_text",
             return_value=[
                 {
                     "signal_id": "text-margin",
@@ -292,6 +302,59 @@ def test_fetch_financial_payload_combines_xbrl_and_sec_text_signals() -> None:
     assert "text-margin" in signal_ids
 
 
+def test_fetch_financial_payload_normalizes_reports_to_canonical_json() -> None:
+    report_model = _SyntheticFinancialReport(
+        base={
+            "fiscal_year": {"value": "2025"},
+            "total_revenue": {"value": 1000.0},
+            "net_income": {"value": 100.0},
+            "operating_cash_flow": {"value": 120.0},
+            "total_equity": {"value": 700.0},
+            "total_assets": {"value": 1500.0},
+        },
+        industry_type="Industrial",
+        extension_type="Industrial",
+        extension={"capex": {"value": 50.0}},
+    )
+
+    with patch(
+        "src.agents.fundamental.infrastructure.sec_xbrl.provider._fetch_financial_payload",
+        return_value={
+            "financial_reports": [report_model],
+            "forward_signals": [{"signal_id": "sig-1"}],
+        },
+    ):
+        payload = fetch_financial_payload("AAPL", years=3)
+
+    reports = payload["financial_reports"]
+    assert isinstance(reports, list)
+    assert len(reports) == 1
+    first = reports[0]
+    assert isinstance(first, dict)
+    assert first["industry_type"] == "Industrial"
+    assert first["extension_type"] == "Industrial"
+    assert isinstance(first.get("base"), dict)
+    assert payload["forward_signals"] == [{"signal_id": "sig-1"}]
+
+
+def test_fetch_financial_payload_rejects_extension_without_extension_type() -> None:
+    report_model = _SyntheticFinancialReport(
+        base={"fiscal_year": {"value": "2025"}},
+        industry_type="Industrial",
+        extension={"capex": {"value": 50.0}},
+    )
+
+    with patch(
+        "src.agents.fundamental.infrastructure.sec_xbrl.provider._fetch_financial_payload",
+        return_value={
+            "financial_reports": [report_model],
+            "forward_signals": [],
+        },
+    ):
+        with pytest.raises(TypeError, match="extension requires extension_type"):
+            fetch_financial_payload("AAPL", years=3)
+
+
 def test_extract_forward_signals_from_sec_text_logs_focus_diagnostics() -> None:
     records = [
         FilingTextRecord(
@@ -312,7 +375,7 @@ def test_extract_forward_signals_from_sec_text_logs_focus_diagnostics() -> None:
     ]
 
     with patch(
-        "src.agents.fundamental.data.clients.sec_xbrl.forward_signals_text.log_event"
+        "src.agents.fundamental.infrastructure.sec_xbrl.forward_signals_text.log_event"
     ) as mock_log:
         signals = extract_forward_signals_from_sec_text(
             ticker="AAPL",
@@ -378,13 +441,13 @@ def test_extract_forward_signals_from_sec_text_fast_skips_fls_without_cues() -> 
 
     with (
         patch(
-            "src.agents.fundamental.data.clients.sec_xbrl.forward_signals_text.filter_forward_looking_sentences_with_stats",
+            "src.agents.fundamental.infrastructure.sec_xbrl.forward_signals_text.filter_forward_looking_sentences_with_stats",
             side_effect=AssertionError(
                 "FLS should be skipped when no cues are present"
             ),
         ),
         patch(
-            "src.agents.fundamental.data.clients.sec_xbrl.forward_signals_text.log_event"
+            "src.agents.fundamental.infrastructure.sec_xbrl.forward_signals_text.log_event"
         ) as mock_log,
     ):
         signals = extract_forward_signals_from_sec_text(
@@ -509,7 +572,7 @@ def test_extract_forward_signals_from_sec_text_tracks_8k_section_diagnostics() -
     ]
 
     with patch(
-        "src.agents.fundamental.data.clients.sec_xbrl.forward_signals_text.log_event"
+        "src.agents.fundamental.infrastructure.sec_xbrl.forward_signals_text.log_event"
     ) as mock_log:
         signals = extract_forward_signals_from_sec_text(
             ticker="AAPL",
@@ -559,11 +622,11 @@ def test_extract_forward_signals_from_sec_text_accepts_dependency_hits() -> None
 
     with (
         patch(
-            "src.agents.fundamental.data.clients.sec_xbrl.forward_signals_text.find_metric_dependency_hits",
+            "src.agents.fundamental.infrastructure.sec_xbrl.forward_signals_text.find_metric_dependency_hits",
             side_effect=_dependency_stub,
         ),
         patch(
-            "src.agents.fundamental.data.clients.sec_xbrl.forward_signals_text.log_event"
+            "src.agents.fundamental.infrastructure.sec_xbrl.forward_signals_text.log_event"
         ) as mock_log,
     ):
         signals = extract_forward_signals_from_sec_text(
@@ -700,7 +763,7 @@ def test_extract_forward_signals_from_sec_text_deduplicates_similar_evidence() -
     ]
     with (
         patch(
-            "src.agents.fundamental.data.clients.sec_xbrl.forward_signals_text.extract_metric_regex_hits",
+            "src.agents.fundamental.infrastructure.sec_xbrl.forward_signals_text.extract_metric_regex_hits",
             return_value=MetricRegexHits(
                 up_hits=[hit_primary, hit_shifted],
                 down_hits=[],
@@ -708,11 +771,11 @@ def test_extract_forward_signals_from_sec_text_deduplicates_similar_evidence() -
             ),
         ),
         patch(
-            "src.agents.fundamental.data.clients.sec_xbrl.forward_signals_text.find_metric_lemma_hits",
+            "src.agents.fundamental.infrastructure.sec_xbrl.forward_signals_text.find_metric_lemma_hits",
             return_value=([], []),
         ),
         patch(
-            "src.agents.fundamental.data.clients.sec_xbrl.forward_signals_text.find_metric_dependency_hits",
+            "src.agents.fundamental.infrastructure.sec_xbrl.forward_signals_text.find_metric_dependency_hits",
             return_value=([], []),
         ),
     ):
@@ -756,7 +819,7 @@ def test_apply_finbert_direction_reviews_overrides_signal_direction() -> None:
     ]
 
     with patch(
-        "src.agents.fundamental.data.clients.sec_xbrl.forward_signals_text.review_signal_direction_with_finbert",
+        "src.agents.fundamental.infrastructure.sec_xbrl.forward_signals_text.review_signal_direction_with_finbert",
         return_value=FinbertDirectionReview(
             elapsed_ms=12.0,
             reviewed=True,

@@ -11,9 +11,9 @@ def test_non_sec_xbrl_modules_use_provider_entrypoint() -> None:
         repo_root / "finance-agent-core" / "scripts",
     ]
     banned_imports = (
-        "src.agents.fundamental.data.clients.sec_xbrl.forward_signals_text",
-        "src.agents.fundamental.data.clients.sec_xbrl.forward_signals",
-        "src.agents.fundamental.data.clients.sec_xbrl.utils",
+        "src.agents.fundamental.infrastructure.sec_xbrl.forward_signals_text",
+        "src.agents.fundamental.infrastructure.sec_xbrl.forward_signals",
+        "src.agents.fundamental.infrastructure.sec_xbrl.financial_payload_service",
     )
 
     violations: list[str] = []
@@ -23,7 +23,7 @@ def test_non_sec_xbrl_modules_use_provider_entrypoint() -> None:
         for path in root.rglob("*.py"):
             relative_path = path.relative_to(repo_root)
             # Internal implementation modules in sec_xbrl can reference each other.
-            if "src/agents/fundamental/data/clients/sec_xbrl/" in str(relative_path):
+            if "src/agents/fundamental/infrastructure/sec_xbrl/" in str(relative_path):
                 continue
             content = path.read_text(encoding="utf-8")
             tree = ast.parse(content)

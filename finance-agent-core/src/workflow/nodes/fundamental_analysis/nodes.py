@@ -1,7 +1,7 @@
 from langgraph.graph import END
 from langgraph.types import Command
 
-from src.agents.fundamental.application.factory import fundamental_workflow_runner
+from src.agents.fundamental.wiring import fundamental_workflow_runner
 from src.workflow.command_adapter import command_from_result
 
 from .subgraph_state import FundamentalAnalysisState

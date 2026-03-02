@@ -20,14 +20,14 @@ class _ValuationCalculatorLike(Protocol):
 
 
 @dataclass(frozen=True)
-class ValuationSkillRuntime:
+class ValuationModelRuntime:
     schema: _ParamsSchemaLike
     calculator: _ValuationCalculatorLike
 
 
-def parse_valuation_skill_runtime(
+def parse_valuation_model_runtime(
     value: object, *, context: str
-) -> ValuationSkillRuntime:
+) -> ValuationModelRuntime:
     if not isinstance(value, Mapping):
         raise TypeError(f"{context} must be a mapping")
 
@@ -39,7 +39,7 @@ def parse_valuation_skill_runtime(
     if not callable(calculator):
         raise TypeError(f"{context}.calculator must be callable")
 
-    return ValuationSkillRuntime(
+    return ValuationModelRuntime(
         schema=cast(_ParamsSchemaLike, schema),
         calculator=cast(_ValuationCalculatorLike, calculator),
     )

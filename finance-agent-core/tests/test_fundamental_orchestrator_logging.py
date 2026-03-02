@@ -7,7 +7,9 @@ import pytest
 from pydantic import BaseModel
 
 from src.agents.fundamental.application.orchestrator import FundamentalOrchestrator
-from src.agents.fundamental.domain.valuation.param_builder import ParamBuildResult
+from src.agents.fundamental.domain.valuation.parameterization.contracts import (
+    ParamBuildResult,
+)
 from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
 
 
@@ -33,19 +35,11 @@ class _FakePort:
         _ = artifact_id
         return [{"base": {"fiscal_year": {"value": 2025}}}]
 
-    async def load_financial_reports_payload(self, artifact_id: object):
+    async def load_financial_reports_bundle(
+        self, artifact_id: object
+    ) -> tuple[list[JSONObject], list[JSONObject] | None] | None:
         _ = artifact_id
-
-        class _Report:
-            def model_dump(self, mode: str = "json") -> JSONObject:
-                _ = mode
-                return {"base": {"fiscal_year": {"value": 2025}}}
-
-        class _Payload:
-            financial_reports = [_Report()]
-            forward_signals = self._forward_signals
-
-        return _Payload()
+        return ([{"base": {"fiscal_year": {"value": 2025}}}], self._forward_signals)
 
 
 class _ValuationParams(BaseModel):
@@ -172,14 +166,16 @@ async def test_run_valuation_logs_mc_completion_fields_from_diagnostics() -> Non
             },
         }
 
-    with patch("src.agents.fundamental.application.orchestrator.log_event") as mock_log:
+    with patch(
+        "src.agents.fundamental.application.use_cases.run_valuation_use_case.log_event"
+    ) as mock_log:
         result = await orchestrator.run_valuation(
             _build_state(),
             build_params_fn=lambda _model_type,
             _ticker,
             _reports,
             _forward_signals: _build_params_result(),
-            get_skill_fn=lambda _model_type: {
+            get_model_runtime_fn=lambda _model_type: {
                 "schema": _ValuationParams,
                 "calculator": _calculator,
             },
@@ -210,14 +206,16 @@ async def test_run_valuation_logs_mc_completion_defaults_when_diagnostics_missin
     def _calculator(_params: _ValuationParams) -> Mapping[str, object]:
         return {"intrinsic_value": 80.0}
 
-    with patch("src.agents.fundamental.application.orchestrator.log_event") as mock_log:
+    with patch(
+        "src.agents.fundamental.application.use_cases.run_valuation_use_case.log_event"
+    ) as mock_log:
         result = await orchestrator.run_valuation(
             _build_state(),
             build_params_fn=lambda _model_type,
             _ticker,
             _reports,
             _forward_signals: _build_params_result(),
-            get_skill_fn=lambda _model_type: {
+            get_model_runtime_fn=lambda _model_type: {
                 "schema": _ValuationParams,
                 "calculator": _calculator,
             },
@@ -254,7 +252,9 @@ async def test_run_valuation_logs_forward_signal_completion_fields() -> None:
     def _calculator(_params: _ValuationParams) -> Mapping[str, object]:
         return {"intrinsic_value": 140.0}
 
-    with patch("src.agents.fundamental.application.orchestrator.log_event") as mock_log:
+    with patch(
+        "src.agents.fundamental.application.use_cases.run_valuation_use_case.log_event"
+    ) as mock_log:
         result = await orchestrator.run_valuation(
             _build_state(),
             build_params_fn=lambda _model_type,
@@ -268,7 +268,7 @@ async def test_run_valuation_logs_forward_signal_completion_fields() -> None:
                     }
                 }
             ),
-            get_skill_fn=lambda _model_type: {
+            get_model_runtime_fn=lambda _model_type: {
                 "schema": _ValuationParams,
                 "calculator": _calculator,
             },
@@ -304,7 +304,7 @@ async def test_run_valuation_passes_forward_signals_from_financial_reports_artif
             captured.update({"forward_signals": _forward_signals})
             or _build_params_result()
         ),
-        get_skill_fn=lambda _model_type: {
+        get_model_runtime_fn=lambda _model_type: {
             "schema": _ValuationParams,
             "calculator": _calculator,
         },

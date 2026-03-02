@@ -2,17 +2,17 @@ from __future__ import annotations
 
 import pytest
 
-from src.agents.fundamental.domain.valuation.skills.valuation_bank.schemas import (
-    BankParams,
-)
-from src.agents.fundamental.domain.valuation.skills.valuation_bank.tools import (
+from src.agents.fundamental.domain.valuation.calculators.bank_calculator import (
     calculate_bank_valuation,
 )
-from src.agents.fundamental.domain.valuation.skills.valuation_reit_ffo.schemas import (
-    ReitFfoParams,
-)
-from src.agents.fundamental.domain.valuation.skills.valuation_reit_ffo.tools import (
+from src.agents.fundamental.domain.valuation.calculators.reit_ffo_calculator import (
     calculate_reit_ffo_valuation,
+)
+from src.agents.fundamental.domain.valuation.models.bank.contracts import (
+    BankParams,
+)
+from src.agents.fundamental.domain.valuation.models.reit_ffo.contracts import (
+    ReitFfoParams,
 )
 from src.shared.kernel.traceable import ManualProvenance, TraceableField
 

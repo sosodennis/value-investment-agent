@@ -1,15 +1,30 @@
 from __future__ import annotations
 
-from src.agents.fundamental.data.clients.sec_xbrl.extractor import SearchType
-from src.agents.fundamental.data.clients.sec_xbrl.factory import (
-    BaseFinancialModelFactory,
+from src.agents.fundamental.infrastructure.sec_xbrl.base_model_debt_policy_service import (
+    resolve_total_debt_policy as resolve_total_debt_policy_util,
 )
+from src.agents.fundamental.infrastructure.sec_xbrl.extractor import SearchType
+from src.agents.fundamental.infrastructure.sec_xbrl.factory_derived_utils import (
+    build_real_estate_debt_combined_ex_leases as build_real_estate_debt_combined_ex_leases_util,
+)
+from src.agents.fundamental.infrastructure.sec_xbrl.factory_derived_utils import (
+    build_total_debt_with_policy as build_total_debt_with_policy_util,
+)
+from src.agents.fundamental.infrastructure.sec_xbrl.factory_derived_utils import (
+    relax_statement_filters as relax_statement_filters_util,
+)
+from src.agents.fundamental.infrastructure.sec_xbrl.report_factory_common_utils import (
+    sum_fields as sum_fields_util,
+)
+from src.shared.kernel.tools.logger import get_logger
 from src.shared.kernel.traceable import (
     ComputedProvenance,
     ManualProvenance,
     TraceableField,
     XBRLProvenance,
 )
+
+logger = get_logger(__name__)
 
 
 def _xbrl_field(name: str, value: float | None, concept: str) -> TraceableField[float]:
@@ -29,7 +44,7 @@ def _manual_field(name: str, value: float | None) -> TraceableField[float]:
 
 
 def test_total_debt_include_policy_prefers_combined_with_leases() -> None:
-    total_debt, _, source = BaseFinancialModelFactory._build_total_debt_with_policy(
+    total_debt, _, source = build_total_debt_with_policy_util(
         debt_combined_ex_leases=_xbrl_field("Debt Combined", 80.0, "us-gaap:Debt"),
         debt_short=_manual_field("Debt Short", None),
         debt_long=_manual_field("Debt Long", None),
@@ -44,6 +59,7 @@ def test_total_debt_include_policy_prefers_combined_with_leases() -> None:
         finance_lease_current=_manual_field("Lease Current", None),
         finance_lease_noncurrent=_manual_field("Lease Noncurrent", None),
         policy="include_finance_leases",
+        sum_fields_fn=sum_fields_util,
     )
 
     assert total_debt.value == 100.0
@@ -51,7 +67,7 @@ def test_total_debt_include_policy_prefers_combined_with_leases() -> None:
 
 
 def test_total_debt_include_policy_falls_back_to_debt_plus_lease() -> None:
-    total_debt, _, source = BaseFinancialModelFactory._build_total_debt_with_policy(
+    total_debt, _, source = build_total_debt_with_policy_util(
         debt_combined_ex_leases=_manual_field("Debt Combined", None),
         debt_short=_xbrl_field("Debt Short", 30.0, "us-gaap:DebtCurrent"),
         debt_long=_xbrl_field("Debt Long", 50.0, "us-gaap:LongTermDebtNoncurrent"),
@@ -64,6 +80,7 @@ def test_total_debt_include_policy_falls_back_to_debt_plus_lease() -> None:
             "Lease Noncurrent", 15.0, "us-gaap:FinanceLeaseLiabilityNoncurrent"
         ),
         policy="include_finance_leases",
+        sum_fields_fn=sum_fields_util,
     )
 
     assert total_debt.value == 100.0
@@ -71,7 +88,7 @@ def test_total_debt_include_policy_falls_back_to_debt_plus_lease() -> None:
 
 
 def test_total_debt_exclude_policy_ignores_finance_lease() -> None:
-    total_debt, _, source = BaseFinancialModelFactory._build_total_debt_with_policy(
+    total_debt, _, source = build_total_debt_with_policy_util(
         debt_combined_ex_leases=_manual_field("Debt Combined", None),
         debt_short=_xbrl_field("Debt Short", 40.0, "us-gaap:DebtCurrent"),
         debt_long=_xbrl_field("Debt Long", 60.0, "us-gaap:LongTermDebtNoncurrent"),
@@ -86,6 +103,7 @@ def test_total_debt_exclude_policy_ignores_finance_lease() -> None:
         finance_lease_current=_manual_field("Lease Current", None),
         finance_lease_noncurrent=_manual_field("Lease Noncurrent", None),
         policy="exclude_finance_leases",
+        sum_fields_fn=sum_fields_util,
     )
 
     assert total_debt.value == 100.0
@@ -96,7 +114,11 @@ def test_resolve_total_debt_policy_defaults_on_invalid_value(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("FUNDAMENTAL_TOTAL_DEBT_POLICY", "bad_policy")
-    policy = BaseFinancialModelFactory._resolve_total_debt_policy()
+    policy = resolve_total_debt_policy_util(
+        env_var="FUNDAMENTAL_TOTAL_DEBT_POLICY",
+        default_policy="include_finance_leases",
+        logger_=logger,
+    )
     assert policy == "include_finance_leases"
 
 
@@ -110,7 +132,7 @@ def test_relax_statement_filters_clears_statement_tokens() -> None:
             respect_anchor_date=False,
         )
     ]
-    relaxed = BaseFinancialModelFactory._relax_statement_filters(strict)
+    relaxed = relax_statement_filters_util(strict)
     assert relaxed[0].statement_types is None
     assert relaxed[0].period_type == "instant"
     assert relaxed[0].unit_whitelist == ["usd"]
@@ -118,7 +140,7 @@ def test_relax_statement_filters_clears_statement_tokens() -> None:
 
 
 def test_real_estate_debt_combined_prefers_note_split_and_adds_components() -> None:
-    total = BaseFinancialModelFactory._build_real_estate_debt_combined_ex_leases(
+    total = build_real_estate_debt_combined_ex_leases_util(
         notes_payable=_xbrl_field("Notes Payable", 80.0, "us-gaap:NotesPayable"),
         notes_payable_current=_xbrl_field(
             "Notes Payable (Current)", 30.0, "us-gaap:NotesPayableCurrent"
@@ -133,6 +155,7 @@ def test_real_estate_debt_combined_prefers_note_split_and_adds_components() -> N
         commercial_paper=_xbrl_field(
             "Commercial Paper", 10.0, "us-gaap:CommercialPaper"
         ),
+        sum_fields_fn=sum_fields_util,
     )
 
     assert total.value == 130.0
@@ -144,13 +167,14 @@ def test_real_estate_debt_combined_prefers_note_split_and_adds_components() -> N
 
 
 def test_real_estate_debt_combined_deduplicates_same_tag_period_and_value() -> None:
-    total = BaseFinancialModelFactory._build_real_estate_debt_combined_ex_leases(
+    total = build_real_estate_debt_combined_ex_leases_util(
         notes_payable=_xbrl_field("Notes Payable", 100.0, "us-gaap:NotesPayable"),
         notes_payable_current=_manual_field("Notes Payable (Current)", None),
         notes_payable_noncurrent=_manual_field("Notes Payable (Noncurrent)", None),
         loans_payable=_xbrl_field("Loans Payable", 100.0, "us-gaap:NotesPayable"),
         loans_payable_current=_manual_field("Loans Payable (Current)", None),
         commercial_paper=_manual_field("Commercial Paper", None),
+        sum_fields_fn=sum_fields_util,
     )
 
     assert total.value == 100.0

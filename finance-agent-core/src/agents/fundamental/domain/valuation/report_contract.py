@@ -1,17 +1,28 @@
+"""Domain projection contract for valuation inputs.
+
+This module owns domain-facing `FinancialReport` projection/coercion used by
+valuation param builders. Canonical payload ownership stays in
+`interface/contracts.py`.
+Input mappings here are expected to already be canonicalized; this module no
+longer performs extension-type inference fallback.
+"""
+
 from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from src.agents.fundamental.domain.report_semantics import (
-    infer_extension_type_from_extension,
-    normalize_extension_type_token,
-)
 from src.shared.kernel.traceable import (
     ComputedProvenance,
     ManualProvenance,
     TraceableField,
     XBRLProvenance,
+)
+
+CANONICAL_EXTENSION_TYPES: tuple[str, ...] = (
+    "Industrial",
+    "FinancialServices",
+    "RealEstate",
 )
 
 
@@ -115,15 +126,12 @@ TRACEABLE_FIELD_LABELS: dict[str, str] = {
 }
 
 
-def parse_financial_reports(
-    reports: list[FinancialReport | dict[str, object]],
+def parse_domain_financial_reports(
+    reports: list[Mapping[str, object]],
 ) -> list[FinancialReport]:
     result: list[FinancialReport] = []
     for item in reports:
-        if isinstance(item, FinancialReport):
-            result.append(item)
-            continue
-        if isinstance(item, dict):
+        if isinstance(item, Mapping):
             result.append(_coerce_report(item))
             continue
         raise TypeError(f"financial report item has unsupported type: {type(item)!r}")
@@ -138,16 +146,10 @@ def _coerce_report(value: Mapping[str, object]) -> FinancialReport:
         if extension_raw is not None
         else None
     )
-
-    extension_type = normalize_extension_type_token(
-        value.get("extension_type"), context="financial report.extension_type"
+    extension_type = _resolve_extension_type(
+        value,
+        has_extension=extension_map is not None,
     )
-    if extension_type is None:
-        extension_type = normalize_extension_type_token(
-            value.get("industry_type"), context="financial report.industry_type"
-        )
-    if extension_type is None and extension_map is not None:
-        extension_type = infer_extension_type_from_extension(extension_map)
 
     base = BaseFinancialModel(
         fields=_coerce_traceable_mapping(base_raw, context="financial report.base")
@@ -188,6 +190,31 @@ def _as_mapping(value: object, context: str) -> Mapping[str, object]:
     raise TypeError(f"{context} must be an object")
 
 
+def _resolve_extension_type(
+    payload: Mapping[str, object], *, has_extension: bool
+) -> str | None:
+    extension_type = _parse_canonical_extension_type(
+        payload.get("extension_type"), context="financial report.extension_type"
+    )
+    if has_extension and extension_type is None:
+        raise TypeError(
+            "financial report.extension requires extension_type in canonical payload"
+        )
+    return extension_type
+
+
+def _parse_canonical_extension_type(value: object, *, context: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise TypeError(f"{context} must be canonical token")
+    token = value.strip()
+    if token in CANONICAL_EXTENSION_TYPES:
+        return token
+    allowed = ", ".join(CANONICAL_EXTENSION_TYPES)
+    raise TypeError(f"{context} must be canonical token ({allowed})")
+
+
 def _coerce_traceable_mapping(
     mapping: Mapping[str, object], *, context: str
 ) -> dict[str, TraceableField]:
@@ -199,58 +226,96 @@ def _coerce_traceable_mapping(
 
 def _coerce_traceable_field(value: object, *, key: str, context: str) -> TraceableField:
     label = TRACEABLE_FIELD_LABELS.get(key, key.replace("_", " ").title())
-    if isinstance(value, TraceableField):
-        return value
     if value is None:
         return _missing_traceable_field(key, f"{context} is missing")
-    if isinstance(value, Mapping):
-        if "value" not in value:
-            raise TypeError(f"{context} must contain 'value'")
-        raw_name = value.get("name")
-        name = raw_name if isinstance(raw_name, str) and raw_name.strip() else label
-        raw_value = value.get("value")
-        if isinstance(raw_value, bool):
-            raise TypeError(f"{context}.value cannot be boolean")
-        if raw_value is not None and not isinstance(raw_value, str | int | float):
-            raise TypeError(f"{context}.value must be string | number | null")
-        provenance = _coerce_provenance(value.get("provenance"), field_key=key)
-        return TraceableField(name=name, value=raw_value, provenance=provenance)
     if isinstance(value, bool):
         raise TypeError(f"{context} cannot be boolean")
-    if isinstance(value, str | int | float):
-        return TraceableField(
-            name=label,
-            value=value,
-            provenance=ManualProvenance(
-                description=f"Coerced scalar value for '{key}' from canonical payload"
-            ),
+    if isinstance(value, Mapping):
+        return _coerce_traceable_field_from_mapping(
+            value,
+            key=key,
+            context=context,
+            label=label,
         )
-    raise TypeError(f"{context} has unsupported type: {type(value)!r}")
+    raise TypeError(f"{context} must be a traceable object")
+
+
+def _coerce_traceable_field_from_mapping(
+    payload: Mapping[str, object],
+    *,
+    key: str,
+    context: str,
+    label: str,
+) -> TraceableField:
+    if "value" not in payload:
+        raise TypeError(f"{context} must contain 'value'")
+    raw_name = payload.get("name")
+    name = raw_name if isinstance(raw_name, str) and raw_name.strip() else label
+    raw_value = payload.get("value")
+    if isinstance(raw_value, bool):
+        raise TypeError(f"{context}.value cannot be boolean")
+    if raw_value is not None and not isinstance(raw_value, str | int | float):
+        raise TypeError(f"{context}.value must be string | number | null")
+    provenance = _coerce_provenance(
+        payload.get("provenance"),
+        field_key=key,
+        context=context,
+    )
+    return TraceableField(name=name, value=raw_value, provenance=provenance)
+
+
+def _normalize_provenance_type(value: object, *, context: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise TypeError(f"{context}.type must be a string")
+    normalized = value.strip().upper()
+    if normalized not in {"XBRL", "CALCULATION", "MANUAL"}:
+        raise TypeError(f"{context}.type has unsupported value: {value!r}")
+    return normalized
 
 
 def _coerce_provenance(
-    value: object, *, field_key: str
+    value: object, *, field_key: str, context: str
 ) -> XBRLProvenance | ComputedProvenance | ManualProvenance:
-    if isinstance(value, XBRLProvenance | ComputedProvenance | ManualProvenance):
-        return value
-    if isinstance(value, Mapping):
-        concept = value.get("concept")
-        period = value.get("period")
-        if isinstance(concept, str) and isinstance(period, str):
-            return XBRLProvenance(concept=concept, period=period)
+    provenance_context = f"{context}.provenance"
+    if value is None:
+        raise TypeError(f"{provenance_context} is required")
+    if not isinstance(value, Mapping):
+        raise TypeError(f"{provenance_context} must be an object")
 
-        op_code = value.get("op_code")
-        expression = value.get("expression")
-        if isinstance(op_code, str) and isinstance(expression, str):
-            return ComputedProvenance(op_code=op_code, expression=expression, inputs={})
+    kind = _normalize_provenance_type(value.get("type"), context=provenance_context)
 
-        description = value.get("description")
-        if isinstance(description, str):
-            author = value.get("author")
-            if isinstance(author, str):
-                return ManualProvenance(description=description, author=author)
-            return ManualProvenance(description=description)
-    return ManualProvenance(description=f"Imported provenance for '{field_key}'")
+    concept = value.get("concept")
+    period = value.get("period")
+    if isinstance(concept, str) and isinstance(period, str):
+        if kind is not None and kind != "XBRL":
+            raise TypeError(
+                f"{provenance_context} payload is incompatible with type {kind!r}"
+            )
+        return XBRLProvenance(concept=concept, period=period)
+
+    op_code = value.get("op_code")
+    expression = value.get("expression")
+    if isinstance(op_code, str) and isinstance(expression, str):
+        if kind is not None and kind != "CALCULATION":
+            raise TypeError(
+                f"{provenance_context} payload is incompatible with type {kind!r}"
+            )
+        return ComputedProvenance(op_code=op_code, expression=expression, inputs={})
+
+    description = value.get("description")
+    if isinstance(description, str):
+        if kind is not None and kind != "MANUAL":
+            raise TypeError(
+                f"{provenance_context} payload is incompatible with type {kind!r}"
+            )
+        author = value.get("author")
+        if isinstance(author, str):
+            return ManualProvenance(description=description, author=author)
+        return ManualProvenance(description=description)
+
+    raise TypeError(f"{provenance_context} has unsupported shape")
 
 
 def _missing_traceable_field(field_key: str, reason: str) -> TraceableField:

@@ -10,18 +10,19 @@ from src.agents.fundamental.application.orchestrator import (
 )
 from src.agents.fundamental.application.ports import (
     IFundamentalFinancialPayloadProvider,
+    IFundamentalMarketDataService,
+    IFundamentalReportRepo,
 )
-from src.agents.fundamental.data.clients.market_data import market_data_client
-from src.agents.fundamental.data.clients.sec_xbrl.provider import (
-    fetch_financial_payload,
-)
-from src.agents.fundamental.data.ports import fundamental_artifact_port
 from src.agents.fundamental.domain.model_selection import select_valuation_model
-from src.agents.fundamental.domain.valuation.param_builder import (
+from src.agents.fundamental.domain.valuation.parameterization.contracts import (
     ParamBuildResult,
+)
+from src.agents.fundamental.domain.valuation.parameterization.orchestrator import (
     build_params,
 )
-from src.agents.fundamental.domain.valuation.registry import SkillRegistry
+from src.agents.fundamental.domain.valuation.valuation_model_registry import (
+    ValuationModelRegistry,
+)
 from src.agents.fundamental.interface.contracts import (
     FundamentalPreviewInputModel,
     parse_financial_reports_model,
@@ -74,9 +75,12 @@ def _build_progress_artifact(
     )
 
 
-def build_fundamental_orchestrator() -> FundamentalOrchestrator:
+def build_fundamental_orchestrator(
+    *,
+    port: IFundamentalReportRepo,
+) -> FundamentalOrchestrator:
     return FundamentalOrchestrator(
-        port=fundamental_artifact_port,
+        port=port,
         summarize_preview=_summarize_preview,
         build_progress_artifact=_build_progress_artifact,
         normalize_model_selection_reports=normalize_model_selection_reports,
@@ -90,6 +94,7 @@ def build_fundamental_orchestrator() -> FundamentalOrchestrator:
 class FundamentalWorkflowRunner:
     orchestrator: FundamentalOrchestrator
     fetch_financial_payload_fn: IFundamentalFinancialPayloadProvider
+    market_data_service: IFundamentalMarketDataService
     financial_payload_years: int = 3
 
     async def run_financial_health(
@@ -118,9 +123,14 @@ class FundamentalWorkflowRunner:
             reports_raw: list[dict[str, object]],
             forward_signals: list[dict[str, object]] | None,
         ) -> ParamBuildResult:
+            canonical_reports = parse_financial_reports_model(
+                reports_raw,
+                context="valuation.financial_reports",
+                inject_default_provenance=True,
+            )
             market_snapshot: dict[str, object] | None = None
             if ticker:
-                market_snapshot = market_data_client.get_market_snapshot(
+                market_snapshot = self.market_data_service.get_market_snapshot(
                     ticker
                 ).to_mapping()
             if market_snapshot is None and isinstance(forward_signals, list):
@@ -130,22 +140,27 @@ class FundamentalWorkflowRunner:
             return build_params(
                 model_type,
                 ticker,
-                reports_raw,
+                canonical_reports,
                 market_snapshot=market_snapshot,
             )
 
         return await self.orchestrator.run_valuation(
             state,
             build_params_fn=_build_params_with_market_data,
-            get_skill_fn=SkillRegistry.get_skill,
+            get_model_runtime_fn=ValuationModelRegistry.get_model_runtime,
         )
 
 
-def build_fundamental_workflow_runner() -> FundamentalWorkflowRunner:
+def build_fundamental_workflow_runner(
+    *,
+    orchestrator: FundamentalOrchestrator,
+    fetch_financial_payload_fn: IFundamentalFinancialPayloadProvider,
+    market_data_service: IFundamentalMarketDataService,
+    financial_payload_years: int = 3,
+) -> FundamentalWorkflowRunner:
     return FundamentalWorkflowRunner(
-        orchestrator=build_fundamental_orchestrator(),
-        fetch_financial_payload_fn=fetch_financial_payload,
+        orchestrator=orchestrator,
+        fetch_financial_payload_fn=fetch_financial_payload_fn,
+        market_data_service=market_data_service,
+        financial_payload_years=financial_payload_years,
     )
-
-
-fundamental_workflow_runner = build_fundamental_workflow_runner()

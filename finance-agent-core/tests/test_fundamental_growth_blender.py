@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.agents.fundamental.domain.valuation.assumptions import (
+from src.agents.fundamental.domain.valuation.policies.growth_assumption_policy import (
     DEFAULT_LONG_RUN_GROWTH_TARGET,
     blend_growth_rate,
     project_growth_rate_series,

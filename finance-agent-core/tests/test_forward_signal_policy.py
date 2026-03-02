@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.agents.fundamental.domain.valuation.assumptions import (
+from src.agents.fundamental.domain.valuation.policies.forward_signal_policy import (
     apply_forward_signal_policy,
     parse_forward_signals,
 )

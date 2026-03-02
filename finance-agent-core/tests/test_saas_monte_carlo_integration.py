@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from src.agents.fundamental.domain.valuation.skills.valuation_saas.schemas import (
-    SaaSParams,
-)
-from src.agents.fundamental.domain.valuation.skills.valuation_saas.tools import (
+from src.agents.fundamental.domain.valuation.calculators.saas_calculator import (
     calculate_saas_valuation,
+)
+from src.agents.fundamental.domain.valuation.models.saas.contracts import (
+    SaaSParams,
 )
 from src.shared.kernel.traceable import ManualProvenance, TraceableField
 

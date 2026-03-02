@@ -1,4 +1,4 @@
-from src.agents.debate.domain.models import EvidenceFact
+from src.agents.debate.domain.report_contracts import EvidenceFact
 from src.agents.debate.domain.validators import FactValidator
 
 

@@ -7,8 +7,12 @@ from functools import lru_cache
 import pytest
 import requests
 
-from src.agents.fundamental.data.clients.sec_xbrl.factory import FinancialReportFactory
-from src.agents.fundamental.data.clients.sec_xbrl.models import FinancialReport
+from src.agents.fundamental.infrastructure.sec_xbrl.factory import (
+    FinancialReportFactory,
+)
+from src.agents.fundamental.infrastructure.sec_xbrl.report_contracts import (
+    FinancialReport,
+)
 from src.shared.kernel.traceable import TraceableField, XBRLProvenance
 
 RUN_LIVE_TESTS = os.getenv("SEC_XBRL_LIVE_TESTS", "0").strip() == "1"
@@ -67,7 +71,7 @@ CASES = [
         case_id="jpm_total_debt_2025",
         ticker="JPM",
         fiscal_year=2025,
-        expected_industry="Financial Services",
+        expected_industry="FinancialServices",
         field_path="base.total_debt",
         expected_concept="us-gaap:LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities",
         cik="0000019617",
@@ -78,7 +82,7 @@ CASES = [
         case_id="o_revenue_2024",
         ticker="O",
         fiscal_year=2025,
-        expected_industry="Real Estate",
+        expected_industry="RealEstate",
         field_path="base.total_revenue",
         expected_concept="us-gaap:Revenues",
         cik="0000726728",
@@ -89,7 +93,7 @@ CASES = [
         case_id="pld_revenue_2025",
         ticker="PLD",
         fiscal_year=2025,
-        expected_industry="Real Estate",
+        expected_industry="RealEstate",
         field_path="base.total_revenue",
         expected_concept="us-gaap:Revenues",
         cik="0001045609",

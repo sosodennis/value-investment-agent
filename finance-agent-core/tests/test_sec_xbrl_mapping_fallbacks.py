@@ -1,26 +1,29 @@
 from __future__ import annotations
 
-from src.agents.fundamental.data.clients.sec_xbrl.extractor import SECReportExtractor
-from src.agents.fundamental.data.clients.sec_xbrl.mapping import (
-    REGISTRY,
+from src.agents.fundamental.infrastructure.sec_xbrl.extractor_search_processing_service import (
+    normalize_unit,
+    period_sort_key,
+)
+from src.agents.fundamental.infrastructure.sec_xbrl.mapping import (
     FieldSpec,
     XbrlMappingRegistry,
+    get_mapping_registry,
 )
 
 
 def test_normalize_unit_handles_u_prefix() -> None:
-    assert SECReportExtractor._normalize_unit("U_USD") == "usd"
-    assert SECReportExtractor._normalize_unit("iso4217:USD") == "usd"
+    assert normalize_unit("U_USD") == "usd"
+    assert normalize_unit("iso4217:USD") == "usd"
 
 
 def test_period_sort_key_prefers_latest_end_date() -> None:
-    latest = SECReportExtractor._period_sort_key("duration_2024-01-01_2024-12-31")
-    older = SECReportExtractor._period_sort_key("instant_2023-12-31")
+    latest = period_sort_key("duration_2024-01-01_2024-12-31")
+    older = period_sort_key("instant_2023-12-31")
     assert latest > older
 
 
 def test_interest_expense_mapping_includes_operating_nonoperating_tags() -> None:
-    spec = REGISTRY.get("interest_expense")
+    spec = get_mapping_registry().get("interest_expense")
     assert spec is not None
     concepts = [cfg.concept_regex for cfg in spec.configs]
     assert "us-gaap:InterestExpenseOperating" in concepts
@@ -28,48 +31,48 @@ def test_interest_expense_mapping_includes_operating_nonoperating_tags() -> None
 
 
 def test_capex_mapping_includes_productive_assets_tag() -> None:
-    spec = REGISTRY.get("capex")
+    spec = get_mapping_registry().get("capex")
     assert spec is not None
     concepts = [cfg.concept_regex for cfg in spec.configs]
     assert "us-gaap:PaymentsToAcquireProductiveAssets" in concepts
 
 
 def test_shares_outstanding_mapping_relaxes_anchor_date() -> None:
-    spec = REGISTRY.get("shares_outstanding")
+    spec = get_mapping_registry().get("shares_outstanding")
     assert spec is not None
     assert all(cfg.respect_anchor_date is False for cfg in spec.configs)
 
 
 def test_debt_long_mapping_includes_notes_payable() -> None:
-    spec = REGISTRY.get("debt_long")
+    spec = get_mapping_registry().get("debt_long")
     assert spec is not None
     concepts = [cfg.concept_regex for cfg in spec.configs]
     assert "us-gaap:NotesPayable" in concepts
 
 
 def test_debt_short_mapping_includes_loans_payable() -> None:
-    spec = REGISTRY.get("debt_short")
+    spec = get_mapping_registry().get("debt_short")
     assert spec is not None
     concepts = [cfg.concept_regex for cfg in spec.configs]
     assert "us-gaap:LoansPayable" in concepts
 
 
 def test_real_estate_dep_amort_mapping_includes_dep_depletion() -> None:
-    spec = REGISTRY.get("real_estate_dep_amort")
+    spec = get_mapping_registry().get("real_estate_dep_amort")
     assert spec is not None
     concepts = [cfg.concept_regex for cfg in spec.configs]
     assert "us-gaap:DepreciationDepletionAndAmortization" in concepts
 
 
 def test_total_revenue_mapping_includes_bank_net_revenue_tags() -> None:
-    spec = REGISTRY.get("total_revenue")
+    spec = get_mapping_registry().get("total_revenue")
     assert spec is not None
     concepts = [cfg.concept_regex for cfg in spec.configs]
     assert "us-gaap:RevenuesNetOfInterestExpense" in concepts
 
 
 def test_total_debt_including_leases_mapping_includes_current_maturities_tag() -> None:
-    spec = REGISTRY.get("total_debt_including_finance_leases_combined")
+    spec = get_mapping_registry().get("total_debt_including_finance_leases_combined")
     assert spec is not None
     concepts = [cfg.concept_regex for cfg in spec.configs]
     assert (
@@ -79,7 +82,7 @@ def test_total_debt_including_leases_mapping_includes_current_maturities_tag() -
 
 
 def test_tier1_capital_ratio_mapping_accepts_number_unit() -> None:
-    spec = REGISTRY.get("tier1_capital_ratio")
+    spec = get_mapping_registry().get("tier1_capital_ratio")
     assert spec is not None
     concepts = [cfg.concept_regex for cfg in spec.configs]
     assert "us-gaap:TierOneRiskBasedCapitalToRiskWeightedAssets" in concepts
@@ -92,7 +95,7 @@ def test_tier1_capital_ratio_mapping_accepts_number_unit() -> None:
 def test_financial_extension_mapping_includes_credit_loss_and_interest_operating() -> (
     None
 ):
-    allowance_spec = REGISTRY.get("allowance_for_credit_losses")
+    allowance_spec = get_mapping_registry().get("allowance_for_credit_losses")
     assert allowance_spec is not None
     allowance_concepts = [cfg.concept_regex for cfg in allowance_spec.configs]
     assert (
@@ -100,7 +103,7 @@ def test_financial_extension_mapping_includes_credit_loss_and_interest_operating
         in allowance_concepts
     )
 
-    income_spec = REGISTRY.get("interest_income")
+    income_spec = get_mapping_registry().get("interest_income")
     assert income_spec is not None
     income_concepts = [cfg.concept_regex for cfg in income_spec.configs]
     assert "us-gaap:InterestIncomeOperating" in income_concepts

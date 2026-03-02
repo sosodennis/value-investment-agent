@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-import src.agents.fundamental.data.clients.sec_xbrl.filing_fetcher as m
-from src.agents.fundamental.data.clients.sec_xbrl.filing_fetcher import (
+import src.agents.fundamental.infrastructure.sec_xbrl.filing_fetcher as m
+from src.agents.fundamental.infrastructure.sec_xbrl.filing_fetcher import (
     SECFetchPolicy,
     call_with_sec_retry,
 )

@@ -1,6 +1,6 @@
 import json
 
-from src.agents.intent.domain.models import TickerCandidate
+from src.agents.intent.domain.report_contracts import TickerCandidate
 from src.agents.intent.interface.mappers import summarize_intent_for_preview
 from src.agents.intent.interface.serializers import (
     serialize_ticker_candidates,

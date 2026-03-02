@@ -7,7 +7,7 @@ from src.agents.fundamental.domain.model_selection import (
     SelectionSignals,
     _evaluate_spec,
 )
-from src.agents.fundamental.domain.models import ValuationModel
+from src.agents.fundamental.domain.valuation_model import ValuationModel
 
 
 def test_evaluate_spec_uses_configurable_scoring_weights() -> None:

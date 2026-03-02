@@ -12,6 +12,9 @@ from src.agents.debate.application.debate_context import (
     build_debate_artifact_context,
     build_debate_conversation_context,
 )
+from src.agents.debate.application.debate_llm_retry_service import (
+    call_with_debate_llm_retry,
+)
 from src.agents.debate.application.dto import DebateFactExtractionResult
 from src.agents.debate.application.ports import (
     DebateSourceReaderPort,
@@ -151,7 +154,12 @@ async def execute_bull_round(
         )
 
     log_messages(messages, "BULL_AGENT", round_num)
-    response = await llm.ainvoke(messages)
+    response = await call_with_debate_llm_retry(
+        operation="debate_bull_round",
+        agent="BULL_AGENT",
+        round_num=round_num,
+        execute=lambda: llm.ainvoke(messages),
+    )
     response_text = str(response.content)
     log_llm_response("BULL_AGENT", round_num, response_text)
 
@@ -203,7 +211,12 @@ async def execute_bear_round(
         )
 
     log_messages(messages, "BEAR_AGENT", round_num)
-    response = await llm.ainvoke(messages)
+    response = await call_with_debate_llm_retry(
+        operation="debate_bear_round",
+        agent="BEAR_AGENT",
+        round_num=round_num,
+        execute=lambda: llm.ainvoke(messages),
+    )
     response_text = str(response.content)
     log_llm_response("BEAR_AGENT", round_num, response_text)
 
@@ -262,7 +275,12 @@ async def execute_moderator_round(
     messages = build_moderator_messages(system_content=system_content, history=history)
 
     log_messages(messages, "MODERATOR_CRITIQUE", round_num)
-    response = await llm.ainvoke(messages)
+    response = await call_with_debate_llm_retry(
+        operation="debate_moderator_round",
+        agent="MODERATOR",
+        round_num=round_num,
+        execute=lambda: llm.ainvoke(messages),
+    )
     response_text = str(response.content)
     log_llm_response("MODERATOR_CRITIQUE", round_num, response_text)
 

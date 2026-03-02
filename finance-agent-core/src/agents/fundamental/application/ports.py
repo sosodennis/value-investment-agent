@@ -15,9 +15,21 @@ class IFundamentalReportRepo(Protocol):
     ) -> str: ...
 
     async def load_financial_reports(
-        self, artifact_id: str
+        self, artifact_id: object
     ) -> list[JSONObject] | None: ...
+
+    async def load_financial_reports_bundle(
+        self, artifact_id: object
+    ) -> tuple[list[JSONObject], list[JSONObject] | None] | None: ...
 
 
 class IFundamentalFinancialPayloadProvider(Protocol):
     def __call__(self, ticker: str, *, years: int = 3) -> JSONObject: ...
+
+
+class IMarketSnapshot(Protocol):
+    def to_mapping(self) -> JSONObject: ...
+
+
+class IFundamentalMarketDataService(Protocol):
+    def get_market_snapshot(self, ticker_symbol: str) -> IMarketSnapshot: ...

@@ -6,8 +6,8 @@ import types
 import numpy as np
 import torch
 
-from src.agents.fundamental.data.clients.sec_xbrl.fls_filter import _FLSClassifier
-from src.agents.fundamental.data.clients.sec_xbrl.hybrid_retriever import (
+from src.agents.fundamental.infrastructure.sec_xbrl.fls_filter import _FLSClassifier
+from src.agents.fundamental.infrastructure.sec_xbrl.hybrid_retriever import (
     _DenseRetriever,
 )
 

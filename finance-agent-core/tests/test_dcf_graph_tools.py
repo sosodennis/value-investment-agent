@@ -2,18 +2,18 @@ from __future__ import annotations
 
 import pytest
 
-import src.agents.fundamental.domain.valuation.skills.valuation_saas.tools as saas_tools
-from src.agents.fundamental.domain.valuation.skills.valuation_dcf_growth.schemas import (
-    DCFGrowthParams,
-)
-from src.agents.fundamental.domain.valuation.skills.valuation_dcf_growth.tools import (
+import src.agents.fundamental.domain.valuation.calculators.saas_calculator as saas_tools
+from src.agents.fundamental.domain.valuation.calculators.dcf_growth_calculator import (
     calculate_dcf_growth_valuation,
 )
-from src.agents.fundamental.domain.valuation.skills.valuation_dcf_standard.schemas import (
-    DCFStandardParams,
-)
-from src.agents.fundamental.domain.valuation.skills.valuation_dcf_standard.tools import (
+from src.agents.fundamental.domain.valuation.calculators.dcf_standard_calculator import (
     calculate_dcf_standard_valuation,
+)
+from src.agents.fundamental.domain.valuation.models.dcf_growth.contracts import (
+    DCFGrowthParams,
+)
+from src.agents.fundamental.domain.valuation.models.dcf_standard.contracts import (
+    DCFStandardParams,
 )
 
 

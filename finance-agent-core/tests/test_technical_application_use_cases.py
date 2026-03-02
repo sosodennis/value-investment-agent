@@ -16,7 +16,7 @@ from src.agents.technical.application.state_updates import (
     build_semantic_success_update,
 )
 from src.agents.technical.data.mappers import serialize_fracdiff_outputs
-from src.agents.technical.domain.models import (
+from src.agents.technical.domain.report_contracts import (
     SemanticConfluenceResult,
     SemanticTagPolicyResult,
 )

@@ -1,12 +1,21 @@
 from __future__ import annotations
 
-from src.agents.fundamental.data.clients.sec_xbrl.extractor import SearchConfig
-from src.agents.fundamental.data.clients.sec_xbrl.factory import (
+from typing import Any
+
+import pytest
+
+from src.agents.fundamental.infrastructure.sec_xbrl.extractor import SearchConfig
+from src.agents.fundamental.infrastructure.sec_xbrl.factory import (
     BaseFinancialModelFactory,
     FinancialReportFactory,
 )
-from src.agents.fundamental.data.clients.sec_xbrl.mapping import REGISTRY
-from src.agents.fundamental.data.clients.sec_xbrl.models import BaseFinancialModel
+from src.agents.fundamental.infrastructure.sec_xbrl.mapping import get_mapping_registry
+from src.agents.fundamental.infrastructure.sec_xbrl.report_contracts import (
+    BaseFinancialModel,
+    FinancialServicesExtension,
+    IndustrialExtension,
+    RealEstateExtension,
+)
 from src.shared.kernel.traceable import ManualProvenance, TraceableField
 
 
@@ -38,7 +47,7 @@ def test_industrial_extension_uses_industrial_registry_and_exposes_components(
         seen.append((industry, issuer))
         return None
 
-    monkeypatch.setattr(REGISTRY, "resolve", fake_resolve)
+    monkeypatch.setattr(get_mapping_registry(), "resolve", fake_resolve)
     monkeypatch.setattr(
         BaseFinancialModelFactory, "_extract_field", staticmethod(_fake_extract)
     )
@@ -64,7 +73,7 @@ def test_financial_services_extension_uses_financial_registry(monkeypatch) -> No
         seen.append((industry, issuer))
         return None
 
-    monkeypatch.setattr(REGISTRY, "resolve", fake_resolve)
+    monkeypatch.setattr(get_mapping_registry(), "resolve", fake_resolve)
     monkeypatch.setattr(
         BaseFinancialModelFactory, "_extract_field", staticmethod(_fake_extract)
     )
@@ -105,7 +114,7 @@ def test_financial_services_tier1_fallback_supports_number_unit(monkeypatch) -> 
             provenance=ManualProvenance(description="test"),
         )
 
-    monkeypatch.setattr(REGISTRY, "resolve", fake_resolve)
+    monkeypatch.setattr(get_mapping_registry(), "resolve", fake_resolve)
     monkeypatch.setattr(
         BaseFinancialModelFactory, "_extract_field", staticmethod(capture_extract)
     )
@@ -157,7 +166,7 @@ def test_base_model_create_uses_passed_industry_for_registry(monkeypatch) -> Non
         seen.append((industry, issuer))
         return None
 
-    monkeypatch.setattr(REGISTRY, "resolve", fake_resolve)
+    monkeypatch.setattr(get_mapping_registry(), "resolve", fake_resolve)
     monkeypatch.setattr(
         BaseFinancialModelFactory, "_extract_field", staticmethod(_fake_extract)
     )
@@ -167,3 +176,72 @@ def test_base_model_create_uses_passed_industry_for_registry(monkeypatch) -> Non
     assert seen
     assert all(industry == "Real Estate" for industry, _issuer in seen)
     assert all(issuer == "DUMMY" for _industry, issuer in seen)
+
+
+@pytest.mark.parametrize(
+    ("resolved_industry", "expected_extension_type", "expected_extension_cls"),
+    [
+        ("Industrial", "Industrial", IndustrialExtension),
+        ("General", "Industrial", IndustrialExtension),
+        ("Financial Services", "FinancialServices", FinancialServicesExtension),
+        ("Real Estate", "RealEstate", RealEstateExtension),
+    ],
+)
+def test_create_report_sets_canonical_extension_type(
+    monkeypatch,
+    resolved_industry: str,
+    expected_extension_type: str,
+    expected_extension_cls: type[Any],
+) -> None:
+    class DummyExtractor:
+        def __init__(self, ticker: str, fiscal_year: int) -> None:
+            self.ticker = ticker
+            self.fiscal_year = fiscal_year
+
+        @staticmethod
+        def sic_code() -> str:
+            return "0000"
+
+    monkeypatch.setattr(
+        "src.agents.fundamental.infrastructure.sec_xbrl.factory.SECReportExtractor",
+        DummyExtractor,
+    )
+    monkeypatch.setattr(
+        BaseFinancialModelFactory,
+        "create",
+        staticmethod(
+            lambda _extractor, _industry_type=None: BaseFinancialModel(
+                fiscal_year=TraceableField(
+                    name="Fiscal Year",
+                    value="2025",
+                    provenance=ManualProvenance(description="test"),
+                )
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        FinancialReportFactory,
+        "_resolve_industry_type",
+        staticmethod(lambda _sic_code: resolved_industry),
+    )
+    monkeypatch.setattr(
+        FinancialReportFactory,
+        "_create_industrial_extension",
+        staticmethod(lambda _extractor: IndustrialExtension()),
+    )
+    monkeypatch.setattr(
+        FinancialReportFactory,
+        "_create_financial_services_extension",
+        staticmethod(lambda _extractor: FinancialServicesExtension()),
+    )
+    monkeypatch.setattr(
+        FinancialReportFactory,
+        "_create_real_estate_extension",
+        staticmethod(lambda _extractor, _base_model: RealEstateExtension()),
+    )
+
+    report = FinancialReportFactory.create_report("DUMMY", 2025)
+
+    assert report.industry_type == expected_extension_type
+    assert report.extension_type == expected_extension_type
+    assert isinstance(report.extension, expected_extension_cls)

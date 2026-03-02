@@ -8,6 +8,9 @@ from typing import Protocol
 
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
 
+from src.agents.debate.application.debate_llm_retry_service import (
+    call_with_debate_llm_retry,
+)
 from src.agents.debate.application.debate_service import (
     MAX_CHAR_HISTORY,
     execute_bear_round,
@@ -485,7 +488,12 @@ class DebateOrchestrator:
 
             log_messages([SystemMessage(content=verdict_system)], "VERDICT", 3)
             structured_llm = llm.with_structured_output(DebateConclusion)
-            conclusion = await structured_llm.ainvoke(verdict_system)
+            conclusion = await call_with_debate_llm_retry(
+                operation="debate_verdict_structured_output",
+                agent="VERDICT",
+                round_num=3,
+                execute=lambda: structured_llm.ainvoke(verdict_system),
+            )
             conclusion_data = conclusion.model_dump(mode="json")
             if not isinstance(conclusion_data, dict):
                 raise TypeError("verdict output must serialize to JSON object")
