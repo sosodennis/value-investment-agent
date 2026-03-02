@@ -46,6 +46,7 @@ services:
       - HF_BAKED_CACHE=/opt/hf-cache-baked
       - HF_HUB_CACHE=/opt/hf-cache/hub
       - SENTENCE_TRANSFORMERS_HOME=/opt/hf-cache/hub
+      - FASTEMBED_CACHE_PATH=/opt/hf-cache/hub
       - HF_HUB_OFFLINE=1
       - TRANSFORMERS_OFFLINE=1
       - HF_LOCAL_FILES_ONLY=1

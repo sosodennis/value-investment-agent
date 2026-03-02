@@ -1,64 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass, field
 
-TOP_TIER_DOMAINS = (
-    "bloomberg.com",
-    "reuters.com",
-    "wsj.com",
-)
-TIER_1_DOMAINS = (
-    "bloomberg.com",
-    "reuters.com",
-    "wsj.com",
-    "ft.com",
-    "bbc.com",
-)
-TIER_2_DOMAINS = (
-    "cnbc.com",
-    "marketwatch.com",
-    "barrons.com",
-    "finance.yahoo.com",
-    "nytimes.com",
-    "fortune.com",
-)
-
-PRIORITY_ORDER = (
-    "corporate_event",
-    "financials",
-    "bullish",
-    "bearish",
-    "analyst_opinion",
-    "trusted_news",
-)
-SORT_TAG_PRIORITY = (
-    "corporate_event",
-    "financials",
-    "bearish",
-    "bullish",
-    "analyst_opinion",
-    "trusted_news",
-)
-QUOTAS: dict[str, int] = {
-    "corporate_event": 5,
-    "financials": 2,
-    "bullish": 5,
-    "bearish": 5,
-    "analyst_opinion": 2,
-    "trusted_news": 4,
-}
-MAX_CONCURRENT_REQUESTS = 3
-JITTER_SECONDS: tuple[float, float] = (3.0, 5.0)
-
-
-@dataclass(frozen=True)
-class SearchTask:
-    time_param: str
-    query: str
-    limit: int
-    tag: str
-    fallbacks: tuple[str, ...] = field(default_factory=tuple)
+from src.agents.news.domain.search_strategy.contracts import SearchTask
 
 
 def build_site_query(domains: Iterable[str]) -> str:

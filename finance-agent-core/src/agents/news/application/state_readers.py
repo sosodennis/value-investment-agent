@@ -3,18 +3,18 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 
-def _mapping_or_empty(value: object) -> Mapping[str, object]:
-    if isinstance(value, Mapping):
-        return value
+def intent_context_from_state(state: Mapping[str, object]) -> Mapping[str, object]:
+    context = state.get("intent_extraction")
+    if isinstance(context, Mapping):
+        return context
     return {}
 
 
-def intent_context_from_state(state: Mapping[str, object]) -> Mapping[str, object]:
-    return _mapping_or_empty(state.get("intent_extraction", {}))
-
-
 def news_context_from_state(state: Mapping[str, object]) -> Mapping[str, object]:
-    return _mapping_or_empty(state.get("financial_news_research", {}))
+    context = state.get("financial_news_research")
+    if isinstance(context, Mapping):
+        return context
+    return {}
 
 
 def resolved_ticker_from_state(state: Mapping[str, object]) -> str | None:
@@ -33,19 +33,31 @@ def company_name_from_state(state: Mapping[str, object]) -> str | None:
     return None
 
 
-def search_artifact_id_from_state(state: Mapping[str, object]) -> object:
-    return news_context_from_state(state).get("search_artifact_id")
+def search_artifact_id_from_state(state: Mapping[str, object]) -> str | None:
+    artifact_id = news_context_from_state(state).get("search_artifact_id")
+    if isinstance(artifact_id, str) and artifact_id:
+        return artifact_id
+    return None
 
 
-def selection_artifact_id_from_state(state: Mapping[str, object]) -> object:
-    return news_context_from_state(state).get("selection_artifact_id")
+def selection_artifact_id_from_state(state: Mapping[str, object]) -> str | None:
+    artifact_id = news_context_from_state(state).get("selection_artifact_id")
+    if isinstance(artifact_id, str) and artifact_id:
+        return artifact_id
+    return None
 
 
-def news_items_artifact_id_from_state(state: Mapping[str, object]) -> object:
-    return news_context_from_state(state).get("news_items_artifact_id")
+def news_items_artifact_id_from_state(state: Mapping[str, object]) -> str | None:
+    artifact_id = news_context_from_state(state).get("news_items_artifact_id")
+    if isinstance(artifact_id, str) and artifact_id:
+        return artifact_id
+    return None
 
 
 def aggregator_ticker_from_state(state: Mapping[str, object]) -> str:
+    resolved = resolved_ticker_from_state(state)
+    if resolved:
+        return resolved
     ticker_raw = state.get("ticker")
     if isinstance(ticker_raw, str) and ticker_raw:
         return ticker_raw

@@ -27,7 +27,8 @@ from src.agents.fundamental.infrastructure.sec_xbrl.fls_filter import (
 from src.agents.fundamental.infrastructure.sec_xbrl.matchers.dependency_signal_matcher import (
     warmup_dependency_matcher,
 )
-from src.agents.news.data.clients.finbert_service import get_finbert_analyzer
+from src.agents.news.infrastructure.content_fetch import close_shared_async_client
+from src.agents.news.infrastructure.sentiment import get_finbert_analyzer
 from src.infrastructure.database import init_db
 from src.interface.artifacts.artifact_api_models import (
     ArtifactApiResponse,
@@ -147,6 +148,7 @@ async def lifespan(app: FastAPI):
 
     logger.info("✅ [Lifespan] Initialization complete.")
     yield
+    await close_shared_async_client()
     logger.info("🛑 [Lifespan] Shutting down...")
 
 

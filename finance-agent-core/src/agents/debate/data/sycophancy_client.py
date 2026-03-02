@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 
 import numpy as np
@@ -15,10 +16,29 @@ class SycophancyDetectorClient:
     model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
     _embedding_model: TextEmbedding | None = None
 
+    @staticmethod
+    def _local_files_only() -> bool:
+        return os.getenv("HF_LOCAL_FILES_ONLY", "1").strip().lower() not in {
+            "0",
+            "false",
+            "no",
+        }
+
+    @staticmethod
+    def _cache_dir() -> str | None:
+        value = os.getenv("FASTEMBED_CACHE_PATH")
+        if isinstance(value, str) and value.strip():
+            return value
+        return None
+
     @property
     def embedding_model(self) -> TextEmbedding:
         if self._embedding_model is None:
-            self._embedding_model = TextEmbedding(model_name=self.model_name)
+            self._embedding_model = TextEmbedding(
+                model_name=self.model_name,
+                cache_dir=self._cache_dir(),
+                local_files_only=self._local_files_only(),
+            )
         return self._embedding_model
 
     @staticmethod

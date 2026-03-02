@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from src.agents.news.domain.aggregation.contracts import NewsAggregationResult
 from src.agents.news.domain.entities import NewsItemEntity
-from src.agents.news.domain.models import NewsAggregationResult
 
 
 def aggregate_news_items(
@@ -53,13 +53,4 @@ def aggregate_news_items(
         key_themes=key_themes,
         summary_text=summary_text,
         top_headlines=top_headlines,
-    )
-
-
-def build_news_summary_message(*, ticker: str, result: NewsAggregationResult) -> str:
-    return (
-        f"### News Research: {ticker}\n\n"
-        f"**Overall Sentiment:** {result.sentiment_label.upper()} ({result.weighted_score})\n\n"
-        f"**Analysis Summaries:**\n{result.summary_text}\n\n"
-        f"**Themes:** {', '.join(result.key_themes) or 'N/A'}"
     )

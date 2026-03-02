@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from src.agents.news.application.view_models import derive_news_preview_view_model
 from src.agents.news.interface.formatters import format_news_preview
+from src.agents.news.interface.preview_projection_service import (
+    derive_news_preview_view_model,
+)
 from src.shared.kernel.types import JSONObject
 
 

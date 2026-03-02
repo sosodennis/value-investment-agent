@@ -4,7 +4,13 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from urllib.parse import urlparse
 
-from src.agents.news.domain.policies import (
+from src.agents.news.domain.search_strategy.contracts import SearchTask
+from src.agents.news.domain.search_strategy.query_policy_service import (
+    build_base_term,
+    build_search_tasks,
+    build_site_query,
+)
+from src.agents.news.domain.search_strategy.ranking_policy_service import (
     JITTER_SECONDS,
     MAX_CONCURRENT_REQUESTS,
     PRIORITY_ORDER,
@@ -13,10 +19,6 @@ from src.agents.news.domain.policies import (
     TIER_1_DOMAINS,
     TIER_2_DOMAINS,
     TOP_TIER_DOMAINS,
-    SearchTask,
-    build_base_term,
-    build_search_tasks,
-    build_site_query,
 )
 from src.shared.kernel.tools.logger import get_logger, log_event
 
@@ -128,7 +130,7 @@ async def _fetch_one_managed(
     import random
 
     async with semaphore:
-        # Random jitter (3.0-5.0s) to avoid burst patterns
+        # Small random jitter to avoid burst patterns while keeping latency acceptable
         await asyncio.sleep(random.uniform(*JITTER_SECONDS))
         return await asyncio.to_thread(_fetch_one_sync, task)
 

@@ -26,6 +26,7 @@ This is the canonical cross-agent architecture standard. Keep this file short an
    - Must not own domain policy or infrastructure I/O.
 4. `infrastructure`
    - Owns provider/client/repository adapters and runtime wiring/config.
+   - Repository adapters are storage gateways only; do not mix domain projection/aggregation logic into repository owners.
    - Must not own workflow orchestration or domain policy decisions.
 
 ## 3. Naming Contract (Hard Rules)
@@ -63,8 +64,19 @@ This is the canonical cross-agent architecture standard. Keep this file short an
 2. Avoid long callable bundles (`*_fn`) across orchestrator/use-case chains:
    - inject typed runtime ports instead.
 3. Avoid `object`-typed runtime port boundaries when minimal typed contracts are available.
-4. Infrastructure registry/bootstrap must be explicit or lazy accessor based:
+4. `object` is allowed only at boundary decoding/parsing points (typically `interface/parsers`) and must be normalized immediately.
+5. `application` runtime boundaries (`ports`, `orchestrator`, `state_readers`) must not keep avoidable `object` types.
+6. Infrastructure registry/bootstrap must be explicit or lazy accessor based:
    - no import-time registration side effects.
+7. In async use-cases, avoid blocking SDK calls on the event loop:
+   - prefer native async APIs (`ainvoke`, async client methods)
+   - if only sync API exists, use `asyncio.to_thread(...)` at the boundary.
+8. In high-frequency async HTTP adapters/providers, reuse client/session objects:
+   - avoid per-request `AsyncClient`/session construction on hot paths
+   - expose explicit close hook and wire it into app shutdown lifecycle.
+9. External provider degraded outcomes must be typed:
+   - do not encode failure as bare `None` without reason metadata.
+   - return machine-readable failure info (`failure_code`, optional transport metadata like HTTP status) so use-cases can produce deterministic degraded state and diagnostics.
 
 ## 6. Error Handling and State Rules
 
@@ -74,6 +86,12 @@ This is the canonical cross-agent architecture standard. Keep this file short an
 3. Error update contract must stay consistent across agents:
    - `current_node`, `internal_progress`, `node_statuses`, `error_logs`.
    - `error_logs` item shape: `node`, `error`, `severity`.
+4. Workflow state entry boundary may remain `Mapping[str, object]` (LangGraph heterogeneous state contract):
+   - keep this boundary at node/orchestrator entry only
+   - normalize to typed values immediately in `state_readers` and avoid propagating raw state into deeper service contracts.
+5. Artifact read semantics must distinguish `not_found` from `empty_payload`:
+   - repository/read-boundary owners must not silently normalize missing artifact id/data to empty values (`[]`, `{}`, `""`).
+   - missing artifact must surface as explicit failure so use-cases can decide terminal vs degraded behavior deterministically.
 
 ## 7. Refactor Migration Rules
 
@@ -82,7 +100,27 @@ This is the canonical cross-agent architecture standard. Keep this file short an
 3. Keep each slice testable and reversible; remove old paths immediately after validation.
 4. Add/extend hygiene guards for removed legacy imports/modules.
 
-## 8. Minimal PR Checklist
+## 8. Logging Quality Rules
+
+1. Use structured logs only:
+   - every event uses a stable `event` name and machine-readable `fields`.
+   - avoid free-form logs for state transitions, degradation, and failures.
+2. Every node/use-case must emit exactly one start and one completion summary log:
+   - start includes key input scope (for example ticker, input count).
+   - completion includes output counts and final quality flags (`is_degraded`, `status`).
+3. Every degraded/error path must emit a dedicated reason log with `error_code`:
+   - include `stage/source`, impact metrics (`input_count`, `output_count`, fallback size), and a short reason string.
+   - do not rely on UI `error_logs` state only; backend logs must be independently diagnosable.
+4. Fallback behavior must be observable:
+   - log `fallback_mode` and fallback selection size/count.
+5. Keep logs high-signal and low-noise:
+   - no large payload dumps, no duplicated per-item success spam in hot paths.
+   - per-item failure logs are allowed if each carries actionable fields (`url`, status/error_code).
+6. Keep field naming consistent across agents:
+   - prefer `*_count`, `is_degraded`, `error_code`, `node`, `ticker`, `artifact_id`.
+7. Exception text in logs should be bounded (truncated) to avoid oversized noisy events.
+
+## 9. Minimal PR Checklist
 
 1. Does each changed module have a single clear owner responsibility?
 2. Any concrete class still named `*Port`?
@@ -97,7 +135,15 @@ This is the canonical cross-agent architecture standard. Keep this file short an
 11. Were compatibility paths removed after call-site migration?
 12. Did this change improve maintainability without unnecessary abstraction?
 13. Any preview projection logic left in `application/view_models.py` instead of `interface` projection owner?
+14. Any repository adapter mixing persistence I/O with domain projection/aggregation logic?
+15. Any avoidable `object` type left in `application` runtime boundaries (outside parser decoding boundary and workflow-state entry boundary)?
+16. Any async node/use-case still doing blocking sync network/LLM calls on the event loop?
+17. Are start/completion/degraded logs present and structured for the changed node/use-case?
+18. Are degraded/error logs carrying machine-readable reason and impact metrics (not only free-text)?
+19. Any repository/read boundary silently converting missing artifact to empty payload?
+20. Any high-frequency async adapter still creating per-request client/session objects without lifecycle-managed reuse?
+21. Any external provider still returning bare `None` for degraded failures where typed failure metadata is required for state/log diagnostics?
 
-## 9. Standard Update Policy
+## 10. Standard Update Policy
 
 Update this file only when a new anti-pattern class appears in real code. Do not add case-specific rules that do not generalize across agents.

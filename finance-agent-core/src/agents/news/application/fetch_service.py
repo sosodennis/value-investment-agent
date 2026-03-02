@@ -35,7 +35,7 @@ def build_articles_to_fetch(
     return selected
 
 
-def build_cleaned_search_results(results: list[dict[str, object]]) -> list[JSONObject]:
+def build_cleaned_search_results(results: list[JSONObject]) -> list[JSONObject]:
     candidates: list[JSONObject] = []
     for result in results:
         candidates.append(
@@ -57,8 +57,8 @@ def build_cleaned_search_results(results: list[dict[str, object]]) -> list[JSONO
     return [item.model_dump(mode="json") for item in parsed]
 
 
-def parse_published_at(date_value: object) -> datetime | None:
-    if not isinstance(date_value, str) or not date_value:
+def parse_published_at(date_value: str | None) -> datetime | None:
+    if not date_value:
         return None
     try:
         return datetime.fromisoformat(date_value)

@@ -3,13 +3,18 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
+from typing import Protocol, cast
+
+from langchain_core.prompts import ChatPromptTemplate
+from pydantic import BaseModel
 
 from src.agents.news.application.ports import (
-    ChainLike,
     FinbertAnalyzerLike,
     FinbertResultLike,
     LLMLike,
+    ModelDumpLike,
     NewsArtifactTextReaderPort,
+    StructuredChainLike,
 )
 from src.agents.news.interface.parsers import parse_structured_llm_output
 from src.agents.news.interface.prompt_renderers import build_analysis_chain_payload
@@ -19,10 +24,14 @@ from src.shared.kernel.types import JSONObject
 logger = get_logger(__name__)
 
 
+class AsyncChainLike(Protocol):
+    async def ainvoke(self, payload: JSONObject) -> ModelDumpLike: ...
+
+
 @dataclass(frozen=True)
 class AnalysisChains:
-    basic: ChainLike
-    finbert: ChainLike
+    basic: StructuredChainLike
+    finbert: StructuredChainLike
 
 
 @dataclass(frozen=True)
@@ -31,12 +40,22 @@ class AnalystExecutionResult:
     article_errors: list[str]
 
 
+async def invoke_chain_non_blocking(
+    chain: StructuredChainLike,
+    payload: JSONObject,
+) -> ModelDumpLike:
+    if hasattr(chain, "ainvoke"):
+        async_chain = cast(AsyncChainLike, chain)
+        return await async_chain.ainvoke(payload)
+    return await asyncio.to_thread(chain.invoke, payload)
+
+
 def build_analysis_chains(
     *,
     llm: LLMLike,
-    prompt_basic: object,
-    prompt_finbert: object,
-    analysis_model_type: type[object],
+    prompt_basic: ChatPromptTemplate,
+    prompt_finbert: ChatPromptTemplate,
+    analysis_model_type: type[BaseModel],
 ) -> AnalysisChains:
     basic_structured = llm.with_structured_output(analysis_model_type)
     finbert_structured = llm.with_structured_output(analysis_model_type)
@@ -45,7 +64,7 @@ def build_analysis_chains(
     return AnalysisChains(basic=basic_chain, finbert=finbert_chain)
 
 
-def run_analysis_with_resilience(
+async def run_analysis_with_resilience(
     *,
     chains: AnalysisChains,
     chain_payload: JSONObject,
@@ -53,17 +72,17 @@ def run_analysis_with_resilience(
 ) -> tuple[JSONObject, bool]:
     if prefer_finbert_chain:
         try:
-            result = chains.finbert.invoke(chain_payload)
+            result = await invoke_chain_non_blocking(chains.finbert, chain_payload)
             return parse_structured_llm_output(
                 result, context="news finbert analysis response"
             ), False
         except Exception:
-            result = chains.basic.invoke(chain_payload)
+            result = await invoke_chain_non_blocking(chains.basic, chain_payload)
             return parse_structured_llm_output(
                 result, context="news basic analysis degraded-path response"
             ), True
 
-    result = chains.basic.invoke(chain_payload)
+    result = await invoke_chain_non_blocking(chains.basic, chain_payload)
     return parse_structured_llm_output(
         result, context="news basic analysis response"
     ), False
@@ -120,7 +139,7 @@ async def analyze_news_items(
                 content_to_analyze=content_to_analyze,
                 finbert_summary=finbert_summary,
             )
-            analysis_payload, _used_degraded_path = run_analysis_with_resilience(
+            analysis_payload, _used_degraded_path = await run_analysis_with_resilience(
                 chains=chains,
                 chain_payload=chain_payload,
                 prefer_finbert_chain=finbert_result is not None,

@@ -47,8 +47,13 @@ def build_analyst_node_update(
 
 def build_search_node_no_ticker_update() -> JSONObject:
     return {
+        "financial_news_research": {
+            "status": "skipped",
+            "article_count": 0,
+        },
         "current_node": "search_node",
         "internal_progress": {"search_node": "done"},
+        "node_statuses": {"financial_news_research": "done"},
     }
 
 
@@ -69,9 +74,14 @@ def build_search_node_error_update(error_message: str) -> JSONObject:
 
 def build_search_node_empty_update() -> JSONObject:
     return {
-        "news_items": [],
+        "financial_news_research": {
+            "status": "empty",
+            "article_count": 0,
+            "search_artifact_id": None,
+        },
         "current_node": "search_node",
         "internal_progress": {"search_node": "done"},
+        "node_statuses": {"financial_news_research": "done"},
     }
 
 
@@ -123,6 +133,51 @@ def build_selector_node_update(
     return update
 
 
+def build_selector_node_error_update(error_message: str) -> JSONObject:
+    return {
+        "current_node": "selector_node",
+        "internal_progress": {"selector_node": "error"},
+        "node_statuses": {"financial_news_research": "error"},
+        "error_logs": [
+            {
+                "node": "selector_node",
+                "error": error_message,
+                "severity": "error",
+            }
+        ],
+    }
+
+
+def build_fetch_node_error_update(error_message: str) -> JSONObject:
+    return {
+        "current_node": "fetch_node",
+        "internal_progress": {"fetch_node": "error"},
+        "node_statuses": {"financial_news_research": "error"},
+        "error_logs": [
+            {
+                "node": "fetch_node",
+                "error": error_message,
+                "severity": "error",
+            }
+        ],
+    }
+
+
+def build_analyst_node_error_update(error_message: str) -> JSONObject:
+    return {
+        "current_node": "analyst_node",
+        "internal_progress": {"analyst_node": "error"},
+        "node_statuses": {"financial_news_research": "error"},
+        "error_logs": [
+            {
+                "node": "analyst_node",
+                "error": error_message,
+                "severity": "error",
+            }
+        ],
+    }
+
+
 def build_analyst_chain_error_update(error_message: str) -> JSONObject:
     return {
         "current_node": "analyst_node",
@@ -141,6 +196,7 @@ def build_analyst_chain_error_update(error_message: str) -> JSONObject:
 def build_aggregator_node_update(
     *,
     status: str,
+    node_status: str,
     sentiment_summary: str,
     sentiment_score: float,
     article_count: int,
@@ -163,5 +219,5 @@ def build_aggregator_node_update(
         "financial_news_research": news_update,
         "current_node": "aggregator_node",
         "internal_progress": {"aggregator_node": "done"},
-        "node_statuses": {"financial_news_research": "done"},
+        "node_statuses": {"financial_news_research": node_status},
     }

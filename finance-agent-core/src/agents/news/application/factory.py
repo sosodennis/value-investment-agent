@@ -1,20 +1,18 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 
+from pydantic import BaseModel
+
 from src.agents.news.application.orchestrator import NewsNodeResult, NewsOrchestrator
-from src.agents.news.data.clients import (
-    fetch_clean_text_async,
-    generate_news_id,
-    get_finbert_analyzer,
-    get_source_reliability,
-    news_search_multi_timeframe,
-)
-from src.agents.news.data.ports import news_artifact_port
-from src.agents.news.domain.prompt_builder import (
-    build_analyst_prompt_spec,
-    build_selector_prompt_spec,
+from src.agents.news.application.ports import (
+    FetchContentResult,
+    FinbertAnalyzerLike,
+    INewsArtifactRepository,
+    LLMLike,
+    NewsItemFactoryLike,
+    SourceFactoryLike,
 )
 from src.agents.news.interface.contracts import (
     AIAnalysisModel,
@@ -22,18 +20,22 @@ from src.agents.news.interface.contracts import (
     SourceInfoModel,
 )
 from src.agents.news.interface.mappers import summarize_news_for_preview
+from src.agents.news.interface.prompt_specs import (
+    build_analyst_prompt_spec,
+    build_selector_prompt_spec,
+)
 from src.agents.news.interface.serializers import build_news_report_payload
-from src.infrastructure.llm.provider import get_llm
 from src.interface.events.schemas import ArtifactReference, build_artifact_payload
 from src.shared.kernel.contracts import (
     ARTIFACT_KIND_NEWS_ANALYSIS_REPORT,
     OUTPUT_KIND_FINANCIAL_NEWS_RESEARCH,
 )
+from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
 
 
 def _build_news_output_artifact(
-    summary: str, preview: dict[str, object], report_id: str | None
-) -> dict[str, object] | None:
+    summary: str, preview: JSONObject, report_id: str | None
+) -> AgentOutputArtifactPayload:
     reference = None
     if report_id:
         reference = ArtifactReference(
@@ -49,9 +51,9 @@ def _build_news_output_artifact(
     )
 
 
-def build_news_orchestrator() -> NewsOrchestrator:
+def build_news_orchestrator(*, port: INewsArtifactRepository) -> NewsOrchestrator:
     return NewsOrchestrator(
-        port=news_artifact_port,
+        port=port,
         summarize_preview=summarize_news_for_preview,
         build_news_report_payload=build_news_report_payload,
         build_output_artifact=_build_news_output_artifact,
@@ -59,20 +61,36 @@ def build_news_orchestrator() -> NewsOrchestrator:
 
 
 @dataclass(frozen=True)
+class NewsWorkflowDependencies:
+    news_search_multi_timeframe_fn: Callable[
+        [str, str | None], Awaitable[list[JSONObject]]
+    ]
+    get_llm_fn: Callable[[], LLMLike]
+    fetch_clean_text_async_fn: Callable[[str], Awaitable[FetchContentResult]]
+    generate_news_id_fn: Callable[[str | None, str | None], str]
+    get_source_reliability_fn: Callable[[str], float]
+    get_finbert_analyzer_fn: Callable[[], FinbertAnalyzerLike]
+    item_factory: NewsItemFactoryLike = FinancialNewsItemModel
+    source_factory: SourceFactoryLike = SourceInfoModel
+    analysis_model_type: type[BaseModel] = AIAnalysisModel
+
+
+@dataclass(frozen=True)
 class NewsWorkflowRunner:
     orchestrator: NewsOrchestrator
+    deps: NewsWorkflowDependencies
 
     async def run_search(self, state: Mapping[str, object]) -> NewsNodeResult:
         return await self.orchestrator.run_search(
             state,
-            news_search_multi_timeframe_fn=news_search_multi_timeframe,
+            news_search_multi_timeframe_fn=self.deps.news_search_multi_timeframe_fn,
         )
 
     async def run_selector(self, state: Mapping[str, object]) -> NewsNodeResult:
         selector_prompt = build_selector_prompt_spec()
         return await self.orchestrator.run_selector(
             state,
-            get_llm_fn=get_llm,
+            get_llm_fn=self.deps.get_llm_fn,
             selector_system_prompt=selector_prompt.system,
             selector_user_prompt=selector_prompt.user,
         )
@@ -80,31 +98,32 @@ class NewsWorkflowRunner:
     async def run_fetch(self, state: Mapping[str, object]) -> NewsNodeResult:
         return await self.orchestrator.run_fetch(
             state,
-            fetch_clean_text_async_fn=fetch_clean_text_async,
-            generate_news_id_fn=generate_news_id,
-            get_source_reliability_fn=get_source_reliability,
-            item_factory=FinancialNewsItemModel,
-            source_factory=SourceInfoModel,
+            fetch_clean_text_async_fn=self.deps.fetch_clean_text_async_fn,
+            generate_news_id_fn=self.deps.generate_news_id_fn,
+            get_source_reliability_fn=self.deps.get_source_reliability_fn,
+            item_factory=self.deps.item_factory,
+            source_factory=self.deps.source_factory,
         )
 
     async def run_analyst(self, state: Mapping[str, object]) -> NewsNodeResult:
         analyst_prompt = build_analyst_prompt_spec()
         return await self.orchestrator.run_analyst(
             state,
-            get_llm_fn=get_llm,
-            get_finbert_analyzer_fn=get_finbert_analyzer,
+            get_llm_fn=self.deps.get_llm_fn,
+            get_finbert_analyzer_fn=self.deps.get_finbert_analyzer_fn,
             analyst_system_prompt=analyst_prompt.system,
             analyst_user_prompt_basic=analyst_prompt.user_basic,
             analyst_user_prompt_with_finbert=analyst_prompt.user_with_finbert,
-            analysis_model_type=AIAnalysisModel,
+            analysis_model_type=self.deps.analysis_model_type,
         )
 
     async def run_aggregator(self, state: Mapping[str, object]) -> NewsNodeResult:
         return await self.orchestrator.run_aggregator(state)
 
 
-def build_news_workflow_runner() -> NewsWorkflowRunner:
-    return NewsWorkflowRunner(orchestrator=build_news_orchestrator())
-
-
-news_workflow_runner = build_news_workflow_runner()
+def build_news_workflow_runner(
+    *,
+    orchestrator: NewsOrchestrator,
+    deps: NewsWorkflowDependencies,
+) -> NewsWorkflowRunner:
+    return NewsWorkflowRunner(orchestrator=orchestrator, deps=deps)

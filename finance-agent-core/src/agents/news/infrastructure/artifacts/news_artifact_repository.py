@@ -5,8 +5,7 @@ from typing import TypeVar, cast
 
 from pydantic import BaseModel
 
-from src.agents.news.data.mappers import to_news_item_entities
-from src.agents.news.domain.entities import NewsItemEntity
+from src.agents.news.application.ports import ArtifactNotFoundError
 from src.agents.news.interface.contracts import NewsArtifactModel
 from src.interface.artifacts.artifact_data_models import (
     NewsArticleArtifactData,
@@ -29,7 +28,7 @@ _ModelT = TypeVar("_ModelT", bound=BaseModel)
 
 
 @dataclass
-class NewsArtifactPort:
+class NewsArtifactRepository:
     search_results_port: TypedArtifactPort[SearchResultsArtifactData]
     news_selection_port: TypedArtifactPort[NewsSelectionArtifactData]
     news_article_port: TypedArtifactPort[NewsArticleArtifactData]
@@ -53,7 +52,7 @@ class NewsArtifactPort:
     async def _load_port(
         self,
         port: TypedArtifactPort[_ModelT],
-        artifact_id: object,
+        artifact_id: str | None,
         *,
         context: str,
     ) -> _ModelT | None:
@@ -63,9 +62,9 @@ class NewsArtifactPort:
         )
 
     @staticmethod
-    def _dump_models(items: list[BaseModel]) -> list[dict[str, object]]:
+    def _dump_models(items: list[BaseModel]) -> list[JSONObject]:
         return cast(
-            list[dict[str, object]],
+            list[JSONObject],
             [item.model_dump(mode="json") for item in items],
         )
 
@@ -84,7 +83,7 @@ class NewsArtifactPort:
         )
 
     async def load_search_results(
-        self, artifact_id: object
+        self, artifact_id: str | None
     ) -> SearchResultsArtifactData | None:
         return await self._load_port(
             self.search_results_port,
@@ -107,7 +106,7 @@ class NewsArtifactPort:
         )
 
     async def load_news_selection(
-        self, artifact_id: object
+        self, artifact_id: str | None
     ) -> NewsSelectionArtifactData | None:
         return await self._load_port(
             self.news_selection_port,
@@ -130,7 +129,7 @@ class NewsArtifactPort:
         )
 
     async def load_news_article(
-        self, artifact_id: object
+        self, artifact_id: str | None
     ) -> NewsArticleArtifactData | None:
         return await self._load_port(
             self.news_article_port,
@@ -153,7 +152,7 @@ class NewsArtifactPort:
         )
 
     async def load_news_items(
-        self, artifact_id: object
+        self, artifact_id: str | None
     ) -> NewsItemsListArtifactData | None:
         return await self._load_port(
             self.news_items_port,
@@ -162,11 +161,19 @@ class NewsArtifactPort:
         )
 
     async def load_search_context(
-        self, search_artifact_id: object
-    ) -> tuple[str, list[dict[str, object]]]:
+        self, search_artifact_id: str | None
+    ) -> tuple[str, list[JSONObject]]:
+        if not search_artifact_id:
+            raise ArtifactNotFoundError(
+                artifact_kind="search_results",
+                artifact_id=search_artifact_id,
+            )
         search_data = await self.load_search_results(search_artifact_id)
         if search_data is None:
-            return "", []
+            raise ArtifactNotFoundError(
+                artifact_kind="search_results",
+                artifact_id=search_artifact_id,
+            )
         return (
             search_data.formatted_results,
             self._dump_models(search_data.raw_results),
@@ -174,35 +181,54 @@ class NewsArtifactPort:
 
     async def load_fetch_context(
         self,
-        search_artifact_id: object,
-        selection_artifact_id: object,
-    ) -> tuple[list[dict[str, object]], list[int]]:
+        search_artifact_id: str | None,
+        selection_artifact_id: str | None,
+    ) -> tuple[list[JSONObject], list[int]]:
+        if not search_artifact_id:
+            raise ArtifactNotFoundError(
+                artifact_kind="search_results",
+                artifact_id=search_artifact_id,
+            )
+        if not selection_artifact_id:
+            raise ArtifactNotFoundError(
+                artifact_kind="news_selection",
+                artifact_id=selection_artifact_id,
+            )
         search_data = await self.load_search_results(search_artifact_id)
         selection_data = await self.load_news_selection(selection_artifact_id)
-        raw_results = (
-            self._dump_models(search_data.raw_results)
-            if search_data is not None
-            else []
-        )
-        selected_indices = (
-            selection_data.selected_indices if selection_data is not None else []
-        )
+        if search_data is None:
+            raise ArtifactNotFoundError(
+                artifact_kind="search_results",
+                artifact_id=search_artifact_id,
+            )
+        if selection_data is None:
+            raise ArtifactNotFoundError(
+                artifact_kind="news_selection",
+                artifact_id=selection_artifact_id,
+            )
+        raw_results = self._dump_models(search_data.raw_results)
+        selected_indices = selection_data.selected_indices
         return raw_results, selected_indices
 
     async def load_news_items_data(
-        self, news_items_artifact_id: object
-    ) -> list[dict[str, object]]:
+        self, news_items_artifact_id: str | None
+    ) -> list[JSONObject]:
+        if not news_items_artifact_id:
+            raise ArtifactNotFoundError(
+                artifact_kind="news_items_list",
+                artifact_id=news_items_artifact_id,
+            )
         news_items_data = await self.load_news_items(news_items_artifact_id)
         if news_items_data is None:
-            return []
+            raise ArtifactNotFoundError(
+                artifact_kind="news_items_list",
+                artifact_id=news_items_artifact_id,
+            )
         return self._dump_models(news_items_data.news_items)
 
-    def project_news_item_entities(
-        self, news_items: list[dict[str, object]]
-    ) -> list[NewsItemEntity]:
-        return to_news_item_entities(news_items)
-
-    async def load_news_article_text(self, content_artifact_id: object) -> str | None:
+    async def load_news_article_text(
+        self, content_artifact_id: str | None
+    ) -> str | None:
         content_data = await self.load_news_article(content_artifact_id)
         if content_data is None:
             return None
@@ -223,30 +249,34 @@ class NewsArtifactPort:
         )
 
 
-news_artifact_port = NewsArtifactPort(
-    search_results_port=TypedArtifactPort(
-        manager=artifact_manager,
-        kind=ARTIFACT_KIND_SEARCH_RESULTS,
-        model=SearchResultsArtifactData,
-    ),
-    news_selection_port=TypedArtifactPort(
-        manager=artifact_manager,
-        kind=ARTIFACT_KIND_NEWS_SELECTION,
-        model=NewsSelectionArtifactData,
-    ),
-    news_article_port=TypedArtifactPort(
-        manager=artifact_manager,
-        kind=ARTIFACT_KIND_NEWS_ARTICLE,
-        model=NewsArticleArtifactData,
-    ),
-    news_items_port=TypedArtifactPort(
-        manager=artifact_manager,
-        kind=ARTIFACT_KIND_NEWS_ITEMS_LIST,
-        model=NewsItemsListArtifactData,
-    ),
-    news_report_port=TypedArtifactPort(
-        manager=artifact_manager,
-        kind=ARTIFACT_KIND_NEWS_ANALYSIS_REPORT,
-        model=NewsArtifactModel,
-    ),
-)
+def build_default_news_artifact_repository() -> NewsArtifactRepository:
+    return NewsArtifactRepository(
+        search_results_port=TypedArtifactPort(
+            manager=artifact_manager,
+            kind=ARTIFACT_KIND_SEARCH_RESULTS,
+            model=SearchResultsArtifactData,
+        ),
+        news_selection_port=TypedArtifactPort(
+            manager=artifact_manager,
+            kind=ARTIFACT_KIND_NEWS_SELECTION,
+            model=NewsSelectionArtifactData,
+        ),
+        news_article_port=TypedArtifactPort(
+            manager=artifact_manager,
+            kind=ARTIFACT_KIND_NEWS_ARTICLE,
+            model=NewsArticleArtifactData,
+        ),
+        news_items_port=TypedArtifactPort(
+            manager=artifact_manager,
+            kind=ARTIFACT_KIND_NEWS_ITEMS_LIST,
+            model=NewsItemsListArtifactData,
+        ),
+        news_report_port=TypedArtifactPort(
+            manager=artifact_manager,
+            kind=ARTIFACT_KIND_NEWS_ANALYSIS_REPORT,
+            model=NewsArtifactModel,
+        ),
+    )
+
+
+__all__ = ["NewsArtifactRepository", "build_default_news_artifact_repository"]

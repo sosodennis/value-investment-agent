@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.agents.news.domain.models import NewsAggregationResult
+from src.agents.news.domain.aggregation.contracts import NewsAggregationResult
 from src.shared.kernel.types import JSONObject
 
 

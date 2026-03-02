@@ -4,7 +4,9 @@ import os
 import time
 from dataclasses import dataclass
 
-from src.agents.news.data.clients.finbert_service import get_finbert_analyzer
+from src.agents.news.infrastructure.sentiment.finbert_sentiment_provider import (
+    get_finbert_analyzer,
+)
 
 _FINBERT_DIRECTION_ENABLED = os.getenv(
     "SEC_TEXT_FINBERT_DIRECTION_ENABLED", "1"

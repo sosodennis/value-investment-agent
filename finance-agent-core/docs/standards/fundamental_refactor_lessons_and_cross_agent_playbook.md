@@ -39,6 +39,27 @@
 10. Preview projection owner 漂移
    - 症狀: `interface/mappers` 反向依賴 `application/view_models.py`。
    - 做法: preview projection 統一放在 `interface/preview_projection_service.py`，再交由 formatter 輸出。
+11. Repository 混入 projection/聚合責任
+   - 症狀: repository adapter 同時做 artifact I/O 與 domain entity projection。
+   - 做法: repository 只負責 save/load；projection/aggregation 回到 application/domain owner service。
+12. Workflow state boundary 型別誤收斂
+   - 症狀: 為消除 `object` 而把 LangGraph 異質 state 邊界過度抽象，反而增加認知負擔。
+   - 做法: 保留 `Mapping[str, object]` 在 workflow entry；在 `state_readers` 立即正規化為 typed 值，避免 raw state 向內層擴散。
+13. Async use-case 中的同步外部呼叫阻塞
+   - 症狀: 在 `async` 流程內直接 `invoke()` / sync SDK call，導致 event loop 被阻塞、整體延遲放大。
+   - 做法: 優先使用 async API；若上游僅提供 sync API，邊界層使用 `asyncio.to_thread(...)` 包裝。
+14. Degraded 流程可觀測性不足
+   - 症狀: 只看到 `is_degraded=true`，但不知道在哪個階段、因何降級、影響範圍多大。
+   - 做法: 對 degraded path 補 dedicated structured warning log，固定帶 `error_code`、`degrade_source`、`fallback_mode`、`input/output_count`。
+15. Artifact 缺失被靜默視為空資料
+   - 症狀: repository 在 artifact 缺失時回傳 `[]/{}/\"\"`，造成流程「偽成功」並掩蓋 root cause。
+   - 做法: repository/read-boundary 必須顯式拋出 not-found failure；由 use-case 明確決定 terminal/degraded。
+16. 高頻 async provider 每次請求都新建 client/session
+   - 症狀: 每篇/每次呼叫都建立 `AsyncClient`（或同類 session），延遲與資源開銷偏高。
+   - 做法: provider 層重用 client/session，並提供顯式 close hook 於應用 shutdown 清理。
+17. Provider 失敗語義只有 `None`
+   - 症狀: 外部請求失敗只回傳 `None`，use-case 無法區分原因與影響，容易出現「狀態健康但品質下降」。
+   - 做法: provider 回傳 typed failure payload（如 failure_code/http_status/reason）；use-case 依此計算 degraded 指標與錯誤摘要。
 
 ## 2. 標準重構切片流程（每批固定）
 

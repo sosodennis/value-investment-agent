@@ -21,6 +21,7 @@ ENV HF_BAKED_CACHE=/opt/hf-cache-baked
 ENV HF_HOME=/opt/hf-cache
 ENV HF_HUB_CACHE=/opt/hf-cache/hub
 ENV SENTENCE_TRANSFORMERS_HOME=/opt/hf-cache/hub
+ENV FASTEMBED_CACHE_PATH=/opt/hf-cache/hub
 
 # Copy dependency files
 COPY pyproject.toml uv.lock ./
@@ -46,6 +47,7 @@ model_repos = [
     "project-aps/finbert-finetune",
     "yiyanghkust/finbert-fls",
     "sentence-transformers/all-MiniLM-L6-v2",
+    "qdrant/all-MiniLM-L6-v2-onnx",
 ]
 
 for repo_id in model_repos:

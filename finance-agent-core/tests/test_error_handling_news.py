@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from src.agents.news.wiring import get_news_workflow_runner
 from src.workflow.nodes.financial_news_research.nodes import (
     aggregator_node,
     analyst_node,
@@ -20,9 +21,7 @@ async def test_search_node_error_log():
         "error_logs": [],
     }
 
-    with patch(
-        "src.agents.news.application.factory.news_search_multi_timeframe"
-    ) as mock_search:
+    with patch("src.agents.news.wiring.news_search_multi_timeframe") as mock_search:
         mock_search.side_effect = Exception("Search API Error")
 
         command = await search_node(state)
@@ -45,21 +44,25 @@ async def test_selector_node_error_log():
         "src.services.artifact_manager.artifact_manager.get_artifact_data"
     ) as mock_get:
         mock_get.return_value = {"raw_results": [], "formatted_results": ""}
+        with patch(
+            "src.services.artifact_manager.artifact_manager.save_artifact",
+            new=AsyncMock(return_value="selection-artifact-1"),
+        ):
+            with patch("src.agents.news.wiring.get_llm") as mock_llm:
+                # Simulate LLM failure
+                mock_chain = MagicMock()
+                mock_chain.invoke.side_effect = Exception("LLM Timeout")
+                mock_llm.return_value = mock_chain
 
-        with patch("src.agents.news.application.factory.get_llm") as mock_llm:
-            # Simulate LLM failure
-            mock_chain = MagicMock()
-            mock_chain.invoke.side_effect = Exception("LLM Timeout")
-            mock_llm.return_value = mock_chain
+                command = await selector_node(state)
 
-            command = await selector_node(state)
-
-            assert (
-                command.update["node_statuses"]["financial_news_research"] == "degraded"
-            )
-            assert "error_logs" in command.update
-            assert "Selection failed" in command.update["error_logs"][0]["error"]
-            assert command.goto == "fetch_node"
+                assert (
+                    command.update["node_statuses"]["financial_news_research"]
+                    == "degraded"
+                )
+                assert "error_logs" in command.update
+                assert "Selection failed" in command.update["error_logs"][0]["error"]
+                assert command.goto == "fetch_node"
 
 
 @pytest.mark.asyncio
@@ -80,13 +83,13 @@ async def test_fetch_node_error_log():
 
         command = await fetch_node(state)
 
-        assert command.update["node_statuses"]["financial_news_research"] == "degraded"
+        assert command.update["node_statuses"]["financial_news_research"] == "error"
         # The error message comes from the new catch block
         assert (
             "Failed to retrieve search/selection artifacts"
             in command.update["error_logs"][0]["error"]
         )
-        assert command.goto == "analyst_node"
+        assert command.goto == "__end__"
 
 
 @pytest.mark.asyncio
@@ -98,17 +101,30 @@ async def test_analyst_node_error_log():
 
     async def mock_get_artifact_data(_artifact_id, expected_kind=None):
         if expected_kind == "news_items_list":
-            return {"news_items": [{"title": "T1", "link": "L1"}]}
+            return {
+                "news_items": [
+                    {
+                        "id": "n1",
+                        "url": "https://example.com/news/1",
+                        "title": "T1",
+                        "snippet": "S1",
+                        "source": {
+                            "name": "Reuters",
+                            "domain": "reuters.com",
+                            "reliability_score": 0.9,
+                        },
+                        "categories": ["general"],
+                    }
+                ]
+            }
         return None
 
     with patch(
         "src.services.artifact_manager.artifact_manager.get_artifact_data",
         side_effect=mock_get_artifact_data,
     ):
-        with patch("src.agents.news.application.factory.get_llm") as mock_llm:
-            with patch(
-                "src.agents.news.application.factory.get_finbert_analyzer"
-            ) as mock_finbert:
+        with patch("src.agents.news.wiring.get_llm") as mock_llm:
+            with patch("src.agents.news.wiring.get_finbert_analyzer") as mock_finbert:
                 # Ensure finbert doesn't crash test
                 mock_finbert.return_value.is_available.return_value = False
 
@@ -144,8 +160,9 @@ async def test_aggregator_node_payload_build_failure_returns_error_update() -> N
     }
 
     with (
-        patch(
-            "src.agents.news.application.factory.news_workflow_runner.orchestrator.port.load_news_items_data",
+        patch.object(
+            get_news_workflow_runner().orchestrator.port,
+            "load_news_items_data",
             new=AsyncMock(
                 return_value=[
                     {
@@ -163,7 +180,7 @@ async def test_aggregator_node_payload_build_failure_returns_error_update() -> N
             ),
         ),
         patch(
-            "src.agents.news.application.orchestrator.parse_news_artifact_model",
+            "src.agents.news.application.use_cases.run_aggregator_node_use_case.parse_news_artifact_model",
             side_effect=RuntimeError("payload boom"),
         ),
     ):

@@ -1,5 +1,7 @@
-from src.agents.news.application.view_models import derive_news_preview_view_model
 from src.agents.news.interface.formatters import format_news_preview
+from src.agents.news.interface.preview_projection_service import (
+    derive_news_preview_view_model,
+)
 
 
 def test_derive_news_preview_view_model_extracts_canonical_fields() -> None:

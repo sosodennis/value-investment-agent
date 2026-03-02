@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from src.agents.news.domain.entities import AnalysisEntity, NewsItemEntity, SourceEntity
+from src.shared.kernel.types import JSONObject
 
 
 def _parse_source_entity(value: object) -> SourceEntity | None:
@@ -54,7 +55,7 @@ def to_news_item_entity(value: object) -> NewsItemEntity | None:
     )
 
 
-def to_news_item_entities(values: list[dict[str, object]]) -> list[NewsItemEntity]:
+def to_news_item_entities(values: list[JSONObject]) -> list[NewsItemEntity]:
     result: list[NewsItemEntity] = []
     for value in values:
         entity = to_news_item_entity(value)

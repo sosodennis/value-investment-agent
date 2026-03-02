@@ -36,6 +36,8 @@ seed_hf_cache() {
 
     export HF_HUB_CACHE="${HF_HUB_CACHE:-${runtime_cache}/hub}"
     export SENTENCE_TRANSFORMERS_HOME="${SENTENCE_TRANSFORMERS_HOME:-${HF_HUB_CACHE}}"
+    export FASTEMBED_CACHE_PATH="${FASTEMBED_CACHE_PATH:-${HF_HUB_CACHE}}"
+    mkdir -p "${FASTEMBED_CACHE_PATH}"
     # transformers v5 deprecates TRANSFORMERS_CACHE in favor of HF_HOME.
     unset TRANSFORMERS_CACHE
 }
