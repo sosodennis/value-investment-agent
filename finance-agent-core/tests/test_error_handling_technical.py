@@ -17,7 +17,7 @@ async def test_data_fetch_node_error():
     }
 
     with patch(
-        "src.agents.technical.application.factory.fetch_daily_ohlcv"
+        "src.agents.technical.infrastructure.market_data.yahoo_market_data_provider.YahooMarketDataProvider.fetch_daily_ohlcv"
     ) as mock_fetch:
         mock_fetch.side_effect = Exception("YF API Error")
 
@@ -57,9 +57,9 @@ async def test_fracdiff_compute_node_crash():
         }
 
         with patch(
-            "src.agents.technical.application.factory.calculate_rolling_fracdiff"
-        ) as mock_calc:
-            mock_calc.side_effect = Exception("Math Error")
+            "src.agents.technical.application.fracdiff_runtime_service.TechnicalFracdiffRuntimeService.compute"
+        ) as mock_compute:
+            mock_compute.side_effect = Exception("Math Error")
 
             command = await fracdiff_compute_node(state)
 
@@ -80,9 +80,7 @@ async def test_semantic_translate_node_error():
     }
 
     # Simulate Assembler Crash
-    with patch(
-        "src.agents.technical.application.factory.assemble_semantic_tags"
-    ) as mock_assemble:
+    with patch("src.agents.technical.wiring.assemble_semantic_tags") as mock_assemble:
         mock_assemble.side_effect = Exception("Assembler Crash")
 
         command = await semantic_translate_node(state)

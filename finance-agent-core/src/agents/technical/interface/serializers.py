@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from src.agents.technical.domain.services import (
+from src.agents.technical.domain.signal_policy import (
     derive_memory_strength,
     derive_statistical_state,
     safe_float,

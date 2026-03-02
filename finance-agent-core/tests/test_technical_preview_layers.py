@@ -1,9 +1,9 @@
-from src.agents.technical.application.view_models import derive_ta_preview_view_model
 from src.agents.technical.interface.formatters import format_ta_preview
+from src.agents.technical.interface.preview_projection_service import project_ta_preview
 
 
-def test_derive_ta_preview_view_model_computes_zscore_state() -> None:
-    view_model = derive_ta_preview_view_model(
+def test_project_ta_preview_computes_zscore_state() -> None:
+    projection = project_ta_preview(
         {
             "ticker": "GME",
             "latest_price": 23.4,
@@ -13,9 +13,9 @@ def test_derive_ta_preview_view_model_computes_zscore_state() -> None:
             "statistical_strength": 71,
         }
     )
-    assert view_model["ticker"] == "GME"
-    assert view_model["z_score"] == 2.2
-    assert view_model["z_score_state"] == "Anomaly"
+    assert projection["ticker"] == "GME"
+    assert projection["z_score"] == 2.2
+    assert projection["z_score_state"] == "Anomaly"
 
 
 def test_format_ta_preview_formats_display_fields() -> None:

@@ -8,7 +8,7 @@ import pandas as pd
 
 def test_find_optimal_d_returns_valid_range():
     """Test that optimal d value is between 0 and 1."""
-    from src.agents.technical.data.tools import find_optimal_d
+    from src.agents.technical.domain.fracdiff import find_optimal_d
 
     # Create synthetic price series with trend
     np.random.seed(42)
@@ -24,7 +24,7 @@ def test_find_optimal_d_returns_valid_range():
 
 def test_apply_fracdiff_preserves_structure():
     """Test that FracDiff output has expected structure."""
-    from src.agents.technical.data.tools import frac_diff_ffd
+    from src.agents.technical.domain.fracdiff import frac_diff_ffd
 
     # Create synthetic price series
     np.random.seed(42)
@@ -39,7 +39,7 @@ def test_apply_fracdiff_preserves_structure():
 
 def test_compute_z_score():
     """Test Z-score computation."""
-    from src.agents.technical.data.tools import compute_z_score
+    from src.agents.technical.domain.fracdiff import compute_z_score
 
     # Create synthetic FracDiff series
     np.random.seed(42)
@@ -54,10 +54,10 @@ def test_compute_z_score():
 
 def test_semantic_tags_mapping():
     """Test that semantic tags are correctly mapped based on thresholds."""
-    from src.agents.technical.domain.policies import assemble_semantic_tags
-    from src.agents.technical.domain.report_contracts import (
+    from src.agents.technical.domain.signal_policy import (
         SemanticConfluenceInput,
         SemanticTagPolicyInput,
+        assemble_semantic_tags,
     )
 
     dummy_confluence = SemanticConfluenceInput(

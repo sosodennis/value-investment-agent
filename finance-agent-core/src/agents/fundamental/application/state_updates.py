@@ -7,6 +7,7 @@ def build_financial_health_missing_ticker_update() -> JSONObject:
     return {
         "current_node": "financial_health",
         "internal_progress": {"financial_health": "error"},
+        "node_statuses": {"fundamental_analysis": "error"},
         "error_logs": [
             {
                 "node": "financial_health",
@@ -45,6 +46,7 @@ def build_model_selection_waiting_update() -> JSONObject:
         "fundamental_analysis": {"status": "clarifying"},
         "current_node": "model_selection",
         "internal_progress": {"model_selection": "waiting"},
+        "node_statuses": {"fundamental_analysis": "running"},
     }
 
 
@@ -69,6 +71,7 @@ def build_model_selection_success_update(
 
 def build_node_error_update(*, node: str, error: str) -> JSONObject:
     return {
+        "current_node": node,
         "error_logs": [
             {
                 "node": node,

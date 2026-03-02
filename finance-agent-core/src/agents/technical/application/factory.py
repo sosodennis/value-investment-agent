@@ -1,30 +1,23 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 from src.agents.technical.application.orchestrator import (
     TechnicalNodeResult,
     TechnicalOrchestrator,
 )
-from src.agents.technical.data.ports import technical_artifact_port
-from src.agents.technical.data.tools import (
-    CombinedBacktester,
-    WalkForwardOptimizer,
-    calculate_fd_bollinger,
-    calculate_fd_macd,
-    calculate_fd_obv,
-    calculate_rolling_fracdiff,
-    calculate_rolling_z_score,
-    calculate_statistical_strength,
-    compute_z_score,
-    fetch_daily_ohlcv,
-    fetch_risk_free_series,
-    format_backtest_for_llm,
-    format_wfa_for_llm,
-    generate_interpretation,
+from src.agents.technical.application.ports import (
+    ITechnicalArtifactRepository,
+    ITechnicalBacktestRuntime,
+    ITechnicalFracdiffRuntime,
+    ITechnicalInterpretationProvider,
+    ITechnicalMarketDataProvider,
 )
-from src.agents.technical.domain.policies import assemble_semantic_tags
+from src.agents.technical.domain.signal_policy import (
+    SemanticTagPolicyInput,
+    SemanticTagPolicyResult,
+)
 from src.agents.technical.interface.mappers import summarize_ta_for_preview
 from src.agents.technical.interface.serializers import build_full_report_payload
 from src.interface.events.schemas import ArtifactReference, build_artifact_payload
@@ -32,6 +25,7 @@ from src.shared.kernel.contracts import (
     ARTIFACT_KIND_TA_FULL_REPORT,
     OUTPUT_KIND_TECHNICAL_ANALYSIS,
 )
+from src.shared.kernel.types import JSONObject
 
 
 def _build_progress_artifact(
@@ -60,9 +54,11 @@ def _build_semantic_output_artifact(
     )
 
 
-def build_technical_orchestrator() -> TechnicalOrchestrator:
+def build_technical_orchestrator(
+    *, port: ITechnicalArtifactRepository
+) -> TechnicalOrchestrator:
     return TechnicalOrchestrator(
-        port=technical_artifact_port,
+        port=port,
         summarize_preview=summarize_ta_for_preview,
         build_progress_artifact=_build_progress_artifact,
         build_semantic_output_artifact=_build_semantic_output_artifact,
@@ -70,13 +66,26 @@ def build_technical_orchestrator() -> TechnicalOrchestrator:
 
 
 @dataclass(frozen=True)
+class TechnicalWorkflowDependencies:
+    market_data_provider: ITechnicalMarketDataProvider
+    interpretation_provider: ITechnicalInterpretationProvider
+    backtest_runtime: ITechnicalBacktestRuntime
+    fracdiff_runtime: ITechnicalFracdiffRuntime
+    assemble_semantic_tags_fn: Callable[
+        [SemanticTagPolicyInput], SemanticTagPolicyResult
+    ]
+    build_full_report_payload_fn: Callable[..., JSONObject] = build_full_report_payload
+
+
+@dataclass(frozen=True)
 class TechnicalWorkflowRunner:
     orchestrator: TechnicalOrchestrator
+    deps: TechnicalWorkflowDependencies
 
     async def run_data_fetch(self, state: Mapping[str, object]) -> TechnicalNodeResult:
         return await self.orchestrator.run_data_fetch(
             state,
-            fetch_daily_ohlcv_fn=lambda ticker: fetch_daily_ohlcv(ticker, period="5y"),
+            market_data_provider=self.deps.market_data_provider,
         )
 
     async def run_fracdiff_compute(
@@ -84,13 +93,7 @@ class TechnicalWorkflowRunner:
     ) -> TechnicalNodeResult:
         return await self.orchestrator.run_fracdiff_compute(
             state,
-            calculate_rolling_fracdiff_fn=calculate_rolling_fracdiff,
-            compute_z_score_fn=compute_z_score,
-            calculate_rolling_z_score_fn=calculate_rolling_z_score,
-            calculate_fd_bollinger_fn=calculate_fd_bollinger,
-            calculate_statistical_strength_fn=calculate_statistical_strength,
-            calculate_fd_macd_fn=calculate_fd_macd,
-            calculate_fd_obv_fn=calculate_fd_obv,
+            fracdiff_runtime=self.deps.fracdiff_runtime,
         )
 
     async def run_semantic_translate(
@@ -98,22 +101,18 @@ class TechnicalWorkflowRunner:
     ) -> TechnicalNodeResult:
         return await self.orchestrator.run_semantic_translate(
             state,
-            assemble_fn=assemble_semantic_tags,
-            build_full_report_payload_fn=build_full_report_payload,
-            generate_interpretation_fn=generate_interpretation,
-            calculate_statistical_strength_fn=calculate_statistical_strength,
-            calculate_fd_bollinger_fn=calculate_fd_bollinger,
-            calculate_fd_obv_fn=calculate_fd_obv,
-            fetch_risk_free_series_fn=fetch_risk_free_series,
-            backtester_factory=CombinedBacktester,
-            format_backtest_for_llm_fn=format_backtest_for_llm,
-            wfa_optimizer_factory=WalkForwardOptimizer,
-            format_wfa_for_llm_fn=format_wfa_for_llm,
+            assemble_fn=self.deps.assemble_semantic_tags_fn,
+            build_full_report_payload_fn=self.deps.build_full_report_payload_fn,
+            fracdiff_runtime=self.deps.fracdiff_runtime,
+            market_data_provider=self.deps.market_data_provider,
+            interpretation_provider=self.deps.interpretation_provider,
+            backtest_runtime=self.deps.backtest_runtime,
         )
 
 
-def build_technical_workflow_runner() -> TechnicalWorkflowRunner:
-    return TechnicalWorkflowRunner(orchestrator=build_technical_orchestrator())
-
-
-technical_workflow_runner = build_technical_workflow_runner()
+def build_technical_workflow_runner(
+    *,
+    orchestrator: TechnicalOrchestrator,
+    deps: TechnicalWorkflowDependencies,
+) -> TechnicalWorkflowRunner:
+    return TechnicalWorkflowRunner(orchestrator=orchestrator, deps=deps)

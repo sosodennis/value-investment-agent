@@ -5,8 +5,10 @@ import time
 from collections.abc import Callable
 from typing import Protocol
 
-from src.agents.technical.application.semantic_service import (
+from src.agents.technical.application.semantic_pipeline_contracts import (
     SemanticPipelineResult,
+)
+from src.agents.technical.application.semantic_policy_input_service import (
     semantic_tags_to_dict,
 )
 from src.shared.kernel.tools.logger import get_logger, log_event
@@ -18,7 +20,7 @@ logger = get_logger(__name__)
 class _TechnicalReportPort(Protocol):
     async def save_full_report_canonical(
         self,
-        data: object,
+        data: JSONObject,
         *,
         produced_by: str,
         key_prefix: str | None = None,

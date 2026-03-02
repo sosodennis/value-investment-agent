@@ -1,11 +1,11 @@
-from src.agents.fundamental.application.view_models import (
-    derive_fundamental_preview_view_model,
-)
 from src.agents.fundamental.interface.formatters import format_fundamental_preview
+from src.agents.fundamental.interface.preview_projection_service import (
+    project_fundamental_preview,
+)
 
 
-def test_derive_fundamental_preview_view_model_extracts_metrics() -> None:
-    view_model = derive_fundamental_preview_view_model(
+def test_project_fundamental_preview_extracts_metrics() -> None:
+    projection = project_fundamental_preview(
         {
             "ticker": "TSLA",
             "model_type": "saas",
@@ -29,19 +29,19 @@ def test_derive_fundamental_preview_view_model_extracts_metrics() -> None:
             }
         ],
     )
-    metrics = view_model["metrics"]
+    metrics = projection["metrics"]
     assert metrics["revenue_raw"] == 100000000000
     assert metrics["net_income_raw"] == 15000000000
     assert metrics["total_assets_raw"] == 200000000000
     assert metrics["roe_ratio"] == 0.3
-    assert view_model["assumption_breakdown"]["total_assumptions"] == 2
-    assert view_model["data_freshness"]["market_data"]["provider"] == "yfinance"
-    assert view_model["assumption_risk_level"] == "medium"
-    assert view_model["data_quality_flags"] == ["defaults_present"]
-    assert view_model["time_alignment_status"] == "ok"
-    assert view_model["forward_signal_summary"]["signals_total"] == 2
-    assert view_model["forward_signal_risk_level"] == "medium"
-    assert view_model["forward_signal_evidence_count"] == 3
+    assert projection["assumption_breakdown"]["total_assumptions"] == 2
+    assert projection["data_freshness"]["market_data"]["provider"] == "yfinance"
+    assert projection["assumption_risk_level"] == "medium"
+    assert projection["data_quality_flags"] == ["defaults_present"]
+    assert projection["time_alignment_status"] == "ok"
+    assert projection["forward_signal_summary"]["signals_total"] == 2
+    assert projection["forward_signal_risk_level"] == "medium"
+    assert projection["forward_signal_evidence_count"] == 3
 
 
 def test_format_fundamental_preview_formats_currency_and_roe() -> None:

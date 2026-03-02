@@ -96,6 +96,7 @@ def build_fracdiff_success_update(
             "fracdiff_compute": "done",
             "semantic_translate": "running",
         },
+        "node_statuses": {"technical_analysis": "running"},
     }
 
 
