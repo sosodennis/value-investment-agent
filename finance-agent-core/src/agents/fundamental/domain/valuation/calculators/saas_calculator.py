@@ -152,15 +152,22 @@ def _run_saas_monte_carlo(
 
         batch_size = growth_shock.shape[0]
 
+        growth_base = base_growth_rates[np.newaxis, :]
+        margin_base = base_operating_margins[np.newaxis, :]
+        growth_lower = growth_base - 0.30
+        growth_upper = growth_base + 0.30
+        margin_lower = margin_base - 0.20
+        margin_upper = margin_base + 0.20
+
         growth_rates = np.clip(
-            base_growth_rates[np.newaxis, :] + growth_shock[:, np.newaxis],
-            -0.80,
-            1.50,
+            growth_base + growth_shock[:, np.newaxis],
+            growth_lower,
+            growth_upper,
         )
         operating_margins = np.clip(
-            base_operating_margins[np.newaxis, :] + margin_shock[:, np.newaxis],
-            -0.50,
-            0.70,
+            margin_base + margin_shock[:, np.newaxis],
+            margin_lower,
+            margin_upper,
         )
 
         projected_revenue = np.empty((batch_size, projection_years), dtype=float)
@@ -193,16 +200,26 @@ def _run_saas_monte_carlo(
         equity_value = enterprise_value + cash - total_debt - preferred_stock
         return equity_value / shares_outstanding
 
+    base_case_inputs = {
+        key: np.asarray([value], dtype=float)
+        for key, value in base_numeric_inputs.items()
+    }
+    base_case_intrinsic = float(
+        batch_evaluate(base_case_inputs, base_numeric_inputs)[0]
+    )
+
     result = engine.run(
         base_inputs=base_numeric_inputs,
         distributions=distributions,
         batch_evaluator=batch_evaluate,
         correlation_groups=correlation_groups,
     )
+    diagnostics = dict(result.diagnostics)
+    diagnostics["base_case_intrinsic_value"] = base_case_intrinsic
     return {
         "metric_type": "intrinsic_value_per_share",
         "summary": result.summary,
-        "diagnostics": result.diagnostics,
+        "diagnostics": diagnostics,
     }
 
 

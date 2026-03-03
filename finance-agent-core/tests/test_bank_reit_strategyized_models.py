@@ -133,6 +133,40 @@ def test_bank_valuation_monte_carlo_handles_traceable_growth_inputs() -> None:
     assert isinstance(distribution, dict)
 
 
+def test_bank_monte_carlo_base_case_matches_point_intrinsic() -> None:
+    params = BankParams(
+        ticker="BNK",
+        rationale="test",
+        initial_net_income=100.0,
+        income_growth_rates=[0.05, 0.05, 0.05],
+        rwa_intensity=0.05,
+        tier1_target_ratio=0.12,
+        initial_capital=200.0,
+        risk_free_rate=0.04,
+        beta=1.1,
+        market_risk_premium=0.05,
+        cost_of_equity_strategy="capm",
+        terminal_growth=0.02,
+        shares_outstanding=100.0,
+        monte_carlo_iterations=300,
+        monte_carlo_seed=123,
+    )
+    result = calculate_bank_valuation(params)
+    assert "error" not in result
+    point_intrinsic = result.get("intrinsic_value")
+    assert isinstance(point_intrinsic, float)
+
+    details = result["details"]
+    assert isinstance(details, dict)
+    distribution = details.get("distribution_summary")
+    assert isinstance(distribution, dict)
+    diagnostics = distribution.get("diagnostics")
+    assert isinstance(diagnostics, dict)
+    base_case_intrinsic = diagnostics.get("base_case_intrinsic_value")
+    assert isinstance(base_case_intrinsic, float)
+    assert point_intrinsic == pytest.approx(base_case_intrinsic, rel=1e-9, abs=1e-9)
+
+
 def test_bank_valuation_fails_closed_for_invalid_inputs() -> None:
     params = BankParams(
         ticker="BNK",
@@ -205,3 +239,35 @@ def test_reit_valuation_includes_distribution_summary_when_mc_enabled() -> None:
     assert "percentile_5" in summary
     assert "median" in summary
     assert "percentile_95" in summary
+
+
+def test_reit_monte_carlo_base_case_matches_point_intrinsic() -> None:
+    params = ReitFfoParams(
+        ticker="REIT",
+        rationale="test",
+        ffo=100.0,
+        ffo_multiple=10.0,
+        depreciation_and_amortization=20.0,
+        maintenance_capex_ratio=0.8,
+        cash=10.0,
+        total_debt=50.0,
+        preferred_stock=0.0,
+        shares_outstanding=10.0,
+        monte_carlo_iterations=300,
+        monte_carlo_seed=321,
+    )
+
+    result = calculate_reit_ffo_valuation(params)
+    assert "error" not in result
+    point_intrinsic = result.get("intrinsic_value")
+    assert isinstance(point_intrinsic, float)
+
+    details = result["details"]
+    assert isinstance(details, dict)
+    distribution = details.get("distribution_summary")
+    assert isinstance(distribution, dict)
+    diagnostics = distribution.get("diagnostics")
+    assert isinstance(diagnostics, dict)
+    base_case_intrinsic = diagnostics.get("base_case_intrinsic_value")
+    assert isinstance(base_case_intrinsic, float)
+    assert point_intrinsic == pytest.approx(base_case_intrinsic, rel=1e-9, abs=1e-9)

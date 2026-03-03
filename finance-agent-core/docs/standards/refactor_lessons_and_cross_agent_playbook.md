@@ -66,6 +66,12 @@
 19. Completion log 只覆蓋 happy path
    - 症狀: 有 `started` 但只有成功分支有 `completed`，early return / error 分支缺 completion summary，導致節點終態不可觀測。
    - 做法: 每個 terminal return path（success/waiting/error）都要打同一個 completion event，固定帶 `status`/`is_degraded`/`error_code`（若有）。
+20. Deterministic 與 Monte Carlo 基準案例不一致
+   - 症狀: point intrinsic 顯示上漲，但 distribution 顯示 current 已高於 P95（或反向矛盾）。
+   - 做法: MC evaluator 必須滿足「zero-shock base case = deterministic point」；任何裁剪/guard 都不能改變 base 值，並且記錄 `base_case_intrinsic_value` 供運行時核對。
+21. 估值方法論 gate 缺失（企業級可靠性）
+   - 症狀: 模型可跑但無法快速驗證是否滿足方法論一致性（cash-flow/discount-rate/terminal/scenario/reproducibility）。
+   - 做法: 每個估值模型至少具備 5 個 gate：`cash_flow_basis 明確`、`terminal r>g guard`、`discount-rate 與 cash-flow 口徑一致`、`風險以 scenario/distribution 表達`、`Monte Carlo 可重現且輸出 diagnostics`。
 
 ## 2. 標準重構切片流程（每批固定）
 

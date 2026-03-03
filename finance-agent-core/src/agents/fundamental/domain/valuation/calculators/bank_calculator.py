@@ -84,6 +84,8 @@ def _run_bank_monte_carlo(
     beta = float(base_inputs["beta"])
     market_risk_premium = float(base_inputs["market_risk_premium"])
     shares_outstanding = float(base_inputs["shares_outstanding"])
+    provision_rate_mean = float(params.provision_rate_mean)
+    provision_denominator = max(1.0 - provision_rate_mean, 1e-6)
     use_override = (
         params.cost_of_equity_strategy == "override"
         and params.cost_of_equity_override is not None
@@ -104,11 +106,15 @@ def _run_bank_monte_carlo(
 
         batch_size = provision_rate.shape[0]
 
-        adjusted_initial_income = initial_net_income * (1.0 - provision_rate)
+        provision_multiplier = (1.0 - provision_rate) / provision_denominator
+        adjusted_initial_income = initial_net_income * provision_multiplier
+        growth_base = base_growth_rates[np.newaxis, :]
+        growth_lower = growth_base - 0.30
+        growth_upper = growth_base + 0.30
         growth_rates = np.clip(
-            base_growth_rates[np.newaxis, :] + income_growth_shock[:, np.newaxis],
-            -0.80,
-            1.50,
+            growth_base + income_growth_shock[:, np.newaxis],
+            growth_lower,
+            growth_upper,
         )
         net_income = np.empty((batch_size, projection_years), dtype=float)
         income_level = adjusted_initial_income.copy()
@@ -142,16 +148,26 @@ def _run_bank_monte_carlo(
         equity_value = pv_dividends + pv_terminal
         return equity_value / shares_outstanding
 
+    base_case_inputs = {
+        key: np.asarray([value], dtype=float)
+        for key, value in base_numeric_inputs.items()
+    }
+    base_case_intrinsic = float(
+        batch_evaluate(base_case_inputs, base_numeric_inputs)[0]
+    )
+
     result = engine.run(
         base_inputs=base_numeric_inputs,
         distributions=distributions,
         batch_evaluator=batch_evaluate,
         correlation_groups=correlation_groups,
     )
+    diagnostics = dict(result.diagnostics)
+    diagnostics["base_case_intrinsic_value"] = base_case_intrinsic
     return {
         "metric_type": "intrinsic_value_per_share",
         "summary": result.summary,
-        "diagnostics": result.diagnostics,
+        "diagnostics": diagnostics,
     }
 
 

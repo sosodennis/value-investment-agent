@@ -97,6 +97,7 @@ def _run_reit_monte_carlo(
     total_debt = float(base_inputs["total_debt"])
     preferred_stock = float(base_inputs["preferred_stock"])
     shares_outstanding = float(base_inputs["shares_outstanding"])
+    occupancy_mode = max(float(params.occupancy_rate_mode), 1e-6)
 
     def batch_evaluate(
         sampled_batch: dict[str, np.ndarray],
@@ -105,12 +106,22 @@ def _run_reit_monte_carlo(
         occupancy_rate = np.asarray(sampled_batch["occupancy_rate"], dtype=float)
         cap_rate = np.asarray(sampled_batch["cap_rate"], dtype=float)
         cap_rate = np.maximum(cap_rate, 1e-6)
-        ffo = base_ffo * occupancy_rate
+        # Anchor Monte Carlo base case to deterministic valuation at occupancy mode.
+        occupancy_multiplier = occupancy_rate / occupancy_mode
+        ffo = base_ffo * occupancy_multiplier
         maintenance_capex = depreciation_and_amortization * maintenance_capex_ratio
         affo = ffo - maintenance_capex
         enterprise_value = affo / cap_rate
         equity_value = enterprise_value + cash - total_debt - preferred_stock
         return equity_value / shares_outstanding
+
+    base_case_inputs = {
+        key: np.asarray([value], dtype=float)
+        for key, value in base_numeric_inputs.items()
+    }
+    base_case_intrinsic = float(
+        batch_evaluate(base_case_inputs, base_numeric_inputs)[0]
+    )
 
     result = engine.run(
         base_inputs=base_numeric_inputs,
@@ -118,10 +129,12 @@ def _run_reit_monte_carlo(
         batch_evaluator=batch_evaluate,
         correlation_groups=correlation_groups,
     )
+    diagnostics = dict(result.diagnostics)
+    diagnostics["base_case_intrinsic_value"] = base_case_intrinsic
     return {
         "metric_type": "intrinsic_value_per_share",
         "summary": result.summary,
-        "diagnostics": result.diagnostics,
+        "diagnostics": diagnostics,
     }
 
 

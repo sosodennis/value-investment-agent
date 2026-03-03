@@ -8,6 +8,10 @@ from src.agents.fundamental.application.services.valuation_completion_fields_ser
     build_forward_signal_completion_fields,
     build_monte_carlo_completion_fields,
 )
+from src.agents.fundamental.application.services.valuation_distribution_preview_service import (
+    coerce_float,
+    extract_distribution_summary,
+)
 from src.agents.fundamental.application.services.valuation_execution_context_service import (
     resolve_valuation_execution_context,
 )
@@ -54,6 +58,194 @@ class ValuationRuntime(Protocol):
     ) -> JSONObject: ...
 
     def build_valuation_error_update(self, error: str) -> JSONObject: ...
+
+
+def _extract_numeric_metric(
+    calculation_metrics: Mapping[str, object], key: str
+) -> float | None:
+    direct = coerce_float(calculation_metrics.get(key))
+    if direct is not None:
+        return direct
+    details_raw = calculation_metrics.get("details")
+    if isinstance(details_raw, Mapping):
+        return coerce_float(details_raw.get(key))
+    return None
+
+
+def _extract_distribution_value_per_share(
+    *,
+    distribution_summary: Mapping[str, object] | None,
+    key: str,
+    shares_outstanding: float | None,
+) -> float | None:
+    if distribution_summary is None:
+        return None
+    summary_raw = distribution_summary.get("summary")
+    if not isinstance(summary_raw, Mapping):
+        return None
+    value = coerce_float(summary_raw.get(key))
+    if value is None:
+        return None
+    metric_type_raw = distribution_summary.get("metric_type")
+    metric_type = metric_type_raw if isinstance(metric_type_raw, str) else None
+    if metric_type in {"equity_value_total", "equity_value"}:
+        if shares_outstanding is None or shares_outstanding <= 0:
+            return None
+        return value / shares_outstanding
+    return value
+
+
+def _extract_distribution_diagnostic_per_share(
+    *,
+    distribution_summary: Mapping[str, object] | None,
+    key: str,
+    shares_outstanding: float | None,
+) -> float | None:
+    if distribution_summary is None:
+        return None
+    diagnostics_raw = distribution_summary.get("diagnostics")
+    if not isinstance(diagnostics_raw, Mapping):
+        return None
+    value = coerce_float(diagnostics_raw.get(key))
+    if value is None:
+        return None
+    metric_type_raw = distribution_summary.get("metric_type")
+    metric_type = metric_type_raw if isinstance(metric_type_raw, str) else None
+    if metric_type in {"equity_value_total", "equity_value"}:
+        if shares_outstanding is None or shares_outstanding <= 0:
+            return None
+        return value / shares_outstanding
+    return value
+
+
+def _build_valuation_metrics_snapshot_fields(
+    *,
+    params_dump: Mapping[str, object],
+    calculation_metrics: Mapping[str, object],
+) -> JSONObject:
+    fields: JSONObject = {}
+
+    point_intrinsic = _extract_numeric_metric(calculation_metrics, "intrinsic_value")
+    point_equity = _extract_numeric_metric(calculation_metrics, "equity_value")
+    point_upside = _extract_numeric_metric(calculation_metrics, "upside_potential")
+    current_price = coerce_float(params_dump.get("current_price"))
+    shares_outstanding = coerce_float(params_dump.get("shares_outstanding"))
+    distribution_summary = extract_distribution_summary(dict(calculation_metrics))
+
+    if point_intrinsic is not None:
+        fields["point_intrinsic_value"] = point_intrinsic
+    if point_equity is not None:
+        fields["point_equity_value"] = point_equity
+    if point_upside is not None:
+        fields["point_upside_potential"] = point_upside
+    if current_price is not None:
+        fields["current_price"] = current_price
+    if shares_outstanding is not None:
+        fields["shares_outstanding"] = shares_outstanding
+
+    distribution_metric_type: str | None = None
+    if isinstance(distribution_summary, Mapping):
+        metric_type_raw = distribution_summary.get("metric_type")
+        if isinstance(metric_type_raw, str) and metric_type_raw:
+            distribution_metric_type = metric_type_raw
+            fields["distribution_metric_type"] = metric_type_raw
+
+    p5 = _extract_distribution_value_per_share(
+        distribution_summary=distribution_summary,
+        key="percentile_5",
+        shares_outstanding=shares_outstanding,
+    )
+    p50 = _extract_distribution_value_per_share(
+        distribution_summary=distribution_summary,
+        key="median",
+        shares_outstanding=shares_outstanding,
+    )
+    p95 = _extract_distribution_value_per_share(
+        distribution_summary=distribution_summary,
+        key="percentile_95",
+        shares_outstanding=shares_outstanding,
+    )
+    if p5 is not None:
+        fields["distribution_p5_per_share"] = p5
+    if p50 is not None:
+        fields["distribution_p50_per_share"] = p50
+    if p95 is not None:
+        fields["distribution_p95_per_share"] = p95
+
+    base_case = _extract_distribution_diagnostic_per_share(
+        distribution_summary=distribution_summary,
+        key="base_case_intrinsic_value",
+        shares_outstanding=shares_outstanding,
+    )
+    if base_case is not None:
+        fields["distribution_base_case_per_share"] = base_case
+
+    if (
+        point_upside is None
+        and point_intrinsic is not None
+        and current_price is not None
+        and current_price > 0
+    ):
+        point_upside = (point_intrinsic - current_price) / current_price
+        fields["point_upside_potential"] = point_upside
+
+    if point_intrinsic is not None and current_price is not None and current_price > 0:
+        fields["point_vs_current_pct"] = (
+            point_intrinsic - current_price
+        ) / current_price
+
+    if current_price is not None and p95 is not None and p95 > 0:
+        fields["current_vs_p95_pct"] = (current_price - p95) / p95
+    if current_price is not None and p5 is not None and p5 > 0:
+        fields["current_vs_p5_pct"] = (current_price - p5) / p5
+    if point_intrinsic is not None and p50 is not None and p50 > 0:
+        fields["point_vs_p50_pct"] = (point_intrinsic - p50) / p50
+    if point_intrinsic is not None and base_case is not None and base_case > 0:
+        fields["point_vs_distribution_base_case_pct"] = (
+            point_intrinsic - base_case
+        ) / base_case
+
+    # Helps quickly reason about possible denominator mismatch around share class choices.
+    if point_equity is not None and point_intrinsic is not None and point_intrinsic > 0:
+        fields["implied_shares_from_point"] = point_equity / point_intrinsic
+
+    # Preserve metric type even when summary is missing so downstream triage is simpler.
+    if distribution_metric_type is None and isinstance(distribution_summary, Mapping):
+        fields["distribution_metric_type"] = "unknown"
+
+    return fields
+
+
+def _detect_valuation_metric_mismatch(
+    snapshot_fields: Mapping[str, object],
+) -> str | None:
+    point_upside = coerce_float(snapshot_fields.get("point_upside_potential"))
+    current_vs_p95 = coerce_float(snapshot_fields.get("current_vs_p95_pct"))
+    current_vs_p5 = coerce_float(snapshot_fields.get("current_vs_p5_pct"))
+    point_vs_p50 = coerce_float(snapshot_fields.get("point_vs_p50_pct"))
+    point_vs_mc_base = coerce_float(
+        snapshot_fields.get("point_vs_distribution_base_case_pct")
+    )
+
+    if (
+        point_upside is not None
+        and current_vs_p95 is not None
+        and point_upside > 0
+        and current_vs_p95 > 0
+    ):
+        return "point_upside_positive_but_current_above_p95"
+    if (
+        point_upside is not None
+        and current_vs_p5 is not None
+        and point_upside < 0
+        and current_vs_p5 < 0
+    ):
+        return "point_upside_negative_but_current_below_p5"
+    if point_vs_p50 is not None and abs(point_vs_p50) >= 0.5:
+        return "point_intrinsic_far_from_distribution_median"
+    if point_vs_mc_base is not None and abs(point_vs_mc_base) >= 0.05:
+        return "point_intrinsic_far_from_monte_carlo_base_case"
+    return None
 
 
 def _log_build_result_policy_events(
@@ -211,6 +403,42 @@ async def run_valuation_use_case(
             raise RuntimeError(
                 "valuation calculation result is missing params_dump or metrics"
             )
+
+        valuation_snapshot_fields = _build_valuation_metrics_snapshot_fields(
+            params_dump=params_dump,
+            calculation_metrics=calculation_metrics,
+        )
+        if valuation_snapshot_fields:
+            log_event(
+                logger,
+                event="fundamental_valuation_metrics_snapshot",
+                message="fundamental valuation metrics snapshot recorded",
+                fields={
+                    "ticker": ticker,
+                    "model_type": model_type,
+                    **valuation_snapshot_fields,
+                },
+            )
+            mismatch_reason = _detect_valuation_metric_mismatch(
+                valuation_snapshot_fields
+            )
+            if mismatch_reason is not None:
+                log_event(
+                    logger,
+                    event="fundamental_valuation_metric_mismatch",
+                    message=(
+                        "point valuation and distribution metrics are materially "
+                        "inconsistent"
+                    ),
+                    level=logging.WARNING,
+                    error_code="FUNDAMENTAL_VALUATION_METRIC_MISMATCH",
+                    fields={
+                        "ticker": ticker,
+                        "model_type": model_type,
+                        "mismatch_reason": mismatch_reason,
+                        **valuation_snapshot_fields,
+                    },
+                )
 
         mc_completion_fields = build_monte_carlo_completion_fields(calculation_metrics)
         forward_signal_completion_fields = build_forward_signal_completion_fields(

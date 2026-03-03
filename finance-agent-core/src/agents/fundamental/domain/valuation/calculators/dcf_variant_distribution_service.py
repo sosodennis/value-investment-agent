@@ -111,19 +111,26 @@ def run_dcf_variant_monte_carlo(
         margin_shock = np.asarray(sampled_batch["margin_shock"], dtype=float)
         wacc = np.asarray(sampled_batch["wacc"], dtype=float)
         sampled_terminal = np.asarray(sampled_batch["terminal_growth"], dtype=float)
-        terminal_growth = np.minimum(sampled_terminal, wacc - 0.002)
+        terminal_growth = np.minimum(sampled_terminal, wacc - 0.005)
 
         batch_size = growth_shock.shape[0]
 
+        growth_base = base_growth[np.newaxis, :]
+        margin_base = base_margin[np.newaxis, :]
+        growth_lower = growth_base + policy.growth_clip_min
+        growth_upper = growth_base + policy.growth_clip_max
+        margin_lower = margin_base + policy.margin_clip_min
+        margin_upper = margin_base + policy.margin_clip_max
+
         growth_rates = np.clip(
-            base_growth[np.newaxis, :] + growth_shock[:, np.newaxis],
-            policy.growth_clip_min,
-            policy.growth_clip_max,
+            growth_base + growth_shock[:, np.newaxis],
+            growth_lower,
+            growth_upper,
         )
         margins = np.clip(
-            base_margin[np.newaxis, :] + margin_shock[:, np.newaxis],
-            policy.margin_clip_min,
-            policy.margin_clip_max,
+            margin_base + margin_shock[:, np.newaxis],
+            margin_lower,
+            margin_upper,
         )
 
         projected_revenue = np.empty((batch_size, years), dtype=float)
@@ -155,14 +162,24 @@ def run_dcf_variant_monte_carlo(
         equity_value = enterprise_value + cash - total_debt - preferred_stock
         return equity_value / shares_outstanding
 
+    base_case_inputs = {
+        key: np.asarray([value], dtype=float)
+        for key, value in base_numeric_inputs.items()
+    }
+    base_case_intrinsic = float(
+        batch_evaluate(base_case_inputs, base_numeric_inputs)[0]
+    )
+
     result = engine.run(
         base_inputs=base_numeric_inputs,
         distributions=distributions,
         batch_evaluator=batch_evaluate,
         correlation_groups=correlation_groups,
     )
+    diagnostics = dict(result.diagnostics)
+    diagnostics["base_case_intrinsic_value"] = base_case_intrinsic
     return {
         "metric_type": "intrinsic_value_per_share",
         "summary": result.summary,
-        "diagnostics": result.diagnostics,
+        "diagnostics": diagnostics,
     }

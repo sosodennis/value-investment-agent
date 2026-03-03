@@ -107,3 +107,27 @@ def test_dcf_growth_includes_monte_carlo_distribution() -> None:
     assert isinstance(diagnostics, dict)
     assert diagnostics.get("sampler_type") == "pseudo"
     assert diagnostics.get("batch_evaluator_used") is True
+
+
+def test_dcf_growth_monte_carlo_base_case_matches_point_intrinsic() -> None:
+    params = DCFGrowthParams(
+        **_base_kwargs(),
+        monte_carlo_iterations=128,
+        monte_carlo_seed=23,
+        monte_carlo_sampler="pseudo",
+    )
+    result = calculate_dcf_growth_valuation(params)
+
+    assert "error" not in result
+    point_intrinsic = result.get("intrinsic_value")
+    assert isinstance(point_intrinsic, float)
+
+    details = result["details"]
+    assert isinstance(details, dict)
+    distribution = details.get("distribution_summary")
+    assert isinstance(distribution, dict)
+    diagnostics = distribution.get("diagnostics")
+    assert isinstance(diagnostics, dict)
+    base_case_intrinsic = diagnostics.get("base_case_intrinsic_value")
+    assert isinstance(base_case_intrinsic, float)
+    assert point_intrinsic == pytest.approx(base_case_intrinsic, rel=1e-9, abs=1e-9)
