@@ -1,0 +1,4 @@
+interface:
+  display_name: "Architecture Modification Planner"
+  short_description: "Plan architecture-safe refactors with risk controls"
+  default_prompt: "Use $architecture-modification-planner to produce a no-code, file-by-file refactor plan from requirements and review findings."

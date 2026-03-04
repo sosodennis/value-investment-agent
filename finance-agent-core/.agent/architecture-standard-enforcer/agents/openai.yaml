@@ -1,0 +1,4 @@
+interface:
+  display_name: "Architecture Standard Enforcer"
+  short_description: "Enforce cross-agent architecture standards"
+  default_prompt: "Use $architecture-standard-enforcer to audit changed agent modules for standard compliance and report violations by rule section."

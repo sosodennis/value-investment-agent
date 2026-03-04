@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent Debug Review Playbook"
+  short_description: "Debug and review agent regressions systematically"
+  default_prompt: "Use $agent-debug-review-playbook to run a structured debug and review flow with severity-ranked findings and validation steps."
