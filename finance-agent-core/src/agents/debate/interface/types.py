@@ -39,6 +39,7 @@ SOURCE_TYPE_MAP: dict[str, str] = {
     "financials": "financials",
     "news": "news",
     "technicals": "technicals",
+    "valuation": "valuation",
 }
 
 SOURCE_WEIGHT_MAP: dict[str, str] = {
@@ -137,7 +138,7 @@ HistoryContent: TypeAlias = Annotated[
 
 EvidenceFactText: TypeAlias = Annotated[str, BeforeValidator(_parse_fact_text)]
 EvidenceSourceType: TypeAlias = Annotated[
-    Literal["financials", "news", "technicals"],
+    Literal["financials", "news", "technicals", "valuation"],
     BeforeValidator(_parse_source_type),
 ]
 EvidenceSourceWeight: TypeAlias = Annotated[

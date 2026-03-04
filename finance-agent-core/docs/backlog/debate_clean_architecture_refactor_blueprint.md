@@ -389,3 +389,196 @@ Recommended order:
 2. D3 as second large slice (runtime safety/perf).
 3. D4 + D5 as third combined slice (owner and observability convergence).
 4. D6 as final cleanup slice.
+
+---
+
+## D7 Enhancement Plan (Dual-Channel Grounding + Valuation Evidence)
+
+Date: 2026-03-04
+Status: Planned (ready for implementation)
+
+Status update (2026-03-04):
+1. D7-S1 completed (small, high-risk state contract slice):
+   - removed legacy single-channel `compressed_reports` path.
+   - introduced dual-channel internal state keys:
+     - `context_summary_text`
+     - `facts_registry_text`
+   - updated debate prompt runtime assembly to inject explicit dual placeholders:
+     - `{facts_registry}`
+     - `{context_summary}`
+2. D7-S2 completed (medium, valuation citeable evidence):
+   - added valuation fact extraction from `fundamental_analysis.artifact.preview`.
+   - extended debate evidence source contracts:
+     - domain `SourceType` includes `valuation`
+     - interface source-type parsing/literals include `valuation`
+     - citation validator supports `V###` tags.
+3. D7-S2b completed (medium, technical evidence depth):
+   - expanded technical facts from single signal point to layered evidence:
+     - signal + z-score
+     - fracdiff optimal_d
+     - memory strength
+     - confluence states (bollinger/macd/obv) when present.
+4. Validation (D7-S1/S2/S2b):
+   - `ruff check` passed on changed debate/workflow/tests paths.
+   - debate-targeted regression suite passed:
+     - `34 passed`.
+5. Compliance gate (D7-S1/S2/S2b):
+   - no remaining reads/writes to legacy `compressed_reports`.
+   - interface/domain/application boundaries unchanged and compliant for this slice.
+
+### Requirement Breakdown
+
+Objectives:
+1. Replace single overwritten `compressed_reports` channel with dual-channel debate context:
+   - `facts_registry_text` (strict citation registry)
+   - `context_summary_text` (compressed multi-source narrative summary)
+2. Make valuation outputs first-class citeable evidence in debate (not only implicit narrative context).
+3. Keep no-compatibility posture: remove legacy single-channel state key once migrated.
+
+Constraints:
+1. Follow `docs/standards` boundaries and naming contracts.
+2. Avoid over-design; prefer minimal additive contracts and deterministic migration.
+3. Keep citation/audit flow deterministic and machine-checkable.
+
+Non-goals:
+1. No redesign of bull/bear/moderator strategy semantics.
+2. No new microservice split or cross-process architecture changes.
+
+### Technical Objectives and Strategy
+
+1. Separate context channels by owner and purpose:
+   - facts registry for citation enforcement
+   - summary context for qualitative synthesis
+2. Keep all three debate input artifacts explicit and typed in source-reader boundary:
+   - Fundamental: `ARTIFACT_KIND_FINANCIAL_REPORTS`
+   - News: `ARTIFACT_KIND_NEWS_ANALYSIS_REPORT`
+   - Technical: `ARTIFACT_KIND_TA_FULL_REPORT`
+3. Add valuation evidence extraction from canonical fundamental context (`fundamental_analysis.artifact.preview`) in application/domain layer.
+4. Extend evidence contract once (typed + parser + validator) to support valuation evidence IDs.
+5. Migrate prompt spec placeholders to explicit two-channel injection and remove single `{reports}` dependency.
+
+### Involved Files
+
+Primary:
+1. `src/agents/debate/application/orchestrator.py`
+2. `src/agents/debate/application/debate_service.py`
+3. `src/agents/debate/application/debate_context.py`
+4. `src/agents/debate/application/report_service.py`
+5. `src/agents/debate/application/dto.py`
+6. `src/agents/debate/infrastructure/artifacts/debate_source_reader_repository.py`
+7. `src/agents/debate/domain/fact_builders.py`
+8. `src/agents/debate/domain/models.py`
+9. `src/agents/debate/domain/validators.py`
+10. `src/agents/debate/interface/prompt_specs.py`
+11. `src/agents/debate/interface/types.py`
+12. `src/agents/debate/interface/contracts.py`
+13. `src/agents/debate/interface/serializers.py`
+
+Directly affected artifact contracts:
+1. `src/agents/technical/interface/contracts.py` (if TA artifact parsing is tightened to model parse path)
+
+Boundary/state:
+1. `src/workflow/nodes/debate/subgraph_state.py`
+2. `src/workflow/state.py` (only if new cross-node field is persisted; otherwise keep changes local to subgraph state)
+
+Tests:
+1. `finance-agent-core/tests/test_debate_*` (prompt/runtime/facts/validators/orchestrator targets)
+
+### Detailed Per-File Plan
+
+#### D7-S1 (Large): Dual-Channel Context Contract
+
+Actions:
+1. Introduce two explicit internal state keys in debate subgraph:
+   - `facts_registry_text`
+   - `context_summary_text`
+2. Update `run_debate_aggregator` to write only `context_summary_text`.
+3. Update `run_fact_extractor` to write only `facts_registry_text` (no overwrite of summary channel).
+4. Update debate context reader and report service cache logic to consume the new keys and remove legacy `compressed_reports` route.
+5. Update bull/bear/moderator prompt assembly to inject both channels explicitly.
+
+Exit criteria:
+1. No write/read of legacy `compressed_reports`.
+2. Logs clearly indicate channel source (`cached/computed`) per channel.
+
+#### D7-S2 (Large): Valuation Evidence as Citeable Facts
+
+Actions:
+1. Add valuation fact extraction from canonical fundamental valuation preview (intrinsic value, upside/downside signal, distribution anchors, key diagnostics when present).
+2. Extend evidence typing/contracts to include valuation source:
+   - source type map and literals
+   - citation ID family extension (e.g., `V###`)
+3. Extend citation validator regex/compliance parsing to accept valuation fact IDs while preserving existing bull financial-citation minimum rule.
+4. Include valuation evidence in strict registry rendering and facts summary counts.
+5. Optionally include compact valuation block in narrative summary payload (if present) without duplicating full payload in state.
+
+Exit criteria:
+1. Debate transcript can cite valuation evidence IDs and pass validator.
+2. Facts artifact schema and parser accept valuation source type deterministically.
+
+#### D7-S2b (Large): Technical Evidence Depth + Artifact Parse Hardening
+
+Actions:
+1. Tighten technical artifact parsing in debate source reader to typed model boundary (instead of loose JSON-only parse), while keeping degraded handling semantics unchanged.
+2. Expand technical fact extraction beyond single signal fact:
+   - directional signal + z-score
+   - memory/fracdiff metrics (where present)
+   - confluence components (bollinger/macd/obv) as separate citeable facts when available
+3. Keep technical facts concise; avoid over-fragmentation and keep deterministic IDs/order.
+
+Exit criteria:
+1. Technical artifact read path is typed and contract-safe.
+2. Debate gets richer T-facts without changing technical agent output contract semantics.
+
+#### D7-S3 (Medium): Prompt/Observability Hardening
+
+Actions:
+1. Update prompt specs to show separate sections:
+   - `FACTS_REGISTRY (STRICT CITATION REQUIRED)`
+   - `CONTEXT SUMMARY (NON-CITABLE BACKGROUND)`
+2. Add structured logs for channel availability and size:
+   - `facts_registry_chars/hash`
+   - `context_summary_chars/hash`
+3. Keep degraded path machine-readable when either channel is unavailable.
+
+Exit criteria:
+1. Start/completion/degraded logs remain symmetric and bounded.
+2. Prompt input shape is stable and explicit.
+
+### Risk/Dependency Assessment
+
+Functional risks:
+1. Validator/prompt updates may temporarily reduce citation pass rate if ID patterns are partially migrated.
+2. Valuation preview fields are optional across models; extraction must remain tolerant and avoid false hard-fail.
+
+Migration risks:
+1. Single-key to dual-key migration can break rounds if one read path is missed.
+2. Contract changes (`source_type`, fact ID pattern) can break artifact parsing/tests if not updated atomically.
+
+Mitigation:
+1. Implement S1/S2 atomically in one branch with immediate test coverage updates.
+2. Keep fallback behavior explicit: missing valuation preview -> no valuation facts, not fatal.
+
+### Validation and Rollout Gates
+
+Mandatory:
+1. `ruff check` on changed debate/workflow/interface files.
+2. Debate-targeted pytest batch covering:
+   - dual-channel cache behavior (no overwrite)
+   - valuation fact generation and citation validation
+   - prompt renderer input contract
+   - orchestrator path (aggregator + fact extractor + one round)
+3. Runtime smoke with one full debate execution:
+   - verify both channels logged and present
+   - verify valuation evidence count in facts summary
+   - verify no legacy `compressed_reports` key writes
+
+### Assumptions/Open Questions
+
+Assumptions:
+1. Canonical valuation context remains `fundamental_analysis.artifact.preview`.
+2. Valuation evidence IDs will use a dedicated prefix (recommended: `V###`) for readability and auditability.
+
+Open questions (default decision pre-set):
+1. Whether valuation facts should count toward Bull’s “>=3 financial citations” requirement.
+   - Default: no, keep the financial (`F###`) minimum unchanged for discipline.

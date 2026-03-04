@@ -77,7 +77,8 @@ class DebateState(TypedDict):
     internal_progress: Annotated[dict[str, str], merge_dict]
     current_node: Annotated[str, last_value]
     node_statuses: Annotated[dict[str, str], merge_dict]
-    compressed_reports: Annotated[str | None, last_value]
+    context_summary_text: Annotated[str | None, last_value]
+    facts_registry_text: Annotated[str | None, last_value]
 
     # Fact Registry (Grounding)
     facts_artifact_id: Annotated[str | None, last_value]

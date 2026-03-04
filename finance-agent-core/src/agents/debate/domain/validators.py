@@ -11,7 +11,7 @@ class FactValidator:
     @staticmethod
     def extract_citations(text: str) -> list[str]:
         """Extracts all [Fact:ID] tags from text."""
-        return re.findall(r"\[Fact:[FNT]\d{3}\]", text)
+        return re.findall(r"\[Fact:[FNTV]\d{3}\]", text)
 
     @staticmethod
     def validate_citations(text: str, valid_facts: list[EvidenceFact]) -> dict:
@@ -44,7 +44,7 @@ class FactValidator:
         Bull: >= 3 Financial facts.
         Bear: >= 2 challenge points.
         """
-        cited_ids = re.findall(r"\[Fact:([FNT]\d{3})\]", text)
+        cited_ids = re.findall(r"\[Fact:([FNTV]\d{3})\]", text)
         financial_citations = [fid for fid in cited_ids if fid.startswith("F")]
 
         if role == "bull":

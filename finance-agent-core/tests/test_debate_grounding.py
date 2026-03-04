@@ -4,9 +4,12 @@ from src.shared.kernel.traceable import ManualProvenance
 
 
 def test_fact_extraction_regex():
-    text = "Revenue grew 20% [Fact:F001] and sentiment is positive [Fact:N005]."
+    text = (
+        "Revenue grew 20% [Fact:F001], sentiment is positive [Fact:N005], "
+        "and valuation upside is high [Fact:V003]."
+    )
     citations = FactValidator.extract_citations(text)
-    assert citations == ["[Fact:F001]", "[Fact:N005]"]
+    assert citations == ["[Fact:F001]", "[Fact:N005]", "[Fact:V003]"]
 
 
 def test_citation_validation():
@@ -25,13 +28,21 @@ def test_citation_validation():
             summary="N1",
             provenance=ManualProvenance(description="test"),
         ),
+        EvidenceFact(
+            fact_id="V003",
+            source_type="valuation",
+            source_weight="HIGH",
+            summary="V1",
+            provenance=ManualProvenance(description="test"),
+        ),
     ]
 
-    text = "Claim [Fact:F001] and invalid [Fact:F999]"
+    text = "Claim [Fact:F001] [Fact:V003] and invalid [Fact:F999]"
     results = FactValidator.validate_citations(text, valid_facts)
 
-    assert results["total_cited"] == 2
+    assert results["total_cited"] == 3
     assert "F001" in results["valid_citations"]
+    assert "V003" in results["valid_citations"]
     assert "F999" in results["invalid_citations"]
 
 

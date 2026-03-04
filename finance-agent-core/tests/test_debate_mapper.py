@@ -82,13 +82,23 @@ def test_build_final_report_payload_serializes_facts_and_history():
                 units="%",
                 period="2025",
                 provenance=ManualProvenance(description="Manual test fact"),
-            )
+            ),
+            EvidenceFact(
+                fact_id="V001",
+                source_type="valuation",
+                source_weight="MEDIUM",
+                summary="Intrinsic value estimate",
+                value=124.58,
+                units="USD/share",
+                provenance=ManualProvenance(description="Valuation test fact"),
+            ),
         ],
         history=[AIMessage(content="Bull argument", name="GrowthHunter")],
     )
 
     assert payload["final_verdict"] == "LONG"
     assert payload["facts"][0]["fact_id"] == "F001"
+    assert payload["facts"][1]["fact_id"] == "V001"
     assert payload["history"][0]["content"] == "Bull argument"
 
 

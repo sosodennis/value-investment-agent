@@ -43,6 +43,14 @@ def debate_context_from_state(state: Mapping[str, object]) -> Mapping[str, objec
     return debate
 
 
+def bull_thesis_from_state(state: Mapping[str, object]) -> str | None:
+    return _thesis_from_state(state, key="bull_thesis")
+
+
+def bear_thesis_from_state(state: Mapping[str, object]) -> str | None:
+    return _thesis_from_state(state, key="bear_thesis")
+
+
 def get_last_message_from_role(history: list[BaseMessage], role_name: str) -> str:
     """Extract the last message from a specific role with resilience handling."""
     if not history:
@@ -56,3 +64,11 @@ def get_last_message_from_role(history: list[BaseMessage], role_name: str) -> st
         ):
             return str(msg.content)
     return ""
+
+
+def _thesis_from_state(state: Mapping[str, object], *, key: str) -> str | None:
+    value = state.get(key)
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized or None

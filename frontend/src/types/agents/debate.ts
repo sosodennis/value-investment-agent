@@ -10,7 +10,7 @@ export interface DebateHistoryMessage {
 
 export interface EvidenceFact {
     fact_id: string;
-    source_type: 'financials' | 'news' | 'technicals';
+    source_type: 'financials' | 'news' | 'technicals' | 'valuation';
     source_weight: 'HIGH' | 'MEDIUM' | 'LOW';
     summary: string;
     value?: string | number;

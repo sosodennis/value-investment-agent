@@ -13,6 +13,7 @@ const FactItem = ({ fact }: { fact: EvidenceFact }) => {
             case 'financials': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25';
             case 'news': return 'bg-cyan-500/10 text-cyan-400 border-cyan-500/25';
             case 'technicals': return 'bg-amber-500/10 text-amber-400 border-amber-500/25';
+            case 'valuation': return 'bg-violet-500/10 text-violet-400 border-violet-500/25';
             default: return 'bg-slate-500/10 text-slate-400 border-slate-500/20';
         }
     };
@@ -22,6 +23,7 @@ const FactItem = ({ fact }: { fact: EvidenceFact }) => {
             case 'financials': return <Database className="w-2.5 h-2.5 text-current" />;
             case 'news': return <Newspaper className="w-2.5 h-2.5 text-current" />;
             case 'technicals': return <BarChart4 className="w-2.5 h-2.5 text-current" />;
+            case 'valuation': return <Database className="w-2.5 h-2.5 text-current" />;
             default: return <ShieldCheck className="w-2.5 h-2.5 text-current" />;
         }
     };
@@ -31,6 +33,7 @@ const FactItem = ({ fact }: { fact: EvidenceFact }) => {
             case 'financials': return <Database className="w-3 h-3 text-emerald-400" />;
             case 'news': return <Newspaper className="w-3 h-3 text-cyan-400" />;
             case 'technicals': return <BarChart4 className="w-3 h-3 text-amber-400" />;
+            case 'valuation': return <Database className="w-3 h-3 text-violet-400" />;
             default: return <ShieldCheck className="w-3 h-3 text-slate-400" />;
         }
     };
@@ -91,6 +94,7 @@ export const DebateFactSheet: React.FC<DebateFactSheetProps> = ({ facts }) => {
     const financials = facts.filter(f => f.source_type === 'financials');
     const news = facts.filter(f => f.source_type === 'news');
     const technicals = facts.filter(f => f.source_type === 'technicals');
+    const valuation = facts.filter(f => f.source_type === 'valuation');
 
     return (
         <div className="space-y-8 animate-fade-in py-6">
@@ -134,6 +138,18 @@ export const DebateFactSheet: React.FC<DebateFactSheetProps> = ({ facts }) => {
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {technicals.map(f => <FactItem key={f.fact_id} fact={f} />)}
+                    </div>
+                </div>
+            )}
+
+            {valuation.length > 0 && (
+                <div className="space-y-4">
+                    <div className="flex items-center gap-3 px-2">
+                        <Database className="w-4 h-4 text-violet-500/60" />
+                        <h4 className="text-[10px] font-black text-violet-500/80 uppercase tracking-widest">Valuation Signals</h4>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {valuation.map(f => <FactItem key={f.fact_id} fact={f} />)}
                     </div>
                 </div>
             )}

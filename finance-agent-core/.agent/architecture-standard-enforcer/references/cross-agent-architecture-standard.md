@@ -110,6 +110,9 @@ This is the canonical cross-agent architecture standard. Keep this file short an
 5. Artifact read semantics must distinguish `not_found` from `empty_payload`:
    - repository/read-boundary owners must not silently normalize missing artifact id/data to empty values (`[]`, `{}`, `""`).
    - missing artifact must surface as explicit failure so use-cases can decide terminal vs degraded behavior deterministically.
+6. State writer/reader ownership must align for runtime quality checks:
+   - if a use-case writes runtime fields (for example `bull_thesis`, `bear_thesis`) at one state path, readers/consumers must read the same canonical path.
+   - do not mix top-level and nested-context variants for the same semantic field without an explicit migration contract.
 
 ## 7. Refactor Migration Rules
 
@@ -138,6 +141,9 @@ This is the canonical cross-agent architecture standard. Keep this file short an
 6. Keep field naming consistent across agents:
    - prefer `*_count`, `is_degraded`, `error_code`, `node`, `ticker`, `artifact_id`.
 7. Exception text in logs should be bounded (truncated) to avoid oversized noisy events.
+8. For model/comparator quality checks (for example similarity/sycophancy), log input diagnostics:
+   - include bounded observability fields (for example `*_chars`, optional content hash) so false positives can be traced to input shape/path issues.
+   - never dump full raw text in hot-path logs.
 
 ## 9. Minimal PR Checklist
 
@@ -166,6 +172,7 @@ This is the canonical cross-agent architecture standard. Keep this file short an
 23. Is deterministic logic placed on the right owner (entity/value object vs domain service) per single-aggregate vs cross-entity rule?
 24. Any heavy compute path inside async use-cases still running directly on the event loop?
 25. For changed heavy-compute code, is the reproducible performance baseline/test updated and within threshold?
+26. For runtime quality checks, do state writer/reader paths align and do logs include comparator input diagnostics (`*_chars`/hash)?
 
 ## 10. Standard Update Policy
 

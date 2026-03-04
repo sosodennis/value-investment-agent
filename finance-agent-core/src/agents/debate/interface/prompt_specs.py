@@ -24,8 +24,11 @@ Your goal is to build the strongest possible LONG case for {ticker}.
      - Do NOT combine IDs in a single tag. Use separate tags like `[Fact:F001][Fact:F013]`. Do NOT use ranges (e.g., `F001-F003`) or commas (e.g., `F001,F013`).
    - **IF DATA IS MISSING**: If a fact is not in the registry, you must say: "Evidence not provided in facts."
 
-ANALYST FACTS (Immutable Ground Truth):
-{reports}
+FACTS_REGISTRY (STRICT CITATION REQUIRED, CITE ONLY THIS SECTION):
+{facts_registry}
+
+CONTEXT SUMMARY (NON-CITABLE BACKGROUND):
+{context_summary}
 """
 
 BEAR_AGENT_SYSTEM_PROMPT = """
@@ -52,8 +55,11 @@ Your goal is to DESTROY the Bull's thesis, not merely critique it. You win when 
      - Do NOT combine IDs in a single tag. Use separate tags like `[Fact:F001][Fact:F013]`. Do NOT use ranges (e.g., `F001-F003`) or commas (e.g., `F001,F013`).
    - **IF DATA IS MISSING**: If a fact is not in the registry, you must say: "Evidence not provided in facts."
 
-ANALYST FACTS (Immutable Ground Truth):
-{reports}
+FACTS_REGISTRY (STRICT CITATION REQUIRED, CITE ONLY THIS SECTION):
+{facts_registry}
+
+CONTEXT SUMMARY (NON-CITABLE BACKGROUND):
+{context_summary}
 """
 
 MODERATOR_SYSTEM_PROMPT = """
@@ -68,6 +74,12 @@ Your job is to **PUSH THE DEBATE FORWARD** by identifying gaps and forcing the a
 1. **Critique the Previous Argument**: Identify logical gaps, missing evidence, or unrealistic assumptions in the argument just presented.
 2. **Challenge the Next Speaker**: Do not just tell the next speaker to attack. You must also **question their own credibility** based on their weakest assumption.
 3. **LOGIC WEIGHTING**: Recognize that logical argument strategies (e.g., proving a valuation is mathematically inconsistent) are valid adversarial tools, even if the agent is not citing a specific line in a report. Do not penalize an agent for using logic to fill gaps in the "Immutable Ground Truth."
+
+FACTS_REGISTRY (STRICT CITATION REQUIRED, CITE ONLY THIS SECTION):
+{facts_registry}
+
+CONTEXT SUMMARY (NON-CITABLE BACKGROUND):
+{context_summary}
 
 **OUTPUT FORMAT (STRICT)**:
 You must respond in this exact format:

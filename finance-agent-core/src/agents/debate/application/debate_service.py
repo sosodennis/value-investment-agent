@@ -28,16 +28,20 @@ from src.agents.debate.application.prompt_runtime import (
     build_bear_round_messages,
     build_bull_round_messages,
     build_moderator_messages,
+    hash_text,
     log_debate_context,
     log_llm_config,
     log_llm_response,
     log_messages,
 )
-from src.agents.debate.application.report_service import get_debate_reports_text
+from src.agents.debate.application.report_service import (
+    get_debate_prompt_context_text,
+)
 from src.agents.debate.domain.fact_builders import (
     build_financial_facts,
     build_news_facts,
     build_technical_facts,
+    build_valuation_facts,
     render_strict_facts_registry,
     summarize_facts_by_source,
 )
@@ -87,6 +91,12 @@ async def extract_debate_facts(
             start_index=len(facts) + 1,
         )
     )
+    facts.extend(
+        build_valuation_facts(
+            artifact_context.fundamental_valuation_preview,
+            start_index=len(facts) + 1,
+        )
+    )
 
     facts_raw = [f.model_dump() for f in facts]
     facts_hash = hashlib.sha256(
@@ -128,13 +138,14 @@ async def execute_bull_round(
         raise ValueError("Missing intent_extraction.resolved_ticker for bull agent")
 
     log_llm_config("BULL_AGENT", round_num, llm)
-    compressed_reports = await get_debate_reports_text(
+    prompt_context = await get_debate_prompt_context_text(
         state, stage=f"bull_r{round_num}", ticker=ticker, source_reader=source_reader
     )
 
     system_content = system_prompt_template.format(
         ticker=ticker,
-        reports=compressed_reports,
+        facts_registry=prompt_context.facts_registry_text,
+        context_summary=prompt_context.context_summary_text,
         adversarial_rule=adversarial_rule,
     )
     history = conversation_context.history
@@ -185,13 +196,14 @@ async def execute_bear_round(
         raise ValueError("Missing intent_extraction.resolved_ticker for bear agent")
 
     log_llm_config("BEAR_AGENT", round_num, llm)
-    compressed_reports = await get_debate_reports_text(
+    prompt_context = await get_debate_prompt_context_text(
         state, stage=f"bear_r{round_num}", ticker=ticker, source_reader=source_reader
     )
 
     system_content = system_prompt_template.format(
         ticker=ticker,
-        reports=compressed_reports,
+        facts_registry=prompt_context.facts_registry_text,
+        context_summary=prompt_context.context_summary_text,
         adversarial_rule=adversarial_rule,
     )
     history = conversation_context.history
@@ -243,27 +255,58 @@ async def execute_moderator_round(
 
     log_llm_config("MODERATOR", round_num, llm)
 
-    debate_map = conversation_context.debate_context
-    bull_thesis = str(debate_map.get("bull_thesis") or "")
-    bear_thesis = str(debate_map.get("bear_thesis") or "")
-    similarity, is_sycophantic = await asyncio.to_thread(
-        detector.check_consensus,
-        bull_thesis,
-        bear_thesis,
-    )
-    log_event(
-        logger,
-        event="debate_sycophancy_checked",
-        message="debate sycophancy check completed",
-        fields={
-            "round_num": round_num,
-            "similarity": similarity,
-            "threshold": 0.8,
-            "flagged": is_sycophantic,
-        },
-    )
+    bull_thesis = conversation_context.bull_thesis or ""
+    bear_thesis = conversation_context.bear_thesis or ""
+    bull_chars = len(bull_thesis)
+    bear_chars = len(bear_thesis)
+    bull_hash = hash_text(bull_thesis) if bull_thesis else None
+    bear_hash = hash_text(bear_thesis) if bear_thesis else None
 
-    compressed_reports = await get_debate_reports_text(
+    similarity = 0.0
+    is_sycophantic = False
+    missing_inputs: list[str] = []
+    if not bull_thesis:
+        missing_inputs.append("bull_thesis")
+    if not bear_thesis:
+        missing_inputs.append("bear_thesis")
+
+    if missing_inputs:
+        log_event(
+            logger,
+            event="debate_sycophancy_skipped",
+            message="debate sycophancy check skipped due to missing thesis inputs",
+            fields={
+                "round_num": round_num,
+                "missing_inputs": missing_inputs,
+                "bull_chars": bull_chars,
+                "bear_chars": bear_chars,
+                "bull_hash": bull_hash,
+                "bear_hash": bear_hash,
+            },
+        )
+    else:
+        similarity, is_sycophantic = await asyncio.to_thread(
+            detector.check_consensus,
+            bull_thesis,
+            bear_thesis,
+        )
+        log_event(
+            logger,
+            event="debate_sycophancy_checked",
+            message="debate sycophancy check completed",
+            fields={
+                "round_num": round_num,
+                "similarity": similarity,
+                "threshold": 0.8,
+                "flagged": is_sycophantic,
+                "bull_chars": bull_chars,
+                "bear_chars": bear_chars,
+                "bull_hash": bull_hash,
+                "bear_hash": bear_hash,
+            },
+        )
+
+    prompt_context = await get_debate_prompt_context_text(
         state,
         stage=f"moderator_r{round_num}",
         ticker=ticker,
@@ -272,7 +315,9 @@ async def execute_moderator_round(
     history = conversation_context.history
 
     system_content = system_prompt_template.format(
-        ticker=ticker, reports=compressed_reports
+        ticker=ticker,
+        facts_registry=prompt_context.facts_registry_text,
+        context_summary=prompt_context.context_summary_text,
     )
     if is_sycophantic:
         system_content += "\n⚠️ SYCOPHANCY DETECTED. Demand counter-arguments."

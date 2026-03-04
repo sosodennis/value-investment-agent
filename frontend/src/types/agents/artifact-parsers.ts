@@ -498,7 +498,8 @@ const parseEvidenceFact = (value: unknown, context: string): EvidenceFact => {
     if (
         sourceType !== 'financials' &&
         sourceType !== 'news' &&
-        sourceType !== 'technicals'
+        sourceType !== 'technicals' &&
+        sourceType !== 'valuation'
     ) {
         throw new TypeError(`${context}.source_type has unsupported value.`);
     }

@@ -2,6 +2,8 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from src.agents.debate.application.state_readers import (
     artifact_ref_id_from_context,
+    bear_thesis_from_state,
+    bull_thesis_from_state,
     debate_context_from_state,
     get_last_message_from_role,
     history_from_state,
@@ -42,3 +44,14 @@ def test_debate_context_from_state():
     state = {"debate": {"bull_thesis": "x", "bear_thesis": "y"}}
     ctx = debate_context_from_state(state)
     assert ctx.get("bull_thesis") == "x"
+
+
+def test_thesis_from_state_reads_top_level_and_normalizes() -> None:
+    state = {"bull_thesis": "  bull text  ", "bear_thesis": "bear text"}
+    assert bull_thesis_from_state(state) == "bull text"
+    assert bear_thesis_from_state(state) == "bear text"
+
+
+def test_thesis_from_state_returns_none_for_empty_or_missing() -> None:
+    assert bull_thesis_from_state({"bull_thesis": "   "}) is None
+    assert bear_thesis_from_state({}) is None

@@ -133,7 +133,7 @@ class DebateOrchestrator:
             )
 
         reports = await prepare_debate_reports(state, source_reader=self.source_reader)
-        compressed_reports = self._compress_reports(reports.payload)
+        context_summary_text = self._compress_reports(reports.payload)
         is_degraded = reports.is_degraded
         degraded_reasons = reports.degraded_reason_codes
         if is_degraded:
@@ -155,8 +155,8 @@ class DebateOrchestrator:
             message="debate aggregator prepared compressed reports",
             fields={
                 "ticker": ticker,
-                "compressed_chars": len(compressed_reports),
-                "compressed_hash": hash_text(compressed_reports),
+                "context_summary_chars": len(context_summary_text),
+                "context_summary_hash": hash_text(context_summary_text),
                 "source": "computed",
                 "is_degraded": is_degraded,
                 "degraded_reason_count": len(degraded_reasons),
@@ -202,7 +202,7 @@ class DebateOrchestrator:
                     "r1_bear": "running",
                 },
                 "node_statuses": {"debate": node_status},
-                "compressed_reports": compressed_reports,
+                "context_summary_text": context_summary_text,
                 **({"error_logs": error_logs} if error_logs else {}),
             },
             goto=["fact_extractor"],
@@ -280,7 +280,7 @@ class DebateOrchestrator:
                 "facts_hash": extracted.facts_hash,
                 "facts_summary": extracted.summary,
                 "fact_extraction_status": "done",
-                "compressed_reports": extracted.strict_facts_registry,
+                "facts_registry_text": extracted.strict_facts_registry,
             },
             goto=["r1_bull", "r1_bear"],
         )

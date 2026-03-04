@@ -18,6 +18,10 @@ from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import JSONObject
 
 logger = get_logger(__name__)
+_MISSING_FACTS_REGISTRY_TEXT = (
+    "FACTS_REGISTRY (STRICT CITATION REQUIRED):\n"
+    "[NO_FACTS_AVAILABLE] Evidence registry unavailable."
+)
 
 
 @dataclass(frozen=True)
@@ -32,6 +36,12 @@ class PreparedDebateReports:
     @property
     def degraded_reason_codes(self) -> list[str]:
         return [issue.reason_code for issue in self.load_issues]
+
+
+@dataclass(frozen=True)
+class DebatePromptContextText:
+    facts_registry_text: str
+    context_summary_text: str
 
 
 def build_compressed_report_payload(
@@ -89,55 +99,101 @@ async def prepare_debate_reports(
     )
 
 
-async def get_debate_reports_text(
+async def get_debate_prompt_context_text(
     state: Mapping[str, object],
     *,
     stage: str,
     ticker: str,
     source_reader: DebateSourceReaderPort,
-) -> str:
+) -> DebatePromptContextText:
     artifact_context = build_debate_artifact_context(state)
-    if artifact_context.cached_reports is not None:
+    if artifact_context.cached_context_summary_text is not None:
         log_event(
             logger,
-            event="debate_reports_compressed",
-            message="debate reports compressed",
+            event="debate_context_summary_text_resolved",
+            message="debate context summary text resolved",
             fields={
                 "stage": stage,
                 "ticker": ticker,
                 "source": "cached",
-                "chars": len(artifact_context.cached_reports),
-                "hash": hash_text(artifact_context.cached_reports),
+                "chars": len(artifact_context.cached_context_summary_text),
+                "hash": hash_text(artifact_context.cached_context_summary_text),
             },
         )
-        return artifact_context.cached_reports
-
-    prepared = await prepare_debate_reports(state, source_reader=source_reader)
-    if prepared.is_degraded:
+        context_summary_text = artifact_context.cached_context_summary_text
+    else:
+        prepared = await prepare_debate_reports(state, source_reader=source_reader)
+        if prepared.is_degraded:
+            log_event(
+                logger,
+                event="debate_reports_source_degraded",
+                message="debate reports source degraded",
+                level=logging.WARNING,
+                error_code="DEBATE_REPORTS_SOURCE_DEGRADED",
+                fields={
+                    "stage": stage,
+                    "ticker": ticker,
+                    "degraded_reason_count": len(prepared.load_issues),
+                    "degraded_reasons": prepared.degraded_reason_codes,
+                },
+            )
+        context_summary_text = compress_reports(prepared.payload)
         log_event(
             logger,
-            event="debate_reports_source_degraded",
-            message="debate reports source degraded",
-            level=logging.WARNING,
-            error_code="DEBATE_REPORTS_SOURCE_DEGRADED",
+            event="debate_context_summary_text_resolved",
+            message="debate context summary text resolved",
             fields={
                 "stage": stage,
                 "ticker": ticker,
-                "degraded_reason_count": len(prepared.load_issues),
-                "degraded_reasons": prepared.degraded_reason_codes,
+                "source": "computed",
+                "chars": len(context_summary_text),
+                "hash": hash_text(context_summary_text),
             },
         )
-    compressed_reports = compress_reports(prepared.payload)
+
+    if artifact_context.cached_facts_registry_text is not None:
+        facts_registry_text = artifact_context.cached_facts_registry_text
+        log_event(
+            logger,
+            event="debate_facts_registry_text_resolved",
+            message="debate facts registry text resolved",
+            fields={
+                "stage": stage,
+                "ticker": ticker,
+                "source": "cached",
+                "chars": len(facts_registry_text),
+                "hash": hash_text(facts_registry_text),
+            },
+        )
+    else:
+        facts_registry_text = _MISSING_FACTS_REGISTRY_TEXT
+        log_event(
+            logger,
+            event="debate_facts_registry_missing",
+            message="debate facts registry text missing; using placeholder",
+            level=logging.WARNING,
+            error_code="DEBATE_FACTS_REGISTRY_MISSING",
+            fields={
+                "stage": stage,
+                "ticker": ticker,
+                "source": "placeholder",
+                "chars": len(facts_registry_text),
+                "hash": hash_text(facts_registry_text),
+            },
+        )
+
     log_event(
         logger,
-        event="debate_reports_compressed",
-        message="debate reports compressed",
+        event="debate_prompt_context_resolved",
+        message="debate prompt context resolved",
         fields={
             "stage": stage,
             "ticker": ticker,
-            "source": "computed",
-            "chars": len(compressed_reports),
-            "hash": hash_text(compressed_reports),
+            "facts_registry_chars": len(facts_registry_text),
+            "context_summary_chars": len(context_summary_text),
         },
     )
-    return compressed_reports
+    return DebatePromptContextText(
+        facts_registry_text=facts_registry_text,
+        context_summary_text=context_summary_text,
+    )

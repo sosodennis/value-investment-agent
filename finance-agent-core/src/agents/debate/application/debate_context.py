@@ -7,10 +7,13 @@ from langchain_core.messages import BaseMessage
 
 from src.agents.debate.application.state_readers import (
     artifact_ref_id_from_context,
+    bear_thesis_from_state,
+    bull_thesis_from_state,
     debate_context_from_state,
     history_from_state,
     resolved_ticker_from_state,
 )
+from src.shared.kernel.types import JSONObject
 
 
 @dataclass(frozen=True)
@@ -19,7 +22,9 @@ class DebateArtifactContext:
     financial_reports_artifact_id: str | None
     news_artifact_id: str | None
     technical_artifact_id: str | None
-    cached_reports: str | None
+    fundamental_valuation_preview: JSONObject | None
+    cached_context_summary_text: str | None
+    cached_facts_registry_text: str | None
 
 
 @dataclass(frozen=True)
@@ -27,6 +32,8 @@ class DebateConversationContext:
     ticker: str | None
     history: list[BaseMessage]
     debate_context: Mapping[str, object]
+    bull_thesis: str | None
+    bear_thesis: str | None
 
 
 def build_debate_artifact_context(state: Mapping[str, object]) -> DebateArtifactContext:
@@ -34,14 +41,18 @@ def build_debate_artifact_context(state: Mapping[str, object]) -> DebateArtifact
     financial_reports_artifact_id = _fundamental_reports_artifact_id(state)
     news_artifact_id = _news_artifact_id(state)
     technical_artifact_id = _technical_artifact_id(state)
-    cached_reports = _cached_reports(state)
+    fundamental_valuation_preview = _fundamental_valuation_preview(state)
+    cached_context_summary_text = _cached_context_summary_text(state)
+    cached_facts_registry_text = _cached_facts_registry_text(state)
 
     return DebateArtifactContext(
         ticker=ticker,
         financial_reports_artifact_id=financial_reports_artifact_id,
         news_artifact_id=news_artifact_id,
         technical_artifact_id=technical_artifact_id,
-        cached_reports=cached_reports,
+        fundamental_valuation_preview=fundamental_valuation_preview,
+        cached_context_summary_text=cached_context_summary_text,
+        cached_facts_registry_text=cached_facts_registry_text,
     )
 
 
@@ -52,6 +63,8 @@ def build_debate_conversation_context(
         ticker=resolved_ticker_from_state(state),
         history=history_from_state(state),
         debate_context=debate_context_from_state(state),
+        bull_thesis=bull_thesis_from_state(state),
+        bear_thesis=bear_thesis_from_state(state),
     )
 
 
@@ -63,6 +76,19 @@ def _fundamental_reports_artifact_id(state: Mapping[str, object]) -> str | None:
     if not isinstance(artifact_id, str):
         return None
     return artifact_id
+
+
+def _fundamental_valuation_preview(state: Mapping[str, object]) -> JSONObject | None:
+    fundamental_ctx = state.get("fundamental_analysis", {})
+    if not isinstance(fundamental_ctx, Mapping):
+        return None
+    artifact_raw = fundamental_ctx.get("artifact")
+    if not isinstance(artifact_raw, Mapping):
+        return None
+    preview_raw = artifact_raw.get("preview")
+    if not isinstance(preview_raw, Mapping):
+        return None
+    return dict(preview_raw)
 
 
 def _news_artifact_id(state: Mapping[str, object]) -> str | None:
@@ -79,10 +105,19 @@ def _technical_artifact_id(state: Mapping[str, object]) -> str | None:
     return artifact_ref_id_from_context(technical_ctx)
 
 
-def _cached_reports(state: Mapping[str, object]) -> str | None:
-    cached_reports = state.get("compressed_reports")
-    if not isinstance(cached_reports, str):
+def _cached_context_summary_text(state: Mapping[str, object]) -> str | None:
+    cached_context_summary_text = state.get("context_summary_text")
+    if not isinstance(cached_context_summary_text, str):
         return None
-    if not cached_reports:
+    if not cached_context_summary_text:
         return None
-    return cached_reports
+    return cached_context_summary_text
+
+
+def _cached_facts_registry_text(state: Mapping[str, object]) -> str | None:
+    cached_facts_registry_text = state.get("facts_registry_text")
+    if not isinstance(cached_facts_registry_text, str):
+        return None
+    if not cached_facts_registry_text:
+        return None
+    return cached_facts_registry_text

@@ -34,8 +34,8 @@ async def test_debate_aggregator_caches_reports():
 
         command = await debate_aggregator_node(state)
 
-        assert "compressed_reports" in command.update
-        assert command.update["compressed_reports"] == "compressed_data"
+        assert "context_summary_text" in command.update
+        assert command.update["context_summary_text"] == "compressed_data"
         assert command.update["node_statuses"]["debate"] == "running"
         mock_prepare.assert_called_once()
         mock_compress.assert_called_once()
@@ -80,7 +80,8 @@ async def test_debate_aggregator_exposes_degraded_source_state() -> None:
 async def test_agent_uses_cached_reports():
     state = {
         "ticker": "AAPL",
-        "compressed_reports": "cached_data",
+        "context_summary_text": "cached_data",
+        "facts_registry_text": "FACTS_REGISTRY (STRICT CITATION REQUIRED):\n[F001] data",
         "intent_extraction": {"resolved_ticker": "AAPL"},
         "debate": {"history": []},
         "internal_progress": {},
@@ -107,7 +108,7 @@ async def test_agent_uses_cached_reports():
 async def test_agent_fallbacks_if_no_cache():
     state = {
         "ticker": "AAPL",
-        # no compressed_reports
+        # no context_summary_text
         "intent_extraction": {"resolved_ticker": "AAPL"},
         "debate": {"history": []},
         "internal_progress": {},

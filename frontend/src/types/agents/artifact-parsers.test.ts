@@ -277,6 +277,15 @@ describe('artifact parsers', () => {
                     units: null,
                     period: null,
                 },
+                {
+                    fact_id: 'V1',
+                    source_type: 'valuation',
+                    source_weight: 'MEDIUM',
+                    summary: 'Intrinsic value indicates upside',
+                    value: 12.4,
+                    units: '%',
+                    period: 'FY2025',
+                },
             ],
         });
 
@@ -285,6 +294,7 @@ describe('artifact parsers', () => {
         expect(parsed.facts?.[0]?.value).toBeUndefined();
         expect(parsed.facts?.[0]?.period).toBeUndefined();
         expect(parsed.facts?.[0]?.units).toBeUndefined();
+        expect(parsed.facts?.[1]?.source_type).toBe('valuation');
         expect(parsed.rr_ratio).toBeUndefined();
         expect(parsed.analysis_bias).toBeUndefined();
         expect(parsed.data_quality_warning).toBeUndefined();

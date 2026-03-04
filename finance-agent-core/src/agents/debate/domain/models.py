@@ -84,7 +84,7 @@ class DebateConclusion(BaseModel):
 
 # --- Ground Truth Facts ---
 
-SourceType = Literal["financials", "news", "technicals"]
+SourceType = Literal["financials", "news", "technicals", "valuation"]
 SourceWeight = Literal["HIGH", "MEDIUM", "LOW"]
 
 
