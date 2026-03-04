@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent Refactor Executor"
+  short_description: "Execute refactors in medium/small verified slices"
+  default_prompt: "Use $agent-refactor-executor to execute an approved refactor plan in medium/small slices with validation and compliance checks after each slice."
