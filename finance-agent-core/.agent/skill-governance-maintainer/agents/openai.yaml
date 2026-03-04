@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skill Governance Maintainer"
+  short_description: "Govern skill updates with SCR and PR templates"
+  default_prompt: "Use $skill-governance-maintainer to classify a proposed skill update and produce an SCR plus PR-ready checklist using canonical governance templates."
