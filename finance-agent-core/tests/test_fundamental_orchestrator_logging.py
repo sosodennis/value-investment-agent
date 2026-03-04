@@ -183,12 +183,16 @@ def _build_orchestrator_with_port(port: object) -> FundamentalOrchestrator:
     )
 
 
-def _build_params_result(*, metadata: JSONObject | None = None) -> ParamBuildResult:
+def _build_params_result(
+    *,
+    metadata: JSONObject | None = None,
+    assumptions: list[str] | None = None,
+) -> ParamBuildResult:
     return ParamBuildResult(
         params={"wacc": 0.1},
         trace_inputs={},
         missing=[],
-        assumptions=[],
+        assumptions=list(assumptions or []),
         metadata=metadata or {},
     )
 
@@ -364,6 +368,121 @@ async def test_run_valuation_logs_forward_signal_completion_fields() -> None:
     assert fields["forward_signals_present"] is True
     assert fields["forward_signals_count"] == 1
     assert fields["forward_signals_source"] == "mda"
+
+
+@pytest.mark.asyncio
+async def test_run_valuation_logs_parameter_source_completion_fields() -> None:
+    orchestrator = _build_orchestrator()
+
+    def _calculator(_params: _ValuationParams) -> Mapping[str, object]:
+        return {"intrinsic_value": 125.0}
+
+    with patch(
+        "src.agents.fundamental.application.use_cases.run_valuation_use_case.log_event"
+    ) as mock_log:
+        result = await orchestrator.run_valuation(
+            _build_state(),
+            build_params_fn=lambda _model_type,
+            _ticker,
+            _reports,
+            _forward_signals: _build_params_result(
+                metadata={
+                    "data_freshness": {
+                        "market_data": {
+                            "provider": "yfinance",
+                            "as_of": "2026-03-01T00:00:00Z",
+                        },
+                        "shares_outstanding_source": "filing_market_stale_fallback",
+                        "financial_statement": {
+                            "filing": {
+                                "selection_mode": "latest_available",
+                                "filing_date": "2026-02-20",
+                            }
+                        },
+                    },
+                    "parameter_source_summary": {
+                        "parameters": {
+                            "shares_outstanding": {"source": "yfinance"},
+                            "risk_free_rate": {"source": "fred"},
+                        },
+                        "shares_outstanding": {
+                            "fallback_reason": "market_stale",
+                            "market_is_stale": True,
+                            "market_staleness_days": 9,
+                        },
+                    },
+                }
+            ),
+            get_model_runtime_fn=lambda _model_type: {
+                "schema": _ValuationParams,
+                "calculator": _calculator,
+                "auditor": lambda _params: _AuditResult(True, []),
+            },
+        )
+
+    assert result.goto == "END"
+    completion_call = next(
+        call
+        for call in mock_log.call_args_list
+        if call.kwargs["event"] == "fundamental_valuation_completed"
+    )
+    fields = completion_call.kwargs["fields"]
+    assert fields["parameter_source_summary_present"] is True
+    assert fields["parameter_source_parameter_count"] == 2
+    assert fields["shares_fallback_reason"] == "market_stale"
+    assert fields["shares_market_is_stale"] is True
+    assert fields["shares_market_staleness_days"] == 9
+    assert fields["shares_outstanding_source"] == "filing_market_stale_fallback"
+    assert fields["filing_selection_mode"] == "latest_available"
+
+
+@pytest.mark.asyncio
+async def test_run_valuation_marks_completion_as_degraded_when_market_data_is_stale() -> (
+    None
+):
+    orchestrator = _build_orchestrator()
+
+    def _calculator(_params: _ValuationParams) -> Mapping[str, object]:
+        return {"intrinsic_value": 125.0}
+
+    with patch(
+        "src.agents.fundamental.application.use_cases.run_valuation_use_case.log_event"
+    ) as mock_log:
+        result = await orchestrator.run_valuation(
+            _build_state(),
+            build_params_fn=lambda _model_type,
+            _ticker,
+            _reports,
+            _forward_signals: _build_params_result(
+                metadata={
+                    "data_freshness": {
+                        "market_data": {
+                            "provider": "yfinance",
+                            "as_of": "2026-03-01T00:00:00Z",
+                            "quality_flags": ["long_run_growth_anchor:stale"],
+                        }
+                    }
+                }
+            ),
+            get_model_runtime_fn=lambda _model_type: {
+                "schema": _ValuationParams,
+                "calculator": _calculator,
+                "auditor": lambda _params: _AuditResult(True, []),
+            },
+        )
+
+    assert result.goto == "END"
+    completion_call = next(
+        call
+        for call in mock_log.call_args_list
+        if call.kwargs["event"] == "fundamental_valuation_completed"
+    )
+    fields = completion_call.kwargs["fields"]
+    assert fields["is_degraded"] is True
+    degrade_reasons = fields.get("degrade_reasons")
+    assert isinstance(degrade_reasons, list)
+    assert "market_data_quality_flags_present" in degrade_reasons
+    assert "market_data_stale" in degrade_reasons
 
 
 @pytest.mark.asyncio

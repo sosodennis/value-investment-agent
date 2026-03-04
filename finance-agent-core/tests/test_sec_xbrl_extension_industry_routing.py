@@ -194,13 +194,21 @@ def test_create_report_sets_canonical_extension_type(
     expected_extension_cls: type[Any],
 ) -> None:
     class DummyExtractor:
-        def __init__(self, ticker: str, fiscal_year: int) -> None:
+        def __init__(self, ticker: str, fiscal_year: int | None) -> None:
             self.ticker = ticker
             self.fiscal_year = fiscal_year
 
         @staticmethod
         def sic_code() -> str:
             return "0000"
+
+        @staticmethod
+        def get_selected_filing_metadata() -> dict[str, object]:
+            return {
+                "form": "10-K",
+                "selection_mode": "fiscal_year_match",
+                "matched_fiscal_year": 2025,
+            }
 
     monkeypatch.setattr(
         "src.agents.fundamental.infrastructure.sec_xbrl.factory.SECReportExtractor",
@@ -245,3 +253,6 @@ def test_create_report_sets_canonical_extension_type(
     assert report.industry_type == expected_extension_type
     assert report.extension_type == expected_extension_type
     assert isinstance(report.extension, expected_extension_cls)
+    assert isinstance(report.filing_metadata, dict)
+    assert report.filing_metadata.get("form") == "10-K"
+    assert report.filing_metadata.get("matched_fiscal_year") == 2025

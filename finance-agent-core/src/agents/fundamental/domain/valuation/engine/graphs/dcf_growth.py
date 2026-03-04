@@ -21,6 +21,12 @@ from .dcf_common import (
     projection_years,
 )
 
+HIGH_MARGIN_REGIME_TRIGGER = 0.50
+BASE_MARGIN_TARGET_CEILING = 0.42
+BASE_MARGIN_SERIES_CEILING = 0.55
+HIGH_MARGIN_TARGET_CEILING = 0.60
+HIGH_MARGIN_SERIES_CEILING = 0.70
+
 
 def _growth_convergence_start(length: int) -> int:
     if length <= 2:
@@ -48,13 +54,19 @@ def converge_operating_margins_growth(
 ) -> list[float]:
     if not operating_margins:
         raise ValueError("operating_margins cannot be empty")
-    target = clamp(max(operating_margins[-1], 0.18), 0.10, 0.42)
+    trailing_margin = float(operating_margins[-1])
+    target_ceiling = BASE_MARGIN_TARGET_CEILING
+    series_ceiling = BASE_MARGIN_SERIES_CEILING
+    if trailing_margin >= HIGH_MARGIN_REGIME_TRIGGER:
+        target_ceiling = HIGH_MARGIN_TARGET_CEILING
+        series_ceiling = HIGH_MARGIN_SERIES_CEILING
+    target = clamp(max(trailing_margin, 0.18), 0.10, target_ceiling)
     return converge_series(
         operating_margins,
         target=target,
         start_index=_growth_convergence_start(len(operating_margins)),
         min_value=-0.25,
-        max_value=0.55,
+        max_value=series_ceiling,
     )
 
 

@@ -159,6 +159,19 @@ class RealEstateExtensionModel(BaseModel):
     ffo: TraceableFieldModel | None = None
 
 
+class FilingMetadataModel(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    form: str | None = None
+    accession_number: str | None = None
+    filing_date: str | None = None
+    accepted_datetime: str | None = None
+    period_of_report: str | None = None
+    requested_fiscal_year: int | None = None
+    matched_fiscal_year: int | None = None
+    selection_mode: str | None = None
+
+
 class FinancialReportModel(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -173,6 +186,7 @@ class FinancialReportModel(BaseModel):
         | RealEstateExtensionModel
         | None
     ) = None
+    filing_metadata: FilingMetadataModel | None = None
 
     @model_validator(mode="before")
     @classmethod

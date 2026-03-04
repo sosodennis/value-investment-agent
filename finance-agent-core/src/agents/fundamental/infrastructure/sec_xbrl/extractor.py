@@ -55,13 +55,14 @@ __all__ = [
 
 
 class SECReportExtractor:
-    def __init__(self, ticker: str, fiscal_year: int):
+    def __init__(self, ticker: str, fiscal_year: int | None):
         self.ticker = ticker
         self.fiscal_year = fiscal_year
         self.standard_industrial_classification_code: int | None = None
         self.df: pd.DataFrame | None = None
         self.actual_date: str | None = None
         self.real_dim_cols: list[str] = []
+        self.selected_filing_metadata: dict[str, object] | None = None
         self._load_report_data()
 
     def _load_report_data(self) -> None:
@@ -84,31 +85,37 @@ class SECReportExtractor:
             ticker=self.ticker,
             execute=lambda: company.sic,
         )
-        filings = call_with_sec_retry(
-            operation=f"get_filings_10-K_{self.fiscal_year}",
+        filings = _fetch_annual_filings(
+            company=company,
             ticker=self.ticker,
-            execute=lambda: company.get_filings(
-                form="10-K",
-                year=[self.fiscal_year, self.fiscal_year + 1],
-                amendments=False,
-            ),
+            fiscal_year=self.fiscal_year,
         )
 
-        target_filing = next(
-            (
-                filing
-                for filing in filings
-                if pd.to_datetime(filing.period_of_report).year == self.fiscal_year
-            ),
-            None,
+        target_filing, selection_mode = _select_target_filing(
+            filings=filings,
+            requested_fiscal_year=self.fiscal_year,
         )
-        if not target_filing:
-            target_filing = filings.latest()
         if not target_filing:
             raise ValueError(f"找不到 {self.ticker} 報告。")
+        self.selected_filing_metadata = _build_selected_filing_metadata(
+            filing=target_filing,
+            requested_fiscal_year=self.fiscal_year,
+            selection_mode=selection_mode,
+        )
+        log_event(
+            logger,
+            event="fundamental_xbrl_report_filing_selected",
+            message="xbrl filing selected for report extraction",
+            fields={
+                "ticker": self.ticker,
+                "requested_fiscal_year": self.fiscal_year,
+                "selection_mode": selection_mode,
+                "selected_filing": self.selected_filing_metadata,
+            },
+        )
 
         xb = call_with_sec_retry(
-            operation=f"filing_xbrl_{self.fiscal_year}",
+            operation=f"filing_xbrl_{self.fiscal_year or 'latest'}",
             ticker=self.ticker,
             execute=target_filing.xbrl,
         )
@@ -140,6 +147,11 @@ class SECReportExtractor:
             )
 
         self.real_dim_cols = identify_dimension_columns(list(self.df.columns))
+
+    def get_selected_filing_metadata(self) -> dict[str, object] | None:
+        if not isinstance(self.selected_filing_metadata, dict):
+            return None
+        return dict(self.selected_filing_metadata)
 
     def search(self, config: SearchConfig) -> list[SECExtractResult]:
         if self.df is None:
@@ -238,7 +250,7 @@ def _validate_xbrl_dataframe_schema(
     *,
     df: pd.DataFrame,
     ticker: str,
-    fiscal_year: int,
+    fiscal_year: int | None,
 ) -> None:
     missing_columns = [
         column for column in _REQUIRED_XBRL_COLUMNS if column not in df.columns
@@ -298,7 +310,7 @@ def _resolve_xbrl_facts_dataframe(
     primary_df: pd.DataFrame,
     filing: object,
     ticker: str,
-    fiscal_year: int,
+    fiscal_year: int | None,
 ) -> pd.DataFrame:
     missing_columns = [
         column for column in _REQUIRED_XBRL_COLUMNS if column not in primary_df.columns
@@ -350,7 +362,7 @@ def _build_dataframe_from_filing_attachments(
     *,
     filing: object,
     ticker: str,
-    fiscal_year: int,
+    fiscal_year: int | None,
 ) -> tuple[pd.DataFrame, str] | None:
     data_files = _get_filing_data_files(filing)
     if not data_files:
@@ -516,3 +528,119 @@ def _attachment_content_text(attachment: object) -> str | None:
     if isinstance(content, str):
         return content
     return None
+
+
+def _fetch_annual_filings(*, company: Company, ticker: str, fiscal_year: int | None):
+    if fiscal_year is None:
+        return call_with_sec_retry(
+            operation="get_filings_10-K_latest",
+            ticker=ticker,
+            execute=lambda: company.get_filings(
+                form="10-K",
+                amendments=False,
+            ),
+        )
+    return call_with_sec_retry(
+        operation=f"get_filings_10-K_{fiscal_year}",
+        ticker=ticker,
+        execute=lambda: company.get_filings(
+            form="10-K",
+            year=[fiscal_year, fiscal_year + 1],
+            amendments=False,
+        ),
+    )
+
+
+def _select_target_filing(
+    *,
+    filings: object,
+    requested_fiscal_year: int | None,
+) -> tuple[object | None, str]:
+    filing_items = _collect_filing_items(filings)
+    if requested_fiscal_year is not None:
+        matched_fiscal_year = [
+            filing
+            for filing in filing_items
+            if _coerce_year(getattr(filing, "period_of_report", None))
+            == requested_fiscal_year
+        ]
+        if matched_fiscal_year:
+            selected = _latest_filing(matched_fiscal_year)
+            if selected is not None:
+                return selected, "fiscal_year_match"
+
+    selected_latest = _latest_filing(filing_items)
+    if selected_latest is not None:
+        return selected_latest, "latest_available"
+
+    latest_fn = getattr(filings, "latest", None)
+    if callable(latest_fn):
+        fallback = latest_fn()
+        if fallback is not None:
+            return fallback, "latest_fallback"
+
+    return None, "missing"
+
+
+def _collect_filing_items(filings: object) -> list[object]:
+    try:
+        return [item for item in filings if item is not None]
+    except TypeError:
+        return []
+
+
+def _latest_filing(filings: list[object]) -> object | None:
+    if not filings:
+        return None
+    return max(
+        filings,
+        key=lambda filing: (
+            _timestamp_score(getattr(filing, "accepted_datetime", None)),
+            _timestamp_score(getattr(filing, "filing_date", None)),
+            _timestamp_score(getattr(filing, "period_of_report", None)),
+            str(getattr(filing, "accession_number", "") or ""),
+        ),
+    )
+
+
+def _timestamp_score(value: object) -> int:
+    parsed = pd.to_datetime(value, errors="coerce", utc=True)
+    if pd.isna(parsed):
+        return -1
+    return int(parsed.value)
+
+
+def _coerce_year(value: object) -> int | None:
+    parsed = pd.to_datetime(value, errors="coerce", utc=True)
+    if pd.isna(parsed):
+        return None
+    return int(parsed.year)
+
+
+def _normalize_text(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized if normalized else None
+
+
+def _build_selected_filing_metadata(
+    *,
+    filing: object,
+    requested_fiscal_year: int | None,
+    selection_mode: str,
+) -> dict[str, object]:
+    period_of_report = _normalize_text(getattr(filing, "period_of_report", None))
+    matched_fiscal_year = _coerce_year(period_of_report)
+    return {
+        "form": _normalize_text(getattr(filing, "form", None)),
+        "accession_number": _normalize_text(getattr(filing, "accession_number", None)),
+        "filing_date": _normalize_text(getattr(filing, "filing_date", None)),
+        "accepted_datetime": _normalize_text(
+            getattr(filing, "accepted_datetime", None)
+        ),
+        "period_of_report": period_of_report,
+        "requested_fiscal_year": requested_fiscal_year,
+        "matched_fiscal_year": matched_fiscal_year,
+        "selection_mode": selection_mode,
+    }

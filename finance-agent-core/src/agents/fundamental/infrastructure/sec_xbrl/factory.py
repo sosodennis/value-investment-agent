@@ -243,7 +243,7 @@ class BaseFinancialModelFactory:
 
 class FinancialReportFactory:
     @staticmethod
-    def create_report(ticker: str, fiscal_year: int) -> FinancialReport:
+    def create_report(ticker: str, fiscal_year: int | None) -> FinancialReport:
         # 1. Initialize Extractor
         extractor = SECReportExtractor(ticker, fiscal_year)
 
@@ -276,7 +276,12 @@ class FinancialReportFactory:
             # Canonical payload token; source-specific labels stay internal to routing.
             industry_type=extension_type,
             extension_type=extension_type,
+            filing_metadata=extractor.get_selected_filing_metadata(),
         )
+
+    @staticmethod
+    def create_latest_report(ticker: str) -> FinancialReport:
+        return FinancialReportFactory.create_report(ticker, None)
 
     @staticmethod
     def _resolve_industry_type(sic_code: object) -> str:

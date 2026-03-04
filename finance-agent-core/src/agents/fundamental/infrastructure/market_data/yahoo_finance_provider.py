@@ -52,7 +52,11 @@ class YahooFinanceProvider(MarketDataProvider):
                 "risk_free_rate", risk_free_rate, as_of=as_of
             ),
             "consensus_growth_rate": self._datum(
-                "consensus_growth_rate", consensus_growth_rate, as_of=as_of
+                "consensus_growth_rate",
+                consensus_growth_rate,
+                as_of=as_of,
+                horizon="short_term",
+                source_detail="yfinance:revenueGrowth|earningsGrowth",
             ),
             "target_mean_price": self._datum(
                 "target_mean_price", target_mean_price, as_of=as_of
@@ -66,6 +70,8 @@ class YahooFinanceProvider(MarketDataProvider):
         value: float | None,
         *,
         as_of: str,
+        horizon: str | None = None,
+        source_detail: str | None = None,
     ) -> MarketDatum:
         del field
         quality_flags: tuple[str, ...] = ("missing",) if value is None else ()
@@ -73,6 +79,8 @@ class YahooFinanceProvider(MarketDataProvider):
             value=value,
             source=self.name,
             as_of=as_of,
+            horizon=horizon,
+            source_detail=source_detail,
             quality_flags=quality_flags,
             license_note=self.license_note,
         )

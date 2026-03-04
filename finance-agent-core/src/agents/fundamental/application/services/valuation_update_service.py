@@ -134,6 +134,7 @@ def build_valuation_success_update(
         "forward_signal_evidence_count"
     )
     audit_summary = assumption_breakdown.get("audit_summary")
+    parameter_source_summary = assumption_breakdown.get("parameter_source_summary")
     data_quality_flags_list = (
         [item for item in data_quality_flags if isinstance(item, str) and item]
         if isinstance(data_quality_flags, list)
@@ -201,6 +202,8 @@ def build_valuation_success_update(
         preview["forward_signal_evidence_count"] = int(forward_signal_evidence_count)
     if isinstance(audit_summary, Mapping):
         preview["audit_summary"] = dict(audit_summary)
+    if isinstance(parameter_source_summary, Mapping):
+        preview["parameter_source_summary"] = dict(parameter_source_summary)
     artifact = build_valuation_artifact_fn(
         ticker=ticker,
         model_type=model_type,

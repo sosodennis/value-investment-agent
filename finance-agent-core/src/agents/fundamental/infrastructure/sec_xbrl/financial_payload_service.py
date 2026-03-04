@@ -32,7 +32,7 @@ def fetch_financial_data(ticker: str, years: int = 3) -> list[FinancialReport]:
     Fetch financial data using the SECReportExtractor via FinancialReportFactory.
     Returns a list of FinancialReport objects containing Base and Extension models.
     """
-    reports = []
+    reports: list[FinancialReport] = []
     log_event(
         logger,
         event="fundamental_xbrl_fetch_started",
@@ -40,12 +40,69 @@ def fetch_financial_data(ticker: str, years: int = 3) -> list[FinancialReport]:
         fields={"ticker": ticker, "years": years},
     )
 
+    fetched_years: set[int] = set()
+    anchor_year: int | None = None
+
+    try:
+        log_event(
+            logger,
+            event="fundamental_xbrl_latest_attempt",
+            message="xbrl latest filing fetch attempt",
+            fields={"ticker": ticker},
+        )
+        latest_report = call_with_sec_retry(
+            operation="create_report_latest",
+            ticker=ticker,
+            execute=lambda: FinancialReportFactory.create_latest_report(ticker),
+        )
+        latest_year = _report_year(latest_report)
+        if latest_year is not None:
+            fetched_years.add(latest_year)
+            anchor_year = latest_year
+        reports.append(latest_report)
+        log_event(
+            logger,
+            event="fundamental_xbrl_latest_success",
+            message="xbrl latest filing fetched",
+            fields={
+                "ticker": ticker,
+                "actual_year": latest_year,
+                "filing_metadata": latest_report.filing_metadata,
+            },
+        )
+    except ValueError as exc:
+        log_event(
+            logger,
+            event="fundamental_xbrl_latest_not_found",
+            message="xbrl latest filing not found; fallback to fiscal year probing",
+            level=logging.WARNING,
+            error_code="FUNDAMENTAL_XBRL_LATEST_NOT_FOUND",
+            fields={
+                "ticker": ticker,
+                "exception_type": type(exc).__name__,
+                "exception": str(exc),
+            },
+        )
+    except Exception as exc:
+        fields: dict[str, object] = {
+            "ticker": ticker,
+            "exception_type": type(exc).__name__,
+            "exception": str(exc),
+        }
+        if _XBRL_DIAGNOSTICS_ENABLED:
+            fields["traceback"] = traceback.format_exc(limit=25)
+        log_event(
+            logger,
+            event="fundamental_xbrl_latest_failed",
+            message="xbrl latest filing fetch failed; fallback to fiscal year probing",
+            level=logging.ERROR,
+            error_code="FUNDAMENTAL_XBRL_LATEST_FETCH_FAILED",
+            fields=fields,
+        )
+
     current_year = date.today().year
-    start_year = current_year - 1
-
-    fetched_years = set()
+    start_year = (anchor_year - 1) if anchor_year is not None else (current_year - 1)
     attempt_year = start_year
-
     while len(reports) < years and attempt_year > (start_year - years - 5):
         current_attempt_year = attempt_year
         try:
@@ -63,9 +120,20 @@ def fetch_financial_data(ticker: str, years: int = 3) -> list[FinancialReport]:
                 ),
             )
 
-            actual_year = report.base.fiscal_year.value
-
-            if actual_year in fetched_years:
+            actual_year = _report_year(report)
+            if actual_year is None:
+                log_event(
+                    logger,
+                    event="fundamental_xbrl_year_unknown",
+                    message="xbrl report fetched but fiscal year missing; skipping",
+                    level=logging.WARNING,
+                    error_code="FUNDAMENTAL_XBRL_YEAR_UNKNOWN",
+                    fields={
+                        "ticker": ticker,
+                        "attempt_year": current_attempt_year,
+                    },
+                )
+            elif actual_year in fetched_years:
                 log_event(
                     logger,
                     event="fundamental_xbrl_duplicate_skipped",
@@ -125,6 +193,7 @@ def fetch_financial_data(ticker: str, years: int = 3) -> list[FinancialReport]:
 
         attempt_year -= 1
 
+    reports.sort(key=lambda report: _report_year(report) or -1, reverse=True)
     _apply_cross_period_derivatives(reports)
 
     return reports
@@ -181,6 +250,22 @@ def _infer_rules_sector_from_reports(reports: list[FinancialReport]) -> str | No
             continue
         if "financial" in normalized_type:
             return "financials"
+    return None
+
+
+def _report_year(report: FinancialReport) -> int | None:
+    raw = report.base.fiscal_year.value
+    if raw is None:
+        return None
+    if isinstance(raw, int):
+        return raw
+    if isinstance(raw, float):
+        return int(raw)
+    if isinstance(raw, str):
+        try:
+            return int(float(raw))
+        except ValueError:
+            return None
     return None
 
 

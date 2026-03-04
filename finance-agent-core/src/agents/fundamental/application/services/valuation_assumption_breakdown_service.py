@@ -146,6 +146,7 @@ def build_assumption_breakdown(
     forward_signal_risk_level: str | None = None
     forward_signal_evidence_count: int | None = None
     audit_summary: JSONObject | None = None
+    parameter_source_summary: JSONObject | None = None
     if isinstance(build_metadata, Mapping):
         forward_signal_raw = build_metadata.get("forward_signal")
         if isinstance(forward_signal_raw, Mapping):
@@ -205,6 +206,9 @@ def build_assumption_breakdown(
                     summary_payload["messages"] = messages
             if summary_payload:
                 audit_summary = summary_payload
+        parameter_source_raw = build_metadata.get("parameter_source_summary")
+        if isinstance(parameter_source_raw, Mapping):
+            parameter_source_summary = dict(parameter_source_raw)
 
     if isinstance(audit_summary, Mapping):
         fail_count = audit_summary.get("fail_count")
@@ -248,6 +252,8 @@ def build_assumption_breakdown(
         output["forward_signal_evidence_count"] = forward_signal_evidence_count
     if audit_summary is not None:
         output["audit_summary"] = audit_summary
+    if parameter_source_summary is not None:
+        output["parameter_source_summary"] = parameter_source_summary
     return output
 
 

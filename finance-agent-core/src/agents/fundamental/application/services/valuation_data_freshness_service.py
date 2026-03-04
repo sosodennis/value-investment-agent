@@ -23,6 +23,42 @@ def build_data_freshness(
             metadata_freshness = dict(metadata_freshness_raw)
 
     if isinstance(metadata_freshness, dict):
+        financial_statement_raw = metadata_freshness.get("financial_statement")
+        if isinstance(financial_statement_raw, Mapping):
+            financial_statement = (
+                dict(payload.get("financial_statement"))
+                if isinstance(payload.get("financial_statement"), Mapping)
+                else {}
+            )
+            fiscal_year = financial_statement_raw.get("fiscal_year")
+            period_end_date = financial_statement_raw.get("period_end_date")
+            filing_raw = financial_statement_raw.get("filing")
+            if isinstance(fiscal_year, int):
+                financial_statement["fiscal_year"] = fiscal_year
+            if isinstance(period_end_date, str) and period_end_date:
+                financial_statement["period_end_date"] = period_end_date
+            if isinstance(filing_raw, Mapping):
+                filing: JSONObject = {}
+                for field in (
+                    "form",
+                    "accession_number",
+                    "filing_date",
+                    "accepted_datetime",
+                    "period_of_report",
+                    "selection_mode",
+                ):
+                    value = filing_raw.get(field)
+                    if isinstance(value, str) and value:
+                        filing[field] = value
+                for field in ("requested_fiscal_year", "matched_fiscal_year"):
+                    value = filing_raw.get(field)
+                    if isinstance(value, int):
+                        filing[field] = value
+                if filing:
+                    financial_statement["filing"] = filing
+            if financial_statement:
+                payload["financial_statement"] = financial_statement
+
         market_data_raw = metadata_freshness.get("market_data")
         if isinstance(market_data_raw, Mapping):
             market_data: JSONObject = {}
@@ -63,12 +99,20 @@ def build_data_freshness(
                         datum_payload["value"] = None
                     source_raw = datum_raw.get("source")
                     as_of_raw = datum_raw.get("as_of")
+                    horizon_raw = datum_raw.get("horizon")
+                    source_detail_raw = datum_raw.get("source_detail")
                     quality_raw = datum_raw.get("quality_flags")
+                    staleness_raw = datum_raw.get("staleness")
+                    fallback_reason_raw = datum_raw.get("fallback_reason")
                     license_raw = datum_raw.get("license_note")
                     if isinstance(source_raw, str) and source_raw:
                         datum_payload["source"] = source_raw
                     if isinstance(as_of_raw, str) and as_of_raw:
                         datum_payload["as_of"] = as_of_raw
+                    if isinstance(horizon_raw, str) and horizon_raw:
+                        datum_payload["horizon"] = horizon_raw
+                    if isinstance(source_detail_raw, str) and source_detail_raw:
+                        datum_payload["source_detail"] = source_detail_raw
                     if isinstance(quality_raw, list):
                         datum_quality = [
                             item
@@ -77,6 +121,21 @@ def build_data_freshness(
                         ]
                         if datum_quality:
                             datum_payload["quality_flags"] = datum_quality
+                    if isinstance(staleness_raw, Mapping):
+                        staleness: JSONObject = {}
+                        days_raw = staleness_raw.get("days")
+                        is_stale_raw = staleness_raw.get("is_stale")
+                        max_days_raw = staleness_raw.get("max_days")
+                        if isinstance(days_raw, int):
+                            staleness["days"] = days_raw
+                        if isinstance(is_stale_raw, bool):
+                            staleness["is_stale"] = is_stale_raw
+                        if isinstance(max_days_raw, int):
+                            staleness["max_days"] = max_days_raw
+                        if staleness:
+                            datum_payload["staleness"] = staleness
+                    if isinstance(fallback_reason_raw, str) and fallback_reason_raw:
+                        datum_payload["fallback_reason"] = fallback_reason_raw
                     if isinstance(license_raw, str) and license_raw:
                         datum_payload["license_note"] = license_raw
                     if datum_payload:

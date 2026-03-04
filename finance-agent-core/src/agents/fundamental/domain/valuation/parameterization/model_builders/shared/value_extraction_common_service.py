@@ -29,6 +29,8 @@ def _resolve_shares_source(
 ) -> str:
     market_shares = market_float(market_snapshot, "shares_outstanding")
     if market_shares is not None and market_shares > 0:
+        if _is_market_shares_stale(market_snapshot):
+            return f"{filing_source}_market_stale_fallback"
         return "market_data"
     return filing_source
 
@@ -88,3 +90,23 @@ def extract_current_price(
         market_snapshot=market_snapshot,
         field_name="current_price",
     )
+
+
+def _is_market_shares_stale(market_snapshot: Mapping[str, object] | None) -> bool:
+    if market_snapshot is None:
+        return False
+    snapshot_is_stale = market_snapshot.get("shares_outstanding_is_stale")
+    if isinstance(snapshot_is_stale, bool):
+        return snapshot_is_stale
+
+    market_datums_raw = market_snapshot.get("market_datums")
+    if not isinstance(market_datums_raw, Mapping):
+        return False
+    shares_datum_raw = market_datums_raw.get("shares_outstanding")
+    if not isinstance(shares_datum_raw, Mapping):
+        return False
+    staleness_raw = shares_datum_raw.get("staleness")
+    if not isinstance(staleness_raw, Mapping):
+        return False
+    datum_is_stale = staleness_raw.get("is_stale")
+    return bool(datum_is_stale) if isinstance(datum_is_stale, bool) else False

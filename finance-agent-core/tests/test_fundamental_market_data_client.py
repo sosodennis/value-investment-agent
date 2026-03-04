@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 from src.agents.fundamental.infrastructure.market_data.market_data_service import (
     DEFAULT_BETA,
     DEFAULT_RISK_FREE_RATE,
@@ -119,3 +121,69 @@ def test_market_data_service_returns_policy_defaults_on_failure() -> None:
     assert snapshot.source_warnings
     assert snapshot.market_datums["beta"]["source"] == "policy_default"
     assert snapshot.market_datums["risk_free_rate"]["source"] == "policy_default"
+
+
+def test_market_data_service_marks_shares_staleness_fields() -> None:
+    yahoo = _StaticProvider(
+        name="yfinance",
+        license_note="yahoo license",
+        datums={
+            "current_price": MarketDatum(90.0, "yfinance", "2026-01-01T00:00:00Z"),
+            "shares_outstanding": MarketDatum(
+                1_000.0, "yfinance", "2026-01-01T00:00:00Z"
+            ),
+        },
+    )
+    fred = _StaticProvider(
+        name="fred",
+        license_note="fred license",
+        datums={"risk_free_rate": MarketDatum(0.04, "fred", "2026-01-01")},
+    )
+
+    service = MarketDataService(ttl_seconds=120, max_retries=0, providers=(yahoo, fred))
+    snapshot = service.get_market_snapshot("EXM")
+
+    assert snapshot.market_stale_max_days == 5
+    assert snapshot.shares_outstanding_is_stale is True
+    assert isinstance(snapshot.shares_outstanding_staleness_days, int)
+    staleness = snapshot.market_datums["shares_outstanding"].get("staleness")
+    assert isinstance(staleness, dict)
+    assert staleness.get("is_stale") is True
+
+
+def test_market_data_service_uses_relaxed_staleness_for_long_run_growth_anchor() -> (
+    None
+):
+    stale_as_of = (datetime.now(timezone.utc) - timedelta(days=150)).isoformat()
+    yahoo = _StaticProvider(
+        name="yfinance",
+        license_note="yahoo license",
+        datums={
+            "current_price": MarketDatum(90.0, "yfinance", stale_as_of),
+            "shares_outstanding": MarketDatum(1_000.0, "yfinance", stale_as_of),
+        },
+    )
+    fred = _StaticProvider(
+        name="fred",
+        license_note="fred license",
+        datums={
+            "risk_free_rate": MarketDatum(0.04, "fred", stale_as_of),
+            "long_run_growth_anchor": MarketDatum(0.014, "fred", stale_as_of),
+        },
+    )
+
+    service = MarketDataService(ttl_seconds=120, max_retries=0, providers=(yahoo, fred))
+    snapshot = service.get_market_snapshot("EXM")
+
+    long_run_staleness = snapshot.market_datums["long_run_growth_anchor"].get(
+        "staleness"
+    )
+    assert isinstance(long_run_staleness, dict)
+    assert long_run_staleness.get("max_days") == 180
+    assert long_run_staleness.get("is_stale") is False
+    assert "long_run_growth_anchor:stale" not in snapshot.quality_flags
+
+    shares_staleness = snapshot.market_datums["shares_outstanding"].get("staleness")
+    assert isinstance(shares_staleness, dict)
+    assert shares_staleness.get("max_days") == 5
+    assert shares_staleness.get("is_stale") is True

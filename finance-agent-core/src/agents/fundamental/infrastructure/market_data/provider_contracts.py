@@ -11,7 +11,11 @@ class MarketDatum:
     value: float | None
     source: str
     as_of: str | None = None
+    horizon: str | None = None
+    source_detail: str | None = None
     quality_flags: tuple[str, ...] = ()
+    staleness: dict[str, str | int | bool | None] | None = None
+    fallback_reason: str | None = None
     license_note: str | None = None
 
     def to_mapping(self) -> JSONObject:
@@ -21,6 +25,14 @@ class MarketDatum:
             "as_of": self.as_of,
             "quality_flags": list(self.quality_flags),
         }
+        if self.horizon is not None:
+            payload["horizon"] = self.horizon
+        if self.source_detail is not None:
+            payload["source_detail"] = self.source_detail
+        if isinstance(self.staleness, dict):
+            payload["staleness"] = dict(self.staleness)
+        if self.fallback_reason is not None:
+            payload["fallback_reason"] = self.fallback_reason
         if self.license_note is not None:
             payload["license_note"] = self.license_note
         return payload

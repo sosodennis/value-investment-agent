@@ -79,6 +79,7 @@ def build_saas_growth_rates(
     assumptions.append(
         "growth_rates blended via context-aware weights "
         f"(profile={blend_result.weights.profile})"
+        " using historical growth and short-term consensus signals"
     )
 
     return computed_field(

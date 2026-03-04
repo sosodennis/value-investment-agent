@@ -18,6 +18,8 @@ from .snapshot_service import (
 )
 from .types import MonteCarloControls
 
+DEFAULT_MARKET_STALE_MAX_DAYS = 5
+
 
 def resolve_monte_carlo_controls(
     *,
@@ -92,6 +94,16 @@ def resolve_shares_outstanding(
 ) -> TraceableField[float]:
     market_shares = market_float(market_snapshot, "shares_outstanding")
     if market_shares is None or market_shares <= 0:
+        assumptions.append("shares_outstanding fallback to filing (market unavailable)")
+        return filing_shares_tf
+
+    stale_max_days = _resolve_market_stale_max_days(market_snapshot)
+    is_stale, stale_days = _extract_market_share_staleness(market_snapshot)
+    if is_stale is True:
+        assumptions.append(
+            "shares_outstanding fallback to filing "
+            f"(market stale: age_days={stale_days}, threshold={stale_max_days})"
+        )
         return filing_shares_tf
 
     provider_raw = None if market_snapshot is None else market_snapshot.get("provider")
@@ -99,7 +111,10 @@ def resolve_shares_outstanding(
     provider = str(provider_raw) if isinstance(provider_raw, str) else "market_data"
     as_of = str(as_of_raw) if isinstance(as_of_raw, str) else "unknown"
 
-    assumptions.append("shares_outstanding sourced from market data")
+    assumptions.append(
+        "shares_outstanding sourced from market data "
+        f"(stale={is_stale}, age_days={stale_days}, threshold={stale_max_days})"
+    )
     return TraceableField(
         name="Shares Outstanding (Market)",
         value=market_shares,
@@ -110,4 +125,50 @@ def resolve_shares_outstanding(
             ),
             author="MarketDataService",
         ),
+    )
+
+
+def _resolve_market_stale_max_days(
+    market_snapshot: Mapping[str, object] | None,
+) -> int:
+    configured = env_int(
+        "FUNDAMENTAL_MARKET_STALE_MAX_DAYS",
+        DEFAULT_MARKET_STALE_MAX_DAYS,
+        minimum=0,
+    )
+    if market_snapshot is None:
+        return configured
+    snapshot_value = to_int(market_snapshot.get("market_stale_max_days"))
+    if snapshot_value is None or snapshot_value < 0:
+        return configured
+    return snapshot_value
+
+
+def _extract_market_share_staleness(
+    market_snapshot: Mapping[str, object] | None,
+) -> tuple[bool | None, int | None]:
+    if market_snapshot is None:
+        return None, None
+
+    snapshot_is_stale = market_snapshot.get("shares_outstanding_is_stale")
+    snapshot_days = market_snapshot.get("shares_outstanding_staleness_days")
+    is_stale = snapshot_is_stale if isinstance(snapshot_is_stale, bool) else None
+    stale_days = snapshot_days if isinstance(snapshot_days, int) else None
+    if is_stale is not None:
+        return is_stale, stale_days
+
+    market_datums_raw = market_snapshot.get("market_datums")
+    if not isinstance(market_datums_raw, Mapping):
+        return None, None
+    shares_datum_raw = market_datums_raw.get("shares_outstanding")
+    if not isinstance(shares_datum_raw, Mapping):
+        return None, None
+    staleness_raw = shares_datum_raw.get("staleness")
+    if not isinstance(staleness_raw, Mapping):
+        return None, None
+    datum_is_stale = staleness_raw.get("is_stale")
+    datum_days = staleness_raw.get("days")
+    return (
+        datum_is_stale if isinstance(datum_is_stale, bool) else None,
+        datum_days if isinstance(datum_days, int) else None,
     )

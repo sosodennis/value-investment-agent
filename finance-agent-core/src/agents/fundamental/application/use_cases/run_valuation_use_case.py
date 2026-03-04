@@ -340,6 +340,113 @@ def _build_metadata_with_audit(
     return metadata
 
 
+def _build_parameter_source_completion_fields(
+    build_metadata: Mapping[str, object] | None,
+) -> JSONObject:
+    fields: JSONObject = {}
+    if not isinstance(build_metadata, Mapping):
+        fields["parameter_source_summary_present"] = False
+        return fields
+
+    parameter_source_raw = build_metadata.get("parameter_source_summary")
+    has_parameter_source = isinstance(parameter_source_raw, Mapping)
+    fields["parameter_source_summary_present"] = has_parameter_source
+    if has_parameter_source:
+        parameters_raw = parameter_source_raw.get("parameters")
+        if isinstance(parameters_raw, Mapping):
+            fields["parameter_source_parameter_count"] = len(parameters_raw)
+        shares_raw = parameter_source_raw.get("shares_outstanding")
+        if isinstance(shares_raw, Mapping):
+            fallback_reason = shares_raw.get("fallback_reason")
+            market_is_stale = shares_raw.get("market_is_stale")
+            market_staleness_days = shares_raw.get("market_staleness_days")
+            if isinstance(fallback_reason, str) and fallback_reason:
+                fields["shares_fallback_reason"] = fallback_reason
+            if isinstance(market_is_stale, bool):
+                fields["shares_market_is_stale"] = market_is_stale
+            if isinstance(market_staleness_days, int):
+                fields["shares_market_staleness_days"] = market_staleness_days
+
+    data_freshness_raw = build_metadata.get("data_freshness")
+    if not isinstance(data_freshness_raw, Mapping):
+        return fields
+
+    shares_source = data_freshness_raw.get("shares_outstanding_source")
+    if isinstance(shares_source, str) and shares_source:
+        fields["shares_outstanding_source"] = shares_source
+
+    market_data_raw = data_freshness_raw.get("market_data")
+    if isinstance(market_data_raw, Mapping):
+        market_provider = market_data_raw.get("provider")
+        market_as_of = market_data_raw.get("as_of")
+        if isinstance(market_provider, str) and market_provider:
+            fields["market_data_provider"] = market_provider
+        if isinstance(market_as_of, str) and market_as_of:
+            fields["market_data_as_of"] = market_as_of
+
+    financial_statement_raw = data_freshness_raw.get("financial_statement")
+    if isinstance(financial_statement_raw, Mapping):
+        filing_raw = financial_statement_raw.get("filing")
+        if isinstance(filing_raw, Mapping):
+            selection_mode = filing_raw.get("selection_mode")
+            filing_date = filing_raw.get("filing_date")
+            if isinstance(selection_mode, str) and selection_mode:
+                fields["filing_selection_mode"] = selection_mode
+            if isinstance(filing_date, str) and filing_date:
+                fields["filing_date"] = filing_date
+
+    return fields
+
+
+def _build_completion_quality_fields(
+    *,
+    build_metadata: Mapping[str, object] | None,
+    assumptions: list[str],
+    parameter_source_completion_fields: Mapping[str, object],
+) -> JSONObject:
+    reasons: list[str] = []
+
+    if any(
+        statement.startswith("terminal_growth fallback to filing-first anchor")
+        for statement in assumptions
+    ):
+        reasons.append("terminal_growth_market_stale_fallback")
+    if any(
+        statement.startswith("shares_outstanding fallback to filing (market stale")
+        for statement in assumptions
+    ):
+        reasons.append("shares_market_stale_fallback")
+
+    shares_fallback_reason = parameter_source_completion_fields.get(
+        "shares_fallback_reason"
+    )
+    if shares_fallback_reason == "market_stale":
+        reasons.append("shares_market_stale_fallback")
+
+    if isinstance(build_metadata, Mapping):
+        data_freshness_raw = build_metadata.get("data_freshness")
+        if isinstance(data_freshness_raw, Mapping):
+            market_data_raw = data_freshness_raw.get("market_data")
+            if isinstance(market_data_raw, Mapping):
+                quality_flags_raw = market_data_raw.get("quality_flags")
+                if isinstance(quality_flags_raw, list):
+                    quality_flags = [
+                        item
+                        for item in quality_flags_raw
+                        if isinstance(item, str) and item
+                    ]
+                    if quality_flags:
+                        reasons.append("market_data_quality_flags_present")
+                    if any("stale" in item for item in quality_flags):
+                        reasons.append("market_data_stale")
+
+    dedup_reasons = list(dict.fromkeys(reasons))
+    fields: JSONObject = {"is_degraded": bool(dedup_reasons)}
+    if dedup_reasons:
+        fields["degrade_reasons"] = dedup_reasons
+    return fields
+
+
 async def run_valuation_use_case(
     runtime: ValuationRuntime,
     state: Mapping[str, object],
@@ -563,6 +670,16 @@ async def run_valuation_use_case(
             forward_signals=execution_context.forward_signals,
             build_metadata=build_metadata,
         )
+        parameter_source_completion_fields = _build_parameter_source_completion_fields(
+            build_metadata if isinstance(build_metadata, Mapping) else None,
+        )
+        completion_quality_fields = _build_completion_quality_fields(
+            build_metadata=build_metadata
+            if isinstance(build_metadata, Mapping)
+            else None,
+            assumptions=build_result.assumptions,
+            parameter_source_completion_fields=parameter_source_completion_fields,
+        )
         log_event(
             logger,
             event="fundamental_valuation_completed",
@@ -571,11 +688,12 @@ async def run_valuation_use_case(
                 "ticker": ticker,
                 "model_type": model_type,
                 "status": "done",
-                "is_degraded": False,
                 "audit_passed": execution_result.audit_passed is True,
                 "audit_message_count": len(execution_result.audit_messages),
                 **mc_completion_fields,
                 **forward_signal_completion_fields,
+                **parameter_source_completion_fields,
+                **completion_quality_fields,
             },
         )
 

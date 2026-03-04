@@ -131,3 +131,17 @@ def test_dcf_growth_monte_carlo_base_case_matches_point_intrinsic() -> None:
     base_case_intrinsic = diagnostics.get("base_case_intrinsic_value")
     assert isinstance(base_case_intrinsic, float)
     assert point_intrinsic == pytest.approx(base_case_intrinsic, rel=1e-9, abs=1e-9)
+
+
+def test_dcf_growth_preserves_high_margin_regime() -> None:
+    kwargs = _base_kwargs()
+    kwargs["operating_margins"] = [0.58, 0.58, 0.58, 0.58, 0.58]
+    params = DCFGrowthParams(**kwargs)
+    result = calculate_dcf_growth_valuation(params)
+
+    assert "error" not in result
+    details = result["details"]
+    assert isinstance(details, dict)
+    margins = details.get("operating_margins_converged")
+    assert isinstance(margins, list)
+    assert margins == pytest.approx([0.58, 0.58, 0.58, 0.58, 0.58])

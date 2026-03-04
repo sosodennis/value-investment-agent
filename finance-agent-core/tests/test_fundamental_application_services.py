@@ -114,6 +114,16 @@ def test_build_valuation_success_update_includes_output_and_artifact() -> None:
                 ],
             },
             "data_freshness": {
+                "financial_statement": {
+                    "fiscal_year": 2025,
+                    "period_end_date": "2025-12-31",
+                    "filing": {
+                        "form": "10-K",
+                        "filing_date": "2026-02-20",
+                        "selection_mode": "latest_available",
+                        "matched_fiscal_year": 2025,
+                    },
+                },
                 "market_data": {
                     "provider": "yfinance",
                     "as_of": "2026-02-20T00:00:00Z",
@@ -138,6 +148,16 @@ def test_build_valuation_success_update_includes_output_and_artifact() -> None:
                     "threshold_days": 365,
                     "market_as_of": "2026-02-20T00:00:00+00:00",
                     "filing_period_end": "2024-12-31",
+                },
+            },
+            "parameter_source_summary": {
+                "market_data_anchor": {
+                    "provider": "yfinance",
+                    "as_of": "2026-02-20T00:00:00Z",
+                },
+                "shares_outstanding": {
+                    "selected_source": "market_data",
+                    "market_is_stale": False,
                 },
             },
         },
@@ -185,6 +205,9 @@ def test_build_valuation_success_update_includes_output_and_artifact() -> None:
     assert preview["forward_signal_summary"]["signals_total"] == 2
     assert preview["forward_signal_risk_level"] == "medium"
     assert preview["forward_signal_evidence_count"] == 3
+    assert preview["parameter_source_summary"]["market_data_anchor"]["provider"] == (
+        "yfinance"
+    )
     assert preview["forward_signal_summary"]["source_types"] == ["mda", "manual"]
     assert (
         preview["assumption_breakdown"]["forward_signal_summary"][
@@ -192,7 +215,17 @@ def test_build_valuation_success_update_includes_output_and_artifact() -> None:
         ]
         == 45.0
     )
+    assert (
+        preview["assumption_breakdown"]["parameter_source_summary"][
+            "shares_outstanding"
+        ]["selected_source"]
+        == "market_data"
+    )
     assert preview["data_freshness"]["financial_statement"]["fiscal_year"] == 2025
+    assert (
+        preview["data_freshness"]["financial_statement"]["filing"]["selection_mode"]
+        == "latest_available"
+    )
     assert preview["data_freshness"]["market_data"]["provider"] == "yfinance"
     assert preview["data_freshness"]["market_data"]["quality_flags"] == [
         "risk_free_rate:defaulted"

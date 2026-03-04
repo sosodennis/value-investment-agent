@@ -204,6 +204,85 @@ def test_build_params_dcf_growth_uses_dedicated_builder_variant() -> None:
     )
 
 
+def test_build_params_forward_signal_adjustments_sync_trace_inputs() -> None:
+    canonical_reports = parse_financial_reports_model(
+        _raw_reports(), context="test.financial_reports.dcf_growth.forward_signal_sync"
+    )
+    baseline = build_params(
+        "dcf_growth",
+        "EXM",
+        canonical_reports,
+        market_snapshot={"consensus_growth_rate": 0.25},
+    )
+    adjusted = build_params(
+        "dcf_growth",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "consensus_growth_rate": 0.25,
+            "forward_signals": [
+                {
+                    "signal_id": "sig-growth-down",
+                    "source_type": "manual",
+                    "metric": "growth_outlook",
+                    "direction": "down",
+                    "value": 120.0,
+                    "unit": "basis_points",
+                    "confidence": 0.8,
+                    "evidence": [
+                        {
+                            "preview_text": "growth pressure",
+                            "full_text": "growth pressure",
+                            "source_url": "https://example.com/growth",
+                        }
+                    ],
+                },
+                {
+                    "signal_id": "sig-margin-down",
+                    "source_type": "mda",
+                    "metric": "margin_outlook",
+                    "direction": "down",
+                    "value": 80.0,
+                    "unit": "basis_points",
+                    "confidence": 0.8,
+                    "evidence": [
+                        {
+                            "preview_text": "margin pressure",
+                            "full_text": "margin pressure",
+                            "source_url": "https://example.com/margin",
+                        }
+                    ],
+                },
+            ],
+        },
+    )
+
+    baseline_growth = baseline.params["growth_rates"]
+    adjusted_growth = adjusted.params["growth_rates"]
+    assert isinstance(baseline_growth, list)
+    assert isinstance(adjusted_growth, list)
+    assert adjusted_growth[0] < baseline_growth[0]
+
+    baseline_margin = baseline.params["operating_margins"]
+    adjusted_margin = adjusted.params["operating_margins"]
+    assert isinstance(baseline_margin, list)
+    assert isinstance(adjusted_margin, list)
+    assert adjusted_margin[0] < baseline_margin[0]
+
+    trace_growth = adjusted.trace_inputs["growth_rates"]
+    trace_margin = adjusted.trace_inputs["operating_margins"]
+    assert trace_growth.value == adjusted_growth
+    assert trace_margin.value == adjusted_margin
+    assert any(
+        statement.startswith("forward_signal growth adjustment applied")
+        for statement in adjusted.assumptions
+    )
+    assert any(
+        statement.startswith("forward_signal margin adjustment applied")
+        for statement in adjusted.assumptions
+    )
+
+
 def test_build_params_prefers_market_shares_when_available() -> None:
     canonical_reports = parse_financial_reports_model(
         _raw_reports(), context="test.financial_reports"
@@ -225,7 +304,10 @@ def test_build_params_prefers_market_shares_when_available() -> None:
     assert result.params["current_price"] == 77.5
     shares_input = result.trace_inputs["shares_outstanding"]
     assert shares_input.value == 1200.0
-    assert "shares_outstanding sourced from market data" in result.assumptions
+    assert any(
+        statement.startswith("shares_outstanding sourced from market data")
+        for statement in result.assumptions
+    )
     growth_rates = result.params["growth_rates"]
     assert isinstance(growth_rates, list)
     assert growth_rates[0] > growth_rates[-1]
@@ -248,7 +330,8 @@ def test_build_params_saas_uses_market_aware_wacc_when_available() -> None:
         market_snapshot={
             "risk_free_rate": 0.04,
             "beta": 1.2,
-            "consensus_growth_rate": 0.03,
+            "consensus_growth_rate": 0.15,
+            "long_run_growth_anchor": 0.03,
             "provider": "test_feed",
             "as_of": "2026-02-20T00:00:00Z",
         },
@@ -260,7 +343,7 @@ def test_build_params_saas_uses_market_aware_wacc_when_available() -> None:
     assert result.params["wacc"] == pytest.approx(0.10)
     assert result.params["terminal_growth"] == pytest.approx(0.03)
     assert "wacc sourced from market-aware CAPM inputs" in result.assumptions
-    assert "terminal_growth sourced from consensus_growth_rate" in result.assumptions
+    assert "terminal_growth sourced from long_run_growth_anchor" in result.assumptions
 
 
 def test_build_params_saas_clamps_terminal_growth_against_wacc() -> None:
@@ -274,7 +357,7 @@ def test_build_params_saas_clamps_terminal_growth_against_wacc() -> None:
         market_snapshot={
             "risk_free_rate": 0.03,
             "beta": 0.50,
-            "consensus_growth_rate": 0.20,
+            "long_run_growth_anchor": 0.20,
             "provider": "test_feed",
             "as_of": "2026-02-20T00:00:00Z",
         },
@@ -284,6 +367,100 @@ def test_build_params_saas_clamps_terminal_growth_against_wacc() -> None:
     assert result.params["terminal_growth"] == pytest.approx(0.04)
     assert any(
         "terminal_growth clamped from 20.00% to 4.00%" in s for s in result.assumptions
+    )
+
+
+def test_build_params_saas_clamps_beta_for_capm_stability() -> None:
+    canonical_reports = parse_financial_reports_model(
+        _raw_reports(), context="test.financial_reports.saas.beta_clamp"
+    )
+    result = build_params(
+        "saas",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "risk_free_rate": 0.04,
+            "beta": 2.40,
+            "consensus_growth_rate": 0.15,
+            "long_run_growth_anchor": 0.03,
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+
+    assert result.params["beta"] == pytest.approx(1.8)
+    assert result.params["wacc"] == pytest.approx(0.13)
+    assert any(
+        "beta clamped from 2.400 to 1.800" in statement
+        for statement in result.assumptions
+    )
+
+
+def test_build_params_saas_does_not_use_short_term_consensus_for_terminal_growth() -> (
+    None
+):
+    canonical_reports = parse_financial_reports_model(
+        _raw_reports(), context="test.financial_reports.saas.terminal_consensus_split"
+    )
+    result = build_params(
+        "saas",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "risk_free_rate": 0.04,
+            "beta": 1.2,
+            "consensus_growth_rate": 0.25,
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+
+    assert result.params["terminal_growth"] == pytest.approx(0.02)
+    assert (
+        "terminal_growth sourced from long_run_growth_anchor" not in result.assumptions
+    )
+    assert any(
+        "long_run_growth_anchor unavailable" in statement
+        for statement in result.assumptions
+    )
+
+
+def test_build_params_saas_falls_back_to_filing_terminal_anchor_when_market_anchor_is_stale() -> (
+    None
+):
+    canonical_reports = parse_financial_reports_model(
+        _raw_reports(), context="test.financial_reports.saas.terminal_stale_fallback"
+    )
+    result = build_params(
+        "saas",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "risk_free_rate": 0.04,
+            "beta": 1.2,
+            "long_run_growth_anchor": 0.014,
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+            "market_datums": {
+                "long_run_growth_anchor": {
+                    "value": 0.014,
+                    "source": "fred",
+                    "as_of": "2025-01-01T00:00:00Z",
+                    "staleness": {"days": 416, "is_stale": True, "max_days": 5},
+                }
+            },
+        },
+    )
+
+    assert result.params["terminal_growth"] == pytest.approx(0.04)
+    assert any(
+        statement.startswith("terminal_growth fallback to filing-first anchor")
+        for statement in result.assumptions
+    )
+    assert any(
+        "terminal_growth sourced from filing-first anchor" in statement
+        or "terminal_growth clamped from" in statement
+        for statement in result.assumptions
     )
 
 
@@ -304,7 +481,39 @@ def test_build_params_does_not_infer_shares_from_market_cap_price() -> None:
     )
 
     assert result.params["shares_outstanding"] == 1000.0
-    assert "shares_outstanding sourced from market data" not in result.assumptions
+    assert all(
+        not statement.startswith("shares_outstanding sourced from market data")
+        for statement in result.assumptions
+    )
+
+
+def test_build_params_falls_back_to_filing_shares_when_market_shares_is_stale() -> None:
+    canonical_reports = parse_financial_reports_model(
+        _raw_reports(), context="test.financial_reports.shares_stale_fallback"
+    )
+    result = build_params(
+        "saas",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "shares_outstanding": 1200.0,
+            "shares_outstanding_is_stale": True,
+            "shares_outstanding_staleness_days": 9,
+            "market_stale_max_days": 5,
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+
+    assert result.params["shares_outstanding"] == 1000.0
+    shares_source = result.metadata.get("data_freshness", {}).get(
+        "shares_outstanding_source"
+    )
+    assert shares_source == "filing_market_stale_fallback"
+    assert any(
+        statement.startswith("shares_outstanding fallback to filing (market stale")
+        for statement in result.assumptions
+    )
 
 
 def test_build_params_bank_includes_capm_inputs() -> None:
@@ -492,7 +701,11 @@ def test_build_params_metadata_includes_market_datum_quality_contract() -> None:
                     "value": 0.042,
                     "source": "policy_default",
                     "as_of": "2026-02-23T00:00:00Z",
+                    "horizon": "long_term",
+                    "source_detail": "policy:default",
                     "quality_flags": ["defaulted"],
+                    "staleness": {"days": 0, "is_stale": False, "max_days": 5},
+                    "fallback_reason": "provider_missing",
                     "license_note": "internal default",
                 }
             },
@@ -510,3 +723,10 @@ def test_build_params_metadata_includes_market_datum_quality_contract() -> None:
     risk_free = market_datums.get("risk_free_rate")
     assert isinstance(risk_free, dict)
     assert risk_free.get("source") == "policy_default"
+    assert risk_free.get("horizon") == "long_term"
+    assert risk_free.get("fallback_reason") == "provider_missing"
+    parameter_source_summary = result.metadata.get("parameter_source_summary")
+    assert isinstance(parameter_source_summary, dict)
+    assert parameter_source_summary.get("market_data_anchor", {}).get("provider") == (
+        "yfinance"
+    )

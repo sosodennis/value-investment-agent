@@ -57,12 +57,25 @@ class RealEstateExtension(TraceableNamespace):
 
 
 @dataclass(frozen=True)
+class FilingMetadata:
+    form: str | None = None
+    accession_number: str | None = None
+    filing_date: str | None = None
+    accepted_datetime: str | None = None
+    period_of_report: str | None = None
+    requested_fiscal_year: int | None = None
+    matched_fiscal_year: int | None = None
+    selection_mode: str | None = None
+
+
+@dataclass(frozen=True)
 class FinancialReport:
     base: BaseFinancialModel
     extension: (
         IndustrialExtension | FinancialServicesExtension | RealEstateExtension | None
     ) = None
     industry_type: str = "General"
+    filing_metadata: FilingMetadata | None = None
 
 
 TRACEABLE_FIELD_LABELS: dict[str, str] = {
@@ -150,6 +163,7 @@ def _coerce_report(value: Mapping[str, object]) -> FinancialReport:
         value,
         has_extension=extension_map is not None,
     )
+    filing_metadata = _coerce_filing_metadata(value.get("filing_metadata"))
 
     base = BaseFinancialModel(
         fields=_coerce_traceable_mapping(base_raw, context="financial report.base")
@@ -181,6 +195,7 @@ def _coerce_report(value: Mapping[str, object]) -> FinancialReport:
         base=base,
         extension=extension,
         industry_type=extension_type or "General",
+        filing_metadata=filing_metadata,
     )
 
 
@@ -222,6 +237,45 @@ def _coerce_traceable_mapping(
     for key, item in mapping.items():
         output[key] = _coerce_traceable_field(item, key=key, context=f"{context}.{key}")
     return output
+
+
+def _coerce_filing_metadata(value: object) -> FilingMetadata | None:
+    if value is None:
+        return None
+    if not isinstance(value, Mapping):
+        raise TypeError("financial report.filing_metadata must be an object")
+    return FilingMetadata(
+        form=_coerce_optional_text(value.get("form")),
+        accession_number=_coerce_optional_text(value.get("accession_number")),
+        filing_date=_coerce_optional_text(value.get("filing_date")),
+        accepted_datetime=_coerce_optional_text(value.get("accepted_datetime")),
+        period_of_report=_coerce_optional_text(value.get("period_of_report")),
+        requested_fiscal_year=_coerce_optional_int(value.get("requested_fiscal_year")),
+        matched_fiscal_year=_coerce_optional_int(value.get("matched_fiscal_year")),
+        selection_mode=_coerce_optional_text(value.get("selection_mode")),
+    )
+
+
+def _coerce_optional_text(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized if normalized else None
+
+
+def _coerce_optional_int(value: object) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(float(value))
+        except ValueError:
+            return None
+    return None
 
 
 def _coerce_traceable_field(value: object, *, key: str, context: str) -> TraceableField:

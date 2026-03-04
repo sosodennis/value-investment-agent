@@ -29,6 +29,8 @@ from ..shared.missing_metrics_service import collect_missing_metric_names
 
 DEFAULT_SAAS_RISK_FREE_RATE = 0.042
 DEFAULT_SAAS_BETA = 1.0
+BETA_FLOOR = 0.50
+BETA_CEILING = 1.80
 WACC_FLOOR = 0.05
 WACC_CEILING = 0.30
 TERMINAL_GROWTH_FLOOR = -0.02
@@ -49,8 +51,99 @@ def _clamp(value: float, lower: float, upper: float) -> float:
     return max(lower, min(upper, value))
 
 
+def _to_float(value: object) -> float | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int | float):
+        return float(value)
+    if isinstance(value, str):
+        normalized = value.strip()
+        if not normalized:
+            return None
+        try:
+            return float(normalized)
+        except ValueError:
+            return None
+    return None
+
+
+def _to_int(value: object) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        normalized = value.strip()
+        if not normalized:
+            return None
+        try:
+            return int(float(normalized))
+        except ValueError:
+            return None
+    return None
+
+
+def _extract_market_datum_staleness(
+    market_snapshot: Mapping[str, object] | None,
+    *,
+    field: str,
+) -> tuple[bool | None, int | None, int | None]:
+    if market_snapshot is None:
+        return None, None, None
+    market_datums_raw = market_snapshot.get("market_datums")
+    if not isinstance(market_datums_raw, Mapping):
+        return None, None, None
+    datum_raw = market_datums_raw.get(field)
+    if not isinstance(datum_raw, Mapping):
+        return None, None, None
+    staleness_raw = datum_raw.get("staleness")
+    if not isinstance(staleness_raw, Mapping):
+        return None, None, None
+    is_stale_raw = staleness_raw.get("is_stale")
+    days_raw = staleness_raw.get("days")
+    max_days_raw = staleness_raw.get("max_days")
+    is_stale = is_stale_raw if isinstance(is_stale_raw, bool) else None
+    stale_days = days_raw if isinstance(days_raw, int) else _to_int(days_raw)
+    stale_max_days = (
+        max_days_raw if isinstance(max_days_raw, int) else _to_int(max_days_raw)
+    )
+    return is_stale, stale_days, stale_max_days
+
+
+def _derive_filing_terminal_growth_anchor(
+    reports: list[FinancialReport],
+) -> float | None:
+    points: list[tuple[int, float]] = []
+    for report in reports:
+        year = _to_int(report.base.fiscal_year.value)
+        revenue = _to_float(report.base.total_revenue.value)
+        if year is None or revenue is None or revenue <= 0:
+            continue
+        points.append((year, revenue))
+
+    if len(points) < 2:
+        return None
+    points.sort(key=lambda item: item[0])
+    first_year, first_revenue = points[0]
+    last_year, last_revenue = points[-1]
+    if last_revenue <= 0 or first_revenue <= 0:
+        return None
+
+    span_years = last_year - first_year
+    if span_years > 0:
+        return (last_revenue / first_revenue) ** (1.0 / float(span_years)) - 1.0
+
+    previous_revenue = points[-2][1]
+    if previous_revenue <= 0:
+        return None
+    return (last_revenue - previous_revenue) / previous_revenue
+
+
 def _build_saas_capm_terminal_inputs(
     *,
+    reports: list[FinancialReport],
     market_snapshot: Mapping[str, object] | None,
     market_float: Callable[[Mapping[str, object] | None, str], float | None],
     default_market_risk_premium: float,
@@ -68,7 +161,13 @@ def _build_saas_capm_terminal_inputs(
         assumptions=assumptions,
     )
     risk_free_rate = market_defaults.risk_free_rate
-    beta = market_defaults.beta
+    raw_beta = market_defaults.beta
+    beta = _clamp(raw_beta, BETA_FLOOR, BETA_CEILING)
+    if beta != raw_beta:
+        assumptions.append(
+            f"beta clamped from {raw_beta:.3f} to {beta:.3f} "
+            f"(bounds={BETA_FLOOR:.3f}-{BETA_CEILING:.3f})"
+        )
     market_risk_premium = market_defaults.market_risk_premium
 
     raw_wacc = risk_free_rate + (beta * market_risk_premium)
@@ -92,12 +191,44 @@ def _build_saas_capm_terminal_inputs(
         ),
     )
 
-    consensus_growth_rate = market_float(market_snapshot, "consensus_growth_rate")
-    terminal_candidate = (
-        consensus_growth_rate
-        if consensus_growth_rate is not None
-        else DEFAULT_TERMINAL_GROWTH
+    long_run_growth_anchor = market_float(market_snapshot, "long_run_growth_anchor")
+    anchor_is_stale, anchor_stale_days, anchor_stale_max_days = (
+        _extract_market_datum_staleness(
+            market_snapshot,
+            field="long_run_growth_anchor",
+        )
     )
+    anchor_source = "market"
+    terminal_anchor = long_run_growth_anchor
+    if anchor_is_stale is True:
+        filing_anchor = _derive_filing_terminal_growth_anchor(reports)
+        stale_days_label = (
+            str(anchor_stale_days) if isinstance(anchor_stale_days, int) else "unknown"
+        )
+        stale_max_label = (
+            str(anchor_stale_max_days)
+            if isinstance(anchor_stale_max_days, int)
+            else "unknown"
+        )
+        if filing_anchor is not None:
+            terminal_anchor = filing_anchor
+            anchor_source = "filing"
+            assumptions.append(
+                "terminal_growth fallback to filing-first anchor "
+                "(market stale: "
+                f"age_days={stale_days_label}, threshold={stale_max_label})"
+            )
+        else:
+            assumptions.append(
+                "terminal_growth stale market anchor could not fallback to filing-first "
+                "(filing anchor unavailable)"
+            )
+            terminal_anchor = None
+
+    if terminal_anchor is None:
+        terminal_anchor = DEFAULT_TERMINAL_GROWTH
+        anchor_source = "default"
+
     terminal_upper_bound = min(
         TERMINAL_GROWTH_CEILING,
         clamped_wacc - TERMINAL_GROWTH_SPREAD_BUFFER,
@@ -105,29 +236,34 @@ def _build_saas_capm_terminal_inputs(
     if terminal_upper_bound <= TERMINAL_GROWTH_FLOOR:
         terminal_upper_bound = TERMINAL_GROWTH_FLOOR + 0.001
     clamped_terminal_growth = _clamp(
-        terminal_candidate,
+        terminal_anchor,
         TERMINAL_GROWTH_FLOOR,
         terminal_upper_bound,
     )
-    if consensus_growth_rate is None:
+    if anchor_source == "default":
         assumptions.append(
             f"terminal_growth defaulted to {DEFAULT_TERMINAL_GROWTH:.2%} "
-            "(consensus unavailable)"
+            "(long_run_growth_anchor unavailable)"
         )
-    elif clamped_terminal_growth != terminal_candidate:
+    elif clamped_terminal_growth != terminal_anchor:
         assumptions.append(
-            f"terminal_growth clamped from {terminal_candidate:.2%} to "
+            f"terminal_growth clamped from {terminal_anchor:.2%} to "
             f"{clamped_terminal_growth:.2%} "
             f"(bounds={TERMINAL_GROWTH_FLOOR:.2%}-{terminal_upper_bound:.2%})"
         )
+    elif anchor_source == "filing":
+        assumptions.append(
+            "terminal_growth sourced from filing-first anchor "
+            "(market stale fallback)"
+        )
     else:
-        assumptions.append("terminal_growth sourced from consensus_growth_rate")
+        assumptions.append("terminal_growth sourced from long_run_growth_anchor")
     terminal_growth_tf = TraceableField(
         name="Terminal Growth",
         value=clamped_terminal_growth,
         provenance=ManualProvenance(
             description=(
-                "Consensus-aware terminal growth with economic bounds "
+                "Long-run-anchor terminal growth with economic bounds "
                 f"(upper=min({TERMINAL_GROWTH_CEILING:.2%}, wacc-"
                 f"{TERMINAL_GROWTH_SPREAD_BUFFER:.2%}))"
             ),
@@ -543,6 +679,7 @@ def build_saas_payload(
     )
 
     capm_terminal_inputs = _build_saas_capm_terminal_inputs(
+        reports=reports,
         market_snapshot=market_snapshot,
         market_float=deps.market_float,
         default_market_risk_premium=deps.default_market_risk_premium,

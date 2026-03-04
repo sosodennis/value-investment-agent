@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from src.shared.kernel.tools.logger import get_logger, log_event
+from src.shared.kernel.traceable import TraceableField
 
 from ..report_contract import (
     FinancialReport,
@@ -27,6 +28,45 @@ logger = get_logger(__name__)
 
 DEFAULT_TIME_ALIGNMENT_MAX_DAYS = 365
 DEFAULT_TIME_ALIGNMENT_POLICY = "warn"
+
+
+def _coerce_traceable_value(value: object) -> float | list[float] | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int | float):
+        return float(value)
+    if isinstance(value, list | tuple):
+        output: list[float] = []
+        for item in value:
+            if not isinstance(item, int | float) or isinstance(item, bool):
+                return None
+            output.append(float(item))
+        return output
+    return None
+
+
+def _sync_adjusted_params_into_trace_inputs(
+    *,
+    trace_inputs: Mapping[str, object],
+    original_params: Mapping[str, object],
+    adjusted_params: Mapping[str, object],
+) -> dict[str, object]:
+    synced: dict[str, object] = dict(trace_inputs)
+    if not synced:
+        return synced
+
+    for field_name, original_value in original_params.items():
+        adjusted_value = adjusted_params.get(field_name)
+        if adjusted_value == original_value:
+            continue
+        trace_raw = synced.get(field_name)
+        if not isinstance(trace_raw, TraceableField):
+            continue
+        coerced_adjusted = _coerce_traceable_value(adjusted_value)
+        if coerced_adjusted is None:
+            continue
+        synced[field_name] = trace_raw.model_copy(update={"value": coerced_adjusted})
+    return synced
 
 
 def build_params(
@@ -155,9 +195,14 @@ def _apply_forward_signal_adjustments(
             message="forward signal policy applied to valuation params",
             fields=outcome.log_fields,
         )
+    synced_trace_inputs = _sync_adjusted_params_into_trace_inputs(
+        trace_inputs=result.trace_inputs,
+        original_params=result.params,
+        adjusted_params=outcome.params,
+    )
     return ParamBuildResult(
         params=outcome.params,
-        trace_inputs=result.trace_inputs,
+        trace_inputs=synced_trace_inputs,
         missing=result.missing,
         assumptions=outcome.assumptions,
         metadata=outcome.metadata,
