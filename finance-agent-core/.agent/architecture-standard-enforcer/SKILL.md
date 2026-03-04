@@ -7,7 +7,7 @@ description: Enforce canonical cross-agent architecture compliance for finance-a
 
 ## Required Reference
 
-Read `../agent-architecture-guard/references/cross-agent-architecture-standard.md` before analysis.
+Read `references/cross-agent-architecture-standard.md` before analysis.
 Treat hard rules as blocking unless the user explicitly requests a temporary exception.
 
 ## Workflow
