@@ -127,8 +127,32 @@ async def run_semantic_translate_use_case(
             pipeline_result=pipeline_result,
             build_output_artifact=runtime.build_semantic_output_artifact,
         )
-        success_update = build_semantic_translate_success_result(ta_update)
-        is_degraded = "artifact" not in ta_update
+        degraded_reasons = list(pipeline_result.degraded_reasons)
+        artifact_written = "artifact" in ta_update
+        if not artifact_written:
+            degraded_reasons.append("TECHNICAL_SEMANTIC_ARTIFACT_FAILED")
+        is_degraded = bool(degraded_reasons)
+        success_update = build_semantic_translate_success_result(
+            ta_update,
+            is_degraded=is_degraded,
+            degraded_reasons=degraded_reasons,
+        )
+        if is_degraded:
+            log_event(
+                logger,
+                event="technical_semantic_translate_degraded",
+                message="technical semantic translation completed with degraded quality",
+                level=logging.WARNING,
+                error_code="TECHNICAL_SEMANTIC_TRANSLATE_DEGRADED",
+                fields={
+                    "ticker": context.ticker,
+                    "degrade_source": "semantic_pipeline",
+                    "fallback_mode": "continue_with_partial_semantic_output",
+                    "degraded_reasons": degraded_reasons,
+                    "input_count": len(pipeline_result.tags_result.tags),
+                    "output_count": len(ta_update),
+                },
+            )
         log_event(
             logger,
             event="technical_semantic_translate_completed",
@@ -138,8 +162,10 @@ async def run_semantic_translate_use_case(
                 "ticker": context.ticker,
                 "status": "done",
                 "is_degraded": is_degraded,
-                "artifact_written": not is_degraded,
+                "artifact_written": artifact_written,
                 "semantic_tag_count": len(pipeline_result.tags_result.tags),
+                "degraded_reason_count": len(degraded_reasons),
+                "degraded_reasons": degraded_reasons,
             },
         )
         return TechnicalNodeResult(update=success_update.update, goto="END")

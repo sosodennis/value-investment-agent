@@ -201,10 +201,9 @@ def test_node_update_builders_for_search_selector_and_analyst_chain() -> None:
             "preview": None,
             "reference": None,
         },
-        article_count=3,
         search_artifact_id="a1",
     )
-    assert success["financial_news_research"]["article_count"] == 3
+    assert success["financial_news_research"]["search_artifact_id"] == "a1"
     assert success["node_statuses"]["financial_news_research"] == "running"
 
     selector_degraded = build_selector_node_update(
@@ -664,6 +663,11 @@ def test_aggregator_ticker_from_state_prefers_resolved_ticker() -> None:
         }
     )
     assert ticker == "GOOG"
+
+
+def test_aggregator_ticker_from_state_does_not_fallback_to_root_ticker() -> None:
+    ticker = aggregator_ticker_from_state({"ticker": "STATE_TICKER"})
+    assert ticker == "UNKNOWN"
 
 
 class _SearchSaveFailPort:

@@ -23,6 +23,8 @@ class BacktestContextResult:
     wfa_context: str
     price_data: PriceSeriesDataLike | None
     chart_data: TechnicalChartDataLike | None
+    is_degraded: bool = False
+    failure_code: str | None = None
 
 
 @dataclass(frozen=True)
@@ -40,6 +42,10 @@ class SemanticPipelineResult:
     llm_interpretation: str
     backtest_context_result: BacktestContextResult
     semantic_finalize_result: SemanticFinalizeResult
+    llm_is_fallback: bool = False
+    llm_failure_code: str | None = None
+    is_degraded: bool = False
+    degraded_reasons: tuple[str, ...] = ()
 
 
 class TechnicalPortLike(Protocol):

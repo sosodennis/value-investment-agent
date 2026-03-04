@@ -20,9 +20,6 @@ from src.agents.fundamental.domain.valuation_model_type_service import (
 from src.agents.fundamental.interface.report_projection_service import (
     project_selection_reports,
 )
-from src.agents.fundamental.interface.serializers import (
-    serialize_model_selection_details,
-)
 from src.shared.cross_agent.domain.market_identity import CompanyProfile
 from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
@@ -161,7 +158,6 @@ async def run_model_selection_use_case(
                 selection_reports,
             )
 
-        selection_details = serialize_model_selection_details(selection)
         model_type = resolve_calculator_model_type(model.value)
 
         artifact: AgentOutputArtifactPayload | None
@@ -196,12 +192,46 @@ async def run_model_selection_use_case(
             )
             artifact, report_id = None, None
 
+        resolved_reports_artifact_id = report_id or reports_artifact_id
+        if resolved_reports_artifact_id is None:
+            log_event(
+                logger,
+                event="fundamental_model_selection_report_id_missing",
+                message="fundamental model selection missing reports artifact id for valuation handoff",
+                level=logging.ERROR,
+                error_code="FUNDAMENTAL_MODEL_SELECTION_REPORT_ID_MISSING",
+                fields={
+                    "ticker": resolved_ticker,
+                    "model_type": model_type,
+                    "reports_count": len(financial_reports),
+                    "forward_signal_count": len(forward_signals or []),
+                },
+            )
+            log_event(
+                logger,
+                event="fundamental_model_selection_completed",
+                message="fundamental model selection completed",
+                level=logging.ERROR,
+                fields={
+                    "ticker": resolved_ticker,
+                    "status": "error",
+                    "is_degraded": True,
+                    "error_code": "FUNDAMENTAL_MODEL_SELECTION_REPORT_ID_MISSING",
+                    "reports_count": len(financial_reports),
+                    "forward_signal_count": len(forward_signals or []),
+                },
+            )
+            return FundamentalNodeResult(
+                update=build_node_error_update(
+                    node="model_selection",
+                    error="Missing financial reports artifact id for valuation handoff",
+                ),
+                goto="END",
+            )
+
         fa_update: JSONObject = {
             "model_type": model_type,
-            "selected_model": model.value,
-            "valuation_summary": reasoning,
-            "financial_reports_artifact_id": report_id or reports_artifact_id,
-            "model_selection_details": selection_details,
+            "financial_reports_artifact_id": resolved_reports_artifact_id,
         }
         if artifact is not None:
             fa_update["artifact"] = artifact
@@ -227,7 +257,6 @@ async def run_model_selection_use_case(
         return FundamentalNodeResult(
             update=build_model_selection_success_update(
                 fa_update=fa_update,
-                resolved_ticker=resolved_ticker,
             ),
             goto="calculation",
         )

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 
 from src.shared.kernel.traceable import TraceableField
 
@@ -42,10 +43,74 @@ from .snapshot_service import (
     to_float as _to_float,
 )
 from .types import MonteCarloControls
-from .wiring_service import BuilderContextDeps
-from .wiring_service import (
-    build_builder_context as _build_builder_context_service,
-)
+
+
+@dataclass(frozen=True)
+class _BuilderContextDeps:
+    resolve_shares_outstanding: Callable[
+        [TraceableField[float], Mapping[str, object] | None, list[str]],
+        TraceableField[float],
+    ]
+    resolve_monte_carlo_controls: Callable[
+        [Mapping[str, object] | None, list[str]],
+        MonteCarloControls,
+    ]
+    market_float: Callable[[Mapping[str, object] | None, str], float | None]
+    value_or_missing: Callable[
+        [TraceableField[float] | None, str, list[str]],
+        float | None,
+    ]
+    ratio: Callable[
+        [str, TraceableField[float], TraceableField[float], str],
+        TraceableField[float],
+    ]
+    subtract: Callable[
+        [str, TraceableField[float], TraceableField[float], str],
+        TraceableField[float],
+    ]
+    build_saas_growth_rates: Callable[
+        [list[TraceableField[float]], Mapping[str, object] | None, list[str]],
+        TraceableField[list[float]],
+    ]
+    repeat_rate: Callable[
+        [str, TraceableField[float], int], TraceableField[list[float]]
+    ]
+    missing_field: Callable[[str, str], TraceableField[float]]
+    to_float: Callable[[object], float | None]
+    computed_field: Callable[
+        [str, float | list[float], str, str, dict[str, TraceableField]],
+        TraceableField,
+    ]
+    growth_rates_from_series: Callable[
+        [str, list[TraceableField[float]], int],
+        TraceableField[list[float]],
+    ]
+
+
+def _build_builder_context(
+    *,
+    projection_years: int,
+    default_market_risk_premium: float,
+    default_maintenance_capex_ratio: float,
+    deps: _BuilderContextDeps,
+) -> BuilderContext:
+    return BuilderContext(
+        projection_years=projection_years,
+        default_market_risk_premium=default_market_risk_premium,
+        default_maintenance_capex_ratio=default_maintenance_capex_ratio,
+        resolve_shares_outstanding=deps.resolve_shares_outstanding,
+        resolve_monte_carlo_controls=deps.resolve_monte_carlo_controls,
+        market_float=deps.market_float,
+        value_or_missing=deps.value_or_missing,
+        ratio=deps.ratio,
+        subtract=deps.subtract,
+        build_saas_growth_rates=deps.build_saas_growth_rates,
+        repeat_rate=deps.repeat_rate,
+        missing_field=deps.missing_field,
+        to_float=deps.to_float,
+        computed_field=deps.computed_field,
+        growth_rates_from_series=deps.growth_rates_from_series,
+    )
 
 
 def build_default_builder_context(
@@ -96,11 +161,11 @@ def build_default_builder_context(
             high_growth_trigger=high_growth_trigger,
         )
 
-    return _build_builder_context_service(
+    return _build_builder_context(
         projection_years=projection_years,
         default_market_risk_premium=default_market_risk_premium,
         default_maintenance_capex_ratio=default_maintenance_capex_ratio,
-        deps=BuilderContextDeps(
+        deps=_BuilderContextDeps(
             resolve_shares_outstanding=_resolve_shares_outstanding,
             resolve_monte_carlo_controls=_resolve_monte_carlo,
             market_float=_market_float,

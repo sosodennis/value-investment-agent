@@ -28,13 +28,11 @@ def build_data_fetch_error_update(error_message: str) -> JSONObject:
 def build_data_fetch_success_update(
     *,
     price_artifact_id: str,
-    resolved_ticker: str,
     artifact: AgentOutputArtifactPayload,
 ) -> JSONObject:
     return {
         "technical_analysis": {
             "price_artifact_id": price_artifact_id,
-            "ticker": resolved_ticker,
             "artifact": artifact,
         },
         "current_node": "data_fetch",
@@ -100,10 +98,18 @@ def build_fracdiff_success_update(
     }
 
 
-def build_semantic_success_update(ta_update: JSONObject) -> SemanticCommandUpdateResult:
+def build_semantic_success_update(
+    ta_update: JSONObject,
+    *,
+    is_degraded: bool,
+    degraded_reasons: list[str],
+) -> SemanticCommandUpdateResult:
+    technical_analysis = dict(ta_update)
+    technical_analysis["is_degraded"] = is_degraded
+    technical_analysis["degraded_reasons"] = list(degraded_reasons)
     return SemanticCommandUpdateResult(
         update={
-            "technical_analysis": ta_update,
+            "technical_analysis": technical_analysis,
             "current_node": "semantic_translate",
             "internal_progress": {"semantic_translate": "done"},
             "node_statuses": {"technical_analysis": "done"},

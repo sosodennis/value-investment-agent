@@ -4,6 +4,10 @@ import warnings
 import pandas as pd
 import yfinance as yf
 
+from src.agents.technical.application.ports import (
+    TechnicalOhlcvFetchResult,
+    TechnicalProviderFailure,
+)
 from src.shared.kernel.tools.logger import get_logger, log_event
 
 logger = get_logger(__name__)
@@ -11,7 +15,9 @@ logger = get_logger(__name__)
 warnings.filterwarnings("ignore", category=FutureWarning, module="yfinance")
 
 
-def fetch_daily_ohlcv(ticker_symbol: str, period: str = "5y") -> pd.DataFrame | None:
+def fetch_daily_ohlcv(
+    ticker_symbol: str, period: str = "5y"
+) -> TechnicalOhlcvFetchResult:
     """Fetch daily OHLCV data and apply split adjustment to close prices."""
     try:
         log_event(
@@ -34,7 +40,13 @@ def fetch_daily_ohlcv(ticker_symbol: str, period: str = "5y") -> pd.DataFrame | 
                 error_code="TECHNICAL_OHLCV_EMPTY",
                 fields={"ticker": ticker_symbol, "period": period},
             )
-            return None
+            return TechnicalOhlcvFetchResult(
+                data=None,
+                failure=TechnicalProviderFailure(
+                    failure_code="TECHNICAL_OHLCV_EMPTY",
+                    reason="empty_history",
+                ),
+            )
 
         if not splits.empty:
             log_event(
@@ -70,7 +82,7 @@ def fetch_daily_ohlcv(ticker_symbol: str, period: str = "5y") -> pd.DataFrame | 
                 "latest_volume": float(latest_vol),
             },
         )
-        return final_df
+        return TechnicalOhlcvFetchResult(data=final_df)
 
     except Exception as exc:
         log_event(
@@ -81,4 +93,10 @@ def fetch_daily_ohlcv(ticker_symbol: str, period: str = "5y") -> pd.DataFrame | 
             error_code="TECHNICAL_OHLCV_FETCH_FAILED",
             fields={"ticker": ticker_symbol, "period": period, "exception": str(exc)},
         )
-        return None
+        return TechnicalOhlcvFetchResult(
+            data=None,
+            failure=TechnicalProviderFailure(
+                failure_code="TECHNICAL_OHLCV_FETCH_FAILED",
+                reason=str(exc),
+            ),
+        )

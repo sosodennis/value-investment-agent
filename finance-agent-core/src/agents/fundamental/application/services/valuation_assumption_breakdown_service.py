@@ -145,6 +145,7 @@ def build_assumption_breakdown(
     forward_signal_summary: JSONObject | None = None
     forward_signal_risk_level: str | None = None
     forward_signal_evidence_count: int | None = None
+    audit_summary: JSONObject | None = None
     if isinstance(build_metadata, Mapping):
         forward_signal_raw = build_metadata.get("forward_signal")
         if isinstance(forward_signal_raw, Mapping):
@@ -178,6 +179,45 @@ def build_assumption_breakdown(
                 elif isinstance(evidence_raw, float):
                     forward_signal_evidence_count = int(evidence_raw)
 
+        audit_raw = build_metadata.get("audit")
+        if isinstance(audit_raw, Mapping):
+            passed_raw = audit_raw.get("passed")
+            message_count_raw = audit_raw.get("message_count")
+            warn_count_raw = audit_raw.get("warn_count")
+            fail_count_raw = audit_raw.get("fail_count")
+            messages_raw = audit_raw.get("messages")
+            summary_payload: JSONObject = {}
+            if isinstance(passed_raw, bool):
+                summary_payload["passed"] = passed_raw
+            if isinstance(message_count_raw, int):
+                summary_payload["message_count"] = max(message_count_raw, 0)
+            if isinstance(warn_count_raw, int):
+                summary_payload["warn_count"] = max(warn_count_raw, 0)
+            if isinstance(fail_count_raw, int):
+                summary_payload["fail_count"] = max(fail_count_raw, 0)
+            if isinstance(messages_raw, list):
+                messages = [
+                    item
+                    for item in messages_raw
+                    if isinstance(item, str) and item.strip()
+                ]
+                if messages:
+                    summary_payload["messages"] = messages
+            if summary_payload:
+                audit_summary = summary_payload
+
+    if isinstance(audit_summary, Mapping):
+        fail_count = audit_summary.get("fail_count")
+        warn_count = audit_summary.get("warn_count")
+        if isinstance(fail_count, int) and fail_count > 0:
+            assumption_risk_level = "high"
+        elif (
+            isinstance(warn_count, int)
+            and warn_count > 0
+            and assumption_risk_level != "high"
+        ):
+            assumption_risk_level = "medium"
+
     if forward_signal_risk_level == "high":
         assumption_risk_level = "high"
     elif forward_signal_risk_level == "medium" and assumption_risk_level != "high":
@@ -206,6 +246,8 @@ def build_assumption_breakdown(
         output["forward_signal_risk_level"] = forward_signal_risk_level
     if forward_signal_evidence_count is not None:
         output["forward_signal_evidence_count"] = forward_signal_evidence_count
+    if audit_summary is not None:
+        output["audit_summary"] = audit_summary
     return output
 
 

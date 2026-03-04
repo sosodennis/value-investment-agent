@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable
+from dataclasses import dataclass
 from typing import Protocol
 
 import pandas as pd
@@ -21,6 +22,32 @@ from src.interface.artifacts.artifact_data_models import (
     TechnicalChartArtifactData,
 )
 from src.shared.kernel.types import JSONObject
+
+
+@dataclass(frozen=True)
+class TechnicalProviderFailure:
+    failure_code: str
+    reason: str | None = None
+    http_status: int | None = None
+
+
+@dataclass(frozen=True)
+class TechnicalOhlcvFetchResult:
+    data: pd.DataFrame | None
+    failure: TechnicalProviderFailure | None = None
+
+
+@dataclass(frozen=True)
+class TechnicalRiskFreeRateFetchResult:
+    data: pd.Series | None
+    failure: TechnicalProviderFailure | None = None
+
+
+@dataclass(frozen=True)
+class TechnicalInterpretationResult:
+    content: str
+    is_fallback: bool = False
+    failure: TechnicalProviderFailure | None = None
 
 
 class ITechnicalArtifactRepository(Protocol):
@@ -66,9 +93,11 @@ class ITechnicalArtifactRepository(Protocol):
 class ITechnicalMarketDataProvider(Protocol):
     def fetch_daily_ohlcv(
         self, ticker_symbol: str, period: str = "5y"
-    ) -> pd.DataFrame | None: ...
+    ) -> TechnicalOhlcvFetchResult: ...
 
-    def fetch_risk_free_series(self, period: str = "5y") -> pd.Series | None: ...
+    def fetch_risk_free_series(
+        self, period: str = "5y"
+    ) -> TechnicalRiskFreeRateFetchResult: ...
 
 
 class ITechnicalInterpretationProvider(Protocol):
@@ -78,7 +107,7 @@ class ITechnicalInterpretationProvider(Protocol):
         ticker: str,
         backtest_context: str = "",
         wfa_context: str = "",
-    ) -> Awaitable[str]: ...
+    ) -> Awaitable[TechnicalInterpretationResult]: ...
 
 
 class ITechnicalBacktester(Protocol):

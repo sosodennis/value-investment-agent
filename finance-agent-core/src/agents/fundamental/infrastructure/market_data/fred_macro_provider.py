@@ -32,9 +32,6 @@ class FredMacroProvider(MarketDataProvider):
         self._series_id = series_id
         self._timeout_seconds = timeout_seconds
 
-    def fetch_datums(self, ticker_symbol: str) -> dict[str, MarketDatum]:
-        return self.fetch(ticker_symbol).datums
-
     def fetch(self, ticker_symbol: str) -> ProviderFetch:
         del ticker_symbol
         as_of = datetime.now(timezone.utc).isoformat()

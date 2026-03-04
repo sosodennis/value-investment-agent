@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TypedDict
+from typing import TypeAlias
 
-import pandas as pd
-
+from src.agents.technical.domain.fracdiff import (
+    BollingerIndicator,
+    MacdIndicator,
+    ObvIndicator,
+    StatisticalStrengthSeries,
+)
 from src.shared.kernel.types import JSONObject
 
 
@@ -18,32 +22,14 @@ class FracdiffRuntimeResult:
     adf_pvalue: float | None
     bollinger: dict[str, float | str | None]
     statistical_strength_val: float | None
-    macd: JSONObject
+    macd: MacdIndicator
     obv: dict[str, float | str | None]
     chart_data: JSONObject
 
 
-class StatisticalStrengthInput(TypedDict):
-    value: float
-    series_value: pd.Series
-
-
-class BollingerInput(TypedDict):
-    upper: float
-    middle: float
-    lower: float
-    state: str
-    bandwidth: float
-    series_upper: pd.Series
-    series_lower: pd.Series
-
-
-class ObvInput(TypedDict):
-    raw_obv_val: float
-    fd_obv_z: float
-    optimal_d: float
-    state: str
-    series_z: pd.Series
+StatisticalStrengthInput: TypeAlias = StatisticalStrengthSeries
+BollingerInput: TypeAlias = BollingerIndicator
+ObvInput: TypeAlias = ObvIndicator
 
 
 @dataclass(frozen=True)

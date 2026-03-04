@@ -4,12 +4,13 @@ import numpy as np
 import pandas as pd
 from statsmodels.tsa.stattools import adfuller
 
+from .contracts import BollingerIndicator, MacdIndicator, ObvIndicator
 from .fracdiff_service import frac_diff_ffd
 
 
 def calculate_fd_bollinger(
     fd_series: pd.Series, window: int = 20, num_std: float = 2.5
-) -> dict:
+) -> BollingerIndicator:
     s = pd.Series(fd_series.values.flatten(), index=fd_series.index)
 
     middle = s.rolling(window=window).mean()
@@ -53,7 +54,7 @@ def calculate_dynamic_thresholds(series: pd.Series, window: int = 252) -> dict:
 
 def calculate_fd_macd(
     fd_series: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9
-) -> dict:
+) -> MacdIndicator:
     s = pd.Series(fd_series.values.flatten(), index=fd_series.index)
 
     ema_fast = s.ewm(span=fast, adjust=False).mean()
@@ -84,7 +85,7 @@ def calculate_fd_macd(
     }
 
 
-def calculate_fd_obv(price_series: pd.Series, volume_series: pd.Series) -> dict:
+def calculate_fd_obv(price_series: pd.Series, volume_series: pd.Series) -> ObvIndicator:
     change = price_series.diff()
     direction = np.where(change > 0, 1, np.where(change < 0, -1, 0))
     raw_obv = (direction * volume_series).cumsum().fillna(0)

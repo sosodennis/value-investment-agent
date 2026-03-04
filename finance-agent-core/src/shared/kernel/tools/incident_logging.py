@@ -55,6 +55,15 @@ def _string_map(value: object) -> dict[str, str]:
     return output
 
 
+def _resolved_ticker_from_state(state: Mapping[str, object]) -> str | None:
+    intent_raw = state.get("intent_extraction")
+    intent_ctx = intent_raw if isinstance(intent_raw, Mapping) else {}
+    resolved_ticker = intent_ctx.get("resolved_ticker")
+    if isinstance(resolved_ticker, str) and resolved_ticker.strip():
+        return resolved_ticker
+    return None
+
+
 def build_replay_diagnostics(
     state: Mapping[str, object], *, node: str
 ) -> BoundaryReplayDiagnostics:
@@ -68,7 +77,7 @@ def build_replay_diagnostics(
             if isinstance(state.get("current_node"), str)
             else None
         ),
-        "ticker": state.get("ticker") if isinstance(state.get("ticker"), str) else None,
+        "ticker": _resolved_ticker_from_state(state),
         "message_count": message_count,
         "artifact_refs": _collect_artifact_refs(state),
         "node_statuses": _string_map(state.get("node_statuses")),

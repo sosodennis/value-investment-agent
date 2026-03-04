@@ -20,8 +20,7 @@ def test_build_valuation_missing_inputs_update_sets_error_shape() -> None:
     )
     fa = update["fundamental_analysis"]
     assert isinstance(fa, dict)
-    assert fa["missing_inputs"] == ["wacc", "terminal_growth_rate"]
-    assert fa["assumptions"] == ["assume_wacc_from_sector"]
+    assert fa == {}
     assert update["node_statuses"]["fundamental_analysis"] == "error"
     assert "Missing SEC XBRL inputs" in update["error_logs"][0]["error"]
 
@@ -146,8 +145,6 @@ def test_build_valuation_success_update_includes_output_and_artifact() -> None:
 
     fa = update["fundamental_analysis"]
     assert isinstance(fa, dict)
-    assert fa["extraction_output"]["params"]["wacc"] == 0.1
-    assert fa["calculation_output"]["metrics"]["intrinsic_value"] == 42.5
     assert fa["artifact"]["kind"] == "fundamental_analysis.output"
     assert fa["artifact"]["reference"]["artifact_id"] == "artifact-123"
     preview = fa["artifact"]["preview"]

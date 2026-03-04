@@ -7,7 +7,7 @@ from src.shared.kernel.tools.logger import get_logger
 
 def test_build_replay_diagnostics_collects_artifact_refs() -> None:
     state = {
-        "ticker": "AAPL",
+        "intent_extraction": {"resolved_ticker": "AAPL"},
         "current_node": "aggregator_node",
         "messages": [{"content": "hello"}],
         "node_statuses": {"financial_news_research": "running"},
@@ -41,7 +41,7 @@ def test_log_boundary_event_returns_schema_fields() -> None:
         artifact_id=None,
         contract_kind="workflow_state",
         error_code="OK",
-        state={"ticker": "AAPL"},
+        state={"intent_extraction": {"resolved_ticker": "AAPL"}},
     )
 
     assert record["node"] == "intent.searching"

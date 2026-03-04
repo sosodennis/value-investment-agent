@@ -1,6 +1,6 @@
 # Fundamental Refactor Execution Tracker
 
-Date: 2026-02-27
+Date: 2026-03-03
 Owner: Codex + project maintainers
 Scope: `finance-agent-core/src/agents/fundamental/**`
 Status: In Progress
@@ -47,8 +47,121 @@ Status: In Progress
 | P3 | 大檔拆分（中高風險） | 拆 `sec_xbrl/factory.py`、`forward_signals_text.py`、`param_builder.py` | 檔案內聚提升、單檔規模下降 | Todo |
 | P4 | 目錄收斂（中風險） | `data` 漸進遷移到 `infrastructure`，保留短期 shim | application 不直連 legacy 實作 | Todo |
 | P5 | 清理收尾（高風險） | 移除 shim、更新 docs/runbook、穩定性驗證 | 無 legacy 路徑依賴 | Todo |
+| P6 | Auditor 主流程接入（高價值） | valuation execution 串接 model auditor（hard/soft gate） | 任一模型審核生效，hard-fail 不進 calculator | Planned |
+| P7 | Service 顆粒收斂（中風險） | 精簡 parameterization/model builders 薄 service | 內聚提升、跳檔下降、輸出不變 | In Progress |
+| P8 | Monte Carlo 性能基線（中風險） | 建立固定 seed/iterations baseline 與回歸閾值 | 性能退化可自動攔截 | Planned |
 
 ## 5. 當前進度（Progress）
+
+### 2026-03-03
+
+Completed:
+
+1. Standards 更新（聚焦兩條）：
+   - 新增 `Entity/Value Object vs Domain Service` 決策規則。
+   - 新增重計算節點 performance gate（async offload + reproducible baseline）。
+2. F-P0 實作（auditor 主流程接入）：
+   - `parse_valuation_model_runtime` 要求 `auditor` callable。
+   - valuation execution 改為 `schema -> auditor -> calculator`。
+   - auditor failure 會阻斷 calculator 並回傳明確錯誤。
+   - auditor warning/failure 會輸出 structured logs。
+   - audit summary 寫入 `build_metadata`，並進入 valuation preview/artifact。
+3. T-P0 實作（technical async 阻塞尾巴修復）：
+   - `semantic_backtest_context_service` 的 `run_backtest/run_wfa` 改為 `asyncio.to_thread(...)` offload。
+   - 新增 bounded concurrency semaphore，避免重計算同時過量。
+4. 新增/更新測試：
+   - `test_fundamental_interface_parsers.py`（auditor runtime contract）
+   - `test_fundamental_orchestrator_logging.py`（audit fail 會提前終止）
+   - `test_technical_semantic_backtest_context_service.py`（backtest/wfa offload 路徑）
+5. 驗證結果：
+   - `ruff check`（所有 touched files）通過
+   - `pytest` targeted batch 通過（36 passed）
+6. F-P1 第一批大切片（service 顆粒收斂）：
+   - 收斂 `eva/reit/residual_income` model builders 內部薄 service owner：
+     - policy/output assembly 函式併回各自 builder owner 檔案
+   - 移除 6 個碎片檔案：
+     - `eva/eva_invested_capital_policy_service.py`
+     - `eva/eva_output_assembly_service.py`
+     - `reit/reit_fallback_policy_service.py`
+     - `reit/reit_ffo_policy_service.py`
+     - `reit/reit_output_assembly_service.py`
+     - `residual_income/residual_income_output_assembly_service.py`
+7. 驗證結果（F-P1 slice-1）：
+   - `ruff check`（touched model builders）通過
+   - `pytest finance-agent-core/tests/test_fundamental_* -q` 通過（50 passed）
+   - `pytest finance-agent-core/tests/test_param_builder_canonical_reports.py -q` 通過（17 passed）
+8. F-P1 第二批大切片（service 顆粒收斂）：
+   - 收斂 `bank/saas` model builders 內部薄 service owner：
+     - CAPM policy / rates policy / output assembly 函式併回各自 builder owner 檔案
+   - 移除 6 個碎片檔案：
+     - `bank/bank_capm_policy_service.py`
+     - `bank/bank_rorwa_policy_service.py`
+     - `bank/bank_output_assembly_service.py`
+     - `saas/saas_capm_policy_service.py`
+     - `saas/saas_operating_rates_policy_service.py`
+     - `saas/saas_output_assembly_service.py`
+9. 驗證結果（F-P1 slice-2）：
+   - `ruff check`（`bank.py` + `saas.py`）通過
+   - `pytest finance-agent-core/tests/test_fundamental_* -q` 通過（50 passed）
+   - `pytest finance-agent-core/tests/test_param_builder_canonical_reports.py -q` 通過（17 passed）
+10. P8 第一批（重計算性能基線 gate）：
+   - 新增 Fundamental Monte Carlo 固定案例 latency gate：
+     - `tests/test_fundamental_monte_carlo_performance_gate.py`
+     - warmup + repeated run + `p50` latency threshold
+   - 新增 Technical WFA 固定案例 latency gate：
+     - `tests/test_technical_wfa_performance_gate.py`
+     - warmup + repeated run + `p50` latency threshold
+11. P8 第一批驗證結果：
+   - `ruff check`（新增兩個 performance gate tests）通過
+   - `pytest tests/test_fundamental_monte_carlo_performance_gate.py tests/test_technical_wfa_performance_gate.py -q` 通過（2 passed）
+   - 回歸驗證：
+     - `pytest finance-agent-core/tests/test_fundamental_* -q` 通過（51 passed）
+     - `pytest finance-agent-core/tests/test_technical_* -q` 通過（26 passed）
+12. Standards 更新：
+   - 在 cross-agent standard 明確新增「LOC is a signal, not a target」：
+     - 高 LOC 是 review 觸發條件，不是硬門檻
+     - 不可為追行數目標而拆分
+     - 拆分以責任邊界與內聚為先
+13. P1 第三批大切片（parameterization wiring/factory 收斂）：
+   - 將 `model_builder_factory_service.py` + `model_builder_adapter_service.py` 內聯到 `registry_service.py` owner。
+   - 將 `wiring_service.py` 的 context wiring（`BuilderContextDeps` + builder context assembly）內聯到 `default_context_service.py` owner。
+   - 刪除 3 個中介檔案：
+     - `model_builder_factory_service.py`
+     - `model_builder_adapter_service.py`
+     - `wiring_service.py`
+14. P2 收尾（market provider compatibility 去除）：
+   - 移除 `YahooFinanceProvider` / `FredMacroProvider` 未使用且非標準契約的 `fetch_datums(...)`。
+   - provider 僅保留 `fetch(...) -> ProviderFetch`。
+15. 驗證結果（P1 slice-3 + P2 provider 收尾）：
+   - `ruff check`（touched parameterization + providers）通過
+   - `pytest finance-agent-core/tests/test_fundamental_* -q` 通過（51 passed）
+   - `pytest finance-agent-core/tests/test_technical_* -q` 通過（26 passed）
+   - `rg` 驗證：已無 `model_builder_factory_service|model_builder_adapter_service|wiring_service|fetch_datums` 引用
+16. 全鏈路 review 三點修復（valuation/model_selection/financial_health）：
+   - P1 async 阻塞修復：
+     - `run_valuation_use_case.py` 將 `execute_valuation_calculation(...)` 改為 `asyncio.to_thread(...)`。
+     - 新增 bounded concurrency semaphore，避免 valuation 重計算併發失控。
+   - P2 model_selection handoff fail-fast：
+     - `run_model_selection_use_case.py` 在 `report_id` 與 `reports_artifact_id` 同時缺失時立即 fail-fast（不再進 calculation）。
+     - 補 completion/error logs（固定 `error_code=FUNDAMENTAL_MODEL_SELECTION_REPORT_ID_MISSING`）。
+   - P2 financial_health 邊界型別收斂：
+     - 新增 `interface/parsers.py::FinancialHealthPayload` + `parse_financial_health_payload(...)`。
+     - `run_financial_health_use_case` / `orchestrator` 改為 typed callback，移除 application use-case contract 上的 `object` payload + normalize callback。
+17. 測試補強：
+   - `test_fundamental_orchestrator_logging.py`：
+     - 新增 valuation offload 驗證（確保 `execute_valuation_calculation` 走 `to_thread`）。
+     - 新增 model_selection 缺 report id fail-fast 驗證。
+     - financial_health 測試切到 typed parser payload。
+   - `test_fundamental_interface_parsers.py`：
+     - 新增 `parse_financial_health_payload(...)` 正向案例（mapping/list 入口）驗證。
+18. 驗證結果（全鏈路三點修復）：
+   - `ruff check`（touched files）通過
+   - `pytest finance-agent-core/tests/test_fundamental_interface_parsers.py finance-agent-core/tests/test_fundamental_orchestrator_logging.py -q` 通過（21 passed）
+   - `pytest finance-agent-core/tests/test_fundamental_* -q` 通過（55 passed）
+   - `pytest finance-agent-core/tests/test_technical_* -q` 通過（26 passed）
+
+Lessons Review: updated
+Reason: 本日已完成標準更新（LOC 作為訊號而非硬目標）；本批三點修復屬既有規約落地（async offload、handoff fail-fast、typed boundary），未新增新的跨 agent 反模式類型。
 
 ### 2026-02-27
 

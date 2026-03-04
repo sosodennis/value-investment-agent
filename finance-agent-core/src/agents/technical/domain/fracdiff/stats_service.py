@@ -8,6 +8,8 @@ from scipy.stats import norm
 
 from src.shared.kernel.tools.logger import get_logger, log_event
 
+from .contracts import StatisticalStrengthSeries
+
 logger = get_logger(__name__)
 
 
@@ -50,7 +52,9 @@ def calculate_rolling_z_score(fd_series: pd.Series, lookback: int = 126) -> pd.S
     return z_score_series
 
 
-def calculate_statistical_strength(z_score_series: pd.Series) -> dict:
+def calculate_statistical_strength(
+    z_score_series: pd.Series,
+) -> StatisticalStrengthSeries:
     if z_score_series.empty:
         return {"value": 50.0, "series_value": pd.Series()}
 

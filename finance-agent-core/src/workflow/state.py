@@ -79,23 +79,8 @@ class DebateContext(TypedDict):
 class FundamentalAnalysisContext(TypedDict):
     """Context for fundamental analysis workflow."""
 
-    status: NotRequired[str | None]
-    approved: NotRequired[bool | None]
     model_type: NotRequired[str | None]  # e.g., saas, bank
-    selected_model: NotRequired[str | None]  # e.g., dcf_standard, ddm
-    model_selection_details: NotRequired[JSONObject | None]
-
-    # [L2 Data] 關鍵業務指標 (Source of Truth)
-    valuation_score: NotRequired[float | None]
-    valuation_summary: NotRequired[str | None]
-
-    # [L3 Pointer] 指向 Artifact Store 的 ID
     financial_reports_artifact_id: NotRequired[str | None]
-
-    # 下面這些複雜對象建議未來也轉為 Artifact ID 或精簡字典
-    extraction_output: NotRequired[JSONObject | None]
-    audit_output: NotRequired[JSONObject | None]
-    calculation_output: NotRequired[JSONObject | None]
     artifact: NotRequired[AgentOutputArtifactPayload | None]
 
 
@@ -105,39 +90,38 @@ class FinancialNewsContext(TypedDict):
     Refactored per Engineering Charter v3.1 - Metadata Only.
     """
 
-    status: NotRequired[str]  # "success" | "error" | "processing"
-
-    # [L2 Data] 用於 Adapter 生成 Preview
-    sentiment_summary: NotRequired[str]  # "bullish" | "bearish" | "neutral"
-    sentiment_score: NotRequired[float]  # -1.0 to 1.0
-    article_count: NotRequired[int]
-
-    # [L3 Pointer] 指向 Artifact Store 的 ID
     search_artifact_id: NotRequired[str]  # Pointer to raw/formatted search results
     selection_artifact_id: NotRequired[str]  # Pointer to selected indices/items
     news_items_artifact_id: NotRequired[
         str
     ]  # Pointer to list of news items (dictionaries)
-    report_id: NotRequired[str]
-
-    error_message: NotRequired[str]
+    report_id: NotRequired[str | None]
     artifact: NotRequired[AgentOutputArtifactPayload | None]
 
 
 class TechnicalAnalysisContext(TypedDict):
     """Context for technical analysis workflow."""
 
-    status: NotRequired[str | None]
-
-    # [L2 Data]
     latest_price: NotRequired[float | None]
     optimal_d: NotRequired[float | None]
     z_score_latest: NotRequired[float | None]
     signal: NotRequired[str | None]  # "BUY", "SELL", "HOLD"
-    statistical_strength: NotRequired[str | None]
-    signals: NotRequired[dict[str, str] | None]  # e.g. {"rsi": "buy"}
+    statistical_strength: NotRequired[str | None]  # e.g. "high"
+    risk_level: NotRequired[str | None]
+    llm_interpretation: NotRequired[str | None]
+    semantic_tags: NotRequired[list[str] | None]
+    memory_strength: NotRequired[str | None]
+    is_degraded: NotRequired[bool | None]
+    degraded_reasons: NotRequired[list[str] | None]
 
-    # [L3 Pointer] 指向圖表數據或回測報告
+    window_length: NotRequired[int | None]
+    adf_statistic: NotRequired[float | None]
+    adf_pvalue: NotRequired[float | None]
+    bollinger: NotRequired[JSONObject | None]
+    statistical_strength_val: NotRequired[float | None]
+    macd: NotRequired[JSONObject | None]
+    obv: NotRequired[JSONObject | None]
+
     price_artifact_id: NotRequired[str | None]
     chart_data_id: NotRequired[str | None]
     artifact: NotRequired[AgentOutputArtifactPayload | None]
@@ -154,7 +138,6 @@ class AgentState(TypedDict):
 
     # Global Shared State
     user_query: Annotated[str | None, last_value]
-    ticker: Annotated[str | None, last_value]
 
     # Global Conversation History
     messages: Annotated[list[AnyMessage], add_messages]
@@ -174,6 +157,7 @@ class AgentState(TypedDict):
     # Dashboard tracking
     node_statuses: Annotated[dict[str, str], merge_dict]
     current_node: Annotated[str | None, last_value]
+    internal_progress: Annotated[dict[str, str], merge_dict]
 
     # Error logging
     error_logs: Annotated[list[dict], append_logs]

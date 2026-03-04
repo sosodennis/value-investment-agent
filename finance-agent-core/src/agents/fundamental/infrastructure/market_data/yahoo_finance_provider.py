@@ -19,10 +19,6 @@ class YahooFinanceProvider(MarketDataProvider):
         "production redistribution."
     )
 
-    def fetch_datums(self, ticker_symbol: str) -> dict[str, MarketDatum]:
-        result = self.fetch(ticker_symbol)
-        return result.datums
-
     def fetch(self, ticker_symbol: str) -> ProviderFetch:
         ticker_info = self._safe_info(ticker_symbol)
         tnx_info = self._safe_info("^TNX")

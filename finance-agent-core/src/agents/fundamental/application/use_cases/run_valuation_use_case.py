@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Callable, Mapping
 from typing import Protocol
@@ -27,6 +28,8 @@ from src.shared.kernel.workflow_contracts import WorkflowNodeResult
 
 logger = get_logger(__name__)
 FundamentalNodeResult = WorkflowNodeResult
+_VALUATION_COMPUTE_CONCURRENCY_LIMIT = 2
+_valuation_compute_semaphore: asyncio.Semaphore | None = None
 
 
 class ValuationRuntime(Protocol):
@@ -58,6 +61,25 @@ class ValuationRuntime(Protocol):
     ) -> JSONObject: ...
 
     def build_valuation_error_update(self, error: str) -> JSONObject: ...
+
+
+def _get_valuation_compute_semaphore() -> asyncio.Semaphore:
+    global _valuation_compute_semaphore
+    if _valuation_compute_semaphore is None:
+        _valuation_compute_semaphore = asyncio.Semaphore(
+            _VALUATION_COMPUTE_CONCURRENCY_LIMIT
+        )
+    return _valuation_compute_semaphore
+
+
+async def _offload_valuation_compute(
+    func: Callable[..., object],
+    /,
+    *args: object,
+    **kwargs: object,
+) -> object:
+    async with _get_valuation_compute_semaphore():
+        return await asyncio.to_thread(func, *args, **kwargs)
 
 
 def _extract_numeric_metric(
@@ -291,6 +313,33 @@ def _log_build_result_policy_events(
             )
 
 
+def _build_metadata_with_audit(
+    *,
+    base_metadata: Mapping[str, object] | None,
+    audit_passed: bool | None,
+    audit_messages: list[str],
+) -> JSONObject:
+    metadata: JSONObject = {}
+    if isinstance(base_metadata, Mapping):
+        metadata.update(dict(base_metadata))
+
+    if audit_passed is None:
+        return metadata
+
+    warn_count = len([item for item in audit_messages if item.startswith("WARN:")])
+    fail_count = len([item for item in audit_messages if item.startswith("FAIL:")])
+    audit_payload: JSONObject = {
+        "passed": audit_passed,
+        "message_count": len(audit_messages),
+        "warn_count": warn_count,
+        "fail_count": fail_count,
+    }
+    if audit_messages:
+        audit_payload["messages"] = list(audit_messages)
+    metadata["audit"] = audit_payload
+    return metadata
+
+
 async def run_valuation_use_case(
     runtime: ValuationRuntime,
     state: Mapping[str, object],
@@ -316,11 +365,21 @@ async def run_valuation_use_case(
         model_type = execution_context.model_type
         ticker = execution_context.ticker
 
-        execution_result = execute_valuation_calculation(
+        execution_result = await _offload_valuation_compute(
+            execute_valuation_calculation,
             context=execution_context,
             build_params_fn=build_params_fn,
         )
         build_result = execution_result.build_result
+        build_metadata = _build_metadata_with_audit(
+            base_metadata=(
+                build_result.metadata
+                if isinstance(build_result.metadata, Mapping)
+                else None
+            ),
+            audit_passed=execution_result.audit_passed,
+            audit_messages=execution_result.audit_messages,
+        )
 
         _log_build_result_policy_events(
             model_type=model_type,
@@ -362,6 +421,65 @@ async def run_valuation_use_case(
                     assumptions=build_result.assumptions,
                 ),
                 goto="END",
+            )
+
+        if execution_result.audit_error:
+            log_event(
+                logger,
+                event="fundamental_valuation_audit_failed",
+                message="valuation audit rejected parameter set",
+                level=logging.ERROR,
+                error_code="FUNDAMENTAL_VALUATION_AUDIT_FAILED",
+                fields={
+                    "ticker": ticker,
+                    "model_type": model_type,
+                    "error": execution_result.audit_error,
+                    "audit_message_count": len(execution_result.audit_messages),
+                    "audit_messages": execution_result.audit_messages,
+                },
+            )
+            log_event(
+                logger,
+                event="fundamental_valuation_completed",
+                message="fundamental valuation completed",
+                level=logging.ERROR,
+                fields={
+                    "ticker": ticker,
+                    "model_type": model_type,
+                    "status": "error",
+                    "is_degraded": True,
+                    "error_code": "FUNDAMENTAL_VALUATION_AUDIT_FAILED",
+                    "audit_message_count": len(execution_result.audit_messages),
+                },
+            )
+            return FundamentalNodeResult(
+                update=runtime.build_valuation_error_update(
+                    execution_result.audit_error
+                ),
+                goto="END",
+            )
+
+        audit_warn_count = len(
+            [
+                item
+                for item in execution_result.audit_messages
+                if item.startswith("WARN:")
+            ]
+        )
+        if audit_warn_count > 0:
+            log_event(
+                logger,
+                event="fundamental_valuation_audit_warnings",
+                message="valuation audit emitted warnings",
+                level=logging.WARNING,
+                error_code="FUNDAMENTAL_VALUATION_AUDIT_WARNINGS",
+                fields={
+                    "ticker": ticker,
+                    "model_type": model_type,
+                    "audit_warn_count": audit_warn_count,
+                    "audit_message_count": len(execution_result.audit_messages),
+                    "audit_messages": execution_result.audit_messages,
+                },
             )
 
         if execution_result.calculation_error:
@@ -443,11 +561,7 @@ async def run_valuation_use_case(
         mc_completion_fields = build_monte_carlo_completion_fields(calculation_metrics)
         forward_signal_completion_fields = build_forward_signal_completion_fields(
             forward_signals=execution_context.forward_signals,
-            build_metadata=(
-                build_result.metadata
-                if isinstance(build_result.metadata, Mapping)
-                else None
-            ),
+            build_metadata=build_metadata,
         )
         log_event(
             logger,
@@ -458,6 +572,8 @@ async def run_valuation_use_case(
                 "model_type": model_type,
                 "status": "done",
                 "is_degraded": False,
+                "audit_passed": execution_result.audit_passed is True,
+                "audit_message_count": len(execution_result.audit_messages),
                 **mc_completion_fields,
                 **forward_signal_completion_fields,
             },
@@ -474,7 +590,7 @@ async def run_valuation_use_case(
                 params_dump=params_dump,
                 calculation_metrics=calculation_metrics,
                 assumptions=build_result.assumptions,
-                build_metadata=build_result.metadata,
+                build_metadata=build_metadata,
             ),
             goto="END",
         )

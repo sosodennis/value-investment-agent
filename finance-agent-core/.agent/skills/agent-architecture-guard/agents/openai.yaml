@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent Architecture Guard"
+  short_description: "Enforce cross-agent architecture standards"
+  default_prompt: "Use $agent-architecture-guard to review changes in finance-agent-core/src/agents for naming, layering, typing, and logging contract compliance."

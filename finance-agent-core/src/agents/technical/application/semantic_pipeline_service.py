@@ -54,7 +54,7 @@ async def execute_semantic_pipeline(
         backtest_runtime=backtest_runtime,
     )
 
-    llm_interpretation = await interpretation_provider.generate_interpretation(
+    interpretation_result = await interpretation_provider.generate_interpretation(
         semantic_tags_to_dict(tags_result),
         ticker,
         backtest_context_result.backtest_context,
@@ -65,15 +65,36 @@ async def execute_semantic_pipeline(
         ticker=ticker,
         technical_context=technical_context,
         tags_result=tags_result,
-        llm_interpretation=llm_interpretation,
+        llm_interpretation=interpretation_result.content,
         price_data=backtest_context_result.price_data,
         chart_data=backtest_context_result.chart_data,
         build_full_report_payload_fn=build_full_report_payload_fn,
     )
 
+    degraded_reasons: list[str] = []
+    if backtest_context_result.is_degraded:
+        degraded_reasons.append(
+            backtest_context_result.failure_code
+            or "TECHNICAL_SEMANTIC_BACKTEST_CONTEXT_FAILED"
+        )
+    if interpretation_result.is_fallback:
+        degraded_reasons.append(
+            interpretation_result.failure.failure_code
+            if interpretation_result.failure is not None
+            else "TECHNICAL_LLM_INTERPRETATION_FAILED"
+        )
+
     return SemanticPipelineResult(
         tags_result=tags_result,
-        llm_interpretation=llm_interpretation,
+        llm_interpretation=interpretation_result.content,
         backtest_context_result=backtest_context_result,
         semantic_finalize_result=semantic_finalize_result,
+        llm_is_fallback=interpretation_result.is_fallback,
+        llm_failure_code=(
+            interpretation_result.failure.failure_code
+            if interpretation_result.failure is not None
+            else None
+        ),
+        is_degraded=bool(degraded_reasons),
+        degraded_reasons=tuple(degraded_reasons),
     )

@@ -2,7 +2,7 @@
 
 Date: 2026-03-02
 Scope: `finance-agent-core/src/agents/technical`
-Status: Completed (post-P14 compliance review)
+Status: In Progress (Focused hardening P0-P2)
 Policy baseline:
 1. `finance-agent-core/docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
 2. `finance-agent-core/docs/standards/refactor_lessons_and_cross_agent_playbook.md`
@@ -160,6 +160,33 @@ Status update (2026-03-02):
    - removed legacy `application/view_models.py` modules in technical/fundamental (no compatibility alias kept).
 31. Standards/Lessons review for preview projection convergence: `updated`
    - update: cross-agent standard now explicitly requires preview projection ownership in `interface` and discourages generic `view_models.py` module naming in mature agents.
+32. P15 started and implemented (2026-03-03, hardening P0):
+   - fixed async blocking tail in `application/semantic_backtest_context_service.py`:
+     - `run_backtest(...)` and `run_wfa(...)` are now offloaded with `asyncio.to_thread(...)`
+     - added bounded compute concurrency via module-owned semaphore guard
+   - preserved degraded fallback/error contract behavior.
+33. Validation + Standards/Lessons review for P15: `no_update`
+   - validation:
+     - `ruff check` (changed technical/fundamental files + new tests) passed
+     - targeted tests passed, including new
+       `tests/test_technical_semantic_backtest_context_service.py`
+   - reason: this slice is direct application of existing standards (`async boundary offload`, `heavy compute gate`) without introducing a new anti-pattern class.
+34. P16 started and implemented (2026-03-04, P1/P2 convergence hardening):
+   - semantic translate degraded state is now externally visible in workflow state (not logs-only):
+     - `technical_analysis.is_degraded`
+     - `technical_analysis.degraded_reasons`
+   - `run_semantic_translate_use_case.py` now computes degraded reasons from pipeline quality and artifact fallback, then writes them via completion/update owner.
+   - `semantic_translate_completion_service.py` / `state_updates.py` updated so success updates carry quality flags for UI/downstream consumers.
+35. P17 started and implemented (2026-03-04, P3 boundary ownership convergence):
+   - moved backtest/WFA narrative formatter owner from application to interface:
+     - new owner: `interface/semantic_context_formatter_service.py`
+     - removed legacy owner: `application/semantic_context_formatter_service.py`
+   - updated runtime wiring/imports to interface owner and added hygiene guard to block legacy module reintroduction.
+36. Validation + Standards/Lessons review for P16/P17: `no_update`
+   - validation:
+     - `ruff check` passed on changed technical modules/tests
+     - `pytest finance-agent-core/tests/test_technical_* finance-agent-core/tests/test_error_handling_technical.py -q` passed (`33 passed`)
+   - plan alignment: no deviation from this blueprint; this batch is direct convergence on existing standards (`degraded observability`, `interface ownership for narrative formatting`, `no compatibility residue`).
 
 ## 1. Review 結論（先回答你的判斷）
 
@@ -227,7 +254,6 @@ src/agents/technical/
     report_service.py
     state_readers.py
     state_updates.py
-    semantic_context_formatter_service.py
     semantic_pipeline_contracts.py
     semantic_policy_input_service.py
     semantic_translate_context_service.py
@@ -241,6 +267,7 @@ src/agents/technical/
       semantic_translate_use_case.py
   wiring.py
   interface/
+    semantic_context_formatter_service.py
     contracts.py
     serializers.py
     mappers.py
@@ -279,7 +306,7 @@ src/agents/technical/
    - 策略回測 engine
    - walk-forward optimizer
    - LLM narrative formatter
-   - 對位：拆成 `domain/backtest/*`（數值）+ `application/semantic_backtest_context_service.py`（組 context）+ `application/semantic_context_formatter_service.py`（文字格式化）。
+   - 對位：拆成 `domain/backtest/*`（數值）+ `application/semantic_backtest_context_service.py`（組 context）+ `interface/semantic_context_formatter_service.py`（文字格式化）。
 2. `application/orchestrator.py` 過胖：
    - 同時做 state 讀取、計算、artifact IO、錯誤路由與 payload 組裝。
    - 對位：拆成 `use_cases/*`，orchestrator 保留薄 delegation。
@@ -348,7 +375,7 @@ src/agents/technical/
    - `domain/backtest/walk_forward_service.py`
    - `domain/backtest/strategy_registry.py`（從 `strategies.py` 收斂）
 2. `format_backtest_for_llm`、`format_wfa_for_llm` 移出 domain engine：
-   - 放 `application/semantic_context_formatter_service.py`（只做展示字串）。
+   - 放 `interface/semantic_context_formatter_service.py`（只做展示字串）。
 
 驗收：
 
@@ -400,3 +427,48 @@ src/agents/technical/
 4. orchestrator 為薄層，use-case owner 清晰。
 5. 回測/fracdiff owner 模組可獨立測試、可定位責任邊界。
 6. 測試與 lint 全綠，且無 legacy compatibility shim。
+
+## 9. 2026-03-03 Focused Hardening Plan（本輪）
+
+目標：在既有完成狀態上做高價值硬化，不新增不必要抽象。
+
+### T-P0：修復 async 阻塞尾巴（backtest/WFA）
+
+背景：
+1. technical 主流程多數 async 邊界已完成，但 semantic backtest context 內仍有同步重計算調用。
+
+實作切片：
+1. 將 backtest 與 WFA 執行從 event loop 邊界 offload（`asyncio.to_thread(...)` 或等價 executor）。
+2. 維持既有 degraded fallback 行為與 error contract。
+3. 加入 bounded concurrency（避免同時過量 CPU 任務堆疊）。
+
+驗收：
+1. async use-case 內無直接同步重計算阻塞點。
+2. 功能輸出不變，延遲抖動下降。
+3. 相關測試（成功/降級）全綠。
+
+### T-P1：精簡過細 Service 顆粒（避免過度設計）
+
+策略：
+1. 合併薄透傳 runtime/service owner（不影響邊界清晰度前提下）。
+2. 保留有獨立語義的 capability owner（fracdiff/backtest/signal policy）。
+
+實作切片：
+1. 盤點 `application/*runtime*` 與 `semantic_*` 的薄 wrapper。
+2. 只對「無獨立責任、僅透傳」做收斂；避免建立新的抽象層。
+3. 補齊 import hygiene 測試，防止碎片回流。
+
+驗收：
+1. call chain 更短、檔案責任更明確。
+2. 無新增 generic module 或抽象層膨脹。
+
+### T-P2：WFA 性能基線與回歸閘道
+
+實作切片：
+1. 建立固定資料窗口（train/test window）與固定輸入的 WFA 基線。
+2. 記錄基線指標（總耗時、每階段耗時、樣本數）。
+3. 加入性能回歸閾值 gate（先以相對退化比率為主）。
+
+驗收：
+1. WFA 性能可重現、可比較。
+2. 後續重構若性能退化超閾值可被快速攔截。

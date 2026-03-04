@@ -70,9 +70,6 @@ def build_valuation_missing_inputs_update(
     assumptions: list[str],
 ) -> JSONObject:
     fa_update = fundamental.copy()
-    fa_update["missing_inputs"] = missing_inputs
-    if assumptions:
-        fa_update["assumptions"] = assumptions
     return {
         "fundamental_analysis": fa_update,
         "current_node": "calculation",
@@ -106,10 +103,6 @@ def build_valuation_success_update(
     build_metadata: JSONObject | None = None,
 ) -> JSONObject:
     fa_update = fundamental.copy()
-    fa_update["extraction_output"] = {"params": params_dump}
-    fa_update["calculation_output"] = {"metrics": calculation_metrics}
-    if assumptions:
-        fa_update["assumptions"] = assumptions
 
     distribution_summary = extract_distribution_summary(calculation_metrics)
     shares_outstanding = coerce_float(params_dump.get("shares_outstanding"))
@@ -140,6 +133,7 @@ def build_valuation_success_update(
     forward_signal_evidence_count = assumption_breakdown.get(
         "forward_signal_evidence_count"
     )
+    audit_summary = assumption_breakdown.get("audit_summary")
     data_quality_flags_list = (
         [item for item in data_quality_flags if isinstance(item, str) and item]
         if isinstance(data_quality_flags, list)
@@ -205,6 +199,8 @@ def build_valuation_success_update(
         preview["forward_signal_risk_level"] = forward_signal_risk_level
     if isinstance(forward_signal_evidence_count, int | float):
         preview["forward_signal_evidence_count"] = int(forward_signal_evidence_count)
+    if isinstance(audit_summary, Mapping):
+        preview["audit_summary"] = dict(audit_summary)
     artifact = build_valuation_artifact_fn(
         ticker=ticker,
         model_type=model_type,

@@ -188,7 +188,6 @@ class IntentOrchestrator:
 
         return {
             "intent_extraction": intent_ctx,
-            "ticker": selected_symbol,
             "messages": [
                 AIMessage(
                     content="",
@@ -499,7 +498,6 @@ class IntentOrchestrator:
             return IntentNodeResult(
                 update={
                     "intent_extraction": resolved_ctx,
-                    "ticker": resolved_ticker,
                     "current_node": "deciding",
                     "internal_progress": {"deciding": "done"},
                     "node_statuses": {"intent_extraction": "done"},

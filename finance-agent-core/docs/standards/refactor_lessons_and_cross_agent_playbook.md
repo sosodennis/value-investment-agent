@@ -1,6 +1,6 @@
 # Cross-Agent Refactor Lessons and Execution Playbook
 
-日期: 2026-03-02
+日期: 2026-03-03
 範圍: `finance-agent-core/src/agents/*`
 狀態: Active
 搭配規範: `cross_agent_class_naming_and_layer_responsibility_guideline.md`
@@ -72,6 +72,19 @@
 21. 估值方法論 gate 缺失（企業級可靠性）
    - 症狀: 模型可跑但無法快速驗證是否滿足方法論一致性（cash-flow/discount-rate/terminal/scenario/reproducibility）。
    - 做法: 每個估值模型至少具備 5 個 gate：`cash_flow_basis 明確`、`terminal r>g guard`、`discount-rate 與 cash-flow 口徑一致`、`風險以 scenario/distribution 表達`、`Monte Carlo 可重現且輸出 diagnostics`。
+22. Entity/Domain Service 責任漂移
+   - 症狀: 單一實體狀態可完成的 deterministic 邏輯被拆成多個薄 `*_service.py`，造成跳檔與低內聚；或跨實體協調被硬塞入 entity 造成模型臃腫。
+   - 做法: 單一 aggregate/value-object 的無 I/O 規則優先收斂在 model owner；跨實體/跨聚合協調保留 domain service。
+23. 重計算路徑缺少性能 gate
+   - 症狀: Monte Carlo/WFA 類能力在重構後功能不壞，但延遲明顯退化且缺乏可重現對照基準。
+   - 做法: 建立固定 seed/window/iterations 的可重現性能基線，並加回歸門檻；async use-case 中以邊界 offload 避免阻塞 event loop。
+24. Workflow context 契約與實際讀寫漂移
+   - 症狀: `workflow/state.py` 保留舊欄位，或缺少當前 use-case 已寫入欄位，導致跨 agent 協作時型別與語義脫節。
+   - 做法: 每次切片同步比對 `state_updates`/reader/consumer 與 context 定義；新增欄位就入契約，無 writer/consumer 的欄位立即刪除，不保留兼容占位。
+   - 補充: canonical 欄位（例如 `intent_extraction.resolved_ticker`）不得再鏡像回 root `ticker`。
+25. Workflow context 過度鏡像（payload duplication）
+   - 症狀: state context 同時保存 artifact 中已有的大量衍生欄位（例如 summary/metrics/details），導致 checkpoint 冗餘與維護成本上升。
+   - 做法: context 只保留 orchestration 需要的最小欄位與 artifact pointer；展示/分析細節由 artifact preview/full payload 承載。
 
 ## 2. 標準重構切片流程（每批固定）
 

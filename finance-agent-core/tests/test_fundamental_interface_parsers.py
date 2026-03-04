@@ -5,25 +5,43 @@ import pytest
 from src.agents.fundamental.interface.contracts import parse_financial_reports_model
 from src.agents.fundamental.interface.parsers import (
     parse_calculation_metrics,
+    parse_financial_health_payload,
     parse_valuation_model_runtime,
 )
 
 
 def test_parse_valuation_model_runtime_accepts_mapping() -> None:
+    class _AuditResult:
+        passed = True
+        messages: list[str] = []
+
     runtime = parse_valuation_model_runtime(
         {
             "schema": lambda **kwargs: kwargs,
             "calculator": lambda params: {"intrinsic_value": 1.0, "params": params},
+            "auditor": lambda params: _AuditResult(),
         },
         context="fundamental model runtime",
     )
     assert callable(runtime.schema)
     assert callable(runtime.calculator)
+    assert callable(runtime.auditor)
 
 
 def test_parse_valuation_model_runtime_rejects_non_mapping() -> None:
     with pytest.raises(TypeError):
         parse_valuation_model_runtime("invalid", context="fundamental model runtime")
+
+
+def test_parse_valuation_model_runtime_rejects_missing_auditor() -> None:
+    with pytest.raises(TypeError, match="auditor"):
+        parse_valuation_model_runtime(
+            {
+                "schema": lambda **kwargs: kwargs,
+                "calculator": lambda params: {"intrinsic_value": 1.0, "params": params},
+            },
+            context="fundamental model runtime",
+        )
 
 
 def test_parse_calculation_metrics_requires_object() -> None:
@@ -145,3 +163,42 @@ def test_parse_financial_reports_model_rejects_legacy_extension_type_token() -> 
             ],
             context="financial reports",
         )
+
+
+def test_parse_financial_health_payload_normalizes_reports_and_signals() -> None:
+    payload = parse_financial_health_payload(
+        {
+            "financial_reports": [
+                {
+                    "base": {},
+                    "industry_type": "Industrial",
+                    "extension_type": "Industrial",
+                    "extension": {},
+                }
+            ],
+            "forward_signals": [
+                {"signal_id": "sig-1", "metric": "growth_outlook"},
+                "invalid",
+            ],
+        },
+        context="financial_health.payload",
+    )
+    assert len(payload.financial_reports) == 1
+    assert payload.financial_reports[0]["industry_type"] == "Industrial"
+    assert payload.forward_signals == [
+        {"signal_id": "sig-1", "metric": "growth_outlook"}
+    ]
+
+
+def test_parse_financial_health_payload_supports_top_level_reports_list() -> None:
+    payload = parse_financial_health_payload(
+        [
+            {
+                "base": {},
+                "industry_type": "General",
+            }
+        ],
+        context="financial_health.payload",
+    )
+    assert len(payload.financial_reports) == 1
+    assert payload.forward_signals is None

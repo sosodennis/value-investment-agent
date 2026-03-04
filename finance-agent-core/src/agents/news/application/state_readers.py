@@ -58,7 +58,4 @@ def aggregator_ticker_from_state(state: Mapping[str, object]) -> str:
     resolved = resolved_ticker_from_state(state)
     if resolved:
         return resolved
-    ticker_raw = state.get("ticker")
-    if isinstance(ticker_raw, str) and ticker_raw:
-        return ticker_raw
     return "UNKNOWN"

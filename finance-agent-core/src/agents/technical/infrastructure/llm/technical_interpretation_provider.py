@@ -9,6 +9,10 @@ from __future__ import annotations
 
 import logging
 
+from src.agents.technical.application.ports import (
+    TechnicalInterpretationResult,
+    TechnicalProviderFailure,
+)
 from src.agents.technical.interface.interpretation_prompt_spec import (
     build_interpretation_prompt_spec,
 )
@@ -27,7 +31,7 @@ async def generate_interpretation(
     ticker: str,
     backtest_context: str = "",
     wfa_context: str = "",
-) -> str:
+) -> TechnicalInterpretationResult:
     risk_level = str(tags_dict.get("risk_level", "medium"))
     try:
         log_event(
@@ -71,7 +75,7 @@ async def generate_interpretation(
             message="technical llm interpretation completed",
             fields={"ticker": ticker, "interpretation_preview": interpretation[:120]},
         )
-        return interpretation
+        return TechnicalInterpretationResult(content=interpretation)
     except Exception as exc:
         log_event(
             logger,
@@ -82,7 +86,14 @@ async def generate_interpretation(
             fields={"ticker": ticker, "exception": str(exc)},
         )
         z_score = tags_dict.get("z_score", "N/A")
-        return f"Technical analysis complete. Z-Score: {z_score}, Risk: {risk_level}"
+        return TechnicalInterpretationResult(
+            content=f"Technical analysis complete. Z-Score: {z_score}, Risk: {risk_level}",
+            is_fallback=True,
+            failure=TechnicalProviderFailure(
+                failure_code="TECHNICAL_LLM_INTERPRETATION_FAILED",
+                reason=str(exc),
+            ),
+        )
 
 
 class TechnicalInterpretationProvider:
@@ -92,7 +103,7 @@ class TechnicalInterpretationProvider:
         ticker: str,
         backtest_context: str = "",
         wfa_context: str = "",
-    ) -> str:
+    ) -> TechnicalInterpretationResult:
         return await generate_interpretation(
             tags_dict,
             ticker,

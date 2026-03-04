@@ -6,10 +6,15 @@ from dataclasses import dataclass
 import pandas as pd
 
 from src.agents.technical.application.fracdiff_runtime_contracts import (
+    BollingerInput,
     FracdiffBacktestInputs,
     FracdiffRuntimeResult,
+    ObvInput,
+    StatisticalStrengthInput,
 )
 from src.agents.technical.domain.fracdiff import (
+    MacdIndicator,
+    RollingFracdiffOutput,
     calculate_fd_bollinger,
     calculate_fd_macd,
     calculate_fd_obv,
@@ -22,22 +27,27 @@ from src.agents.technical.domain.fracdiff.serialization_service import (
     serialize_fracdiff_outputs,
 )
 from src.agents.technical.domain.signal_policy import safe_float
-from src.shared.kernel.types import JSONObject
 
 
 @dataclass(frozen=True)
 class TechnicalFracdiffRuntimeService:
     calculate_rolling_fracdiff_fn: Callable[
-        ..., tuple[object, object, int, object, object]
+        [pd.Series, int, int], RollingFracdiffOutput
     ] = calculate_rolling_fracdiff
-    compute_z_score_fn: Callable[..., object] = compute_z_score
-    calculate_rolling_z_score_fn: Callable[..., object] = calculate_rolling_z_score
-    calculate_fd_bollinger_fn: Callable[..., JSONObject] = calculate_fd_bollinger
-    calculate_statistical_strength_fn: Callable[..., JSONObject] = (
-        calculate_statistical_strength
+    compute_z_score_fn: Callable[[pd.Series, int], float] = compute_z_score
+    calculate_rolling_z_score_fn: Callable[[pd.Series, int], pd.Series] = (
+        calculate_rolling_z_score
     )
-    calculate_fd_macd_fn: Callable[..., JSONObject] = calculate_fd_macd
-    calculate_fd_obv_fn: Callable[..., JSONObject] = calculate_fd_obv
+    calculate_fd_bollinger_fn: Callable[[pd.Series, int, float], BollingerInput] = (
+        calculate_fd_bollinger
+    )
+    calculate_statistical_strength_fn: Callable[
+        [pd.Series], StatisticalStrengthInput
+    ] = calculate_statistical_strength
+    calculate_fd_macd_fn: Callable[[pd.Series, int, int, int], MacdIndicator] = (
+        calculate_fd_macd
+    )
+    calculate_fd_obv_fn: Callable[[pd.Series, pd.Series], ObvInput] = calculate_fd_obv
 
     def build_backtest_inputs(
         self,

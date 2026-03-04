@@ -26,7 +26,6 @@ class FinancialNewsInput(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    ticker: str | None = None
     intent_extraction: IntentExtractionContext = Field(default_factory=dict)
     financial_news_research: FinancialNewsContext = Field(default_factory=dict)
 
@@ -53,7 +52,6 @@ class FinancialNewsState(TypedDict):
     """
 
     # --- From Input ---
-    ticker: NotRequired[str | None]
     intent_extraction: NotRequired[IntentExtractionContext]
 
     # --- Core State (Using TypedDict reducers) ---

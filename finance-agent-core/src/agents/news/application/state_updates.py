@@ -3,12 +3,25 @@ from __future__ import annotations
 from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
 
 
+def _clear_news_context() -> JSONObject:
+    return {
+        "search_artifact_id": None,
+        "selection_artifact_id": None,
+        "news_items_artifact_id": None,
+        "report_id": None,
+        "artifact": None,
+    }
+
+
 def build_fetch_node_update(
     *, news_items_id: str | None, article_errors: list[str]
 ) -> JSONObject:
     status = "degraded" if article_errors else "running"
     update: JSONObject = {
-        "financial_news_research": {"news_items_artifact_id": news_items_id},
+        "financial_news_research": {
+            "news_items_artifact_id": news_items_id,
+            "report_id": None,
+        },
         "current_node": "fetch_node",
         "internal_progress": {"fetch_node": "done", "analyst_node": "running"},
         "node_statuses": {"financial_news_research": status},
@@ -29,7 +42,10 @@ def build_analyst_node_update(
 ) -> JSONObject:
     status = "degraded" if article_errors else "running"
     update: JSONObject = {
-        "financial_news_research": {"news_items_artifact_id": news_items_id},
+        "financial_news_research": {
+            "news_items_artifact_id": news_items_id,
+            "report_id": None,
+        },
         "current_node": "analyst_node",
         "internal_progress": {"analyst_node": "done", "aggregator_node": "running"},
         "node_statuses": {"financial_news_research": status},
@@ -47,10 +63,7 @@ def build_analyst_node_update(
 
 def build_search_node_no_ticker_update() -> JSONObject:
     return {
-        "financial_news_research": {
-            "status": "skipped",
-            "article_count": 0,
-        },
+        "financial_news_research": _clear_news_context(),
         "current_node": "search_node",
         "internal_progress": {"search_node": "done"},
         "node_statuses": {"financial_news_research": "done"},
@@ -74,11 +87,7 @@ def build_search_node_error_update(error_message: str) -> JSONObject:
 
 def build_search_node_empty_update() -> JSONObject:
     return {
-        "financial_news_research": {
-            "status": "empty",
-            "article_count": 0,
-            "search_artifact_id": None,
-        },
+        "financial_news_research": _clear_news_context(),
         "current_node": "search_node",
         "internal_progress": {"search_node": "done"},
         "node_statuses": {"financial_news_research": "done"},
@@ -88,14 +97,15 @@ def build_search_node_empty_update() -> JSONObject:
 def build_search_node_success_update(
     *,
     artifact: AgentOutputArtifactPayload,
-    article_count: int,
     search_artifact_id: str | None,
 ) -> JSONObject:
     return {
         "financial_news_research": {
             "artifact": artifact,
-            "article_count": article_count,
             "search_artifact_id": search_artifact_id,
+            "selection_artifact_id": None,
+            "news_items_artifact_id": None,
+            "report_id": None,
         },
         "current_node": "search_node",
         "internal_progress": {"search_node": "done", "selector_node": "running"},
@@ -195,25 +205,14 @@ def build_analyst_chain_error_update(error_message: str) -> JSONObject:
 
 def build_aggregator_node_update(
     *,
-    status: str,
     node_status: str,
-    sentiment_summary: str,
-    sentiment_score: float,
-    article_count: int,
     report_id: str | None,
-    top_headlines: list[str],
     artifact: AgentOutputArtifactPayload | None,
 ) -> JSONObject:
     news_update: JSONObject = {
-        "status": status,
-        "sentiment_summary": sentiment_summary,
-        "sentiment_score": sentiment_score,
-        "article_count": article_count,
         "report_id": report_id,
-        "top_headlines": top_headlines,
+        "artifact": artifact,
     }
-    if artifact is not None:
-        news_update["artifact"] = artifact
 
     return {
         "financial_news_research": news_update,

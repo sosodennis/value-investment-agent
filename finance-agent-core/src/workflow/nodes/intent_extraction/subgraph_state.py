@@ -15,7 +15,6 @@ class IntentExtractionInput(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    ticker: str | None = None
     user_query: str | None = None
     messages: list = Field(default_factory=list)
     intent_extraction: IntentExtractionContext = Field(default_factory=dict)
@@ -28,7 +27,6 @@ class IntentExtractionOutput(BaseModel):
     """
 
     intent_extraction: IntentExtractionContext
-    ticker: str | None = None
     messages: list = Field(default_factory=list)
     node_statuses: dict[str, str] = Field(default_factory=dict)
     error_logs: list[dict] = Field(default_factory=list)
@@ -41,7 +39,6 @@ class IntentExtractionState(TypedDict):
     """
 
     # --- From Input ---
-    ticker: str | None
     user_query: str | None
 
     # Core State (Reducers applied)

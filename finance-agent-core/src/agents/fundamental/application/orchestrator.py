@@ -15,6 +15,7 @@ from src.agents.fundamental.application.services.valuation_update_service import
     build_valuation_success_update,
 )
 from src.agents.fundamental.application.use_cases.run_financial_health_use_case import (
+    FinancialHealthPayload,
     run_financial_health_use_case,
 )
 from src.agents.fundamental.application.use_cases.run_model_selection_use_case import (
@@ -156,14 +157,12 @@ class FundamentalOrchestrator:
         self,
         state: Mapping[str, object],
         *,
-        fetch_financial_data_fn: Callable[[str], object],
-        normalize_financial_reports_fn: Callable[[object, str], list[JSONObject]],
+        fetch_financial_data_fn: Callable[[str], FinancialHealthPayload],
     ) -> FundamentalNodeResult:
         return await run_financial_health_use_case(
             self,
             state,
             fetch_financial_data_fn=fetch_financial_data_fn,
-            normalize_financial_reports_fn=normalize_financial_reports_fn,
         )
 
     async def run_model_selection(

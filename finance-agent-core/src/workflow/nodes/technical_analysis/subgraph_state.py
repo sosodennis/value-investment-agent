@@ -25,7 +25,6 @@ class TechnicalAnalysisInput(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    ticker: str | None = None
     intent_extraction: IntentExtractionContext = Field(default_factory=dict)
     technical_analysis: TechnicalAnalysisContext = Field(default_factory=dict)
 
@@ -48,7 +47,6 @@ class TechnicalAnalysisState(TypedDict):
     """
 
     # --- From Input ---
-    ticker: NotRequired[str | None]
     intent_extraction: NotRequired[IntentExtractionContext]
 
     # --- Core State (Reducers applied) ---

@@ -131,7 +131,6 @@ async def run_search_node_use_case(
     return WorkflowNodeResult(
         update=build_search_node_success_update(
             artifact=artifact,
-            article_count=len(cleaned_results),
             search_artifact_id=search_artifact_id,
         ),
         goto="selector_node",

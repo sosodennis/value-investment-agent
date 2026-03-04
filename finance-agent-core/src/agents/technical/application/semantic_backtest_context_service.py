@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
+from typing import TypeVar
 
 import pandas as pd
 
@@ -17,6 +19,27 @@ from src.agents.technical.application.semantic_pipeline_contracts import (
 from src.shared.kernel.tools.logger import get_logger, log_event
 
 logger = get_logger(__name__)
+_COMPUTE_CONCURRENCY_LIMIT = 2
+_T = TypeVar("_T")
+_compute_semaphore: asyncio.Semaphore | None = None
+
+
+def _get_compute_semaphore() -> asyncio.Semaphore:
+    global _compute_semaphore
+    if _compute_semaphore is None:
+        _compute_semaphore = asyncio.Semaphore(_COMPUTE_CONCURRENCY_LIMIT)
+    return _compute_semaphore
+
+
+async def _offload_compute(
+    func: Callable[..., _T],
+    /,
+    *args: object,
+    **kwargs: object,
+) -> _T:
+    # Bound heavy compute concurrency so semantic nodes do not flood thread workers.
+    async with _get_compute_semaphore():
+        return await asyncio.to_thread(func, *args, **kwargs)
 
 
 async def assemble_backtest_context(
@@ -55,10 +78,27 @@ async def assemble_backtest_context(
             fd_series=fd_series,
             z_score_series=z_score_series,
         )
-        rf_series = await asyncio.to_thread(
+        risk_free_result = await asyncio.to_thread(
             market_data_provider.fetch_risk_free_series,
             "5y",
         )
+        rf_series = risk_free_result.data
+        if risk_free_result.failure is not None:
+            log_event(
+                logger,
+                event="technical_semantic_risk_free_unavailable",
+                message="technical semantic backtest context missing risk-free series; continuing with default fallback",
+                level=logging.WARNING,
+                error_code=risk_free_result.failure.failure_code,
+                fields={
+                    "degrade_source": "market_data_provider.risk_free",
+                    "provider_failure_code": risk_free_result.failure.failure_code,
+                    "provider_reason": risk_free_result.failure.reason,
+                    "fallback_mode": "backtester_default_risk_free",
+                    "input_count": 1,
+                    "output_count": 0,
+                },
+            )
 
         backtester = backtest_runtime.create_backtester(
             price_series=prices,
@@ -69,12 +109,17 @@ async def assemble_backtest_context(
             rf_series=rf_series,
         )
 
-        bt_results = backtest_runtime.run_backtest(backtester, transaction_cost=0.0005)
+        bt_results = await _offload_compute(
+            backtest_runtime.run_backtest,
+            backtester,
+            transaction_cost=0.0005,
+        )
         backtest_context = backtest_runtime.format_backtest_for_llm(bt_results)
 
         try:
             wfa_optimizer = backtest_runtime.create_wfa_optimizer(backtester)
-            wfa_results = backtest_runtime.run_wfa(
+            wfa_results = await _offload_compute(
+                backtest_runtime.run_wfa,
                 wfa_optimizer,
                 train_window=252,
                 test_window=63,
@@ -88,14 +133,17 @@ async def assemble_backtest_context(
             wfa_context=wfa_context,
             price_data=price_data,
             chart_data=chart_data,
+            is_degraded=False,
+            failure_code=None,
         )
     except Exception as exc:
+        failure_code = "TECHNICAL_SEMANTIC_BACKTEST_CONTEXT_FAILED"
         log_event(
             logger,
             event="technical_semantic_backtest_context_failed",
             message="technical semantic backtest context failed; proceeding without statistical verification",
             level=logging.WARNING,
-            error_code="TECHNICAL_SEMANTIC_BACKTEST_CONTEXT_FAILED",
+            error_code=failure_code,
             fields={
                 "exception": str(exc),
                 "degrade_source": "semantic_backtest_context",
@@ -112,4 +160,6 @@ async def assemble_backtest_context(
             wfa_context="",
             price_data=price_data,
             chart_data=chart_data,
+            is_degraded=True,
+            failure_code=failure_code,
         )

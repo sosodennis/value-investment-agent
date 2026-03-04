@@ -15,6 +15,7 @@ from src.agents.fundamental.application.state_updates import (
     build_financial_health_success_update,
     build_node_error_update,
 )
+from src.agents.fundamental.interface.parsers import FinancialHealthPayload
 from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
 from src.shared.kernel.workflow_contracts import WorkflowNodeResult
@@ -38,38 +39,11 @@ class FinancialHealthRuntime(Protocol):
     ) -> str: ...
 
 
-def normalize_forward_signals(raw: object) -> list[JSONObject] | None:
-    if not isinstance(raw, list):
-        return None
-    normalized: list[JSONObject] = []
-    for item in raw:
-        if isinstance(item, Mapping):
-            normalized.append(dict(item))
-    return normalized or None
-
-
-def _extract_financial_health_payload(
-    raw: object,
-) -> tuple[object, list[JSONObject] | None]:
-    if not isinstance(raw, Mapping):
-        return raw, None
-
-    reports_raw = raw.get("financial_reports")
-    if reports_raw is None:
-        reports_raw = raw.get("reports")
-    if reports_raw is None:
-        reports_raw = []
-
-    forward_signals = normalize_forward_signals(raw.get("forward_signals"))
-    return reports_raw, forward_signals
-
-
 async def run_financial_health_use_case(
     runtime: FinancialHealthRuntime,
     state: Mapping[str, object],
     *,
-    fetch_financial_data_fn: Callable[[str], object],
-    normalize_financial_reports_fn: Callable[[object, str], list[JSONObject]],
+    fetch_financial_data_fn: Callable[[str], FinancialHealthPayload],
 ) -> FundamentalNodeResult:
     intent_state = read_intent_state(state)
     resolved_ticker = intent_state.resolved_ticker
@@ -106,21 +80,16 @@ async def run_financial_health_use_case(
             goto="END",
         )
     try:
-        financial_reports_raw = await asyncio.to_thread(
+        payload = await asyncio.to_thread(
             fetch_financial_data_fn,
             resolved_ticker,
         )
-        reports_input, forward_signals = _extract_financial_health_payload(
-            financial_reports_raw
-        )
-        reports_data: list[JSONObject] = []
+        reports_data = payload.financial_reports
+        forward_signals = payload.forward_signals
         reports_artifact_id: str | None = None
         artifact: AgentOutputArtifactPayload | None = None
 
-        if reports_input:
-            reports_data = normalize_financial_reports_fn(
-                reports_input, "financial_health.financial_reports"
-            )
+        if reports_data:
             artifact_payload: JSONObject = {"financial_reports": reports_data}
             if isinstance(forward_signals, list):
                 artifact_payload["forward_signals"] = forward_signals

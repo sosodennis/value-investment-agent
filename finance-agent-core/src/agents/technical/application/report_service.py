@@ -50,7 +50,9 @@ async def build_semantic_report_update(
     build_output_artifact: Callable[[str, JSONObject, str], AgentOutputArtifactPayload],
 ) -> JSONObject:
     try:
-        preview = summarize_preview(technical_context)
+        preview_context = dict(technical_context)
+        preview_context["ticker"] = ticker
+        preview = summarize_preview(preview_context)
         report_id = await technical_port.save_full_report_canonical(
             data=pipeline_result.semantic_finalize_result.full_report_data_raw,
             produced_by="technical_analysis.semantic_translate",

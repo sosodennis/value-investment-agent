@@ -26,7 +26,6 @@ class FundamentalAnalysisInput(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    ticker: str | None = None
     intent_extraction: IntentExtractionContext = Field(default_factory=dict)
     fundamental_analysis: FundamentalAnalysisContext = Field(default_factory=dict)
 
@@ -51,7 +50,6 @@ class FundamentalAnalysisState(TypedDict):
     """
 
     # --- From Input ---
-    ticker: NotRequired[str | None]
     intent_extraction: NotRequired[IntentExtractionContext]
 
     # --- Core State (Reducers applied) ---

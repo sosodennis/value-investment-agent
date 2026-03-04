@@ -124,11 +124,10 @@ async def run_fracdiff_compute_use_case(
 
         result = fracdiff_runtime.compute(prices=prices, volumes=volumes)
 
-        key_prefix = state.get("ticker")
         chart_data_id = await runtime.save_chart_data(
             data=result.chart_data,
             produced_by="technical_analysis.fracdiff_compute",
-            key_prefix=key_prefix if isinstance(key_prefix, str) else None,
+            key_prefix=ticker_value,
         )
     except Exception as exc:
         log_event(

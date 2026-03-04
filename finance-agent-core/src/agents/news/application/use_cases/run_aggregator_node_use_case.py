@@ -92,12 +92,8 @@ async def run_aggregator_node_use_case(
         return WorkflowNodeResult(
             update={
                 "financial_news_research": {
-                    "status": "error",
-                    "sentiment_summary": "unknown",
-                    "sentiment_score": 0.0,
-                    "article_count": 0,
                     "report_id": None,
-                    "top_headlines": [],
+                    "artifact": None,
                 },
                 "current_node": "aggregator_node",
                 "internal_progress": {"aggregator_node": "error"},
@@ -154,12 +150,8 @@ async def run_aggregator_node_use_case(
         return WorkflowNodeResult(
             update={
                 "financial_news_research": {
-                    "status": "error",
-                    "sentiment_summary": "unknown",
-                    "sentiment_score": 0.0,
-                    "article_count": len(news_items),
                     "report_id": None,
-                    "top_headlines": [],
+                    "artifact": None,
                 },
                 "current_node": "aggregator_node",
                 "internal_progress": {"aggregator_node": "error"},
@@ -277,16 +269,10 @@ async def run_aggregator_node_use_case(
             },
         )
     summary_message = build_news_summary_message(ticker=ticker, result=aggregation)
-    status = "degraded" if degrade_messages else "success"
     node_status = "degraded" if degrade_messages else "done"
     update = build_aggregator_node_update(
-        status=status,
         node_status=node_status,
-        sentiment_summary=aggregation.sentiment_label,
-        sentiment_score=aggregation.weighted_score,
-        article_count=len(news_items),
         report_id=report_id,
-        top_headlines=aggregation.top_headlines,
         artifact=artifact,
     )
     if degrade_messages:

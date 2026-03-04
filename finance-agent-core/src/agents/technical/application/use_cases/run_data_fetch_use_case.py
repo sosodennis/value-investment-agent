@@ -75,7 +75,7 @@ async def run_data_fetch_use_case(
         )
 
     try:
-        df = await asyncio.to_thread(
+        fetch_result = await asyncio.to_thread(
             market_data_provider.fetch_daily_ohlcv,
             resolved_ticker,
             "5y",
@@ -108,6 +108,84 @@ async def run_data_fetch_use_case(
             goto="END",
         )
 
+    provider_failure = fetch_result.failure
+    if provider_failure is not None:
+        if provider_failure.failure_code == "TECHNICAL_OHLCV_EMPTY":
+            log_event(
+                logger,
+                event="technical_data_fetch_empty",
+                message="technical data fetch returned empty frame",
+                level=logging.WARNING,
+                error_code="TECHNICAL_DATA_EMPTY",
+                fields={
+                    "ticker": resolved_ticker,
+                    "degrade_source": "market_data_provider",
+                    "provider_failure_code": provider_failure.failure_code,
+                    "provider_reason": provider_failure.reason,
+                    "fallback_mode": "terminate_empty_frame",
+                    "input_count": 0,
+                    "output_count": 0,
+                },
+            )
+            log_event(
+                logger,
+                event="technical_data_fetch_completed",
+                message="technical data fetch completed",
+                level=logging.ERROR,
+                fields={
+                    "ticker": resolved_ticker,
+                    "status": "error",
+                    "is_degraded": True,
+                    "error_code": "TECHNICAL_DATA_EMPTY",
+                    "rows": 0,
+                    "artifact_written": False,
+                },
+            )
+            return TechnicalNodeResult(
+                update=build_data_fetch_error_update(
+                    "Empty data returned from provider"
+                ),
+                goto="END",
+            )
+
+        log_event(
+            logger,
+            event="technical_data_fetch_failed",
+            message="technical data fetch failed",
+            level=logging.ERROR,
+            error_code="TECHNICAL_DATA_FETCH_FAILED",
+            fields={
+                "ticker": resolved_ticker,
+                "degrade_source": "market_data_provider",
+                "provider_failure_code": provider_failure.failure_code,
+                "provider_reason": provider_failure.reason,
+                "fallback_mode": "terminate_provider_failure",
+                "input_count": 1,
+                "output_count": 0,
+            },
+        )
+        log_event(
+            logger,
+            event="technical_data_fetch_completed",
+            message="technical data fetch completed",
+            level=logging.ERROR,
+            fields={
+                "ticker": resolved_ticker,
+                "status": "error",
+                "is_degraded": True,
+                "error_code": "TECHNICAL_DATA_FETCH_FAILED",
+                "rows": 0,
+                "artifact_written": False,
+            },
+        )
+        return TechnicalNodeResult(
+            update=build_data_fetch_error_update(
+                f"Data fetch failed: {provider_failure.failure_code}"
+            ),
+            goto="END",
+        )
+
+    df = fetch_result.data
     if df is None or df.empty:
         log_event(
             logger,
@@ -183,7 +261,6 @@ async def run_data_fetch_use_case(
     return TechnicalNodeResult(
         update=build_data_fetch_success_update(
             price_artifact_id=price_artifact_id,
-            resolved_ticker=resolved_ticker,
             artifact=artifact,
         ),
         goto="fracdiff_compute",

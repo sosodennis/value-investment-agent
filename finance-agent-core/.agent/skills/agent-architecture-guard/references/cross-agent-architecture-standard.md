@@ -110,16 +110,6 @@ This is the canonical cross-agent architecture standard. Keep this file short an
 5. Artifact read semantics must distinguish `not_found` from `empty_payload`:
    - repository/read-boundary owners must not silently normalize missing artifact id/data to empty values (`[]`, `{}`, `""`).
    - missing artifact must surface as explicit failure so use-cases can decide terminal vs degraded behavior deterministically.
-6. Workflow context contracts must stay canonical and current:
-   - `workflow/state.py` context keys are the single source of truth for cross-agent state shape.
-   - every field written by `state_updates`/use-cases must be declared in the corresponding context.
-   - remove stale context fields that have no active writer/consumer; do not keep compatibility placeholders.
-7. State reader source priority must be deterministic:
-   - when a canonical source exists (for example `intent_extraction.resolved_ticker`), do not fallback to unrelated legacy keys.
-   - do not mirror canonical ticker fields back to root workflow state (no root `ticker` compatibility key).
-8. Workflow context payload should be pointer-first and orchestration-only:
-   - keep only fields required for cross-node orchestration and downstream consumption.
-   - do not mirror large/derived reporting payloads in workflow context when the same data already exists in artifacts/previews.
 
 ## 7. Refactor Migration Rules
 

@@ -66,6 +66,7 @@ def test_no_legacy_generic_technical_imports() -> None:
         "src.agents.technical.domain.policies",
         "src.agents.technical.domain.prompt_builder",
         "src.agents.technical.application.semantic_service",
+        "src.agents.technical.application.semantic_context_formatter_service",
     ]
 
     violations: list[str] = []
@@ -111,6 +112,13 @@ def test_no_legacy_generic_technical_module_files() -> None:
         / "technical"
         / "application"
         / "semantic_service.py",
+        repo_root
+        / "finance-agent-core"
+        / "src"
+        / "agents"
+        / "technical"
+        / "application"
+        / "semantic_context_formatter_service.py",
         repo_root
         / "finance-agent-core"
         / "src"
@@ -235,5 +243,45 @@ def test_artifact_repository_port_has_no_object_typed_boundaries() -> None:
 
     assert not violations, (
         "ITechnicalArtifactRepository should not use object-typed boundaries:\n"
+        + "\n".join(sorted(violations))
+    )
+
+
+def test_fracdiff_runtime_service_has_no_object_typed_callables() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    target = (
+        repo_root
+        / "finance-agent-core"
+        / "src"
+        / "agents"
+        / "technical"
+        / "application"
+        / "fracdiff_runtime_service.py"
+    )
+    tree = ast.parse(target.read_text(encoding="utf-8"))
+
+    service_class = None
+    for node in tree.body:
+        if (
+            isinstance(node, ast.ClassDef)
+            and node.name == "TechnicalFracdiffRuntimeService"
+        ):
+            service_class = node
+            break
+
+    assert service_class is not None, "TechnicalFracdiffRuntimeService not found"
+
+    violations: list[str] = []
+    for node in service_class.body:
+        if isinstance(node, ast.AnnAssign) and _annotation_contains_object(
+            node.annotation
+        ):
+            target_name = (
+                node.target.id if isinstance(node.target, ast.Name) else "<unknown>"
+            )
+            violations.append(f"{target_name}: annotation contains object")
+
+    assert not violations, (
+        "TechnicalFracdiffRuntimeService should not use object-typed callables:\n"
         + "\n".join(sorted(violations))
     )

@@ -28,6 +28,9 @@ from src.agents.fundamental.interface.contracts import (
     parse_financial_reports_model,
 )
 from src.agents.fundamental.interface.mappers import summarize_fundamental_for_preview
+from src.agents.fundamental.interface.parsers import (
+    parse_financial_health_payload,
+)
 from src.agents.fundamental.interface.serializers import (
     build_model_selection_artifact,
     build_model_selection_report_payload,
@@ -102,10 +105,12 @@ class FundamentalWorkflowRunner:
     ) -> FundamentalNodeResult:
         return await self.orchestrator.run_financial_health(
             state,
-            fetch_financial_data_fn=lambda ticker: self.fetch_financial_payload_fn(
-                ticker, years=self.financial_payload_years
+            fetch_financial_data_fn=lambda ticker: parse_financial_health_payload(
+                self.fetch_financial_payload_fn(
+                    ticker, years=self.financial_payload_years
+                ),
+                context="financial_health.payload",
             ),
-            normalize_financial_reports_fn=parse_financial_reports_model,
         )
 
     async def run_model_selection(

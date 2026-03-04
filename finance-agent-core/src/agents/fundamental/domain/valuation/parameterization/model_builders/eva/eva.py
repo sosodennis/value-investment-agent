@@ -10,12 +10,92 @@ from ...types import TraceInput
 from ..shared.capital_structure_value_extraction_service import (
     extract_filing_capital_structure_market_values,
 )
-from .eva_invested_capital_policy_service import resolve_eva_invested_capital_field
-from .eva_output_assembly_service import (
-    build_eva_params,
-    build_eva_trace_inputs,
-    extend_eva_missing_fields,
+from ..shared.common_output_assembly_service import (
+    build_capital_structure_params,
+    build_capital_structure_trace_inputs,
+    build_sec_xbrl_base_params,
 )
+from ..shared.missing_metrics_service import extend_missing_fields
+
+
+def _resolve_eva_invested_capital_field(
+    *,
+    equity_tf: TraceableField[float],
+    debt_tf: TraceableField[float],
+    cash_tf: TraceableField[float],
+    missing_field: Callable[[str, str], TraceableField[float]],
+    computed_field: Callable[
+        [str, float | list[float], str, str, dict[str, TraceableField]],
+        TraceableField,
+    ],
+) -> TraceableField[float]:
+    if equity_tf.value is None or debt_tf.value is None or cash_tf.value is None:
+        return missing_field("Invested Capital", "Missing equity, debt, or cash")
+
+    return computed_field(
+        "Invested Capital",
+        float(equity_tf.value) + float(debt_tf.value) - float(cash_tf.value),
+        "INVESTED_CAPITAL",
+        "TotalEquity + TotalDebt - Cash",
+        {
+            "Total Equity": equity_tf,
+            "Total Debt": debt_tf,
+            "Cash": cash_tf,
+        },
+    )
+
+
+def _extend_eva_missing_fields(*, missing: list[str]) -> None:
+    extend_missing_fields(
+        missing=missing,
+        field_names=("projected_evas", "wacc", "terminal_growth"),
+    )
+
+
+def _build_eva_trace_inputs(
+    *,
+    invested_capital_tf: TraceableField[float],
+    cash_tf: TraceableField[float],
+    debt_tf: TraceableField[float],
+    preferred_tf: TraceableField[float],
+    shares_tf: TraceableField[float],
+) -> dict[str, TraceInput]:
+    return {
+        "current_invested_capital": invested_capital_tf,
+        **build_capital_structure_trace_inputs(
+            cash_tf=cash_tf,
+            debt_tf=debt_tf,
+            preferred_tf=preferred_tf,
+            shares_tf=shares_tf,
+        ),
+    }
+
+
+def _build_eva_params(
+    *,
+    ticker: str | None,
+    current_invested_capital: float | None,
+    cash: float | None,
+    total_debt: float | None,
+    preferred_stock: float | None,
+    shares_outstanding: float | None,
+    current_price: float | None,
+) -> dict[str, object]:
+    return {
+        **build_sec_xbrl_base_params(ticker=ticker),
+        "current_invested_capital": current_invested_capital,
+        "projected_evas": None,
+        "wacc": None,
+        "terminal_growth": None,
+        "terminal_eva": None,
+        **build_capital_structure_params(
+            cash=cash,
+            total_debt=total_debt,
+            preferred_stock=preferred_stock,
+            shares_outstanding=shares_outstanding,
+            current_price=current_price,
+        ),
+    }
 
 
 @dataclass(frozen=True)
@@ -66,7 +146,7 @@ def build_eva_payload(
     )
     preferred_tf = base.preferred_stock
 
-    invested_capital_tf = resolve_eva_invested_capital_field(
+    invested_capital_tf = _resolve_eva_invested_capital_field(
         equity_tf=equity_tf,
         debt_tf=debt_tf,
         cash_tf=cash_tf,
@@ -96,9 +176,9 @@ def build_eva_payload(
     current_price = market_values.current_price
     shares_source = market_values.shares_source
 
-    extend_eva_missing_fields(missing=missing)
+    _extend_eva_missing_fields(missing=missing)
 
-    trace_inputs: dict[str, TraceInput] = build_eva_trace_inputs(
+    trace_inputs: dict[str, TraceInput] = _build_eva_trace_inputs(
         invested_capital_tf=invested_capital_tf,
         cash_tf=cash_tf,
         debt_tf=debt_tf,
@@ -106,7 +186,7 @@ def build_eva_payload(
         shares_tf=shares_tf,
     )
 
-    params: dict[str, object] = build_eva_params(
+    params: dict[str, object] = _build_eva_params(
         ticker=ticker,
         current_invested_capital=current_invested_capital,
         cash=cash,

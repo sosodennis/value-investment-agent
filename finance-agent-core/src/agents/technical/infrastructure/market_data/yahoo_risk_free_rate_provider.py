@@ -1,14 +1,17 @@
 import logging
 
-import pandas as pd
 import yfinance as yf
 
+from src.agents.technical.application.ports import (
+    TechnicalProviderFailure,
+    TechnicalRiskFreeRateFetchResult,
+)
 from src.shared.kernel.tools.logger import get_logger, log_event
 
 logger = get_logger(__name__)
 
 
-def fetch_risk_free_series(period: str = "5y") -> pd.Series | None:
+def fetch_risk_free_series(period: str = "5y") -> TechnicalRiskFreeRateFetchResult:
     """Fetch historical daily risk-free rate series from ^TNX."""
     try:
         log_event(
@@ -29,7 +32,13 @@ def fetch_risk_free_series(period: str = "5y") -> pd.Series | None:
                 error_code="TECHNICAL_RISK_FREE_EMPTY",
                 fields={"period": period},
             )
-            return None
+            return TechnicalRiskFreeRateFetchResult(
+                data=None,
+                failure=TechnicalProviderFailure(
+                    failure_code="TECHNICAL_RISK_FREE_EMPTY",
+                    reason="empty_history",
+                ),
+            )
 
         daily_rf = (hist["Close"] / 100.0) / 252.0
         daily_rf = daily_rf.ffill().fillna(0.0)
@@ -41,7 +50,7 @@ def fetch_risk_free_series(period: str = "5y") -> pd.Series | None:
             message="technical risk-free rate fetch completed",
             fields={"period": period, "rows": len(daily_rf)},
         )
-        return daily_rf
+        return TechnicalRiskFreeRateFetchResult(data=daily_rf)
 
     except Exception as exc:
         log_event(
@@ -52,4 +61,10 @@ def fetch_risk_free_series(period: str = "5y") -> pd.Series | None:
             error_code="TECHNICAL_RISK_FREE_FETCH_FAILED",
             fields={"period": period, "exception": str(exc)},
         )
-        return None
+        return TechnicalRiskFreeRateFetchResult(
+            data=None,
+            failure=TechnicalProviderFailure(
+                failure_code="TECHNICAL_RISK_FREE_FETCH_FAILED",
+                reason=str(exc),
+            ),
+        )

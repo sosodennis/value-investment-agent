@@ -17,6 +17,35 @@ Execution tracker:
 3. `application` 對 concrete infrastructure 依賴已移除，concrete wiring 已外置到 `agents/fundamental/wiring.py`。
 4. `domain` 與 `infrastructure/sec_xbrl` 的 generic module 命名已完成收斂（`models/rules/services` -> semantic owners）。
 
+狀態更新（2026-03-03）：
+
+1. Focused hardening 已啟動，優先處理 P0/P1/P2（auditor 接入、service 顆粒收斂、性能基線）。
+2. F-P0 已實作：
+   - valuation 主鏈路改為 `schema -> auditor -> calculator`
+   - auditor fail 會阻斷 calculator（hard gate）
+   - auditor warning/failure 已有 structured logs
+   - audit summary 進入 build metadata，並回寫到 valuation preview/artifact。
+3. F-P1 slice-1 已實作（service 顆粒收斂）：
+   - `eva/reit/residual_income` 的單一-owner policy/output assembly 函式，已併回各自 builder owner 檔案
+   - 已移除 6 個薄 `*_service.py` 碎片，降低跨檔跳轉與維護負擔。
+4. F-P1 slice-2 已實作（service 顆粒收斂擴大）：
+   - `bank/saas` 的單一-owner policy/rates/output assembly 函式，已併回各自 builder owner 檔案
+   - 再移除 6 個薄 `*_service.py` 碎片（累計 12 個），parameterization model builders 內聚進一步提升。
+5. P8 第一批已實作（重計算性能基線）：
+   - 新增 Fundamental Monte Carlo 固定案例 latency gate（warmup + repeated run + p50 threshold）
+   - 新增 Technical WFA 固定案例 latency gate（warmup + repeated run + p50 threshold）
+   - 用於攔截重構後的 silent performance regression。
+6. P1 slice-3 已實作（parameterization owner 收斂）：
+   - `registry_service.py` 內聯 model-builder factory/adapter owner，減少中介跳轉。
+   - `default_context_service.py` 內聯 builder context wiring owner，刪除額外 wiring layer。
+   - 移除 `model_builder_factory_service.py`、`model_builder_adapter_service.py`、`wiring_service.py` 三個中介檔。
+7. P2 provider 契約收尾：
+   - Fundamental market providers 去除 `fetch_datums` 相容入口，統一只保留 `fetch(...) -> ProviderFetch`。
+8. 全鏈路 hardening 已實作（依 review 三點）：
+   - valuation use-case 重計算改為 `to_thread + bounded semaphore`，避免 async event loop 阻塞。
+   - model_selection -> valuation handoff 在 report id 缺失時 fail-fast，不再延後到 calculation 才報錯。
+   - financial_health payload 在 interface parser 邊界先正規化為 typed contract，移除 application runtime contract 的 `object` payload。
+
 目標：
 
 1. 清晰分層（domain/application/interface/infrastructure）。
@@ -386,5 +415,59 @@ src/agents/fundamental/
 1. 先做 Phase 1（契約與模型統一）避免後續搬遷反覆衝突。
 2. 接著做 `factory.py` 與 `param_builder.py` 拆解（最大收益）。
 3. 最後再做 package re-layout 與命名收尾。
+
+## 11. 2026-03-03 Focused Hardening Plan（本輪）
+
+目標：只聚焦高價值修正，避免過度設計。
+
+### F-P0：Valuation Auditor 正式接入主流程（決策：接入，不移除）
+
+背景：
+1. `valuation_model_registry` 已定義各模型 `auditor`，但主執行路徑目前實際僅使用 `schema + calculator`。
+2. 這會造成架構語義不一致（名義上有審核，執行上未生效）。
+
+決策：
+1. 將 auditor 接入 valuation execution 主鏈路。
+2. 採「Hard + Soft gate」：
+   - Hard gate：數學一致性/邊界違反（例如不可計算條件）直接中止計算。
+   - Soft gate：可告警但可繼續，保留 warning 訊息供 artifact/UI 展示。
+
+實作切片：
+1. 擴充 runtime contract，顯式帶出 `auditor` callable。
+2. 在 `execute_valuation_calculation(...)` 中插入 `schema -> auditor -> calculator` 順序。
+3. 統一 audit 失敗回傳契約（error_code/message/status）與 structured logs。
+4. 增加測試：pass / soft-fail / hard-fail 三路徑。
+
+驗收：
+1. 任一模型都會執行 auditor（非空跑）。
+2. hard-fail 不再進 calculator。
+3. audit 診斷可在 artifact 與 logs 觀測到。
+
+### F-P1：精簡過細 Service 顆粒（Parameterization/Model Builders）
+
+策略：
+1. 只合併「薄透傳或單用途 wrapper」。
+2. 保留跨模型共享 owner 與真正有語義差異的 policy service。
+
+實作切片：
+1. 盤點 `domain/valuation/parameterization/model_builders/**` 下低內聚薄 service。
+2. 以 model package 為邊界做合併（例如同模型的 capm/output assembly 小碎片收斂）。
+3. 刪除純 pass-through 檔案，更新 call sites 與 import hygiene。
+
+驗收：
+1. package 層級變淺、跳檔成本下降。
+2. 不新增 generic bucket（`helpers/services/tools`）。
+3. 行為與輸出保持一致（targeted regression 綠燈）。
+
+### F-P2：Monte Carlo 性能基線與回歸閘道
+
+實作切片：
+1. 建立固定 seed + iterations + 輸入樣本的基線測試/腳本。
+2. 產出 baseline 指標（p50/p95 latency、executed_iterations、核心 diagnostics）。
+3. 在 CI 或本地 gate 中加入回歸閾值（先用相對門檻）。
+
+驗收：
+1. 能重現同一組性能結果（允許小幅波動）。
+2. 重構後若超閾值退化可被自動偵測。
 
 這樣可以在風險最小的前提下，先把可維護性與演進速度拉上來。
