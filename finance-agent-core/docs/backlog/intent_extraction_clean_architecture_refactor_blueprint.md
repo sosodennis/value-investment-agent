@@ -2,10 +2,185 @@
 
 Date: 2026-03-04
 Scope: `finance-agent-core/src/agents/intent`
-Status: Proposed (Ready for implementation)
+Status: Completed
 Policy baseline:
 1. `finance-agent-core/docs/standards/cross_agent_class_naming_and_layer_responsibility_guideline.md`
 2. `finance-agent-core/docs/standards/refactor_lessons_and_cross_agent_playbook.md`
+
+Status update (2026-03-04):
+1. I-01 (P0 baseline, small) completed:
+   - fixed stale test import residue from removed legacy module:
+     - `tests/test_intent_mapper.py`: `src.agents.intent.domain.report_contracts` -> `src.agents.intent.domain.models`
+   - verification:
+     - `ruff check` passed for changed test file
+     - targeted intent tests passed (`16 passed`)
+     - residue scan confirms no remaining `src.agents.intent.domain.report_contracts` references.
+2. I-02 (P3 compatibility cleanup, small) completed:
+   - removed legacy `ticker` fallback from clarification resume flow:
+     - `application/orchestrator.py`: `resolve_selected_symbol` now accepts canonical `selected_symbol` only
+     - `interface/parsers.py`: `ResolvedSelectionInput` now exposes only `selected_symbol`
+   - updated parser tests to canonical contract behavior.
+   - verification:
+     - `ruff check` passed on changed intent files
+     - targeted tests passed (`16 passed`)
+   - compliance note:
+     - this slice resolves a blocking migration-hygiene violation (legacy compatibility residue) and introduces no new hard-rule violations.
+3. I-03 (P1 layer ownership convergence, small) completed:
+   - moved intent external adapters from legacy `data/` route to `infrastructure/` owners:
+     - `infrastructure/market_data/company_profile_provider.py`
+     - `infrastructure/market_data/yahoo_ticker_search_provider.py`
+     - `infrastructure/search/ddg_web_search_provider.py`
+   - updated composition import route in `application/factory.py`
+   - removed legacy files:
+     - `data/market_clients.py`
+     - `data/__init__.py`
+   - synced directly impacted reference doc path:
+     - `workflow/nodes/fundamental_analysis/README.md`
+4. I-04 (P1 layer rewiring bootstrap, small) completed:
+   - moved runtime composition ownership out of application:
+     - added `src/agents/intent/wiring.py`
+     - `workflow/nodes/intent_extraction/nodes.py` now pulls orchestrator via wiring
+   - removed import-time env side effect from application:
+     - removed `load_dotenv/find_dotenv` from `application/intent_service.py`
+   - removed direct application->infrastructure imports for LLM:
+     - `intent_service` now receives `llm_provider_fn` by injection.
+   - verification:
+     - `ruff check` passed
+     - targeted intent/protocol tests passed (`27 passed`)
+   - compliance note:
+     - changed paths no longer show application direct imports from `intent.infrastructure` or global `src.infrastructure.llm`.
+5. Next slice:
+   - I-05 (small): introduce explicit `application/ports.py` runtime contracts and switch `application/factory.py` to typed port injection (reduce callable-bundle coupling).
+6. I-05 (P2 prompt ownership convergence, small) completed:
+   - moved intent prompt specs from domain to interface:
+     - added `interface/prompt_specs.py`
+     - removed `domain/prompt_builder.py`
+     - updated `application/intent_service.py` imports to interface owner
+   - cleaned stale domain export in `domain/__init__.py`.
+   - verification:
+     - `ruff check` passed
+     - targeted intent/protocol tests passed (`27 passed`)
+   - compliance note:
+     - changed paths no longer contain prompt specs under `domain`.
+7. I-06 (P2 runtime contract convergence, small) completed:
+   - added explicit runtime contracts in `application/ports.py`:
+     - `IIntentLlmProvider`
+     - `IIntentTickerSearchProvider`
+     - `IIntentWebSearchProvider`
+     - `IIntentCompanyProfileProvider`
+     - `IntentRuntimePorts`
+   - migrated `application/factory.py` to inject a single typed `runtime_ports` bundle (instead of scattered runtime callables in factory signature).
+   - updated `wiring.py` composition to build and inject `IntentRuntimePorts`.
+   - verification:
+     - `ruff check` passed
+     - targeted intent/protocol tests passed (`27 passed`)
+   - compliance note:
+     - application composition boundary now depends on explicit runtime contract owner (`application/ports.py`) and keeps concrete adapter imports in wiring.
+8. Next slice:
+   - I-07 (small): strengthen provider degraded semantics (remove bare `None` for profile fetch failures) with typed failure metadata and align orchestrator handling/logging.
+9. I-07 (P1/P2 degraded semantics hardening, small) completed:
+   - introduced typed company profile lookup outcome in `application/ports.py`:
+     - `IntentCompanyProfileLookup(profile, failure_code, failure_reason)`
+   - updated provider contract and implementation:
+     - `infrastructure/market_data/company_profile_provider.py`
+     - now distinguishes:
+       - `INTENT_PROFILE_NOT_FOUND`
+       - `INTENT_PROFILE_PROVIDER_ERROR`
+     - no bare `None` failure return path.
+   - aligned orchestrator handling/logging:
+     - `application/orchestrator.py` now consumes typed profile lookup result
+     - warning logs include provider-level failure code/reason on profile lookup failure.
+   - verification:
+     - `ruff check` passed
+     - targeted tests passed (`30 passed`)
+     - added deterministic provider tests:
+       - `tests/test_intent_company_profile_provider.py`
+   - compliance note:
+     - changed paths now satisfy typed degraded-outcome requirement for company-profile provider.
+10. Next slice:
+   - I-08 (small): normalize intent node completion logging so extraction/searching/decision each emits terminal completion summary on all return paths.
+11. I-08 (P3 logging contract hardening, small) completed:
+   - normalized terminal completion summary logs for:
+     - `run_extraction`
+     - `run_searching`
+     - `run_decision`
+   - each terminal return path now emits a stable completion event with machine-readable fields:
+     - `status`
+     - `goto_node`
+     - `is_degraded`
+     - scope metrics (`candidate_count`, `resolved_ticker`, etc. where applicable)
+   - added explicit `intent_decision_started` log to align start/completion symmetry for decision node.
+   - verification:
+     - `ruff check` passed on changed files
+     - targeted intent tests passed (`24 passed`)
+   - compliance note:
+     - changed intent node paths now satisfy logging completion symmetry requirement for extraction/searching/decision.
+12. Next slice:
+   - I-09 (small): extend completion-summary symmetry to clarification node terminal paths (`clarification_node` success + retry branches) for full P3 closure.
+13. I-09 (P3 logging contract closure, small) completed:
+   - extended clarification node completion-summary symmetry in:
+     - `src/workflow/nodes/intent_extraction/nodes.py`
+   - `clarification_node` now emits `intent_clarification_completed` on both terminal branches:
+     - resolved branch (`goto=END`)
+     - retry branch (`goto=extraction`)
+   - completion event fields include machine-readable quality/context:
+     - `status`
+     - `goto_node`
+     - `is_degraded`
+     - `candidate_count`
+     - `resolved_ticker`
+   - verification:
+     - `ruff check` passed on changed file
+     - targeted intent tests passed (`24 passed`)
+   - compliance note:
+     - intent extraction/searching/decision/clarification now all satisfy start+completion symmetry for terminal branches per logging quality rules.
+14. Next slice:
+   - I-10 (small): P4 cleanup/closure pass (remove any leftover stale comments/imports, run full intent targeted verification, and finalize blueprint completion status).
+15. I-10 (P4 cleanup/closure, small) completed:
+   - performed cleanup/residue scan for intent scope:
+     - no remaining direct `application -> infrastructure` imports in intent application layer
+     - no prompt spec ownership leakage back to `domain`
+     - no legacy clarification resume fallback (`selected_symbol` canonical path intact)
+   - executed full intent-targeted closure gates:
+     - `ruff check` on intent package + intent workflow node + intent-related test files
+     - expanded pytest suite for intent + interrupt/protocol/subgraph/state-contract boundaries
+   - verification:
+     - `ruff check` passed
+     - `pytest` passed (`35 passed`)
+   - compliance note:
+     - no blocking architecture-standard violations found in changed intent paths.
+16. Next slice:
+   - None. Intent extraction refactor slices I-01..I-10 are completed.
+17. Post-completion hardening (small) completed:
+   - fixed runtime boundary ergonomics in orchestrator construction:
+     - removed long flat callable-bundle injection from `IntentOrchestrator`
+     - orchestrator now depends on `IntentRuntimePorts` as the single runtime boundary owner
+   - fixed bounded exception logging in intent scope:
+     - added shared helper `bounded_text(...)` in `src/shared/kernel/tools/logger.py`
+     - replaced raw `str(exc)` logging/failure text in intent application + infrastructure modules
+   - verification:
+     - `ruff check` passed on changed intent/shared files
+     - intent closure test suite passed (`35 passed`)
+   - compliance note:
+     - no remaining long `*_fn: Callable[...]` injection fields in intent orchestrator
+     - no remaining raw `str(exc)` in intent scope logs.
+18. Post-log-review hardening (small) completed:
+   - fixed search-channel degraded observability:
+     - introduced typed web-search runtime outcome in `application/ports.py` (`IntentWebSearchResult`)
+     - `intent_search_completed` now reflects `is_degraded=true` when web channel fails/empty and Yahoo fallback is used
+     - added dedicated degraded reason event: `intent_search_degraded_web_channel`
+   - adjusted web-search severity semantics:
+     - "no results found" now logs as warning (`INTENT_WEB_SEARCH_EMPTY`) instead of error
+   - fixed extraction completion field semantics:
+     - `intent_extraction_completed.fields.resolved_ticker` now emits `null` for empty ticker instead of empty string
+   - verification:
+     - `ruff check` passed on changed files
+     - intent closure test suite passed (`37 passed`)
+     - added regression tests in `tests/test_error_handling_intent.py` for degraded completion signal + null ticker field semantics
+19. Governance follow-up completed:
+   - ran skill governance triage and classified update owner as `agent-debug-review-playbook`
+   - applied minimal reusable playbook improvement for multi-source degraded-observability review checks
+   - `quick_validate.py` passed for updated skill.
 
 ## Requirement Breakdown
 
@@ -16,7 +191,7 @@ Objectives:
 4. Do not keep long-lived compatibility paths.
 
 Constraints:
-1. This blueprint is planning-only (no code in this phase).
+1. Execution follows controlled `small|medium` slices with immediate validation and compliance gates.
 2. Refactor should prefer larger, atomic slices.
 3. Directly impacted boundary modules may be included (`workflow/nodes/intent_extraction/*`, `workflow/state.py`, `tests/*intent*`).
 
@@ -24,7 +199,9 @@ Non-goals:
 1. No functional strategy changes to intent business semantics unless required by architecture correctness.
 2. No refactor of `debate` in this slice.
 
-## Findings
+## Initial Findings (Baseline)
+
+Note: this section records pre-refactor baseline findings from planning time. Resolution status is tracked in the `Status update` slices above.
 
 Severity order, with violated standard section:
 

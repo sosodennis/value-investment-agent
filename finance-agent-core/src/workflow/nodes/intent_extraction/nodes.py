@@ -9,13 +9,14 @@ from collections.abc import Mapping
 from langgraph.graph import END
 from langgraph.types import Command, interrupt
 
-from src.agents.intent.application.factory import intent_orchestrator
+from src.agents.intent.wiring import get_intent_orchestrator
 from src.shared.kernel.tools.logger import get_logger, log_event
 from src.workflow.command_adapter import command_from_result, command_from_update
 
 from .subgraph_state import IntentExtractionState
 
 logger = get_logger(__name__)
+intent_orchestrator = get_intent_orchestrator()
 
 
 def extraction_node(state: IntentExtractionState) -> Command:
@@ -51,6 +52,7 @@ def clarification_node(state: IntentExtractionState) -> Command:
     interrupt_payload_dump, candidates_raw = (
         intent_orchestrator.build_clarification_interrupt_payload(state)
     )
+    candidate_count = len(candidates_raw) if isinstance(candidates_raw, list) else 0
     user_input = interrupt(interrupt_payload_dump)
     payload_keys: list[str] = []
     if isinstance(user_input, Mapping):
@@ -71,6 +73,24 @@ def clarification_node(state: IntentExtractionState) -> Command:
         interrupt_payload_dump=interrupt_payload_dump,
     )
     if resolution_update is not None:
+        resolved_ticker: str | None = None
+        intent_ctx_raw = resolution_update.get("intent_extraction")
+        if isinstance(intent_ctx_raw, Mapping):
+            resolved_ticker_raw = intent_ctx_raw.get("resolved_ticker")
+            if isinstance(resolved_ticker_raw, str) and resolved_ticker_raw.strip():
+                resolved_ticker = resolved_ticker_raw
+        log_event(
+            logger,
+            event="intent_clarification_completed",
+            message="intent clarification completed",
+            fields={
+                "status": "resolved",
+                "goto_node": "END",
+                "is_degraded": False,
+                "candidate_count": candidate_count,
+                "resolved_ticker": resolved_ticker,
+            },
+        )
         return command_from_update(resolution_update, goto="END", end_node=END)
 
     # If even fallback fails, retry extraction
@@ -80,6 +100,20 @@ def clarification_node(state: IntentExtractionState) -> Command:
         message="intent clarification resolution failed; retrying extraction",
         level=logging.WARNING,
         error_code="INTENT_CLARIFICATION_RETRY",
+    )
+    log_event(
+        logger,
+        event="intent_clarification_completed",
+        message="intent clarification completed",
+        level=logging.WARNING,
+        error_code="INTENT_CLARIFICATION_RETRY",
+        fields={
+            "status": "retry_extraction",
+            "goto_node": "extraction",
+            "is_degraded": True,
+            "candidate_count": candidate_count,
+            "resolved_ticker": None,
+        },
     )
     result = intent_orchestrator.build_clarification_retry_update()
     return command_from_result(result, end_node=END)

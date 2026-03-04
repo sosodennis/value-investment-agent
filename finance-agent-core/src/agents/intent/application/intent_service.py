@@ -10,23 +10,18 @@ import re
 from collections.abc import Callable
 from typing import Protocol
 
-from dotenv import find_dotenv, load_dotenv
-
+from src.agents.intent.application.ports import IIntentLlmProvider
 from src.agents.intent.domain.extraction_policies import heuristic_extract_intent
 from src.agents.intent.domain.models import TickerCandidate
-from src.agents.intent.domain.prompt_builder import (
-    build_intent_extraction_system_prompt,
-    build_search_extraction_system_prompt,
-)
 from src.agents.intent.interface.prompt_renderers import (
     build_intent_extraction_chat_prompt,
     build_search_extraction_chat_prompt,
 )
-from src.infrastructure.llm.provider import get_llm
-from src.shared.kernel.tools.logger import get_logger, log_event
-
-# Load environment variables
-load_dotenv(find_dotenv())
+from src.agents.intent.interface.prompt_specs import (
+    build_intent_extraction_system_prompt,
+    build_search_extraction_system_prompt,
+)
+from src.shared.kernel.tools.logger import bounded_text, get_logger, log_event
 
 logger = get_logger(__name__)
 
@@ -92,12 +87,13 @@ def extract_candidates_from_search(
     *,
     search_extraction_model_type: type[object],
     to_ticker_candidate_fn: Callable[[object], TickerCandidate],
+    llm_provider_fn: IIntentLlmProvider,
 ) -> list[TickerCandidate]:
     """
     Extract potential ticker symbols and company names from search results using LLM.
     """
     try:
-        llm = get_llm(timeout=30)
+        llm = llm_provider_fn(30)
 
         prompt = build_search_extraction_chat_prompt(
             system_prompt=build_search_extraction_system_prompt(),
@@ -116,19 +112,22 @@ def extract_candidates_from_search(
             message="llm search extraction failed; returning empty candidates",
             level=logging.WARNING,
             error_code="INTENT_SEARCH_EXTRACTION_FAILED",
-            fields={"exception": str(exc)},
+            fields={"exception": bounded_text(exc)},
         )
         return []
 
 
 def extract_intent(
-    query: str, *, intent_model_type: type[_IntentExtractionLike]
+    query: str,
+    *,
+    intent_model_type: type[_IntentExtractionLike],
+    llm_provider_fn: IIntentLlmProvider,
 ) -> _IntentExtractionLike:
     """
     Extract intent from user query using LLM with heuristic resilience path.
     """
     try:
-        llm = get_llm(timeout=30)
+        llm = llm_provider_fn(30)
 
         prompt = build_intent_extraction_chat_prompt(
             system_prompt=build_intent_extraction_system_prompt(),
@@ -155,6 +154,6 @@ def extract_intent(
             message="llm intent extraction failed; using heuristic fallback",
             level=logging.WARNING,
             error_code="INTENT_EXTRACTION_FALLBACK_HEURISTIC",
-            fields={"exception": str(exc)},
+            fields={"exception": bounded_text(exc)},
         )
         return _heuristic_extract(query, intent_model_factory=intent_model_type)

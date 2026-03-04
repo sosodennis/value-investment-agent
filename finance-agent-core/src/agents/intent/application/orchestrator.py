@@ -1,59 +1,72 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Protocol
 
+from src.agents.intent.application.intent_service import (
+    deduplicate_candidates as deduplicate_candidates_service,
+)
+from src.agents.intent.application.intent_service import (
+    extract_candidates_from_search as extract_candidates_from_search_service,
+)
+from src.agents.intent.application.intent_service import (
+    extract_intent as extract_intent_service,
+)
+from src.agents.intent.application.ports import (
+    IntentCompanyProfileLookup,
+    IntentRuntimePorts,
+)
 from src.agents.intent.domain.models import TickerCandidate
+from src.agents.intent.domain.policies import should_request_clarification
+from src.agents.intent.interface.contracts import IntentExtraction, SearchExtraction
+from src.agents.intent.interface.mappers import (
+    summarize_intent_for_preview,
+    to_ticker_candidate,
+)
+from src.agents.intent.interface.parsers import (
+    parse_resume_selection_input,
+    parse_ticker_candidates,
+)
+from src.agents.intent.interface.serializers import (
+    serialize_ticker_candidates,
+    serialize_ticker_selection_interrupt_payload,
+)
+from src.interface.events.schemas import build_artifact_payload
 from src.shared.cross_agent.domain.market_identity import CompanyProfile
+from src.shared.kernel.contracts import OUTPUT_KIND_INTENT_EXTRACTION
 from src.shared.kernel.tools.incident_logging import (
     CONTRACT_KIND_INTERRUPT_PAYLOAD,
     CONTRACT_KIND_WORKFLOW_STATE,
     build_replay_diagnostics,
     log_boundary_event,
 )
-from src.shared.kernel.tools.logger import get_logger, log_event
+from src.shared.kernel.tools.logger import bounded_text, get_logger, log_event
 from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
 from src.shared.kernel.workflow_contracts import WorkflowNodeResult
 
 logger = get_logger(__name__)
 
 
-class _ParsedSelectionInput(Protocol):
-    selected_symbol: str | None
-    ticker: str | None
-
-
-class _IntentExtractionLike(Protocol):
-    company_name: str | None
-    ticker: str | None
-    is_valuation_request: bool
-    reasoning: str | None
-
-    def model_dump(self, *, mode: str = "python") -> dict[str, object]: ...
+@dataclass(frozen=True)
+class _SearchCandidatesOutcome:
+    candidates: list[TickerCandidate]
+    is_degraded: bool
+    degrade_error_code: str | None = None
+    degrade_reason: str | None = None
+    fallback_mode: str | None = None
 
 
 @dataclass
 class IntentOrchestrator:
-    extract_intent_fn: Callable[[str], _IntentExtractionLike]
-    search_ticker_fn: Callable[[str], list[TickerCandidate]]
-    web_search_fn: Callable[[str], str]
-    extract_candidates_from_search_fn: Callable[[str, str], list[TickerCandidate]]
-    deduplicate_candidates_fn: Callable[[list[TickerCandidate]], list[TickerCandidate]]
-    should_request_clarification_fn: Callable[[list[TickerCandidate]], bool]
-    get_company_profile_fn: Callable[[str], CompanyProfile | None]
-    parse_ticker_candidates_fn: Callable[[object], list[TickerCandidate]]
-    serialize_ticker_candidates_fn: Callable[[list[TickerCandidate]], list[JSONObject]]
-    serialize_ticker_selection_interrupt_payload_fn: Callable[
-        [list[TickerCandidate], object], JSONObject
-    ]
-    parse_resume_selection_input_fn: Callable[[object], _ParsedSelectionInput]
-    summarize_preview_fn: Callable[[JSONObject], JSONObject]
-    build_output_artifact_fn: Callable[[str, JSONObject], AgentOutputArtifactPayload]
+    runtime_ports: IntentRuntimePorts
 
-    def extract_intent(self, user_query: str) -> _IntentExtractionLike:
-        return self.extract_intent_fn(user_query)
+    def extract_intent(self, user_query: str) -> IntentExtraction:
+        return extract_intent_service(
+            user_query,
+            intent_model_type=IntentExtraction,
+            llm_provider_fn=self.runtime_ports.llm_provider,
+        )
 
     def build_search_queries(
         self,
@@ -84,43 +97,55 @@ class IntentOrchestrator:
 
         return []
 
-    def search_candidates(self, search_queries: list[str]) -> list[TickerCandidate]:
+    def search_candidates(self, search_queries: list[str]) -> _SearchCandidatesOutcome:
         candidate_map: dict[str, TickerCandidate] = {}
 
         for query in search_queries:
-            yf_candidates = self.search_ticker_fn(query)
+            yf_candidates = self.runtime_ports.search_ticker(query)
             for candidate in yf_candidates:
                 existing = candidate_map.get(candidate.symbol)
                 if existing is None or candidate.confidence > existing.confidence:
                     candidate_map[candidate.symbol] = candidate
 
         primary_query = search_queries[0]
-        search_results = self.web_search_fn(
+        web_search_result = self.runtime_ports.web_search(
             f'"{primary_query}" stock ticker symbol official'
         )
-        web_candidates = self.extract_candidates_from_search_fn(
-            primary_query, search_results
-        )
+        web_candidates: list[TickerCandidate] = []
+        if web_search_result.content:
+            web_candidates = extract_candidates_from_search_service(
+                primary_query,
+                web_search_result.content,
+                search_extraction_model_type=SearchExtraction,
+                to_ticker_candidate_fn=to_ticker_candidate,
+                llm_provider_fn=self.runtime_ports.llm_provider,
+            )
         for candidate in web_candidates:
             existing = candidate_map.get(candidate.symbol)
             if existing is None or candidate.confidence > existing.confidence:
                 candidate_map[candidate.symbol] = candidate
 
-        return self.deduplicate_candidates_fn(list(candidate_map.values()))
+        return _SearchCandidatesOutcome(
+            candidates=deduplicate_candidates_service(list(candidate_map.values())),
+            is_degraded=web_search_result.failure_code is not None,
+            degrade_error_code=web_search_result.failure_code,
+            degrade_reason=web_search_result.failure_reason,
+            fallback_mode=web_search_result.fallback_mode,
+        )
 
     def parse_candidates(self, raw_candidates: object) -> list[TickerCandidate]:
-        return self.parse_ticker_candidates_fn(raw_candidates)
+        return parse_ticker_candidates(raw_candidates)
 
     def serialize_candidates(
         self, candidates: list[TickerCandidate]
     ) -> list[JSONObject]:
-        return self.serialize_ticker_candidates_fn(candidates)
+        return serialize_ticker_candidates(candidates)
 
     def needs_clarification(self, candidates: list[TickerCandidate]) -> bool:
-        return self.should_request_clarification_fn(candidates)
+        return should_request_clarification(candidates)
 
-    def resolve_profile(self, ticker: str) -> CompanyProfile | None:
-        return self.get_company_profile_fn(ticker)
+    def resolve_profile(self, ticker: str) -> IntentCompanyProfileLookup:
+        return self.runtime_ports.company_profile(ticker)
 
     def build_resolved_intent_context(
         self, *, ticker: str, profile: CompanyProfile
@@ -134,9 +159,11 @@ class IntentOrchestrator:
     def build_output_artifact(
         self, *, resolved_ticker: str, intent_ctx: JSONObject
     ) -> AgentOutputArtifactPayload:
-        return self.build_output_artifact_fn(
-            f"已確認分析標的: {resolved_ticker}",
-            self.summarize_preview_fn(intent_ctx),
+        return build_artifact_payload(
+            kind=OUTPUT_KIND_INTENT_EXTRACTION,
+            summary=f"已確認分析標的: {resolved_ticker}",
+            preview=summarize_intent_for_preview(intent_ctx),
+            reference=None,
         )
 
     def resolve_selected_symbol(
@@ -145,11 +172,9 @@ class IntentOrchestrator:
         user_input: object,
         candidate_objs: list[TickerCandidate],
     ) -> str | None:
-        parsed_input = self.parse_resume_selection_input_fn(user_input)
+        parsed_input = parse_resume_selection_input(user_input)
         if parsed_input.selected_symbol is not None:
             return parsed_input.selected_symbol
-        if parsed_input.ticker is not None:
-            return parsed_input.ticker
 
         if candidate_objs:
             return candidate_objs[0].symbol
@@ -170,8 +195,20 @@ class IntentOrchestrator:
         if not selected_symbol:
             return None
 
-        profile = self.resolve_profile(selected_symbol)
-        if not profile:
+        profile_lookup = self.resolve_profile(selected_symbol)
+        profile = profile_lookup.profile
+        if profile is None:
+            log_event(
+                logger,
+                event="intent_clarification_profile_lookup_failed",
+                message="intent clarification could not resolve company profile",
+                level=logging.WARNING,
+                error_code=profile_lookup.failure_code or "INTENT_PROFILE_MISSING",
+                fields={
+                    "selected_symbol": selected_symbol,
+                    "failure_reason": profile_lookup.failure_reason,
+                },
+            )
             return None
 
         from langchain_core.messages import AIMessage, HumanMessage
@@ -206,6 +243,16 @@ class IntentOrchestrator:
 
     def run_extraction(self, state: Mapping[str, object]) -> IntentNodeResult:
         user_query = state.get("user_query")
+        query_length = len(user_query.strip()) if isinstance(user_query, str) else 0
+        log_event(
+            logger,
+            event="intent_extraction_started",
+            message="intent extraction started",
+            fields={
+                "query_present": bool(query_length),
+                "query_length": query_length,
+            },
+        )
         if not isinstance(user_query, str) or not user_query.strip():
             log_event(
                 logger,
@@ -213,6 +260,19 @@ class IntentOrchestrator:
                 message="intent extraction missing query; switching to clarification",
                 level=logging.WARNING,
                 error_code="INTENT_QUERY_MISSING",
+            )
+            log_event(
+                logger,
+                event="intent_extraction_completed",
+                message="intent extraction completed",
+                level=logging.WARNING,
+                error_code="INTENT_QUERY_MISSING",
+                fields={
+                    "status": "clarifying",
+                    "goto_node": "clarifying",
+                    "is_degraded": True,
+                    "has_intent": False,
+                },
             )
             return IntentNodeResult(
                 update={
@@ -229,13 +289,23 @@ class IntentOrchestrator:
             )
 
         try:
+            intent = self.extract_intent(user_query)
             log_event(
                 logger,
-                event="intent_extraction_started",
-                message="intent extraction started",
-                fields={"query_length": len(user_query)},
+                event="intent_extraction_completed",
+                message="intent extraction completed",
+                fields={
+                    "status": "searching",
+                    "goto_node": "searching",
+                    "is_degraded": False,
+                    "has_intent": True,
+                    "resolved_ticker": (
+                        intent.ticker.strip()
+                        if isinstance(intent.ticker, str) and intent.ticker.strip()
+                        else None
+                    ),
+                },
             )
-            intent = self.extract_intent(user_query)
             return IntentNodeResult(
                 update={
                     "intent_extraction": {
@@ -255,7 +325,20 @@ class IntentOrchestrator:
                 message="intent extraction failed",
                 level=logging.ERROR,
                 error_code="INTENT_EXTRACTION_FAILED",
-                fields={"exception": str(exc)},
+                fields={"exception": bounded_text(exc)},
+            )
+            log_event(
+                logger,
+                event="intent_extraction_completed",
+                message="intent extraction completed",
+                level=logging.WARNING,
+                error_code="INTENT_EXTRACTION_FAILED",
+                fields={
+                    "status": "clarifying",
+                    "goto_node": "clarifying",
+                    "is_degraded": True,
+                    "has_intent": False,
+                },
             )
             return IntentNodeResult(
                 update={
@@ -269,7 +352,10 @@ class IntentOrchestrator:
                     "error_logs": [
                         {
                             "node": "extraction",
-                            "error": f"Model failed to extract intent: {str(exc)}",
+                            "error": (
+                                "Model failed to extract intent: "
+                                f"{bounded_text(exc)}"
+                            ),
                             "severity": "error",
                         }
                     ],
@@ -287,6 +373,15 @@ class IntentOrchestrator:
             extracted_name=intent.get("company_name"),
             user_query=state.get("user_query"),
         )
+        log_event(
+            logger,
+            event="intent_search_started",
+            message="intent ticker search started",
+            fields={
+                "search_query_count": len(search_queries),
+                "search_queries": search_queries,
+            },
+        )
         if not search_queries:
             log_event(
                 logger,
@@ -294,6 +389,20 @@ class IntentOrchestrator:
                 message="intent search query missing; switching to clarification",
                 level=logging.WARNING,
                 error_code="INTENT_SEARCH_QUERY_MISSING",
+            )
+            log_event(
+                logger,
+                event="intent_search_completed",
+                message="intent ticker search completed",
+                level=logging.WARNING,
+                error_code="INTENT_SEARCH_QUERY_MISSING",
+                fields={
+                    "status": "clarifying",
+                    "goto_node": "clarifying",
+                    "is_degraded": True,
+                    "candidate_count": 0,
+                    "candidate_symbols": [],
+                },
             )
             return IntentNodeResult(
                 update={
@@ -305,22 +414,41 @@ class IntentOrchestrator:
             )
 
         try:
-            log_event(
-                logger,
-                event="intent_search_started",
-                message="intent ticker search started",
-                fields={
-                    "search_query_count": len(search_queries),
-                    "search_queries": search_queries,
-                },
+            search_raw = self.search_candidates(search_queries)
+            search_outcome = (
+                search_raw
+                if isinstance(search_raw, _SearchCandidatesOutcome)
+                else _SearchCandidatesOutcome(
+                    candidates=search_raw if isinstance(search_raw, list) else [],
+                    is_degraded=False,
+                )
             )
-            final_candidates = self.search_candidates(search_queries)
+            final_candidates = search_outcome.candidates
             candidate_symbols = [candidate.symbol for candidate in final_candidates]
+            if search_outcome.is_degraded:
+                log_event(
+                    logger,
+                    event="intent_search_degraded_web_channel",
+                    message="intent search web channel degraded; using yahoo-first fallback",
+                    level=logging.WARNING,
+                    error_code=search_outcome.degrade_error_code
+                    or "INTENT_SEARCH_WEB_DEGRADED",
+                    fields={
+                        "degrade_source": "web_search",
+                        "fallback_mode": search_outcome.fallback_mode,
+                        "degraded_reason": search_outcome.degrade_reason,
+                        "candidate_count": len(final_candidates),
+                        "search_query_count": len(search_queries),
+                    },
+                )
             log_event(
                 logger,
                 event="intent_search_completed",
                 message="intent ticker search completed",
                 fields={
+                    "status": "deciding",
+                    "goto_node": "deciding",
+                    "is_degraded": search_outcome.is_degraded,
                     "candidate_count": len(final_candidates),
                     "candidate_symbols": candidate_symbols,
                 },
@@ -358,7 +486,7 @@ class IntentOrchestrator:
                 contract_kind=CONTRACT_KIND_WORKFLOW_STATE,
                 error_code="INTENT_SEARCH_FAILED",
                 state=state,
-                detail={"exception": str(exc)},
+                detail={"exception": bounded_text(exc)},
                 level=logging.ERROR,
             )
             log_event(
@@ -367,7 +495,21 @@ class IntentOrchestrator:
                 message="intent ticker search failed",
                 level=logging.ERROR,
                 error_code="INTENT_SEARCH_FAILED",
-                fields={"exception": str(exc)},
+                fields={"exception": bounded_text(exc)},
+            )
+            log_event(
+                logger,
+                event="intent_search_completed",
+                message="intent ticker search completed",
+                level=logging.WARNING,
+                error_code="INTENT_SEARCH_FAILED",
+                fields={
+                    "status": "clarifying",
+                    "goto_node": "clarifying",
+                    "is_degraded": True,
+                    "candidate_count": 0,
+                    "candidate_symbols": [],
+                },
             )
             return IntentNodeResult(
                 update={
@@ -383,7 +525,7 @@ class IntentOrchestrator:
                             "node": "searching",
                             "error": (
                                 "Search tool failed: "
-                                f"{str(exc)}. Switching to manual selection."
+                                f"{bounded_text(exc)}. Switching to manual selection."
                             ),
                             "severity": "error",
                             "error_code": "INTENT_SEARCH_FAILED",
@@ -402,6 +544,13 @@ class IntentOrchestrator:
         intent_ctx_raw = state.get("intent_extraction")
         intent_ctx = intent_ctx_raw if isinstance(intent_ctx_raw, Mapping) else {}
         candidates = intent_ctx.get("ticker_candidates") or []
+        candidate_count = len(candidates) if isinstance(candidates, list) else 0
+        log_event(
+            logger,
+            event="intent_decision_started",
+            message="intent decision started",
+            fields={"candidate_count": candidate_count},
+        )
         if not isinstance(candidates, list) or not candidates:
             log_event(
                 logger,
@@ -409,6 +558,20 @@ class IntentOrchestrator:
                 message="intent decision found no candidates; switching to clarification",
                 level=logging.WARNING,
                 error_code="INTENT_CANDIDATES_MISSING",
+            )
+            log_event(
+                logger,
+                event="intent_decision_completed",
+                message="intent decision completed",
+                level=logging.WARNING,
+                error_code="INTENT_CANDIDATES_MISSING",
+                fields={
+                    "status": "clarifying",
+                    "goto_node": "clarifying",
+                    "is_degraded": True,
+                    "resolved_ticker": None,
+                    "candidate_count": 0,
+                },
             )
             return IntentNodeResult(
                 update={
@@ -444,6 +607,20 @@ class IntentOrchestrator:
                     error_code="INTENT_TICKER_AMBIGUOUS",
                     fields={"candidate_count": len(candidate_objs)},
                 )
+                log_event(
+                    logger,
+                    event="intent_decision_completed",
+                    message="intent decision completed",
+                    level=logging.WARNING,
+                    error_code="INTENT_TICKER_AMBIGUOUS",
+                    fields={
+                        "status": "clarifying",
+                        "goto_node": "clarifying",
+                        "is_degraded": True,
+                        "resolved_ticker": None,
+                        "candidate_count": len(candidate_objs),
+                    },
+                )
                 return IntentNodeResult(
                     update={
                         "intent_extraction": {"status": "clarifying"},
@@ -463,15 +640,33 @@ class IntentOrchestrator:
                 message="intent decision resolved ticker",
                 fields={"resolved_ticker": resolved_ticker},
             )
-            profile = self.resolve_profile(resolved_ticker)
-            if not profile:
+            profile_lookup = self.resolve_profile(resolved_ticker)
+            profile = profile_lookup.profile
+            if profile is None:
                 log_event(
                     logger,
                     event="intent_decision_profile_missing",
                     message="intent decision could not resolve company profile",
                     level=logging.WARNING,
-                    error_code="INTENT_PROFILE_MISSING",
-                    fields={"resolved_ticker": resolved_ticker},
+                    error_code=profile_lookup.failure_code or "INTENT_PROFILE_MISSING",
+                    fields={
+                        "resolved_ticker": resolved_ticker,
+                        "failure_reason": profile_lookup.failure_reason,
+                    },
+                )
+                log_event(
+                    logger,
+                    event="intent_decision_completed",
+                    message="intent decision completed",
+                    level=logging.WARNING,
+                    error_code=profile_lookup.failure_code or "INTENT_PROFILE_MISSING",
+                    fields={
+                        "status": "clarifying",
+                        "goto_node": "clarifying",
+                        "is_degraded": True,
+                        "resolved_ticker": resolved_ticker,
+                        "candidate_count": len(candidate_objs),
+                    },
                 )
                 return IntentNodeResult(
                     update={
@@ -494,6 +689,18 @@ class IntentOrchestrator:
                 intent_ctx=resolved_ctx,
             )
             resolved_ctx["artifact"] = artifact
+            log_event(
+                logger,
+                event="intent_decision_completed",
+                message="intent decision completed",
+                fields={
+                    "status": "resolved",
+                    "goto_node": "END",
+                    "is_degraded": False,
+                    "resolved_ticker": resolved_ticker,
+                    "candidate_count": len(candidate_objs),
+                },
+            )
 
             return IntentNodeResult(
                 update={
@@ -512,7 +719,7 @@ class IntentOrchestrator:
                 contract_kind=CONTRACT_KIND_WORKFLOW_STATE,
                 error_code="INTENT_DECISION_FAILED",
                 state=state,
-                detail={"exception": str(exc)},
+                detail={"exception": bounded_text(exc)},
                 level=logging.ERROR,
             )
             log_event(
@@ -521,7 +728,21 @@ class IntentOrchestrator:
                 message="intent decision failed",
                 level=logging.ERROR,
                 error_code="INTENT_DECISION_FAILED",
-                fields={"exception": str(exc)},
+                fields={"exception": bounded_text(exc)},
+            )
+            log_event(
+                logger,
+                event="intent_decision_completed",
+                message="intent decision completed",
+                level=logging.WARNING,
+                error_code="INTENT_DECISION_FAILED",
+                fields={
+                    "status": "clarifying",
+                    "goto_node": "clarifying",
+                    "is_degraded": True,
+                    "resolved_ticker": None,
+                    "candidate_count": candidate_count,
+                },
             )
             return IntentNodeResult(
                 update={
@@ -534,7 +755,7 @@ class IntentOrchestrator:
                             "node": "deciding",
                             "error": (
                                 "Decision logic crashed: "
-                                f"{str(exc)}. Switching to manual selection."
+                                f"{bounded_text(exc)}. Switching to manual selection."
                             ),
                             "severity": "error",
                             "error_code": "INTENT_DECISION_FAILED",
@@ -556,9 +777,9 @@ class IntentOrchestrator:
         intent_ctx = intent_ctx_raw if isinstance(intent_ctx_raw, Mapping) else {}
         candidates_raw = intent_ctx.get("ticker_candidates") or []
         candidate_objs = self.parse_candidates(candidates_raw)
-        payload = self.serialize_ticker_selection_interrupt_payload_fn(
-            candidate_objs,
-            intent_ctx.get("extracted_intent"),
+        payload = serialize_ticker_selection_interrupt_payload(
+            candidates=candidate_objs,
+            extracted_intent=intent_ctx.get("extracted_intent"),
         )
         log_boundary_event(
             logger,

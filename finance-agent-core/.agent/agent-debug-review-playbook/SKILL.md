@@ -23,6 +23,8 @@ Produce actionable findings, not broad speculative rewrites.
 3. Evidence collection.
 - Collect stack traces, logs, state snapshots, and contract mismatches.
 - Validate whether degraded behavior is typed and observable.
+- For multi-source nodes, verify completion quality flags align with channel-level failures/fallbacks:
+  - if any upstream channel fails or returns empty unexpectedly and fallback is used, completion should reflect quality degradation (`is_degraded=true`) and emit a machine-readable degrade reason log.
 
 4. Root-cause hypothesis and verification.
 - Rank hypotheses by likelihood and blast radius.

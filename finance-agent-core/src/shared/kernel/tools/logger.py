@@ -75,6 +75,17 @@ def _normalize_key_name(key: str) -> str:
 _REDACT_KEYS = _normalized_redact_keys()
 
 
+def bounded_text(value: object, *, max_length: int = 512) -> str:
+    text = str(value)
+    if max_length <= 0:
+        return ""
+    if len(text) <= max_length:
+        return text
+    if max_length <= 3:
+        return text[:max_length]
+    return f"{text[: max_length - 3]}..."
+
+
 def _is_sensitive_key(key: str | None) -> bool:
     if key is None:
         return False

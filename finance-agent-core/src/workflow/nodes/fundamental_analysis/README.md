@@ -27,7 +27,7 @@ the agent package:
    - `src/agents/fundamental/domain/valuation/**`
 2. Data clients:
    - `src/agents/fundamental/data/clients/sec_xbrl/**`
-   - (Ticker resolution/search clients now live under `src/agents/intent/data/`)
+   - (Ticker resolution/search clients now live under `src/agents/intent/infrastructure/**`)
 3. Application entrypoint:
    - `src/agents/fundamental/application/orchestrator.py`
 

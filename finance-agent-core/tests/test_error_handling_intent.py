@@ -1,7 +1,9 @@
+import logging
 from unittest.mock import patch
 
 import pytest
 
+from src.agents.intent.application.orchestrator import _SearchCandidatesOutcome
 from src.agents.intent.domain.models import TickerCandidate
 from src.workflow.nodes.intent_extraction.nodes import (
     decision_node,
@@ -91,3 +93,81 @@ async def test_searching_node_serializes_domain_candidates_to_json():
     assert serialized[0]["symbol"] == "GME"
     assert serialized[0]["name"] == "GameStop Corp."
     assert serialized[1]["symbol"] == "GMED"
+
+
+@pytest.mark.asyncio
+async def test_searching_node_marks_degraded_when_web_channel_degraded(caplog):
+    state = {
+        "user_query": "Valuate NVDA",
+        "intent_extraction": {
+            "extracted_intent": {"company_name": "NVIDIA", "ticker": "NVDA"}
+        },
+    }
+    outcome = _SearchCandidatesOutcome(
+        candidates=[
+            TickerCandidate(symbol="NVDA", name="NVIDIA Corp.", confidence=0.98)
+        ],
+        is_degraded=True,
+        degrade_error_code="INTENT_WEB_SEARCH_EMPTY",
+        degrade_reason="no results found",
+        fallback_mode="yahoo_only",
+    )
+
+    with patch(
+        "src.workflow.nodes.intent_extraction.nodes.intent_orchestrator.search_candidates",
+        return_value=outcome,
+    ):
+        with caplog.at_level(logging.INFO):
+            command = searching_node(state)
+
+    assert command.goto == "deciding"
+    completed = [
+        record
+        for record in caplog.records
+        if getattr(record, "event", None) == "intent_search_completed"
+    ]
+    assert completed
+    assert completed[-1].fields.get("is_degraded") is True
+
+    degraded_reason_logs = [
+        record
+        for record in caplog.records
+        if getattr(record, "event", None) == "intent_search_degraded_web_channel"
+    ]
+    assert degraded_reason_logs
+    assert degraded_reason_logs[-1].error_code == "INTENT_WEB_SEARCH_EMPTY"
+
+
+@pytest.mark.asyncio
+async def test_extraction_completed_uses_null_resolved_ticker_for_empty_value(caplog):
+    state = {"user_query": "Analyze NVIDIA"}
+
+    class _IntentStub:
+        company_name = "NVIDIA"
+        ticker = ""
+        is_valuation_request = True
+        reasoning = "stub"
+
+        def model_dump(self, *, mode: str = "python") -> dict[str, object]:
+            return {
+                "company_name": self.company_name,
+                "ticker": self.ticker,
+                "is_valuation_request": self.is_valuation_request,
+                "reasoning": self.reasoning,
+            }
+
+    with patch(
+        "src.workflow.nodes.intent_extraction.nodes.intent_orchestrator.extract_intent",
+        return_value=_IntentStub(),
+    ):
+        with caplog.at_level(logging.INFO):
+            command = extraction_node(state)
+
+    assert command.goto == "searching"
+    completed = [
+        record
+        for record in caplog.records
+        if getattr(record, "event", None) == "intent_extraction_completed"
+    ]
+    assert completed
+    assert completed[-1].fields.get("resolved_ticker") is None
