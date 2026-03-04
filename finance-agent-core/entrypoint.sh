@@ -32,6 +32,11 @@ seed_hf_cache() {
     if [ -z "$(ls -A "$runtime_cache" 2>/dev/null)" ]; then
         echo "Seeding Hugging Face cache from baked image layer..."
         cp -a "${baked_cache}/." "${runtime_cache}/"
+    else
+        # Keep runtime cache fresh when image adds new baked models.
+        # `cp -an` copies only missing paths/files and preserves existing cache artifacts.
+        echo "Syncing missing Hugging Face cache entries from baked image layer..."
+        cp -an "${baked_cache}/." "${runtime_cache}/"
     fi
 
     export HF_HUB_CACHE="${HF_HUB_CACHE:-${runtime_cache}/hub}"

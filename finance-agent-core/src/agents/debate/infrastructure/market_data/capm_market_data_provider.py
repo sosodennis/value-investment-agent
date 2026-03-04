@@ -11,7 +11,7 @@ import pandas as pd
 import yfinance as yf
 
 # Use the project's custom logger
-from src.shared.kernel.tools.logger import get_logger, log_event
+from src.shared.kernel.tools.logger import bounded_text, get_logger, log_event
 
 logger = get_logger(__name__)
 
@@ -98,13 +98,14 @@ def _fetch_price_series(
         return data.dropna()
 
     except Exception as exc:
+        exc_text = bounded_text(exc)
         log_event(
             logger,
             event="debate_market_price_series_failed",
             message="market price series fetch failed",
             level=logging.WARNING,
             error_code="DEBATE_MARKET_DATA_FETCH_FAILED",
-            fields={"ticker": ticker, "exception": str(exc)},
+            fields={"ticker": ticker, "exception": exc_text},
         )
         return None
 
@@ -243,13 +244,14 @@ def get_current_risk_free_rate() -> float:
         return float(quarterly_yield)
 
     except Exception as exc:
+        exc_text = bounded_text(exc)
         log_event(
             logger,
             event="debate_risk_free_rate_fetch_failed",
             message="failed to fetch dynamic risk free rate; using fallback",
             level=logging.WARNING,
             error_code="DEBATE_RISK_FREE_FETCH_FAILED",
-            fields={"exception": str(exc)},
+            fields={"exception": exc_text},
         )
         return DEFAULT_RISK_FREE_RATE / 4.0
 

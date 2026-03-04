@@ -7,7 +7,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TypeVar
 
-from src.shared.kernel.tools.logger import get_logger, log_event
+from src.shared.kernel.tools.logger import bounded_text, get_logger, log_event
 
 logger = get_logger(__name__)
 
@@ -108,6 +108,7 @@ async def call_with_debate_llm_retry(
             if (not retryable) or attempt >= policy.max_attempts:
                 raise
             sleep_seconds = _retry_delay_seconds(policy, attempt)
+            exc_text = bounded_text(exc)
             log_event(
                 logger,
                 event="debate_llm_retry",
@@ -120,7 +121,7 @@ async def call_with_debate_llm_retry(
                     "attempt": attempt,
                     "max_attempts": policy.max_attempts,
                     "retry_in_seconds": round(sleep_seconds, 3),
-                    "exception": str(exc),
+                    "exception": exc_text,
                 },
             )
             await asyncio.sleep(sleep_seconds)

@@ -107,7 +107,7 @@ def test_semantic_tags_mapping():
 
 def test_compress_ta_data():
     """Test TA data compression for debate."""
-    from src.agents.debate.domain.services import compress_ta_data
+    from src.agents.debate.domain.report_compression_service import compress_ta_data
 
     # Mock TA output
     ta_output = {
@@ -140,7 +140,7 @@ def test_compress_ta_data():
 
 def test_compress_ta_data_handles_none():
     """Test that compress_ta_data handles None input."""
-    from src.agents.debate.domain.services import compress_ta_data
+    from src.agents.debate.domain.report_compression_service import compress_ta_data
 
     result = compress_ta_data(None)
     assert result is None

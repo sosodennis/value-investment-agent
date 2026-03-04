@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 from collections.abc import Mapping
@@ -245,7 +246,11 @@ async def execute_moderator_round(
     debate_map = conversation_context.debate_context
     bull_thesis = str(debate_map.get("bull_thesis") or "")
     bear_thesis = str(debate_map.get("bear_thesis") or "")
-    similarity, is_sycophantic = detector.check_consensus(bull_thesis, bear_thesis)
+    similarity, is_sycophantic = await asyncio.to_thread(
+        detector.check_consensus,
+        bull_thesis,
+        bear_thesis,
+    )
     log_event(
         logger,
         event="debate_sycophancy_checked",

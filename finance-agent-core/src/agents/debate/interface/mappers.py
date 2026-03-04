@@ -2,14 +2,16 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from src.agents.debate.application.view_models import derive_debate_preview_view_model
 from src.agents.debate.domain.models import EvidenceFact
 from src.agents.debate.interface.formatters import format_debate_preview
+from src.agents.debate.interface.preview_projection_service import (
+    project_debate_preview,
+)
 from src.shared.kernel.types import JSONObject
 
 
 def summarize_debate_for_preview(ctx: JSONObject) -> JSONObject:
-    view_model = derive_debate_preview_view_model(ctx)
+    view_model = project_debate_preview(ctx)
     return format_debate_preview(view_model)
 
 

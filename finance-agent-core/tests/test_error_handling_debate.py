@@ -39,7 +39,7 @@ async def test_verdict_node_error_log():
         "history": [AIMessage(content="Arg1", name="GrowthHunter")],
     }
 
-    with patch("src.agents.debate.application.factory.get_llm") as mock_llm:
+    with patch("src.agents.debate.wiring.get_llm") as mock_llm:
         # Simulate LLM failure
         mock_chain = MagicMock()
         mock_chain.ainvoke.side_effect = Exception("Verdict Generation Error")

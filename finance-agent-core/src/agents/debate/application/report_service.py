@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
+from dataclasses import dataclass
 
 from src.agents.debate.application.debate_context import build_debate_artifact_context
-from src.agents.debate.application.dto import DebateSourceData
+from src.agents.debate.application.dto import DebateSourceData, DebateSourceLoadIssue
 from src.agents.debate.application.ports import DebateSourceReaderPort
 from src.agents.debate.application.prompt_runtime import (
     compress_reports,
@@ -13,8 +15,23 @@ from src.agents.debate.interface.serializers import (
     build_compressed_report_payload as serialize_compressed_report_payload,
 )
 from src.shared.kernel.tools.logger import get_logger, log_event
+from src.shared.kernel.types import JSONObject
 
 logger = get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class PreparedDebateReports:
+    payload: JSONObject
+    load_issues: list[DebateSourceLoadIssue]
+
+    @property
+    def is_degraded(self) -> bool:
+        return bool(self.load_issues)
+
+    @property
+    def degraded_reason_codes(self) -> list[str]:
+        return [issue.reason_code for issue in self.load_issues]
 
 
 def build_compressed_report_payload(
@@ -23,7 +40,7 @@ def build_compressed_report_payload(
     source_data: DebateSourceData,
     news_artifact_id: str | None,
     technical_artifact_id: str | None,
-) -> dict[str, object]:
+) -> JSONObject:
     log_event(
         logger,
         event="debate_report_input_built",
@@ -35,6 +52,11 @@ def build_compressed_report_payload(
             "ta_present": source_data.technical_payload is not None,
             "news_artifact_id": news_artifact_id or "none",
             "ta_artifact_id": technical_artifact_id or "none",
+            "is_degraded": source_data.is_degraded,
+            "degraded_reason_count": len(source_data.load_issues),
+            "degraded_reasons": [
+                issue.reason_code for issue in source_data.load_issues
+            ],
         },
     )
 
@@ -48,18 +70,22 @@ async def prepare_debate_reports(
     state: Mapping[str, object],
     *,
     source_reader: DebateSourceReaderPort,
-) -> dict[str, object]:
+) -> PreparedDebateReports:
     artifact_context = build_debate_artifact_context(state)
     source_data = await source_reader.load_debate_source_data(
         financial_reports_artifact_id=artifact_context.financial_reports_artifact_id,
         news_artifact_id=artifact_context.news_artifact_id,
         technical_artifact_id=artifact_context.technical_artifact_id,
     )
-    return build_compressed_report_payload(
+    payload = build_compressed_report_payload(
         ticker=artifact_context.ticker,
         source_data=source_data,
         news_artifact_id=artifact_context.news_artifact_id,
         technical_artifact_id=artifact_context.technical_artifact_id,
+    )
+    return PreparedDebateReports(
+        payload=payload,
+        load_issues=source_data.load_issues,
     )
 
 
@@ -86,8 +112,22 @@ async def get_debate_reports_text(
         )
         return artifact_context.cached_reports
 
-    reports = await prepare_debate_reports(state, source_reader=source_reader)
-    compressed_reports = compress_reports(reports)
+    prepared = await prepare_debate_reports(state, source_reader=source_reader)
+    if prepared.is_degraded:
+        log_event(
+            logger,
+            event="debate_reports_source_degraded",
+            message="debate reports source degraded",
+            level=logging.WARNING,
+            error_code="DEBATE_REPORTS_SOURCE_DEGRADED",
+            fields={
+                "stage": stage,
+                "ticker": ticker,
+                "degraded_reason_count": len(prepared.load_issues),
+                "degraded_reasons": prepared.degraded_reason_codes,
+            },
+        )
+    compressed_reports = compress_reports(prepared.payload)
     log_event(
         logger,
         event="debate_reports_compressed",

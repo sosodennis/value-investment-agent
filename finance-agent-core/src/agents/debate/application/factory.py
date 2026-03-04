@@ -7,14 +7,7 @@ from src.agents.debate.application.orchestrator import (
     DebateNodeResult,
     DebateOrchestrator,
 )
-from src.agents.debate.data.market_data import (
-    get_current_risk_free_rate,
-    get_dynamic_payoff_map,
-)
-from src.agents.debate.data.ports import debate_artifact_port
-from src.agents.debate.data.report_reader import debate_source_reader
-from src.agents.debate.data.sycophancy_client import get_sycophancy_detector_client
-from src.agents.debate.domain.prompt_builder import (
+from src.agents.debate.interface.prompt_specs import (
     BEAR_AGENT_SYSTEM_PROMPT,
     BEAR_R1_ADVERSARIAL,
     BEAR_R2_ADVERSARIAL,
@@ -23,47 +16,6 @@ from src.agents.debate.domain.prompt_builder import (
     BULL_R2_ADVERSARIAL,
     MODERATOR_SYSTEM_PROMPT,
 )
-from src.agents.debate.interface.mappers import summarize_debate_for_preview
-from src.infrastructure.llm.provider import get_llm
-from src.interface.events.schemas import ArtifactReference, build_artifact_payload
-from src.shared.kernel.contracts import (
-    ARTIFACT_KIND_DEBATE_FINAL_REPORT,
-    OUTPUT_KIND_DEBATE,
-)
-
-
-def _build_debate_output_artifact(
-    summary: str,
-    preview: dict[str, object],
-    report_id: str | None,
-) -> dict[str, object] | None:
-    reference = None
-    if report_id:
-        reference = ArtifactReference(
-            artifact_id=report_id,
-            download_url=f"/api/artifacts/{report_id}",
-            type=ARTIFACT_KIND_DEBATE_FINAL_REPORT,
-        )
-
-    return build_artifact_payload(
-        kind=OUTPUT_KIND_DEBATE,
-        summary=summary,
-        preview=preview,
-        reference=reference,
-    )
-
-
-def build_debate_orchestrator() -> DebateOrchestrator:
-    return DebateOrchestrator(
-        source_reader=debate_source_reader,
-        artifact_port=debate_artifact_port,
-        get_llm_fn=lambda: get_llm(),
-        get_sycophancy_detector_fn=lambda: get_sycophancy_detector_client(),
-        summarize_preview_fn=summarize_debate_for_preview,
-        build_output_artifact_fn=_build_debate_output_artifact,
-        get_risk_free_rate_fn=get_current_risk_free_rate,
-        get_payoff_map_fn=get_dynamic_payoff_map,
-    )
 
 
 @dataclass(frozen=True)
@@ -180,8 +132,7 @@ class DebateWorkflowRunner:
         return await self.orchestrator.run_verdict(state)
 
 
-def build_debate_workflow_runner() -> DebateWorkflowRunner:
-    return DebateWorkflowRunner(orchestrator=build_debate_orchestrator())
-
-
-debate_workflow_runner = build_debate_workflow_runner()
+def build_debate_workflow_runner(
+    orchestrator: DebateOrchestrator,
+) -> DebateWorkflowRunner:
+    return DebateWorkflowRunner(orchestrator=orchestrator)

@@ -12,7 +12,7 @@ logger = get_logger(__name__)
 
 
 @dataclass
-class SycophancyDetectorClient:
+class SycophancyDetectorProvider:
     model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
     _embedding_model: TextEmbedding | None = None
 
@@ -58,11 +58,11 @@ class SycophancyDetectorClient:
         return similarity, similarity > threshold
 
 
-_detector: SycophancyDetectorClient | None = None
+_detector: SycophancyDetectorProvider | None = None
 
 
-def get_sycophancy_detector_client() -> SycophancyDetectorClient:
+def get_sycophancy_detector_provider() -> SycophancyDetectorProvider:
     global _detector
     if _detector is None:
-        _detector = SycophancyDetectorClient()
+        _detector = SycophancyDetectorProvider()
     return _detector

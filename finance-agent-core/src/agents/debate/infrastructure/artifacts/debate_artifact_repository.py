@@ -14,7 +14,7 @@ from src.shared.kernel.types import JSONObject
 
 
 @dataclass
-class DebateArtifactPort:
+class DebateArtifactRepository:
     facts_port: TypedArtifactPort[DebateFactsArtifactData]
     final_report_port: TypedArtifactPort[DebateArtifactModel]
 
@@ -32,7 +32,7 @@ class DebateArtifactPort:
         )
 
     async def load_facts_bundle(
-        self, artifact_id: object
+        self, artifact_id: str
     ) -> DebateFactsArtifactData | None:
         return await self.facts_port.load(
             artifact_id,
@@ -53,7 +53,7 @@ class DebateArtifactPort:
         )
 
 
-debate_artifact_port = DebateArtifactPort(
+debate_artifact_repository = DebateArtifactRepository(
     facts_port=TypedArtifactPort(
         manager=artifact_manager,
         kind=ARTIFACT_KIND_DEBATE_FACTS,

@@ -8,6 +8,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 
 from src.agents.debate.application.state_readers import get_last_message_from_role
 from src.shared.kernel.tools.logger import get_logger, log_event
+from src.shared.kernel.types import JSONObject
 
 logger = get_logger(__name__)
 
@@ -25,9 +26,7 @@ def hash_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
 
 
-def compress_reports(
-    reports: dict[str, object], max_chars: int = MAX_CHAR_REPORTS
-) -> str:
+def compress_reports(reports: JSONObject, max_chars: int = MAX_CHAR_REPORTS) -> str:
     """Compress analyst reports to fit context window."""
     if not reports:
         return "{}"

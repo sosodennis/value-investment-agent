@@ -1,7 +1,9 @@
 import asyncio
 from unittest.mock import AsyncMock, patch
 
-from src.agents.debate.data.report_reader import load_debate_source_data
+from src.agents.debate.infrastructure.artifacts.debate_source_reader_repository import (
+    load_debate_source_data,
+)
 from src.shared.kernel.contracts import (
     ARTIFACT_KIND_FINANCIAL_REPORTS,
     ARTIFACT_KIND_NEWS_ANALYSIS_REPORT,
@@ -12,7 +14,7 @@ from src.shared.kernel.contracts import (
 def test_load_debate_source_data_reads_all_three_sources() -> None:
     with (
         patch(
-            "src.agents.debate.data.report_reader.artifact_manager.get_artifact_data",
+            "src.agents.debate.infrastructure.artifacts.debate_source_reader_repository.artifact_manager.get_artifact_data",
             new=AsyncMock(
                 side_effect=[
                     {
@@ -74,6 +76,8 @@ def test_load_debate_source_data_reads_all_three_sources() -> None:
     assert source.news_items == []
     assert source.technical_payload is not None
     assert source.technical_payload.get("ticker") == "AAPL"
+    assert source.is_degraded is True
+    assert [issue.reason_code for issue in source.load_issues] == ["news:empty_payload"]
 
 
 def test_load_debate_source_data_handles_missing_ids() -> None:
@@ -87,14 +91,20 @@ def test_load_debate_source_data_handles_missing_ids() -> None:
     assert source.financial_reports == []
     assert source.news_items == []
     assert source.technical_payload is None
+    assert source.is_degraded is True
+    assert [issue.reason_code for issue in source.load_issues] == [
+        "financial_reports:missing_artifact_id",
+        "news:missing_artifact_id",
+        "technical_analysis:missing_artifact_id",
+    ]
 
 
 def test_load_debate_source_data_uses_expected_kinds() -> None:
     with patch(
-        "src.agents.debate.data.report_reader.artifact_manager.get_artifact_data",
+        "src.agents.debate.infrastructure.artifacts.debate_source_reader_repository.artifact_manager.get_artifact_data",
         new=AsyncMock(side_effect=[None, None, None]),
     ) as mocked_get_artifact_data:
-        asyncio.run(
+        source = asyncio.run(
             load_debate_source_data(
                 financial_reports_artifact_id="fa-1",
                 news_artifact_id="news-1",
@@ -113,3 +123,9 @@ def test_load_debate_source_data_uses_expected_kinds() -> None:
     ):
         assert awaited_call.args[0] == artifact_id
         assert awaited_call.kwargs["expected_kind"] == expected_kind
+
+    assert [issue.reason_code for issue in source.load_issues] == [
+        "financial_reports:artifact_not_found",
+        "news:artifact_not_found",
+        "technical_analysis:artifact_not_found",
+    ]

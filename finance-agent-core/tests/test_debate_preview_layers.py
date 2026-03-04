@@ -1,9 +1,11 @@
-from src.agents.debate.application.view_models import derive_debate_preview_view_model
 from src.agents.debate.interface.formatters import format_debate_preview
+from src.agents.debate.interface.preview_projection_service import (
+    project_debate_preview,
+)
 
 
-def test_derive_debate_preview_view_model_extracts_fields() -> None:
-    view_model = derive_debate_preview_view_model(
+def test_project_debate_preview_extracts_fields() -> None:
+    view_model = project_debate_preview(
         {
             "final_verdict": "STRONG_LONG",
             "kelly_confidence": 0.85,

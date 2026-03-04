@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from collections.abc import Callable, Mapping
@@ -18,7 +19,11 @@ from src.agents.debate.application.debate_service import (
     execute_moderator_round,
     extract_debate_facts,
 )
-from src.agents.debate.application.ports import DebateSourceReaderPort
+from src.agents.debate.application.ports import (
+    DebateArtifactRepositoryPort,
+    DebateSourceReaderPort,
+    SycophancyDetectorPort,
+)
 from src.agents.debate.application.prompt_runtime import (
     get_trimmed_history,
     hash_text,
@@ -28,9 +33,10 @@ from src.agents.debate.application.prompt_runtime import (
 )
 from src.agents.debate.application.report_service import prepare_debate_reports
 from src.agents.debate.application.state_readers import resolved_ticker_from_state
-from src.agents.debate.data.ports import DebateArtifactPort
 from src.agents.debate.domain.models import DebateConclusion, EvidenceFact
-from src.agents.debate.domain.services import calculate_pragmatic_verdict
+from src.agents.debate.domain.pragmatic_verdict_policy import (
+    calculate_pragmatic_verdict,
+)
 from src.agents.debate.domain.validators import FactValidator
 from src.agents.debate.interface.mappers import (
     build_citation_audit_payload,
@@ -44,7 +50,7 @@ from src.shared.kernel.tools.incident_logging import (
     build_replay_diagnostics,
     log_boundary_event,
 )
-from src.shared.kernel.tools.logger import get_logger, log_event
+from src.shared.kernel.tools.logger import bounded_text, get_logger, log_event
 from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
 from src.shared.kernel.workflow_contracts import WorkflowFanoutNodeResult
 
@@ -63,7 +69,7 @@ class _DebateLLMLike(Protocol):
     async def ainvoke(self, messages: object) -> object: ...
 
     def with_structured_output(
-        self, schema: type[object]
+        self, schema: type[DebateConclusion]
     ) -> _StructuredVerdictChainLike: ...
 
 
@@ -81,9 +87,9 @@ DebateNodeResult = WorkflowFanoutNodeResult
 @dataclass(frozen=True)
 class DebateOrchestrator:
     source_reader: DebateSourceReaderPort
-    artifact_port: DebateArtifactPort
+    artifact_port: DebateArtifactRepositoryPort
     get_llm_fn: Callable[[], _DebateLLMLike]
-    get_sycophancy_detector_fn: Callable[[], object]
+    get_sycophancy_detector_fn: Callable[[], SycophancyDetectorPort]
     summarize_preview_fn: Callable[[JSONObject], JSONObject]
     build_output_artifact_fn: Callable[
         [str, JSONObject, str | None], AgentOutputArtifactPayload | None
@@ -127,7 +133,22 @@ class DebateOrchestrator:
             )
 
         reports = await prepare_debate_reports(state, source_reader=self.source_reader)
-        compressed_reports = self._compress_reports(reports)
+        compressed_reports = self._compress_reports(reports.payload)
+        is_degraded = reports.is_degraded
+        degraded_reasons = reports.degraded_reason_codes
+        if is_degraded:
+            log_event(
+                logger,
+                event="debate_aggregator_sources_degraded",
+                message="debate aggregator source data degraded",
+                level=logging.WARNING,
+                error_code="DEBATE_SOURCE_DATA_DEGRADED",
+                fields={
+                    "ticker": ticker,
+                    "degraded_reason_count": len(degraded_reasons),
+                    "degraded_reasons": degraded_reasons,
+                },
+            )
         log_event(
             logger,
             event="debate_aggregator_reports_prepared",
@@ -137,6 +158,8 @@ class DebateOrchestrator:
                 "compressed_chars": len(compressed_reports),
                 "compressed_hash": hash_text(compressed_reports),
                 "source": "computed",
+                "is_degraded": is_degraded,
+                "degraded_reason_count": len(degraded_reasons),
             },
         )
         log_boundary_event(
@@ -149,13 +172,27 @@ class DebateOrchestrator:
             detail={
                 "ticker": ticker,
                 "financial_reports_count": len(
-                    reports.get("financials", {}).get("data", [])
+                    reports.payload.get("financials", {}).get("data", [])
                 )
-                if isinstance(reports.get("financials"), Mapping)
+                if isinstance(reports.payload.get("financials"), Mapping)
                 else 0,
+                "is_degraded": is_degraded,
+                "degraded_reasons": degraded_reasons,
             },
         )
 
+        node_status = "degraded" if is_degraded else "running"
+        error_logs = (
+            [
+                {
+                    "node": "debate_aggregator",
+                    "error": f"degraded source inputs: {', '.join(degraded_reasons)}",
+                    "severity": "warning",
+                }
+            ]
+            if is_degraded
+            else []
+        )
         return DebateNodeResult(
             update={
                 "current_node": "debate_aggregator",
@@ -164,8 +201,9 @@ class DebateOrchestrator:
                     "r1_bull": "running",
                     "r1_bear": "running",
                 },
-                "node_statuses": {"debate": "running"},
+                "node_statuses": {"debate": node_status},
                 "compressed_reports": compressed_reports,
+                **({"error_logs": error_logs} if error_logs else {}),
             },
             goto=["fact_extractor"],
         )
@@ -259,6 +297,13 @@ class DebateOrchestrator:
         success_progress: dict[str, str],
         error_progress: dict[str, str],
     ) -> DebateNodeResult:
+        ticker = resolved_ticker_from_state(state)
+        log_event(
+            logger,
+            event="debate_bull_round_started",
+            message="debate bull round started",
+            fields={"node": node_name, "round_num": round_num, "ticker": ticker},
+        )
         try:
             llm = self.get_llm_fn()
             result = await execute_bull_round(
@@ -269,6 +314,18 @@ class DebateOrchestrator:
                 llm=llm,
                 source_reader=self.source_reader,
             )
+            log_event(
+                logger,
+                event="debate_bull_round_completed",
+                message="debate bull round completed",
+                fields={
+                    "node": node_name,
+                    "round_num": round_num,
+                    "ticker": ticker,
+                    "status": "done",
+                    "is_degraded": False,
+                },
+            )
             return DebateNodeResult(
                 update={
                     "history": result["history"],
@@ -278,6 +335,7 @@ class DebateOrchestrator:
                 goto=success_goto,
             )
         except Exception as exc:
+            exc_text = bounded_text(exc)
             log_event(
                 logger,
                 event="debate_bull_round_failed",
@@ -287,10 +345,22 @@ class DebateOrchestrator:
                 fields={
                     "node": node_name,
                     "round_num": round_num,
-                    "exception": str(exc),
+                    "exception": exc_text,
                 },
             )
-            error_msg = f"Bull Agent failed in Round {round_num}: {str(exc)}"
+            log_event(
+                logger,
+                event="debate_bull_round_completed",
+                message="debate bull round completed",
+                fields={
+                    "node": node_name,
+                    "round_num": round_num,
+                    "ticker": ticker,
+                    "status": "degraded",
+                    "is_degraded": True,
+                },
+            )
+            error_msg = f"Bull Agent failed in Round {round_num}: {exc_text}"
             return DebateNodeResult(
                 update={
                     "history": [
@@ -300,7 +370,7 @@ class DebateOrchestrator:
                     "internal_progress": error_progress,
                     "node_statuses": {"debate": "degraded"},
                     "error_logs": [
-                        {"node": node_name, "error": str(exc), "severity": "error"}
+                        {"node": node_name, "error": exc_text, "severity": "error"}
                     ],
                 },
                 goto=success_goto,
@@ -318,6 +388,13 @@ class DebateOrchestrator:
         success_progress: dict[str, str],
         error_progress: dict[str, str],
     ) -> DebateNodeResult:
+        ticker = resolved_ticker_from_state(state)
+        log_event(
+            logger,
+            event="debate_bear_round_started",
+            message="debate bear round started",
+            fields={"node": node_name, "round_num": round_num, "ticker": ticker},
+        )
         try:
             llm = self.get_llm_fn()
             result = await execute_bear_round(
@@ -328,6 +405,18 @@ class DebateOrchestrator:
                 llm=llm,
                 source_reader=self.source_reader,
             )
+            log_event(
+                logger,
+                event="debate_bear_round_completed",
+                message="debate bear round completed",
+                fields={
+                    "node": node_name,
+                    "round_num": round_num,
+                    "ticker": ticker,
+                    "status": "done",
+                    "is_degraded": False,
+                },
+            )
             return DebateNodeResult(
                 update={
                     "history": result["history"],
@@ -337,6 +426,7 @@ class DebateOrchestrator:
                 goto=success_goto,
             )
         except Exception as exc:
+            exc_text = bounded_text(exc)
             log_event(
                 logger,
                 event="debate_bear_round_failed",
@@ -346,10 +436,22 @@ class DebateOrchestrator:
                 fields={
                     "node": node_name,
                     "round_num": round_num,
-                    "exception": str(exc),
+                    "exception": exc_text,
                 },
             )
-            error_msg = f"Bear Agent failed in Round {round_num}: {str(exc)}"
+            log_event(
+                logger,
+                event="debate_bear_round_completed",
+                message="debate bear round completed",
+                fields={
+                    "node": node_name,
+                    "round_num": round_num,
+                    "ticker": ticker,
+                    "status": "degraded",
+                    "is_degraded": True,
+                },
+            )
+            error_msg = f"Bear Agent failed in Round {round_num}: {exc_text}"
             return DebateNodeResult(
                 update={
                     "history": [
@@ -361,7 +463,7 @@ class DebateOrchestrator:
                     "internal_progress": error_progress,
                     "node_statuses": {"debate": "degraded"},
                     "error_logs": [
-                        {"node": node_name, "error": str(exc), "severity": "error"}
+                        {"node": node_name, "error": exc_text, "severity": "error"}
                     ],
                 },
                 goto=success_goto,
@@ -380,6 +482,13 @@ class DebateOrchestrator:
         progress_winning_thesis: str,
         progress_summary: str,
     ) -> DebateNodeResult:
+        ticker = resolved_ticker_from_state(state)
+        log_event(
+            logger,
+            event="debate_moderator_round_started",
+            message="debate moderator round started",
+            fields={"node": node_name, "round_num": round_num, "ticker": ticker},
+        )
         try:
             llm = self.get_llm_fn()
             result = await execute_moderator_round(
@@ -395,6 +504,18 @@ class DebateOrchestrator:
                 winning_thesis=progress_winning_thesis,
                 summary=progress_summary,
             )
+            log_event(
+                logger,
+                event="debate_moderator_round_completed",
+                message="debate moderator round completed",
+                fields={
+                    "node": node_name,
+                    "round_num": round_num,
+                    "ticker": ticker,
+                    "status": "done",
+                    "is_degraded": False,
+                },
+            )
             return DebateNodeResult(
                 update={
                     "history": result["history"],
@@ -407,6 +528,7 @@ class DebateOrchestrator:
                 goto=success_goto,
             )
         except Exception as exc:
+            exc_text = bounded_text(exc)
             log_event(
                 logger,
                 event="debate_moderator_round_failed",
@@ -416,10 +538,22 @@ class DebateOrchestrator:
                 fields={
                     "node": node_name,
                     "round_num": round_num,
-                    "exception": str(exc),
+                    "exception": exc_text,
                 },
             )
-            error_msg = f"Moderator failed in Round {round_num}: {str(exc)}"
+            log_event(
+                logger,
+                event="debate_moderator_round_completed",
+                message="debate moderator round completed",
+                fields={
+                    "node": node_name,
+                    "round_num": round_num,
+                    "ticker": ticker,
+                    "status": "degraded",
+                    "is_degraded": True,
+                },
+            )
+            error_msg = f"Moderator failed in Round {round_num}: {exc_text}"
             return DebateNodeResult(
                 update={
                     "history": [
@@ -429,7 +563,7 @@ class DebateOrchestrator:
                     "internal_progress": error_progress,
                     "node_statuses": {"debate": "degraded"},
                     "error_logs": [
-                        {"node": node_name, "error": str(exc), "severity": "error"}
+                        {"node": node_name, "error": exc_text, "severity": "error"}
                     ],
                 },
                 goto=success_goto,
@@ -503,7 +637,8 @@ class DebateOrchestrator:
                 json.dumps(conclusion_data, ensure_ascii=True, indent=2),
             )
 
-            metrics = calculate_pragmatic_verdict(
+            metrics = await asyncio.to_thread(
+                calculate_pragmatic_verdict,
                 conclusion_data,
                 ticker=ticker,
                 get_risk_free_rate=self.get_risk_free_rate_fn,
@@ -552,13 +687,14 @@ class DebateOrchestrator:
                 goto="END",
             )
         except Exception as exc:
+            exc_text = bounded_text(exc)
             log_event(
                 logger,
                 event="debate_verdict_failed",
                 message="debate verdict failed",
                 level=logging.ERROR,
                 error_code="DEBATE_VERDICT_FAILED",
-                fields={"ticker": ticker, "exception": str(exc)},
+                fields={"ticker": ticker, "exception": exc_text},
             )
             return DebateNodeResult(
                 update={
@@ -567,7 +703,7 @@ class DebateOrchestrator:
                     "error_logs": [
                         {
                             "node": "verdict",
-                            "error": f"Verdict generation failed: {str(exc)}",
+                            "error": f"Verdict generation failed: {exc_text}",
                             "severity": "error",
                         }
                     ],
@@ -576,14 +712,14 @@ class DebateOrchestrator:
             )
 
     @staticmethod
-    def _compress_reports(reports: dict[str, object]) -> str:
+    def _compress_reports(reports: JSONObject) -> str:
         from src.agents.debate.application.prompt_runtime import compress_reports
 
         return compress_reports(reports)
 
     @staticmethod
     def _build_verdict_prompt(*, ticker: str, history_text: str) -> str:
-        from src.agents.debate.domain.prompt_builder import VERDICT_PROMPT
+        from src.agents.debate.interface.prompt_specs import VERDICT_PROMPT
 
         return VERDICT_PROMPT.format(ticker=ticker, history=history_text)
 
@@ -614,13 +750,14 @@ class DebateOrchestrator:
             )
             return self.build_output_artifact_fn(summary, preview, None)
         except Exception as exc:
+            exc_text = bounded_text(exc)
             log_event(
                 logger,
                 event="debate_progress_artifact_failed",
                 message="failed to generate debate progress artifact",
                 level=logging.ERROR,
                 error_code="DEBATE_PROGRESS_ARTIFACT_FAILED",
-                fields={"exception": str(exc)},
+                fields={"exception": exc_text},
             )
             return None
 
@@ -638,12 +775,13 @@ class DebateOrchestrator:
                 report_id,
             )
         except Exception as exc:
+            exc_text = bounded_text(exc)
             log_event(
                 logger,
                 event="debate_output_artifact_failed",
                 message="failed to generate debate output artifact",
                 level=logging.ERROR,
                 error_code="DEBATE_OUTPUT_ARTIFACT_FAILED",
-                fields={"exception": str(exc)},
+                fields={"exception": exc_text},
             )
             return None

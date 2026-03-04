@@ -1,5 +1,6 @@
-from src.agents.debate.domain.report_contracts import EvidenceFact
+from src.agents.debate.domain.models import EvidenceFact
 from src.agents.debate.domain.validators import FactValidator
+from src.shared.kernel.traceable import ManualProvenance
 
 
 def test_fact_extraction_regex():
@@ -15,14 +16,14 @@ def test_citation_validation():
             source_type="financials",
             source_weight="HIGH",
             summary="F1",
-            provenance={"description": "test"},
+            provenance=ManualProvenance(description="test"),
         ),
         EvidenceFact(
             fact_id="N005",
             source_type="news",
             source_weight="MEDIUM",
             summary="N1",
-            provenance={"description": "test"},
+            provenance=ManualProvenance(description="test"),
         ),
     ]
 

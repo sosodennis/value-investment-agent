@@ -3,7 +3,7 @@ from __future__ import annotations
 from src.shared.kernel.types import JSONObject
 
 
-def derive_debate_preview_view_model(ctx: JSONObject) -> JSONObject:
+def project_debate_preview(ctx: JSONObject) -> JSONObject:
     verdict = str(ctx.get("final_verdict", "NEUTRAL"))
     confidence_raw = ctx.get("kelly_confidence")
     confidence = (

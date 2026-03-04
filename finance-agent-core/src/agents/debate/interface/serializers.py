@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from typing import Protocol
 
 from src.agents.debate.domain.models import EvidenceFact
-from src.agents.debate.domain.services import (
+from src.agents.debate.domain.report_compression_service import (
     compress_financial_data,
     compress_news_data,
     compress_ta_data,
@@ -35,7 +35,7 @@ def build_compressed_report_payload(
             "rationale": "Primary source: SEC XBRL filings (audited, regulatory-grade data)",
         },
         "news": {
-            "data": compress_news_data({"news_items": source_data.news_items}),
+            "data": compress_news_data(source_data.news_items),
             "source_weight": "MEDIUM",
             "rationale": "Secondary source: Curated financial news (editorial bias possible)",
         },
