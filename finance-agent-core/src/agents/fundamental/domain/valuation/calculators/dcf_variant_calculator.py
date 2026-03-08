@@ -18,6 +18,7 @@ from .dcf_variant_result_service import (
     build_dcf_variant_static_inputs,
     extract_dcf_variant_converged_inputs,
 )
+from .dcf_variant_sensitivity_service import run_dcf_variant_sensitivity
 from .dcf_variant_validation_service import validate_dcf_variant_projection_lengths
 
 
@@ -46,16 +47,26 @@ def calculate_dcf_variant_valuation(
         upside = compute_upside(intrinsic_value, params.current_price)
 
         converged_inputs = extract_dcf_variant_converged_inputs(results)
+        static_inputs = build_dcf_variant_static_inputs(params)
         details = build_dcf_variant_details(
             results=results,
             converged_inputs=converged_inputs,
+        )
+        _attach_dcf_variant_sensitivity(
+            details=details,
+            intrinsic_value=intrinsic_value,
+            converged_inputs=converged_inputs,
+            static_inputs=static_inputs,
+            wacc=params.wacc,
+            terminal_growth=params.terminal_growth,
+            policy=monte_carlo_policy,
         )
 
         if params.monte_carlo_iterations > 0:
             details["distribution_summary"] = run_dcf_variant_monte_carlo(
                 params=params,
                 converged_inputs=converged_inputs,
-                static_inputs=build_dcf_variant_static_inputs(params),
+                static_inputs=static_inputs,
                 policy=monte_carlo_policy,
             )
 
@@ -74,6 +85,43 @@ def calculate_dcf_variant_valuation(
         }
     except Exception as exc:  # noqa: BLE001
         return {"error": str(exc)}
+
+
+def _attach_dcf_variant_sensitivity(
+    *,
+    details: dict[str, object],
+    intrinsic_value: float,
+    converged_inputs: dict[str, list[float]],
+    static_inputs: dict[str, float],
+    wacc: float,
+    terminal_growth: float,
+    policy: DcfMonteCarloPolicy,
+) -> None:
+    try:
+        sensitivity = run_dcf_variant_sensitivity(
+            base_intrinsic_value=intrinsic_value,
+            converged_inputs=converged_inputs,
+            static_inputs=static_inputs,
+            base_wacc=float(wacc),
+            base_terminal_growth=float(terminal_growth),
+            policy=policy,
+        )
+    except Exception as exc:  # noqa: BLE001
+        details["sensitivity_summary"] = {
+            "enabled": False,
+            "reason": f"error:{exc.__class__.__name__}",
+        }
+        return
+
+    details["sensitivity_summary"] = {
+        "enabled": True,
+        "base_intrinsic_value": sensitivity["base_intrinsic_value"],
+        "scenario_count": sensitivity["scenario_count"],
+        "max_upside_delta_pct": sensitivity["max_upside_delta_pct"],
+        "max_downside_delta_pct": sensitivity["max_downside_delta_pct"],
+        "top_drivers": sensitivity["top_drivers"],
+    }
+    details["sensitivity_cases"] = sensitivity["cases"]
 
 
 __all__ = [

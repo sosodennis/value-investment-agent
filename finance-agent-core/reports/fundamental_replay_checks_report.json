@@ -1,0 +1,22 @@
+{
+  "manifest_schema_version": "valuation_replay_manifest_v1",
+  "results": [
+    {
+      "case_id": "AAPL_CI",
+      "input_path": "/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/tests/fixtures/fundamental_replay_inputs/aapl.replay.json",
+      "status": "ok"
+    },
+    {
+      "case_id": "NVDA_CI",
+      "input_path": "/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/tests/fixtures/fundamental_replay_inputs/nvda.replay.json",
+      "status": "ok"
+    }
+  ],
+  "schema_version": "fundamental_replay_checks_report_v1",
+  "summary": {
+    "error_code_counts": {},
+    "failed_cases": 0,
+    "passed_cases": 2,
+    "total_cases": 2
+  }
+}

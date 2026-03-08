@@ -44,6 +44,60 @@ export interface ParsedDistributionScenarios {
     bull?: ParsedDistributionScenario;
 }
 
+export interface ParsedSensitivityDriver {
+    shock_dimension?: string;
+    shock_value_bp?: number;
+    delta_pct_vs_base?: number;
+}
+
+export interface ParsedSensitivitySummary {
+    enabled?: boolean;
+    scenario_count?: number;
+    max_upside_delta_pct?: number;
+    max_downside_delta_pct?: number;
+    top_drivers?: ParsedSensitivityDriver[];
+}
+
+export interface ParsedValuationDiagnostics {
+    growth_rates_converged?: number[];
+    terminal_growth_effective?: number;
+    growth_consensus_policy?: string;
+    growth_consensus_horizon?: string;
+    terminal_anchor_policy?: string;
+    terminal_anchor_stale_fallback?: boolean;
+    base_growth_guardrail_applied?: boolean;
+    base_growth_guardrail_version?: string;
+    base_growth_raw_year1?: number;
+    base_growth_raw_yearN?: number;
+    base_growth_guarded_year1?: number;
+    base_growth_guarded_yearN?: number;
+    base_margin_guardrail_applied?: boolean;
+    base_margin_guardrail_version?: string;
+    base_margin_raw_year1?: number;
+    base_margin_raw_yearN?: number;
+    base_margin_guarded_year1?: number;
+    base_margin_guarded_yearN?: number;
+    forward_signal_mapping_version?: string;
+    forward_signal_calibration_applied?: boolean;
+    sensitivity_summary?: ParsedSensitivitySummary;
+}
+
+export interface ParsedBaseAssumptionGuardrailSlice {
+    applied?: boolean;
+    version?: string;
+    raw_year1?: number;
+    raw_yearN?: number;
+    guarded_year1?: number;
+    guarded_yearN?: number;
+    reasons?: string[];
+}
+
+export interface ParsedBaseAssumptionGuardrailSummary {
+    version?: string;
+    growth?: ParsedBaseAssumptionGuardrailSlice;
+    margin?: ParsedBaseAssumptionGuardrailSlice;
+}
+
 export interface ParsedAssumptionItem {
     statement: string;
     category?: string;
@@ -57,6 +111,8 @@ export interface ParsedForwardSignalSummary {
     evidence_count?: number;
     growth_adjustment_basis_points?: number;
     margin_adjustment_basis_points?: number;
+    calibration_applied?: boolean;
+    mapping_version?: string;
     risk_level?: string;
     source_types?: string[];
     decision_count?: number;
@@ -73,6 +129,7 @@ export interface ParsedAssumptionBreakdown {
     forward_signal_summary?: ParsedForwardSignalSummary;
     forward_signal_risk_level?: string;
     forward_signal_evidence_count?: number;
+    base_assumption_guardrail?: ParsedBaseAssumptionGuardrailSummary;
 }
 
 export interface ParsedDataFreshnessFinancialStatement {
@@ -123,6 +180,7 @@ export interface ParsedFinancialPreview {
     signal_state?: ParsedSignalState;
     distribution_summary?: ParsedDistributionSummary;
     distribution_scenarios?: ParsedDistributionScenarios;
+    valuation_diagnostics?: ParsedValuationDiagnostics;
     assumption_breakdown?: ParsedAssumptionBreakdown;
     data_freshness?: ParsedDataFreshness;
     assumption_risk_level?: string;
@@ -173,6 +231,23 @@ const parseNullableOptionalNumber = (
 ): number | undefined => {
     if (value === null) return undefined;
     return parseOptionalNumber(value, context);
+};
+
+const parseOptionalBoolean = (
+    value: unknown,
+    context: string
+): boolean | undefined => {
+    if (value === undefined) return undefined;
+    if (typeof value === 'boolean') return value;
+    throw new TypeError(`${context} must be a boolean | undefined.`);
+};
+
+const parseNullableOptionalBoolean = (
+    value: unknown,
+    context: string
+): boolean | undefined => {
+    if (value === null) return undefined;
+    return parseOptionalBoolean(value, context);
 };
 
 const parseProvenance = (value: unknown, context: string): Provenance | null => {
@@ -663,6 +738,261 @@ const parseScalarRecord = (
     return parsed;
 };
 
+const parseSensitivityDriver = (
+    value: unknown,
+    context: string
+): ParsedSensitivityDriver => {
+    const record = toRecord(value, context);
+    const parsed: ParsedSensitivityDriver = {};
+    const shockDimension = parseNullableOptionalString(
+        record.shock_dimension,
+        `${context}.shock_dimension`
+    );
+    const shockValueBp = parseNullableOptionalNumber(
+        record.shock_value_bp,
+        `${context}.shock_value_bp`
+    );
+    const deltaPctVsBase = parseNullableOptionalNumber(
+        record.delta_pct_vs_base,
+        `${context}.delta_pct_vs_base`
+    );
+    if (shockDimension !== undefined) parsed.shock_dimension = shockDimension;
+    if (shockValueBp !== undefined) parsed.shock_value_bp = shockValueBp;
+    if (deltaPctVsBase !== undefined) parsed.delta_pct_vs_base = deltaPctVsBase;
+    return parsed;
+};
+
+const parseSensitivitySummary = (
+    value: unknown,
+    context: string
+): ParsedSensitivitySummary | undefined => {
+    if (value === undefined || value === null) return undefined;
+    const record = toRecord(value, context);
+    const parsed: ParsedSensitivitySummary = {};
+    const enabled = parseNullableOptionalBoolean(record.enabled, `${context}.enabled`);
+    const scenarioCount = parseNullableOptionalNumber(
+        record.scenario_count,
+        `${context}.scenario_count`
+    );
+    const maxUpsideDeltaPct = parseNullableOptionalNumber(
+        record.max_upside_delta_pct,
+        `${context}.max_upside_delta_pct`
+    );
+    const maxDownsideDeltaPct = parseNullableOptionalNumber(
+        record.max_downside_delta_pct,
+        `${context}.max_downside_delta_pct`
+    );
+
+    if (enabled !== undefined) parsed.enabled = enabled;
+    if (scenarioCount !== undefined) parsed.scenario_count = scenarioCount;
+    if (maxUpsideDeltaPct !== undefined) {
+        parsed.max_upside_delta_pct = maxUpsideDeltaPct;
+    }
+    if (maxDownsideDeltaPct !== undefined) {
+        parsed.max_downside_delta_pct = maxDownsideDeltaPct;
+    }
+
+    const topDriversRaw = record.top_drivers;
+    if (topDriversRaw !== undefined && topDriversRaw !== null) {
+        if (!Array.isArray(topDriversRaw)) {
+            throw new TypeError(`${context}.top_drivers must be an array.`);
+        }
+        parsed.top_drivers = topDriversRaw.map((item, index) =>
+            parseSensitivityDriver(item, `${context}.top_drivers[${index}]`)
+        );
+    }
+
+    return parsed;
+};
+
+const parseValuationDiagnostics = (
+    value: unknown,
+    context: string
+): ParsedValuationDiagnostics | undefined => {
+    if (value === undefined || value === null) return undefined;
+    const record = toRecord(value, context);
+    const parsed: ParsedValuationDiagnostics = {};
+
+    const growthRatesConverged = parseOptionalNumberArray(
+        record.growth_rates_converged,
+        `${context}.growth_rates_converged`
+    );
+    if (growthRatesConverged !== undefined) {
+        parsed.growth_rates_converged = growthRatesConverged;
+    }
+
+    const terminalGrowthEffective = parseNullableOptionalNumber(
+        record.terminal_growth_effective,
+        `${context}.terminal_growth_effective`
+    );
+    if (terminalGrowthEffective !== undefined) {
+        parsed.terminal_growth_effective = terminalGrowthEffective;
+    }
+
+    const growthConsensusPolicy = parseOptionalString(
+        record.growth_consensus_policy,
+        `${context}.growth_consensus_policy`
+    );
+    if (growthConsensusPolicy !== undefined) {
+        parsed.growth_consensus_policy = growthConsensusPolicy;
+    }
+
+    const growthConsensusHorizon = parseOptionalString(
+        record.growth_consensus_horizon,
+        `${context}.growth_consensus_horizon`
+    );
+    if (growthConsensusHorizon !== undefined) {
+        parsed.growth_consensus_horizon = growthConsensusHorizon;
+    }
+
+    const terminalAnchorPolicy = parseOptionalString(
+        record.terminal_anchor_policy,
+        `${context}.terminal_anchor_policy`
+    );
+    if (terminalAnchorPolicy !== undefined) {
+        parsed.terminal_anchor_policy = terminalAnchorPolicy;
+    }
+
+    const terminalAnchorStaleFallback = parseOptionalBoolean(
+        record.terminal_anchor_stale_fallback,
+        `${context}.terminal_anchor_stale_fallback`
+    );
+    if (terminalAnchorStaleFallback !== undefined) {
+        parsed.terminal_anchor_stale_fallback = terminalAnchorStaleFallback;
+    }
+
+    const baseGrowthGuardrailApplied = parseOptionalBoolean(
+        record.base_growth_guardrail_applied,
+        `${context}.base_growth_guardrail_applied`
+    );
+    if (baseGrowthGuardrailApplied !== undefined) {
+        parsed.base_growth_guardrail_applied = baseGrowthGuardrailApplied;
+    }
+    const baseGrowthGuardrailVersion = parseOptionalString(
+        record.base_growth_guardrail_version,
+        `${context}.base_growth_guardrail_version`
+    );
+    if (baseGrowthGuardrailVersion !== undefined) {
+        parsed.base_growth_guardrail_version = baseGrowthGuardrailVersion;
+    }
+    const baseGrowthRawYear1 = parseNullableOptionalNumber(
+        record.base_growth_raw_year1,
+        `${context}.base_growth_raw_year1`
+    );
+    if (baseGrowthRawYear1 !== undefined) {
+        parsed.base_growth_raw_year1 = baseGrowthRawYear1;
+    }
+    const baseGrowthRawYearN = parseNullableOptionalNumber(
+        record.base_growth_raw_yearN,
+        `${context}.base_growth_raw_yearN`
+    );
+    if (baseGrowthRawYearN !== undefined) {
+        parsed.base_growth_raw_yearN = baseGrowthRawYearN;
+    }
+    const baseGrowthGuardedYear1 = parseNullableOptionalNumber(
+        record.base_growth_guarded_year1,
+        `${context}.base_growth_guarded_year1`
+    );
+    if (baseGrowthGuardedYear1 !== undefined) {
+        parsed.base_growth_guarded_year1 = baseGrowthGuardedYear1;
+    }
+    const baseGrowthGuardedYearN = parseNullableOptionalNumber(
+        record.base_growth_guarded_yearN,
+        `${context}.base_growth_guarded_yearN`
+    );
+    if (baseGrowthGuardedYearN !== undefined) {
+        parsed.base_growth_guarded_yearN = baseGrowthGuardedYearN;
+    }
+    const baseMarginGuardrailApplied = parseOptionalBoolean(
+        record.base_margin_guardrail_applied,
+        `${context}.base_margin_guardrail_applied`
+    );
+    if (baseMarginGuardrailApplied !== undefined) {
+        parsed.base_margin_guardrail_applied = baseMarginGuardrailApplied;
+    }
+    const baseMarginGuardrailVersion = parseOptionalString(
+        record.base_margin_guardrail_version,
+        `${context}.base_margin_guardrail_version`
+    );
+    if (baseMarginGuardrailVersion !== undefined) {
+        parsed.base_margin_guardrail_version = baseMarginGuardrailVersion;
+    }
+    const baseMarginRawYear1 = parseNullableOptionalNumber(
+        record.base_margin_raw_year1,
+        `${context}.base_margin_raw_year1`
+    );
+    if (baseMarginRawYear1 !== undefined) {
+        parsed.base_margin_raw_year1 = baseMarginRawYear1;
+    }
+    const baseMarginRawYearN = parseNullableOptionalNumber(
+        record.base_margin_raw_yearN,
+        `${context}.base_margin_raw_yearN`
+    );
+    if (baseMarginRawYearN !== undefined) {
+        parsed.base_margin_raw_yearN = baseMarginRawYearN;
+    }
+    const baseMarginGuardedYear1 = parseNullableOptionalNumber(
+        record.base_margin_guarded_year1,
+        `${context}.base_margin_guarded_year1`
+    );
+    if (baseMarginGuardedYear1 !== undefined) {
+        parsed.base_margin_guarded_year1 = baseMarginGuardedYear1;
+    }
+    const baseMarginGuardedYearN = parseNullableOptionalNumber(
+        record.base_margin_guarded_yearN,
+        `${context}.base_margin_guarded_yearN`
+    );
+    if (baseMarginGuardedYearN !== undefined) {
+        parsed.base_margin_guarded_yearN = baseMarginGuardedYearN;
+    }
+
+    const forwardSignalMappingVersion = parseOptionalString(
+        record.forward_signal_mapping_version,
+        `${context}.forward_signal_mapping_version`
+    );
+    if (forwardSignalMappingVersion !== undefined) {
+        parsed.forward_signal_mapping_version = forwardSignalMappingVersion;
+    }
+
+    const forwardSignalCalibrationApplied = parseOptionalBoolean(
+        record.forward_signal_calibration_applied,
+        `${context}.forward_signal_calibration_applied`
+    );
+    if (forwardSignalCalibrationApplied !== undefined) {
+        parsed.forward_signal_calibration_applied =
+            forwardSignalCalibrationApplied;
+    }
+
+    const sensitivitySummary = parseSensitivitySummary(
+        record.sensitivity_summary,
+        `${context}.sensitivity_summary`
+    );
+    if (sensitivitySummary !== undefined) {
+        parsed.sensitivity_summary = sensitivitySummary;
+    }
+
+    return parsed;
+};
+
+const parseOptionalNumberArray = (
+    value: unknown,
+    context: string
+): number[] | undefined => {
+    if (value === undefined || value === null) return undefined;
+    if (!Array.isArray(value)) {
+        throw new TypeError(`${context} must be an array.`);
+    }
+    const parsed: number[] = [];
+    for (let i = 0; i < value.length; i += 1) {
+        const item = parseOptionalNumber(value[i], `${context}[${i}]`);
+        if (item === undefined) {
+            throw new TypeError(`${context}[${i}] must be a number.`);
+        }
+        parsed.push(item);
+    }
+    return parsed;
+};
+
 const parseOptionalStringArray = (
     value: unknown,
     context: string
@@ -690,22 +1020,53 @@ const parseForwardSignalSummary = (
     const record = toRecord(value, context);
     const parsed: ParsedForwardSignalSummary = {};
 
-    const numericFields = [
-        'signals_total',
-        'signals_accepted',
-        'signals_rejected',
-        'evidence_count',
-        'growth_adjustment_basis_points',
-        'margin_adjustment_basis_points',
-    ] as const;
-    for (const field of numericFields) {
-        const parsedValue = parseNullableOptionalNumber(
-            record[field],
-            `${context}.${field}`
-        );
-        if (parsedValue !== undefined) {
-            parsed[field] = parsedValue;
-        }
+    const signalsTotal = parseNullableOptionalNumber(
+        record.signals_total,
+        `${context}.signals_total`
+    );
+    if (signalsTotal !== undefined) parsed.signals_total = signalsTotal;
+    const signalsAccepted = parseNullableOptionalNumber(
+        record.signals_accepted,
+        `${context}.signals_accepted`
+    );
+    if (signalsAccepted !== undefined) parsed.signals_accepted = signalsAccepted;
+    const signalsRejected = parseNullableOptionalNumber(
+        record.signals_rejected,
+        `${context}.signals_rejected`
+    );
+    if (signalsRejected !== undefined) parsed.signals_rejected = signalsRejected;
+    const evidenceCount = parseNullableOptionalNumber(
+        record.evidence_count,
+        `${context}.evidence_count`
+    );
+    if (evidenceCount !== undefined) parsed.evidence_count = evidenceCount;
+    const growthAdjustmentBp = parseNullableOptionalNumber(
+        record.growth_adjustment_basis_points,
+        `${context}.growth_adjustment_basis_points`
+    );
+    if (growthAdjustmentBp !== undefined) {
+        parsed.growth_adjustment_basis_points = growthAdjustmentBp;
+    }
+    const marginAdjustmentBp = parseNullableOptionalNumber(
+        record.margin_adjustment_basis_points,
+        `${context}.margin_adjustment_basis_points`
+    );
+    if (marginAdjustmentBp !== undefined) {
+        parsed.margin_adjustment_basis_points = marginAdjustmentBp;
+    }
+    const calibrationApplied = parseNullableOptionalBoolean(
+        record.calibration_applied,
+        `${context}.calibration_applied`
+    );
+    if (calibrationApplied !== undefined) {
+        parsed.calibration_applied = calibrationApplied;
+    }
+    const mappingVersion = parseNullableOptionalString(
+        record.mapping_version,
+        `${context}.mapping_version`
+    );
+    if (mappingVersion !== undefined) {
+        parsed.mapping_version = mappingVersion;
     }
 
     const riskLevel = parseNullableOptionalString(
@@ -789,6 +1150,60 @@ const parseAssumptionItem = (
     const parsed: ParsedAssumptionItem = { statement };
     if (category !== undefined) parsed.category = category;
     if (severity !== undefined) parsed.severity = severity;
+    return parsed;
+};
+
+const parseBaseAssumptionGuardrailSlice = (
+    value: unknown,
+    context: string
+): ParsedBaseAssumptionGuardrailSlice | undefined => {
+    if (value === undefined || value === null) return undefined;
+    const record = toRecord(value, context);
+    const parsed: ParsedBaseAssumptionGuardrailSlice = {};
+
+    const applied = parseNullableOptionalBoolean(record.applied, `${context}.applied`);
+    if (applied !== undefined) parsed.applied = applied;
+    const version = parseNullableOptionalString(record.version, `${context}.version`);
+    if (version !== undefined) parsed.version = version;
+    const rawYear1 = parseNullableOptionalNumber(record.raw_year1, `${context}.raw_year1`);
+    if (rawYear1 !== undefined) parsed.raw_year1 = rawYear1;
+    const rawYearN = parseNullableOptionalNumber(record.raw_yearN, `${context}.raw_yearN`);
+    if (rawYearN !== undefined) parsed.raw_yearN = rawYearN;
+    const guardedYear1 = parseNullableOptionalNumber(
+        record.guarded_year1,
+        `${context}.guarded_year1`
+    );
+    if (guardedYear1 !== undefined) parsed.guarded_year1 = guardedYear1;
+    const guardedYearN = parseNullableOptionalNumber(
+        record.guarded_yearN,
+        `${context}.guarded_yearN`
+    );
+    if (guardedYearN !== undefined) parsed.guarded_yearN = guardedYearN;
+    const reasons = parseOptionalStringArray(record.reasons, `${context}.reasons`);
+    if (reasons !== undefined) parsed.reasons = reasons;
+    return parsed;
+};
+
+const parseBaseAssumptionGuardrailSummary = (
+    value: unknown,
+    context: string
+): ParsedBaseAssumptionGuardrailSummary | undefined => {
+    if (value === undefined || value === null) return undefined;
+    const record = toRecord(value, context);
+    const parsed: ParsedBaseAssumptionGuardrailSummary = {};
+
+    const version = parseNullableOptionalString(record.version, `${context}.version`);
+    if (version !== undefined) parsed.version = version;
+    const growth = parseBaseAssumptionGuardrailSlice(
+        record.growth,
+        `${context}.growth`
+    );
+    if (growth !== undefined) parsed.growth = growth;
+    const margin = parseBaseAssumptionGuardrailSlice(
+        record.margin,
+        `${context}.margin`
+    );
+    if (margin !== undefined) parsed.margin = margin;
     return parsed;
 };
 
@@ -879,6 +1294,14 @@ const parseAssumptionBreakdown = (
     );
     if (forwardSignalEvidenceCount !== undefined) {
         parsed.forward_signal_evidence_count = forwardSignalEvidenceCount;
+    }
+
+    const baseAssumptionGuardrail = parseBaseAssumptionGuardrailSummary(
+        record.base_assumption_guardrail,
+        `${context}.base_assumption_guardrail`
+    );
+    if (baseAssumptionGuardrail !== undefined) {
+        parsed.base_assumption_guardrail = baseAssumptionGuardrail;
     }
     return parsed;
 };
@@ -1076,6 +1499,14 @@ export const parseFinancialPreview = (
     );
     if (distributionScenarios !== undefined) {
         parsed.distribution_scenarios = distributionScenarios;
+    }
+
+    const valuationDiagnostics = parseValuationDiagnostics(
+        record.valuation_diagnostics,
+        `${context}.valuation_diagnostics`
+    );
+    if (valuationDiagnostics !== undefined) {
+        parsed.valuation_diagnostics = valuationDiagnostics;
     }
 
     const assumptionBreakdown = parseAssumptionBreakdown(

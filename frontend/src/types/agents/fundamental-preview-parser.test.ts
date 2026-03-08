@@ -54,6 +54,44 @@ describe('parseFinancialPreview', () => {
                 base: { label: 'P50 (Base)', price: 150 },
                 bull: { label: 'P95 (Bull)', price: 190 },
             },
+            valuation_diagnostics: {
+                growth_rates_converged: [0.12, 0.1, 0.08],
+                terminal_growth_effective: 0.0135,
+                growth_consensus_policy: 'ignored',
+                growth_consensus_horizon: 'short_term',
+                terminal_anchor_policy: 'policy_default_market_stale',
+                terminal_anchor_stale_fallback: true,
+                base_growth_guardrail_applied: true,
+                base_growth_guardrail_version:
+                    'base_assumption_guardrail_v1_2026_03_05',
+                base_growth_raw_year1: 0.8,
+                base_growth_raw_yearN: 0.02,
+                base_growth_guarded_year1: 0.55,
+                base_growth_guarded_yearN: 0.014,
+                base_margin_guardrail_applied: true,
+                base_margin_guardrail_version:
+                    'base_assumption_guardrail_v1_2026_03_05',
+                base_margin_raw_year1: 0.5943,
+                base_margin_raw_yearN: 0.5943,
+                base_margin_guarded_year1: 0.5943,
+                base_margin_guarded_yearN: 0.42,
+                forward_signal_mapping_version:
+                    'forward_signal_calibration_v2_2026_03_05',
+                forward_signal_calibration_applied: true,
+                sensitivity_summary: {
+                    enabled: true,
+                    scenario_count: 16,
+                    max_upside_delta_pct: 0.22,
+                    max_downside_delta_pct: -0.19,
+                    top_drivers: [
+                        {
+                            shock_dimension: 'wacc',
+                            shock_value_bp: -100,
+                            delta_pct_vs_base: 0.22,
+                        },
+                    ],
+                },
+            },
             assumption_breakdown: {
                 total_assumptions: 2,
                 assumptions: [
@@ -87,12 +125,36 @@ describe('parseFinancialPreview', () => {
                     evidence_count: 4,
                     growth_adjustment_basis_points: 45.5,
                     margin_adjustment_basis_points: -20.0,
+                    calibration_applied: true,
+                    mapping_version: 'forward_signal_calibration_v2_2026_03_05',
                     risk_level: 'medium',
                     source_types: ['mda', 'press_release'],
                     decisions: [{ signal_id: 'sig-1' }],
                 },
                 forward_signal_risk_level: 'medium',
                 forward_signal_evidence_count: 4,
+                base_assumption_guardrail: {
+                    version: 'base_assumption_guardrail_v1_2026_03_05',
+                    growth: {
+                        applied: true,
+                        raw_year1: 0.8,
+                        raw_yearN: 0.02,
+                        guarded_year1: 0.55,
+                        guarded_yearN: 0.014,
+                        reasons: [
+                            'growth_year1_capped',
+                            'growth_terminal_aligned_to_long_run_target',
+                        ],
+                    },
+                    margin: {
+                        applied: true,
+                        raw_year1: 0.5943,
+                        raw_yearN: 0.5943,
+                        guarded_year1: 0.5943,
+                        guarded_yearN: 0.42,
+                        reasons: ['margin_terminal_converged_to_normalized_band'],
+                    },
+                },
             },
             assumption_risk_level: 'high',
             data_quality_flags: [
@@ -107,6 +169,8 @@ describe('parseFinancialPreview', () => {
                 evidence_count: 4,
                 growth_adjustment_basis_points: 45.5,
                 margin_adjustment_basis_points: -20.0,
+                calibration_applied: true,
+                mapping_version: 'forward_signal_calibration_v2_2026_03_05',
                 risk_level: 'medium',
                 source_types: ['mda', 'press_release'],
                 decisions: [{ signal_id: 'sig-1' }],
@@ -165,6 +229,39 @@ describe('parseFinancialPreview', () => {
         expect(parsed?.distribution_summary?.summary.percentile_75).toBe(168);
         expect(parsed?.distribution_summary?.diagnostics?.sampler_type).toBe('sobol');
         expect(parsed?.distribution_scenarios?.bull?.price).toBe(190);
+        expect(parsed?.valuation_diagnostics?.growth_rates_converged).toEqual([
+            0.12,
+            0.1,
+            0.08,
+        ]);
+        expect(parsed?.valuation_diagnostics?.terminal_growth_effective).toBe(0.0135);
+        expect(parsed?.valuation_diagnostics?.growth_consensus_policy).toBe('ignored');
+        expect(parsed?.valuation_diagnostics?.growth_consensus_horizon).toBe('short_term');
+        expect(parsed?.valuation_diagnostics?.terminal_anchor_policy).toBe(
+            'policy_default_market_stale'
+        );
+        expect(parsed?.valuation_diagnostics?.terminal_anchor_stale_fallback).toBe(true);
+        expect(parsed?.valuation_diagnostics?.base_growth_guardrail_applied).toBe(true);
+        expect(parsed?.valuation_diagnostics?.base_growth_guardrail_version).toBe(
+            'base_assumption_guardrail_v1_2026_03_05'
+        );
+        expect(parsed?.valuation_diagnostics?.base_growth_guarded_yearN).toBe(0.014);
+        expect(parsed?.valuation_diagnostics?.base_margin_guardrail_applied).toBe(true);
+        expect(parsed?.valuation_diagnostics?.base_margin_guarded_yearN).toBe(0.42);
+        expect(parsed?.valuation_diagnostics?.forward_signal_mapping_version).toBe(
+            'forward_signal_calibration_v2_2026_03_05'
+        );
+        expect(parsed?.valuation_diagnostics?.forward_signal_calibration_applied).toBe(
+            true
+        );
+        expect(parsed?.valuation_diagnostics?.sensitivity_summary?.enabled).toBe(true);
+        expect(parsed?.valuation_diagnostics?.sensitivity_summary?.scenario_count).toBe(
+            16
+        );
+        expect(
+            parsed?.valuation_diagnostics?.sensitivity_summary?.top_drivers?.[0]
+                ?.shock_dimension
+        ).toBe('wacc');
         expect(parsed?.assumption_breakdown?.total_assumptions).toBe(2);
         expect(parsed?.assumption_breakdown?.monte_carlo?.executed_iterations).toBe(5000);
         expect(parsed?.assumption_breakdown?.monte_carlo?.effective_window).toBe(250);
@@ -175,6 +272,17 @@ describe('parseFinancialPreview', () => {
             'time_alignment:high_risk',
         ]);
         expect(parsed?.assumption_breakdown?.time_alignment_status).toBe('high_risk');
+        expect(parsed?.assumption_breakdown?.base_assumption_guardrail?.version).toBe(
+            'base_assumption_guardrail_v1_2026_03_05'
+        );
+        expect(
+            parsed?.assumption_breakdown?.base_assumption_guardrail?.growth
+                ?.guarded_year1
+        ).toBe(0.55);
+        expect(
+            parsed?.assumption_breakdown?.base_assumption_guardrail?.margin
+                ?.guarded_yearN
+        ).toBe(0.42);
         expect(parsed?.assumption_risk_level).toBe('high');
         expect(parsed?.data_quality_flags).toEqual([
             'defaults_present',
@@ -186,6 +294,10 @@ describe('parseFinancialPreview', () => {
             'mda',
             'press_release',
         ]);
+        expect(parsed?.forward_signal_summary?.calibration_applied).toBe(true);
+        expect(parsed?.forward_signal_summary?.mapping_version).toBe(
+            'forward_signal_calibration_v2_2026_03_05'
+        );
         expect(parsed?.forward_signal_summary?.decision_count).toBe(1);
         expect(parsed?.forward_signal_risk_level).toBe('medium');
         expect(parsed?.forward_signal_evidence_count).toBe(4);

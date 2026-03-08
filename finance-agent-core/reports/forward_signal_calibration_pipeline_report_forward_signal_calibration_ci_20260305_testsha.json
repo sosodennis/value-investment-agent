@@ -1,0 +1,31 @@
+{
+  "replay_report": "finance-agent-core/tests/fixtures/forward_signal_calibration_pipeline_replay_fixture.json",
+  "dataset_output": "finance-agent-core/reports/forward_signal_calibration_dataset_forward_signal_calibration_ci_20260305_testsha.jsonl",
+  "row_count": 4,
+  "usable_row_count": 4,
+  "dropped_row_count": 0,
+  "observation_count": 8,
+  "dropped_reasons": {},
+  "anchor_stats": {
+    "resolved_count": 4,
+    "from_report_count": 4,
+    "from_live_market_data_count": 0,
+    "missing_count": 0
+  },
+  "fit": {
+    "mapping_version": "forward_signal_calibration_ci_20260305_testsha",
+    "used_fallback": false,
+    "fallback_reason": null,
+    "input_count": 8,
+    "usable_count": 8,
+    "dropped_count": 0,
+    "min_samples_required": 4,
+    "mapping_bins_sample_count": {
+      "50.0": 2,
+      "120.0": 6,
+      "220.0": 8,
+      "300.0": 8
+    },
+    "artifact_output": "finance-agent-core/reports/forward_signal_calibration.mapping_forward_signal_calibration_ci_20260305_testsha.json"
+  }
+}

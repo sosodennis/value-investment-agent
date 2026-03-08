@@ -1,0 +1,104 @@
+{
+  "baseline_path": "/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/tests/fixtures/fundamental_backtest_baseline.json",
+  "calibration": {
+    "degraded_reason": null,
+    "gate_passed": true,
+    "mapping_artifact_name": "forward_signal_calibration.mapping_forward_signal_calibration_ci_20260305_testsha.json",
+    "mapping_path": "reports/forward_signal_calibration.mapping_forward_signal_calibration_ci_20260305_testsha.json",
+    "mapping_source": "env_path",
+    "mapping_version": "forward_signal_calibration_ci_20260305_testsha"
+  },
+  "dataset_path": "/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/tests/fixtures/fundamental_backtest_cases.json",
+  "drifts": [],
+  "generated_at": "2026-03-05T14:02:06+00:00",
+  "issues": [],
+  "results": [
+    {
+      "id": "saas_mc_seeded",
+      "metrics": {
+        "distribution_summary": {
+          "max": 4.9806237466016015,
+          "mean": 2.8156174321754435,
+          "median": 2.6780510976389933,
+          "min": 1.685620529235077,
+          "percentile_25": 2.4452029973318195,
+          "percentile_5": 2.215699863360125,
+          "percentile_75": 3.0365923768010474,
+          "percentile_95": 3.7983954384121468,
+          "std": 0.5981267412384048
+        },
+        "enterprise_value": 268.9049437442796,
+        "equity_value": 273.9049437442796,
+        "intrinsic_value": 2.739049437442796,
+        "upside_potential": 0.0
+      },
+      "model": "saas",
+      "status": "ok"
+    },
+    {
+      "id": "bank_capm_mc_seeded",
+      "metrics": {
+        "cost_of_equity": 0.095,
+        "distribution_summary": {
+          "max": 17.007955050813617,
+          "mean": 12.891586699343996,
+          "median": 12.618460571133893,
+          "min": 10.224146094736714,
+          "percentile_25": 11.59267834710443,
+          "percentile_5": 10.394657888468828,
+          "percentile_75": 13.919032652091259,
+          "percentile_95": 15.746684849393422,
+          "std": 1.6358832662768739
+        },
+        "equity_value": 1270.0193907549885,
+        "intrinsic_value": 12.700193907549885,
+        "upside_potential": 0.0
+      },
+      "model": "bank",
+      "status": "ok"
+    },
+    {
+      "id": "reit_affo_mc_seeded",
+      "metrics": {
+        "distribution_summary": {
+          "max": 117.33628817135138,
+          "mean": 76.69813215068477,
+          "median": 77.002744080193,
+          "min": 52.14101768965069,
+          "percentile_25": 69.15863011067101,
+          "percentile_5": 56.682091430264165,
+          "percentile_75": 83.25511538776061,
+          "percentile_95": 96.50775395544846,
+          "std": 12.56332836785745
+        },
+        "enterprise_value": 840.0,
+        "equity_value": 800.0,
+        "intrinsic_value": 80.0,
+        "upside_potential": 0.0
+      },
+      "model": "reit_ffo",
+      "status": "ok"
+    },
+    {
+      "id": "bank_override_deterministic",
+      "metrics": {
+        "cost_of_equity": 0.2,
+        "equity_value": 507.55208333333337,
+        "intrinsic_value": 5.075520833333334,
+        "upside_potential": 0.0
+      },
+      "model": "bank",
+      "status": "ok"
+    }
+  ],
+  "summary": {
+    "baseline_updated": false,
+    "calibration_gate_passed": true,
+    "drift_count": 0,
+    "drifted_case_count": 0,
+    "errors": 0,
+    "issue_count": 0,
+    "ok": 4,
+    "total_cases": 4
+  }
+}

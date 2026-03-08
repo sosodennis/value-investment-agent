@@ -34,6 +34,13 @@ def _growth_convergence_start(length: int) -> int:
     return max(2, int(length * 0.65))
 
 
+def _late_growth_rate_convergence_start(length: int) -> int:
+    if length <= 3:
+        return 1
+    # Keep the final 3 projection years as the growth fade window.
+    return max(1, length - 4)
+
+
 def converge_growth_rates_growth(
     growth_rates: list[float], terminal_growth: float
 ) -> list[float]:
@@ -43,7 +50,7 @@ def converge_growth_rates_growth(
     return converge_series(
         growth_rates,
         target=target,
-        start_index=_growth_convergence_start(len(growth_rates)),
+        start_index=_late_growth_rate_convergence_start(len(growth_rates)),
         min_value=-0.50,
         max_value=1.20,
     )

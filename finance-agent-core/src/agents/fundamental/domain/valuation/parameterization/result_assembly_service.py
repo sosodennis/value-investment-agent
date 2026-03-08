@@ -24,5 +24,15 @@ def build_param_result(
             latest=latest,
             market_snapshot=market_snapshot,
             shares_source=payload.shares_source,
+            terminal_growth_path=(
+                payload.terminal_growth_path
+                if isinstance(getattr(payload, "terminal_growth_path", None), Mapping)
+                else None
+            ),
+            shares_path=(
+                payload.shares_path
+                if isinstance(getattr(payload, "shares_path", None), Mapping)
+                else None
+            ),
         ),
     )

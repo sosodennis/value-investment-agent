@@ -58,6 +58,8 @@ describe('FundamentalAnalysisOutput', () => {
                 signals_rejected: 1,
                 growth_adjustment_basis_points: 45.5,
                 margin_adjustment_basis_points: -20,
+                calibration_applied: true,
+                mapping_version: 'forward_signal_calibration_v2_2026_03_05',
                 source_types: ['mda'],
             },
             forward_signal_risk_level: 'medium',
@@ -71,6 +73,9 @@ describe('FundamentalAnalysisOutput', () => {
                     effective_window: 100,
                     stopped_early: false,
                     psd_repaired: true,
+                    converged: false,
+                    median_delta: 0.0032,
+                    tolerance: 0.002,
                 },
             },
         });
@@ -80,12 +85,14 @@ describe('FundamentalAnalysisOutput', () => {
         expect(screen.queryByText('Window: 100')).not.toBeNull();
         expect(screen.queryByText('Early Stop: No')).not.toBeNull();
         expect(screen.queryByText('PSD Repair: Yes')).not.toBeNull();
+        expect(screen.queryByText('Converged: No')).not.toBeNull();
+        expect(screen.queryByText('Median Δ: 0.32% / 0.20% tol')).not.toBeNull();
         expect(screen.queryByText('Risk: High')).not.toBeNull();
         expect(screen.queryByText('defaults_present')).not.toBeNull();
         expect(screen.queryByText('time_alignment:high_risk')).not.toBeNull();
         expect(screen.queryByText(/Time Alignment Status/i)).not.toBeNull();
         expect(screen.getAllByText('high_risk').length).toBeGreaterThan(0);
-        expect(screen.queryByText('Forward Signal Policy')).not.toBeNull();
+        expect(screen.queryAllByText('Forward Signal Policy').length).toBeGreaterThan(0);
         expect(screen.queryByText('Signals: 3')).not.toBeNull();
         expect(screen.queryByText('Accepted: 2')).not.toBeNull();
         expect(screen.queryByText('Rejected: 1')).not.toBeNull();
@@ -96,6 +103,12 @@ describe('FundamentalAnalysisOutput', () => {
         expect(
             screen.queryByText('Margin adjustment: -20.0 basis points')
         ).not.toBeNull();
+        expect(screen.queryAllByText('Calibration: Applied').length).toBeGreaterThan(0);
+        expect(
+            screen.queryAllByText(
+                'Mapping: forward_signal_calibration_v2_2026_03_05'
+            ).length
+        ).toBeGreaterThan(0);
         expect(screen.queryByText('Forward Risk: medium')).not.toBeNull();
         expect(screen.queryByText('Source: mda')).not.toBeNull();
     });
@@ -111,6 +124,11 @@ describe('FundamentalAnalysisOutput', () => {
                 reasoning: 'Strong cash flow profile',
                 status: 'done',
                 financial_reports: [],
+                valuation_diagnostics: {
+                    forward_signal_mapping_version:
+                        'forward_signal_calibration_v2_2026_03_05',
+                    forward_signal_calibration_applied: true,
+                },
                 forward_signals: [
                     {
                         signal_id: 'sig-1',
@@ -154,6 +172,12 @@ describe('FundamentalAnalysisOutput', () => {
         expect(screen.queryByText('Model: DCF (dcf)')).not.toBeNull();
         expect(screen.queryByText('Growth Outlook')).not.toBeNull();
         expect(screen.getAllByText('Source: mda').length).toBeGreaterThan(0);
+        expect(screen.queryAllByText('Calibration: Applied').length).toBeGreaterThan(0);
+        expect(
+            screen.queryAllByText(
+                'Mapping: forward_signal_calibration_v2_2026_03_05'
+            ).length
+        ).toBeGreaterThan(0);
         expect(screen.queryByText('2025-11-03')).not.toBeNull();
         expect(screen.queryByText('0000320193-25-000073')).not.toBeNull();
         expect(
@@ -163,6 +187,120 @@ describe('FundamentalAnalysisOutput', () => {
         ).toBe(
             'https://www.sec.gov/Archives/edgar/data/320193/000032019325000073/0000320193-25-000073-index.html'
         );
+    });
+
+    it('renders sensitivity summary block when valuation diagnostics are available', () => {
+        renderComponent({
+            ticker: 'AAPL',
+            assumption_breakdown: {
+                total_assumptions: 1,
+                monte_carlo: { enabled: false },
+            },
+            valuation_diagnostics: {
+                growth_consensus_policy: 'ignored',
+                growth_consensus_horizon: 'short_term',
+                terminal_anchor_policy: 'policy_default_market_stale',
+                terminal_anchor_stale_fallback: true,
+                forward_signal_mapping_version:
+                    'forward_signal_calibration_v2_2026_03_05',
+                forward_signal_calibration_applied: true,
+                sensitivity_summary: {
+                    enabled: true,
+                    scenario_count: 16,
+                    max_upside_delta_pct: 0.22,
+                    max_downside_delta_pct: -0.19,
+                    top_drivers: [
+                        {
+                            shock_dimension: 'wacc',
+                            shock_value_bp: -100,
+                            delta_pct_vs_base: 0.22,
+                        },
+                    ],
+                },
+            },
+        });
+
+        expect(screen.queryByText('Sensitivity (One-Way)')).not.toBeNull();
+        expect(screen.queryByText('Enabled: Yes')).not.toBeNull();
+        expect(screen.queryByText('Scenarios: 16')).not.toBeNull();
+        expect(screen.queryByText('Max Upside: +22.0%')).not.toBeNull();
+        expect(screen.queryByText('Max Downside: -19.0%')).not.toBeNull();
+        expect(screen.queryByText(/wacc -100bp -> \+22.0%/i)).not.toBeNull();
+        expect(screen.queryAllByText('Forward Signal Policy').length).toBeGreaterThan(0);
+        expect(screen.queryAllByText('Calibration: Applied').length).toBeGreaterThan(0);
+        expect(
+            screen.queryAllByText(
+                'Mapping: forward_signal_calibration_v2_2026_03_05'
+            ).length
+        ).toBeGreaterThan(0);
+        expect(screen.queryAllByText('Growth / Anchor Policy').length).toBeGreaterThan(0);
+        expect(screen.queryAllByText('Consensus: Ignored').length).toBeGreaterThan(0);
+        expect(screen.queryAllByText('Horizon: short_term').length).toBeGreaterThan(0);
+        expect(
+            screen.queryAllByText('Terminal Anchor: Policy Default (Market Stale)')
+                .length
+        ).toBeGreaterThan(0);
+        expect(screen.queryAllByText('Stale Fallback: Yes').length).toBeGreaterThan(0);
+        expect(
+            screen.queryAllByText('Calibration Applied (Diagnostics):').length
+        ).toBeGreaterThan(0);
+        expect(
+            screen.queryAllByText('Calibration Mapping (Diagnostics):').length
+        ).toBeGreaterThan(0);
+    });
+
+    it('renders base assumption guardrail summary from diagnostics and assumption breakdown fallback', () => {
+        renderComponent({
+            ticker: 'AAPL',
+            assumption_breakdown: {
+                total_assumptions: 2,
+                monte_carlo: { enabled: false },
+                base_assumption_guardrail: {
+                    version: 'base_assumption_guardrail_v1_2026_03_05',
+                    margin: {
+                        applied: true,
+                        raw_year1: 0.594,
+                        raw_yearN: 0.594,
+                        guarded_year1: 0.45,
+                        guarded_yearN: 0.35,
+                        reasons: ['margin_ceiling_clamp'],
+                    },
+                },
+            },
+            valuation_diagnostics: {
+                base_growth_guardrail_applied: true,
+                base_growth_guardrail_version: 'base_assumption_guardrail_v1_2026_03_05',
+                base_growth_raw_year1: 0.668,
+                base_growth_raw_yearN: 0.04,
+                base_growth_guarded_year1: 0.42,
+                base_growth_guarded_yearN: 0.03,
+            },
+        });
+
+        expect(screen.queryByText('Base Assumption Guardrail')).not.toBeNull();
+        expect(screen.queryByText('Growth: Applied')).not.toBeNull();
+        expect(
+            screen.queryByText(
+                'Growth Version: base_assumption_guardrail_v1_2026_03_05'
+            )
+        ).not.toBeNull();
+        expect(screen.queryByText('Growth Y1 Raw: 66.8%')).not.toBeNull();
+        expect(screen.queryByText('Growth Y1 Guarded: 42.0%')).not.toBeNull();
+        expect(screen.queryByText('Growth YN Raw: 4.0%')).not.toBeNull();
+        expect(screen.queryByText('Growth YN Guarded: 3.0%')).not.toBeNull();
+        expect(screen.queryByText('Margin: Applied')).not.toBeNull();
+        expect(
+            screen.queryByText(
+                'Margin Version: base_assumption_guardrail_v1_2026_03_05'
+            )
+        ).not.toBeNull();
+        expect(screen.queryByText('Margin Y1 Raw: 59.4%')).not.toBeNull();
+        expect(screen.queryByText('Margin Y1 Guarded: 45.0%')).not.toBeNull();
+        expect(screen.queryByText('Margin YN Raw: 59.4%')).not.toBeNull();
+        expect(screen.queryByText('Margin YN Guarded: 35.0%')).not.toBeNull();
+        expect(
+            screen.queryByText('Margin Reasons: margin_ceiling_clamp')
+        ).not.toBeNull();
     });
 
     it('toggles evidence preview and full text', () => {

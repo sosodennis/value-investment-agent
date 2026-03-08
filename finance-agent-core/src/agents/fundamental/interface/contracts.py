@@ -107,6 +107,8 @@ class FundamentalBaseModel(BaseModel):
     cik: TraceableFieldModel | None = None
     sic_code: TraceableFieldModel | None = None
     shares_outstanding: TraceableFieldModel | None = None
+    weighted_average_shares_basic: TraceableFieldModel | None = None
+    weighted_average_shares_diluted: TraceableFieldModel | None = None
     total_revenue: TraceableFieldModel | None = None
     net_income: TraceableFieldModel | None = None
     income_tax_expense: TraceableFieldModel | None = None
@@ -256,6 +258,7 @@ class FundamentalArtifactModel(BaseModel):
     reasoning: FundamentalText
     financial_reports: list[FinancialReportModel]
     forward_signals: list[dict[str, object]] | None = None
+    valuation_diagnostics: dict[str, object] | None = None
     status: Literal["done"]
 
     @model_validator(mode="before")

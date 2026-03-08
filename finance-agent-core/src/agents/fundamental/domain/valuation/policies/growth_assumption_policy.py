@@ -6,8 +6,8 @@ BASELINE_HISTORICAL_WEIGHT = 0.30
 BASELINE_CONSENSUS_WEIGHT = 0.50
 BASELINE_ADJUSTMENT_WEIGHT = 0.20
 
-MATURE_HISTORICAL_WEIGHT = 0.60
-MATURE_CONSENSUS_WEIGHT = 0.35
+MATURE_HISTORICAL_WEIGHT = 0.30
+MATURE_CONSENSUS_WEIGHT = 0.65
 MATURE_ADJUSTMENT_WEIGHT = 0.05
 
 VOLATILE_HISTORICAL_WEIGHT = 0.10
@@ -17,6 +17,7 @@ VOLATILE_ADJUSTMENT_WEIGHT = 0.10
 MATURE_VOLATILITY_THRESHOLD = 0.05
 DEFAULT_LONG_RUN_GROWTH_TARGET = 0.025
 DEFAULT_HIGH_GROWTH_TRIGGER = 0.30
+DEFAULT_SHORT_TERM_CONSENSUS_DECAY_YEARS = 3
 
 
 @dataclass(frozen=True)
@@ -123,3 +124,10 @@ def project_growth_rate_series(
         value = base_growth - (step * idx)
         series.append(max(long_run_target, value))
     return series
+
+
+def build_linear_decay_weights(window_years: int) -> list[float]:
+    if window_years <= 0:
+        return []
+    denominator = float(window_years)
+    return [float(window_years - idx) / denominator for idx in range(window_years)]

@@ -1,0 +1,76 @@
+{
+  "schema_version": "valuation_replay_input_v2",
+  "model_type": "dcf_standard",
+  "ticker": "AAPL",
+  "reports": [
+    {
+      "industry_type": "Industrial",
+      "extension_type": "Industrial",
+      "base": {
+        "fiscal_year": {"value": "2024", "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "fiscal_period": {"value": "FY", "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "period_end_date": {"value": "2024-12-31", "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "company_name": {"value": "Example Inc.", "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "cik": {"value": "0000000001", "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "sic_code": {"value": "7372", "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "shares_outstanding": {"value": 1000.0, "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "total_revenue": {"value": 1000.0, "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "net_income": {"value": 120.0, "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "income_tax_expense": {"value": 30.0, "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "total_assets": {"value": 2000.0, "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "total_liabilities": {"value": 800.0, "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "total_equity": {"value": 1200.0, "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "cash_and_equivalents": {"value": 300.0, "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "operating_cash_flow": {"value": 150.0, "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "operating_income": {"value": 180.0, "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "income_before_tax": {"value": 150.0, "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "depreciation_and_amortization": {"value": 40.0, "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "share_based_compensation": {"value": 20.0, "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "current_assets": {"value": 900.0, "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "current_liabilities": {"value": 400.0, "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "total_debt": {"value": 200.0, "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "preferred_stock": {"value": 10.0, "provenance": {"type": "MANUAL", "description": "fixture"}}
+      },
+      "extension": {
+        "capex": {"value": 50.0, "provenance": {"type": "MANUAL", "description": "fixture"}}
+      }
+    },
+    {
+      "industry_type": "Industrial",
+      "extension_type": "Industrial",
+      "base": {
+        "fiscal_year": {"value": "2023", "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "fiscal_period": {"value": "FY", "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "period_end_date": {"value": "2023-12-31", "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "company_name": {"value": "Example Inc.", "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "cik": {"value": "0000000001", "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "sic_code": {"value": "7372", "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "shares_outstanding": {"value": 1000.0, "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "total_revenue": {"value": 900.0, "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "net_income": {"value": 100.0, "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "income_tax_expense": {"value": 28.0, "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "total_assets": {"value": 1900.0, "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "total_liabilities": {"value": 790.0, "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "total_equity": {"value": 1110.0, "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "cash_and_equivalents": {"value": 250.0, "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "operating_cash_flow": {"value": 130.0, "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "operating_income": {"value": 150.0, "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "income_before_tax": {"value": 130.0, "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "depreciation_and_amortization": {"value": 35.0, "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "share_based_compensation": {"value": 18.0, "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "current_assets": {"value": 850.0, "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "current_liabilities": {"value": 390.0, "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "total_debt": {"value": 210.0, "provenance": {"type": "MANUAL", "description": "fixture"}},
+        "preferred_stock": {"value": 10.0, "provenance": {"type": "MANUAL", "description": "fixture"}}
+      },
+      "extension": {
+        "capex": {"value": 45.0, "provenance": {"type": "MANUAL", "description": "fixture"}}
+      }
+    }
+  ],
+  "market_snapshot": {
+    "current_price": 180.0,
+    "provider": "fixture",
+    "as_of": "2026-03-07T00:00:00Z"
+  }
+}

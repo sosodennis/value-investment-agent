@@ -255,7 +255,7 @@ def test_fetch_financial_payload_combines_xbrl_and_sec_text_signals() -> None:
             return_value=[
                 {
                     "signal_id": "xbrl-growth",
-                    "source_type": "manual",
+                    "source_type": "xbrl_auto",
                     "metric": "growth_outlook",
                     "direction": "up",
                     "value": 80.0,

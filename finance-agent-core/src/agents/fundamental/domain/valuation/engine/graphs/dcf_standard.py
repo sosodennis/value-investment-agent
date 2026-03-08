@@ -28,7 +28,7 @@ def converge_growth_rates_standard(
     if not growth_rates:
         raise ValueError("growth_rates cannot be empty")
     target = clamp(terminal_growth, -0.01, 0.04)
-    start = max(1, len(growth_rates) // 2)
+    start = _late_growth_convergence_start(len(growth_rates))
     return converge_series(
         growth_rates,
         target=target,
@@ -38,12 +38,22 @@ def converge_growth_rates_standard(
     )
 
 
+def _late_growth_convergence_start(length: int) -> int:
+    if length <= 3:
+        return 1
+    # Keep the final 3 projection years as the fade window.
+    return max(1, length - 4)
+
+
 def converge_operating_margins_standard(
     operating_margins: list[float],
 ) -> list[float]:
     if not operating_margins:
         raise ValueError("operating_margins cannot be empty")
-    target = clamp(operating_margins[-1], 0.08, 0.30)
+    lower_bound, upper_bound = _resolve_operating_margin_bounds_standard(
+        operating_margins[-1]
+    )
+    target = clamp(operating_margins[-1], lower_bound, upper_bound)
     start = max(1, len(operating_margins) // 2)
     return converge_series(
         operating_margins,
@@ -52,6 +62,16 @@ def converge_operating_margins_standard(
         min_value=-0.20,
         max_value=0.45,
     )
+
+
+def _resolve_operating_margin_bounds_standard(
+    anchor_margin: float,
+) -> tuple[float, float]:
+    if anchor_margin >= 0.34:
+        return 0.10, 0.40
+    if anchor_margin >= 0.28:
+        return 0.08, 0.34
+    return 0.08, 0.30
 
 
 def converge_da_rates_standard(da_rates: list[float]) -> list[float]:

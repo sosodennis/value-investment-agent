@@ -46,6 +46,38 @@ def register_base_core_fields(registry: XbrlMappingRegistry) -> None:
     )
 
     registry.register(
+        "weighted_average_shares_basic",
+        FieldSpec(
+            name="Weighted Average Shares Outstanding (Basic)",
+            configs=[
+                SearchType.CONSOLIDATED(
+                    "us-gaap:WeightedAverageNumberOfSharesOutstandingBasic",
+                    statement_types=IS_STATEMENT_TOKENS,
+                    period_type="duration",
+                    unit_whitelist=SHARES_UNITS,
+                    respect_anchor_date=False,
+                ),
+            ],
+        ),
+    )
+
+    registry.register(
+        "weighted_average_shares_diluted",
+        FieldSpec(
+            name="Weighted Average Shares Outstanding (Diluted)",
+            configs=[
+                SearchType.CONSOLIDATED(
+                    "us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding",
+                    statement_types=IS_STATEMENT_TOKENS,
+                    period_type="duration",
+                    unit_whitelist=SHARES_UNITS,
+                    respect_anchor_date=False,
+                ),
+            ],
+        ),
+    )
+
+    registry.register(
         "total_assets",
         FieldSpec(
             name="Total Assets",

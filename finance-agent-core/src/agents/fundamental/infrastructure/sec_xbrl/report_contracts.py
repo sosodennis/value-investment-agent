@@ -57,6 +57,16 @@ class BaseFinancialModel(BaseModel):
         value=None,
         provenance=ManualProvenance(description="Initial state"),
     )
+    weighted_average_shares_basic: TraceableField[float] = TraceableField(
+        name="Weighted Average Shares Outstanding (Basic)",
+        value=None,
+        provenance=ManualProvenance(description="Initial state"),
+    )
+    weighted_average_shares_diluted: TraceableField[float] = TraceableField(
+        name="Weighted Average Shares Outstanding (Diluted)",
+        value=None,
+        provenance=ManualProvenance(description="Initial state"),
+    )
 
     # Balance Sheet (BS)
     total_assets: TraceableField[float] = TraceableField(

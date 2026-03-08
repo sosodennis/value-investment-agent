@@ -57,6 +57,10 @@ def run_backtest_cases(cases: Sequence[BacktestCase]) -> list[CaseResult]:
                 continue
 
             metrics = extract_backtest_metrics(result_mapping)
+            _attach_consensus_anchor_metrics(
+                metrics=metrics,
+                consensus_target_price_median=case.consensus_target_price_median,
+            )
             missing_required = [
                 metric
                 for metric in case.required_metrics
@@ -102,10 +106,28 @@ def extract_backtest_metrics(result: Mapping[str, object]) -> JSONObject:
         "enterprise_value",
         "cost_of_equity",
         "upside_potential",
+        "consensus_gap_pct",
+        "consensus_gap_ratio",
+        "consensus_gap",
+        "consensus_target_price_median",
+        "consensus_price_median",
+        "target_price_median",
     ):
         value = result.get(key)
         if isinstance(value, int | float) and not isinstance(value, bool):
             metrics[key] = float(value)
+    for key in (
+        "guardrail_hit",
+        "base_growth_guardrail_applied",
+        "base_margin_guardrail_applied",
+        "base_capex_guardrail_applied",
+        "base_wc_guardrail_applied",
+        "shares_scope_mismatch_detected",
+        "shares_scope_mismatch_resolved",
+    ):
+        value = result.get(key)
+        if isinstance(value, bool):
+            metrics[key] = value
 
     details_raw = result.get("details")
     if isinstance(details_raw, Mapping):
@@ -132,3 +154,23 @@ def _lookup_numeric_metric(payload: Mapping[str, object], path: str) -> float | 
     if isinstance(current, int | float) and not isinstance(current, bool):
         return float(current)
     return None
+
+
+def _attach_consensus_anchor_metrics(
+    *,
+    metrics: JSONObject,
+    consensus_target_price_median: float | None,
+) -> None:
+    if consensus_target_price_median is None:
+        return
+    if abs(consensus_target_price_median) <= 1e-12:
+        return
+
+    metrics["consensus_target_price_median"] = float(consensus_target_price_median)
+    intrinsic_value = _lookup_numeric_metric(metrics, "intrinsic_value")
+    if intrinsic_value is None:
+        return
+    consensus_gap_pct = (intrinsic_value - consensus_target_price_median) / abs(
+        consensus_target_price_median
+    )
+    metrics["consensus_gap_pct"] = float(consensus_gap_pct)

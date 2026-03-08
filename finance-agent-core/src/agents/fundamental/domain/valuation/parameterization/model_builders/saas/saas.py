@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
@@ -36,6 +37,74 @@ WACC_CEILING = 0.30
 TERMINAL_GROWTH_FLOOR = -0.02
 TERMINAL_GROWTH_CEILING = 0.04
 TERMINAL_GROWTH_SPREAD_BUFFER = 0.005
+S3_LITE_DILUTION_PROXY_CEILING = 0.20
+TERMINAL_GROWTH_STALE_FALLBACK_MODE_ENV = (
+    "FUNDAMENTAL_TERMINAL_GROWTH_STALE_FALLBACK_MODE"
+)
+TERMINAL_GROWTH_STALE_FALLBACK_DEFAULT = "default_only"
+TERMINAL_GROWTH_STALE_FALLBACK_FILING_FIRST = "filing_first_then_default"
+SHARES_SCOPE_MISMATCH_RATIO_THRESHOLD = 0.20
+
+
+@dataclass(frozen=True)
+class _TerminalGrowthPathDiagnostics:
+    fallback_mode: str
+    anchor_source: str
+    market_anchor_value: float | None
+    filing_anchor_value: float | None
+    market_anchor_is_stale: bool | None
+    market_anchor_staleness_days: int | None
+    market_anchor_stale_max_days: int | None
+
+    def to_metadata(self) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "terminal_growth_fallback_mode": self.fallback_mode,
+            "terminal_growth_anchor_source": self.anchor_source,
+        }
+        if self.market_anchor_value is not None:
+            payload["long_run_growth_anchor_market"] = self.market_anchor_value
+        if self.filing_anchor_value is not None:
+            payload["long_run_growth_anchor_filing"] = self.filing_anchor_value
+
+        staleness: dict[str, object] = {}
+        if isinstance(self.market_anchor_is_stale, bool):
+            staleness["is_stale"] = self.market_anchor_is_stale
+        if isinstance(self.market_anchor_staleness_days, int):
+            staleness["days"] = self.market_anchor_staleness_days
+        if isinstance(self.market_anchor_stale_max_days, int):
+            staleness["max_days"] = self.market_anchor_stale_max_days
+        if staleness:
+            payload["long_run_growth_anchor_staleness"] = staleness
+        return payload
+
+
+@dataclass(frozen=True)
+class _SharesPathDiagnostics:
+    selected_source: str
+    shares_scope: str
+    equity_value_scope: str
+    scope_mismatch_detected: bool
+    filing_shares: float | None
+    market_shares: float | None
+    selected_shares: float | None
+    scope_mismatch_ratio: float | None
+
+    def to_metadata(self) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "selected_source": self.selected_source,
+            "shares_scope": self.shares_scope,
+            "equity_value_scope": self.equity_value_scope,
+            "scope_mismatch_detected": self.scope_mismatch_detected,
+        }
+        if self.filing_shares is not None:
+            payload["filing_shares"] = self.filing_shares
+        if self.market_shares is not None:
+            payload["market_shares"] = self.market_shares
+        if self.selected_shares is not None:
+            payload["selected_shares"] = self.selected_shares
+        if self.scope_mismatch_ratio is not None:
+            payload["scope_mismatch_ratio"] = self.scope_mismatch_ratio
+        return payload
 
 
 @dataclass(frozen=True)
@@ -45,6 +114,7 @@ class _SaasCapmTerminalInputs:
     market_risk_premium: float
     wacc_tf: TraceableField[float]
     terminal_growth_tf: TraceableField[float]
+    terminal_growth_path: _TerminalGrowthPathDiagnostics
 
 
 def _clamp(value: float, lower: float, upper: float) -> float:
@@ -141,12 +211,274 @@ def _derive_filing_terminal_growth_anchor(
     return (last_revenue - previous_revenue) / previous_revenue
 
 
+def _resolve_terminal_growth_stale_fallback_mode() -> str:
+    raw = os.getenv(TERMINAL_GROWTH_STALE_FALLBACK_MODE_ENV)
+    if raw is None:
+        return TERMINAL_GROWTH_STALE_FALLBACK_DEFAULT
+    token = raw.strip().lower()
+    if token in {
+        TERMINAL_GROWTH_STALE_FALLBACK_DEFAULT,
+        TERMINAL_GROWTH_STALE_FALLBACK_FILING_FIRST,
+    }:
+        return token
+    return TERMINAL_GROWTH_STALE_FALLBACK_DEFAULT
+
+
+def _resolve_interest_cost_rate(
+    *,
+    report: FinancialReport,
+    total_debt: float | None,
+    assumptions: list[str],
+) -> float | None:
+    direct_rate = _to_float(report.base.interest_cost_rate.value)
+    if direct_rate is not None and direct_rate > 0:
+        return direct_rate
+
+    interest_expense = _to_float(report.base.interest_expense.value)
+    if interest_expense is None:
+        return None
+    if total_debt is None or total_debt <= 0:
+        return None
+
+    derived = abs(interest_expense) / total_debt
+    if derived <= 0:
+        return None
+    assumptions.append("cost_of_debt derived from interest_expense / total_debt")
+    return derived
+
+
+def _resolve_conservative_shares_denominator(
+    *,
+    resolved_shares_tf: TraceableField[float],
+    filing_shares_tf: TraceableField[float],
+    assumptions: list[str],
+) -> tuple[TraceableField[float], bool]:
+    resolved_value = _to_float(resolved_shares_tf.value)
+    filing_value = _to_float(filing_shares_tf.value)
+    if resolved_value is None or resolved_value <= 0:
+        return resolved_shares_tf, False
+    if filing_value is None or filing_value <= 0:
+        return resolved_shares_tf, False
+    if filing_value <= resolved_value:
+        return resolved_shares_tf, False
+
+    assumptions.append(
+        "shares_outstanding conservative denominator policy selected filing shares "
+        f"(filing={filing_value:.0f} > resolved={resolved_value:.0f})"
+    )
+    return filing_shares_tf, True
+
+
+def _normalize_shares_source_token(shares_source: str) -> str:
+    token = shares_source
+    if token.endswith("_dilution_proxy"):
+        token = token.removesuffix("_dilution_proxy")
+    return token
+
+
+def _resolve_shares_scope_from_source(shares_source: str) -> str:
+    normalized = _normalize_shares_source_token(shares_source)
+    if normalized == "market_data":
+        return "market_class"
+    return "filing_consolidated"
+
+
+def _build_shares_path_diagnostics(
+    *,
+    selected_source: str,
+    current_price: float | None,
+    filing_shares: float | None,
+    market_shares: float | None,
+    selected_shares: float | None,
+) -> _SharesPathDiagnostics:
+    shares_scope = _resolve_shares_scope_from_source(selected_source)
+    scope_mismatch_ratio: float | None = None
+    if (
+        filing_shares is not None
+        and filing_shares > 0
+        and market_shares is not None
+        and market_shares > 0
+    ):
+        scope_mismatch_ratio = abs(filing_shares - market_shares) / filing_shares
+
+    scope_mismatch_detected = bool(
+        shares_scope != "market_class"
+        and scope_mismatch_ratio is not None
+        and scope_mismatch_ratio >= SHARES_SCOPE_MISMATCH_RATIO_THRESHOLD
+        and current_price is not None
+        and current_price > 0
+    )
+
+    if current_price is None or current_price <= 0:
+        equity_value_scope = "unavailable_current_price"
+    elif shares_scope == "market_class":
+        equity_value_scope = "market_class"
+    elif scope_mismatch_detected:
+        equity_value_scope = "mixed_price_filing_shares"
+    else:
+        equity_value_scope = "filing_consolidated"
+
+    return _SharesPathDiagnostics(
+        selected_source=selected_source,
+        shares_scope=shares_scope,
+        equity_value_scope=equity_value_scope,
+        scope_mismatch_detected=scope_mismatch_detected,
+        filing_shares=filing_shares,
+        market_shares=market_shares,
+        selected_shares=selected_shares,
+        scope_mismatch_ratio=scope_mismatch_ratio,
+    )
+
+
+def _resolve_s3_lite_dilution_proxy(
+    *,
+    report: FinancialReport,
+    assumptions: list[str],
+) -> float | None:
+    basic_shares = _to_float(report.base.weighted_average_shares_basic.value)
+    diluted_shares = _to_float(report.base.weighted_average_shares_diluted.value)
+
+    if basic_shares is None or basic_shares <= 0:
+        assumptions.append(
+            "s3_lite dilution proxy fallback: weighted-average basic shares unavailable"
+        )
+        return None
+    if diluted_shares is None or diluted_shares <= 0:
+        assumptions.append(
+            "s3_lite dilution proxy fallback: weighted-average diluted shares unavailable"
+        )
+        return None
+
+    if diluted_shares <= basic_shares:
+        assumptions.append(
+            "s3_lite dilution proxy resolved to 0.00% "
+            "(anti-dilutive or no incremental dilution)"
+        )
+        return 0.0
+
+    raw_proxy = (diluted_shares - basic_shares) / basic_shares
+    proxy = _clamp(raw_proxy, 0.0, S3_LITE_DILUTION_PROXY_CEILING)
+    if proxy != raw_proxy:
+        assumptions.append(
+            "s3_lite dilution proxy clamped from "
+            f"{raw_proxy:.2%} to {proxy:.2%} "
+            f"(ceiling={S3_LITE_DILUTION_PROXY_CEILING:.2%})"
+        )
+    assumptions.append(
+        "s3_lite dilution proxy sourced from SEC weighted-average shares "
+        f"(basic={basic_shares:.0f}, diluted={diluted_shares:.0f}, proxy={proxy:.2%})"
+    )
+    return proxy
+
+
+def _build_fcff_wacc(
+    *,
+    risk_free_rate: float,
+    beta: float,
+    market_risk_premium: float,
+    tax_rate: float | None,
+    total_debt: float | None,
+    shares_outstanding: float | None,
+    current_price: float | None,
+    interest_cost_rate: float | None,
+    assumptions: list[str],
+) -> tuple[float, str]:
+    raw_cost_of_equity = risk_free_rate + (beta * market_risk_premium)
+    cost_of_equity = _clamp(raw_cost_of_equity, WACC_FLOOR, WACC_CEILING)
+    if cost_of_equity != raw_cost_of_equity:
+        assumptions.append(
+            f"cost_of_equity clamped from {raw_cost_of_equity:.2%} to {cost_of_equity:.2%} "
+            f"(bounds={WACC_FLOOR:.2%}-{WACC_CEILING:.2%})"
+        )
+
+    if (
+        shares_outstanding is None
+        or shares_outstanding <= 0
+        or current_price is None
+        or current_price <= 0
+    ):
+        assumptions.append(
+            "wacc fallback to CAPM cost_of_equity "
+            "(fcff_wacc_missing_equity_market_value)"
+        )
+        return cost_of_equity, (
+            "Fallback CAPM cost of equity (missing equity market value for FCFF-WACC). "
+            f"risk_free_rate + beta * market_risk_premium = {raw_cost_of_equity:.4f}"
+        )
+
+    equity_value = shares_outstanding * current_price
+    debt_value = (
+        total_debt if isinstance(total_debt, int | float) and total_debt > 0 else 0.0
+    )
+    if debt_value <= 0:
+        assumptions.append("wacc sourced from FCFF-WACC (all-equity capital structure)")
+        return cost_of_equity, (
+            "FCFF-WACC all-equity path: "
+            f"Ke={cost_of_equity:.4f}, E/V=1.0000, D/V=0.0000"
+        )
+
+    if interest_cost_rate is None or interest_cost_rate <= 0:
+        assumptions.append(
+            "wacc fallback to CAPM cost_of_equity " "(fcff_wacc_missing_cost_of_debt)"
+        )
+        return cost_of_equity, (
+            "Fallback CAPM cost of equity (missing cost of debt for positive debt). "
+            f"risk_free_rate + beta * market_risk_premium = {raw_cost_of_equity:.4f}"
+        )
+
+    cost_of_debt = _clamp(interest_cost_rate, 0.0, WACC_CEILING)
+    if cost_of_debt != interest_cost_rate:
+        assumptions.append(
+            f"cost_of_debt clamped from {interest_cost_rate:.2%} to {cost_of_debt:.2%} "
+            f"(bounds=0.00%-{WACC_CEILING:.2%})"
+        )
+
+    effective_tax_rate = _clamp(tax_rate if tax_rate is not None else 0.21, 0.0, 0.60)
+    total_capital = equity_value + debt_value
+    if total_capital <= 0:
+        assumptions.append(
+            "wacc fallback to CAPM cost_of_equity " "(fcff_wacc_non_positive_capital)"
+        )
+        return cost_of_equity, (
+            "Fallback CAPM cost of equity (non-positive FCFF capital base). "
+            f"risk_free_rate + beta * market_risk_premium = {raw_cost_of_equity:.4f}"
+        )
+
+    equity_weight = equity_value / total_capital
+    debt_weight = debt_value / total_capital
+    raw_wacc = (cost_of_equity * equity_weight) + (
+        cost_of_debt * (1.0 - effective_tax_rate) * debt_weight
+    )
+    wacc = _clamp(raw_wacc, WACC_FLOOR, WACC_CEILING)
+    if wacc != raw_wacc:
+        assumptions.append(
+            f"wacc clamped from {raw_wacc:.2%} to {wacc:.2%} "
+            f"(bounds={WACC_FLOOR:.2%}-{WACC_CEILING:.2%})"
+        )
+    assumptions.append(
+        "wacc sourced from FCFF-WACC "
+        f"(ke={cost_of_equity:.2%}, kd={cost_of_debt:.2%}, "
+        f"tax={effective_tax_rate:.2%}, E/V={equity_weight:.4f}, D/V={debt_weight:.4f})"
+    )
+    return wacc, (
+        "FCFF-WACC: Ke*E/V + Kd*(1-tax)*D/V, "
+        f"Ke={cost_of_equity:.4f}, Kd={cost_of_debt:.4f}, "
+        f"tax={effective_tax_rate:.4f}, E/V={equity_weight:.4f}, D/V={debt_weight:.4f}, "
+        f"raw={raw_wacc:.4f}"
+    )
+
+
 def _build_saas_capm_terminal_inputs(
     *,
     reports: list[FinancialReport],
     market_snapshot: Mapping[str, object] | None,
     market_float: Callable[[Mapping[str, object] | None, str], float | None],
     default_market_risk_premium: float,
+    tax_rate: float | None,
+    total_debt: float | None,
+    shares_outstanding: float | None,
+    current_price: float | None,
+    interest_cost_rate: float | None,
     assumptions: list[str],
 ) -> _SaasCapmTerminalInputs:
     market_defaults = resolve_capm_market_defaults(
@@ -158,6 +490,7 @@ def _build_saas_capm_terminal_inputs(
         beta_format=".2f",
         default_market_risk_premium=default_market_risk_premium,
         market_risk_premium_format=".2%",
+        allow_market_snapshot_mrp=False,
         assumptions=assumptions,
     )
     risk_free_rate = market_defaults.risk_free_rate
@@ -170,28 +503,29 @@ def _build_saas_capm_terminal_inputs(
         )
     market_risk_premium = market_defaults.market_risk_premium
 
-    raw_wacc = risk_free_rate + (beta * market_risk_premium)
-    clamped_wacc = _clamp(raw_wacc, WACC_FLOOR, WACC_CEILING)
-    if clamped_wacc != raw_wacc:
-        assumptions.append(
-            f"wacc clamped from {raw_wacc:.2%} to {clamped_wacc:.2%} "
-            f"(bounds={WACC_FLOOR:.2%}-{WACC_CEILING:.2%})"
-        )
-    else:
-        assumptions.append("wacc sourced from market-aware CAPM inputs")
+    resolved_wacc, wacc_description = _build_fcff_wacc(
+        risk_free_rate=risk_free_rate,
+        beta=beta,
+        market_risk_premium=market_risk_premium,
+        tax_rate=tax_rate,
+        total_debt=total_debt,
+        shares_outstanding=shares_outstanding,
+        current_price=current_price,
+        interest_cost_rate=interest_cost_rate,
+        assumptions=assumptions,
+    )
     wacc_tf = TraceableField(
         name="WACC",
-        value=clamped_wacc,
+        value=resolved_wacc,
         provenance=ManualProvenance(
-            description=(
-                "Market-aware CAPM-derived WACC: "
-                f"risk_free_rate + beta * market_risk_premium = {raw_wacc:.4f}"
-            ),
+            description=wacc_description,
             author="ValuationPolicy",
         ),
     )
 
     long_run_growth_anchor = market_float(market_snapshot, "long_run_growth_anchor")
+    fallback_mode = _resolve_terminal_growth_stale_fallback_mode()
+    assumptions.append(f"terminal_growth stale fallback mode={fallback_mode}")
     anchor_is_stale, anchor_stale_days, anchor_stale_max_days = (
         _extract_market_datum_staleness(
             market_snapshot,
@@ -200,6 +534,7 @@ def _build_saas_capm_terminal_inputs(
     )
     anchor_source = "market"
     terminal_anchor = long_run_growth_anchor
+    filing_anchor: float | None = None
     if anchor_is_stale is True:
         filing_anchor = _derive_filing_terminal_growth_anchor(reports)
         stale_days_label = (
@@ -210,18 +545,43 @@ def _build_saas_capm_terminal_inputs(
             if isinstance(anchor_stale_max_days, int)
             else "unknown"
         )
-        if filing_anchor is not None:
-            terminal_anchor = filing_anchor
-            anchor_source = "filing"
+        if (
+            fallback_mode == TERMINAL_GROWTH_STALE_FALLBACK_FILING_FIRST
+            and filing_anchor is not None
+        ):
             assumptions.append(
-                "terminal_growth fallback to filing-first anchor "
+                "terminal_growth market anchor stale; filing growth anchor "
+                f"selected as terminal anchor ({filing_anchor:.2%}) "
                 "(market stale: "
                 f"age_days={stale_days_label}, threshold={stale_max_label})"
             )
+            terminal_anchor = filing_anchor
+            anchor_source = "filing"
+        elif filing_anchor is not None:
+            assumptions.append(
+                "terminal_growth market anchor stale; filing growth anchor "
+                f"captured for diagnostics only ({filing_anchor:.2%}) "
+                "(market stale: "
+                f"age_days={stale_days_label}, threshold={stale_max_label})"
+            )
+            assumptions.append(
+                "terminal_growth market anchor stale; fallback to policy default "
+                "(filing growth anchor is never used as terminal anchor)"
+            )
+            terminal_anchor = None
         else:
             assumptions.append(
-                "terminal_growth stale market anchor could not fallback to filing-first "
-                "(filing anchor unavailable)"
+                "terminal_growth market anchor stale and filing growth anchor unavailable "
+                "(diagnostic only path)"
+            )
+            if fallback_mode == TERMINAL_GROWTH_STALE_FALLBACK_FILING_FIRST:
+                assumptions.append(
+                    "terminal_growth market anchor stale; filing-first fallback unavailable "
+                    "(falling back to policy default)"
+                )
+            assumptions.append(
+                "terminal_growth market anchor stale; fallback to policy default "
+                "(filing growth anchor is never used as terminal anchor)"
             )
             terminal_anchor = None
 
@@ -231,7 +591,7 @@ def _build_saas_capm_terminal_inputs(
 
     terminal_upper_bound = min(
         TERMINAL_GROWTH_CEILING,
-        clamped_wacc - TERMINAL_GROWTH_SPREAD_BUFFER,
+        resolved_wacc - TERMINAL_GROWTH_SPREAD_BUFFER,
     )
     if terminal_upper_bound <= TERMINAL_GROWTH_FLOOR:
         terminal_upper_bound = TERMINAL_GROWTH_FLOOR + 0.001
@@ -258,6 +618,7 @@ def _build_saas_capm_terminal_inputs(
         )
     else:
         assumptions.append("terminal_growth sourced from long_run_growth_anchor")
+    assumptions.append(f"terminal_growth anchor source={anchor_source}")
     terminal_growth_tf = TraceableField(
         name="Terminal Growth",
         value=clamped_terminal_growth,
@@ -270,6 +631,15 @@ def _build_saas_capm_terminal_inputs(
             author="ValuationPolicy",
         ),
     )
+    terminal_growth_path = _TerminalGrowthPathDiagnostics(
+        fallback_mode=fallback_mode,
+        anchor_source=anchor_source,
+        market_anchor_value=long_run_growth_anchor,
+        filing_anchor_value=filing_anchor,
+        market_anchor_is_stale=anchor_is_stale,
+        market_anchor_staleness_days=anchor_stale_days,
+        market_anchor_stale_max_days=anchor_stale_max_days,
+    )
 
     return _SaasCapmTerminalInputs(
         risk_free_rate=risk_free_rate,
@@ -277,6 +647,7 @@ def _build_saas_capm_terminal_inputs(
         market_risk_premium=market_risk_premium,
         wacc_tf=wacc_tf,
         terminal_growth_tf=terminal_growth_tf,
+        terminal_growth_path=terminal_growth_path,
     )
 
 
@@ -584,6 +955,8 @@ class SaasBuildPayload:
     missing: list[str]
     assumptions: list[str]
     shares_source: str
+    terminal_growth_path: dict[str, object] | None = None
+    shares_path: dict[str, object] | None = None
 
 
 def build_saas_payload(
@@ -599,10 +972,19 @@ def build_saas_payload(
     base = latest.base
 
     revenue_tf = base.total_revenue
+    filing_shares = _to_float(base.shares_outstanding.value)
+    market_shares = _to_float(deps.market_float(market_snapshot, "shares_outstanding"))
     shares_tf = deps.resolve_shares_outstanding(
         base.shares_outstanding,
         market_snapshot,
         assumptions,
+    )
+    shares_tf, used_filing_conservative_shares = (
+        _resolve_conservative_shares_denominator(
+            resolved_shares_tf=shares_tf,
+            filing_shares_tf=base.shares_outstanding,
+            assumptions=assumptions,
+        )
     )
     cash_tf = base.cash_and_equivalents
     debt_tf = base.total_debt
@@ -660,6 +1042,62 @@ def build_saas_payload(
     preferred_stock = market_values.preferred_stock
     current_price = market_values.current_price
     shares_source = market_values.shares_source
+    if used_filing_conservative_shares and shares_source == "market_data":
+        shares_source = "filing_conservative_dilution"
+
+    dilution_proxy = _resolve_s3_lite_dilution_proxy(
+        report=latest,
+        assumptions=assumptions,
+    )
+    if dilution_proxy is not None:
+        if shares_outstanding is None or shares_outstanding <= 0:
+            assumptions.append(
+                "s3_lite dilution proxy skipped: shares_outstanding unavailable"
+            )
+        elif dilution_proxy <= 0:
+            assumptions.append(
+                "s3_lite dilution proxy not applied to denominator (proxy=0.00%)"
+            )
+        else:
+            adjusted_shares_outstanding = shares_outstanding * (1.0 + dilution_proxy)
+            assumptions.append(
+                "shares_outstanding adjusted by s3_lite dilution proxy "
+                f"(base={shares_outstanding:.0f}, proxy={dilution_proxy:.2%}, "
+                f"adjusted={adjusted_shares_outstanding:.0f})"
+            )
+            shares_outstanding = adjusted_shares_outstanding
+            shares_source = (
+                shares_source
+                if shares_source.endswith("_dilution_proxy")
+                else f"{shares_source}_dilution_proxy"
+            )
+            shares_tf = TraceableField(
+                name="Shares Outstanding (S3-lite Dilution Proxy)",
+                value=shares_outstanding,
+                provenance=ManualProvenance(
+                    description=(
+                        "Denominator adjusted by SEC weighted-average "
+                        f"dilution proxy ({dilution_proxy:.4f})"
+                    ),
+                    author="ValuationPolicy",
+                ),
+            )
+    shares_path_diagnostics = _build_shares_path_diagnostics(
+        selected_source=shares_source,
+        current_price=current_price,
+        filing_shares=filing_shares,
+        market_shares=market_shares,
+        selected_shares=shares_outstanding,
+    )
+    if shares_path_diagnostics.scope_mismatch_detected:
+        mismatch_ratio = shares_path_diagnostics.scope_mismatch_ratio
+        if mismatch_ratio is not None:
+            assumptions.append(
+                "shares_scope mismatch detected "
+                f"(shares_scope={shares_path_diagnostics.shares_scope}, "
+                f"equity_value_scope={shares_path_diagnostics.equity_value_scope}, "
+                f"mismatch_ratio={mismatch_ratio:.2%})"
+            )
     (
         monte_carlo_iterations,
         monte_carlo_seed,
@@ -683,6 +1121,15 @@ def build_saas_payload(
         market_snapshot=market_snapshot,
         market_float=deps.market_float,
         default_market_risk_premium=deps.default_market_risk_premium,
+        tax_rate=tax_rate_tf.value,
+        total_debt=total_debt,
+        shares_outstanding=shares_outstanding,
+        current_price=current_price,
+        interest_cost_rate=_resolve_interest_cost_rate(
+            report=latest,
+            total_debt=total_debt,
+            assumptions=assumptions,
+        ),
         assumptions=assumptions,
     )
     risk_free_rate = capm_terminal_inputs.risk_free_rate
@@ -744,4 +1191,6 @@ def build_saas_payload(
         missing=missing,
         assumptions=assumptions,
         shares_source=shares_source,
+        terminal_growth_path=capm_terminal_inputs.terminal_growth_path.to_metadata(),
+        shares_path=shares_path_diagnostics.to_metadata(),
     )

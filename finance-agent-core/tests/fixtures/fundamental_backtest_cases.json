@@ -97,6 +97,138 @@
       }
     },
     {
+      "id": "dcf_standard_consensus_anchor",
+      "model": "dcf_standard",
+      "consensus_target_price_median": 2.9,
+      "required_metrics": [
+        "intrinsic_value",
+        "equity_value",
+        "enterprise_value",
+        "consensus_gap_pct"
+      ],
+      "params": {
+        "ticker": "DCFSTD",
+        "rationale": "golden dcf standard consensus-anchor case",
+        "initial_revenue": 100.0,
+        "growth_rates": [
+          0.1,
+          0.09,
+          0.08,
+          0.07,
+          0.06
+        ],
+        "operating_margins": [
+          0.2,
+          0.21,
+          0.22,
+          0.23,
+          0.24
+        ],
+        "tax_rate": 0.21,
+        "da_rates": [
+          0.03,
+          0.03,
+          0.03,
+          0.03,
+          0.03
+        ],
+        "capex_rates": [
+          0.04,
+          0.04,
+          0.04,
+          0.04,
+          0.04
+        ],
+        "wc_rates": [
+          0.01,
+          0.01,
+          0.01,
+          0.01,
+          0.01
+        ],
+        "sbc_rates": [
+          0.01,
+          0.01,
+          0.01,
+          0.01,
+          0.01
+        ],
+        "wacc": 0.095,
+        "terminal_growth": 0.02,
+        "shares_outstanding": 100.0,
+        "cash": 10.0,
+        "total_debt": 5.0,
+        "preferred_stock": 0.0,
+        "current_price": 2.8
+      }
+    },
+    {
+      "id": "dcf_growth_consensus_anchor",
+      "model": "dcf_growth",
+      "consensus_target_price_median": 5.2,
+      "required_metrics": [
+        "intrinsic_value",
+        "equity_value",
+        "enterprise_value",
+        "consensus_gap_pct"
+      ],
+      "params": {
+        "ticker": "DCFGRO",
+        "rationale": "golden dcf growth consensus-anchor case",
+        "initial_revenue": 100.0,
+        "growth_rates": [
+          0.18,
+          0.16,
+          0.14,
+          0.12,
+          0.1
+        ],
+        "operating_margins": [
+          0.22,
+          0.24,
+          0.26,
+          0.28,
+          0.3
+        ],
+        "tax_rate": 0.21,
+        "da_rates": [
+          0.03,
+          0.03,
+          0.03,
+          0.03,
+          0.03
+        ],
+        "capex_rates": [
+          0.05,
+          0.05,
+          0.05,
+          0.05,
+          0.05
+        ],
+        "wc_rates": [
+          0.01,
+          0.01,
+          0.01,
+          0.01,
+          0.01
+        ],
+        "sbc_rates": [
+          0.02,
+          0.02,
+          0.02,
+          0.02,
+          0.02
+        ],
+        "wacc": 0.1,
+        "terminal_growth": 0.025,
+        "shares_outstanding": 100.0,
+        "cash": 10.0,
+        "total_debt": 5.0,
+        "preferred_stock": 0.0,
+        "current_price": 4.8
+      }
+    },
+    {
       "id": "reit_affo_mc_seeded",
       "model": "reit_ffo",
       "required_metrics": [

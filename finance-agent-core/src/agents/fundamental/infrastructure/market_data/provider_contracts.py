@@ -12,6 +12,7 @@ class MarketDatum:
     source: str
     as_of: str | None = None
     horizon: str | None = None
+    update_cadence_days: int | None = None
     source_detail: str | None = None
     quality_flags: tuple[str, ...] = ()
     staleness: dict[str, str | int | bool | None] | None = None
@@ -27,6 +28,8 @@ class MarketDatum:
         }
         if self.horizon is not None:
             payload["horizon"] = self.horizon
+        if isinstance(self.update_cadence_days, int) and self.update_cadence_days > 0:
+            payload["update_cadence_days"] = self.update_cadence_days
         if self.source_detail is not None:
             payload["source_detail"] = self.source_detail
         if isinstance(self.staleness, dict):

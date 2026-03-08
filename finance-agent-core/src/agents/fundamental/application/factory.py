@@ -13,6 +13,9 @@ from src.agents.fundamental.application.ports import (
     IFundamentalMarketDataService,
     IFundamentalReportRepo,
 )
+from src.agents.fundamental.application.services.valuation_replay_contracts import (
+    INTERNAL_REPLAY_MARKET_SNAPSHOT_KEY,
+)
 from src.agents.fundamental.domain.model_selection import select_valuation_model
 from src.agents.fundamental.domain.valuation.parameterization.contracts import (
     ParamBuildResult,
@@ -98,7 +101,7 @@ class FundamentalWorkflowRunner:
     orchestrator: FundamentalOrchestrator
     fetch_financial_payload_fn: IFundamentalFinancialPayloadProvider
     market_data_service: IFundamentalMarketDataService
-    financial_payload_years: int = 3
+    financial_payload_years: int = 5
 
     async def run_financial_health(
         self, state: Mapping[str, object]
@@ -142,11 +145,25 @@ class FundamentalWorkflowRunner:
                 market_snapshot = {}
             if isinstance(market_snapshot, dict) and isinstance(forward_signals, list):
                 market_snapshot["forward_signals"] = forward_signals
-            return build_params(
+            build_result = build_params(
                 model_type,
                 ticker,
                 canonical_reports,
                 market_snapshot=market_snapshot,
+            )
+            if not isinstance(market_snapshot, dict):
+                return build_result
+
+            replay_metadata: dict[str, object] = {}
+            if isinstance(build_result.metadata, Mapping):
+                replay_metadata.update(dict(build_result.metadata))
+            replay_metadata[INTERNAL_REPLAY_MARKET_SNAPSHOT_KEY] = dict(market_snapshot)
+            return ParamBuildResult(
+                params=build_result.params,
+                trace_inputs=build_result.trace_inputs,
+                missing=build_result.missing,
+                assumptions=build_result.assumptions,
+                metadata=replay_metadata,
             )
 
         return await self.orchestrator.run_valuation(
@@ -161,7 +178,7 @@ def build_fundamental_workflow_runner(
     orchestrator: FundamentalOrchestrator,
     fetch_financial_payload_fn: IFundamentalFinancialPayloadProvider,
     market_data_service: IFundamentalMarketDataService,
-    financial_payload_years: int = 3,
+    financial_payload_years: int = 5,
 ) -> FundamentalWorkflowRunner:
     return FundamentalWorkflowRunner(
         orchestrator=orchestrator,

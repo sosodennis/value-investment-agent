@@ -46,6 +46,10 @@ def test_canonicalize_fundamental_artifact_normalizes_reports() -> None:
                 "extension": {"loans_and_leases": {"value": 1.0}},
             }
         ],
+        "valuation_diagnostics": {
+            "forward_signal_mapping_version": "forward_signal_calibration_v2_2026_03_05",
+            "forward_signal_calibration_applied": True,
+        },
     }
 
     normalized = parse_fundamental_artifact_model(payload)
@@ -60,6 +64,14 @@ def test_canonicalize_fundamental_artifact_normalizes_reports() -> None:
     assert report["extension_type"] == "FinancialServices"
     assert report["base"]["period_end_date"] == {"value": "2024-09-28"}
     assert report["base"]["currency"] == {"value": "USD"}
+    assert (
+        normalized["valuation_diagnostics"]["forward_signal_mapping_version"]
+        == "forward_signal_calibration_v2_2026_03_05"
+    )
+    assert (
+        normalized["valuation_diagnostics"]["forward_signal_calibration_applied"]
+        is True
+    )
 
 
 def test_canonicalize_technical_artifact_normalizes_enums_and_series() -> None:

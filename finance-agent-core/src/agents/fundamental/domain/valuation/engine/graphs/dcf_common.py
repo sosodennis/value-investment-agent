@@ -125,8 +125,7 @@ def calculate_fcff(
     for index, revenue in enumerate(projected_revenue):
         da = revenue * da_rates_converged[index]
         capex = revenue * capex_rates_converged[index]
-        sbc = revenue * sbc_rates_converged[index]
-        fcff.append(nopat[index] + da - capex - delta_wc[index] + sbc)
+        fcff.append(nopat[index] + da - capex - delta_wc[index])
     return fcff
 
 

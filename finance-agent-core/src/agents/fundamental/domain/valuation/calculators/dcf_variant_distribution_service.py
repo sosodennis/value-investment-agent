@@ -92,7 +92,6 @@ def run_dcf_variant_monte_carlo(
     da_rates = np.asarray(converged_inputs["da_rates_converged"], dtype=float)
     capex_rates = np.asarray(converged_inputs["capex_rates_converged"], dtype=float)
     wc_rates = np.asarray(converged_inputs["wc_rates_converged"], dtype=float)
-    sbc_rates = np.asarray(converged_inputs["sbc_rates_converged"], dtype=float)
 
     initial_revenue = static_inputs["initial_revenue"]
     tax_rate = static_inputs["tax_rate"]
@@ -143,12 +142,11 @@ def run_dcf_variant_monte_carlo(
         nopat = ebit * (1.0 - tax_rate)
         da = projected_revenue * da_rates[np.newaxis, :]
         capex = projected_revenue * capex_rates[np.newaxis, :]
-        sbc = projected_revenue * sbc_rates[np.newaxis, :]
         previous_revenue = np.empty_like(projected_revenue)
         previous_revenue[:, 0] = initial_revenue
         previous_revenue[:, 1:] = projected_revenue[:, :-1]
         delta_wc = (projected_revenue - previous_revenue) * wc_rates[np.newaxis, :]
-        fcff = nopat + da - capex - delta_wc + sbc
+        fcff = nopat + da - capex - delta_wc
 
         discount_curve = np.power(
             1.0 + wacc[:, np.newaxis], discount_years[np.newaxis, :]

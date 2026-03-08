@@ -1,0 +1,264 @@
+{
+  "baseline_path": "/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/tests/fixtures/fundamental_backtest_baseline.json",
+  "dataset_path": "/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/tests/fixtures/fundamental_backtest_cases.json",
+  "drifts": [
+    {
+      "abs_diff": 0.02019714644416215,
+      "baseline": 5.000820893045764,
+      "case_id": "saas_mc_seeded",
+      "current": 4.9806237466016015,
+      "metric_path": "distribution_summary.max",
+      "rel_diff": 0.00403876620981341
+    },
+    {
+      "abs_diff": 0.08039138194441131,
+      "baseline": 2.896008814119855,
+      "case_id": "saas_mc_seeded",
+      "current": 2.8156174321754435,
+      "metric_path": "distribution_summary.mean",
+      "rel_diff": 0.027759370604278907
+    },
+    {
+      "abs_diff": 0.149452364837666,
+      "baseline": 2.8275034624766593,
+      "case_id": "saas_mc_seeded",
+      "current": 2.6780510976389933,
+      "metric_path": "distribution_summary.median",
+      "rel_diff": 0.05285665139619602
+    },
+    {
+      "abs_diff": 0.3987374326299069,
+      "baseline": 1.28688309660517,
+      "case_id": "saas_mc_seeded",
+      "current": 1.685620529235077,
+      "metric_path": "distribution_summary.min",
+      "rel_diff": 0.30984743966393397
+    },
+    {
+      "abs_diff": 0.30553222608757347,
+      "baseline": 1.9101676372725516,
+      "case_id": "saas_mc_seeded",
+      "current": 2.215699863360125,
+      "metric_path": "distribution_summary.percentile_5",
+      "rel_diff": 0.1599504777098151
+    },
+    {
+      "abs_diff": 0.44660350150572903,
+      "baseline": 4.244998939917876,
+      "case_id": "saas_mc_seeded",
+      "current": 3.7983954384121468,
+      "metric_path": "distribution_summary.percentile_95",
+      "rel_diff": 0.10520697597968519
+    },
+    {
+      "abs_diff": 0.12362191206908424,
+      "baseline": 0.721748653307489,
+      "case_id": "saas_mc_seeded",
+      "current": 0.5981267412384048,
+      "metric_path": "distribution_summary.std",
+      "rel_diff": 0.17128111220239045
+    },
+    {
+      "abs_diff": 1655.4219154059329,
+      "baseline": 1672.4298704567464,
+      "case_id": "bank_capm_mc_seeded",
+      "current": 17.007955050813617,
+      "metric_path": "distribution_summary.max",
+      "rel_diff": 0.989830392681178
+    },
+    {
+      "abs_diff": 1257.169646115248,
+      "baseline": 1270.0612328145921,
+      "case_id": "bank_capm_mc_seeded",
+      "current": 12.891586699343996,
+      "metric_path": "distribution_summary.mean",
+      "rel_diff": 0.9898496337292534
+    },
+    {
+      "abs_diff": 1244.477246219951,
+      "baseline": 1257.095706791085,
+      "case_id": "bank_capm_mc_seeded",
+      "current": 12.618460571133893,
+      "metric_path": "distribution_summary.median",
+      "rel_diff": 0.9899622117051499
+    },
+    {
+      "abs_diff": 925.3035288488206,
+      "baseline": 935.5276749435574,
+      "case_id": "bank_capm_mc_seeded",
+      "current": 10.224146094736714,
+      "metric_path": "distribution_summary.min",
+      "rel_diff": 0.9890712521194485
+    },
+    {
+      "abs_diff": 1044.2613538008522,
+      "baseline": 1054.656011689321,
+      "case_id": "bank_capm_mc_seeded",
+      "current": 10.394657888468828,
+      "metric_path": "distribution_summary.percentile_5",
+      "rel_diff": 0.9901440301166833
+    },
+    {
+      "abs_diff": 1614.444527247074,
+      "baseline": 1630.1912120964673,
+      "case_id": "bank_capm_mc_seeded",
+      "current": 15.746684849393422,
+      "metric_path": "distribution_summary.percentile_95",
+      "rel_diff": 0.9903405902739821
+    },
+    {
+      "abs_diff": 164.38131472534857,
+      "baseline": 166.01719799162544,
+      "case_id": "bank_capm_mc_seeded",
+      "current": 1.6358832662768739,
+      "metric_path": "distribution_summary.std",
+      "rel_diff": 0.9901463023947713
+    },
+    {
+      "abs_diff": 23.696631267452986,
+      "baseline": 93.6396569038984,
+      "case_id": "reit_affo_mc_seeded",
+      "current": 117.33628817135138,
+      "metric_path": "distribution_summary.max",
+      "rel_diff": 0.2530619189663696
+    },
+    {
+      "abs_diff": 8.152768097109274,
+      "baseline": 68.5453640535755,
+      "case_id": "reit_affo_mc_seeded",
+      "current": 76.69813215068477,
+      "metric_path": "distribution_summary.mean",
+      "rel_diff": 0.11893974464468549
+    },
+    {
+      "abs_diff": 9.073166036323357,
+      "baseline": 67.92957804386964,
+      "case_id": "reit_affo_mc_seeded",
+      "current": 77.002744080193,
+      "metric_path": "distribution_summary.median",
+      "rel_diff": 0.13356723680020227
+    },
+    {
+      "abs_diff": 6.938192827745581,
+      "baseline": 45.20282486190511,
+      "case_id": "reit_affo_mc_seeded",
+      "current": 52.14101768965069,
+      "metric_path": "distribution_summary.min",
+      "rel_diff": 0.15349024865020716
+    },
+    {
+      "abs_diff": 5.348779783332034,
+      "baseline": 51.33331164693213,
+      "case_id": "reit_affo_mc_seeded",
+      "current": 56.682091430264165,
+      "metric_path": "distribution_summary.percentile_5",
+      "rel_diff": 0.1041970527855414
+    },
+    {
+      "abs_diff": 9.678310699412506,
+      "baseline": 86.82944325603596,
+      "case_id": "reit_affo_mc_seeded",
+      "current": 96.50775395544846,
+      "metric_path": "distribution_summary.percentile_95",
+      "rel_diff": 0.11146346603736536
+    },
+    {
+      "abs_diff": 1.7057526510678453,
+      "baseline": 10.857575716789604,
+      "case_id": "reit_affo_mc_seeded",
+      "current": 12.56332836785745,
+      "metric_path": "distribution_summary.std",
+      "rel_diff": 0.15710253334270155
+    }
+  ],
+  "generated_at": "2026-03-04T14:15:11+00:00",
+  "issues": [],
+  "results": [
+    {
+      "id": "saas_mc_seeded",
+      "metrics": {
+        "distribution_summary": {
+          "max": 4.9806237466016015,
+          "mean": 2.8156174321754435,
+          "median": 2.6780510976389933,
+          "min": 1.685620529235077,
+          "percentile_25": 2.4452029973318195,
+          "percentile_5": 2.215699863360125,
+          "percentile_75": 3.0365923768010474,
+          "percentile_95": 3.7983954384121468,
+          "std": 0.5981267412384048
+        },
+        "enterprise_value": 268.9049437442796,
+        "equity_value": 273.9049437442796,
+        "intrinsic_value": 2.739049437442796,
+        "upside_potential": 0.0
+      },
+      "model": "saas",
+      "status": "ok"
+    },
+    {
+      "id": "bank_capm_mc_seeded",
+      "metrics": {
+        "cost_of_equity": 0.095,
+        "distribution_summary": {
+          "max": 17.007955050813617,
+          "mean": 12.891586699343996,
+          "median": 12.618460571133893,
+          "min": 10.224146094736714,
+          "percentile_25": 11.59267834710443,
+          "percentile_5": 10.394657888468828,
+          "percentile_75": 13.919032652091259,
+          "percentile_95": 15.746684849393422,
+          "std": 1.6358832662768739
+        },
+        "equity_value": 1270.0193907549885,
+        "intrinsic_value": 12.700193907549885,
+        "upside_potential": 0.0
+      },
+      "model": "bank",
+      "status": "ok"
+    },
+    {
+      "id": "reit_affo_mc_seeded",
+      "metrics": {
+        "distribution_summary": {
+          "max": 117.33628817135138,
+          "mean": 76.69813215068477,
+          "median": 77.002744080193,
+          "min": 52.14101768965069,
+          "percentile_25": 69.15863011067101,
+          "percentile_5": 56.682091430264165,
+          "percentile_75": 83.25511538776061,
+          "percentile_95": 96.50775395544846,
+          "std": 12.56332836785745
+        },
+        "enterprise_value": 840.0,
+        "equity_value": 800.0,
+        "intrinsic_value": 80.0,
+        "upside_potential": 0.0
+      },
+      "model": "reit_ffo",
+      "status": "ok"
+    },
+    {
+      "id": "bank_override_deterministic",
+      "metrics": {
+        "cost_of_equity": 0.2,
+        "equity_value": 507.55208333333337,
+        "intrinsic_value": 5.075520833333334,
+        "upside_potential": 0.0
+      },
+      "model": "bank",
+      "status": "ok"
+    }
+  ],
+  "summary": {
+    "baseline_updated": false,
+    "drift_count": 21,
+    "drifted_case_count": 3,
+    "errors": 0,
+    "issue_count": 0,
+    "ok": 4,
+    "total_cases": 4
+  }
+}

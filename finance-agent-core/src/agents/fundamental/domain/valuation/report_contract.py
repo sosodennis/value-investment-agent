@@ -88,6 +88,8 @@ TRACEABLE_FIELD_LABELS: dict[str, str] = {
     "period_end_date": "Period End Date",
     "currency": "Currency",
     "shares_outstanding": "Shares Outstanding",
+    "weighted_average_shares_basic": "Weighted Average Shares Outstanding (Basic)",
+    "weighted_average_shares_diluted": "Weighted Average Shares Outstanding (Diluted)",
     "total_assets": "Total Assets",
     "total_liabilities": "Total Liabilities",
     "total_equity": "Total Equity",

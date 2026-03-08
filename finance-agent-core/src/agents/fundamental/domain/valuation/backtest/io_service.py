@@ -30,6 +30,10 @@ def load_backtest_cases(path: Path) -> list[BacktestCase]:
                     coerce_sequence(required_metrics_raw, f"{context}.required_metrics")
                 )
             )
+        consensus_target_price_median = coerce_optional_number(
+            mapping.get("consensus_target_price_median"),
+            f"{context}.consensus_target_price_median",
+        )
 
         cases.append(
             BacktestCase(
@@ -37,6 +41,7 @@ def load_backtest_cases(path: Path) -> list[BacktestCase]:
                 model=model,
                 params=params,
                 required_metrics=required_metrics,
+                consensus_target_price_median=consensus_target_price_median,
             )
         )
     return cases
@@ -84,3 +89,13 @@ def coerce_non_empty_string(value: object, context: str) -> str:
     if isinstance(value, str) and value:
         return value
     raise TypeError(f"{context} must be a non-empty string")
+
+
+def coerce_optional_number(value: object, context: str) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise TypeError(f"{context} must be numeric")
+    if isinstance(value, int | float):
+        return float(value)
+    raise TypeError(f"{context} must be numeric")

@@ -82,7 +82,7 @@ def _build_growth_acceleration_signal(
     return [
         _signal_payload(
             signal_id=f"sec_xbrl_growth_{year2}",
-            source_type="manual",
+            source_type="xbrl_auto",
             metric="growth_outlook",
             direction=direction,
             value=magnitude_basis_points,
@@ -122,7 +122,7 @@ def _build_margin_delta_signal(
     return [
         _signal_payload(
             signal_id=f"sec_xbrl_margin_{curr_year}",
-            source_type="manual",
+            source_type="xbrl_auto",
             metric="margin_outlook",
             direction=direction,
             value=magnitude_basis_points,

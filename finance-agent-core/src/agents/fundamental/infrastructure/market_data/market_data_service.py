@@ -3,16 +3,26 @@ from __future__ import annotations
 import logging
 import os
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 
 from src.shared.kernel.tools.logger import get_logger, log_event
+from src.shared.kernel.types import JSONObject
 
+from .consensus_anchor_aggregator import (
+    FREE_CONSENSUS_AGGREGATE_SOURCE,
+    build_target_consensus_anchor_datums,
+)
 from .fred_macro_provider import FredMacroProvider
+from .free_consensus_governance import governance_warning_for_provider
+from .investing_provider import InvestingProvider
+from .marketbeat_provider import MarketBeatProvider
 from .provider_contracts import (
     MarketDataProvider,
     MarketDatum,
 )
+from .tipranks_provider import TipRanksProvider
 from .yahoo_finance_provider import YahooFinanceProvider
 
 logger = get_logger(__name__)
@@ -20,7 +30,8 @@ logger = get_logger(__name__)
 DEFAULT_RISK_FREE_RATE = 0.042
 DEFAULT_BETA = 1.0
 DEFAULT_MARKET_STALE_MAX_DAYS = 5
-DEFAULT_LONG_RUN_GROWTH_STALE_MAX_DAYS = 180
+DEFAULT_LONG_RUN_GROWTH_STALE_MAX_DAYS = 90
+CADENCE_STALENESS_MULTIPLIER = 2
 
 MARKET_FIELDS: tuple[str, ...] = (
     "current_price",
@@ -41,7 +52,7 @@ FIELD_SOURCE_PRIORITY: dict[str, tuple[str, ...]] = {
     "beta": ("yfinance",),
     "consensus_growth_rate": ("yfinance",),
     "long_run_growth_anchor": ("fred",),
-    "target_mean_price": ("yfinance",),
+    "target_mean_price": (FREE_CONSENSUS_AGGREGATE_SOURCE, "yfinance"),
 }
 
 
@@ -64,9 +75,14 @@ class MarketSnapshot:
     source_warnings: tuple[str, ...]
     quality_flags: tuple[str, ...]
     license_note: str | None
-    market_datums: dict[str, dict[str, object]]
+    market_datums: dict[str, JSONObject]
+    target_consensus_applied: bool = False
+    target_consensus_source_count: int | None = None
+    target_consensus_sources: tuple[str, ...] = ()
+    target_consensus_fallback_reason: str | None = None
+    target_consensus_warnings: tuple[str, ...] = ()
 
-    def to_mapping(self) -> dict[str, object]:
+    def to_mapping(self) -> JSONObject:
         return {
             "current_price": self.current_price,
             "market_cap": self.market_cap,
@@ -84,6 +100,11 @@ class MarketSnapshot:
             "missing_fields": list(self.missing_fields),
             "source_warnings": list(self.source_warnings),
             "quality_flags": list(self.quality_flags),
+            "target_consensus_applied": self.target_consensus_applied,
+            "target_consensus_source_count": self.target_consensus_source_count,
+            "target_consensus_sources": list(self.target_consensus_sources),
+            "target_consensus_fallback_reason": self.target_consensus_fallback_reason,
+            "target_consensus_warnings": list(self.target_consensus_warnings),
             "license_note": self.license_note,
             "market_datums": self.market_datums,
         }
@@ -102,7 +123,13 @@ class MarketDataService:
         self._max_retries = max_retries
         self._retry_delay_seconds = retry_delay_seconds
         self._cache: dict[str, tuple[float, MarketSnapshot]] = {}
-        configured = providers or (YahooFinanceProvider(), FredMacroProvider())
+        configured = providers or (
+            YahooFinanceProvider(),
+            FredMacroProvider(),
+            TipRanksProvider(),
+            InvestingProvider(),
+            MarketBeatProvider(),
+        )
         self._providers = tuple(configured)
 
     def get_market_snapshot(self, ticker_symbol: str) -> MarketSnapshot:
@@ -153,6 +180,7 @@ class MarketDataService:
         provider_results: dict[str, dict[str, MarketDatum]] = {}
         source_warnings: list[str] = []
         license_notes: list[str] = []
+        free_target_consensus_enabled = _free_target_consensus_enabled()
 
         for provider in self._providers:
             provider_name = _provider_name(provider)
@@ -160,6 +188,12 @@ class MarketDataService:
                 fetched = provider.fetch(ticker_symbol)
             except Exception as exc:
                 source_warnings.append(f"{provider_name} fetch failed: {exc}")
+                governance_warning = _build_provider_governance_warning(
+                    provider_name=provider_name,
+                    exc=exc,
+                )
+                if governance_warning is not None:
+                    source_warnings.append(governance_warning)
                 continue
 
             provider_results[provider_name] = fetched.datums
@@ -167,6 +201,22 @@ class MarketDataService:
             provider_license_note = _provider_license(provider)
             if provider_license_note:
                 license_notes.append(provider_license_note)
+
+        if free_target_consensus_enabled:
+            consensus_result = build_target_consensus_anchor_datums(
+                provider_results=provider_results,
+                now=datetime.now(timezone.utc),
+            )
+            source_warnings.extend(consensus_result.warnings)
+            if consensus_result.datums:
+                provider_results[FREE_CONSENSUS_AGGREGATE_SOURCE] = (
+                    consensus_result.datums
+                )
+                aggregate_license = consensus_result.datums[
+                    "target_mean_price"
+                ].license_note
+                if aggregate_license:
+                    license_notes.append(aggregate_license)
 
         selected_datums: dict[str, MarketDatum] = {}
         for field in MARKET_FIELDS:
@@ -194,6 +244,30 @@ class MarketDataService:
                 license_note="Internal default policy",
             )
             source_warnings.append("risk_free_rate defaulted to 4.2%")
+
+        dedup_warnings = tuple(dict.fromkeys(msg for msg in source_warnings if msg))
+        (
+            target_consensus_applied,
+            target_consensus_source_count,
+            target_consensus_sources,
+            target_consensus_fallback_reason,
+            target_consensus_warnings,
+        ) = _resolve_target_consensus_diagnostics(
+            target_mean_datum=selected_datums["target_mean_price"],
+            source_warnings=dedup_warnings,
+            free_target_consensus_enabled=free_target_consensus_enabled,
+        )
+        if target_consensus_fallback_reason is not None:
+            target_datum = selected_datums["target_mean_price"]
+            target_quality_flags = list(target_datum.quality_flags)
+            target_quality_flags.append("consensus_fallback")
+            selected_datums["target_mean_price"] = replace(
+                target_datum,
+                fallback_reason=target_consensus_fallback_reason,
+                quality_flags=tuple(
+                    dict.fromkeys(flag for flag in target_quality_flags if flag)
+                ),
+            )
 
         stale_max_days = _market_stale_max_days()
         selected_datums = _attach_staleness(
@@ -228,7 +302,6 @@ class MarketDataService:
         dedup_quality_flags = tuple(
             dict.fromkeys(flag for flag in quality_flags if flag)
         )
-        dedup_warnings = tuple(dict.fromkeys(msg for msg in source_warnings if msg))
         shares_staleness = _extract_staleness(selected_datums["shares_outstanding"])
 
         snapshot = MarketSnapshot(
@@ -248,6 +321,11 @@ class MarketDataService:
             missing_fields=missing_fields,
             source_warnings=dedup_warnings,
             quality_flags=dedup_quality_flags,
+            target_consensus_applied=target_consensus_applied,
+            target_consensus_source_count=target_consensus_source_count,
+            target_consensus_sources=target_consensus_sources,
+            target_consensus_fallback_reason=target_consensus_fallback_reason,
+            target_consensus_warnings=target_consensus_warnings,
             license_note=merged_license_note,
             market_datums=market_datums,
         )
@@ -261,6 +339,15 @@ class MarketDataService:
                 "provider": snapshot.provider,
                 "missing_fields": list(snapshot.missing_fields),
                 "quality_flags": list(snapshot.quality_flags),
+                "source_warnings": list(snapshot.source_warnings),
+                "target_consensus_applied": snapshot.target_consensus_applied,
+                "target_consensus_source_count": snapshot.target_consensus_source_count,
+                "target_consensus_sources": list(snapshot.target_consensus_sources),
+                "target_consensus_fallback_reason": snapshot.target_consensus_fallback_reason,
+                "target_consensus_warnings": list(snapshot.target_consensus_warnings),
+                "key_market_inputs": _build_key_market_input_log_fields(
+                    selected_datums
+                ),
             },
         )
         return snapshot
@@ -373,9 +460,150 @@ class MarketDataService:
                 "beta:defaulted",
                 "risk_free_rate:defaulted",
             ),
+            target_consensus_applied=False,
+            target_consensus_source_count=None,
+            target_consensus_sources=(),
+            target_consensus_fallback_reason="market_data_fallback",
+            target_consensus_warnings=(),
             license_note="Internal default policy",
             market_datums=market_datums,
         )
+
+
+def _resolve_target_consensus_diagnostics(
+    *,
+    target_mean_datum: MarketDatum,
+    source_warnings: tuple[str, ...],
+    free_target_consensus_enabled: bool,
+) -> tuple[bool, int | None, tuple[str, ...], str | None, tuple[str, ...]]:
+    applied = (
+        target_mean_datum.source == FREE_CONSENSUS_AGGREGATE_SOURCE
+        and target_mean_datum.value is not None
+    )
+    source_count, sources = _parse_target_consensus_source_detail(
+        target_mean_datum.source_detail
+    )
+    consensus_warnings = _filter_target_consensus_warnings(source_warnings)
+    fallback_reason: str | None = None
+    if (
+        free_target_consensus_enabled
+        and not applied
+        and target_mean_datum.source == "yfinance"
+        and target_mean_datum.value is not None
+    ):
+        fallback_reason = _classify_target_consensus_fallback(consensus_warnings)
+    return (
+        applied,
+        source_count,
+        sources,
+        fallback_reason,
+        consensus_warnings,
+    )
+
+
+def _classify_target_consensus_fallback(
+    consensus_warnings: tuple[str, ...],
+) -> str:
+    if any("code=provider_blocked_http" in warning for warning in consensus_warnings):
+        return "provider_blocked"
+    if any("code=provider_rate_limited" in warning for warning in consensus_warnings):
+        return "provider_rate_limited"
+    if any(
+        "code=provider_dns_error" in warning
+        or "code=provider_connection_error" in warning
+        for warning in consensus_warnings
+    ):
+        return "provider_network_error"
+    if any("insufficient_sources=" in warning for warning in consensus_warnings):
+        return "insufficient_sources"
+    if any(
+        "code=" in warning and "_target_mean_missing" in warning
+        for warning in consensus_warnings
+    ):
+        return "provider_parse_missing"
+    if any("parse missing" in warning for warning in consensus_warnings):
+        return "provider_parse_missing"
+    if any("fetch failed:" in warning for warning in consensus_warnings):
+        return "provider_fetch_failed"
+    return "aggregate_unavailable"
+
+
+def _filter_target_consensus_warnings(
+    source_warnings: tuple[str, ...],
+) -> tuple[str, ...]:
+    relevant_tokens = (
+        "target consensus aggregate",
+        "target_mean_price",
+        "tipranks ",
+        "investing ",
+        "marketbeat ",
+        "provider_governance_review_required",
+    )
+    return tuple(
+        warning
+        for warning in source_warnings
+        if any(token in warning for token in relevant_tokens)
+    )
+
+
+def _parse_target_consensus_source_detail(
+    source_detail: str | None,
+) -> tuple[int | None, tuple[str, ...]]:
+    if not isinstance(source_detail, str) or not source_detail.strip():
+        return None, ()
+    key_values = _parse_semicolon_key_values(source_detail)
+    source_count = _parse_optional_int(key_values.get("source_count"))
+    raw_sources = key_values.get("sources")
+    if not isinstance(raw_sources, str) or not raw_sources:
+        return source_count, ()
+    sources = tuple(
+        dict.fromkeys(item.strip() for item in raw_sources.split(",") if item.strip())
+    )
+    return source_count, sources
+
+
+def _parse_semicolon_key_values(raw: str) -> dict[str, str]:
+    output: dict[str, str] = {}
+    for segment in raw.split(";"):
+        key, sep, value = segment.partition("=")
+        if not sep:
+            continue
+        normalized_key = key.strip()
+        normalized_value = value.strip()
+        if not normalized_key or not normalized_value:
+            continue
+        output[normalized_key] = normalized_value
+    return output
+
+
+def _parse_optional_int(raw: object) -> int | None:
+    if raw is None:
+        return None
+    if isinstance(raw, int):
+        return raw
+    if isinstance(raw, str):
+        normalized = raw.strip()
+        if not normalized:
+            return None
+        try:
+            return int(float(normalized))
+        except ValueError:
+            return None
+    return None
+
+
+def _build_provider_governance_warning(
+    *,
+    provider_name: str,
+    exc: Exception,
+) -> str | None:
+    message = str(exc)
+    if (
+        "code=provider_blocked_http" not in message
+        and "code=provider_rate_limited" not in message
+    ):
+        return None
+    return governance_warning_for_provider(provider_name)
 
 
 def _provider_name(provider: MarketDataProvider) -> str:
@@ -386,7 +614,105 @@ def _provider_license(provider: MarketDataProvider) -> str | None:
     return provider.license_note or None
 
 
+def _build_key_market_input_log_fields(
+    selected_datums: dict[str, MarketDatum],
+) -> dict[str, object]:
+    key_fields = (
+        "current_price",
+        "shares_outstanding",
+        "risk_free_rate",
+        "beta",
+        "consensus_growth_rate",
+        "long_run_growth_anchor",
+        "target_mean_price",
+    )
+    output: dict[str, object] = {}
+    for field in key_fields:
+        datum = selected_datums.get(field)
+        if datum is None:
+            continue
+        payload: dict[str, object] = {
+            "value": datum.value,
+            "source": datum.source,
+        }
+        if datum.as_of is not None:
+            payload["as_of"] = datum.as_of
+        if datum.horizon:
+            payload["horizon"] = datum.horizon
+        if datum.source_detail:
+            payload["source_detail"] = datum.source_detail
+        if isinstance(datum.update_cadence_days, int) and datum.update_cadence_days > 0:
+            payload["update_cadence_days"] = datum.update_cadence_days
+        if datum.quality_flags:
+            payload["quality_flags"] = list(datum.quality_flags)
+        if isinstance(datum.staleness, dict):
+            payload["staleness"] = dict(datum.staleness)
+        output[field] = payload
+    return output
+
+
 market_data_service = MarketDataService()
+
+
+def recompute_market_snapshot_staleness(
+    market_snapshot: Mapping[str, object] | None,
+    *,
+    now: datetime | None = None,
+) -> JSONObject | None:
+    if not isinstance(market_snapshot, Mapping):
+        return None
+
+    snapshot: JSONObject = dict(market_snapshot)
+    raw_datums = snapshot.get("market_datums")
+    if not isinstance(raw_datums, Mapping):
+        return snapshot
+
+    stale_max_days = _to_int(snapshot.get("market_stale_max_days"))
+    if stale_max_days is None:
+        stale_max_days = _market_stale_max_days()
+    stale_max_days = max(stale_max_days, 0)
+
+    resolved_now = _resolve_staleness_now(now=now, snapshot=snapshot)
+    recomputed_datums: dict[str, JSONObject] = {}
+    shares_outstanding_is_stale: bool | None = None
+    shares_outstanding_staleness_days: int | None = None
+
+    for field, payload in raw_datums.items():
+        if not isinstance(field, str) or not isinstance(payload, Mapping):
+            continue
+        datum = _market_datum_from_mapping(payload)
+        field_stale_max_days = _field_stale_max_days(
+            field,
+            datum=datum,
+            default_stale_max_days=stale_max_days,
+        )
+        stale_days = _staleness_days(datum.as_of, now=resolved_now)
+        is_stale = stale_days is not None and stale_days > field_stale_max_days
+        staleness_payload: dict[str, int | bool | None] = {
+            "days": stale_days,
+            "is_stale": is_stale,
+            "max_days": field_stale_max_days,
+        }
+        datum_payload: JSONObject = dict(payload)
+        datum_payload["staleness"] = staleness_payload
+        datum_payload["quality_flags"] = _updated_quality_flags(
+            raw_flags=payload.get("quality_flags"),
+            is_stale=is_stale,
+        )
+        recomputed_datums[field] = datum_payload
+
+        if field == "shares_outstanding":
+            shares_outstanding_is_stale = is_stale
+            shares_outstanding_staleness_days = stale_days
+
+    snapshot["market_datums"] = recomputed_datums
+    snapshot["market_stale_max_days"] = stale_max_days
+    if "shares_outstanding" in recomputed_datums:
+        snapshot["shares_outstanding_is_stale"] = shares_outstanding_is_stale
+        snapshot["shares_outstanding_staleness_days"] = (
+            shares_outstanding_staleness_days
+        )
+    return snapshot
 
 
 def _market_stale_max_days() -> int:
@@ -411,10 +737,23 @@ def _long_run_growth_stale_max_days() -> int:
     return max(parsed, 0)
 
 
-def _field_stale_max_days(field: str, *, default_stale_max_days: int) -> int:
+def _field_stale_max_days(
+    field: str,
+    *,
+    datum: MarketDatum,
+    default_stale_max_days: int,
+) -> int:
+    field_default = default_stale_max_days
     if field == "long_run_growth_anchor":
-        return _long_run_growth_stale_max_days()
-    return default_stale_max_days
+        field_default = _long_run_growth_stale_max_days()
+
+    cadence_days = datum.update_cadence_days
+    if not isinstance(cadence_days, int) or cadence_days <= 0:
+        return field_default
+
+    # Keep staleness policy aligned with each series cadence.
+    cadence_guardrail = cadence_days * CADENCE_STALENESS_MULTIPLIER
+    return max(field_default, cadence_guardrail)
 
 
 def _attach_staleness(
@@ -426,7 +765,9 @@ def _attach_staleness(
     enriched: dict[str, MarketDatum] = {}
     for field, datum in datums.items():
         field_stale_max_days = _field_stale_max_days(
-            field, default_stale_max_days=stale_max_days
+            field,
+            datum=datum,
+            default_stale_max_days=stale_max_days,
         )
         stale_days = _staleness_days(datum.as_of, now=now)
         is_stale = stale_days is not None and stale_days > field_stale_max_days
@@ -480,3 +821,116 @@ def _extract_staleness(datum: MarketDatum) -> tuple[bool | None, int | None]:
     is_stale = is_stale_raw if isinstance(is_stale_raw, bool) else None
     staleness_days = staleness_days_raw if isinstance(staleness_days_raw, int) else None
     return is_stale, staleness_days
+
+
+def _resolve_staleness_now(
+    *,
+    now: datetime | None,
+    snapshot: Mapping[str, object],
+) -> datetime:
+    if isinstance(now, datetime):
+        if now.tzinfo is None:
+            return now.replace(tzinfo=timezone.utc)
+        return now.astimezone(timezone.utc)
+    snapshot_as_of = _parse_as_of(_to_text(snapshot.get("as_of")))
+    if snapshot_as_of is not None:
+        return snapshot_as_of
+    return datetime.now(timezone.utc)
+
+
+def _updated_quality_flags(
+    *,
+    raw_flags: object,
+    is_stale: bool,
+) -> list[str]:
+    flags: list[str] = []
+    if isinstance(raw_flags, list | tuple):
+        for item in raw_flags:
+            if isinstance(item, str) and item:
+                flags.append(item)
+    if is_stale and "stale" not in flags:
+        flags.append("stale")
+    if not is_stale:
+        flags = [flag for flag in flags if flag != "stale"]
+    return flags
+
+
+def _market_datum_from_mapping(payload: Mapping[str, object]) -> MarketDatum:
+    value = _to_float(payload.get("value"))
+    source = _to_text(payload.get("source")) or "unknown"
+    as_of = _to_text(payload.get("as_of"))
+    horizon = _to_text(payload.get("horizon"))
+    update_cadence_days = _to_int(payload.get("update_cadence_days"))
+    source_detail = _to_text(payload.get("source_detail"))
+    fallback_reason = _to_text(payload.get("fallback_reason"))
+    license_note = _to_text(payload.get("license_note"))
+    quality_flags = _updated_quality_flags(
+        raw_flags=payload.get("quality_flags"),
+        is_stale=False,
+    )
+    staleness = payload.get("staleness")
+    normalized_staleness = dict(staleness) if isinstance(staleness, Mapping) else None
+    return MarketDatum(
+        value=value,
+        source=source,
+        as_of=as_of,
+        horizon=horizon,
+        update_cadence_days=update_cadence_days,
+        source_detail=source_detail,
+        quality_flags=tuple(quality_flags),
+        staleness=normalized_staleness,
+        fallback_reason=fallback_reason,
+        license_note=license_note,
+    )
+
+
+def _to_int(value: object) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        token = value.strip()
+        if not token:
+            return None
+        try:
+            return int(float(token))
+        except ValueError:
+            return None
+    return None
+
+
+def _to_float(value: object) -> float | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int | float):
+        return float(value)
+    if isinstance(value, str):
+        token = value.strip()
+        if not token:
+            return None
+        try:
+            return float(token)
+        except ValueError:
+            return None
+    return None
+
+
+def _to_text(value: object) -> str | None:
+    if isinstance(value, str):
+        token = value.strip()
+        if token:
+            return token
+    return None
+
+
+def _free_target_consensus_enabled() -> bool:
+    raw = os.getenv("FUNDAMENTAL_ENABLE_FREE_TARGET_CONSENSUS")
+    if raw is None:
+        return True
+    normalized = raw.strip().lower()
+    if not normalized:
+        return True
+    return normalized not in {"0", "false", "no", "off"}

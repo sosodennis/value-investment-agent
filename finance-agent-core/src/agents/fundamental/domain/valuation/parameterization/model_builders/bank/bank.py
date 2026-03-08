@@ -56,6 +56,7 @@ def _build_bank_capm_terminal_inputs(
         beta_format=".1f",
         default_market_risk_premium=default_market_risk_premium,
         market_risk_premium_format=".2%",
+        allow_market_snapshot_mrp=False,
         assumptions=assumptions,
     )
 

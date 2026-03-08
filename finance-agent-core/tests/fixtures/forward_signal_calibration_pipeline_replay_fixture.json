@@ -1,0 +1,56 @@
+{
+  "results": [
+    {
+      "ticker": "AAPL",
+      "current_price": 100.0,
+      "intrinsic_value": 120.0,
+      "target_mean_price": 112.0,
+      "forward_signal_summary": {
+        "raw_growth_adjustment_basis_points": 180.0,
+        "raw_margin_adjustment_basis_points": 60.0,
+        "source_types": [
+          "mda"
+        ]
+      }
+    },
+    {
+      "ticker": "NVDA",
+      "current_price": 100.0,
+      "intrinsic_value": 85.0,
+      "target_mean_price": 98.0,
+      "forward_signal_summary": {
+        "raw_growth_adjustment_basis_points": -140.0,
+        "raw_margin_adjustment_basis_points": -80.0,
+        "source_types": [
+          "xbrl_auto"
+        ]
+      }
+    },
+    {
+      "ticker": "MSFT",
+      "current_price": 100.0,
+      "intrinsic_value": 108.0,
+      "target_mean_price": 104.0,
+      "forward_signal_summary": {
+        "raw_growth_adjustment_basis_points": 90.0,
+        "raw_margin_adjustment_basis_points": 40.0,
+        "source_types": [
+          "mda"
+        ]
+      }
+    },
+    {
+      "ticker": "GOOGL",
+      "current_price": 100.0,
+      "intrinsic_value": 95.0,
+      "target_mean_price": 101.0,
+      "forward_signal_summary": {
+        "raw_growth_adjustment_basis_points": -70.0,
+        "raw_margin_adjustment_basis_points": -20.0,
+        "source_types": [
+          "xbrl_auto"
+        ]
+      }
+    }
+  ]
+}

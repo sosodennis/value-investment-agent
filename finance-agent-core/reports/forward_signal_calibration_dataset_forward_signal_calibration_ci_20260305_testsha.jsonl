@@ -1,0 +1,8 @@
+{"metric": "growth_outlook", "source_type": "mda", "raw_basis_points": 180.0, "target_basis_points": -119.99999999999943}
+{"metric": "margin_outlook", "source_type": "mda", "raw_basis_points": 60.0, "target_basis_points": -39.9999999999998}
+{"metric": "growth_outlook", "source_type": "xbrl_auto", "raw_basis_points": -140.0, "target_basis_points": 190.90909090909088}
+{"metric": "margin_outlook", "source_type": "xbrl_auto", "raw_basis_points": -80.0, "target_basis_points": 109.0909090909091}
+{"metric": "growth_outlook", "source_type": "mda", "raw_basis_points": 90.0, "target_basis_points": -48.46153846153857}
+{"metric": "margin_outlook", "source_type": "mda", "raw_basis_points": 40.0, "target_basis_points": -21.538461538461597}
+{"metric": "growth_outlook", "source_type": "xbrl_auto", "raw_basis_points": -70.0, "target_basis_points": 163.33333333333357}
+{"metric": "margin_outlook", "source_type": "xbrl_auto", "raw_basis_points": -20.0, "target_basis_points": 46.66666666666673}

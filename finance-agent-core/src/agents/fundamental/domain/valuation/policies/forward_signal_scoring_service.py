@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from typing import Literal
 
+from .forward_signal_calibration_service import (
+    ForwardSignalCalibrationConfig,
+    calibrate_signal_basis_points,
+)
 from .forward_signal_contracts import (
     DEFAULT_FORWARD_SIGNAL_CONFIDENCE_THRESHOLD,
     DEFAULT_FORWARD_SIGNAL_MAX_ADJUSTMENT_BASIS_POINTS,
@@ -20,14 +24,21 @@ def apply_forward_signal_policy(
     max_adjustment_basis_points: float = (
         DEFAULT_FORWARD_SIGNAL_MAX_ADJUSTMENT_BASIS_POINTS
     ),
+    calibration_config: ForwardSignalCalibrationConfig | None = None,
 ) -> ForwardSignalPolicyResult:
     decisions: list[ForwardSignalDecision] = []
-    weighted_basis_points: dict[str, float] = {
+    weighted_raw_basis_points: dict[str, float] = {
+        "growth_outlook": 0.0,
+        "margin_outlook": 0.0,
+    }
+    weighted_calibrated_basis_points: dict[str, float] = {
         "growth_outlook": 0.0,
         "margin_outlook": 0.0,
     }
     weights: dict[str, float] = {"growth_outlook": 0.0, "margin_outlook": 0.0}
     evidence_count = 0
+    mapping_version: str | None = None
+    calibration_applied = False
 
     for signal in signals:
         evidence_count += len(signal.evidence)
@@ -40,6 +51,10 @@ def apply_forward_signal_policy(
                     accepted=False,
                     reason="unsupported_metric_for_v1",
                     effective_basis_points=0.0,
+                    raw_basis_points=0.0,
+                    calibrated_basis_points=0.0,
+                    calibration_applied=False,
+                    mapping_version=None,
                     risk_tag=None,
                 )
             )
@@ -53,12 +68,25 @@ def apply_forward_signal_policy(
                     accepted=False,
                     reason="missing_evidence",
                     effective_basis_points=0.0,
+                    raw_basis_points=0.0,
+                    calibrated_basis_points=0.0,
+                    calibration_applied=False,
+                    mapping_version=None,
                     risk_tag="high_risk",
                 )
             )
             continue
 
-        signed_basis_points = _signed_signal_basis_points(signal)
+        signed_raw_basis_points = _signed_signal_basis_points(signal)
+        (
+            signed_calibrated_basis_points,
+            signal_calibration_applied,
+            signal_mapping_version,
+        ) = calibrate_signal_basis_points(
+            signal,
+            raw_basis_points=signed_raw_basis_points,
+            calibration_config=calibration_config,
+        )
         confidence = _clamp(signal.confidence, 0.0, 1.0)
         risk_tag: str | None = None
         weight = confidence
@@ -74,35 +102,69 @@ def apply_forward_signal_policy(
                     accepted=False,
                     reason="zero_weight_after_policy",
                     effective_basis_points=0.0,
+                    raw_basis_points=0.0,
+                    calibrated_basis_points=0.0,
+                    calibration_applied=False,
+                    mapping_version=None,
                     risk_tag=risk_tag,
                 )
             )
             continue
 
-        weighted_basis_points[metric] += signed_basis_points * weight
+        weighted_raw_basis_points[metric] += signed_raw_basis_points * weight
+        weighted_calibrated_basis_points[metric] += (
+            signed_calibrated_basis_points * weight
+        )
         weights[metric] += weight
+        calibration_applied = calibration_applied or signal_calibration_applied
+        if signal_calibration_applied and signal_mapping_version is not None:
+            mapping_version = signal_mapping_version
         decisions.append(
             ForwardSignalDecision(
                 signal_id=signal.signal_id,
                 metric=metric,
                 accepted=True,
                 reason="accepted",
-                effective_basis_points=signed_basis_points,
+                effective_basis_points=signed_calibrated_basis_points,
+                raw_basis_points=signed_raw_basis_points,
+                calibrated_basis_points=signed_calibrated_basis_points,
+                calibration_applied=signal_calibration_applied,
+                mapping_version=signal_mapping_version,
                 risk_tag=risk_tag,
             )
         )
 
+    raw_growth_basis_points = 0.0
+    raw_margin_basis_points = 0.0
     growth_basis_points = 0.0
     margin_basis_points = 0.0
     if weights["growth_outlook"] > 0.0:
+        raw_growth_basis_points = (
+            weighted_raw_basis_points["growth_outlook"] / weights["growth_outlook"]
+        )
         growth_basis_points = (
-            weighted_basis_points["growth_outlook"] / weights["growth_outlook"]
+            weighted_calibrated_basis_points["growth_outlook"]
+            / weights["growth_outlook"]
         )
     if weights["margin_outlook"] > 0.0:
+        raw_margin_basis_points = (
+            weighted_raw_basis_points["margin_outlook"] / weights["margin_outlook"]
+        )
         margin_basis_points = (
-            weighted_basis_points["margin_outlook"] / weights["margin_outlook"]
+            weighted_calibrated_basis_points["margin_outlook"]
+            / weights["margin_outlook"]
         )
 
+    raw_growth_basis_points = _clamp(
+        raw_growth_basis_points,
+        -max_adjustment_basis_points,
+        max_adjustment_basis_points,
+    )
+    raw_margin_basis_points = _clamp(
+        raw_margin_basis_points,
+        -max_adjustment_basis_points,
+        max_adjustment_basis_points,
+    )
     growth_basis_points = _clamp(
         growth_basis_points,
         -max_adjustment_basis_points,
@@ -138,8 +200,12 @@ def apply_forward_signal_policy(
         evidence_count=evidence_count,
         growth_adjustment=growth_basis_points / 10_000.0,
         margin_adjustment=margin_basis_points / 10_000.0,
+        raw_growth_adjustment_basis_points=raw_growth_basis_points,
+        raw_margin_adjustment_basis_points=raw_margin_basis_points,
         growth_adjustment_basis_points=growth_basis_points,
         margin_adjustment_basis_points=margin_basis_points,
+        calibration_applied=calibration_applied,
+        mapping_version=mapping_version,
         risk_level=risk_level,
         source_types=source_types,
         decisions=tuple(decisions),

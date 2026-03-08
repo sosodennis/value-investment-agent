@@ -123,6 +123,7 @@ def build_default_builder_context(
     default_monte_carlo_sampler: str,
     long_run_growth_target: float,
     high_growth_trigger: float,
+    short_term_consensus_decay_years: int,
 ) -> BuilderContext:
     def _resolve_shares_outstanding(
         filing_shares_tf: TraceableField[float],
@@ -159,6 +160,7 @@ def build_default_builder_context(
             projection_years=projection_years,
             long_run_target=long_run_growth_target,
             high_growth_trigger=high_growth_trigger,
+            short_term_consensus_decay_years=short_term_consensus_decay_years,
         )
 
     return _build_builder_context(

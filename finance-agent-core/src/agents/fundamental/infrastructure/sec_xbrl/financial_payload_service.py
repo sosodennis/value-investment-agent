@@ -27,7 +27,7 @@ _XBRL_DIAGNOSTICS_ENABLED = os.getenv("FUNDAMENTAL_XBRL_DIAG", "0").strip().lowe
 }
 
 
-def fetch_financial_data(ticker: str, years: int = 3) -> list[FinancialReport]:
+def fetch_financial_data(ticker: str, years: int = 5) -> list[FinancialReport]:
     """
     Fetch financial data using the SECReportExtractor via FinancialReportFactory.
     Returns a list of FinancialReport objects containing Base and Extension models.
@@ -199,7 +199,7 @@ def fetch_financial_data(ticker: str, years: int = 3) -> list[FinancialReport]:
     return reports
 
 
-def fetch_financial_payload(ticker: str, years: int = 3) -> dict[str, object]:
+def fetch_financial_payload(ticker: str, years: int = 5) -> dict[str, object]:
     reports = fetch_financial_data(ticker, years=years)
     rules_sector = _infer_rules_sector_from_reports(reports)
     forward_signals: list[dict[str, object]] = []

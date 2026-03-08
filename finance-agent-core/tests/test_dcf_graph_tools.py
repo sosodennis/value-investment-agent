@@ -22,13 +22,57 @@ def _base_kwargs() -> dict[str, object]:
         "ticker": "DCF",
         "rationale": "unit-test",
         "initial_revenue": 220.0,
-        "growth_rates": [0.22, 0.18, 0.14, 0.10, 0.07],
-        "operating_margins": [0.12, 0.14, 0.16, 0.18, 0.20],
+        "growth_rates": [0.22, 0.20, 0.18, 0.16, 0.14, 0.12, 0.10, 0.08, 0.07, 0.06],
+        "operating_margins": [
+            0.12,
+            0.13,
+            0.14,
+            0.15,
+            0.16,
+            0.17,
+            0.18,
+            0.19,
+            0.20,
+            0.20,
+        ],
         "tax_rate": 0.21,
-        "da_rates": [0.03, 0.03, 0.03, 0.03, 0.03],
-        "capex_rates": [0.06, 0.06, 0.055, 0.05, 0.05],
-        "wc_rates": [0.012, 0.011, 0.010, 0.010, 0.009],
-        "sbc_rates": [0.018, 0.017, 0.016, 0.015, 0.014],
+        "da_rates": [0.03] * 10,
+        "capex_rates": [
+            0.06,
+            0.06,
+            0.058,
+            0.056,
+            0.054,
+            0.052,
+            0.050,
+            0.050,
+            0.050,
+            0.050,
+        ],
+        "wc_rates": [
+            0.012,
+            0.011,
+            0.011,
+            0.010,
+            0.010,
+            0.010,
+            0.009,
+            0.009,
+            0.009,
+            0.009,
+        ],
+        "sbc_rates": [
+            0.018,
+            0.017,
+            0.016,
+            0.016,
+            0.015,
+            0.015,
+            0.014,
+            0.014,
+            0.014,
+            0.014,
+        ],
         "wacc": 0.105,
         "terminal_growth": 0.028,
         "shares_outstanding": 120.0,
@@ -68,7 +112,10 @@ def test_dcf_growth_does_not_call_saas_wrapper(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_dcf_standard_outputs_converged_series_and_terminal_guard() -> None:
-    params = DCFStandardParams(**_base_kwargs())
+    kwargs = _base_kwargs()
+    kwargs["growth_rates"] = [0.15] * 10
+    kwargs["terminal_growth"] = 0.03
+    params = DCFStandardParams(**kwargs)
     result = calculate_dcf_standard_valuation(params)
 
     assert "error" not in result
@@ -78,13 +125,23 @@ def test_dcf_standard_outputs_converged_series_and_terminal_guard() -> None:
     growth = details.get("growth_rates_converged")
     terminal_effective = details.get("terminal_growth_effective")
     reinvestment = details.get("reinvestment_rates")
+    sensitivity_summary = details.get("sensitivity_summary")
+    sensitivity_cases = details.get("sensitivity_cases")
 
     assert isinstance(growth, list)
     assert isinstance(reinvestment, list)
-    assert len(growth) == 5
-    assert len(reinvestment) == 5
+    assert len(growth) == 10
+    assert len(reinvestment) == 10
     assert isinstance(terminal_effective, float)
     assert growth[-1] == pytest.approx(terminal_effective, abs=1e-9)
+    assert growth[:7] == pytest.approx([0.15] * 7)
+    assert growth[7] < 0.15
+    assert growth[7] > growth[8] > growth[9]
+    assert isinstance(sensitivity_summary, dict)
+    assert sensitivity_summary.get("enabled") is True
+    assert sensitivity_summary.get("scenario_count") == 16
+    assert isinstance(sensitivity_cases, list)
+    assert len(sensitivity_cases) == 16
 
 
 def test_dcf_growth_includes_monte_carlo_distribution() -> None:
@@ -135,7 +192,7 @@ def test_dcf_growth_monte_carlo_base_case_matches_point_intrinsic() -> None:
 
 def test_dcf_growth_preserves_high_margin_regime() -> None:
     kwargs = _base_kwargs()
-    kwargs["operating_margins"] = [0.58, 0.58, 0.58, 0.58, 0.58]
+    kwargs["operating_margins"] = [0.58] * 10
     params = DCFGrowthParams(**kwargs)
     result = calculate_dcf_growth_valuation(params)
 
@@ -144,4 +201,54 @@ def test_dcf_growth_preserves_high_margin_regime() -> None:
     assert isinstance(details, dict)
     margins = details.get("operating_margins_converged")
     assert isinstance(margins, list)
-    assert margins == pytest.approx([0.58, 0.58, 0.58, 0.58, 0.58])
+    assert margins == pytest.approx([0.58] * 10)
+
+
+def test_dcf_standard_preserves_high_margin_regime_without_forcing_to_30pct() -> None:
+    kwargs = _base_kwargs()
+    kwargs["operating_margins"] = [0.36] * 10
+    params = DCFStandardParams(**kwargs)
+    result = calculate_dcf_standard_valuation(params)
+
+    assert "error" not in result
+    details = result["details"]
+    assert isinstance(details, dict)
+    margins = details.get("operating_margins_converged")
+    assert isinstance(margins, list)
+    assert margins == pytest.approx([0.36] * 10)
+
+
+def test_dcf_standard_still_bounds_extreme_margin_regime() -> None:
+    kwargs = _base_kwargs()
+    kwargs["operating_margins"] = [0.58] * 10
+    params = DCFStandardParams(**kwargs)
+    result = calculate_dcf_standard_valuation(params)
+
+    assert "error" not in result
+    details = result["details"]
+    assert isinstance(details, dict)
+    margins = details.get("operating_margins_converged")
+    assert isinstance(margins, list)
+    assert margins[-1] == pytest.approx(0.40)
+
+
+def test_dcf_standard_fcff_policy_ignores_sbc_addback() -> None:
+    low_sbc_kwargs = _base_kwargs()
+    low_sbc_kwargs["sbc_rates"] = [0.0] * 10
+    low_sbc_result = calculate_dcf_standard_valuation(
+        DCFStandardParams(**low_sbc_kwargs)
+    )
+
+    high_sbc_kwargs = _base_kwargs()
+    high_sbc_kwargs["sbc_rates"] = [0.20] * 10
+    high_sbc_result = calculate_dcf_standard_valuation(
+        DCFStandardParams(**high_sbc_kwargs)
+    )
+
+    assert "error" not in low_sbc_result
+    assert "error" not in high_sbc_result
+    low_intrinsic = low_sbc_result.get("intrinsic_value")
+    high_intrinsic = high_sbc_result.get("intrinsic_value")
+    assert isinstance(low_intrinsic, float)
+    assert isinstance(high_intrinsic, float)
+    assert high_intrinsic == pytest.approx(low_intrinsic, rel=1e-9, abs=1e-9)

@@ -21,6 +21,8 @@ def assemble_base_financial_model(
         fiscal_year=context_balance.fiscal_year,
         fiscal_period=context_balance.fiscal_period,
         shares_outstanding=context_balance.shares_outstanding,
+        weighted_average_shares_basic=context_balance.weighted_average_shares_basic,
+        weighted_average_shares_diluted=context_balance.weighted_average_shares_diluted,
         total_assets=context_balance.total_assets,
         total_liabilities=context_balance.total_liabilities,
         total_equity=context_balance.total_equity,

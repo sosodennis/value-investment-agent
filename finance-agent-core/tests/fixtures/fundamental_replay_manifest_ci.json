@@ -1,0 +1,13 @@
+{
+  "schema_version": "valuation_replay_manifest_v1",
+  "cases": [
+    {
+      "case_id": "AAPL_CI",
+      "input_path": "fundamental_replay_inputs/aapl.replay.json"
+    },
+    {
+      "case_id": "NVDA_CI",
+      "input_path": "fundamental_replay_inputs/nvda.replay.json"
+    }
+  ]
+}

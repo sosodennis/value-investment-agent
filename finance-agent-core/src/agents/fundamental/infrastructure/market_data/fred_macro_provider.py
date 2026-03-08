@@ -17,6 +17,8 @@ from .provider_contracts import (
 DEFAULT_HTTP_TIMEOUT_SECONDS = 4.0
 FRED_10Y_SERIES_ID = "DGS10"
 FRED_LONG_RUN_GROWTH_SERIES_ID = "A191RL1Q225SBEA"
+FRED_10Y_UPDATE_CADENCE_DAYS = 1
+FRED_LONG_RUN_GROWTH_UPDATE_CADENCE_DAYS = 90
 
 
 class FredMacroProvider(MarketDataProvider):
@@ -44,6 +46,7 @@ class FredMacroProvider(MarketDataProvider):
             invalid_flag="invalid_rate",
             invalid_warning="fred risk_free_rate invalid",
             horizon="long_term",
+            update_cadence_days=FRED_10Y_UPDATE_CADENCE_DAYS,
             source_detail=f"fred:{self._risk_free_series_id}",
         )
         long_run_growth_datum, long_run_warnings = self._fetch_series_datum(
@@ -52,6 +55,7 @@ class FredMacroProvider(MarketDataProvider):
             invalid_flag="invalid_growth_anchor",
             invalid_warning="fred long_run_growth_anchor invalid",
             horizon="long_term",
+            update_cadence_days=FRED_LONG_RUN_GROWTH_UPDATE_CADENCE_DAYS,
             source_detail=f"fred:{self._long_run_growth_series_id}",
         )
         warnings = tuple(
@@ -73,6 +77,7 @@ class FredMacroProvider(MarketDataProvider):
         invalid_flag: str,
         invalid_warning: str,
         horizon: str,
+        update_cadence_days: int,
         source_detail: str,
     ) -> tuple[MarketDatum, tuple[str, ...]]:
         as_of = datetime.now(timezone.utc).isoformat()
@@ -83,6 +88,7 @@ class FredMacroProvider(MarketDataProvider):
                     source=self.name,
                     as_of=as_of,
                     horizon=horizon,
+                    update_cadence_days=update_cadence_days,
                     source_detail=source_detail,
                     quality_flags=("missing_api_key",),
                     license_note=self.license_note,
@@ -110,6 +116,7 @@ class FredMacroProvider(MarketDataProvider):
                     source=self.name,
                     as_of=as_of,
                     horizon=horizon,
+                    update_cadence_days=update_cadence_days,
                     source_detail=source_detail,
                     quality_flags=("fetch_error",),
                     license_note=self.license_note,
@@ -125,6 +132,7 @@ class FredMacroProvider(MarketDataProvider):
                     source=self.name,
                     as_of=as_of,
                     horizon=horizon,
+                    update_cadence_days=update_cadence_days,
                     source_detail=source_detail,
                     quality_flags=("missing_observation",),
                     license_note=self.license_note,
@@ -140,6 +148,7 @@ class FredMacroProvider(MarketDataProvider):
                     source=self.name,
                     as_of=as_of,
                     horizon=horizon,
+                    update_cadence_days=update_cadence_days,
                     source_detail=source_detail,
                     quality_flags=("invalid_observation",),
                     license_note=self.license_note,
@@ -162,6 +171,7 @@ class FredMacroProvider(MarketDataProvider):
                     source=self.name,
                     as_of=value_as_of,
                     horizon=horizon,
+                    update_cadence_days=update_cadence_days,
                     source_detail=source_detail,
                     quality_flags=(invalid_flag,),
                     license_note=self.license_note,
@@ -175,6 +185,7 @@ class FredMacroProvider(MarketDataProvider):
                 source=self.name,
                 as_of=value_as_of,
                 horizon=horizon,
+                update_cadence_days=update_cadence_days,
                 source_detail=source_detail,
                 quality_flags=(),
                 license_note=self.license_note,

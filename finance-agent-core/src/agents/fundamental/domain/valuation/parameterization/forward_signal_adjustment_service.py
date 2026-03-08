@@ -6,6 +6,9 @@ from dataclasses import dataclass
 from src.shared.kernel.types import JSONObject
 
 from ..policies.forward_signal_policy import apply_forward_signal_policy
+from .forward_signal_calibration_mapping_service import (
+    load_forward_signal_calibration_mapping,
+)
 from .forward_signal_parser_service import parse_market_forward_signals
 from .snapshot_service import merge_metadata
 
@@ -27,13 +30,30 @@ def apply_forward_signal_adjustments(
     raw_signals: object,
 ) -> ForwardSignalAdjustmentOutcome:
     signals = parse_market_forward_signals(raw_signals)
-    policy = apply_forward_signal_policy(signals)
+    calibration_load_result = load_forward_signal_calibration_mapping()
+    policy = apply_forward_signal_policy(
+        signals,
+        calibration_config=calibration_load_result.config,
+    )
     updated_assumptions = list(assumptions)
     updated_params = dict(params)
     updated_metadata = merge_metadata(
         metadata,
-        {"forward_signal": policy.to_summary()},
+        {
+            "forward_signal": policy.to_summary(),
+            "forward_signal_calibration": {
+                "mapping_source": calibration_load_result.mapping_source,
+                "mapping_path": calibration_load_result.mapping_path,
+                "degraded_reason": calibration_load_result.degraded_reason,
+            },
+        },
     )
+
+    if calibration_load_result.degraded_reason:
+        updated_assumptions.append(
+            "forward_signal calibration fallback to embedded default "
+            f"({calibration_load_result.degraded_reason})"
+        )
 
     if policy.total_count == 0:
         updated_assumptions.append(
@@ -65,7 +85,8 @@ def apply_forward_signal_adjustments(
     if growth_applied and abs(policy.growth_adjustment_basis_points) > 1e-9:
         updated_assumptions.append(
             "forward_signal growth adjustment applied "
-            f"({policy.growth_adjustment_basis_points:+.1f} basis points)"
+            f"(raw={policy.raw_growth_adjustment_basis_points:+.1f}bp -> "
+            f"calibrated={policy.growth_adjustment_basis_points:+.1f}bp)"
         )
 
     margin_applied = apply_series_adjustment(
@@ -78,7 +99,8 @@ def apply_forward_signal_adjustments(
     if margin_applied and abs(policy.margin_adjustment_basis_points) > 1e-9:
         updated_assumptions.append(
             "forward_signal margin adjustment applied "
-            f"({policy.margin_adjustment_basis_points:+.1f} basis points)"
+            f"(raw={policy.raw_margin_adjustment_basis_points:+.1f}bp -> "
+            f"calibrated={policy.margin_adjustment_basis_points:+.1f}bp)"
         )
 
     if (
@@ -103,8 +125,15 @@ def apply_forward_signal_adjustments(
         "signals_total": policy.total_count,
         "signals_accepted": policy.accepted_count,
         "signals_rejected": policy.rejected_count,
+        "raw_growth_adjustment_basis_points": policy.raw_growth_adjustment_basis_points,
+        "raw_margin_adjustment_basis_points": policy.raw_margin_adjustment_basis_points,
         "growth_adjustment_basis_points": policy.growth_adjustment_basis_points,
         "margin_adjustment_basis_points": policy.margin_adjustment_basis_points,
+        "calibration_applied": policy.calibration_applied,
+        "mapping_version": policy.mapping_version,
+        "calibration_mapping_source": calibration_load_result.mapping_source,
+        "calibration_mapping_path": calibration_load_result.mapping_path,
+        "calibration_degraded_reason": calibration_load_result.degraded_reason,
         "risk_level": policy.risk_level,
         "growth_applied": growth_applied,
         "margin_applied": margin_applied,

@@ -2,10 +2,14 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+from src.agents.fundamental.infrastructure.market_data.consensus_anchor_aggregator import (
+    FREE_CONSENSUS_AGGREGATE_SOURCE,
+)
 from src.agents.fundamental.infrastructure.market_data.market_data_service import (
     DEFAULT_BETA,
     DEFAULT_RISK_FREE_RATE,
     MarketDataService,
+    recompute_market_snapshot_staleness,
 )
 from src.agents.fundamental.infrastructure.market_data.provider_contracts import (
     MarketDatum,
@@ -42,6 +46,17 @@ class _FailingProvider:
         del ticker_symbol
         self.calls += 1
         raise RuntimeError("network down")
+
+
+class _CodedFailingProvider:
+    def __init__(self, *, name: str, message: str) -> None:
+        self.name = name
+        self.license_note = f"{name} provider"
+        self._message = message
+
+    def fetch(self, ticker_symbol: str) -> ProviderFetch:
+        del ticker_symbol
+        raise RuntimeError(self._message)
 
 
 def test_market_data_service_prefers_macro_provider_for_risk_free_rate() -> None:
@@ -154,7 +169,7 @@ def test_market_data_service_marks_shares_staleness_fields() -> None:
 def test_market_data_service_uses_relaxed_staleness_for_long_run_growth_anchor() -> (
     None
 ):
-    stale_as_of = (datetime.now(timezone.utc) - timedelta(days=150)).isoformat()
+    stale_as_of = (datetime.now(timezone.utc) - timedelta(days=154)).isoformat()
     yahoo = _StaticProvider(
         name="yfinance",
         license_note="yahoo license",
@@ -168,7 +183,12 @@ def test_market_data_service_uses_relaxed_staleness_for_long_run_growth_anchor()
         license_note="fred license",
         datums={
             "risk_free_rate": MarketDatum(0.04, "fred", stale_as_of),
-            "long_run_growth_anchor": MarketDatum(0.014, "fred", stale_as_of),
+            "long_run_growth_anchor": MarketDatum(
+                0.014,
+                "fred",
+                stale_as_of,
+                update_cadence_days=90,
+            ),
         },
     )
 
@@ -187,3 +207,198 @@ def test_market_data_service_uses_relaxed_staleness_for_long_run_growth_anchor()
     assert isinstance(shares_staleness, dict)
     assert shares_staleness.get("max_days") == 5
     assert shares_staleness.get("is_stale") is True
+
+
+def test_recompute_market_snapshot_staleness_reuses_market_data_policy() -> None:
+    as_of_now = datetime(2026, 3, 8, tzinfo=timezone.utc)
+    snapshot = {
+        "as_of": as_of_now.isoformat(),
+        "market_stale_max_days": 5,
+        "market_datums": {
+            "shares_outstanding": {
+                "value": 1000.0,
+                "source": "yfinance",
+                "as_of": "2026-02-20T00:00:00Z",
+                "quality_flags": [],
+            },
+            "long_run_growth_anchor": {
+                "value": 0.014,
+                "source": "fred",
+                "as_of": "2025-10-05T00:00:00Z",
+                "update_cadence_days": 90,
+                "quality_flags": [],
+            },
+        },
+    }
+    recomputed = recompute_market_snapshot_staleness(snapshot, now=as_of_now)
+
+    assert isinstance(recomputed, dict)
+    shares_staleness = recomputed["market_datums"]["shares_outstanding"]["staleness"]
+    assert shares_staleness["max_days"] == 5
+    assert shares_staleness["is_stale"] is True
+    assert recomputed["shares_outstanding_is_stale"] is True
+
+    anchor_staleness = recomputed["market_datums"]["long_run_growth_anchor"][
+        "staleness"
+    ]
+    assert anchor_staleness["max_days"] == 180
+    assert anchor_staleness["is_stale"] is False
+
+
+def test_market_data_service_prefers_consensus_aggregate_for_target_mean_price() -> (
+    None
+):
+    yfinance = _StaticProvider(
+        name="yfinance",
+        license_note="yahoo license",
+        datums={
+            "current_price": MarketDatum(90.0, "yfinance", "2026-03-05T00:00:00Z"),
+            "shares_outstanding": MarketDatum(
+                1_000.0, "yfinance", "2026-03-05T00:00:00Z"
+            ),
+            "beta": MarketDatum(1.1, "yfinance", "2026-03-05T00:00:00Z"),
+            "risk_free_rate": MarketDatum(0.04, "yfinance", "2026-03-05T00:00:00Z"),
+            "target_mean_price": MarketDatum(220.0, "yfinance", "2026-03-05T00:00:00Z"),
+        },
+    )
+    tipranks = _StaticProvider(
+        name="tipranks",
+        license_note="tipranks license",
+        datums={
+            "target_mean_price": MarketDatum(
+                200.0,
+                "tipranks",
+                "2026-03-05T00:00:00Z",
+            ),
+            "target_analyst_count": MarketDatum(
+                30.0,
+                "tipranks",
+                "2026-03-05T00:00:00Z",
+            ),
+        },
+    )
+    investing = _StaticProvider(
+        name="investing",
+        license_note="investing license",
+        datums={
+            "target_mean_price": MarketDatum(
+                210.0,
+                "investing",
+                "2026-03-05T00:00:00Z",
+            ),
+            "target_analyst_count": MarketDatum(
+                24.0,
+                "investing",
+                "2026-03-05T00:00:00Z",
+            ),
+        },
+    )
+
+    service = MarketDataService(
+        ttl_seconds=120,
+        max_retries=0,
+        providers=(yfinance, tipranks, investing),
+    )
+    snapshot = service.get_market_snapshot("EXM")
+
+    assert snapshot.target_mean_price == 210.0
+    assert snapshot.market_datums["target_mean_price"]["source"] == (
+        FREE_CONSENSUS_AGGREGATE_SOURCE
+    )
+    assert snapshot.target_consensus_applied is True
+    assert snapshot.target_consensus_source_count == 3
+    assert snapshot.target_consensus_sources == ("tipranks", "investing", "yfinance")
+    assert snapshot.target_consensus_fallback_reason is None
+
+
+def test_market_data_service_falls_back_to_yfinance_target_when_consensus_insufficient(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("FUNDAMENTAL_TARGET_CONSENSUS_MIN_SOURCES", "3")
+    yfinance = _StaticProvider(
+        name="yfinance",
+        license_note="yahoo license",
+        datums={
+            "current_price": MarketDatum(90.0, "yfinance", "2026-03-05T00:00:00Z"),
+            "shares_outstanding": MarketDatum(
+                1_000.0, "yfinance", "2026-03-05T00:00:00Z"
+            ),
+            "beta": MarketDatum(1.1, "yfinance", "2026-03-05T00:00:00Z"),
+            "risk_free_rate": MarketDatum(0.04, "yfinance", "2026-03-05T00:00:00Z"),
+            "target_mean_price": MarketDatum(220.0, "yfinance", "2026-03-05T00:00:00Z"),
+        },
+    )
+    tipranks = _StaticProvider(
+        name="tipranks",
+        license_note="tipranks license",
+        datums={
+            "target_mean_price": MarketDatum(
+                200.0,
+                "tipranks",
+                "2026-03-05T00:00:00Z",
+            ),
+            "target_analyst_count": MarketDatum(
+                4.0,
+                "tipranks",
+                "2026-03-05T00:00:00Z",
+            ),
+        },
+    )
+
+    service = MarketDataService(
+        ttl_seconds=120,
+        max_retries=0,
+        providers=(yfinance, tipranks),
+    )
+    snapshot = service.get_market_snapshot("EXM")
+
+    assert snapshot.target_mean_price == 220.0
+    assert snapshot.market_datums["target_mean_price"]["source"] == "yfinance"
+    assert snapshot.market_datums["target_mean_price"]["fallback_reason"] == (
+        "insufficient_sources"
+    )
+    quality_flags = snapshot.market_datums["target_mean_price"].get("quality_flags")
+    assert isinstance(quality_flags, list)
+    assert "consensus_fallback" in quality_flags
+    assert snapshot.target_consensus_applied is False
+    assert snapshot.target_consensus_fallback_reason == "insufficient_sources"
+    assert snapshot.target_consensus_source_count is None
+
+
+def test_market_data_service_classifies_blocked_consensus_fallback_with_governance_warning() -> (
+    None
+):
+    yfinance = _StaticProvider(
+        name="yfinance",
+        license_note="yahoo license",
+        datums={
+            "current_price": MarketDatum(90.0, "yfinance", "2026-03-05T00:00:00Z"),
+            "shares_outstanding": MarketDatum(
+                1_000.0, "yfinance", "2026-03-05T00:00:00Z"
+            ),
+            "beta": MarketDatum(1.1, "yfinance", "2026-03-05T00:00:00Z"),
+            "risk_free_rate": MarketDatum(0.04, "yfinance", "2026-03-05T00:00:00Z"),
+            "target_mean_price": MarketDatum(220.0, "yfinance", "2026-03-05T00:00:00Z"),
+        },
+    )
+    blocked_tipranks = _CodedFailingProvider(
+        name="tipranks",
+        message=(
+            "code=provider_blocked_http;url=https://www.tipranks.com/stocks/exm/forecast;"
+            "status=403"
+        ),
+    )
+
+    service = MarketDataService(
+        ttl_seconds=120,
+        max_retries=0,
+        providers=(yfinance, blocked_tipranks),
+    )
+    snapshot = service.get_market_snapshot("EXM")
+
+    assert snapshot.target_consensus_applied is False
+    assert snapshot.target_consensus_fallback_reason == "provider_blocked"
+    assert any(
+        "provider_governance_review_required" in warning
+        for warning in snapshot.target_consensus_warnings
+    )

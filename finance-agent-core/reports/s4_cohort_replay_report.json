@@ -1,0 +1,25 @@
+{
+  "cases": [],
+  "errors": [
+    {
+      "ticker": "AAPL",
+      "model": "dcf_standard",
+      "error": "No SEC XBRL financial reports available"
+    },
+    {
+      "ticker": "NVDA",
+      "model": "dcf_growth",
+      "error": "No SEC XBRL financial reports available"
+    },
+    {
+      "ticker": "MSFT",
+      "model": "dcf_standard",
+      "error": "No SEC XBRL financial reports available"
+    },
+    {
+      "ticker": "GOOGL",
+      "model": "dcf_standard",
+      "error": "No SEC XBRL financial reports available"
+    }
+  ]
+}

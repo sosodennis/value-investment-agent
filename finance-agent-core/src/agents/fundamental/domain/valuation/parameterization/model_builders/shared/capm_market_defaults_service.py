@@ -21,6 +21,7 @@ def resolve_capm_market_defaults(
     beta_format: str,
     default_market_risk_premium: float,
     market_risk_premium_format: str,
+    allow_market_snapshot_mrp: bool,
     assumptions: list[str],
 ) -> CapmMarketDefaults:
     risk_free_rate = market_float(market_snapshot, "risk_free_rate")
@@ -35,11 +36,21 @@ def resolve_capm_market_defaults(
         beta = default_beta
         assumptions.append(f"beta defaulted to {default_beta:{beta_format}}")
 
-    market_risk_premium = default_market_risk_premium
-    assumptions.append(
-        "market_risk_premium defaulted to "
-        f"{default_market_risk_premium:{market_risk_premium_format}}"
-    )
+    snapshot_market_risk_premium = market_float(market_snapshot, "market_risk_premium")
+    if allow_market_snapshot_mrp and snapshot_market_risk_premium is not None:
+        market_risk_premium = snapshot_market_risk_premium
+        assumptions.append("market_risk_premium sourced from market snapshot")
+    else:
+        market_risk_premium = default_market_risk_premium
+        assumptions.append(
+            "market_risk_premium defaulted to "
+            f"{default_market_risk_premium:{market_risk_premium_format}}"
+        )
+        if snapshot_market_risk_premium is not None:
+            assumptions.append(
+                "market_risk_premium from market snapshot ignored by policy "
+                "(market-level source only)"
+            )
 
     return CapmMarketDefaults(
         risk_free_rate=risk_free_rate,

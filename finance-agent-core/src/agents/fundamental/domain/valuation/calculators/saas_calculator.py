@@ -131,7 +131,6 @@ def _run_saas_monte_carlo(
     da_rates = np.asarray(base_inputs["da_rates"], dtype=float)
     capex_rates = np.asarray(base_inputs["capex_rates"], dtype=float)
     wc_rates = np.asarray(base_inputs["wc_rates"], dtype=float)
-    sbc_rates = np.asarray(base_inputs["sbc_rates"], dtype=float)
     initial_revenue = float(base_inputs["initial_revenue"])
     tax_rate = float(base_inputs["tax_rate"])
     cash = float(base_inputs["cash"])
@@ -180,13 +179,12 @@ def _run_saas_monte_carlo(
         nopat = ebit * (1.0 - tax_rate)
         da = projected_revenue * da_rates[np.newaxis, :]
         capex = projected_revenue * capex_rates[np.newaxis, :]
-        sbc = projected_revenue * sbc_rates[np.newaxis, :]
         previous_revenue = np.empty_like(projected_revenue)
         previous_revenue[:, 0] = initial_revenue
         previous_revenue[:, 1:] = projected_revenue[:, :-1]
         delta_revenue = projected_revenue - previous_revenue
         delta_wc = delta_revenue * wc_rates[np.newaxis, :]
-        fcff = nopat + da - capex - delta_wc + sbc
+        fcff = nopat + da - capex - delta_wc
 
         discount_curve = np.power(
             1.0 + wacc[:, np.newaxis], discount_years[np.newaxis, :]

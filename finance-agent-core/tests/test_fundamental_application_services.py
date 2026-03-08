@@ -46,6 +46,21 @@ def test_build_valuation_success_update_includes_output_and_artifact() -> None:
             "equity_value": 4250.0,
             "upside_potential": 0.15,
             "details": {
+                "growth_rates_converged": [0.12, 0.10, 0.08],
+                "terminal_growth_effective": 0.0135,
+                "sensitivity_summary": {
+                    "enabled": True,
+                    "scenario_count": 16,
+                    "max_upside_delta_pct": 0.22,
+                    "max_downside_delta_pct": -0.18,
+                    "top_drivers": [
+                        {
+                            "shock_dimension": "wacc",
+                            "shock_value_bp": -100,
+                            "delta_pct_vs_base": 0.22,
+                        }
+                    ],
+                },
                 "distribution_summary": {
                     "summary": {
                         "percentile_5": 30.0,
@@ -66,10 +81,24 @@ def test_build_valuation_success_update_includes_output_and_artifact() -> None:
                         "corr_pearson_max_abs_error": 0.03,
                         "corr_spearman_max_abs_error": 0.02,
                     },
-                }
+                },
             },
         },
-        assumptions=["wacc defaulted to 10.00%"],
+        assumptions=[
+            "wacc defaulted to 10.00%",
+            "consensus_growth_rate decayed into near-term DCF growth path "
+            "(horizon=short_term, window_years=3, weights=1.00|0.67|0.33)",
+            "base_growth_guardrail applied "
+            "(version=base_assumption_guardrail_v1_2026_03_05, "
+            "raw_year1=0.800000, raw_yearN=0.020000, "
+            "guarded_year1=0.550000, guarded_yearN=0.014000, "
+            "reasons=growth_year1_capped|growth_terminal_aligned_to_long_run_target)",
+            "base_margin_guardrail applied "
+            "(version=base_assumption_guardrail_v1_2026_03_05, "
+            "raw_year1=0.594300, raw_yearN=0.594300, "
+            "guarded_year1=0.594300, guarded_yearN=0.420000, "
+            "reasons=margin_terminal_converged_to_normalized_band)",
+        ],
         summarize_preview=lambda _ctx, _reports: {
             "company_name": "GameStop",
             "selected_model": "dcf_standard",
@@ -101,6 +130,8 @@ def test_build_valuation_success_update_includes_output_and_artifact() -> None:
                 "evidence_count": 3,
                 "growth_adjustment_basis_points": 45.0,
                 "margin_adjustment_basis_points": -20.0,
+                "calibration_applied": True,
+                "mapping_version": "forward_signal_calibration_v2_2026_03_05",
                 "risk_level": "medium",
                 "source_types": ["mda", "manual"],
                 "decisions": [
@@ -171,10 +202,77 @@ def test_build_valuation_success_update_includes_output_and_artifact() -> None:
     assert isinstance(preview, dict)
     assert "distribution_summary" in preview
     assert preview["distribution_scenarios"]["base"]["price"] == 42.5
+    assert preview["valuation_diagnostics"]["growth_rates_converged"] == pytest.approx(
+        [0.12, 0.10, 0.08]
+    )
+    assert preview["valuation_diagnostics"][
+        "terminal_growth_effective"
+    ] == pytest.approx(0.0135)
+    assert (
+        preview["valuation_diagnostics"]["forward_signal_mapping_version"]
+        == "forward_signal_calibration_v2_2026_03_05"
+    )
+    assert (
+        preview["valuation_diagnostics"]["forward_signal_calibration_applied"] is True
+    )
+    assert preview["valuation_diagnostics"]["base_growth_guardrail_applied"] is True
+    assert preview["valuation_diagnostics"]["growth_consensus_policy"] == "decayed"
+    assert preview["valuation_diagnostics"]["growth_consensus_horizon"] == "short_term"
+    assert preview["valuation_diagnostics"]["growth_consensus_window_years"] == 3
+    assert (
+        preview["valuation_diagnostics"]["base_growth_guardrail_version"]
+        == "base_assumption_guardrail_v1_2026_03_05"
+    )
+    assert preview["valuation_diagnostics"]["base_growth_raw_year1"] == pytest.approx(
+        0.8
+    )
+    assert preview["valuation_diagnostics"]["base_growth_raw_yearN"] == pytest.approx(
+        0.02
+    )
+    assert preview["valuation_diagnostics"][
+        "base_growth_guarded_year1"
+    ] == pytest.approx(0.55)
+    assert preview["valuation_diagnostics"][
+        "base_growth_guarded_yearN"
+    ] == pytest.approx(0.014)
+    assert preview["valuation_diagnostics"]["base_growth_guardrail_reason_count"] == 2
+    assert preview["valuation_diagnostics"]["base_growth_guardrail_reasons"] == [
+        "growth_year1_capped",
+        "growth_terminal_aligned_to_long_run_target",
+    ]
+    assert preview["valuation_diagnostics"]["base_margin_guardrail_applied"] is True
+    assert (
+        preview["valuation_diagnostics"]["base_margin_guardrail_version"]
+        == "base_assumption_guardrail_v1_2026_03_05"
+    )
+    assert preview["valuation_diagnostics"]["base_margin_raw_year1"] == pytest.approx(
+        0.5943
+    )
+    assert preview["valuation_diagnostics"]["base_margin_raw_yearN"] == pytest.approx(
+        0.5943
+    )
+    assert preview["valuation_diagnostics"][
+        "base_margin_guarded_year1"
+    ] == pytest.approx(0.5943)
+    assert preview["valuation_diagnostics"][
+        "base_margin_guarded_yearN"
+    ] == pytest.approx(0.42)
+    assert preview["valuation_diagnostics"]["base_margin_guardrail_reason_count"] == 1
+    assert preview["valuation_diagnostics"]["base_margin_guardrail_reasons"] == [
+        "margin_terminal_converged_to_normalized_band"
+    ]
+    assert preview["valuation_diagnostics"]["base_guardrail_hit_count"] == 2
+    assert preview["valuation_diagnostics"]["sensitivity_summary"]["enabled"] is True
+    assert (
+        preview["valuation_diagnostics"]["sensitivity_summary"]["scenario_count"] == 16
+    )
+    assert preview["valuation_diagnostics"]["sensitivity_summary"][
+        "max_upside_delta_pct"
+    ] == pytest.approx(0.22)
     assert preview["equity_value"] == 4250.0
     assert preview["intrinsic_value"] == 42.5
     assert preview["upside_potential"] == 0.15
-    assert preview["assumption_breakdown"]["total_assumptions"] == 1
+    assert preview["assumption_breakdown"]["total_assumptions"] == 4
     assert preview["assumption_breakdown"]["key_parameters"]["current_price"] == 39.0
     assert (
         preview["assumption_breakdown"]["key_parameters"]["time_alignment_status"]
@@ -194,6 +292,14 @@ def test_build_valuation_success_update_includes_output_and_artifact() -> None:
         is True
     )
     assert preview["assumption_breakdown"]["monte_carlo"]["corr_pairs_total"] == 1
+    assert preview["assumption_breakdown"]["sensitivity"]["enabled"] is True
+    assert preview["assumption_breakdown"]["sensitivity"]["scenario_count"] == 16
+    assert (
+        preview["assumption_breakdown"]["sensitivity"]["top_drivers"][0][
+            "shock_dimension"
+        ]
+        == "wacc"
+    )
     assert preview["assumption_risk_level"] == "high"
     assert preview["data_quality_flags"] == [
         "defaults_present",
@@ -220,6 +326,28 @@ def test_build_valuation_success_update_includes_output_and_artifact() -> None:
             "shares_outstanding"
         ]["selected_source"]
         == "market_data"
+    )
+    assert (
+        preview["assumption_breakdown"]["base_assumption_guardrail"]["version"]
+        == "base_assumption_guardrail_v1_2026_03_05"
+    )
+    assert preview["assumption_breakdown"]["base_assumption_guardrail"]["growth"][
+        "guarded_year1"
+    ] == pytest.approx(0.55)
+    assert (
+        preview["assumption_breakdown"]["base_assumption_guardrail"]["growth"][
+            "reason_count"
+        ]
+        == 2
+    )
+    assert preview["assumption_breakdown"]["base_assumption_guardrail"]["margin"][
+        "guarded_yearN"
+    ] == pytest.approx(0.42)
+    assert (
+        preview["assumption_breakdown"]["base_assumption_guardrail"]["margin"][
+            "reason_count"
+        ]
+        == 1
     )
     assert preview["data_freshness"]["financial_statement"]["fiscal_year"] == 2025
     assert (

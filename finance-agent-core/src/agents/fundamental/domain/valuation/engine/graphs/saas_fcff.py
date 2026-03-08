@@ -48,8 +48,7 @@ def calculate_fcff(
     for i, r in enumerate(projected_revenue):
         da = r * da_rates[i]
         capex = r * capex_rates[i]
-        sbc = r * sbc_rates[i]
-        f = nopat[i] + da - capex - delta_wc[i] + sbc
+        f = nopat[i] + da - capex - delta_wc[i]
         fcff.append(f)
     return fcff
 

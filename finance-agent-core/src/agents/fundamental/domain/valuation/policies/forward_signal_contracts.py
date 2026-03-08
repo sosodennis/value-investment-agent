@@ -14,6 +14,7 @@ SUPPORTED_FORWARD_SIGNAL_METRICS: tuple[str, ...] = (
 )
 SUPPORTED_FORWARD_SIGNAL_SOURCES: tuple[str, ...] = (
     "mda",
+    "xbrl_auto",
     "earnings_call",
     "press_release",
     "news",
@@ -65,6 +66,10 @@ class ForwardSignalDecision:
     accepted: bool
     reason: str
     effective_basis_points: float
+    raw_basis_points: float
+    calibrated_basis_points: float
+    calibration_applied: bool
+    mapping_version: str | None
     risk_tag: str | None
 
 
@@ -76,8 +81,12 @@ class ForwardSignalPolicyResult:
     evidence_count: int
     growth_adjustment: float
     margin_adjustment: float
+    raw_growth_adjustment_basis_points: float
+    raw_margin_adjustment_basis_points: float
     growth_adjustment_basis_points: float
     margin_adjustment_basis_points: float
+    calibration_applied: bool
+    mapping_version: str | None
     risk_level: Literal["low", "medium", "high"]
     source_types: tuple[str, ...]
     decisions: tuple[ForwardSignalDecision, ...]
@@ -88,8 +97,12 @@ class ForwardSignalPolicyResult:
             "signals_accepted": self.accepted_count,
             "signals_rejected": self.rejected_count,
             "evidence_count": self.evidence_count,
+            "raw_growth_adjustment_basis_points": self.raw_growth_adjustment_basis_points,
+            "raw_margin_adjustment_basis_points": self.raw_margin_adjustment_basis_points,
             "growth_adjustment_basis_points": self.growth_adjustment_basis_points,
             "margin_adjustment_basis_points": self.margin_adjustment_basis_points,
+            "calibration_applied": self.calibration_applied,
+            "mapping_version": self.mapping_version,
             "risk_level": self.risk_level,
             "source_types": list(self.source_types),
             "decisions": [
@@ -99,6 +112,10 @@ class ForwardSignalPolicyResult:
                     "accepted": decision.accepted,
                     "reason": decision.reason,
                     "effective_basis_points": decision.effective_basis_points,
+                    "raw_basis_points": decision.raw_basis_points,
+                    "calibrated_basis_points": decision.calibrated_basis_points,
+                    "calibration_applied": decision.calibration_applied,
+                    "mapping_version": decision.mapping_version,
                     "risk_tag": decision.risk_tag,
                 }
                 for decision in self.decisions

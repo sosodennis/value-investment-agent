@@ -17,6 +17,7 @@ class FinancialReportsArtifactData(BaseModel):
 
     financial_reports: list[FinancialReportModel]
     forward_signals: list[dict[str, object]] | None = None
+    valuation_diagnostics: dict[str, object] | None = None
     ticker: str | None = None
     model_type: str | None = None
     company_name: str | None = None
@@ -24,6 +25,13 @@ class FinancialReportsArtifactData(BaseModel):
     industry: str | None = None
     reasoning: str | None = None
     status: Literal["done"] | None = None
+    replay_schema_version: str | None = None
+    replay_source_reports_artifact_id: str | None = None
+    replay_market_snapshot: dict[str, object] | None = None
+    replay_params_dump: dict[str, object] | None = None
+    replay_calculation_metrics: dict[str, object] | None = None
+    replay_assumptions: list[str] | None = None
+    replay_build_metadata: dict[str, object] | None = None
 
 
 class PriceSeriesArtifactData(BaseModel):

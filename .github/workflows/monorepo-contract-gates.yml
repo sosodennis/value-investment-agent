@@ -8,6 +8,122 @@ on:
       - master
 
 jobs:
+  fundamental-release-gate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: finance-agent-core
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Compose calibration artifact version
+        run: |
+          CAL_DATE="$(date -u +%Y%m%d)"
+          SHORT_SHA="${GITHUB_SHA::8}"
+          CAL_VERSION="forward_signal_calibration_ci_${CAL_DATE}_${SHORT_SHA}"
+          echo "CALIBRATION_MAPPING_VERSION=${CAL_VERSION}" >> "$GITHUB_ENV"
+          echo "CALIBRATION_DATASET_PATH=reports/forward_signal_calibration_dataset_${CAL_VERSION}.jsonl" >> "$GITHUB_ENV"
+          echo "CALIBRATION_ARTIFACT_PATH=reports/forward_signal_calibration.mapping_${CAL_VERSION}.json" >> "$GITHUB_ENV"
+          echo "CALIBRATION_PIPELINE_REPORT_PATH=reports/forward_signal_calibration_pipeline_report_${CAL_VERSION}.json" >> "$GITHUB_ENV"
+
+      - name: Build forward-signal calibration pipeline artifacts
+        run: >
+          uv run python scripts/run_forward_signal_calibration_pipeline.py
+          --replay-report tests/fixtures/forward_signal_calibration_pipeline_replay_fixture.json
+          --dataset-output "${CALIBRATION_DATASET_PATH}"
+          --artifact-output "${CALIBRATION_ARTIFACT_PATH}"
+          --mapping-version "${CALIBRATION_MAPPING_VERSION}"
+          --min-samples 4
+          --no-live-market-data
+          --report-output "${CALIBRATION_PIPELINE_REPORT_PATH}"
+          --require-fit
+
+      - name: Validate calibration mapping artifact
+        run: >
+          uv run python scripts/validate_forward_signal_calibration_artifact.py
+          --path "${CALIBRATION_ARTIFACT_PATH}"
+
+      - name: Validate calibration pipeline quality report
+        run: >
+          uv run python scripts/validate_forward_signal_calibration_pipeline_report.py
+          --path "${CALIBRATION_PIPELINE_REPORT_PATH}"
+          --min-usable-rows 4
+          --min-anchor-coverage 0.95
+
+      - name: Run fundamental release gate
+        env:
+          FUNDAMENTAL_FORWARD_SIGNAL_CALIBRATION_MAPPING_PATH: ${{ env.CALIBRATION_ARTIFACT_PATH }}
+          FUNDAMENTAL_REQUIRE_CALIBRATION_PIPELINE_REPORT: "1"
+          FUNDAMENTAL_CALIBRATION_MIN_USABLE_ROWS: "4"
+          FUNDAMENTAL_CALIBRATION_MIN_ANCHOR_COVERAGE: "0.95"
+          FUNDAMENTAL_REPLAY_MANIFEST_PATH: "tests/fixtures/fundamental_replay_manifest_ci.json"
+          FUNDAMENTAL_REPLAY_REPORT_PATH: "reports/fundamental_replay_checks_report_ci.json"
+        run: |
+          set +e
+          RELEASE_GATE_STDERR_PATH="${RUNNER_TEMP}/fundamental_release_gate.stderr.log"
+          bash scripts/run_fundamental_release_gate.sh \
+            reports/fundamental_backtest_report_ci.json \
+            "${CALIBRATION_PIPELINE_REPORT_PATH}" \
+            2> >(tee "${RELEASE_GATE_STDERR_PATH}" >&2)
+          release_gate_status=$?
+
+          echo "FUNDAMENTAL_RELEASE_GATE_EXIT_CODE=${release_gate_status}" >> "$GITHUB_ENV"
+          replay_error_codes="$(sed -n 's/.*error_code=\([^ ]*\).*/\1/p' "${RELEASE_GATE_STDERR_PATH}" | sort -u | tr '\n' ',' | sed 's/,$//')"
+          echo "FUNDAMENTAL_RELEASE_GATE_REPLAY_ERROR_CODES=${replay_error_codes}" >> "$GITHUB_ENV"
+          exit "${release_gate_status}"
+
+      - name: Summarize fundamental release gate
+        if: always()
+        run: |
+          {
+            echo "### Fundamental Release Gate"
+            echo "- Exit code: ${FUNDAMENTAL_RELEASE_GATE_EXIT_CODE:-unknown}"
+            if [[ -n "${FUNDAMENTAL_RELEASE_GATE_REPLAY_ERROR_CODES:-}" ]]; then
+              echo "- Replay error codes: ${FUNDAMENTAL_RELEASE_GATE_REPLAY_ERROR_CODES}"
+            else
+              echo "- Replay error codes: none"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload fundamental backtest report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fundamental-backtest-report
+          path: finance-agent-core/reports/fundamental_backtest_report_ci.json
+          if-no-files-found: warn
+
+      - name: Upload fundamental replay checks report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fundamental-replay-checks-report
+          path: finance-agent-core/reports/fundamental_replay_checks_report_ci.json
+          if-no-files-found: warn
+
+      - name: Upload calibration pipeline artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forward-signal-calibration-artifacts
+          path: |
+            finance-agent-core/${{ env.CALIBRATION_DATASET_PATH }}
+            finance-agent-core/${{ env.CALIBRATION_ARTIFACT_PATH }}
+            finance-agent-core/${{ env.CALIBRATION_PIPELINE_REPORT_PATH }}
+          if-no-files-found: warn
+
   backend-lint-test:
     runs-on: ubuntu-latest
     defaults:

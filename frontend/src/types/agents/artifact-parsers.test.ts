@@ -63,6 +63,11 @@ describe('artifact parsers', () => {
                     ],
                 },
             ],
+            valuation_diagnostics: {
+                forward_signal_mapping_version:
+                    'forward_signal_calibration_v2_2026_03_05',
+                forward_signal_calibration_applied: true,
+            },
         });
 
         expect(parsed.ticker).toBe('AAPL');
@@ -73,6 +78,12 @@ describe('artifact parsers', () => {
         expect(parsed.forward_signals?.[0]?.evidence[0]?.accession_number).toBe(
             '0000320193-25-000073'
         );
+        expect(parsed.valuation_diagnostics?.forward_signal_mapping_version).toBe(
+            'forward_signal_calibration_v2_2026_03_05'
+        );
+        expect(
+            parsed.valuation_diagnostics?.forward_signal_calibration_applied
+        ).toBe(true);
     });
 
     it('normalizes nullable textual fields in fundamental artifact', () => {

@@ -1,0 +1,74 @@
+{
+  "run_date": "2026-03-07",
+  "input_contracts": [
+    "/tmp/fundamental-replay-inputs/aapl.replay-input.json",
+    "/tmp/fundamental-replay-inputs/nvda.replay-input.json"
+  ],
+  "policy_changes_tested": {
+    "mature_short_term_consensus_decay_bonus_years": {
+      "before": 1,
+      "after": 5,
+      "effective_dcf_standard_window": {
+        "before": 4,
+        "after": 8
+      }
+    },
+    "dcf_growth_guardrail": {
+      "growth_max_year1": {
+        "before": 0.5,
+        "after": 0.45
+      },
+      "growth_max_series": {
+        "before": 0.7,
+        "after": 0.6
+      },
+      "growth_max_terminal": {
+        "before": 0.04,
+        "after": 0.035
+      },
+      "growth_final_fade_years": {
+        "before": 4,
+        "after": 5
+      },
+      "margin_max_series": {
+        "before": 0.65,
+        "after": 0.6
+      },
+      "margin_normalized_upper": {
+        "before": 0.38,
+        "after": 0.34
+      },
+      "margin_final_fade_years": {
+        "before": 4,
+        "after": 5
+      }
+    }
+  },
+  "results": {
+    "AAPL": {
+      "model_type": "dcf_standard",
+      "before_replayed_intrinsic": 165.07250848229197,
+      "after_replayed_intrinsic": 203.46951068030646,
+      "delta_abs": 38.39700219801449,
+      "before_vs_current_pct": -0.35516032469123027,
+      "after_vs_current_pct": -0.20516617570879156,
+      "before_vs_target_mean_pct": -0.43721460653831673,
+      "after_vs_target_mean_pct": -0.30630684855706075
+    },
+    "NVDA": {
+      "model_type": "dcf_growth",
+      "before_replayed_intrinsic": 245.02882582242265,
+      "after_replayed_intrinsic": 202.8324822612664,
+      "delta_abs": -42.196343561156255,
+      "before_vs_current_pct": 0.33647226913070055,
+      "after_vs_current_pct": 0.10631876437911197,
+      "before_vs_target_mean_pct": -0.07600093406287742,
+      "after_vs_target_mean_pct": -0.23512254722657389
+    }
+  },
+  "notes": [
+    "Trial reduces AAPL undervaluation and NVDA overvaluation-vs-current simultaneously, but AAPL remains below market/consensus anchors.",
+    "NVDA moved from +33.6% to +10.6% vs current price; AAPL moved from -35.5% to -20.5% vs current price.",
+    "Further alignment likely requires additional levers beyond growth amplitude guardrails (e.g., terminal/wacc governance, multi-source consensus anchor gating)."
+  ]
+}

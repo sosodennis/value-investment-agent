@@ -37,6 +37,10 @@ async def test_get_artifact_returns_canonical_fundamental_payload() -> None:
                     },
                 }
             ],
+            "valuation_diagnostics": {
+                "forward_signal_mapping_version": "forward_signal_calibration_v2_2026_03_05",
+                "forward_signal_calibration_applied": True,
+            },
         }
     )
     envelope = build_artifact_envelope(
@@ -60,6 +64,18 @@ async def test_get_artifact_returns_canonical_fundamental_payload() -> None:
     assert (
         response.json()["data"]["financial_reports"][0]["base"]["fiscal_year"]["value"]
         == "2024"
+    )
+    assert (
+        response.json()["data"]["valuation_diagnostics"][
+            "forward_signal_mapping_version"
+        ]
+        == "forward_signal_calibration_v2_2026_03_05"
+    )
+    assert (
+        response.json()["data"]["valuation_diagnostics"][
+            "forward_signal_calibration_applied"
+        ]
+        is True
     )
     assert response.headers["cache-control"] == "public, max-age=3600"
     assert response.headers["etag"] == '"art_fa"'

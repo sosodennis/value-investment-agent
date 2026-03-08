@@ -1,0 +1,42 @@
+[
+  {
+    "ticker": "AAPL",
+    "intrinsic": 246.87831677579769,
+    "gap_vs_current": -0.03559390298137553,
+    "gap_vs_target_mean": -0.15831223550631376,
+    "terminal_growth": 0.04074801828196414,
+    "capex_yearN": 0.02859230076835775,
+    "wc_yearN": -0.020814010223825702,
+    "margin_yearN": 0.31428544544037024
+  },
+  {
+    "ticker": "MSFT",
+    "intrinsic": 405.45073849040045,
+    "gap_vs_current": -0.008580940702268012,
+    "gap_vs_target_mean": -0.31970858363719246,
+    "terminal_growth": 0.023440679284037567,
+    "capex_yearN": 0.07999999999999999,
+    "wc_yearN": -0.03,
+    "margin_yearN": 0.4614717464085985
+  },
+  {
+    "ticker": "GOOG",
+    "intrinsic": 410.74961350805603,
+    "gap_vs_current": 0.37696819814970167,
+    "gap_vs_target_mean": 0.14246454019828478,
+    "terminal_growth": 0.013999999999999999,
+    "capex_yearN": 0.11131892686928113,
+    "wc_yearN": -0.01,
+    "margin_yearN": 0.32677038592380026
+  },
+  {
+    "ticker": "NVDA",
+    "intrinsic": 245.36473518776742,
+    "gap_vs_current": 0.33830443540835287,
+    "gap_vs_target_mean": -0.0747342262019703,
+    "terminal_growth": 0.013999999999999999,
+    "capex_yearN": 0.04,
+    "wc_yearN": 0.05,
+    "margin_yearN": 0.39051556825
+  }
+]

@@ -21,7 +21,7 @@ def build_default_fundamental_workflow_runner() -> FundamentalWorkflowRunner:
     return build_fundamental_workflow_runner(
         orchestrator=orchestrator,
         fetch_financial_payload_fn=(
-            lambda ticker, *, years=3: fetch_financial_payload(
+            lambda ticker, *, years=5: fetch_financial_payload(
                 ticker=ticker, years=years
             )
         ),

@@ -13,7 +13,14 @@ from src.agents.fundamental.domain.valuation.policies.growth_assumption_policy i
 def test_resolve_growth_blend_weights_uses_mature_profile_for_low_volatility() -> None:
     weights = resolve_growth_blend_weights(0.03)
     assert weights.profile == "mature_stable"
-    assert weights.historical > weights.consensus
+    assert weights.consensus > weights.historical
+
+
+def test_resolve_growth_blend_weights_mature_profile_prefers_consensus_anchor() -> None:
+    weights = resolve_growth_blend_weights(0.03)
+    assert weights.historical == pytest.approx(0.30)
+    assert weights.consensus == pytest.approx(0.65)
+    assert weights.adjustment == pytest.approx(0.05)
 
 
 def test_blend_growth_rate_uses_context_aware_weights() -> None:

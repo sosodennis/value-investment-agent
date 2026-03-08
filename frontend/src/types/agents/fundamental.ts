@@ -92,6 +92,40 @@ export interface ForwardSignal {
     evidence: ForwardSignalEvidence[];
 }
 
+export interface FundamentalValuationDiagnostics {
+    growth_rates_converged?: number[];
+    terminal_growth_effective?: number;
+    growth_consensus_policy?: string;
+    growth_consensus_horizon?: string;
+    terminal_anchor_policy?: string;
+    terminal_anchor_stale_fallback?: boolean;
+    base_growth_guardrail_applied?: boolean;
+    base_growth_guardrail_version?: string;
+    base_growth_raw_year1?: number;
+    base_growth_raw_yearN?: number;
+    base_growth_guarded_year1?: number;
+    base_growth_guarded_yearN?: number;
+    base_margin_guardrail_applied?: boolean;
+    base_margin_guardrail_version?: string;
+    base_margin_raw_year1?: number;
+    base_margin_raw_yearN?: number;
+    base_margin_guarded_year1?: number;
+    base_margin_guarded_yearN?: number;
+    forward_signal_mapping_version?: string;
+    forward_signal_calibration_applied?: boolean;
+    sensitivity_summary?: {
+        enabled?: boolean;
+        scenario_count?: number;
+        max_upside_delta_pct?: number;
+        max_downside_delta_pct?: number;
+        top_drivers?: Array<{
+            shock_dimension?: string;
+            shock_value_bp?: number;
+            delta_pct_vs_base?: number;
+        }>;
+    };
+}
+
 export interface FundamentalAnalysisSuccess {
     ticker: string;
     model_type: string;
@@ -101,6 +135,7 @@ export interface FundamentalAnalysisSuccess {
     reasoning: string;
     financial_reports: FinancialReport[];
     forward_signals?: ForwardSignal[];
+    valuation_diagnostics?: FundamentalValuationDiagnostics;
     status: 'done';
 }
 

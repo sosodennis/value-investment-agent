@@ -38,6 +38,8 @@ class ContextBalanceFields:
     fiscal_year: TraceableField[str]
     fiscal_period: TraceableField[str]
     shares_outstanding: TraceableField[float]
+    weighted_average_shares_basic: TraceableField[float]
+    weighted_average_shares_diluted: TraceableField[float]
     total_assets: TraceableField[float]
     total_liabilities: TraceableField[float]
     total_equity: TraceableField[float]
@@ -53,6 +55,7 @@ def build_context_balance_fields(
     build_config: BuildConfigFn,
     extract_field_fn: ExtractFieldFn,
     bs_statement_tokens: list[str],
+    is_statement_tokens: list[str],
     usd_units: list[str],
     shares_units: list[str],
 ) -> ContextBalanceFields:
@@ -101,6 +104,34 @@ def build_context_balance_fields(
             ),
         ],
         "Shares Outstanding",
+        target_type=float,
+    )
+    tf_weighted_average_shares_basic = extract_field_fn(
+        extractor,
+        resolve_configs("weighted_average_shares_basic")
+        or [
+            build_config(
+                "us-gaap:WeightedAverageNumberOfSharesOutstandingBasic",
+                is_statement_tokens,
+                "duration",
+                shares_units,
+            )
+        ],
+        "Weighted Average Shares Outstanding (Basic)",
+        target_type=float,
+    )
+    tf_weighted_average_shares_diluted = extract_field_fn(
+        extractor,
+        resolve_configs("weighted_average_shares_diluted")
+        or [
+            build_config(
+                "us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding",
+                is_statement_tokens,
+                "duration",
+                shares_units,
+            )
+        ],
+        "Weighted Average Shares Outstanding (Diluted)",
         target_type=float,
     )
 
@@ -234,6 +265,8 @@ def build_context_balance_fields(
         fiscal_year=tf_fiscal_year,
         fiscal_period=tf_fiscal_period,
         shares_outstanding=tf_shares,
+        weighted_average_shares_basic=tf_weighted_average_shares_basic,
+        weighted_average_shares_diluted=tf_weighted_average_shares_diluted,
         total_assets=tf_assets,
         total_liabilities=tf_liabilities,
         total_equity=tf_equity,

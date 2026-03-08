@@ -9,6 +9,8 @@ FUNDAMENTAL_BASE_KEYS: tuple[str, ...] = (
     "cik",
     "sic_code",
     "shares_outstanding",
+    "weighted_average_shares_basic",
+    "weighted_average_shares_diluted",
     "total_revenue",
     "net_income",
     "income_tax_expense",

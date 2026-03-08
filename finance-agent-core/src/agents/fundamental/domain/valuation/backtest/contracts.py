@@ -17,6 +17,7 @@ class BacktestCase:
     model: str
     params: JSONObject
     required_metrics: tuple[str, ...]
+    consensus_target_price_median: float | None = None
 
 
 @dataclass(frozen=True)

@@ -135,7 +135,7 @@ const parseForwardSignalEvidence = (
         record.source_locator === undefined || record.source_locator === null
             ? undefined
             : toRecord(record.source_locator, `${context}.source_locator`);
-    const sourceLocator =
+    const sourceLocator: NonNullable<ForwardSignalEvidence['source_locator']> | undefined =
         sourceLocatorRecord === undefined
             ? undefined
             : (() => {
@@ -172,7 +172,7 @@ const parseForwardSignalEvidence = (
                       );
                   }
                   return {
-                      text_scope: 'metric_text' as const,
+                      text_scope: 'metric_text',
                       char_start: charStart,
                       char_end: charEnd,
                   };
@@ -829,7 +829,10 @@ export const parseFundamentalArtifact = (
         throw new TypeError(`${context}.status must be done.`);
     }
     const parsed = parseFinancialPreview(
-        { financial_reports: record.financial_reports },
+        {
+            financial_reports: record.financial_reports,
+            valuation_diagnostics: record.valuation_diagnostics,
+        },
         `${context}.financial_reports_wrapper`
     );
     if (!parsed?.financial_reports) {
@@ -857,6 +860,35 @@ export const parseFundamentalArtifact = (
             parseForwardSignal(item, `${context}.forward_signals[${idx}]`)
         );
     })();
+    const valuationDiagnostics = parsed?.valuation_diagnostics
+        ? (() => {
+              const diagnostics = {
+                  growth_rates_converged:
+                      parsed.valuation_diagnostics.growth_rates_converged,
+                  terminal_growth_effective:
+                      parsed.valuation_diagnostics.terminal_growth_effective,
+                  growth_consensus_policy:
+                      parsed.valuation_diagnostics.growth_consensus_policy,
+                  growth_consensus_horizon:
+                      parsed.valuation_diagnostics.growth_consensus_horizon,
+                  terminal_anchor_policy:
+                      parsed.valuation_diagnostics.terminal_anchor_policy,
+                  terminal_anchor_stale_fallback:
+                      parsed.valuation_diagnostics.terminal_anchor_stale_fallback,
+                  forward_signal_mapping_version:
+                      parsed.valuation_diagnostics.forward_signal_mapping_version,
+                  forward_signal_calibration_applied:
+                      parsed.valuation_diagnostics
+                          .forward_signal_calibration_applied,
+                  sensitivity_summary:
+                      parsed.valuation_diagnostics.sensitivity_summary,
+              };
+              const hasField = Object.values(diagnostics).some(
+                  (value) => value !== undefined
+              );
+              return hasField ? diagnostics : undefined;
+          })()
+        : undefined;
 
     return {
         ticker,
@@ -867,6 +899,9 @@ export const parseFundamentalArtifact = (
         reasoning: reasoning ?? '',
         financial_reports: parsed.financial_reports,
         ...(forwardSignals ? { forward_signals: forwardSignals } : {}),
+        ...(valuationDiagnostics
+            ? { valuation_diagnostics: valuationDiagnostics }
+            : {}),
         status: 'done',
     };
 };

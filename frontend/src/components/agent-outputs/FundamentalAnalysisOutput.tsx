@@ -70,8 +70,34 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
     const valuationScore = previewData?.valuation_score;
     const previewKeyMetrics = previewData?.key_metrics ?? {};
     const distributionSummary = previewData?.distribution_summary?.summary;
+    const distributionDiagnostics = previewData?.distribution_summary?.diagnostics;
     const distributionScenarios = previewData?.distribution_scenarios;
+    const valuationDiagnostics =
+        previewData?.valuation_diagnostics ?? artifactData?.valuation_diagnostics;
+    const sensitivitySummary = valuationDiagnostics?.sensitivity_summary;
+    const growthConsensusPolicy = valuationDiagnostics?.growth_consensus_policy;
+    const growthConsensusHorizon = valuationDiagnostics?.growth_consensus_horizon;
+    const terminalAnchorPolicy = valuationDiagnostics?.terminal_anchor_policy;
+    const terminalAnchorStaleFallback =
+        valuationDiagnostics?.terminal_anchor_stale_fallback;
+    const growthConsensusPolicyLabel = useMemo(() => {
+        if (!growthConsensusPolicy) return null;
+        if (growthConsensusPolicy === 'ignored') return 'Ignored';
+        if (growthConsensusPolicy === 'included') return 'Included';
+        if (growthConsensusPolicy === 'compatibility_assumed') {
+            return 'Compatibility Assumed';
+        }
+        return growthConsensusPolicy;
+    }, [growthConsensusPolicy]);
+    const terminalAnchorPolicyLabel = useMemo(() => {
+        if (!terminalAnchorPolicy) return null;
+        if (terminalAnchorPolicy === 'policy_default_market_stale') {
+            return 'Policy Default (Market Stale)';
+        }
+        return terminalAnchorPolicy;
+    }, [terminalAnchorPolicy]);
     const assumptionBreakdown = previewData?.assumption_breakdown;
+    const baseAssumptionGuardrailSummary = assumptionBreakdown?.base_assumption_guardrail;
     const dataFreshness = previewData?.data_freshness;
     const assumptionRiskLevel =
         previewData?.assumption_risk_level ?? assumptionBreakdown?.assumption_risk_level;
@@ -98,6 +124,130 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
     const forwardSignalSourceTypes = (forwardSignalSummary?.source_types ?? []).filter(
         (item): item is string => typeof item === 'string' && item.length > 0
     );
+    const forwardSignalMappingVersion =
+        typeof valuationDiagnostics?.forward_signal_mapping_version === 'string' &&
+        valuationDiagnostics.forward_signal_mapping_version.length > 0
+            ? valuationDiagnostics.forward_signal_mapping_version
+            : typeof forwardSignalSummary?.mapping_version === 'string' &&
+                forwardSignalSummary.mapping_version.length > 0
+                ? forwardSignalSummary.mapping_version
+            : undefined;
+    const forwardSignalCalibrationApplied =
+        typeof valuationDiagnostics?.forward_signal_calibration_applied === 'boolean'
+            ? valuationDiagnostics.forward_signal_calibration_applied
+            : typeof forwardSignalSummary?.calibration_applied === 'boolean'
+            ? forwardSignalSummary.calibration_applied
+            : undefined;
+    const baseGrowthGuardrailApplied =
+        typeof valuationDiagnostics?.base_growth_guardrail_applied === 'boolean'
+            ? valuationDiagnostics.base_growth_guardrail_applied
+            : typeof baseAssumptionGuardrailSummary?.growth?.applied === 'boolean'
+            ? baseAssumptionGuardrailSummary.growth.applied
+            : undefined;
+    const baseGrowthGuardrailVersion =
+        typeof valuationDiagnostics?.base_growth_guardrail_version === 'string' &&
+        valuationDiagnostics.base_growth_guardrail_version.length > 0
+            ? valuationDiagnostics.base_growth_guardrail_version
+            : typeof baseAssumptionGuardrailSummary?.growth?.version === 'string' &&
+                baseAssumptionGuardrailSummary.growth.version.length > 0
+            ? baseAssumptionGuardrailSummary.growth.version
+            : typeof baseAssumptionGuardrailSummary?.version === 'string' &&
+                baseAssumptionGuardrailSummary.version.length > 0
+            ? baseAssumptionGuardrailSummary.version
+            : undefined;
+    const baseGrowthRawYear1 =
+        typeof valuationDiagnostics?.base_growth_raw_year1 === 'number'
+            ? valuationDiagnostics.base_growth_raw_year1
+            : typeof baseAssumptionGuardrailSummary?.growth?.raw_year1 === 'number'
+            ? baseAssumptionGuardrailSummary.growth.raw_year1
+            : undefined;
+    const baseGrowthRawYearN =
+        typeof valuationDiagnostics?.base_growth_raw_yearN === 'number'
+            ? valuationDiagnostics.base_growth_raw_yearN
+            : typeof baseAssumptionGuardrailSummary?.growth?.raw_yearN === 'number'
+            ? baseAssumptionGuardrailSummary.growth.raw_yearN
+            : undefined;
+    const baseGrowthGuardedYear1 =
+        typeof valuationDiagnostics?.base_growth_guarded_year1 === 'number'
+            ? valuationDiagnostics.base_growth_guarded_year1
+            : typeof baseAssumptionGuardrailSummary?.growth?.guarded_year1 === 'number'
+            ? baseAssumptionGuardrailSummary.growth.guarded_year1
+            : undefined;
+    const baseGrowthGuardedYearN =
+        typeof valuationDiagnostics?.base_growth_guarded_yearN === 'number'
+            ? valuationDiagnostics.base_growth_guarded_yearN
+            : typeof baseAssumptionGuardrailSummary?.growth?.guarded_yearN === 'number'
+            ? baseAssumptionGuardrailSummary.growth.guarded_yearN
+            : undefined;
+    const baseGrowthReasons = (baseAssumptionGuardrailSummary?.growth?.reasons ?? []).filter(
+        (item): item is string => typeof item === 'string' && item.length > 0
+    );
+    const baseMarginGuardrailApplied =
+        typeof valuationDiagnostics?.base_margin_guardrail_applied === 'boolean'
+            ? valuationDiagnostics.base_margin_guardrail_applied
+            : typeof baseAssumptionGuardrailSummary?.margin?.applied === 'boolean'
+            ? baseAssumptionGuardrailSummary.margin.applied
+            : undefined;
+    const baseMarginGuardrailVersion =
+        typeof valuationDiagnostics?.base_margin_guardrail_version === 'string' &&
+        valuationDiagnostics.base_margin_guardrail_version.length > 0
+            ? valuationDiagnostics.base_margin_guardrail_version
+            : typeof baseAssumptionGuardrailSummary?.margin?.version === 'string' &&
+                baseAssumptionGuardrailSummary.margin.version.length > 0
+            ? baseAssumptionGuardrailSummary.margin.version
+            : typeof baseAssumptionGuardrailSummary?.version === 'string' &&
+                baseAssumptionGuardrailSummary.version.length > 0
+            ? baseAssumptionGuardrailSummary.version
+            : undefined;
+    const baseMarginRawYear1 =
+        typeof valuationDiagnostics?.base_margin_raw_year1 === 'number'
+            ? valuationDiagnostics.base_margin_raw_year1
+            : typeof baseAssumptionGuardrailSummary?.margin?.raw_year1 === 'number'
+            ? baseAssumptionGuardrailSummary.margin.raw_year1
+            : undefined;
+    const baseMarginRawYearN =
+        typeof valuationDiagnostics?.base_margin_raw_yearN === 'number'
+            ? valuationDiagnostics.base_margin_raw_yearN
+            : typeof baseAssumptionGuardrailSummary?.margin?.raw_yearN === 'number'
+            ? baseAssumptionGuardrailSummary.margin.raw_yearN
+            : undefined;
+    const baseMarginGuardedYear1 =
+        typeof valuationDiagnostics?.base_margin_guarded_year1 === 'number'
+            ? valuationDiagnostics.base_margin_guarded_year1
+            : typeof baseAssumptionGuardrailSummary?.margin?.guarded_year1 === 'number'
+            ? baseAssumptionGuardrailSummary.margin.guarded_year1
+            : undefined;
+    const baseMarginGuardedYearN =
+        typeof valuationDiagnostics?.base_margin_guarded_yearN === 'number'
+            ? valuationDiagnostics.base_margin_guarded_yearN
+            : typeof baseAssumptionGuardrailSummary?.margin?.guarded_yearN === 'number'
+            ? baseAssumptionGuardrailSummary.margin.guarded_yearN
+            : undefined;
+    const baseMarginReasons = (baseAssumptionGuardrailSummary?.margin?.reasons ?? []).filter(
+        (item): item is string => typeof item === 'string' && item.length > 0
+    );
+    const hasBaseGrowthGuardrail =
+        typeof baseGrowthGuardrailApplied === 'boolean' ||
+        !!baseGrowthGuardrailVersion ||
+        typeof baseGrowthRawYear1 === 'number' ||
+        typeof baseGrowthRawYearN === 'number' ||
+        typeof baseGrowthGuardedYear1 === 'number' ||
+        typeof baseGrowthGuardedYearN === 'number' ||
+        baseGrowthReasons.length > 0;
+    const hasBaseMarginGuardrail =
+        typeof baseMarginGuardrailApplied === 'boolean' ||
+        !!baseMarginGuardrailVersion ||
+        typeof baseMarginRawYear1 === 'number' ||
+        typeof baseMarginRawYearN === 'number' ||
+        typeof baseMarginGuardedYear1 === 'number' ||
+        typeof baseMarginGuardedYearN === 'number' ||
+        baseMarginReasons.length > 0;
+    const sensitivityTopDrivers = (sensitivitySummary?.top_drivers ?? []).filter((item) => (
+        item &&
+        (typeof item.shock_dimension === 'string' ||
+            typeof item.shock_value_bp === 'number' ||
+            typeof item.delta_pct_vs_base === 'number')
+    ));
     const equityValue = previewData?.equity_value;
     const intrinsicValue = previewData?.intrinsic_value;
     const upsidePotential = previewData?.upside_potential;
@@ -209,6 +359,30 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
         typeof monteCarloMeta?.configured_iterations === 'number'
             ? monteCarloMeta.configured_iterations
             : undefined;
+    const mcConverged = (() => {
+        if (typeof monteCarloMeta?.converged === 'boolean') {
+            return monteCarloMeta.converged;
+        }
+        return typeof distributionDiagnostics?.converged === 'boolean'
+            ? distributionDiagnostics.converged
+            : undefined;
+    })();
+    const mcMedianDelta = (() => {
+        if (typeof monteCarloMeta?.median_delta === 'number') {
+            return monteCarloMeta.median_delta;
+        }
+        return typeof distributionDiagnostics?.median_delta === 'number'
+            ? distributionDiagnostics.median_delta
+            : undefined;
+    })();
+    const mcTolerance = (() => {
+        if (typeof monteCarloMeta?.tolerance === 'number') {
+            return monteCarloMeta.tolerance;
+        }
+        return typeof distributionDiagnostics?.tolerance === 'number'
+            ? distributionDiagnostics.tolerance
+            : undefined;
+    })();
     const mcSamplerType =
         typeof monteCarloMeta?.sampler_type === 'string'
             ? monteCarloMeta.sampler_type
@@ -535,6 +709,12 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
         const pct = value * 100;
         return `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
     }
+    function formatRatePercent(value: number): string {
+        return `${(value * 100).toFixed(1)}%`;
+    }
+    function formatShockBp(value: number): string {
+        return `${value >= 0 ? '+' : ''}${Math.round(value)}bp`;
+    }
     function formatSignedBasisPoints(value: number): string {
         const rounded = Math.round(value * 10) / 10;
         return `${rounded >= 0 ? '+' : ''}${rounded.toFixed(1)} basis points`;
@@ -706,7 +886,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                         </div>
                                     )}
                                     {mcEnabled && (
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2">
                                             {mcExecutedIterations !== undefined && (
                                                 <div className="text-[11px] text-slate-200 bg-slate-900/40 rounded px-2 py-1">
                                                     Executed: {Math.round(mcExecutedIterations)}
@@ -727,9 +907,26 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                                     PSD Repair: {mcPsdRepaired ? 'Yes' : 'No'}
                                                 </div>
                                             )}
+                                            {mcConverged !== undefined && (
+                                                <div className="text-[11px] text-slate-200 bg-slate-900/40 rounded px-2 py-1">
+                                                    Converged: {mcConverged ? 'Yes' : 'No'}
+                                                </div>
+                                            )}
+                                            {mcMedianDelta !== undefined && (
+                                                <div className="text-[11px] text-slate-200 bg-slate-900/40 rounded px-2 py-1">
+                                                    Median Δ: {(mcMedianDelta * 100).toFixed(2)}%
+                                                    {mcTolerance !== undefined
+                                                        ? ` / ${(mcTolerance * 100).toFixed(2)}% tol`
+                                                        : ''}
+                                                </div>
+                                            )}
                                         </div>
                                     )}
-                                    {(forwardSignalSummary || forwardSignalRiskLevel || forwardSignalEvidenceCount !== undefined) && (
+                                    {(forwardSignalSummary ||
+                                        forwardSignalRiskLevel ||
+                                        forwardSignalEvidenceCount !== undefined ||
+                                        forwardSignalMappingVersion ||
+                                        typeof forwardSignalCalibrationApplied === 'boolean') && (
                                         <div className="space-y-2">
                                             <div className="text-[11px] uppercase tracking-wider text-slate-400">
                                                 Forward Signal Policy
@@ -771,7 +968,10 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                                     )}
                                                 </div>
                                             )}
-                                            {(forwardSignalRiskLevel || forwardSignalSourceTypes.length > 0) && (
+                                            {(forwardSignalRiskLevel ||
+                                                forwardSignalSourceTypes.length > 0 ||
+                                                forwardSignalMappingVersion ||
+                                                typeof forwardSignalCalibrationApplied === 'boolean') && (
                                                 <div className="flex flex-wrap items-center gap-2">
                                                     {forwardSignalRiskLevel && (
                                                         <span
@@ -794,8 +994,179 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                                             Source: {source}
                                                         </span>
                                                     ))}
+                                                    {typeof forwardSignalCalibrationApplied === 'boolean' && (
+                                                        <span className="rounded border border-cyan-400/30 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-200">
+                                                            Calibration: {forwardSignalCalibrationApplied ? 'Applied' : 'Bypassed'}
+                                                        </span>
+                                                    )}
+                                                    {forwardSignalMappingVersion && (
+                                                        <span className="rounded border border-slate-400/30 bg-slate-800/60 px-2 py-0.5 text-[11px] text-slate-200">
+                                                            Mapping: {forwardSignalMappingVersion}
+                                                        </span>
+                                                    )}
                                                 </div>
                                             )}
+                                        </div>
+                                    )}
+                                    {sensitivitySummary && (
+                                        <div className="space-y-2">
+                                            <div className="text-[11px] uppercase tracking-wider text-slate-400">
+                                                Sensitivity (One-Way)
+                                            </div>
+                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                                {typeof sensitivitySummary.enabled === 'boolean' && (
+                                                    <div className="text-[11px] text-slate-200 bg-slate-900/40 rounded px-2 py-1">
+                                                        Enabled: {sensitivitySummary.enabled ? 'Yes' : 'No'}
+                                                    </div>
+                                                )}
+                                                {typeof sensitivitySummary.scenario_count === 'number' && (
+                                                    <div className="text-[11px] text-slate-200 bg-slate-900/40 rounded px-2 py-1">
+                                                        Scenarios: {Math.round(sensitivitySummary.scenario_count)}
+                                                    </div>
+                                                )}
+                                                {typeof sensitivitySummary.max_upside_delta_pct === 'number' && (
+                                                    <div className="text-[11px] text-emerald-200 bg-slate-900/40 rounded px-2 py-1">
+                                                        Max Upside: {formatPercent(sensitivitySummary.max_upside_delta_pct)}
+                                                    </div>
+                                                )}
+                                                {typeof sensitivitySummary.max_downside_delta_pct === 'number' && (
+                                                    <div className="text-[11px] text-rose-200 bg-slate-900/40 rounded px-2 py-1">
+                                                        Max Downside: {formatPercent(sensitivitySummary.max_downside_delta_pct)}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            {sensitivityTopDrivers.length > 0 && (
+                                                <div className="flex flex-wrap gap-2">
+                                                    {sensitivityTopDrivers.slice(0, 3).map((driver, index) => (
+                                                        <span
+                                                            key={`${driver.shock_dimension ?? 'driver'}-${driver.shock_value_bp ?? index}-${index}`}
+                                                            className="rounded border border-cyan-400/30 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-200"
+                                                        >
+                                                            {(driver.shock_dimension ?? 'driver').replace(/_/g, ' ')}{' '}
+                                                            {typeof driver.shock_value_bp === 'number'
+                                                                ? formatShockBp(driver.shock_value_bp)
+                                                                : ''}
+                                                            {typeof driver.delta_pct_vs_base === 'number'
+                                                                ? ` -> ${formatPercent(driver.delta_pct_vs_base)}`
+                                                                : ''}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                    {(growthConsensusPolicyLabel ||
+                                        growthConsensusHorizon ||
+                                        terminalAnchorPolicyLabel ||
+                                        typeof terminalAnchorStaleFallback === 'boolean' ||
+                                        forwardSignalMappingVersion ||
+                                        typeof forwardSignalCalibrationApplied === 'boolean') && (
+                                        <div className="space-y-2">
+                                            <div className="text-[11px] uppercase tracking-wider text-slate-400">
+                                                Growth / Anchor Policy
+                                            </div>
+                                            <div className="flex flex-wrap gap-2">
+                                                {growthConsensusPolicyLabel && (
+                                                    <span className="rounded border border-indigo-400/30 bg-indigo-500/10 px-2 py-0.5 text-[11px] text-indigo-200">
+                                                        Consensus: {growthConsensusPolicyLabel}
+                                                    </span>
+                                                )}
+                                                {growthConsensusHorizon && (
+                                                    <span className="rounded border border-indigo-400/30 bg-indigo-500/10 px-2 py-0.5 text-[11px] text-indigo-200">
+                                                        Horizon: {growthConsensusHorizon}
+                                                    </span>
+                                                )}
+                                                {terminalAnchorPolicyLabel && (
+                                                    <span className="rounded border border-amber-400/30 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-200">
+                                                        Terminal Anchor: {terminalAnchorPolicyLabel}
+                                                    </span>
+                                                )}
+                                                {typeof terminalAnchorStaleFallback === 'boolean' && (
+                                                    <span className="rounded border border-amber-400/30 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-200">
+                                                        Stale Fallback: {terminalAnchorStaleFallback ? 'Yes' : 'No'}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {(forwardSignalMappingVersion ||
+                                                typeof forwardSignalCalibrationApplied === 'boolean') && (
+                                                <div className="space-y-1 text-[11px] text-slate-300">
+                                                    {typeof forwardSignalCalibrationApplied === 'boolean' && (
+                                                        <div>
+                                                            Calibration Applied (Diagnostics):{' '}
+                                                            <span className="font-semibold text-slate-100">
+                                                                {forwardSignalCalibrationApplied ? 'Yes' : 'No'}
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                    {forwardSignalMappingVersion && (
+                                                        <div>
+                                                            Calibration Mapping (Diagnostics):{' '}
+                                                            <span className="font-semibold text-slate-100">
+                                                                {forwardSignalMappingVersion}
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                    {(hasBaseGrowthGuardrail || hasBaseMarginGuardrail) && (
+                                        <div className="space-y-2">
+                                            <div className="text-[11px] uppercase tracking-wider text-slate-400">
+                                                Base Assumption Guardrail
+                                            </div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                {hasBaseGrowthGuardrail && (
+                                                    <div className="rounded border border-cyan-400/30 bg-cyan-500/10 px-2 py-1 text-[11px] text-cyan-100 space-y-1">
+                                                        {typeof baseGrowthGuardrailApplied === 'boolean' && (
+                                                            <div>Growth: {baseGrowthGuardrailApplied ? 'Applied' : 'Bypassed'}</div>
+                                                        )}
+                                                        {baseGrowthGuardrailVersion && (
+                                                            <div>Growth Version: {baseGrowthGuardrailVersion}</div>
+                                                        )}
+                                                        {typeof baseGrowthRawYear1 === 'number' && (
+                                                            <div>Growth Y1 Raw: {formatRatePercent(baseGrowthRawYear1)}</div>
+                                                        )}
+                                                        {typeof baseGrowthGuardedYear1 === 'number' && (
+                                                            <div>Growth Y1 Guarded: {formatRatePercent(baseGrowthGuardedYear1)}</div>
+                                                        )}
+                                                        {typeof baseGrowthRawYearN === 'number' && (
+                                                            <div>Growth YN Raw: {formatRatePercent(baseGrowthRawYearN)}</div>
+                                                        )}
+                                                        {typeof baseGrowthGuardedYearN === 'number' && (
+                                                            <div>Growth YN Guarded: {formatRatePercent(baseGrowthGuardedYearN)}</div>
+                                                        )}
+                                                        {baseGrowthReasons.length > 0 && (
+                                                            <div>Growth Reasons: {baseGrowthReasons.join(', ')}</div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                                {hasBaseMarginGuardrail && (
+                                                    <div className="rounded border border-amber-400/30 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-100 space-y-1">
+                                                        {typeof baseMarginGuardrailApplied === 'boolean' && (
+                                                            <div>Margin: {baseMarginGuardrailApplied ? 'Applied' : 'Bypassed'}</div>
+                                                        )}
+                                                        {baseMarginGuardrailVersion && (
+                                                            <div>Margin Version: {baseMarginGuardrailVersion}</div>
+                                                        )}
+                                                        {typeof baseMarginRawYear1 === 'number' && (
+                                                            <div>Margin Y1 Raw: {formatRatePercent(baseMarginRawYear1)}</div>
+                                                        )}
+                                                        {typeof baseMarginGuardedYear1 === 'number' && (
+                                                            <div>Margin Y1 Guarded: {formatRatePercent(baseMarginGuardedYear1)}</div>
+                                                        )}
+                                                        {typeof baseMarginRawYearN === 'number' && (
+                                                            <div>Margin YN Raw: {formatRatePercent(baseMarginRawYearN)}</div>
+                                                        )}
+                                                        {typeof baseMarginGuardedYearN === 'number' && (
+                                                            <div>Margin YN Guarded: {formatRatePercent(baseMarginGuardedYearN)}</div>
+                                                        )}
+                                                        {baseMarginReasons.length > 0 && (
+                                                            <div>Margin Reasons: {baseMarginReasons.join(', ')}</div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     )}
                                     {dataQualityFlags.length > 0 && (
@@ -1150,6 +1521,8 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                             {(mcExecutedIterations !== undefined ||
                                 mcConfiguredIterations !== undefined ||
                                 mcEffectiveWindow !== undefined ||
+                                mcConverged !== undefined ||
+                                mcMedianDelta !== undefined ||
                                 mcPsdRepaired !== undefined ||
                                 mcBatchEvaluatorUsed !== undefined ||
                                 mcSamplerType !== undefined ||
@@ -1171,6 +1544,18 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                     )}
                                     {mcEffectiveWindow !== undefined && (
                                         <span> · window: {Math.round(mcEffectiveWindow)}</span>
+                                    )}
+                                    {mcConverged !== undefined && (
+                                        <span> · converged: {mcConverged ? 'yes' : 'no'}</span>
+                                    )}
+                                    {mcMedianDelta !== undefined && (
+                                        <span>
+                                            {' '}
+                                            · median Δ: {(mcMedianDelta * 100).toFixed(2)}%
+                                            {mcTolerance !== undefined
+                                                ? ` (tol ${(mcTolerance * 100).toFixed(2)}%)`
+                                                : ''}
+                                        </span>
                                     )}
                                     {mcStoppedEarly !== undefined && (
                                         <span>

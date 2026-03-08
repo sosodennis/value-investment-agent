@@ -170,6 +170,7 @@ class BaseFinancialModelFactory:
             build_config=extraction_context.build_config,
             extract_field_fn=BaseFinancialModelFactory._extract_field,
             bs_statement_tokens=BS_STATEMENT_TOKENS,
+            is_statement_tokens=IS_STATEMENT_TOKENS,
             usd_units=USD_UNITS,
             shares_units=SHARES_UNITS,
         )

@@ -1,0 +1,34 @@
+{
+  "mapping_version": "forward_signal_calibration_ci_local",
+  "source_multiplier": {
+    "mda": 1.0,
+    "xbrl_auto": 0.85,
+    "earnings_call": 0.95,
+    "press_release": 0.9,
+    "news": 0.85,
+    "debate": 0.8,
+    "manual": 1.0
+  },
+  "metric_multiplier": {
+    "growth_outlook": 1.0,
+    "margin_outlook": 0.9
+  },
+  "mapping_bins": [
+    [
+      50.0,
+      0.869231
+    ],
+    [
+      120.0,
+      0.869231
+    ],
+    [
+      220.0,
+      0.869231
+    ],
+    [
+      300.0,
+      0.869231
+    ]
+  ]
+}

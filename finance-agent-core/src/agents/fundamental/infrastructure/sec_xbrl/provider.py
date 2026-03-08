@@ -41,7 +41,7 @@ def extract_forward_signals_from_sec_text(
     )
 
 
-def fetch_financial_payload(ticker: str, years: int = 3) -> dict[str, object]:
+def fetch_financial_payload(ticker: str, years: int = 5) -> dict[str, object]:
     """Stable adapter entrypoint for SEC XBRL reports plus forward signals."""
     payload = _fetch_financial_payload(ticker=ticker, years=years)
     reports_raw = payload.get("financial_reports")

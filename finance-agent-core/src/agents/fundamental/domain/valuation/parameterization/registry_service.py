@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from collections.abc import Callable, Mapping
 from functools import lru_cache
 
@@ -28,11 +29,14 @@ from .result_assembly_service import (
 )
 
 PROJECTION_YEARS = 5
-DEFAULT_MARKET_RISK_PREMIUM = 0.05
+DCF_PROJECTION_YEARS = 10
+DEFAULT_MARKET_RISK_PREMIUM = 0.045
 DEFAULT_MAINTENANCE_CAPEX_RATIO = 0.8
-DEFAULT_MONTE_CARLO_ITERATIONS = 300
+DEFAULT_MONTE_CARLO_ITERATIONS = 1000
 DEFAULT_MONTE_CARLO_SEED = 42
 DEFAULT_MONTE_CARLO_SAMPLER = "sobol"
+DEFAULT_SHORT_TERM_CONSENSUS_DECAY_YEARS = 3
+DEFAULT_MARKET_RISK_PREMIUM_ENV = "FUNDAMENTAL_DEFAULT_MARKET_RISK_PREMIUM"
 
 LatestOnlyModelBuilder = Callable[
     [str | None, FinancialReport, Mapping[str, object] | None],
@@ -242,17 +246,33 @@ def _route_latest_only(builder: LatestOnlyModelBuilder) -> ModelParamBuilder:
     return _route
 
 
+def _resolve_default_market_risk_premium() -> float:
+    raw = os.getenv(DEFAULT_MARKET_RISK_PREMIUM_ENV)
+    if raw is None:
+        return DEFAULT_MARKET_RISK_PREMIUM
+    normalized = raw.strip()
+    if not normalized:
+        return DEFAULT_MARKET_RISK_PREMIUM
+    try:
+        parsed = float(normalized)
+    except ValueError:
+        return DEFAULT_MARKET_RISK_PREMIUM
+    if parsed <= 0.0 or parsed >= 0.20:
+        return DEFAULT_MARKET_RISK_PREMIUM
+    return parsed
+
+
 @lru_cache(maxsize=1)
 def _model_builder_registry() -> dict[str, ModelParamBuilder]:
     return {
         "dcf_standard": _build_dcf_variant_model_builder(
             variant="dcf_standard",
-            context_provider=_builder_context,
+            context_provider=_dcf_builder_context,
             assemble_result=_build_param_result_service,
         ),
         "dcf_growth": _build_dcf_variant_model_builder(
             variant="dcf_growth",
-            context_provider=_builder_context,
+            context_provider=_dcf_builder_context,
             assemble_result=_build_param_result_service,
         ),
         "saas": _build_multi_report_model_builder(
@@ -307,11 +327,27 @@ def _model_builder_registry() -> dict[str, ModelParamBuilder]:
 def _builder_context() -> BuilderContext:
     return _build_default_builder_context_service(
         projection_years=PROJECTION_YEARS,
-        default_market_risk_premium=DEFAULT_MARKET_RISK_PREMIUM,
+        default_market_risk_premium=_resolve_default_market_risk_premium(),
         default_maintenance_capex_ratio=DEFAULT_MAINTENANCE_CAPEX_RATIO,
         default_monte_carlo_iterations=DEFAULT_MONTE_CARLO_ITERATIONS,
         default_monte_carlo_seed=DEFAULT_MONTE_CARLO_SEED,
         default_monte_carlo_sampler=DEFAULT_MONTE_CARLO_SAMPLER,
         long_run_growth_target=DEFAULT_LONG_RUN_GROWTH_TARGET,
         high_growth_trigger=DEFAULT_HIGH_GROWTH_TRIGGER,
+        short_term_consensus_decay_years=DEFAULT_SHORT_TERM_CONSENSUS_DECAY_YEARS,
+    )
+
+
+@lru_cache(maxsize=1)
+def _dcf_builder_context() -> BuilderContext:
+    return _build_default_builder_context_service(
+        projection_years=DCF_PROJECTION_YEARS,
+        default_market_risk_premium=_resolve_default_market_risk_premium(),
+        default_maintenance_capex_ratio=DEFAULT_MAINTENANCE_CAPEX_RATIO,
+        default_monte_carlo_iterations=DEFAULT_MONTE_CARLO_ITERATIONS,
+        default_monte_carlo_seed=DEFAULT_MONTE_CARLO_SEED,
+        default_monte_carlo_sampler=DEFAULT_MONTE_CARLO_SAMPLER,
+        long_run_growth_target=DEFAULT_LONG_RUN_GROWTH_TARGET,
+        high_growth_trigger=DEFAULT_HIGH_GROWTH_TRIGGER,
+        short_term_consensus_decay_years=DEFAULT_SHORT_TERM_CONSENSUS_DECAY_YEARS,
     )

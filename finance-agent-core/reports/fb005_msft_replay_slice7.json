@@ -1,0 +1,154 @@
+{
+  "baseline_assumptions_count": 17,
+  "baseline_available": true,
+  "baseline_capex_guardrail": null,
+  "baseline_capex_rates_summary": {
+    "count": 10,
+    "year1": 0.22912850875324786,
+    "yearN": 0.22912850875324786
+  },
+  "baseline_forward_signal": {
+    "calibration_applied": true,
+    "growth_adjustment_basis_points": 37.8,
+    "mapping_version": "forward_signal_calibration_v1_2026_03_04",
+    "margin_adjustment_basis_points": 52.52183999999999,
+    "raw_growth_adjustment_basis_points": 37.8,
+    "raw_margin_adjustment_basis_points": 73.32
+  },
+  "baseline_growth_consensus_window_years": 8,
+  "baseline_growth_rates_summary": {
+    "count": 10,
+    "year1": 0.17078000000000002,
+    "yearN": 0.017779999999999997
+  },
+  "baseline_intrinsic_value": 291.68651140822874,
+  "baseline_operating_margins_summary": {
+    "count": 10,
+    "year1": 0.4614717464085985,
+    "yearN": 0.405252184
+  },
+  "baseline_shares_path": {
+    "selected_source": "filing_conservative_dilution_dilution_proxy"
+  },
+  "baseline_terminal_growth": 0.013999999999999999,
+  "baseline_terminal_growth_anchor_source": null,
+  "baseline_terminal_growth_fallback_mode": null,
+  "baseline_wacc": 0.08919386199117435,
+  "baseline_wc_guardrail": null,
+  "baseline_wc_rates_summary": {
+    "count": 10,
+    "year1": 0.0548941517229629,
+    "yearN": 0.0548941517229629
+  },
+  "capex_year1_delta": 0.0,
+  "capex_yearN_delta": -0.14912850875324787,
+  "forward_signal_growth_bp_delta": 0.0,
+  "forward_signal_margin_bp_delta": 0.0,
+  "growth_year1_delta": 0.0,
+  "growth_yearN_delta": 0.009440679284037568,
+  "has_replay_market_snapshot": true,
+  "input_schema_version": "valuation_replay_input_v2",
+  "intrinsic_delta": 113.76422708217171,
+  "intrinsic_within_tolerance": false,
+  "margin_year1_delta": 0.0,
+  "margin_yearN_delta": 0.05621956240859849,
+  "model_type": "dcf_growth",
+  "override_applied": false,
+  "override_keys": [],
+  "replay_staleness_mode": "snapshot",
+  "replayed_assumptions_count": 24,
+  "replayed_capex_guardrail": {
+    "anchor": 0.181448,
+    "anchor_samples": 3,
+    "applied": true,
+    "guarded_year1": 0.229129,
+    "guarded_yearN": 0.08,
+    "metric": "capex_rates",
+    "profile": "dcf_growth",
+    "raw_year1": 0.229129,
+    "raw_yearN": 0.229129,
+    "reasons": [
+      "capex_anchor_clamped_to_terminal_band",
+      "capex_terminal_converged_to_historical_anchor"
+    ],
+    "version": "base_assumption_guardrail_v1_2026_03_05"
+  },
+  "replayed_capex_rates_summary": {
+    "count": 10,
+    "year1": 0.22912850875324786,
+    "yearN": 0.07999999999999999
+  },
+  "replayed_forward_signal": {
+    "calibration_applied": true,
+    "growth_adjustment_basis_points": 37.8,
+    "mapping_version": "forward_signal_calibration_v1_2026_03_04",
+    "margin_adjustment_basis_points": 52.52183999999999,
+    "raw_growth_adjustment_basis_points": 37.8,
+    "raw_margin_adjustment_basis_points": 73.32
+  },
+  "replayed_growth_consensus_window_years": 8,
+  "replayed_growth_guardrail": {
+    "applied": true,
+    "guarded_year1": 0.167,
+    "guarded_yearN": 0.023441,
+    "profile": "dcf_growth",
+    "raw_year1": 0.167,
+    "raw_yearN": 0.153011,
+    "reasons": [
+      "growth_terminal_aligned_to_long_run_target"
+    ],
+    "version": "base_assumption_guardrail_v1_2026_03_05"
+  },
+  "replayed_growth_rates_summary": {
+    "count": 10,
+    "year1": 0.17078000000000002,
+    "yearN": 0.027220679284037565
+  },
+  "replayed_intrinsic_value": 405.45073849040045,
+  "replayed_margin_guardrail": null,
+  "replayed_operating_margins_summary": {
+    "count": 10,
+    "year1": 0.4614717464085985,
+    "yearN": 0.4614717464085985
+  },
+  "replayed_shares_path": {
+    "equity_value_scope": "filing_consolidated",
+    "filing_shares": 7433166379.0,
+    "market_shares": 7425629076.0,
+    "scope_mismatch_detected": false,
+    "scope_mismatch_ratio": 0.0010140097255584382,
+    "scope_policy_mode": "harmonize_when_mismatch",
+    "scope_policy_resolution": "not_required",
+    "selected_shares": 7465167095.282523,
+    "selected_source": "filing_conservative_dilution_dilution_proxy",
+    "shares_scope": "filing_consolidated"
+  },
+  "replayed_terminal_growth": 0.023440679284037567,
+  "replayed_terminal_growth_anchor_source": "market",
+  "replayed_terminal_growth_fallback_mode": "default_only",
+  "replayed_wacc": 0.08919386199117435,
+  "replayed_wc_guardrail": {
+    "anchor": -0.06569,
+    "anchor_samples": 2,
+    "applied": true,
+    "guarded_year1": 0.054894,
+    "guarded_yearN": -0.03,
+    "metric": "wc_rates",
+    "profile": "dcf_growth",
+    "raw_year1": 0.054894,
+    "raw_yearN": 0.054894,
+    "reasons": [
+      "wc_anchor_clamped_to_terminal_band",
+      "wc_terminal_converged_to_historical_anchor"
+    ],
+    "version": "base_assumption_guardrail_v1_2026_03_05"
+  },
+  "replayed_wc_rates_summary": {
+    "count": 10,
+    "year1": 0.0548941517229629,
+    "yearN": -0.03
+  },
+  "ticker": "MSFT",
+  "wc_year1_delta": 0.0,
+  "wc_yearN_delta": -0.0848941517229629
+}
