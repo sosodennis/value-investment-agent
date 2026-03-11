@@ -202,6 +202,11 @@ def test_build_report_includes_parameter_drift_summaries() -> None:
     )
 
     assert report["intrinsic_delta"] == -30.0
+    assert isinstance(report["delta_by_parameter_group"], dict)
+    assert (
+        report["delta_by_parameter_group"]["method"]
+        == "one_at_a_time_revert_to_baseline"
+    )
     assert report["growth_year1_delta"] == pytest.approx(-0.05)
     assert report["margin_year1_delta"] == pytest.approx(-0.02)
     assert report["capex_year1_delta"] == pytest.approx(-0.04)
@@ -212,6 +217,7 @@ def test_build_report_includes_parameter_drift_summaries() -> None:
     assert report["replayed_wc_guardrail"]["applied"] is True
     assert report["baseline_forward_signal"]["calibration_applied"] is True
     assert report["replayed_forward_signal"]["mapping_version"] == "v1"
+    assert report["replayed_forward_signal"]["calibration_degraded_reason"] is None
     assert report["baseline_growth_consensus_window_years"] == 3
     assert report["replayed_growth_consensus_window_years"] == 4
     assert report["override_applied"] is True
@@ -221,6 +227,59 @@ def test_build_report_includes_parameter_drift_summaries() -> None:
     assert report["replayed_terminal_growth_fallback_mode"] is None
     assert report["baseline_terminal_growth_anchor_source"] is None
     assert report["replayed_terminal_growth_anchor_source"] is None
+
+
+def test_build_delta_by_parameter_group_returns_group_deltas(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_script_module()
+
+    def _fake_intrinsic(*, model_type: str, params_dump: dict[str, object]) -> float:
+        field_to_value = {
+            "growth_rates": 220.0,
+            "operating_margins": 210.0,
+            "capex_rates": 205.0,
+            "terminal_growth": 190.0,
+        }
+        for field, intrinsic in field_to_value.items():
+            if field in params_dump and params_dump[field] == ["baseline"]:
+                return intrinsic
+        return 200.0
+
+    monkeypatch.setattr(
+        module,
+        "_calculate_intrinsic_from_params_dump",
+        _fake_intrinsic,
+    )
+
+    payload = module._build_delta_by_parameter_group(
+        model_type="dcf_growth",
+        baseline_params={
+            "growth_rates": ["baseline"],
+            "operating_margins": ["baseline"],
+            "capex_rates": ["baseline"],
+            "terminal_growth": ["baseline"],
+        },
+        replay_params={
+            "growth_rates": ["replay"],
+            "operating_margins": ["replay"],
+            "capex_rates": ["replay"],
+            "wc_rates": ["replay"],
+            "terminal_growth": ["replay"],
+        },
+        replay_intrinsic=200.0,
+        baseline_intrinsic=150.0,
+    )
+
+    assert payload is not None
+    assert payload["method"] == "one_at_a_time_revert_to_baseline"
+    assert payload["total_intrinsic_delta_vs_baseline"] == 50.0
+    groups = payload["groups"]
+    assert groups["growth"]["status"] == "ok"
+    assert groups["growth"]["delta_vs_replay"] == -20.0
+    assert groups["margin"]["delta_vs_replay"] == -10.0
+    assert groups["reinvestment"]["delta_vs_replay"] == -5.0
+    assert groups["terminal"]["delta_vs_replay"] == 10.0
 
 
 def test_extract_forward_signal_bp_does_not_fallback_to_legacy_calibration_block() -> (
@@ -242,6 +301,29 @@ def test_extract_forward_signal_bp_does_not_fallback_to_legacy_calibration_block
 
     with pytest.raises(ValueError, match="legacy payload is not supported"):
         module._extract_forward_signal_bp(metadata)
+
+
+def test_extract_forward_signal_bp_includes_calibration_degraded_reason() -> None:
+    module = _load_script_module()
+    metadata = {
+        "forward_signal": {
+            "growth_adjustment_basis_points": -80.0,
+            "margin_adjustment_basis_points": -90.0,
+            "raw_growth_adjustment_basis_points": -120.0,
+            "raw_margin_adjustment_basis_points": -150.0,
+            "calibration_applied": True,
+            "mapping_version": "v1",
+        },
+        "forward_signal_calibration": {
+            "degraded_reason": "env_mapping_load_failed:missing_file",
+        },
+    }
+
+    parsed = module._extract_forward_signal_bp(metadata)
+
+    assert (
+        parsed["calibration_degraded_reason"] == "env_mapping_load_failed:missing_file"
+    )
 
 
 def test_main_emits_machine_readable_error_code_for_contract_error(
@@ -404,6 +486,69 @@ def test_build_report_includes_terminal_growth_path_fields() -> None:
     )
     assert report["baseline_terminal_growth_anchor_source"] == "default"
     assert report["replayed_terminal_growth_anchor_source"] == "filing"
+
+
+def test_build_report_includes_target_consensus_quality_fields() -> None:
+    module = _load_script_module()
+    replay_input_raw = _load_fixture_input()
+    replay_input_raw["baseline"] = {
+        "params_dump": {"terminal_growth": 0.02},
+        "calculation_metrics": {"intrinsic_value": 100.0},
+        "assumptions": [],
+        "build_metadata": {
+            "data_freshness": {
+                "market_data": {
+                    "target_consensus_quality_bucket": "degraded",
+                    "target_consensus_confidence_weight": 0.3,
+                    "target_consensus_warning_codes": [
+                        "insufficient_sources",
+                        "provider_fetch_failed",
+                    ],
+                }
+            },
+        },
+    }
+    replay_input = module.parse_valuation_replay_input_model(
+        replay_input_raw,
+        context="test.replay_input.consensus_quality",
+    )
+    report = module._build_report(
+        replay_input=replay_input,
+        replay_params_dump={"terminal_growth": 0.03},
+        replay_calculation_metrics={"intrinsic_value": 105.0},
+        replay_assumptions=[],
+        replay_metadata={
+            "data_freshness": {
+                "market_data": {
+                    "target_consensus_quality_bucket": "high",
+                    "target_consensus_confidence_weight": 1.0,
+                    "target_consensus_warning_codes": [
+                        "provider_fetch_failed",
+                        "provider_blocked_http",
+                    ],
+                }
+            },
+        },
+        override_payload={},
+        abs_tol=1e-6,
+        rel_tol=1e-4,
+    )
+    assert report["baseline_target_consensus_quality_bucket"] == "degraded"
+    assert report["replayed_target_consensus_quality_bucket"] == "high"
+    assert report["baseline_target_consensus_confidence_weight"] == pytest.approx(0.3)
+    assert report["replayed_target_consensus_confidence_weight"] == pytest.approx(1.0)
+    assert report["baseline_target_consensus_warning_codes"] == [
+        "insufficient_sources",
+        "provider_fetch_failed",
+    ]
+    assert report["replayed_target_consensus_warning_codes"] == [
+        "provider_fetch_failed",
+        "provider_blocked_http",
+    ]
+    assert report["baseline_target_consensus_warning_code_count"] == 2
+    assert report["replayed_target_consensus_warning_code_count"] == 2
+    assert report["target_consensus_warning_codes_added"] == ["provider_blocked_http"]
+    assert report["target_consensus_warning_codes_removed"] == ["insufficient_sources"]
 
 
 def test_build_report_includes_shares_path_fields_from_metadata() -> None:

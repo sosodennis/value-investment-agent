@@ -185,6 +185,12 @@ def filter_and_format_results(
         label = tuple_get(row, column_index, "label")
         decimals = tuple_get(row, column_index, "decimals")
         scale = tuple_get(row, column_index, "scale")
+        presentation_score = _to_optional_float(
+            tuple_get(row, column_index, "presentation_score")
+        )
+        calculation_score = _to_optional_float(
+            tuple_get(row, column_index, "calculation_score")
+        )
 
         final_rows.append(
             SECExtractResult(
@@ -198,6 +204,8 @@ def filter_and_format_results(
                 unit=str(unit) if unit is not None else None,
                 decimals=str(decimals) if pd.notna(decimals) else None,
                 scale=str(scale) if pd.notna(scale) else None,
+                presentation_score=presentation_score,
+                calculation_score=calculation_score,
             )
         )
 
@@ -336,6 +344,22 @@ def extract_dimension_detail_from_tuple(
 
 def is_plain_tag(tag: str) -> bool:
     return re.match(r"^[A-Za-z0-9_-]+:[A-Za-z0-9_-]+$", tag) is not None
+
+
+def _to_optional_float(value: object) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, int | float):
+        if pd.isna(value):
+            return None
+        return float(value)
+    try:
+        text = str(value).strip()
+        if not text:
+            return None
+        return float(text)
+    except ValueError:
+        return None
 
 
 def identify_dimension_columns(columns: list[str]) -> list[str]:

@@ -1,0 +1,13 @@
+{
+  "cohort_gate_path": "/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/reports/fundamental_replay_cohort_gate_s31_live_check.json",
+  "cycle_tag": "s31_live_check",
+  "discover_glob": "*.json",
+  "discover_root": "/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/reports/fundamental_replay_inputs/live_auto_s30_prod_p15",
+  "gate_passed": true,
+  "issues": [],
+  "manifest_path": "/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/reports/fundamental_replay_manifest_live_s31_live_check.json",
+  "profile": "live_cohort_v1",
+  "replay_report_path": "/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/reports/fundamental_replay_checks_report_live_s31_live_check.json",
+  "run_path": "/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/reports/fundamental_live_replay_cohort_run_s31_live_check.json",
+  "stage_dir": "/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/reports/fundamental_replay_inputs/live_auto_s31_live_check"
+}

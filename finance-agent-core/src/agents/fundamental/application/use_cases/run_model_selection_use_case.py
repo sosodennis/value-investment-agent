@@ -96,7 +96,7 @@ async def run_model_selection_use_case(
             )
             return FundamentalNodeResult(
                 update=build_model_selection_waiting_update(),
-                goto="clarifying",
+                goto="END",
             )
 
         fundamental_state = read_fundamental_state(state)
@@ -233,6 +233,12 @@ async def run_model_selection_use_case(
             "model_type": model_type,
             "financial_reports_artifact_id": resolved_reports_artifact_id,
         }
+        prior_quality_gates = fundamental_state.context.get("xbrl_quality_gates")
+        if isinstance(prior_quality_gates, Mapping):
+            fa_update["xbrl_quality_gates"] = dict(prior_quality_gates)
+        prior_diagnostics = fundamental_state.context.get("xbrl_diagnostics")
+        if isinstance(prior_diagnostics, Mapping):
+            fa_update["xbrl_diagnostics"] = dict(prior_diagnostics)
         if artifact is not None:
             fa_update["artifact"] = artifact
 

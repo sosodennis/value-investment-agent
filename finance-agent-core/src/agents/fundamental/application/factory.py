@@ -9,6 +9,7 @@ from src.agents.fundamental.application.orchestrator import (
     FundamentalOrchestrator,
 )
 from src.agents.fundamental.application.ports import (
+    FundamentalFinancialPayload,
     IFundamentalFinancialPayloadProvider,
     IFundamentalMarketDataService,
     IFundamentalReportRepo,
@@ -106,14 +107,20 @@ class FundamentalWorkflowRunner:
     async def run_financial_health(
         self, state: Mapping[str, object]
     ) -> FundamentalNodeResult:
+        def _fetch_and_parse_financial_health_payload(
+            ticker: str,
+        ):
+            payload: FundamentalFinancialPayload = self.fetch_financial_payload_fn(
+                ticker, years=self.financial_payload_years
+            )
+            return parse_financial_health_payload(
+                payload,
+                context="financial_health.payload",
+            )
+
         return await self.orchestrator.run_financial_health(
             state,
-            fetch_financial_data_fn=lambda ticker: parse_financial_health_payload(
-                self.fetch_financial_payload_fn(
-                    ticker, years=self.financial_payload_years
-                ),
-                context="financial_health.payload",
-            ),
+            fetch_financial_data_fn=_fetch_and_parse_financial_health_payload,
         )
 
     async def run_model_selection(

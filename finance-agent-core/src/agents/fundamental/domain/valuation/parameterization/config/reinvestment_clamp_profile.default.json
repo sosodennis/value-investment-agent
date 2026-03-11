@@ -1,0 +1,18 @@
+{
+  "schema_version": "fundamental_reinvestment_clamp_profile_v1",
+  "profile_version": "reinvestment_clamp_profile_v1_2026_03_09",
+  "as_of_date": "2026-03-09",
+  "dcf_growth": {
+    "severe_scope_mismatch_ratio_threshold": 0.45,
+    "severe_mismatch_capex_terminal_lower_min": 0.14,
+    "severe_mismatch_capex_terminal_lower_year1_ratio": 1.25,
+    "severe_mismatch_wc_terminal_lower_min": 0.025,
+    "severe_mismatch_wc_terminal_lower_year1_ratio": 0.35
+  },
+  "evidence_refs": [
+    "https://www.spglobal.com/spdji/en/documents/methodologies/methodology-sp-us-indices.pdf",
+    "https://www.lseg.com/content/dam/ftse-russell/en_us/documents/ground-rules/russell-us-indexes-construction-and-methodology.pdf",
+    "https://pages.stern.nyu.edu/~adamodar/pdfiles/val.pdf",
+    "https://www.sec.gov/Archives/edgar/data/1652044/000165204425000014/goog-20241231.htm"
+  ]
+}

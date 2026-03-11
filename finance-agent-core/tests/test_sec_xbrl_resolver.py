@@ -42,6 +42,20 @@ def test_rank_results_prefers_latest_period() -> None:
         config,
     )
     assert ranked[0].result.period_key == "instant_2025-12-31"
+    assert 0.0 <= ranked[0].overall_confidence <= 1.0
+
+
+def test_rank_results_prioritizes_concept_match_quality() -> None:
+    config = SearchType.CONSOLIDATED("us-gaap:DebtCurrent")
+    ranked = rank_results(
+        [
+            _result("instant_2025-12-31", concept="custom:DebtCurrentAlternative"),
+            _result("instant_2024-12-31", concept="us-gaap:DebtCurrent"),
+        ],
+        config,
+    )
+    assert ranked[0].result.concept == "us-gaap:DebtCurrent"
+    assert ranked[0].concept_match_score > ranked[1].concept_match_score
 
 
 def test_choose_best_candidate_prefers_mapping_priority() -> None:
@@ -260,3 +274,5 @@ def test_extract_field_falls_back_to_relaxed_context_stage() -> None:
         call[0] == "CONSOLIDATED" and call[1] is False for call in extractor.calls
     )
     assert any(call[1] is True and call[2] is False for call in extractor.calls)
+    assert field.provenance.resolution_stage == "relaxed_context"
+    assert field.provenance.confidence is not None

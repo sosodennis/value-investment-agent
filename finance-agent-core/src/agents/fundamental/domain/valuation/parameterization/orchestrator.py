@@ -179,7 +179,7 @@ def _apply_forward_signal_adjustments(
 
     raw_signals = market_snapshot.get("forward_signals")
     if raw_signals is None:
-        return result
+        raw_signals = []
 
     outcome = _apply_forward_signal_adjustments_service(
         params=result.params,

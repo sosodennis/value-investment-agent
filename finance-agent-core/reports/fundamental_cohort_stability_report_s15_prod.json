@@ -1,0 +1,76 @@
+{
+  "considered_count": 2,
+  "expected_profile": "prod_cohort_v1",
+  "generated_at": "2026-03-09T06:52:27+00:00",
+  "input_count": 2,
+  "min_runs": 2,
+  "runs": [
+    {
+      "consensus_confidence_weight_avg": 0.0,
+      "consensus_degraded_rate": 0.0,
+      "consensus_gap_count": 2,
+      "consensus_gap_median": -0.0955523731177651,
+      "consensus_gap_p90_abs": 0.184176200189188,
+      "consensus_quality_count": 0,
+      "failed_checks": [
+        "release_gate_nonzero",
+        "consensus_gap_count_below_min",
+        "consensus_confidence_weight_avg_below_min",
+        "consensus_quality_count_below_min"
+      ],
+      "gate_profile": "prod_cohort_v1",
+      "generated_at": "2026-03-09T06:37:24+00:00",
+      "kpi_passed": false,
+      "release_gate_exit_code": 4,
+      "replay_trace_contract_pass_rate": 1.0,
+      "report_path": "reports/fundamental_backtest_report_s13_prod.json",
+      "run_passed": false,
+      "snapshot_available": true,
+      "snapshot_path": "reports/fundamental_release_gate_snapshot_s13_prod.json"
+    },
+    {
+      "consensus_confidence_weight_avg": 0.6,
+      "consensus_degraded_rate": 0.0,
+      "consensus_gap_count": 20,
+      "consensus_gap_median": -0.0955523731177651,
+      "consensus_gap_p90_abs": 0.203286674812741,
+      "consensus_quality_count": 20,
+      "failed_checks": [],
+      "gate_profile": "prod_cohort_v1",
+      "generated_at": "2026-03-09T06:47:22+00:00",
+      "kpi_passed": true,
+      "release_gate_exit_code": 0,
+      "replay_trace_contract_pass_rate": 1.0,
+      "report_path": "reports/fundamental_backtest_report_s14_prod.json",
+      "run_passed": true,
+      "snapshot_available": true,
+      "snapshot_path": "reports/fundamental_release_gate_snapshot_s14_prod.json"
+    }
+  ],
+  "summary": {
+    "considered_runs": 2,
+    "kpi_pass_rate": 0.5,
+    "kpi_passed_count": 1,
+    "latest_snapshot_path": "reports/fundamental_release_gate_snapshot_s14_prod.json",
+    "median_abs_consensus_gap_median": 0.0955523731177651,
+    "median_consensus_gap_p90_abs": 0.1937314375009645,
+    "min_consensus_gap_count": 2,
+    "min_consensus_quality_count": 0,
+    "run_pass_rate": 0.5,
+    "run_passed_count": 1,
+    "stability_reasons": [
+      "kpi_failures_present"
+    ],
+    "stable": false
+  },
+  "thresholds": {
+    "max_consensus_degraded_rate": 0.8,
+    "max_consensus_gap_median_abs": 0.15,
+    "max_consensus_gap_p90_abs": 0.6,
+    "min_consensus_confidence_weight": 0.3,
+    "min_consensus_gap_count": 20,
+    "min_consensus_quality_count": 20,
+    "min_replay_trace_contract_pass_rate": 1.0
+  },
+  "window_size": 2
+}

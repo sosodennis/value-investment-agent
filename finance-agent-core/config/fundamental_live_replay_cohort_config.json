@@ -1,0 +1,26 @@
+{
+  "schema_version": "fundamental_live_replay_cohort_config_v1",
+  "profile": "live_cohort_v1",
+  "discover_root_env_key": "FUNDAMENTAL_LIVE_REPLAY_DISCOVER_ROOT",
+  "require_discover_root_env": false,
+  "discover_root": "reports/fundamental_replay_inputs/inbox",
+  "discover_glob": "*.json",
+  "discover_recursive": true,
+  "ticker_allowlist": [
+    "AAPL",
+    "MSFT",
+    "GOOG",
+    "NVDA"
+  ],
+  "latest_per_ticker": true,
+  "enable_prewarm": false,
+  "prewarm_default_years": 5,
+  "min_cases": 4,
+  "min_unique_tickers": 4,
+  "min_pass_rate": 1.0,
+  "max_quality_block_rate": 0.0,
+  "max_validation_rule_drift_count": 0,
+  "stage_root": "reports/fundamental_replay_inputs",
+  "stage_prefix": "live_auto",
+  "require_relative_input_paths": true
+}

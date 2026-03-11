@@ -36,6 +36,12 @@ from src.agents.fundamental.interface.replay_contracts import (  # noqa: E402
 from src.shared.kernel.types import JSONObject  # noqa: E402
 
 _NUMERIC_PATTERN = r"[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?"
+_PARAMETER_GROUP_FIELDS: dict[str, tuple[str, ...]] = {
+    "growth": ("growth_rates",),
+    "margin": ("operating_margins",),
+    "reinvestment": ("capex_rates", "wc_rates", "sbc_rates"),
+    "terminal": ("terminal_growth",),
+}
 _GUARDRAIL_APPLIED_PATTERN = re.compile(
     r"^base_(?P<kind>growth|margin)_guardrail applied "
     r"\(version=(?P<version>[^,]+), "
@@ -420,6 +426,65 @@ def _extract_terminal_growth_path_from_metadata(
     return None, None
 
 
+def _extract_target_consensus_quality_from_metadata(
+    metadata: Mapping[str, object] | None,
+) -> tuple[str | None, float | None]:
+    if not isinstance(metadata, Mapping):
+        return None, None
+
+    data_freshness_raw = metadata.get("data_freshness")
+    if not isinstance(data_freshness_raw, Mapping):
+        return None, None
+    market_data_raw = data_freshness_raw.get("market_data")
+    if not isinstance(market_data_raw, Mapping):
+        return None, None
+
+    quality_bucket_raw = market_data_raw.get("target_consensus_quality_bucket")
+    confidence_weight_raw = market_data_raw.get("target_consensus_confidence_weight")
+    quality_bucket = (
+        quality_bucket_raw
+        if isinstance(quality_bucket_raw, str) and quality_bucket_raw
+        else None
+    )
+    confidence_weight = (
+        float(confidence_weight_raw)
+        if isinstance(confidence_weight_raw, int | float)
+        else None
+    )
+    return quality_bucket, confidence_weight
+
+
+def _extract_target_consensus_warning_codes_from_metadata(
+    metadata: Mapping[str, object] | None,
+) -> list[str] | None:
+    if not isinstance(metadata, Mapping):
+        return None
+
+    sources: list[Mapping[str, object]] = []
+    data_freshness_raw = metadata.get("data_freshness")
+    if isinstance(data_freshness_raw, Mapping):
+        market_data_raw = data_freshness_raw.get("market_data")
+        if isinstance(market_data_raw, Mapping):
+            sources.append(market_data_raw)
+    parameter_source_raw = metadata.get("parameter_source_summary")
+    if isinstance(parameter_source_raw, Mapping):
+        market_anchor_raw = parameter_source_raw.get("market_data_anchor")
+        if isinstance(market_anchor_raw, Mapping):
+            sources.append(market_anchor_raw)
+
+    codes: list[str] = []
+    for source in sources:
+        raw_codes = source.get("target_consensus_warning_codes")
+        if not isinstance(raw_codes, list):
+            continue
+        for item in raw_codes:
+            if isinstance(item, str) and item:
+                codes.append(item)
+    if not codes:
+        return None
+    return list(dict.fromkeys(codes))
+
+
 def _extract_shares_path_from_metadata(
     metadata: Mapping[str, object] | None,
 ) -> JSONObject | None:
@@ -473,6 +538,18 @@ def _extract_shares_path_from_metadata(
 
 
 def _extract_forward_signal_bp(metadata: Mapping[str, object] | None) -> JSONObject:
+    calibration_block: Mapping[str, object] | None = None
+    if isinstance(metadata, Mapping):
+        raw_calibration_block = metadata.get("forward_signal_calibration")
+        if isinstance(raw_calibration_block, Mapping):
+            calibration_block = raw_calibration_block
+
+    calibration_degraded_reason: str | None = None
+    if calibration_block is not None:
+        degraded_reason_raw = calibration_block.get("degraded_reason")
+        if isinstance(degraded_reason_raw, str) and degraded_reason_raw.strip():
+            calibration_degraded_reason = degraded_reason_raw
+
     if not isinstance(metadata, Mapping):
         return {
             "growth_adjustment_basis_points": None,
@@ -481,6 +558,7 @@ def _extract_forward_signal_bp(metadata: Mapping[str, object] | None) -> JSONObj
             "raw_margin_adjustment_basis_points": None,
             "calibration_applied": None,
             "mapping_version": None,
+            "calibration_degraded_reason": calibration_degraded_reason,
         }
     forward_signal = metadata.get("forward_signal")
     if not isinstance(forward_signal, Mapping):
@@ -491,6 +569,7 @@ def _extract_forward_signal_bp(metadata: Mapping[str, object] | None) -> JSONObj
             "raw_margin_adjustment_basis_points": None,
             "calibration_applied": None,
             "mapping_version": None,
+            "calibration_degraded_reason": calibration_degraded_reason,
         }
     calibration_applied_raw = forward_signal.get("calibration_applied")
     if not isinstance(calibration_applied_raw, bool):
@@ -521,6 +600,7 @@ def _extract_forward_signal_bp(metadata: Mapping[str, object] | None) -> JSONObj
         ),
         "calibration_applied": calibration_applied_raw,
         "mapping_version": mapping_version_raw,
+        "calibration_degraded_reason": calibration_degraded_reason,
     }
 
 
@@ -555,6 +635,96 @@ def _merge_market_snapshot_forward_signals(
         if isinstance(recomputed, Mapping):
             snapshot = dict(recomputed)
     return snapshot
+
+
+def _calculate_intrinsic_from_params_dump(
+    *,
+    model_type: str,
+    params_dump: Mapping[str, object],
+) -> float | None:
+    model_runtime = parse_valuation_model_runtime(
+        ValuationModelRegistry.get_model_runtime(model_type),
+        context=f"replay valuation model runtime for {model_type}",
+    )
+    params_payload = dict(params_dump)
+    # Remove trace payload so what-if replacements use explicit parameter values.
+    params_payload.pop("trace_inputs", None)
+    params_obj = model_runtime.schema(**params_payload)
+    metrics = parse_calculation_metrics(
+        model_runtime.calculator(params_obj),
+        context=f"{model_type} replay valuation result (group_delta)",
+    )
+    return _extract_intrinsic_value(metrics)
+
+
+def _build_delta_by_parameter_group(
+    *,
+    model_type: str,
+    baseline_params: Mapping[str, object] | None,
+    replay_params: Mapping[str, object],
+    replay_intrinsic: float,
+    baseline_intrinsic: float | None,
+) -> JSONObject | None:
+    if not isinstance(baseline_params, Mapping):
+        return None
+    payload: JSONObject = {
+        "method": "one_at_a_time_revert_to_baseline",
+        "total_intrinsic_delta_vs_baseline": (
+            replay_intrinsic - baseline_intrinsic
+            if baseline_intrinsic is not None
+            else None
+        ),
+        "groups": {},
+    }
+    groups_raw = payload["groups"]
+    if not isinstance(groups_raw, dict):
+        return None
+    groups: dict[str, object] = groups_raw
+
+    for group, fields in _PARAMETER_GROUP_FIELDS.items():
+        candidate_params = dict(replay_params)
+        applied_fields: list[str] = []
+        for field in fields:
+            if field in baseline_params:
+                candidate_params[field] = baseline_params[field]
+                applied_fields.append(field)
+            elif field in candidate_params:
+                candidate_params.pop(field)
+
+        if not applied_fields:
+            groups[group] = {
+                "status": "skipped",
+                "fields": list(fields),
+                "reason": "baseline_fields_missing",
+            }
+            continue
+
+        try:
+            reverted_intrinsic = _calculate_intrinsic_from_params_dump(
+                model_type=model_type,
+                params_dump=candidate_params,
+            )
+        except Exception as exc:  # noqa: BLE001
+            groups[group] = {
+                "status": "error",
+                "fields": applied_fields,
+                "error": str(exc),
+            }
+            continue
+        if reverted_intrinsic is None:
+            groups[group] = {
+                "status": "error",
+                "fields": applied_fields,
+                "error": "intrinsic_value_missing",
+            }
+            continue
+        groups[group] = {
+            "status": "ok",
+            "fields": applied_fields,
+            "intrinsic_if_reverted_to_baseline": reverted_intrinsic,
+            "delta_vs_replay": replay_intrinsic - reverted_intrinsic,
+        }
+    return payload
 
 
 def _replay_valuation(
@@ -648,6 +818,19 @@ def _build_report(
     intrinsic_delta = (
         replay_intrinsic - baseline_intrinsic
         if replay_intrinsic is not None and baseline_intrinsic is not None
+        else None
+    )
+    delta_by_parameter_group = (
+        _build_delta_by_parameter_group(
+            model_type=replay_input.model_type,
+            baseline_params=baseline_params
+            if isinstance(baseline_params, Mapping)
+            else None,
+            replay_params=replay_params_dump,
+            replay_intrinsic=replay_intrinsic,
+            baseline_intrinsic=baseline_intrinsic,
+        )
+        if replay_intrinsic is not None
         else None
     )
 
@@ -753,6 +936,30 @@ def _build_report(
         )
     baseline_shares_path = _extract_shares_path_from_metadata(baseline_build_metadata)
     replayed_shares_path = _extract_shares_path_from_metadata(replay_metadata)
+    (
+        baseline_target_consensus_quality_bucket,
+        baseline_target_consensus_confidence_weight,
+    ) = _extract_target_consensus_quality_from_metadata(baseline_build_metadata)
+    (
+        replayed_target_consensus_quality_bucket,
+        replayed_target_consensus_confidence_weight,
+    ) = _extract_target_consensus_quality_from_metadata(replay_metadata)
+    baseline_target_consensus_warning_codes = (
+        _extract_target_consensus_warning_codes_from_metadata(baseline_build_metadata)
+    )
+    replayed_target_consensus_warning_codes = (
+        _extract_target_consensus_warning_codes_from_metadata(replay_metadata)
+    )
+    baseline_warning_code_set = set(
+        baseline_target_consensus_warning_codes or [],
+    )
+    replayed_warning_code_set = set(
+        replayed_target_consensus_warning_codes or [],
+    )
+    warning_codes_added = sorted(replayed_warning_code_set - baseline_warning_code_set)
+    warning_codes_removed = sorted(
+        baseline_warning_code_set - replayed_warning_code_set
+    )
 
     intrinsic_within_tol: bool | None = None
     if replay_intrinsic is not None and baseline_intrinsic is not None:
@@ -777,6 +984,7 @@ def _build_report(
         "baseline_intrinsic_value": baseline_intrinsic,
         "replayed_intrinsic_value": replay_intrinsic,
         "intrinsic_delta": intrinsic_delta,
+        "delta_by_parameter_group": delta_by_parameter_group,
         "intrinsic_within_tolerance": intrinsic_within_tol,
         "baseline_wacc": baseline_wacc,
         "replayed_wacc": replay_wacc,
@@ -860,6 +1068,32 @@ def _build_report(
         "replayed_terminal_growth_fallback_mode": replay_terminal_growth_fallback_mode,
         "baseline_terminal_growth_anchor_source": baseline_terminal_growth_anchor_source,
         "replayed_terminal_growth_anchor_source": replay_terminal_growth_anchor_source,
+        "baseline_target_consensus_quality_bucket": (
+            baseline_target_consensus_quality_bucket
+        ),
+        "replayed_target_consensus_quality_bucket": (
+            replayed_target_consensus_quality_bucket
+        ),
+        "baseline_target_consensus_confidence_weight": (
+            baseline_target_consensus_confidence_weight
+        ),
+        "replayed_target_consensus_confidence_weight": (
+            replayed_target_consensus_confidence_weight
+        ),
+        "baseline_target_consensus_warning_codes": (
+            baseline_target_consensus_warning_codes
+        ),
+        "replayed_target_consensus_warning_codes": (
+            replayed_target_consensus_warning_codes
+        ),
+        "baseline_target_consensus_warning_code_count": len(
+            baseline_target_consensus_warning_codes or []
+        ),
+        "replayed_target_consensus_warning_code_count": len(
+            replayed_target_consensus_warning_codes or []
+        ),
+        "target_consensus_warning_codes_added": warning_codes_added,
+        "target_consensus_warning_codes_removed": warning_codes_removed,
         "baseline_shares_path": baseline_shares_path,
         "replayed_shares_path": replayed_shares_path,
     }

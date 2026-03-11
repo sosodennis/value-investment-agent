@@ -166,6 +166,31 @@ def test_dcf_growth_includes_monte_carlo_distribution() -> None:
     assert diagnostics.get("batch_evaluator_used") is True
 
 
+def test_dcf_growth_short_horizon_preserves_first_three_years_before_fade() -> None:
+    kwargs = _base_kwargs()
+    kwargs["growth_rates"] = [0.18, 0.16, 0.14, 0.12, 0.10]
+    kwargs["operating_margins"] = [0.22, 0.24, 0.26, 0.28, 0.30]
+    kwargs["da_rates"] = [0.03] * 5
+    kwargs["capex_rates"] = [0.05] * 5
+    kwargs["wc_rates"] = [0.01] * 5
+    kwargs["sbc_rates"] = [0.02] * 5
+    params = DCFGrowthParams(**kwargs)
+    result = calculate_dcf_growth_valuation(params)
+
+    assert "error" not in result
+    details = result["details"]
+    assert isinstance(details, dict)
+    growth = details.get("growth_rates_converged")
+    terminal_effective = details.get("terminal_growth_effective")
+    assert isinstance(growth, list)
+    assert isinstance(terminal_effective, float)
+    assert len(growth) == 5
+    assert growth[:3] == pytest.approx([0.18, 0.16, 0.14])
+    assert growth[2] > growth[3] > growth[4]
+    assert growth[4] >= terminal_effective
+    assert growth[4] <= terminal_effective + 0.01 + 1e-9
+
+
 def test_dcf_growth_monte_carlo_base_case_matches_point_intrinsic() -> None:
     params = DCFGrowthParams(
         **_base_kwargs(),

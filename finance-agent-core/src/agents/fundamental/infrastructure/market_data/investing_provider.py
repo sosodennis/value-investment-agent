@@ -34,6 +34,8 @@ class InvestingProvider(MarketDataProvider):
             fallback_patterns=(
                 r'"targetMeanPrice"\s*:\s*([0-9][0-9.,]*)',
                 r'"average"\s*:\s*"?\$?([0-9][0-9.,]*)"?',
+                r"average(?:\s+price)?\s+target[^$]{0,24}\$([0-9][0-9.,]*)",
+                r"12m\s+target[^$]{0,24}\$([0-9][0-9.,]*)",
             ),
         )
         target_high, target_high_extract = extract_float_structured_first(
@@ -42,6 +44,7 @@ class InvestingProvider(MarketDataProvider):
             fallback_patterns=(
                 r'"targetHighPrice"\s*:\s*([0-9][0-9.,]*)',
                 r'"high"\s*:\s*"?\$?([0-9][0-9.,]*)"?',
+                r"high(?:\s+price)?\s+target[^$]{0,24}\$([0-9][0-9.,]*)",
             ),
         )
         target_low, target_low_extract = extract_float_structured_first(
@@ -50,6 +53,7 @@ class InvestingProvider(MarketDataProvider):
             fallback_patterns=(
                 r'"targetLowPrice"\s*:\s*([0-9][0-9.,]*)',
                 r'"low"\s*:\s*"?\$?([0-9][0-9.,]*)"?',
+                r"low(?:\s+price)?\s+target[^$]{0,24}\$([0-9][0-9.,]*)",
             ),
         )
         analyst_count, analyst_extract = extract_int_structured_first(

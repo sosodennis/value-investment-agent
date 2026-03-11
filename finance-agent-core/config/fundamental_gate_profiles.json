@@ -1,0 +1,60 @@
+{
+  "schema_version": "fundamental_gate_profiles_v1",
+  "default_profile": "ci_cohort_v1",
+  "profiles": {
+    "ci_cohort_v1": {
+      "description": "Baseline CI profile for contract and regression gating.",
+      "thresholds": {
+        "max_extreme_upside_rate": 0.3,
+        "min_guardrail_hit_rate": 0.0,
+        "min_reinvestment_guardrail_hit_rate": 0.0,
+        "max_shares_scope_mismatch_rate": 1.0,
+        "max_consensus_gap_median_abs": 0.15,
+        "max_consensus_gap_p90_abs": 0.6,
+        "min_consensus_gap_count": 2,
+        "max_consensus_degraded_rate": 1.0,
+        "min_consensus_confidence_weight": 0.0,
+        "min_consensus_quality_count": 0,
+        "max_consensus_provider_blocked_rate": 1.0,
+        "max_consensus_parse_missing_rate": 1.0,
+        "min_consensus_warning_code_count": 0,
+        "min_replay_trace_contract_pass_rate": 1.0,
+        "max_replay_intrinsic_delta_p90_abs": 1000.0,
+        "max_replay_quality_block_rate": 0.0,
+        "min_replay_cache_hit_rate": 0.0,
+        "max_replay_warm_latency_p90_ms": 120000.0,
+        "max_replay_cold_latency_p90_ms": 120000.0,
+        "max_replay_arelle_parse_latency_p90_ms": 120000.0,
+        "max_replay_arelle_runtime_lock_wait_p90_ms": 120000.0,
+        "max_replay_validation_rule_drift_count": 0
+      }
+    },
+    "prod_cohort_v1": {
+      "description": "Production-like cohort profile for stricter convergence governance.",
+      "thresholds": {
+        "max_extreme_upside_rate": 0.3,
+        "min_guardrail_hit_rate": 0.0,
+        "min_reinvestment_guardrail_hit_rate": 0.0,
+        "max_shares_scope_mismatch_rate": 1.0,
+        "max_consensus_gap_median_abs": 0.15,
+        "max_consensus_gap_p90_abs": 0.15,
+        "min_consensus_gap_count": 20,
+        "max_consensus_degraded_rate": 0.8,
+        "min_consensus_confidence_weight": 0.3,
+        "min_consensus_quality_count": 20,
+        "max_consensus_provider_blocked_rate": 1.0,
+        "max_consensus_parse_missing_rate": 1.0,
+        "min_consensus_warning_code_count": 0,
+        "min_replay_trace_contract_pass_rate": 1.0,
+        "max_replay_intrinsic_delta_p90_abs": 450.0,
+        "max_replay_quality_block_rate": 0.0,
+        "min_replay_cache_hit_rate": 0.0,
+        "max_replay_warm_latency_p90_ms": 120000.0,
+        "max_replay_cold_latency_p90_ms": 120000.0,
+        "max_replay_arelle_parse_latency_p90_ms": 120000.0,
+        "max_replay_arelle_runtime_lock_wait_p90_ms": 120000.0,
+        "max_replay_validation_rule_drift_count": 0
+      }
+    }
+  }
+}

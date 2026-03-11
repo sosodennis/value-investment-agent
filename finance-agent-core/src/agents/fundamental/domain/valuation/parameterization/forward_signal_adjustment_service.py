@@ -29,6 +29,7 @@ def apply_forward_signal_adjustments(
     model_type: str,
     raw_signals: object,
 ) -> ForwardSignalAdjustmentOutcome:
+    has_raw_signal_payload = _has_raw_signal_payload(raw_signals)
     signals = parse_market_forward_signals(raw_signals)
     calibration_load_result = load_forward_signal_calibration_mapping()
     policy = apply_forward_signal_policy(
@@ -56,9 +57,10 @@ def apply_forward_signal_adjustments(
         )
 
     if policy.total_count == 0:
-        updated_assumptions.append(
-            "forward_signals provided but none passed schema validation"
-        )
+        if has_raw_signal_payload:
+            updated_assumptions.append(
+                "forward_signals provided but none passed schema validation"
+            )
         return ForwardSignalAdjustmentOutcome(
             params=updated_params,
             assumptions=updated_assumptions,
@@ -174,6 +176,10 @@ def apply_series_adjustment(
         params[field_name] = adjusted
         return True
     return False
+
+
+def _has_raw_signal_payload(raw_signals: object) -> bool:
+    return isinstance(raw_signals, list | tuple) and len(raw_signals) > 0
 
 
 __all__ = [

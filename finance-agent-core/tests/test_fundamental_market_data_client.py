@@ -94,6 +94,7 @@ def test_market_data_service_prefers_macro_provider_for_risk_free_rate() -> None
     assert snapshot.provider == "yfinance"
     assert snapshot.market_datums["risk_free_rate"]["source"] == "fred"
     assert snapshot.market_datums["current_price"]["source"] == "yfinance"
+    assert snapshot.market_datums["shares_outstanding"]["shares_scope"] == "unknown"
     assert snapshot.license_note is not None
     assert "yahoo license" in snapshot.license_note
     assert "fred license" in snapshot.license_note
@@ -166,9 +167,7 @@ def test_market_data_service_marks_shares_staleness_fields() -> None:
     assert staleness.get("is_stale") is True
 
 
-def test_market_data_service_uses_relaxed_staleness_for_long_run_growth_anchor() -> (
-    None
-):
+def test_market_data_service_uses_strict_staleness_for_long_run_growth_anchor() -> None:
     stale_as_of = (datetime.now(timezone.utc) - timedelta(days=154)).isoformat()
     yahoo = _StaticProvider(
         name="yfinance",
@@ -199,9 +198,9 @@ def test_market_data_service_uses_relaxed_staleness_for_long_run_growth_anchor()
         "staleness"
     )
     assert isinstance(long_run_staleness, dict)
-    assert long_run_staleness.get("max_days") == 180
-    assert long_run_staleness.get("is_stale") is False
-    assert "long_run_growth_anchor:stale" not in snapshot.quality_flags
+    assert long_run_staleness.get("max_days") == 90
+    assert long_run_staleness.get("is_stale") is True
+    assert "long_run_growth_anchor:stale" in snapshot.quality_flags
 
     shares_staleness = snapshot.market_datums["shares_outstanding"].get("staleness")
     assert isinstance(shares_staleness, dict)
@@ -241,8 +240,8 @@ def test_recompute_market_snapshot_staleness_reuses_market_data_policy() -> None
     anchor_staleness = recomputed["market_datums"]["long_run_growth_anchor"][
         "staleness"
     ]
-    assert anchor_staleness["max_days"] == 180
-    assert anchor_staleness["is_stale"] is False
+    assert anchor_staleness["max_days"] == 90
+    assert anchor_staleness["is_stale"] is True
 
 
 def test_market_data_service_prefers_consensus_aggregate_for_target_mean_price() -> (
@@ -309,6 +308,9 @@ def test_market_data_service_prefers_consensus_aggregate_for_target_mean_price()
     assert snapshot.target_consensus_source_count == 3
     assert snapshot.target_consensus_sources == ("tipranks", "investing", "yfinance")
     assert snapshot.target_consensus_fallback_reason is None
+    assert snapshot.target_consensus_warning_codes == ()
+    assert snapshot.target_consensus_quality_bucket == "high"
+    assert snapshot.target_consensus_confidence_weight == 1.0
 
 
 def test_market_data_service_falls_back_to_yfinance_target_when_consensus_insufficient(
@@ -357,12 +359,16 @@ def test_market_data_service_falls_back_to_yfinance_target_when_consensus_insuff
     assert snapshot.market_datums["target_mean_price"]["fallback_reason"] == (
         "insufficient_sources"
     )
+    assert snapshot.market_datums["target_mean_price"]["horizon"] == "12m"
     quality_flags = snapshot.market_datums["target_mean_price"].get("quality_flags")
     assert isinstance(quality_flags, list)
     assert "consensus_fallback" in quality_flags
     assert snapshot.target_consensus_applied is False
     assert snapshot.target_consensus_fallback_reason == "insufficient_sources"
+    assert "insufficient_sources" in snapshot.target_consensus_warning_codes
     assert snapshot.target_consensus_source_count is None
+    assert snapshot.target_consensus_quality_bucket == "degraded"
+    assert snapshot.target_consensus_confidence_weight == 0.30
 
 
 def test_market_data_service_classifies_blocked_consensus_fallback_with_governance_warning() -> (
@@ -398,7 +404,67 @@ def test_market_data_service_classifies_blocked_consensus_fallback_with_governan
 
     assert snapshot.target_consensus_applied is False
     assert snapshot.target_consensus_fallback_reason == "provider_blocked"
+    assert "provider_blocked" in snapshot.target_consensus_warning_codes
+    assert "provider_blocked_http" in snapshot.target_consensus_warning_codes
+    assert (
+        "provider_governance_review_required" in snapshot.target_consensus_warning_codes
+    )
+    assert snapshot.target_consensus_quality_bucket == "degraded"
+    assert snapshot.target_consensus_confidence_weight == 0.30
     assert any(
         "provider_governance_review_required" in warning
+        for warning in snapshot.target_consensus_warnings
+    )
+
+
+def test_market_data_service_degrades_single_source_aggregate_consensus(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("FUNDAMENTAL_TARGET_CONSENSUS_MIN_SOURCES", "1")
+    yfinance = _StaticProvider(
+        name="yfinance",
+        license_note="yahoo license",
+        datums={
+            "current_price": MarketDatum(90.0, "yfinance", "2026-03-05T00:00:00Z"),
+            "shares_outstanding": MarketDatum(
+                1_000.0, "yfinance", "2026-03-05T00:00:00Z"
+            ),
+            "beta": MarketDatum(1.1, "yfinance", "2026-03-05T00:00:00Z"),
+            "risk_free_rate": MarketDatum(0.04, "yfinance", "2026-03-05T00:00:00Z"),
+        },
+    )
+    tipranks = _StaticProvider(
+        name="tipranks",
+        license_note="tipranks license",
+        datums={
+            "target_mean_price": MarketDatum(
+                200.0,
+                "tipranks",
+                "2026-03-05T00:00:00Z",
+            ),
+            "target_analyst_count": MarketDatum(
+                24.0,
+                "tipranks",
+                "2026-03-05T00:00:00Z",
+            ),
+        },
+    )
+
+    service = MarketDataService(
+        ttl_seconds=120,
+        max_retries=0,
+        providers=(yfinance, tipranks),
+    )
+    snapshot = service.get_market_snapshot("EXM")
+
+    assert snapshot.target_mean_price == 200.0
+    assert snapshot.target_consensus_applied is True
+    assert snapshot.target_consensus_source_count == 1
+    assert snapshot.target_consensus_fallback_reason == "single_source_consensus"
+    assert "single_source_consensus" in snapshot.target_consensus_warning_codes
+    assert snapshot.target_consensus_quality_bucket == "degraded"
+    assert snapshot.target_consensus_confidence_weight == 0.30
+    assert any(
+        "single_source_consensus" in warning
         for warning in snapshot.target_consensus_warnings
     )

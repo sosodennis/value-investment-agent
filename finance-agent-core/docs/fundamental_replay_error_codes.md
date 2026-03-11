@@ -60,6 +60,42 @@ Scope: `finance-agent-core/scripts/run_fundamental_replay_checks.py`
   fields in output (`replayed_terminal_growth_fallback_mode`,
   `replayed_terminal_growth_anchor_source`).
 
+6. `forward_signal_trace_missing`
+- Trigger: replay case returned success but missing required forward-signal trace
+  fields in output (`replayed_forward_signal.calibration_applied`,
+  `replayed_forward_signal.mapping_version`, raw/calibrated basis-point values,
+  and `calibration_degraded_reason` key).
+
+## Replay Trace Gate Validator Error Codes
+
+Scope: `finance-agent-core/scripts/validate_fundamental_replay_trace_gate.py`
+
+1. `replay_trace_contract_report_invalid`
+- Trigger: replay checks report `summary` missing required fields.
+
+2. `replay_trace_contract_case_count_invalid`
+- Trigger: replay checks report `summary.total_cases <= 0`.
+
+3. `replay_trace_contract_pass_rate_below_min`
+- Trigger: observed trace-contract pass rate is lower than configured minimum.
+
+## Live Replay Cohort Gate Issue Codes
+
+Scope: `finance-agent-core/scripts/validate_fundamental_replay_cohort_gate.py`
+
+1. `replay_report_intrinsic_delta_available_cases_missing_or_invalid`
+- Trigger: replay report summary missing valid `intrinsic_delta_available_cases` while
+  `--max-intrinsic-delta-p90-abs` gate is enabled.
+
+2. `replay_report_intrinsic_delta_available_cases_empty`
+- Trigger: replay report has zero intrinsic-delta coverage while intrinsic-delta gate is enabled.
+
+3. `replay_report_intrinsic_delta_p90_abs_missing_or_invalid`
+- Trigger: replay report summary missing valid `intrinsic_delta_p90_abs` while intrinsic-delta gate is enabled.
+
+4. `replay_report_intrinsic_delta_p90_abs_above_max`
+- Trigger: replay report summary `intrinsic_delta_p90_abs` exceeds configured maximum threshold.
+
 ## Integration Note
 
 Downstream CI/automation should key on `error_code` first, then use `error` string for debugging details.

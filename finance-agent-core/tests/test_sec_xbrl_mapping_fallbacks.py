@@ -1,10 +1,20 @@
 from __future__ import annotations
 
+import logging
+
+from src.agents.fundamental.infrastructure.sec_xbrl.anchor.extension_anchor_service import (
+    ANCHOR_RULE_NOT_FOUND,
+    build_default_extension_anchor_service,
+)
+from src.agents.fundamental.infrastructure.sec_xbrl.base_model_mapping_resolver_service import (
+    resolve_configs,
+)
 from src.agents.fundamental.infrastructure.sec_xbrl.extractor_search_processing_service import (
     normalize_unit,
     period_sort_key,
 )
 from src.agents.fundamental.infrastructure.sec_xbrl.mapping import (
+    FIELD_MAPPING_NOT_FOUND,
     FieldSpec,
     XbrlMappingRegistry,
     get_mapping_registry,
@@ -69,6 +79,18 @@ def test_total_revenue_mapping_includes_bank_net_revenue_tags() -> None:
     assert spec is not None
     concepts = [cfg.concept_regex for cfg in spec.configs]
     assert "us-gaap:RevenuesNetOfInterestExpense" in concepts
+
+
+def test_income_before_tax_mapping_includes_extended_us_gaap_aliases() -> None:
+    spec = get_mapping_registry().get("income_before_tax")
+    assert spec is not None
+    concepts = [cfg.concept_regex for cfg in spec.configs]
+    assert "us-gaap:IncomeBeforeIncomeTaxes" in concepts
+    assert "us-gaap:IncomeLossBeforeIncomeTaxesMinorityInterest" in concepts
+    assert (
+        "us-gaap:IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments"
+        in concepts
+    )
 
 
 def test_total_debt_including_leases_mapping_includes_current_maturities_tag() -> None:
@@ -148,3 +170,78 @@ def test_registry_resolve_normalizes_issuer_key() -> None:
     assert resolved.source == "issuer_override"
     assert resolved.issuer == "JPM"
     assert resolved.spec is issuer_spec
+
+
+def test_extension_anchor_service_prefers_issuer_then_industry_then_global() -> None:
+    service = build_default_extension_anchor_service()
+
+    issuer_resolution = service.resolve(
+        field_key="income_before_tax",
+        industry="Financial Services",
+        issuer="AMZN",
+    )
+    assert issuer_resolution.source == "issuer_anchor"
+    assert issuer_resolution.unresolved_reason is None
+
+    industry_resolution = service.resolve(
+        field_key="income_before_tax",
+        industry="Financial Services",
+        issuer="JPM",
+    )
+    assert industry_resolution.source == "industry_anchor"
+    assert industry_resolution.unresolved_reason is None
+
+    global_resolution = service.resolve(
+        field_key="income_before_tax",
+        industry="Industrial",
+        issuer="MSFT",
+    )
+    assert global_resolution.source == "global_anchor"
+    assert global_resolution.unresolved_reason is None
+
+    missing_resolution = service.resolve(
+        field_key="unknown_field",
+        industry="Industrial",
+        issuer="MSFT",
+    )
+    assert missing_resolution.source is None
+    assert missing_resolution.unresolved_reason == ANCHOR_RULE_NOT_FOUND
+
+
+def test_registry_resolve_applies_anchor_configs_for_amzn_income_before_tax() -> None:
+    resolved = get_mapping_registry().resolve(
+        "income_before_tax",
+        industry="Industrial",
+        issuer="AMZN",
+    )
+    assert resolved is not None
+    assert resolved.anchor_source == "issuer_anchor"
+    assert resolved.anchor_rule_count >= 1
+    concepts = [cfg.concept_regex for cfg in resolved.spec.configs[:3]]
+    assert "amzn:IncomeBeforeIncomeTaxes" in concepts
+
+
+def test_registry_resolve_with_reason_reports_machine_readable_unresolved_code() -> (
+    None
+):
+    result = get_mapping_registry().resolve_with_reason(
+        "field_not_registered",
+        industry="Industrial",
+        issuer="AMZN",
+    )
+    assert result.resolved is None
+    assert result.unresolved_reason == FIELD_MAPPING_NOT_FOUND
+
+
+def test_resolve_configs_enriches_ranking_metadata_for_anchor_mappings() -> None:
+    configs = resolve_configs(
+        field_key="income_before_tax",
+        industry="Industrial",
+        issuer="AMZN",
+        registry=get_mapping_registry(),
+        logger_=logging.getLogger(__name__),
+    )
+    assert configs
+    assert all(config.mapping_source is not None for config in configs)
+    assert all(config.anchor_confidence is not None for config in configs)
+    assert configs[0].concept_priority >= configs[-1].concept_priority

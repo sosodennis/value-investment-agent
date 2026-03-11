@@ -42,6 +42,15 @@ def build_backtest_report_payload(
     reinvestment_guardrail_hits = _collect_reinvestment_guardrail_hits(results)
     shares_scope_mismatch_flags = _collect_shares_scope_mismatch_flags(results)
     consensus_gaps = _collect_consensus_gaps(results)
+    consensus_confidence_weights = _collect_consensus_confidence_weights(results)
+    consensus_quality_buckets = _collect_consensus_quality_buckets(results)
+    consensus_warning_code_sets = _collect_consensus_warning_code_sets(results)
+    consensus_quality_distribution = _build_consensus_quality_distribution(
+        consensus_quality_buckets
+    )
+    consensus_warning_code_distribution = _build_consensus_warning_code_distribution(
+        consensus_warning_code_sets
+    )
 
     serialized_results: list[JSONObject] = []
     for item in results:
@@ -84,6 +93,23 @@ def build_backtest_report_payload(
             ),
             "consensus_gap_distribution": _build_consensus_gap_distribution(
                 consensus_gaps
+            ),
+            "consensus_confidence_weight_avg": _compute_mean(
+                consensus_confidence_weights
+            ),
+            "consensus_degraded_rate": _read_numeric(
+                consensus_quality_distribution, "degraded_rate"
+            )
+            or 0.0,
+            "consensus_quality_distribution": consensus_quality_distribution,
+            "consensus_warning_code_distribution": consensus_warning_code_distribution,
+            "consensus_provider_blocked_rate": _extract_warning_code_rate(
+                distribution=consensus_warning_code_distribution,
+                code="provider_blocked",
+            ),
+            "consensus_parse_missing_rate": _extract_warning_code_rate(
+                distribution=consensus_warning_code_distribution,
+                code="provider_parse_missing",
             ),
         },
         "calibration": calibration or {},
@@ -171,6 +197,46 @@ def _collect_consensus_gaps(results: Sequence[CaseResult]) -> list[float]:
     return output
 
 
+def _collect_consensus_confidence_weights(results: Sequence[CaseResult]) -> list[float]:
+    output: list[float] = []
+    for item in results:
+        if item.status != "ok" or item.metrics is None:
+            continue
+        weight = _read_numeric(item.metrics, "target_consensus_confidence_weight")
+        if weight is not None:
+            output.append(weight)
+    return output
+
+
+def _collect_consensus_quality_buckets(results: Sequence[CaseResult]) -> list[str]:
+    output: list[str] = []
+    for item in results:
+        if item.status != "ok" or item.metrics is None:
+            continue
+        bucket = item.metrics.get("target_consensus_quality_bucket")
+        if isinstance(bucket, str) and bucket in {"high", "medium", "low", "degraded"}:
+            output.append(bucket)
+    return output
+
+
+def _collect_consensus_warning_code_sets(
+    results: Sequence[CaseResult],
+) -> list[set[str]]:
+    output: list[set[str]] = []
+    for item in results:
+        if item.status != "ok" or item.metrics is None:
+            continue
+        raw_codes = item.metrics.get("target_consensus_warning_codes")
+        if not isinstance(raw_codes, list):
+            continue
+        parsed_codes = {
+            code for code in raw_codes if isinstance(code, str) and code.strip()
+        }
+        if parsed_codes:
+            output.append(parsed_codes)
+    return output
+
+
 def _extract_guardrail_hit(metrics: Mapping[str, object]) -> bool | None:
     direct = _coerce_bool_like(metrics.get("guardrail_hit"))
     if direct is not None:
@@ -229,6 +295,73 @@ def _compute_guardrail_hit_rate(guardrail_hits: Sequence[bool]) -> float:
         return 0.0
     hit_count = sum(1 for value in guardrail_hits if value)
     return hit_count / len(guardrail_hits)
+
+
+def _compute_mean(values: Sequence[float]) -> float:
+    if not values:
+        return 0.0
+    return sum(values) / len(values)
+
+
+def _build_consensus_quality_distribution(
+    buckets: Sequence[str],
+) -> JSONObject:
+    if not buckets:
+        return {"available_count": 0}
+
+    high_count = sum(1 for bucket in buckets if bucket == "high")
+    medium_count = sum(1 for bucket in buckets if bucket == "medium")
+    low_count = sum(1 for bucket in buckets if bucket == "low")
+    degraded_count = sum(1 for bucket in buckets if bucket == "degraded")
+    total = len(buckets)
+    return {
+        "available_count": total,
+        "high_count": high_count,
+        "medium_count": medium_count,
+        "low_count": low_count,
+        "degraded_count": degraded_count,
+        "high_rate": high_count / total,
+        "medium_rate": medium_count / total,
+        "low_rate": low_count / total,
+        "degraded_rate": degraded_count / total,
+    }
+
+
+def _build_consensus_warning_code_distribution(
+    code_sets: Sequence[set[str]],
+) -> JSONObject:
+    if not code_sets:
+        return {"available_count": 0}
+
+    code_case_counts: dict[str, int] = {}
+    for codes in code_sets:
+        for code in codes:
+            code_case_counts[code] = code_case_counts.get(code, 0) + 1
+
+    available_count = len(code_sets)
+    code_case_rates = {
+        code: count / available_count
+        for code, count in sorted(code_case_counts.items())
+    }
+    return {
+        "available_count": available_count,
+        "code_case_counts": dict(sorted(code_case_counts.items())),
+        "code_case_rates": code_case_rates,
+    }
+
+
+def _extract_warning_code_rate(
+    *,
+    distribution: Mapping[str, object],
+    code: str,
+) -> float:
+    rates_raw = distribution.get("code_case_rates")
+    if not isinstance(rates_raw, Mapping):
+        return 0.0
+    rate_raw = rates_raw.get(code)
+    if isinstance(rate_raw, int | float) and not isinstance(rate_raw, bool):
+        return float(rate_raw)
+    return 0.0
 
 
 def _build_consensus_gap_distribution(consensus_gaps: Sequence[float]) -> JSONObject:

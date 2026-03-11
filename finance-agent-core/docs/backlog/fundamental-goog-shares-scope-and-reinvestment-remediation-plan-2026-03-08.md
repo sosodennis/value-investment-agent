@@ -258,6 +258,32 @@ Completed slices:
   - `base_wc_guardrail_applied`
   - `shares_scope_mismatch_detected`
   - `shares_scope_mismatch_resolved`
+
+## Enterprise Validation Addendum (2026-03-09)
+
+1. Shares-scope 治理依據（非貼價調參）
+- S&P Dow Jones 方法論指出多股權類別若以單一 class 價格配總股數會造成權重失真，需按 line-level 可投資股本處理。
+- FTSE Russell 方法論同樣以 security-level `price x available shares`（float-adjusted）計算，不以混合語義分母直接乘價。
+- 因此本輪 `harmonized_market_class` + mismatch ratio gate 是先修正語義一致性，再做參數治理。
+
+2. Reinvestment clamp 依據（企業級現金流一致性）
+- Damodaran 估值框架：`Expected growth in EBIT = Reinvestment rate * Return on capital`；
+  終值期的 reinvestment 不應在正增長假設下無約束掉到近零。
+- Damodaran `Current Data` 提供按行業分組的 `Capital Expenditures` / `Working Capital` / `Growth-Reinvestment` 資料集，適合作為 guardrail 參數的定期校準基準（本輪先用公司級 SEC 證據落地，行業面板作下一輪雙週更新輸入）。
+
+3. Company evidence 對照（GOOG/Alphabet）
+- Alphabet 2024 Form 10-K：`Consolidated revenues 350,018`；`capital expenditures 52.5B`，對應 capex intensity 約 `15.0%`。
+- Alphabet 2023 Form 10-K（同份報告中的對照年度）：`Consolidated revenues 307,394`；`capital expenditures 32.3B`，對應 capex intensity 約 `10.5%`。
+- 本輪 severe clamp `capex_terminal_lower = max(14%, year1*1.25)`、`wc_terminal_lower = max(2.5%, year1*0.35)` 是在上述區間下的保守下界治理，不是外部 target-price 反推。
+
+4. 實務落地規則（避免濫用）
+- 只在以下同時成立時觸發 severe clamp：
+  - `dcf_growth`
+  - `scope_policy_resolution=harmonized_market_class`
+  - `scope_mismatch_ratio >= 45%`
+  - `target_premium <= 30%`
+  - 共識品質 degraded（fallback 或 degraded bucket）
+- 其餘案例維持原 guardrail，不將 GOOG 特例擴散到全市場。
 - backtest summary 指標新增：
   - `reinvestment_guardrail_hit_rate`
   - `shares_scope_mismatch_rate`（僅計 unresolved mismatch）。

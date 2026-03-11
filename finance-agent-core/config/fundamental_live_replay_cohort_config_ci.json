@@ -1,0 +1,24 @@
+{
+  "schema_version": "fundamental_live_replay_cohort_config_v1",
+  "profile": "live_cohort_ci_v1",
+  "discover_root_env_key": "FUNDAMENTAL_LIVE_REPLAY_DISCOVER_ROOT",
+  "require_discover_root_env": true,
+  "discover_root": "tests/fixtures/fundamental_replay_inputs",
+  "discover_glob": "*.replay.json",
+  "discover_recursive": false,
+  "ticker_allowlist": [
+    "AAPL",
+    "NVDA"
+  ],
+  "latest_per_ticker": true,
+  "enable_prewarm": false,
+  "prewarm_default_years": 5,
+  "min_cases": 2,
+  "min_unique_tickers": 2,
+  "min_pass_rate": 1.0,
+  "max_quality_block_rate": 0.0,
+  "max_validation_rule_drift_count": 0,
+  "stage_root": "reports/fundamental_replay_inputs",
+  "stage_prefix": "live_ci",
+  "require_relative_input_paths": true
+}

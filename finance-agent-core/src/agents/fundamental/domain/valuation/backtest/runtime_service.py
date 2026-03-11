@@ -60,6 +60,9 @@ def run_backtest_cases(cases: Sequence[BacktestCase]) -> list[CaseResult]:
             _attach_consensus_anchor_metrics(
                 metrics=metrics,
                 consensus_target_price_median=case.consensus_target_price_median,
+                target_consensus_quality_bucket=case.target_consensus_quality_bucket,
+                target_consensus_confidence_weight=case.target_consensus_confidence_weight,
+                target_consensus_warning_codes=case.target_consensus_warning_codes,
             )
             missing_required = [
                 metric
@@ -112,6 +115,7 @@ def extract_backtest_metrics(result: Mapping[str, object]) -> JSONObject:
         "consensus_target_price_median",
         "consensus_price_median",
         "target_price_median",
+        "target_consensus_confidence_weight",
     ):
         value = result.get(key)
         if isinstance(value, int | float) and not isinstance(value, bool):
@@ -127,6 +131,10 @@ def extract_backtest_metrics(result: Mapping[str, object]) -> JSONObject:
     ):
         value = result.get(key)
         if isinstance(value, bool):
+            metrics[key] = value
+    for key in ("target_consensus_quality_bucket",):
+        value = result.get(key)
+        if isinstance(value, str) and value:
             metrics[key] = value
 
     details_raw = result.get("details")
@@ -160,7 +168,23 @@ def _attach_consensus_anchor_metrics(
     *,
     metrics: JSONObject,
     consensus_target_price_median: float | None,
+    target_consensus_quality_bucket: str | None,
+    target_consensus_confidence_weight: float | None,
+    target_consensus_warning_codes: tuple[str, ...],
 ) -> None:
+    if target_consensus_quality_bucket is not None:
+        metrics["target_consensus_quality_bucket"] = target_consensus_quality_bucket
+    if target_consensus_confidence_weight is not None:
+        metrics["target_consensus_confidence_weight"] = float(
+            target_consensus_confidence_weight
+        )
+    if target_consensus_warning_codes:
+        metrics["target_consensus_warning_codes"] = list(
+            dict.fromkeys(
+                item for item in target_consensus_warning_codes if isinstance(item, str)
+            )
+        )
+
     if consensus_target_price_median is None:
         return
     if abs(consensus_target_price_median) <= 1e-12:

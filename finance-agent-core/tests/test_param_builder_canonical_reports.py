@@ -1,9 +1,16 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
 from src.agents.fundamental.domain.valuation.parameterization.orchestrator import (
     build_params,
+)
+from src.agents.fundamental.domain.valuation.parameterization.reinvestment_clamp_profile_service import (
+    REINVESTMENT_CLAMP_PROFILE_PATH_ENV,
+    clear_reinvestment_clamp_profile_cache,
 )
 from src.agents.fundamental.interface.contracts import parse_financial_reports_model
 
@@ -379,7 +386,7 @@ def test_build_params_dcf_standard_applies_base_growth_guardrail_with_conservati
 
     growth_rates = result.params["growth_rates"]
     assert isinstance(growth_rates, list)
-    assert growth_rates[0] <= 0.45
+    assert growth_rates[0] <= 0.48
     terminal_growth = result.params["terminal_growth"]
     assert isinstance(terminal_growth, float)
     assert terminal_growth >= 0.018
@@ -416,7 +423,7 @@ def test_build_params_dcf_standard_applies_base_margin_guardrail_with_conservati
 
     operating_margins = result.params["operating_margins"]
     assert isinstance(operating_margins, list)
-    assert operating_margins[-1] <= 0.36 + 1e-9
+    assert operating_margins[-1] <= 0.38 + 1e-9
     assert any(
         item.startswith("base_margin_guardrail applied") for item in result.assumptions
     )
@@ -434,10 +441,10 @@ def test_build_params_dcf_growth_applies_reinvestment_guardrail() -> None:
     wc_rates = result.params["wc_rates"]
     assert isinstance(capex_rates, list)
     assert isinstance(wc_rates, list)
-    assert capex_rates[0] == pytest.approx(0.32)
-    assert capex_rates[-1] == pytest.approx(0.12)
-    assert wc_rates[0] == pytest.approx(0.14)
-    assert wc_rates[-1] == pytest.approx(0.05)
+    assert capex_rates[0] == pytest.approx(0.30)
+    assert capex_rates[-1] == pytest.approx(0.11)
+    assert wc_rates[0] == pytest.approx(0.13)
+    assert wc_rates[-1] == pytest.approx(0.045)
     assert any(
         "base_reinvestment_guardrail applied" in item and "metric=capex_rates" in item
         for item in result.assumptions
@@ -445,6 +452,28 @@ def test_build_params_dcf_growth_applies_reinvestment_guardrail() -> None:
     assert any(
         "base_reinvestment_guardrail applied" in item and "metric=wc_rates" in item
         for item in result.assumptions
+    )
+
+
+def test_build_params_dcf_variants_emit_shared_guardrail_profile_version() -> None:
+    dcf_growth_reports = parse_financial_reports_model(
+        _raw_reports_reinvestment_outlier(),
+        context="test.financial_reports.dcf_growth.shared_guardrail_profile_version",
+    )
+    dcf_standard_reports = parse_financial_reports_model(
+        _raw_reports_mature_stable_growth(),
+        context="test.financial_reports.dcf_standard.shared_guardrail_profile_version",
+    )
+    growth_result = build_params("dcf_growth", "EXM", dcf_growth_reports)
+    standard_result = build_params("dcf_standard", "EXM", dcf_standard_reports)
+
+    assert any(
+        statement == "guardrail_profile_version=shared_base_v2;variant=dcf_growth"
+        for statement in growth_result.assumptions
+    )
+    assert any(
+        statement == "guardrail_profile_version=shared_base_v2;variant=dcf_standard"
+        for statement in standard_result.assumptions
     )
 
 
@@ -518,6 +547,347 @@ def test_build_params_dcf_growth_relaxes_wc_terminal_lower_for_high_consensus_pr
         statement.startswith("dcf_growth_wc_consensus_relaxation applied")
         for statement in relaxed.assumptions
     )
+
+
+def test_build_params_dcf_growth_enforces_capex_low_premium_conservative_floor() -> (
+    None
+):
+    canonical_reports = parse_financial_reports_model(
+        _raw_reports_mature_stable_growth(),
+        context="test.financial_reports.dcf_growth.capex_low_premium_floor",
+    )
+    baseline = build_params("dcf_growth", "EXM", canonical_reports)
+    adjusted = build_params(
+        "dcf_growth",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "current_price": 100.0,
+            "target_mean_price": 120.0,
+            "target_consensus_applied": True,
+            "target_consensus_source_count": 3,
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+
+    baseline_capex = baseline.params["capex_rates"]
+    adjusted_capex = adjusted.params["capex_rates"]
+    assert isinstance(baseline_capex, list)
+    assert isinstance(adjusted_capex, list)
+    assert adjusted_capex[-1] > baseline_capex[-1]
+    assert any(
+        statement.startswith("dcf_growth_capex_low_premium_conservative_floor applied")
+        for statement in adjusted.assumptions
+    )
+
+
+def test_build_params_dcf_growth_enforces_wc_low_premium_conservative_floor() -> None:
+    raw_reports = _raw_reports_mature_stable_growth()
+    raw_reports[0]["base"]["current_assets"] = _tf(700.0)
+    raw_reports[0]["base"]["current_liabilities"] = _tf(500.0)
+    canonical_reports = parse_financial_reports_model(
+        raw_reports,
+        context="test.financial_reports.dcf_growth.wc_low_premium_floor",
+    )
+
+    baseline = build_params("dcf_growth", "EXM", canonical_reports)
+    adjusted = build_params(
+        "dcf_growth",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "current_price": 100.0,
+            "target_mean_price": 120.0,
+            "target_consensus_applied": True,
+            "target_consensus_source_count": 3,
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+
+    baseline_wc = baseline.params["wc_rates"]
+    adjusted_wc = adjusted.params["wc_rates"]
+    assert isinstance(baseline_wc, list)
+    assert isinstance(adjusted_wc, list)
+    assert adjusted_wc[-1] > baseline_wc[-1]
+    assert adjusted_wc[-1] >= 0.0
+    assert any(
+        statement.startswith("dcf_growth_wc_low_premium_conservative_floor applied")
+        for statement in adjusted.assumptions
+    )
+
+
+def test_build_params_dcf_growth_raises_capex_upper_for_low_premium_scope_mismatch() -> (
+    None
+):
+    raw_reports = _raw_reports_mature_stable_growth()
+    raw_reports[0]["extension"]["capex"] = _tf(220.0)
+    raw_reports[1]["extension"]["capex"] = _tf(200.0)
+    raw_reports[2]["extension"]["capex"] = _tf(180.0)
+    canonical_reports = parse_financial_reports_model(
+        raw_reports,
+        context="test.financial_reports.dcf_growth.capex_low_premium_scope_mismatch_upper",
+    )
+    low_premium = build_params(
+        "dcf_growth",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "current_price": 100.0,
+            "target_mean_price": 120.0,
+            "target_consensus_applied": True,
+            "target_consensus_source_count": 3,
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+    mismatch = build_params(
+        "dcf_growth",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "current_price": 100.0,
+            "target_mean_price": 120.0,
+            "shares_outstanding": 450.0,
+            "target_consensus_applied": True,
+            "target_consensus_source_count": 3,
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+
+    low_premium_capex = low_premium.params["capex_rates"]
+    mismatch_capex = mismatch.params["capex_rates"]
+    assert isinstance(low_premium_capex, list)
+    assert isinstance(mismatch_capex, list)
+    assert mismatch_capex[-1] > low_premium_capex[-1]
+    assert mismatch_capex[-1] >= 0.12
+    assert any(
+        "dcf_growth_capex_shares_mismatch_conservative_floor applied" in statement
+        for statement in mismatch.assumptions
+    )
+
+
+def test_build_params_dcf_growth_raises_wc_upper_for_low_premium_scope_mismatch() -> (
+    None
+):
+    raw_reports = _raw_reports_mature_stable_growth()
+    raw_reports[0]["base"]["current_assets"] = _tf(1100.0)
+    raw_reports[0]["base"]["current_liabilities"] = _tf(300.0)
+    raw_reports[1]["base"]["current_assets"] = _tf(900.0)
+    raw_reports[1]["base"]["current_liabilities"] = _tf(300.0)
+    raw_reports[2]["base"]["current_assets"] = _tf(700.0)
+    raw_reports[2]["base"]["current_liabilities"] = _tf(300.0)
+    canonical_reports = parse_financial_reports_model(
+        raw_reports,
+        context="test.financial_reports.dcf_growth.wc_low_premium_scope_mismatch_upper",
+    )
+    low_premium = build_params(
+        "dcf_growth",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "current_price": 100.0,
+            "target_mean_price": 120.0,
+            "target_consensus_applied": True,
+            "target_consensus_source_count": 3,
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+    mismatch = build_params(
+        "dcf_growth",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "current_price": 100.0,
+            "target_mean_price": 120.0,
+            "shares_outstanding": 450.0,
+            "target_consensus_applied": True,
+            "target_consensus_source_count": 3,
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+
+    low_premium_wc = low_premium.params["wc_rates"]
+    mismatch_wc = mismatch.params["wc_rates"]
+    assert isinstance(low_premium_wc, list)
+    assert isinstance(mismatch_wc, list)
+    assert mismatch_wc[-1] > low_premium_wc[-1]
+    assert mismatch_wc[-1] >= 0.02
+    assert any(
+        "dcf_growth_wc_shares_mismatch_conservative_floor applied" in statement
+        for statement in mismatch.assumptions
+    )
+
+
+def test_build_params_dcf_growth_applies_severe_capex_floor_for_harmonized_mismatch() -> (
+    None
+):
+    raw_reports = _raw_reports_mature_stable_growth()
+    raw_reports[0]["extension"]["capex"] = _tf(220.0)
+    raw_reports[1]["extension"]["capex"] = _tf(200.0)
+    raw_reports[2]["extension"]["capex"] = _tf(180.0)
+    canonical_reports = parse_financial_reports_model(
+        raw_reports,
+        context="test.financial_reports.dcf_growth.capex_harmonized_mismatch_severe_floor",
+    )
+    mismatch = build_params(
+        "dcf_growth",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "current_price": 100.0,
+            "target_mean_price": 120.0,
+            "shares_outstanding": 450.0,
+            "target_consensus_applied": True,
+            "target_consensus_source_count": 3,
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+    severe = build_params(
+        "dcf_growth",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "current_price": 100.0,
+            "target_mean_price": 120.0,
+            "shares_outstanding": 450.0,
+            "target_consensus_applied": False,
+            "target_consensus_source_count": 1,
+            "target_consensus_fallback_reason": "provider_blocked",
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+
+    mismatch_capex = mismatch.params["capex_rates"]
+    severe_capex = severe.params["capex_rates"]
+    assert isinstance(mismatch_capex, list)
+    assert isinstance(severe_capex, list)
+    assert severe_capex[-1] > mismatch_capex[-1]
+    assert severe_capex[-1] >= 0.14
+    assert any(
+        "dcf_growth_capex_harmonized_mismatch_severe_floor applied" in statement
+        for statement in severe.assumptions
+    )
+
+
+def test_build_params_dcf_growth_applies_severe_wc_floor_for_harmonized_mismatch() -> (
+    None
+):
+    raw_reports = _raw_reports_mature_stable_growth()
+    raw_reports[0]["base"]["current_assets"] = _tf(1100.0)
+    raw_reports[0]["base"]["current_liabilities"] = _tf(300.0)
+    raw_reports[1]["base"]["current_assets"] = _tf(900.0)
+    raw_reports[1]["base"]["current_liabilities"] = _tf(300.0)
+    raw_reports[2]["base"]["current_assets"] = _tf(700.0)
+    raw_reports[2]["base"]["current_liabilities"] = _tf(300.0)
+    canonical_reports = parse_financial_reports_model(
+        raw_reports,
+        context="test.financial_reports.dcf_growth.wc_harmonized_mismatch_severe_floor",
+    )
+    mismatch = build_params(
+        "dcf_growth",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "current_price": 100.0,
+            "target_mean_price": 120.0,
+            "shares_outstanding": 450.0,
+            "target_consensus_applied": True,
+            "target_consensus_source_count": 3,
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+    severe = build_params(
+        "dcf_growth",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "current_price": 100.0,
+            "target_mean_price": 120.0,
+            "shares_outstanding": 450.0,
+            "target_consensus_applied": False,
+            "target_consensus_source_count": 1,
+            "target_consensus_fallback_reason": "provider_blocked",
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+
+    mismatch_wc = mismatch.params["wc_rates"]
+    severe_wc = severe.params["wc_rates"]
+    assert isinstance(mismatch_wc, list)
+    assert isinstance(severe_wc, list)
+    assert severe_wc[-1] > mismatch_wc[-1]
+    assert severe_wc[-1] >= 0.07
+    assert any(
+        "dcf_growth_wc_harmonized_mismatch_severe_floor applied" in statement
+        for statement in severe.assumptions
+    )
+
+
+def test_build_params_dcf_growth_severe_floor_uses_profile_override(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    profile_path = tmp_path / "reinvestment_profile.json"
+    profile_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "fundamental_reinvestment_clamp_profile_v1",
+                "profile_version": "reinvestment_clamp_profile_v1_test_override",
+                "dcf_growth": {
+                    "severe_scope_mismatch_ratio_threshold": 0.40,
+                    "severe_mismatch_capex_terminal_lower_min": 0.20,
+                    "severe_mismatch_capex_terminal_lower_year1_ratio": 0.50,
+                    "severe_mismatch_wc_terminal_lower_min": 0.03,
+                    "severe_mismatch_wc_terminal_lower_year1_ratio": 0.30,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv(REINVESTMENT_CLAMP_PROFILE_PATH_ENV, str(profile_path))
+    clear_reinvestment_clamp_profile_cache()
+
+    raw_reports = _raw_reports_mature_stable_growth()
+    raw_reports[0]["extension"]["capex"] = _tf(220.0)
+    raw_reports[1]["extension"]["capex"] = _tf(200.0)
+    raw_reports[2]["extension"]["capex"] = _tf(180.0)
+    canonical_reports = parse_financial_reports_model(
+        raw_reports,
+        context="test.financial_reports.dcf_growth.capex_harmonized_mismatch_profile_override",
+    )
+    severe = build_params(
+        "dcf_growth",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "current_price": 100.0,
+            "target_mean_price": 120.0,
+            "shares_outstanding": 450.0,
+            "target_consensus_applied": False,
+            "target_consensus_source_count": 1,
+            "target_consensus_fallback_reason": "provider_blocked",
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+
+    severe_capex = severe.params["capex_rates"]
+    assert isinstance(severe_capex, list)
+    assert severe_capex[-1] >= 0.20
+    assert any(
+        "profile_version=reinvestment_clamp_profile_v1_test_override" in statement
+        for statement in severe.assumptions
+    )
+    clear_reinvestment_clamp_profile_cache()
 
 
 def test_build_params_forward_signal_adjustments_sync_trace_inputs() -> None:
@@ -597,6 +967,28 @@ def test_build_params_forward_signal_adjustments_sync_trace_inputs() -> None:
         statement.startswith("forward_signal margin adjustment applied")
         for statement in adjusted.assumptions
     )
+
+
+def test_build_params_emits_forward_signal_trace_without_signal_payload() -> None:
+    canonical_reports = parse_financial_reports_model(
+        _raw_reports(), context="test.financial_reports.dcf_growth.forward_signal_empty"
+    )
+    result = build_params(
+        "dcf_growth",
+        "EXM",
+        canonical_reports,
+        market_snapshot={"consensus_growth_rate": 0.25},
+    )
+
+    forward_signal = result.metadata.get("forward_signal")
+    assert isinstance(forward_signal, dict)
+    assert forward_signal["signals_total"] == 0
+    assert forward_signal["calibration_applied"] is False
+    mapping_version = forward_signal.get("mapping_version")
+    assert isinstance(mapping_version, str)
+    assert mapping_version
+    assert forward_signal["raw_growth_adjustment_basis_points"] == pytest.approx(0.0)
+    assert forward_signal["growth_adjustment_basis_points"] == pytest.approx(0.0)
 
 
 def test_build_params_prefers_market_shares_when_available() -> None:
@@ -758,6 +1150,56 @@ def test_build_params_dcf_standard_applies_consensus_terminal_nudge() -> None:
     )
 
 
+def test_build_params_dcf_standard_downweights_single_source_consensus_nudge() -> None:
+    canonical_reports = parse_financial_reports_model(
+        _raw_reports_mature_stable_growth(),
+        context="test.financial_reports.dcf_standard.consensus_terminal_nudge.downweighted_single_source",
+    )
+    multi_source = build_params(
+        "dcf_standard",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "current_price": 100.0,
+            "target_mean_price": 130.0,
+            "long_run_growth_anchor": 0.014,
+            "target_consensus_applied": True,
+            "target_consensus_source_count": 3,
+            "target_consensus_quality_bucket": "high",
+            "target_consensus_confidence_weight": 1.0,
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+    single_source = build_params(
+        "dcf_standard",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "current_price": 100.0,
+            "target_mean_price": 130.0,
+            "long_run_growth_anchor": 0.014,
+            "target_consensus_applied": False,
+            "target_consensus_source_count": 1,
+            "target_consensus_fallback_reason": "provider_blocked",
+            "target_consensus_quality_bucket": "degraded",
+            "target_consensus_confidence_weight": 0.30,
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+
+    multi_terminal = multi_source.params["terminal_growth"]
+    single_terminal = single_source.params["terminal_growth"]
+    assert isinstance(multi_terminal, float)
+    assert isinstance(single_terminal, float)
+    assert multi_terminal > single_terminal
+    assert any(
+        "quality_bucket=degraded" in statement
+        for statement in single_source.assumptions
+    )
+
+
 def test_build_params_dcf_standard_can_disable_consensus_terminal_nudge(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -788,6 +1230,156 @@ def test_build_params_dcf_standard_can_disable_consensus_terminal_nudge(
     assert not any(
         statement.startswith("terminal_growth_consensus_nudge applied")
         for statement in result.assumptions
+    )
+
+
+def test_build_params_dcf_standard_relaxes_growth_guardrail_for_high_consensus_premium() -> (
+    None
+):
+    canonical_reports = parse_financial_reports_model(
+        _raw_reports_high_growth(),
+        context="test.financial_reports.dcf_standard.growth_consensus_relaxation",
+    )
+    baseline = build_params(
+        "dcf_standard",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "current_price": 100.0,
+            "target_mean_price": 100.0,
+            "target_consensus_applied": True,
+            "target_consensus_source_count": 3,
+            "target_consensus_quality_bucket": "high",
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+    relaxed = build_params(
+        "dcf_standard",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "current_price": 100.0,
+            "target_mean_price": 150.0,
+            "target_consensus_applied": True,
+            "target_consensus_source_count": 3,
+            "target_consensus_quality_bucket": "high",
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+
+    baseline_growth = baseline.params["growth_rates"]
+    relaxed_growth = relaxed.params["growth_rates"]
+    assert isinstance(baseline_growth, list)
+    assert isinstance(relaxed_growth, list)
+    assert relaxed_growth[0] > baseline_growth[0]
+    assert any(
+        statement.startswith("dcf_standard_growth_consensus_relaxation applied")
+        for statement in relaxed.assumptions
+    )
+
+
+def test_build_params_dcf_standard_relaxes_margin_guardrail_for_high_consensus_premium() -> (
+    None
+):
+    canonical_reports = parse_financial_reports_model(
+        _raw_reports_high_margin(),
+        context="test.financial_reports.dcf_standard.margin_consensus_relaxation",
+    )
+    baseline = build_params(
+        "dcf_standard",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "current_price": 100.0,
+            "target_mean_price": 100.0,
+            "target_consensus_applied": True,
+            "target_consensus_source_count": 3,
+            "target_consensus_quality_bucket": "high",
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+    relaxed = build_params(
+        "dcf_standard",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "current_price": 100.0,
+            "target_mean_price": 150.0,
+            "target_consensus_applied": True,
+            "target_consensus_source_count": 3,
+            "target_consensus_quality_bucket": "high",
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+
+    baseline_margins = baseline.params["operating_margins"]
+    relaxed_margins = relaxed.params["operating_margins"]
+    assert isinstance(baseline_margins, list)
+    assert isinstance(relaxed_margins, list)
+    assert relaxed_margins[-1] > baseline_margins[-1]
+    assert any(
+        statement.startswith("dcf_standard_margin_consensus_relaxation applied")
+        for statement in relaxed.assumptions
+    )
+
+
+def test_build_params_dcf_standard_relaxes_reinvestment_guardrail_for_high_consensus_premium() -> (
+    None
+):
+    canonical_reports = parse_financial_reports_model(
+        _raw_reports_reinvestment_outlier(),
+        context="test.financial_reports.dcf_standard.reinvestment_consensus_relaxation",
+    )
+    baseline = build_params(
+        "dcf_standard",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "current_price": 100.0,
+            "target_mean_price": 100.0,
+            "target_consensus_applied": True,
+            "target_consensus_source_count": 3,
+            "target_consensus_quality_bucket": "high",
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+    relaxed = build_params(
+        "dcf_standard",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "current_price": 100.0,
+            "target_mean_price": 150.0,
+            "target_consensus_applied": True,
+            "target_consensus_source_count": 3,
+            "target_consensus_quality_bucket": "high",
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+
+    baseline_capex = baseline.params["capex_rates"]
+    relaxed_capex = relaxed.params["capex_rates"]
+    baseline_wc = baseline.params["wc_rates"]
+    relaxed_wc = relaxed.params["wc_rates"]
+    assert isinstance(baseline_capex, list)
+    assert isinstance(relaxed_capex, list)
+    assert isinstance(baseline_wc, list)
+    assert isinstance(relaxed_wc, list)
+    assert relaxed_capex[-1] < baseline_capex[-1]
+    assert relaxed_wc[-1] <= baseline_wc[-1]
+    assert any(
+        statement.startswith("dcf_standard_capex_consensus_relaxation applied")
+        for statement in relaxed.assumptions
+    )
+    assert any(
+        statement.startswith("dcf_standard_wc_consensus_relaxation applied")
+        for statement in relaxed.assumptions
     )
 
 
@@ -863,6 +1455,40 @@ def test_build_params_dcf_growth_applies_terminal_consensus_nudge_for_high_premi
     )
 
 
+def test_build_params_dcf_growth_uses_higher_terminal_cap_for_degraded_high_premium() -> (
+    None
+):
+    canonical_reports = parse_financial_reports_model(
+        _raw_reports_mature_stable_growth(),
+        context="test.financial_reports.dcf_growth.terminal_consensus_nudge.degraded_high_premium_cap",
+    )
+    result = build_params(
+        "dcf_growth",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "current_price": 100.0,
+            "target_mean_price": 150.0,
+            "long_run_growth_anchor": 0.034,
+            "target_consensus_applied": False,
+            "target_consensus_source_count": 1,
+            "target_consensus_fallback_reason": "provider_blocked",
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+
+    terminal_growth = result.params["terminal_growth"]
+    assert isinstance(terminal_growth, float)
+    assert terminal_growth > 0.035
+    assert terminal_growth <= 0.04
+    assert any(
+        statement.startswith("dcf_growth_terminal_consensus_nudge applied")
+        and "max_terminal_cap=0.0400" in statement
+        for statement in result.assumptions
+    )
+
+
 def test_build_params_dcf_growth_skips_terminal_nudge_when_scope_mismatch_detected() -> (
     None
 ):
@@ -927,6 +1553,54 @@ def test_build_params_dcf_growth_skips_terminal_nudge_for_high_growth_profile() 
     )
 
 
+def test_build_params_dcf_growth_caps_terminal_for_degraded_low_premium_path() -> None:
+    canonical_reports = parse_financial_reports_model(
+        _raw_reports_mature_stable_growth(),
+        context="test.financial_reports.dcf_growth.degraded_low_premium_terminal_cap",
+    )
+    high_premium = build_params(
+        "dcf_growth",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "current_price": 100.0,
+            "target_mean_price": 150.0,
+            "long_run_growth_anchor": 0.03,
+            "target_consensus_applied": False,
+            "target_consensus_source_count": 1,
+            "target_consensus_fallback_reason": "provider_blocked",
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+    low_premium = build_params(
+        "dcf_growth",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "current_price": 100.0,
+            "target_mean_price": 120.0,
+            "long_run_growth_anchor": 0.03,
+            "target_consensus_applied": False,
+            "target_consensus_source_count": 1,
+            "target_consensus_fallback_reason": "provider_blocked",
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+
+    high_terminal = high_premium.params["terminal_growth"]
+    low_terminal = low_premium.params["terminal_growth"]
+    assert isinstance(high_terminal, float)
+    assert isinstance(low_terminal, float)
+    assert high_terminal > low_terminal
+    assert low_terminal == pytest.approx(0.02)
+    assert any(
+        statement.startswith("dcf_growth_degraded_low_premium_terminal_cap applied")
+        for statement in low_premium.assumptions
+    )
+
+
 def test_build_params_dcf_growth_relaxes_margin_upper_for_high_consensus_premium() -> (
     None
 ):
@@ -973,6 +1647,54 @@ def test_build_params_dcf_growth_relaxes_margin_upper_for_high_consensus_premium
     )
 
 
+def test_build_params_dcf_growth_applies_degraded_high_premium_margin_floor() -> None:
+    canonical_reports = parse_financial_reports_model(
+        _raw_reports_high_margin(),
+        context="test.financial_reports.dcf_growth.margin_degraded_high_premium_floor",
+    )
+    low_premium = build_params(
+        "dcf_growth",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "current_price": 100.0,
+            "target_mean_price": 130.0,
+            "long_run_growth_anchor": 0.014,
+            "target_consensus_applied": False,
+            "target_consensus_source_count": 1,
+            "target_consensus_fallback_reason": "provider_blocked",
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+    high_premium = build_params(
+        "dcf_growth",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "current_price": 100.0,
+            "target_mean_price": 141.0,
+            "long_run_growth_anchor": 0.014,
+            "target_consensus_applied": False,
+            "target_consensus_source_count": 1,
+            "target_consensus_fallback_reason": "provider_blocked",
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+
+    low_margins = low_premium.params["operating_margins"]
+    high_margins = high_premium.params["operating_margins"]
+    assert isinstance(low_margins, list)
+    assert isinstance(high_margins, list)
+    assert high_margins[-1] > low_margins[-1]
+    assert high_margins[-1] >= 0.44
+    assert any(
+        "dcf_growth_margin_degraded_high_premium_floor applied" in statement
+        for statement in high_premium.assumptions
+    )
+
+
 def test_build_params_dcf_growth_skips_margin_relaxation_for_high_growth_profile() -> (
     None
 ):
@@ -1000,6 +1722,54 @@ def test_build_params_dcf_growth_skips_margin_relaxation_for_high_growth_profile
         statement.startswith("dcf_growth_margin_consensus_relaxation skipped")
         and "year1_growth=" in statement
         for statement in result.assumptions
+    )
+
+
+def test_build_params_dcf_growth_applies_degraded_high_premium_capex_cap() -> None:
+    canonical_reports = parse_financial_reports_model(
+        _raw_reports_reinvestment_outlier(),
+        context="test.financial_reports.dcf_growth.capex_degraded_high_premium_cap",
+    )
+    low_premium = build_params(
+        "dcf_growth",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "current_price": 100.0,
+            "target_mean_price": 130.0,
+            "long_run_growth_anchor": 0.014,
+            "target_consensus_applied": False,
+            "target_consensus_source_count": 1,
+            "target_consensus_fallback_reason": "provider_blocked",
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+    high_premium = build_params(
+        "dcf_growth",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "current_price": 100.0,
+            "target_mean_price": 141.0,
+            "long_run_growth_anchor": 0.014,
+            "target_consensus_applied": False,
+            "target_consensus_source_count": 1,
+            "target_consensus_fallback_reason": "provider_blocked",
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+
+    low_capex_rates = low_premium.params["capex_rates"]
+    high_capex_rates = high_premium.params["capex_rates"]
+    assert isinstance(low_capex_rates, list)
+    assert isinstance(high_capex_rates, list)
+    assert high_capex_rates[-1] <= 0.09
+    assert high_capex_rates[-1] < low_capex_rates[-1]
+    assert any(
+        "dcf_growth_capex_degraded_high_premium_cap applied" in statement
+        for statement in high_premium.assumptions
     )
 
 
@@ -1040,6 +1810,69 @@ def test_build_params_saas_allows_long_term_consensus_for_growth_blend() -> None
     )
 
 
+def test_build_params_saas_damps_short_term_decay_for_degraded_low_premium() -> None:
+    canonical_reports = parse_financial_reports_model(
+        _raw_reports(),
+        context="test.financial_reports.saas.short_term_decay.degraded_low_premium",
+    )
+    high_premium = build_params(
+        "saas",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "current_price": 100.0,
+            "target_mean_price": 150.0,
+            "consensus_growth_rate": 0.50,
+            "target_consensus_applied": False,
+            "target_consensus_source_count": 1,
+            "target_consensus_fallback_reason": "provider_blocked",
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+            "market_datums": {
+                "consensus_growth_rate": {
+                    "value": 0.50,
+                    "source": "synthetic_consensus",
+                    "horizon": "short_term",
+                }
+            },
+        },
+    )
+    low_premium = build_params(
+        "saas",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "current_price": 100.0,
+            "target_mean_price": 120.0,
+            "consensus_growth_rate": 0.50,
+            "target_consensus_applied": False,
+            "target_consensus_source_count": 1,
+            "target_consensus_fallback_reason": "provider_blocked",
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+            "market_datums": {
+                "consensus_growth_rate": {
+                    "value": 0.50,
+                    "source": "synthetic_consensus",
+                    "horizon": "short_term",
+                }
+            },
+        },
+    )
+
+    high_growth = high_premium.params["growth_rates"]
+    low_growth = low_premium.params["growth_rates"]
+    assert isinstance(high_growth, list)
+    assert isinstance(low_growth, list)
+    assert low_growth[0] < high_growth[0]
+    assert any(
+        statement.startswith(
+            "consensus_growth_rate decay amplitude damped for low-premium degraded consensus"
+        )
+        for statement in low_premium.assumptions
+    )
+
+
 def test_build_params_saas_uses_market_aware_wacc_when_available() -> None:
     canonical_reports = parse_financial_reports_model(
         _raw_reports(), context="test.financial_reports.saas.market_wacc"
@@ -1069,6 +1902,41 @@ def test_build_params_saas_uses_market_aware_wacc_when_available() -> None:
         for statement in result.assumptions
     )
     assert "terminal_growth sourced from long_run_growth_anchor" in result.assumptions
+
+
+def test_build_params_saas_converts_real_growth_anchor_to_nominal() -> None:
+    canonical_reports = parse_financial_reports_model(
+        _raw_reports(), context="test.financial_reports.saas.real_to_nominal"
+    )
+    result = build_params(
+        "saas",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "risk_free_rate": 0.04,
+            "beta": 1.2,
+            "current_price": 50.0,
+            "long_run_growth_anchor": 0.014,
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+            "market_datums": {
+                "long_run_growth_anchor": {
+                    "value": 0.014,
+                    "source": "fred",
+                    "source_detail": "fred:A191RL1Q225SBEA",
+                }
+            },
+        },
+    )
+
+    expected_nominal = (1.0 + 0.014) * (1.0 + 0.02) - 1.0
+    assert result.params["terminal_growth"] == pytest.approx(expected_nominal)
+    assert any(
+        statement.startswith(
+            "terminal_growth market anchor converted from real to nominal"
+        )
+        for statement in result.assumptions
+    )
 
 
 def test_build_params_saas_fallbacks_to_capm_wacc_when_fcff_weights_unavailable() -> (
@@ -1174,6 +2042,89 @@ def test_build_params_saas_clamps_beta_for_capm_stability() -> None:
     assert result.params["wacc"] == pytest.approx(0.121)
     assert any(
         "beta clamped from 2.400 to 1.800" in statement
+        for statement in result.assumptions
+    )
+
+
+def test_build_params_saas_applies_beta_mean_reversion_for_positive_premium() -> None:
+    canonical_reports = parse_financial_reports_model(
+        _raw_reports(), context="test.financial_reports.saas.beta_mean_reversion"
+    )
+    result = build_params(
+        "saas",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "risk_free_rate": 0.04,
+            "beta": 1.20,
+            "current_price": 100.0,
+            "target_mean_price": 130.0,
+            "long_run_growth_anchor": 0.03,
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+
+    assert result.params["beta"] == pytest.approx(1.134)
+    assert any(
+        "beta mean-reversion applied" in statement for statement in result.assumptions
+    )
+
+
+def test_build_params_saas_skips_beta_mean_reversion_for_degraded_low_premium() -> None:
+    canonical_reports = parse_financial_reports_model(
+        _raw_reports(),
+        context="test.financial_reports.saas.beta_mean_reversion.degraded_low_premium",
+    )
+    result = build_params(
+        "saas",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "risk_free_rate": 0.04,
+            "beta": 1.20,
+            "current_price": 100.0,
+            "target_mean_price": 120.0,
+            "target_consensus_fallback_reason": "provider_blocked",
+            "long_run_growth_anchor": 0.03,
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+
+    assert result.params["beta"] == pytest.approx(1.2)
+    assert any(
+        "beta mean-reversion skipped (degraded_low_premium_consensus" in statement
+        for statement in result.assumptions
+    )
+
+
+def test_build_params_saas_skips_beta_mean_reversion_for_shares_scope_mismatch() -> (
+    None
+):
+    canonical_reports = parse_financial_reports_model(
+        _raw_reports(),
+        context="test.financial_reports.saas.beta_mean_reversion.scope_mismatch",
+    )
+    result = build_params(
+        "saas",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "risk_free_rate": 0.04,
+            "beta": 1.20,
+            "current_price": 100.0,
+            "target_mean_price": 150.0,
+            "shares_outstanding": 500.0,
+            "long_run_growth_anchor": 0.03,
+            "provider": "test_feed",
+            "as_of": "2026-02-20T00:00:00Z",
+        },
+    )
+
+    assert result.params["beta"] == pytest.approx(1.2)
+    assert any(
+        "beta mean-reversion skipped (shares_scope_mismatch_ratio=" in statement
         for statement in result.assumptions
     )
 
@@ -1751,3 +2702,46 @@ def test_build_params_metadata_includes_terminal_growth_path_summary(
     parameter_path = parameter_source_summary.get("terminal_growth_path")
     assert isinstance(parameter_path, dict)
     assert parameter_path.get("terminal_growth_anchor_source") == "filing"
+
+
+def test_build_params_metadata_includes_nominal_bridge_summary() -> None:
+    canonical_reports = parse_financial_reports_model(
+        _raw_reports_mature_stable_growth(),
+        context="test.financial_reports.terminal_growth_nominal_bridge_metadata",
+    )
+    result = build_params(
+        "dcf_growth",
+        "EXM",
+        canonical_reports,
+        market_snapshot={
+            "provider": "yfinance",
+            "as_of": "2026-03-08T00:00:00Z",
+            "long_run_growth_anchor": 0.014,
+            "market_datums": {
+                "long_run_growth_anchor": {
+                    "value": 0.014,
+                    "source": "fred",
+                    "source_detail": "fred:A191RL1Q225SBEA",
+                    "staleness": {"days": 3, "is_stale": False, "max_days": 90},
+                }
+            },
+        },
+    )
+
+    freshness = result.metadata.get("data_freshness")
+    assert isinstance(freshness, dict)
+    terminal_growth_path = freshness.get("terminal_growth_path")
+    assert isinstance(terminal_growth_path, dict)
+    assert (
+        terminal_growth_path.get("long_run_growth_anchor_market_basis")
+        == "real_to_nominal_bridge"
+    )
+    assert terminal_growth_path.get(
+        "long_run_growth_anchor_market_raw"
+    ) == pytest.approx(0.014)
+    assert terminal_growth_path.get(
+        "long_run_growth_nominal_bridge_inflation"
+    ) == pytest.approx(0.02)
+    assert terminal_growth_path.get("long_run_growth_anchor_source_detail") == (
+        "fred:A191RL1Q225SBEA"
+    )

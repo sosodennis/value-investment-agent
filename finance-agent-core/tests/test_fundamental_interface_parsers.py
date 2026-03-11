@@ -180,6 +180,8 @@ def test_parse_financial_health_payload_normalizes_reports_and_signals() -> None
                 {"signal_id": "sig-1", "metric": "growth_outlook"},
                 "invalid",
             ],
+            "diagnostics": {"parser": "xbrl", "confidence": 0.9},
+            "quality_gates": {"status": "pass", "blocking_count": 0},
         },
         context="financial_health.payload",
     )
@@ -188,17 +190,33 @@ def test_parse_financial_health_payload_normalizes_reports_and_signals() -> None
     assert payload.forward_signals == [
         {"signal_id": "sig-1", "metric": "growth_outlook"}
     ]
+    assert payload.diagnostics == {"parser": "xbrl", "confidence": 0.9}
+    assert payload.quality_gates == {"status": "pass", "blocking_count": 0}
 
 
-def test_parse_financial_health_payload_supports_top_level_reports_list() -> None:
-    payload = parse_financial_health_payload(
-        [
+def test_parse_financial_health_payload_rejects_non_mapping() -> None:
+    with pytest.raises(TypeError, match="must be a mapping"):
+        parse_financial_health_payload(
+            [
+                {
+                    "base": {},
+                    "industry_type": "General",
+                }
+            ],
+            context="financial_health.payload",
+        )
+
+
+def test_parse_financial_health_payload_rejects_missing_required_key() -> None:
+    with pytest.raises(
+        TypeError,
+        match="financial_health.payload.diagnostics is required",
+    ):
+        parse_financial_health_payload(
             {
-                "base": {},
-                "industry_type": "General",
-            }
-        ],
-        context="financial_health.payload",
-    )
-    assert len(payload.financial_reports) == 1
-    assert payload.forward_signals is None
+                "financial_reports": [],
+                "forward_signals": None,
+                "quality_gates": None,
+            },
+            context="financial_health.payload",
+        )

@@ -31,7 +31,8 @@ DEFAULT_RISK_FREE_RATE = 0.042
 DEFAULT_BETA = 1.0
 DEFAULT_MARKET_STALE_MAX_DAYS = 5
 DEFAULT_LONG_RUN_GROWTH_STALE_MAX_DAYS = 90
-CADENCE_STALENESS_MULTIPLIER = 2
+CANONICAL_TARGET_MEAN_HORIZON = "12m"
+CANONICAL_SHARES_SCOPE_UNKNOWN = "unknown"
 
 MARKET_FIELDS: tuple[str, ...] = (
     "current_price",
@@ -81,6 +82,9 @@ class MarketSnapshot:
     target_consensus_sources: tuple[str, ...] = ()
     target_consensus_fallback_reason: str | None = None
     target_consensus_warnings: tuple[str, ...] = ()
+    target_consensus_warning_codes: tuple[str, ...] = ()
+    target_consensus_quality_bucket: str | None = None
+    target_consensus_confidence_weight: float | None = None
 
     def to_mapping(self) -> JSONObject:
         return {
@@ -105,6 +109,9 @@ class MarketSnapshot:
             "target_consensus_sources": list(self.target_consensus_sources),
             "target_consensus_fallback_reason": self.target_consensus_fallback_reason,
             "target_consensus_warnings": list(self.target_consensus_warnings),
+            "target_consensus_warning_codes": list(self.target_consensus_warning_codes),
+            "target_consensus_quality_bucket": self.target_consensus_quality_bucket,
+            "target_consensus_confidence_weight": self.target_consensus_confidence_weight,
             "license_note": self.license_note,
             "market_datums": self.market_datums,
         }
@@ -224,6 +231,10 @@ class MarketDataService:
                 field=field,
                 provider_results=provider_results,
             )
+        selected_datums, contract_warnings = _enforce_market_datum_contract(
+            datums=selected_datums
+        )
+        source_warnings.extend(contract_warnings)
 
         if selected_datums["beta"].value is None:
             selected_datums["beta"] = MarketDatum(
@@ -252,6 +263,9 @@ class MarketDataService:
             target_consensus_sources,
             target_consensus_fallback_reason,
             target_consensus_warnings,
+            target_consensus_warning_codes,
+            target_consensus_quality_bucket,
+            target_consensus_confidence_weight,
         ) = _resolve_target_consensus_diagnostics(
             target_mean_datum=selected_datums["target_mean_price"],
             source_warnings=dedup_warnings,
@@ -326,6 +340,9 @@ class MarketDataService:
             target_consensus_sources=target_consensus_sources,
             target_consensus_fallback_reason=target_consensus_fallback_reason,
             target_consensus_warnings=target_consensus_warnings,
+            target_consensus_warning_codes=target_consensus_warning_codes,
+            target_consensus_quality_bucket=target_consensus_quality_bucket,
+            target_consensus_confidence_weight=target_consensus_confidence_weight,
             license_note=merged_license_note,
             market_datums=market_datums,
         )
@@ -345,6 +362,11 @@ class MarketDataService:
                 "target_consensus_sources": list(snapshot.target_consensus_sources),
                 "target_consensus_fallback_reason": snapshot.target_consensus_fallback_reason,
                 "target_consensus_warnings": list(snapshot.target_consensus_warnings),
+                "target_consensus_warning_codes": list(
+                    snapshot.target_consensus_warning_codes
+                ),
+                "target_consensus_quality_bucket": snapshot.target_consensus_quality_bucket,
+                "target_consensus_confidence_weight": snapshot.target_consensus_confidence_weight,
                 "key_market_inputs": _build_key_market_input_log_fields(
                     selected_datums
                 ),
@@ -465,6 +487,9 @@ class MarketDataService:
             target_consensus_sources=(),
             target_consensus_fallback_reason="market_data_fallback",
             target_consensus_warnings=(),
+            target_consensus_warning_codes=("market_data_fallback",),
+            target_consensus_quality_bucket="degraded",
+            target_consensus_confidence_weight=0.0,
             license_note="Internal default policy",
             market_datums=market_datums,
         )
@@ -475,7 +500,16 @@ def _resolve_target_consensus_diagnostics(
     target_mean_datum: MarketDatum,
     source_warnings: tuple[str, ...],
     free_target_consensus_enabled: bool,
-) -> tuple[bool, int | None, tuple[str, ...], str | None, tuple[str, ...]]:
+) -> tuple[
+    bool,
+    int | None,
+    tuple[str, ...],
+    str | None,
+    tuple[str, ...],
+    tuple[str, ...],
+    str | None,
+    float | None,
+]:
     applied = (
         target_mean_datum.source == FREE_CONSENSUS_AGGREGATE_SOURCE
         and target_mean_datum.value is not None
@@ -483,7 +517,7 @@ def _resolve_target_consensus_diagnostics(
     source_count, sources = _parse_target_consensus_source_detail(
         target_mean_datum.source_detail
     )
-    consensus_warnings = _filter_target_consensus_warnings(source_warnings)
+    consensus_warnings_list = list(_filter_target_consensus_warnings(source_warnings))
     fallback_reason: str | None = None
     if (
         free_target_consensus_enabled
@@ -491,14 +525,55 @@ def _resolve_target_consensus_diagnostics(
         and target_mean_datum.source == "yfinance"
         and target_mean_datum.value is not None
     ):
-        fallback_reason = _classify_target_consensus_fallback(consensus_warnings)
+        fallback_reason = _classify_target_consensus_fallback(
+            tuple(consensus_warnings_list)
+        )
+    if isinstance(source_count, int) and source_count <= 1:
+        fallback_reason = "single_source_consensus"
+        consensus_warnings_list.append(
+            "target consensus degraded: single_source_consensus source_count=1"
+        )
+    consensus_warnings = tuple(dict.fromkeys(consensus_warnings_list))
+    consensus_warning_codes = _extract_target_consensus_warning_codes(
+        warnings=consensus_warnings,
+        fallback_reason=fallback_reason,
+    )
+    quality_bucket, confidence_weight = _resolve_target_consensus_quality(
+        applied=applied,
+        source_count=source_count,
+        fallback_reason=fallback_reason,
+        target_mean_available=target_mean_datum.value is not None,
+    )
     return (
         applied,
         source_count,
         sources,
         fallback_reason,
         consensus_warnings,
+        consensus_warning_codes,
+        quality_bucket,
+        confidence_weight,
     )
+
+
+def _resolve_target_consensus_quality(
+    *,
+    applied: bool,
+    source_count: int | None,
+    fallback_reason: str | None,
+    target_mean_available: bool,
+) -> tuple[str | None, float | None]:
+    if not target_mean_available:
+        return "degraded", 0.0
+    if isinstance(source_count, int) and source_count <= 1:
+        return "degraded", 0.30
+    if applied and isinstance(source_count, int) and source_count >= 3:
+        return "high", 1.0
+    if applied and isinstance(source_count, int) and source_count >= 2:
+        return "medium", 0.75
+    if isinstance(source_count, int) and source_count >= 2:
+        return "medium", 0.75
+    return "degraded", 0.30
 
 
 def _classify_target_consensus_fallback(
@@ -544,6 +619,48 @@ def _filter_target_consensus_warnings(
         for warning in source_warnings
         if any(token in warning for token in relevant_tokens)
     )
+
+
+def _extract_target_consensus_warning_codes(
+    *,
+    warnings: tuple[str, ...],
+    fallback_reason: str | None,
+) -> tuple[str, ...]:
+    codes: list[str] = []
+    if isinstance(fallback_reason, str) and fallback_reason:
+        codes.append(fallback_reason)
+    for warning in warnings:
+        explicit_code = _extract_warning_code_token(warning)
+        if explicit_code is not None:
+            codes.append(explicit_code)
+        if "insufficient_sources=" in warning:
+            codes.append("insufficient_sources")
+        if "single_source_consensus" in warning:
+            codes.append("single_source_consensus")
+        if "provider_governance_review_required" in warning:
+            codes.append("provider_governance_review_required")
+        if "parse missing" in warning or "_target_mean_missing" in warning:
+            codes.append("provider_parse_missing")
+        if "fetch failed:" in warning:
+            codes.append("provider_fetch_failed")
+    return tuple(dict.fromkeys(code for code in codes if code))
+
+
+def _extract_warning_code_token(warning: str) -> str | None:
+    marker = "code="
+    start = warning.find(marker)
+    if start < 0:
+        return None
+    token_start = start + len(marker)
+    token_chars: list[str] = []
+    for char in warning[token_start:]:
+        if char.isalnum() or char in {"_", "-", "."}:
+            token_chars.append(char)
+            continue
+        break
+    if not token_chars:
+        return None
+    return "".join(token_chars)
 
 
 def _parse_target_consensus_source_detail(
@@ -639,6 +756,8 @@ def _build_key_market_input_log_fields(
             payload["as_of"] = datum.as_of
         if datum.horizon:
             payload["horizon"] = datum.horizon
+        if datum.shares_scope:
+            payload["shares_scope"] = datum.shares_scope
         if datum.source_detail:
             payload["source_detail"] = datum.source_detail
         if isinstance(datum.update_cadence_days, int) and datum.update_cadence_days > 0:
@@ -745,14 +864,15 @@ def _field_stale_max_days(
 ) -> int:
     field_default = default_stale_max_days
     if field == "long_run_growth_anchor":
-        field_default = _long_run_growth_stale_max_days()
+        # Long-run growth anchors must use a strict staleness upper bound.
+        return _long_run_growth_stale_max_days()
 
     cadence_days = datum.update_cadence_days
     if not isinstance(cadence_days, int) or cadence_days <= 0:
         return field_default
 
     # Keep staleness policy aligned with each series cadence.
-    cadence_guardrail = cadence_days * CADENCE_STALENESS_MULTIPLIER
+    cadence_guardrail = cadence_days * 2
     return max(field_default, cadence_guardrail)
 
 
@@ -860,6 +980,7 @@ def _market_datum_from_mapping(payload: Mapping[str, object]) -> MarketDatum:
     source = _to_text(payload.get("source")) or "unknown"
     as_of = _to_text(payload.get("as_of"))
     horizon = _to_text(payload.get("horizon"))
+    shares_scope = _to_text(payload.get("shares_scope"))
     update_cadence_days = _to_int(payload.get("update_cadence_days"))
     source_detail = _to_text(payload.get("source_detail"))
     fallback_reason = _to_text(payload.get("fallback_reason"))
@@ -875,12 +996,77 @@ def _market_datum_from_mapping(payload: Mapping[str, object]) -> MarketDatum:
         source=source,
         as_of=as_of,
         horizon=horizon,
+        shares_scope=shares_scope,
         update_cadence_days=update_cadence_days,
         source_detail=source_detail,
         quality_flags=tuple(quality_flags),
         staleness=normalized_staleness,
         fallback_reason=fallback_reason,
         license_note=license_note,
+    )
+
+
+def _enforce_market_datum_contract(
+    *,
+    datums: dict[str, MarketDatum],
+) -> tuple[dict[str, MarketDatum], tuple[str, ...]]:
+    normalized: dict[str, MarketDatum] = {}
+    warnings: list[str] = []
+    for field, datum in datums.items():
+        normalized[field], field_warnings = _enforce_market_datum_contract_for_field(
+            field=field,
+            datum=datum,
+        )
+        warnings.extend(field_warnings)
+    return normalized, tuple(dict.fromkeys(warnings))
+
+
+def _enforce_market_datum_contract_for_field(
+    *,
+    field: str,
+    datum: MarketDatum,
+) -> tuple[MarketDatum, tuple[str, ...]]:
+    source = datum.source.strip() if datum.source.strip() else "unavailable"
+    value = datum.value
+    horizon = datum.horizon
+    shares_scope = datum.shares_scope
+    fallback_reason = datum.fallback_reason
+    flags = [flag for flag in datum.quality_flags if flag]
+    warnings: list[str] = []
+
+    if source != datum.source:
+        flags.append("contract_normalized_source")
+        if fallback_reason is None:
+            fallback_reason = "contract_invalid_source"
+        warnings.append(
+            f"market datum contract normalized empty source for field={field}"
+        )
+
+    if field == "target_mean_price" and value is not None and not horizon:
+        horizon = CANONICAL_TARGET_MEAN_HORIZON
+        flags.append("contract_defaulted_horizon")
+        warnings.append(
+            "market datum contract defaulted target_mean_price horizon to 12m"
+        )
+
+    if field == "shares_outstanding" and value is not None and not shares_scope:
+        shares_scope = CANONICAL_SHARES_SCOPE_UNKNOWN
+        flags.append("shares_scope_unknown")
+        warnings.append(
+            "market datum contract defaulted shares_outstanding shares_scope to unknown"
+        )
+
+    return (
+        replace(
+            datum,
+            source=source,
+            value=value,
+            horizon=horizon,
+            shares_scope=shares_scope,
+            fallback_reason=fallback_reason,
+            quality_flags=tuple(dict.fromkeys(flags)),
+        ),
+        tuple(warnings),
     )
 
 

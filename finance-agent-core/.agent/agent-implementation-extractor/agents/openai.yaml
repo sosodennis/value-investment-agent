@@ -1,0 +1,3 @@
+interface:
+  display_name: "Agent Implementation Extractor"
+  short_description: "Deep agent architecture and implementation extraction"

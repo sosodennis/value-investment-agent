@@ -17,6 +17,8 @@ class FinancialReportsArtifactData(BaseModel):
 
     financial_reports: list[FinancialReportModel]
     forward_signals: list[dict[str, object]] | None = None
+    diagnostics: dict[str, object] | None = None
+    quality_gates: dict[str, object] | None = None
     valuation_diagnostics: dict[str, object] | None = None
     ticker: str | None = None
     model_type: str | None = None

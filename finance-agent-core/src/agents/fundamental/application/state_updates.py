@@ -22,10 +22,16 @@ def build_financial_health_success_update(
     *,
     reports_artifact_id: str | None,
     artifact: AgentOutputArtifactPayload | None,
+    diagnostics: JSONObject | None = None,
+    quality_gates: JSONObject | None = None,
 ) -> JSONObject:
     fa_update: JSONObject = {
         "financial_reports_artifact_id": reports_artifact_id,
     }
+    if diagnostics is not None:
+        fa_update["xbrl_diagnostics"] = diagnostics
+    if quality_gates is not None:
+        fa_update["xbrl_quality_gates"] = quality_gates
     if artifact is not None:
         fa_update["artifact"] = artifact
 

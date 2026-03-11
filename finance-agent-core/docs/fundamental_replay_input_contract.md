@@ -47,6 +47,19 @@ Optional fields:
 Replay report prefers these metadata fields. If absent, replay will fallback to
 assumption-string extraction.
 
+`market_snapshot.market_datums` canonical contract additions (recommended):
+
+1. `target_mean_price.horizon`:
+- Canonical expected value: `12m`.
+- Runtime normalizes missing value to `12m` for market snapshot persistence.
+2. `shares_outstanding.shares_scope`:
+- Canonical expected values: `market_class`, `filing_consolidated`, `market_class_harmonized`, `unknown`.
+- Runtime normalizes missing value to `unknown` for market snapshot persistence.
+3. `target_mean_price.fallback_reason`:
+- Includes governance reasons such as `single_source_consensus`.
+4. `target_mean_price.quality_flags`:
+- Includes `consensus_fallback` and contract normalization flags when applicable.
+
 ## `valuation_replay_manifest_v1`
 
 Required fields:
@@ -90,3 +103,24 @@ Expected values:
 
 1. Fallback mode: `default_only` or `filing_first_then_default`
 2. Anchor source: `market`, `filing`, or `default`
+
+Key report fields for forward-signal trace observability:
+
+1. `replayed_forward_signal.calibration_applied`
+2. `replayed_forward_signal.mapping_version`
+3. `replayed_forward_signal.growth_adjustment_basis_points`
+4. `replayed_forward_signal.margin_adjustment_basis_points`
+5. `replayed_forward_signal.raw_growth_adjustment_basis_points`
+6. `replayed_forward_signal.raw_margin_adjustment_basis_points`
+7. `replayed_forward_signal.calibration_degraded_reason` (key required, value can be `null`)
+
+Replay checks summary fields used by release gate:
+
+1. `summary.total_cases`
+2. `summary.passed_cases`
+3. `summary.failed_cases`
+4. `summary.trace_contract_pass_rate`
+5. `summary.quality_block_rate`
+6. `summary.cache_hit_rate`
+7. `summary.warm_latency_p90_ms`
+8. `summary.cold_latency_p90_ms`

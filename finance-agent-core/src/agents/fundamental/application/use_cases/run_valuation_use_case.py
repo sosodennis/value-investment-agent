@@ -26,6 +26,9 @@ from src.agents.fundamental.application.services.valuation_replay_contracts impo
 from src.agents.fundamental.domain.valuation.parameterization.contracts import (
     ParamBuildResult,
 )
+from src.agents.fundamental.domain.valuation.parameterization.model_builders.shared.missing_metrics_service import (
+    apply_missing_metric_policy,
+)
 from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import JSONObject
 from src.shared.kernel.workflow_contracts import WorkflowNodeResult
@@ -34,6 +37,14 @@ logger = get_logger(__name__)
 FundamentalNodeResult = WorkflowNodeResult
 _VALUATION_COMPUTE_CONCURRENCY_LIMIT = 2
 _valuation_compute_semaphore: asyncio.Semaphore | None = None
+_XBRL_QUALITY_BLOCKED_CODE = "FUNDAMENTAL_XBRL_QUALITY_BLOCKED"
+_WARN_ONLY_MISSING_INPUT_FIELDS = (
+    "tax_rate",
+    "da_rates",
+    "capex_rates",
+    "wc_rates",
+    "sbc_rates",
+)
 
 
 class ValuationRuntime(Protocol):
@@ -876,7 +887,16 @@ def _build_parameter_source_completion_fields(
         target_consensus_fallback_reason = market_data_raw.get(
             "target_consensus_fallback_reason"
         )
+        target_consensus_quality_bucket = market_data_raw.get(
+            "target_consensus_quality_bucket"
+        )
+        target_consensus_confidence_weight = market_data_raw.get(
+            "target_consensus_confidence_weight"
+        )
         target_consensus_warnings = market_data_raw.get("target_consensus_warnings")
+        target_consensus_warning_codes = market_data_raw.get(
+            "target_consensus_warning_codes"
+        )
         if isinstance(market_provider, str) and market_provider:
             fields["market_data_provider"] = market_provider
         if isinstance(market_as_of, str) and market_as_of:
@@ -900,6 +920,15 @@ def _build_parameter_source_completion_fields(
             fields["target_consensus_fallback_reason"] = (
                 target_consensus_fallback_reason
             )
+        if (
+            isinstance(target_consensus_quality_bucket, str)
+            and target_consensus_quality_bucket
+        ):
+            fields["target_consensus_quality_bucket"] = target_consensus_quality_bucket
+        if isinstance(target_consensus_confidence_weight, int | float):
+            fields["target_consensus_confidence_weight"] = float(
+                target_consensus_confidence_weight
+            )
         if isinstance(target_consensus_warnings, list) and target_consensus_warnings:
             parsed_warnings = [
                 item
@@ -908,6 +937,17 @@ def _build_parameter_source_completion_fields(
             ]
             if parsed_warnings:
                 fields["target_consensus_warnings"] = parsed_warnings
+        if (
+            isinstance(target_consensus_warning_codes, list)
+            and target_consensus_warning_codes
+        ):
+            parsed_warning_codes = [
+                item
+                for item in target_consensus_warning_codes
+                if isinstance(item, str) and item
+            ]
+            if parsed_warning_codes:
+                fields["target_consensus_warning_codes"] = parsed_warning_codes
 
     financial_statement_raw = data_freshness_raw.get("financial_statement")
     if isinstance(financial_statement_raw, Mapping):
@@ -1087,6 +1127,15 @@ def _build_completion_quality_fields(
         )
 
     if isinstance(build_metadata, Mapping):
+        missing_policy_raw = build_metadata.get("xbrl_missing_input_policy")
+        if isinstance(missing_policy_raw, Mapping):
+            downgraded_raw = missing_policy_raw.get("downgraded_to_warn")
+            warn_only_raw = missing_policy_raw.get("warn_only_fields")
+            if isinstance(downgraded_raw, bool) and downgraded_raw:
+                reasons.append("xbrl_missing_non_critical_warn_only")
+            if isinstance(warn_only_raw, list) and warn_only_raw:
+                reasons.append("xbrl_missing_warn_only_fields_present")
+
         data_freshness_raw = build_metadata.get("data_freshness")
         if isinstance(data_freshness_raw, Mapping):
             market_data_raw = data_freshness_raw.get("market_data")
@@ -1264,6 +1313,151 @@ def _apply_snapshot_artifact_reference(
         )
 
 
+def _extract_quality_gates(
+    fundamental: Mapping[str, object],
+) -> Mapping[str, object] | None:
+    quality_raw = fundamental.get("xbrl_quality_gates")
+    if isinstance(quality_raw, Mapping):
+        return quality_raw
+    fallback = fundamental.get("quality_gates")
+    if isinstance(fallback, Mapping):
+        return fallback
+    return None
+
+
+def _extract_blocking_quality_issues(
+    quality_gates: Mapping[str, object] | None,
+) -> list[Mapping[str, object]]:
+    if not isinstance(quality_gates, Mapping):
+        return []
+    issues_raw = quality_gates.get("issues")
+    if not isinstance(issues_raw, list):
+        return []
+    blocking: list[Mapping[str, object]] = []
+    for raw in issues_raw:
+        if not isinstance(raw, Mapping):
+            continue
+        if raw.get("blocking") is True:
+            blocking.append(raw)
+    return blocking
+
+
+def _is_quality_gate_blocked(quality_gates: Mapping[str, object] | None) -> bool:
+    if not isinstance(quality_gates, Mapping):
+        return False
+    status_raw = quality_gates.get("status")
+    if isinstance(status_raw, str) and status_raw.strip().lower() == "block":
+        return True
+    blocking_count = coerce_float(quality_gates.get("blocking_count"))
+    return bool(blocking_count is not None and blocking_count > 0)
+
+
+def _build_quality_gate_error_message(
+    quality_gates: Mapping[str, object] | None,
+    blocking_issues: list[Mapping[str, object]],
+) -> str:
+    if not blocking_issues:
+        return f"{_XBRL_QUALITY_BLOCKED_CODE}: xbrl quality gate blocked valuation"
+    first = blocking_issues[0]
+    issue_code = first.get("code")
+    issue_code_text = issue_code if isinstance(issue_code, str) else "QUALITY_BLOCK"
+    field_key = first.get("field_key")
+    field_label = field_key if isinstance(field_key, str) else "unknown_field"
+    status = quality_gates.get("status") if isinstance(quality_gates, Mapping) else None
+    status_text = status if isinstance(status, str) else "block"
+    return (
+        f"{_XBRL_QUALITY_BLOCKED_CODE}: status={status_text}, "
+        f"issue_code={issue_code_text}, field={field_label}"
+    )
+
+
+def _quality_status_token(quality_gates: Mapping[str, object] | None) -> str:
+    if not isinstance(quality_gates, Mapping):
+        return "unknown"
+    status_raw = quality_gates.get("status")
+    if not isinstance(status_raw, str):
+        return "unknown"
+    token = status_raw.strip().lower()
+    return token if token else "unknown"
+
+
+def _apply_missing_input_policy(
+    *,
+    build_result: ParamBuildResult,
+    quality_gates: Mapping[str, object] | None,
+    model_type: str,
+    ticker: str | None,
+) -> ParamBuildResult:
+    if not build_result.missing:
+        return build_result
+
+    quality_status = _quality_status_token(quality_gates)
+    policy_result = apply_missing_metric_policy(
+        missing_fields=build_result.missing,
+        warn_only_fields=_WARN_ONLY_MISSING_INPUT_FIELDS,
+    )
+    downgraded_warn_only = bool(
+        policy_result.warn_only_fields
+    ) and not _is_quality_gate_blocked(quality_gates)
+    blocking_fields = (
+        policy_result.blocking_fields
+        if downgraded_warn_only
+        else list(build_result.missing)
+    )
+
+    metadata: JSONObject = {}
+    if isinstance(build_result.metadata, Mapping):
+        metadata.update(dict(build_result.metadata))
+    metadata["xbrl_missing_input_policy"] = {
+        "policy_version": "v1",
+        "quality_status": quality_status,
+        "blocking_fields": list(blocking_fields),
+        "warn_only_fields": list(policy_result.warn_only_fields),
+        "downgraded_to_warn": downgraded_warn_only,
+    }
+
+    assumptions = list(build_result.assumptions)
+    if downgraded_warn_only:
+        assumptions.append(
+            "xbrl_missing_input_policy downgraded non-critical missing inputs to warn "
+            f"(quality_status={quality_status}, "
+            f"fields={sorted(set(policy_result.warn_only_fields))})"
+        )
+        log_event(
+            logger,
+            event="fundamental_valuation_missing_policy_applied",
+            message="valuation missing-input policy downgraded warn-only fields",
+            level=logging.WARNING,
+            error_code="FUNDAMENTAL_VALUATION_MISSING_INPUTS_WARN_ONLY",
+            fields={
+                "ticker": ticker,
+                "model_type": model_type,
+                "quality_status": quality_status,
+                "warn_only_fields": list(policy_result.warn_only_fields),
+                "blocking_fields": list(blocking_fields),
+            },
+        )
+
+    return ParamBuildResult(
+        params=build_result.params,
+        trace_inputs=build_result.trace_inputs,
+        missing=blocking_fields,
+        assumptions=assumptions,
+        metadata=metadata,
+    )
+
+
+def _extract_missing_input_policy_metadata(
+    build_metadata: Mapping[str, object] | None,
+) -> Mapping[str, object] | None:
+    if not isinstance(build_metadata, Mapping):
+        return None
+    policy_raw = build_metadata.get("xbrl_missing_input_policy")
+    if not isinstance(policy_raw, Mapping):
+        return None
+    return policy_raw
+
+
 async def run_valuation_use_case(
     runtime: ValuationRuntime,
     state: Mapping[str, object],
@@ -1288,11 +1482,77 @@ async def run_valuation_use_case(
         )
         model_type = execution_context.model_type
         ticker = execution_context.ticker
+        quality_gates = _extract_quality_gates(execution_context.fundamental)
+        if _is_quality_gate_blocked(quality_gates):
+            blocking_issues = _extract_blocking_quality_issues(quality_gates)
+            quality_error = _build_quality_gate_error_message(
+                quality_gates,
+                blocking_issues,
+            )
+            log_event(
+                logger,
+                event="fundamental_valuation_quality_blocked",
+                message="xbrl quality gate blocked valuation",
+                level=logging.ERROR,
+                error_code=_XBRL_QUALITY_BLOCKED_CODE,
+                fields={
+                    "ticker": ticker,
+                    "model_type": model_type,
+                    "quality_status": (
+                        quality_gates.get("status")
+                        if isinstance(quality_gates, Mapping)
+                        else None
+                    ),
+                    "quality_blocking_count": (
+                        quality_gates.get("blocking_count")
+                        if isinstance(quality_gates, Mapping)
+                        else None
+                    ),
+                    "quality_issues": [dict(issue) for issue in blocking_issues],
+                },
+            )
+            log_event(
+                logger,
+                event="fundamental_valuation_completed",
+                message="fundamental valuation completed",
+                level=logging.ERROR,
+                fields={
+                    "ticker": ticker,
+                    "model_type": model_type,
+                    "status": "error",
+                    "is_degraded": True,
+                    "error_code": _XBRL_QUALITY_BLOCKED_CODE,
+                    "quality_blocking_count": len(blocking_issues),
+                },
+            )
+            return FundamentalNodeResult(
+                update=runtime.build_valuation_error_update(quality_error),
+                goto="END",
+            )
+
+        def _build_params_with_missing_policy(
+            model_type_raw: str,
+            ticker_raw: str | None,
+            reports_raw: list[JSONObject],
+            forward_signals_raw: list[JSONObject] | None,
+        ) -> ParamBuildResult:
+            base_result = build_params_fn(
+                model_type_raw,
+                ticker_raw,
+                reports_raw,
+                forward_signals_raw,
+            )
+            return _apply_missing_input_policy(
+                build_result=base_result,
+                quality_gates=quality_gates,
+                model_type=model_type_raw,
+                ticker=ticker_raw,
+            )
 
         execution_result = await _offload_valuation_compute(
             execute_valuation_calculation,
             context=execution_context,
-            build_params_fn=build_params_fn,
+            build_params_fn=_build_params_with_missing_policy,
         )
         build_result = execution_result.build_result
         base_metadata = (
@@ -1314,6 +1574,7 @@ async def run_valuation_use_case(
         )
 
         if build_result.missing:
+            missing_policy_meta = _extract_missing_input_policy_metadata(base_metadata)
             log_event(
                 logger,
                 event="fundamental_valuation_missing_inputs",
@@ -1325,6 +1586,17 @@ async def run_valuation_use_case(
                     "model_type": model_type,
                     "missing_inputs": build_result.missing,
                     "assumptions": build_result.assumptions,
+                    "quality_status": _quality_status_token(quality_gates),
+                    "missing_warn_only_fields": (
+                        missing_policy_meta.get("warn_only_fields")
+                        if isinstance(missing_policy_meta, Mapping)
+                        else None
+                    ),
+                    "missing_policy_downgraded_to_warn": (
+                        missing_policy_meta.get("downgraded_to_warn")
+                        if isinstance(missing_policy_meta, Mapping)
+                        else None
+                    ),
                 },
             )
             log_event(
@@ -1339,6 +1611,7 @@ async def run_valuation_use_case(
                     "is_degraded": True,
                     "error_code": "FUNDAMENTAL_VALUATION_INPUTS_MISSING",
                     "missing_input_count": len(build_result.missing),
+                    "quality_status": _quality_status_token(quality_gates),
                 },
             )
             return FundamentalNodeResult(

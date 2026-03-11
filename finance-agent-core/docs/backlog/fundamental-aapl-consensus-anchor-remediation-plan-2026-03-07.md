@@ -210,3 +210,104 @@
 1. 是否確認本輪將 `target_consensus_fallback` 納入 `is_degraded=true`（建議：是，但僅在 target anchor 被使用於監控/校準路徑時）？
 2. provider fixture 的頁面樣本是否可放在 repo（去識別化後）？
 3. AAPL bias 修復本輪是否只調 `dcf_standard` profile，不動 `dcf_growth`（建議：是，隔離影響面）？
+
+## Execution Progress (As of 2026-03-11)
+
+Completed slices:
+1. `S1` (medium): free-consensus parser drift-hardening + fixture regression baseline
+- Provider fallback pattern hardening:
+  - `tipranks_provider.py`: text fallback patterns for average/high/low target and analyst-count phrases.
+  - `investing_provider.py`: text fallback patterns for average/high/low target phrases.
+  - `marketbeat_provider.py`: added consensus text fallback pattern (`Consensus Price Target`).
+- Added fixture-backed regression HTML samples:
+  - `tests/fixtures/free_consensus/tipranks_page_text_variant.html`
+  - `tests/fixtures/free_consensus/investing_search_variant.html`
+  - `tests/fixtures/free_consensus/investing_page_text_variant.html`
+  - `tests/fixtures/free_consensus/marketbeat_search_variant.html`
+  - `tests/fixtures/free_consensus/marketbeat_page_text_variant.html`
+- Extended provider tests (`tests/test_free_consensus_providers.py`) with fixture-driven variant coverage for TipRanks/Investing/MarketBeat text-fallback parsing.
+- Validation evidence:
+  - `ruff check` (provider modules + test file) passed.
+  - targeted pytest bundle passed: `23 passed`.
+2. `S2` (medium): target-consensus warning code standardization and propagation
+- Added machine-readable `target_consensus_warning_codes` in market snapshot contract and runtime log fields.
+- `market_data_service.py` now normalizes warning/fallback signals into stable codes (for example: `insufficient_sources`, `provider_blocked`, `provider_blocked_http`, `provider_governance_review_required`, `single_source_consensus`).
+- Metadata/completion propagation wired:
+  - `metadata_service.py`: includes `target_consensus_warning_codes` under `data_freshness.market_data` and `parameter_source_summary.market_data_anchor`.
+  - `run_valuation_use_case.py`: emits `target_consensus_warning_codes` in valuation completion fields.
+- Test coverage updates:
+  - `test_fundamental_market_data_client.py`: asserts warning-code propagation for aggregate, insufficient-sources fallback, blocked-provider fallback, and single-source degraded scenarios.
+  - `test_fundamental_orchestrator_logging.py`: asserts completion field includes warning codes on fallback-degraded path.
+- Validation evidence:
+  - `ruff check` (changed runtime + tests) passed.
+  - targeted pytest bundle passed: `27 passed`.
+3. `S3` (small): replay report warning-code evidence fields
+- `replay_fundamental_valuation.py` 新增 target-consensus warning-code replay evidence：
+  - `baseline_target_consensus_warning_codes`
+  - `replayed_target_consensus_warning_codes`
+  - `baseline/replayed_target_consensus_warning_code_count`
+  - `target_consensus_warning_codes_added`
+  - `target_consensus_warning_codes_removed`
+- warning-code extraction 支援 `data_freshness.market_data` 與 `parameter_source_summary.market_data_anchor` 來源，避免 metadata path 差異造成 replay 契約缺洞。
+- 測試更新：`test_replay_fundamental_valuation_script.py` 新增 warning-code 差異驗證（added/removed + counts）。
+- Validation evidence:
+  - `ruff check` (replay script + tests) passed.
+  - targeted pytest bundle passed: `16 passed`.
+4. `S4` (medium): backtest warning-code distribution and monitoring gate wiring
+- Backtest contract/runtime 擴展：
+  - `BacktestCase` 新增 `target_consensus_warning_codes`。
+  - case loader/runtime 會將 warning codes 寫入 case metrics，供 cohort summary 消費。
+- Backtest report summary 新增：
+  - `consensus_warning_code_distribution`（`available_count/code_case_counts/code_case_rates`）
+  - `consensus_provider_blocked_rate`
+  - `consensus_parse_missing_rate`
+- Monitoring gate 新增參數（`run_fundamental_backtest.py`）：
+  - `--max-consensus-provider-blocked-rate`
+  - `--max-consensus-parse-missing-rate`
+  - `--min-consensus-warning-code-count`
+- release gate shell pass-through 新增對應 env：
+  - `FUNDAMENTAL_MAX_CONSENSUS_PROVIDER_BLOCKED_RATE`
+  - `FUNDAMENTAL_MAX_CONSENSUS_PARSE_MISSING_RATE`
+  - `FUNDAMENTAL_MIN_CONSENSUS_WARNING_CODE_COUNT`
+- 測試更新：
+  - `test_fundamental_backtest_report_service.py` 覆蓋 warning-code 分佈與 rate。
+  - `test_fundamental_backtest_runner.py` 新增 provider_blocked rate gate breach 測試，並覆蓋 case-loader/runtime warning-code 傳遞。
+- Validation evidence:
+  - `ruff check` (backtest runtime/report/script + tests) passed.
+  - targeted pytest bundle passed: `16 passed`.
+5. `S5` (small): gate-profile threshold closure for warning-code monitoring gates
+- Gate profile source of truth now includes warning-code monitoring thresholds for all profiles:
+  - `max_consensus_provider_blocked_rate`
+  - `max_consensus_parse_missing_rate`
+  - `min_consensus_warning_code_count`
+- Profile resolver/validator wiring completed:
+  - `resolve_fundamental_gate_profile.py` exports the three env vars
+    (`FUNDAMENTAL_MAX_CONSENSUS_PROVIDER_BLOCKED_RATE`,
+    `FUNDAMENTAL_MAX_CONSENSUS_PARSE_MISSING_RATE`,
+    `FUNDAMENTAL_MIN_CONSENSUS_WARNING_CODE_COUNT`).
+  - `validate_fundamental_gate_profiles.py` treats the new keys as required thresholds
+    (`min_consensus_warning_code_count` as int-like).
+- Test coverage update:
+  - `test_resolve_fundamental_gate_profile_script.py` now asserts exported env values for new keys.
+- Validation evidence:
+  - `ruff check` (profile scripts + tests) passed.
+  - targeted pytest bundle passed: `11 passed`.
+6. `S6` (medium): release snapshot + CI governance wiring for warning-code thresholds/evidence
+- `build_fundamental_release_gate_snapshot.py` now ingests warning-code gate thresholds and persists them under `thresholds`:
+  - `max_consensus_provider_blocked_rate`
+  - `max_consensus_parse_missing_rate`
+  - `min_consensus_warning_code_count`
+- Snapshot summary extraction now carries warning-code governance evidence:
+  - `consensus_provider_blocked_rate`
+  - `consensus_parse_missing_rate`
+  - `consensus_warning_code_distribution` (`available_count/code_case_counts/code_case_rates`)
+- `validate_fundamental_release_gate_snapshot.py` now validates the above summary fields as required snapshot contract.
+- CI workflow wiring (`monorepo-contract-gates`) updated:
+  - snapshot build step now passes new threshold args.
+  - release summary step now prints the new threshold values into `GITHUB_STEP_SUMMARY`.
+- Test coverage update:
+  - `test_build_fundamental_release_gate_snapshot_script.py`
+  - `test_validate_fundamental_release_gate_snapshot_script.py`
+- Validation evidence:
+  - `ruff check` (snapshot scripts + tests) passed.
+  - targeted pytest bundle passed: `11 passed`.

@@ -111,12 +111,75 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--max-consensus-gap-median-abs",
+        type=float,
+        default=0.15,
+        help=(
+            "Monitoring gate: maximum allowed absolute "
+            "consensus_gap_distribution.median when consensus coverage is available."
+        ),
+    )
+    parser.add_argument(
         "--min-consensus-gap-count",
         type=int,
         default=2,
         help=(
             "Monitoring gate: minimum available_count required for "
             "consensus_gap_distribution before checking p90_abs."
+        ),
+    )
+    parser.add_argument(
+        "--max-consensus-degraded-rate",
+        type=float,
+        default=1.0,
+        help=(
+            "Monitoring gate: maximum allowed consensus_degraded_rate when "
+            "consensus quality coverage is available."
+        ),
+    )
+    parser.add_argument(
+        "--min-consensus-confidence-weight",
+        type=float,
+        default=0.0,
+        help=(
+            "Monitoring gate: minimum allowed consensus_confidence_weight_avg "
+            "when consensus quality coverage is available."
+        ),
+    )
+    parser.add_argument(
+        "--min-consensus-quality-count",
+        type=int,
+        default=0,
+        help=(
+            "Monitoring gate: minimum available_count required for "
+            "consensus_quality_distribution before checking confidence/degraded gates."
+        ),
+    )
+    parser.add_argument(
+        "--max-consensus-provider-blocked-rate",
+        type=float,
+        default=1.0,
+        help=(
+            "Monitoring gate: maximum allowed provider_blocked code rate in "
+            "consensus_warning_code_distribution."
+        ),
+    )
+    parser.add_argument(
+        "--max-consensus-parse-missing-rate",
+        type=float,
+        default=1.0,
+        help=(
+            "Monitoring gate: maximum allowed provider_parse_missing code rate in "
+            "consensus_warning_code_distribution."
+        ),
+    )
+    parser.add_argument(
+        "--min-consensus-warning-code-count",
+        type=int,
+        default=0,
+        help=(
+            "Monitoring gate: minimum available_count required for "
+            "consensus_warning_code_distribution before checking code-rate gates."
         ),
     )
     return parser.parse_args()
@@ -195,7 +258,16 @@ def main() -> int:
             min_reinvestment_guardrail_hit_rate=args.min_reinvestment_guardrail_hit_rate,
             max_shares_scope_mismatch_rate=args.max_shares_scope_mismatch_rate,
             max_consensus_gap_p90_abs=args.max_consensus_gap_p90_abs,
+            max_consensus_gap_median_abs=args.max_consensus_gap_median_abs,
             min_consensus_gap_count=args.min_consensus_gap_count,
+            max_consensus_degraded_rate=args.max_consensus_degraded_rate,
+            min_consensus_confidence_weight=args.min_consensus_confidence_weight,
+            min_consensus_quality_count=args.min_consensus_quality_count,
+            max_consensus_provider_blocked_rate=(
+                args.max_consensus_provider_blocked_rate
+            ),
+            max_consensus_parse_missing_rate=args.max_consensus_parse_missing_rate,
+            min_consensus_warning_code_count=args.min_consensus_warning_code_count,
         )
         if monitoring_issues:
             issues.extend(monitoring_issues)
@@ -254,7 +326,14 @@ def _evaluate_monitoring_gates(
     min_reinvestment_guardrail_hit_rate: float,
     max_shares_scope_mismatch_rate: float,
     max_consensus_gap_p90_abs: float,
+    max_consensus_gap_median_abs: float,
     min_consensus_gap_count: int,
+    max_consensus_degraded_rate: float,
+    min_consensus_confidence_weight: float,
+    min_consensus_quality_count: int,
+    max_consensus_provider_blocked_rate: float,
+    max_consensus_parse_missing_rate: float,
+    min_consensus_warning_code_count: int,
 ) -> list[str]:
     issues: list[str] = []
     summary = report_payload.get("summary")
@@ -317,6 +396,16 @@ def _evaluate_monitoring_gates(
         return issues
 
     if available_count_raw > 0:
+        consensus_gap_median = _read_number(consensus_distribution, "median")
+        if consensus_gap_median is None:
+            issues.append("monitoring_gate_failed:consensus_gap_median_missing")
+        elif abs(consensus_gap_median) > max_consensus_gap_median_abs:
+            issues.append(
+                "monitoring_gate_failed:consensus_gap_median_abs="
+                f"{abs(consensus_gap_median):.4f}"
+                f">max:{max_consensus_gap_median_abs:.4f}"
+            )
+
         consensus_gap_p90_abs = _read_number(consensus_distribution, "p90_abs")
         if consensus_gap_p90_abs is None:
             issues.append("monitoring_gate_failed:consensus_gap_p90_abs_missing")
@@ -324,6 +413,92 @@ def _evaluate_monitoring_gates(
             issues.append(
                 "monitoring_gate_failed:consensus_gap_p90_abs="
                 f"{consensus_gap_p90_abs:.4f}>max:{max_consensus_gap_p90_abs:.4f}"
+            )
+
+    quality_distribution = summary.get("consensus_quality_distribution")
+    if not isinstance(quality_distribution, Mapping):
+        issues.append("monitoring_gate_failed:consensus_quality_distribution_missing")
+        return issues
+
+    quality_available_count_raw = quality_distribution.get("available_count")
+    if not isinstance(quality_available_count_raw, int):
+        issues.append(
+            "monitoring_gate_failed:consensus_quality_available_count_missing"
+        )
+        return issues
+    if quality_available_count_raw < min_consensus_quality_count:
+        issues.append(
+            "monitoring_gate_failed:consensus_quality_available_count="
+            f"{quality_available_count_raw}<min:{min_consensus_quality_count}"
+        )
+        return issues
+
+    if quality_available_count_raw > 0:
+        consensus_degraded_rate = _read_number(summary, "consensus_degraded_rate")
+        if consensus_degraded_rate is None:
+            issues.append("monitoring_gate_failed:consensus_degraded_rate_missing")
+        elif consensus_degraded_rate > max_consensus_degraded_rate:
+            issues.append(
+                "monitoring_gate_failed:consensus_degraded_rate="
+                f"{consensus_degraded_rate:.4f}>max:{max_consensus_degraded_rate:.4f}"
+            )
+
+        consensus_confidence_weight_avg = _read_number(
+            summary,
+            "consensus_confidence_weight_avg",
+        )
+        if consensus_confidence_weight_avg is None:
+            issues.append(
+                "monitoring_gate_failed:consensus_confidence_weight_avg_missing"
+            )
+        elif consensus_confidence_weight_avg < min_consensus_confidence_weight:
+            issues.append(
+                "monitoring_gate_failed:consensus_confidence_weight_avg="
+                f"{consensus_confidence_weight_avg:.4f}"
+                f"<min:{min_consensus_confidence_weight:.4f}"
+            )
+
+    warning_code_distribution = summary.get("consensus_warning_code_distribution")
+    if not isinstance(warning_code_distribution, Mapping):
+        issues.append(
+            "monitoring_gate_failed:consensus_warning_code_distribution_missing"
+        )
+        return issues
+
+    warning_code_available_count_raw = warning_code_distribution.get("available_count")
+    if not isinstance(warning_code_available_count_raw, int):
+        issues.append(
+            "monitoring_gate_failed:consensus_warning_code_available_count_missing"
+        )
+        return issues
+    if warning_code_available_count_raw < min_consensus_warning_code_count:
+        issues.append(
+            "monitoring_gate_failed:consensus_warning_code_available_count="
+            f"{warning_code_available_count_raw}<min:{min_consensus_warning_code_count}"
+        )
+        return issues
+
+    if warning_code_available_count_raw > 0:
+        provider_blocked_rate = _read_warning_code_rate(
+            warning_code_distribution,
+            code="provider_blocked",
+        )
+        if provider_blocked_rate > max_consensus_provider_blocked_rate:
+            issues.append(
+                "monitoring_gate_failed:consensus_provider_blocked_rate="
+                f"{provider_blocked_rate:.4f}"
+                f">max:{max_consensus_provider_blocked_rate:.4f}"
+            )
+
+        parse_missing_rate = _read_warning_code_rate(
+            warning_code_distribution,
+            code="provider_parse_missing",
+        )
+        if parse_missing_rate > max_consensus_parse_missing_rate:
+            issues.append(
+                "monitoring_gate_failed:consensus_parse_missing_rate="
+                f"{parse_missing_rate:.4f}"
+                f">max:{max_consensus_parse_missing_rate:.4f}"
             )
 
     return issues
@@ -334,6 +509,16 @@ def _read_number(payload: Mapping[str, object], key: str) -> float | None:
     if isinstance(value, int | float) and not isinstance(value, bool):
         return float(value)
     return None
+
+
+def _read_warning_code_rate(payload: Mapping[str, object], *, code: str) -> float:
+    rates_raw = payload.get("code_case_rates")
+    if not isinstance(rates_raw, Mapping):
+        return 0.0
+    value = rates_raw.get(code)
+    if isinstance(value, int | float) and not isinstance(value, bool):
+        return float(value)
+    return 0.0
 
 
 if __name__ == "__main__":

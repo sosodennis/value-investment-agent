@@ -1,0 +1,21 @@
+{
+  "cases": [
+    {
+      "case_id": "AAPL_dcf_standard_01",
+      "input_path": "fundamental_replay_inputs/live_auto_s36_fb033_s4/AAPL_dcf_standard_01.json"
+    },
+    {
+      "case_id": "GOOG_dcf_growth_02",
+      "input_path": "fundamental_replay_inputs/live_auto_s36_fb033_s4/GOOG_dcf_growth_02.json"
+    },
+    {
+      "case_id": "MSFT_dcf_growth_03",
+      "input_path": "fundamental_replay_inputs/live_auto_s36_fb033_s4/MSFT_dcf_growth_03.json"
+    },
+    {
+      "case_id": "NVDA_dcf_growth_04",
+      "input_path": "fundamental_replay_inputs/live_auto_s36_fb033_s4/NVDA_dcf_growth_04.json"
+    }
+  ],
+  "schema_version": "valuation_replay_manifest_v1"
+}

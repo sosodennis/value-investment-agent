@@ -20,6 +20,9 @@ class SearchConfig:
     unit_whitelist: list[str] | None = None
     unit_blacklist: list[str] | None = None
     respect_anchor_date: bool = True
+    concept_priority: float = 1.0
+    anchor_confidence: float | None = None
+    mapping_source: str | None = None
 
 
 class SearchType:
@@ -77,6 +80,8 @@ class SECExtractResult(BaseModel):
     unit: str | None = None
     decimals: str | None = None
     scale: str | None = None
+    presentation_score: float | None = None
+    calculation_score: float | None = None
 
 
 @dataclass

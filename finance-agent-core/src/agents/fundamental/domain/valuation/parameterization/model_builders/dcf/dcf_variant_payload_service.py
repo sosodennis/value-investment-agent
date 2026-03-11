@@ -17,6 +17,10 @@ from ....policies.base_assumption_guardrail_policy import (
     apply_reinvestment_guardrail,
 )
 from ....report_contract import FinancialReport, IndustrialExtension
+from ...reinvestment_clamp_profile_service import (
+    ReinvestmentClampProfileLoadResult,
+    load_reinvestment_clamp_profile,
+)
 from ..saas import SaasBuilderDeps, SaasBuildPayload, build_saas_payload
 
 
@@ -35,70 +39,222 @@ class _VariantGuardrailProfile:
     terminal_growth_floor: float | None = None
 
 
+_GUARDRAIL_PROFILE_VERSION = "shared_base_v2"
+
+_BASE_GROWTH_GUARDRAIL = GrowthGuardrailConfig(
+    max_year1_growth=0.49,
+    max_series_growth=0.75,
+    min_series_growth=-0.40,
+    min_terminal_growth=0.00,
+    max_terminal_growth=0.040,
+    final_fade_years=4,
+    enforce_nonincreasing_trend=True,
+)
+_BASE_MARGIN_GUARDRAIL = MarginGuardrailConfig(
+    min_series_margin=-0.22,
+    max_series_margin=0.59,
+    normalized_margin_lower=0.15,
+    normalized_margin_upper=0.38,
+    final_fade_years=3,
+)
+_BASE_CAPEX_GUARDRAIL = ReinvestmentGuardrailConfig(
+    min_series_rate=0.00,
+    max_series_rate=0.28,
+    terminal_lower=0.03,
+    terminal_upper=0.10,
+    final_fade_years=5,
+)
+_BASE_WC_GUARDRAIL = ReinvestmentGuardrailConfig(
+    min_series_rate=-0.07,
+    max_series_rate=0.12,
+    terminal_lower=-0.02,
+    terminal_upper=0.045,
+    final_fade_years=5,
+)
+
+
+def _growth_config_from_base(
+    *,
+    max_year1_growth: float | None = None,
+    max_series_growth: float | None = None,
+    min_series_growth: float | None = None,
+    min_terminal_growth: float | None = None,
+    max_terminal_growth: float | None = None,
+    final_fade_years: int | None = None,
+    enforce_nonincreasing_trend: bool | None = None,
+) -> GrowthGuardrailConfig:
+    return GrowthGuardrailConfig(
+        max_year1_growth=(
+            _BASE_GROWTH_GUARDRAIL.max_year1_growth
+            if max_year1_growth is None
+            else max_year1_growth
+        ),
+        max_series_growth=(
+            _BASE_GROWTH_GUARDRAIL.max_series_growth
+            if max_series_growth is None
+            else max_series_growth
+        ),
+        min_series_growth=(
+            _BASE_GROWTH_GUARDRAIL.min_series_growth
+            if min_series_growth is None
+            else min_series_growth
+        ),
+        min_terminal_growth=(
+            _BASE_GROWTH_GUARDRAIL.min_terminal_growth
+            if min_terminal_growth is None
+            else min_terminal_growth
+        ),
+        max_terminal_growth=(
+            _BASE_GROWTH_GUARDRAIL.max_terminal_growth
+            if max_terminal_growth is None
+            else max_terminal_growth
+        ),
+        final_fade_years=(
+            _BASE_GROWTH_GUARDRAIL.final_fade_years
+            if final_fade_years is None
+            else final_fade_years
+        ),
+        enforce_nonincreasing_trend=(
+            _BASE_GROWTH_GUARDRAIL.enforce_nonincreasing_trend
+            if enforce_nonincreasing_trend is None
+            else enforce_nonincreasing_trend
+        ),
+    )
+
+
+def _margin_config_from_base(
+    *,
+    min_series_margin: float | None = None,
+    max_series_margin: float | None = None,
+    normalized_margin_lower: float | None = None,
+    normalized_margin_upper: float | None = None,
+    final_fade_years: int | None = None,
+) -> MarginGuardrailConfig:
+    return MarginGuardrailConfig(
+        min_series_margin=(
+            _BASE_MARGIN_GUARDRAIL.min_series_margin
+            if min_series_margin is None
+            else min_series_margin
+        ),
+        max_series_margin=(
+            _BASE_MARGIN_GUARDRAIL.max_series_margin
+            if max_series_margin is None
+            else max_series_margin
+        ),
+        normalized_margin_lower=(
+            _BASE_MARGIN_GUARDRAIL.normalized_margin_lower
+            if normalized_margin_lower is None
+            else normalized_margin_lower
+        ),
+        normalized_margin_upper=(
+            _BASE_MARGIN_GUARDRAIL.normalized_margin_upper
+            if normalized_margin_upper is None
+            else normalized_margin_upper
+        ),
+        final_fade_years=(
+            _BASE_MARGIN_GUARDRAIL.final_fade_years
+            if final_fade_years is None
+            else final_fade_years
+        ),
+    )
+
+
+def _reinvestment_config_from_base(
+    *,
+    base: ReinvestmentGuardrailConfig,
+    min_series_rate: float | None = None,
+    max_series_rate: float | None = None,
+    terminal_lower: float | None = None,
+    terminal_upper: float | None = None,
+    final_fade_years: int | None = None,
+) -> ReinvestmentGuardrailConfig:
+    return ReinvestmentGuardrailConfig(
+        min_series_rate=(
+            base.min_series_rate if min_series_rate is None else min_series_rate
+        ),
+        max_series_rate=(
+            base.max_series_rate if max_series_rate is None else max_series_rate
+        ),
+        terminal_lower=(
+            base.terminal_lower if terminal_lower is None else terminal_lower
+        ),
+        terminal_upper=(
+            base.terminal_upper if terminal_upper is None else terminal_upper
+        ),
+        final_fade_years=(
+            base.final_fade_years if final_fade_years is None else final_fade_years
+        ),
+    )
+
+
 _DCF_VARIANT_GUARDRAIL_PROFILES: dict[str, _VariantGuardrailProfile] = {
     "dcf_growth": _VariantGuardrailProfile(
         profile_name="dcf_growth",
-        growth_config=GrowthGuardrailConfig(
-            max_year1_growth=0.53,
-            max_series_growth=0.85,
+        growth_config=_growth_config_from_base(
+            max_year1_growth=0.50,
+            max_series_growth=0.80,
             min_series_growth=-0.45,
-            min_terminal_growth=-0.01,
+            min_terminal_growth=-0.005,
             max_terminal_growth=0.035,
             final_fade_years=5,
             enforce_nonincreasing_trend=True,
         ),
-        margin_config=MarginGuardrailConfig(
+        margin_config=_margin_config_from_base(
             min_series_margin=-0.25,
             max_series_margin=0.60,
             normalized_margin_lower=0.18,
-            normalized_margin_upper=0.40,
+            normalized_margin_upper=0.39,
             final_fade_years=5,
         ),
-        capex_config=ReinvestmentGuardrailConfig(
+        capex_config=_reinvestment_config_from_base(
+            base=_BASE_CAPEX_GUARDRAIL,
             min_series_rate=0.00,
-            max_series_rate=0.32,
+            max_series_rate=0.30,
             terminal_lower=0.04,
-            terminal_upper=0.12,
+            terminal_upper=0.11,
             final_fade_years=6,
         ),
-        wc_config=ReinvestmentGuardrailConfig(
+        wc_config=_reinvestment_config_from_base(
+            base=_BASE_WC_GUARDRAIL,
             min_series_rate=-0.08,
-            max_series_rate=0.14,
+            max_series_rate=0.13,
             terminal_lower=-0.01,
-            terminal_upper=0.05,
+            terminal_upper=0.045,
             final_fade_years=6,
         ),
         terminal_growth_floor=None,
     ),
     "dcf_standard": _VariantGuardrailProfile(
         profile_name="dcf_standard",
-        growth_config=GrowthGuardrailConfig(
-            max_year1_growth=0.45,
-            max_series_growth=0.65,
+        growth_config=_growth_config_from_base(
+            max_year1_growth=0.48,
+            max_series_growth=0.70,
             min_series_growth=-0.35,
-            min_terminal_growth=0.026,
-            max_terminal_growth=0.045,
-            final_fade_years=3,
+            min_terminal_growth=0.022,
+            max_terminal_growth=0.048,
+            final_fade_years=4,
             enforce_nonincreasing_trend=True,
         ),
-        margin_config=MarginGuardrailConfig(
+        margin_config=_margin_config_from_base(
             min_series_margin=-0.20,
             max_series_margin=0.58,
             normalized_margin_lower=0.12,
-            normalized_margin_upper=0.36,
-            final_fade_years=2,
+            normalized_margin_upper=0.38,
+            final_fade_years=3,
         ),
-        capex_config=ReinvestmentGuardrailConfig(
+        capex_config=_reinvestment_config_from_base(
+            base=_BASE_CAPEX_GUARDRAIL,
             min_series_rate=0.00,
             max_series_rate=0.24,
             terminal_lower=0.015,
-            terminal_upper=0.08,
+            terminal_upper=0.075,
             final_fade_years=4,
         ),
-        wc_config=ReinvestmentGuardrailConfig(
+        wc_config=_reinvestment_config_from_base(
+            base=_BASE_WC_GUARDRAIL,
             min_series_rate=-0.06,
             max_series_rate=0.10,
-            terminal_lower=-0.03,
+            terminal_lower=-0.035,
             terminal_upper=0.04,
             final_fade_years=4,
         ),
@@ -117,13 +273,34 @@ DCF_STANDARD_CONSENSUS_PREMIUM_CAP = 0.25
 DCF_STANDARD_CONSENSUS_TERMINAL_NUDGE_SLOPE = 0.10
 DCF_STANDARD_CONSENSUS_TERMINAL_NUDGE_MAX = 0.01
 DCF_STANDARD_CONSENSUS_CONFIDENCE_FULL = 1.00
-DCF_STANDARD_CONSENSUS_CONFIDENCE_MULTI_SOURCE = 0.85
-DCF_STANDARD_CONSENSUS_CONFIDENCE_FALLBACK = 0.75
-DCF_STANDARD_CONSENSUS_CONFIDENCE_SINGLE_SOURCE = 0.60
+DCF_STANDARD_CONSENSUS_CONFIDENCE_MULTI_SOURCE = 0.75
+DCF_STANDARD_CONSENSUS_CONFIDENCE_FALLBACK = 0.30
+DCF_STANDARD_CONSENSUS_CONFIDENCE_SINGLE_SOURCE = 0.45
+DCF_STANDARD_GROWTH_RELAX_PREMIUM_TRIGGER = 0.10
+DCF_STANDARD_GROWTH_RELAX_PREMIUM_CAP = 0.20
+DCF_STANDARD_GROWTH_RELAX_SLOPE = 0.50
+DCF_STANDARD_GROWTH_RELAX_MAX = 0.05
+DCF_STANDARD_GROWTH_RELAX_MAX_SERIES_CAP = 0.80
+DCF_STANDARD_MARGIN_RELAX_PREMIUM_TRIGGER = 0.10
+DCF_STANDARD_MARGIN_RELAX_PREMIUM_CAP = 0.20
+DCF_STANDARD_MARGIN_RELAX_SLOPE = 0.35
+DCF_STANDARD_MARGIN_RELAX_MAX = 0.025
+DCF_STANDARD_MARGIN_RELAX_MAX_YEAR1_GROWTH = 0.22
+DCF_STANDARD_CAPEX_RELAX_PREMIUM_TRIGGER = 0.10
+DCF_STANDARD_CAPEX_RELAX_PREMIUM_CAP = 0.20
+DCF_STANDARD_CAPEX_RELAX_SLOPE = 0.25
+DCF_STANDARD_CAPEX_RELAX_MAX = 0.015
+DCF_STANDARD_WC_RELAX_PREMIUM_TRIGGER = 0.10
+DCF_STANDARD_WC_RELAX_PREMIUM_CAP = 0.20
+DCF_STANDARD_WC_RELAX_SLOPE = 0.10
+DCF_STANDARD_WC_RELAX_MAX = 0.008
+DCF_STANDARD_RELAX_MIN_CONFIDENCE = 0.45
 DCF_GROWTH_CAPEX_RELAX_PREMIUM_TRIGGER = 0.35
 DCF_GROWTH_CAPEX_RELAX_PREMIUM_CAP = 0.25
 DCF_GROWTH_CAPEX_RELAX_SLOPE = 0.50
 DCF_GROWTH_CAPEX_RELAX_MAX = 0.04
+DCF_GROWTH_DEGRADED_HIGH_PREMIUM_TRIGGER = 0.40
+DCF_GROWTH_DEGRADED_HIGH_PREMIUM_CAPEX_TERMINAL_UPPER = 0.09
 DCF_GROWTH_WC_RELAX_PREMIUM_TRIGGER = 0.30
 DCF_GROWTH_WC_RELAX_PREMIUM_CAP = 0.25
 DCF_GROWTH_WC_RELAX_SLOPE = 0.20
@@ -132,6 +309,7 @@ DCF_GROWTH_MARGIN_RELAX_PREMIUM_TRIGGER = 0.35
 DCF_GROWTH_MARGIN_RELAX_PREMIUM_CAP = 0.25
 DCF_GROWTH_MARGIN_RELAX_SLOPE = 0.80
 DCF_GROWTH_MARGIN_RELAX_MAX = 0.06
+DCF_GROWTH_DEGRADED_HIGH_PREMIUM_MARGIN_UPPER_FLOOR = 0.44
 DCF_GROWTH_TERMINAL_NUDGE_ENABLED_ENV = (
     "FUNDAMENTAL_DCF_GROWTH_CONSENSUS_TERMINAL_NUDGE_ENABLED"
 )
@@ -140,8 +318,18 @@ DCF_GROWTH_TERMINAL_NUDGE_PREMIUM_CAP = 0.25
 DCF_GROWTH_TERMINAL_NUDGE_SLOPE = 0.08
 DCF_GROWTH_TERMINAL_NUDGE_MAX = 0.012
 DCF_GROWTH_TERMINAL_NUDGE_MAX_TERMINAL = 0.035
+DCF_GROWTH_DEGRADED_HIGH_PREMIUM_TERMINAL_NUDGE_MAX_TERMINAL = 0.040
 DCF_GROWTH_TERMINAL_NUDGE_MAX_YEAR1_GROWTH = 0.25
+DCF_GROWTH_DEGRADED_LOW_PREMIUM_TERMINAL_CAP = 0.020
+DCF_GROWTH_DEGRADED_LOW_PREMIUM_PREMIUM_THRESHOLD = 0.30
 DCF_GROWTH_MARGIN_RELAX_MAX_YEAR1_GROWTH = 0.25
+DCF_GROWTH_LOW_PREMIUM_REINVESTMENT_PREMIUM_THRESHOLD = 0.30
+DCF_GROWTH_LOW_PREMIUM_CAPEX_TERMINAL_LOWER_FLOOR = 0.08
+DCF_GROWTH_LOW_PREMIUM_WC_TERMINAL_LOWER_FLOOR = 0.00
+DCF_GROWTH_MISMATCH_LOW_PREMIUM_CAPEX_TERMINAL_LOWER_FLOOR = 0.12
+DCF_GROWTH_MISMATCH_LOW_PREMIUM_CAPEX_TERMINAL_UPPER_FLOOR = 0.16
+DCF_GROWTH_MISMATCH_LOW_PREMIUM_WC_TERMINAL_LOWER_FLOOR = 0.02
+DCF_GROWTH_MISMATCH_LOW_PREMIUM_WC_TERMINAL_UPPER_FLOOR = 0.07
 
 
 @dataclass(frozen=True)
@@ -166,6 +354,9 @@ def build_dcf_variant_payload(
     assumptions.append(
         f"model_variant={model_variant} routed via dedicated param builder"
     )
+    assumptions.append(
+        f"guardrail_profile_version={_GUARDRAIL_PROFILE_VERSION};variant={model_variant}"
+    )
     trace_inputs = dict(payload.trace_inputs)
     shares_source = payload.shares_source
     shares_path = (
@@ -180,6 +371,21 @@ def build_dcf_variant_payload(
         shares_path=shares_path,
     )
 
+    reinvestment_clamp_profile = load_reinvestment_clamp_profile()
+    if reinvestment_clamp_profile.degraded_reason is None:
+        assumptions.append(
+            "reinvestment_clamp_profile loaded "
+            f"(source={reinvestment_clamp_profile.profile_source}, "
+            f"version={reinvestment_clamp_profile.profile.profile_version})"
+        )
+    else:
+        assumptions.append(
+            "reinvestment_clamp_profile fallback "
+            f"(source={reinvestment_clamp_profile.profile_source}, "
+            f"version={reinvestment_clamp_profile.profile.profile_version}, "
+            f"reason={reinvestment_clamp_profile.degraded_reason})"
+        )
+
     guardrail_profile = _DCF_VARIANT_GUARDRAIL_PROFILES.get(model_variant)
     if guardrail_profile is not None:
         if model_variant == "dcf_growth":
@@ -190,6 +396,13 @@ def build_dcf_variant_payload(
                 market_snapshot=market_snapshot,
                 shares_path=shares_path,
             )
+            _apply_dcf_growth_degraded_low_premium_terminal_cap(
+                params=params,
+                assumptions=assumptions,
+                trace_inputs=trace_inputs,
+                market_snapshot=market_snapshot,
+            )
+        growth_guardrail_config = guardrail_profile.growth_config
         margin_guardrail_config = guardrail_profile.margin_config
         capex_guardrail_config = guardrail_profile.capex_config
         if model_variant == "dcf_growth":
@@ -206,13 +419,53 @@ def build_dcf_variant_payload(
             capex_guardrail_config, capex_relax_assumption = (
                 _resolve_dcf_growth_capex_guardrail_config(
                     config=guardrail_profile.capex_config,
+                    params=params,
                     market_snapshot=market_snapshot,
+                    shares_path=shares_path,
+                    reinvestment_clamp_profile=reinvestment_clamp_profile,
                 )
             )
             if capex_relax_assumption is not None:
                 assumptions.append(capex_relax_assumption)
             wc_guardrail_config, wc_relax_assumption = (
                 _resolve_dcf_growth_wc_guardrail_config(
+                    config=guardrail_profile.wc_config,
+                    params=params,
+                    market_snapshot=market_snapshot,
+                    shares_path=shares_path,
+                    reinvestment_clamp_profile=reinvestment_clamp_profile,
+                )
+            )
+            if wc_relax_assumption is not None:
+                assumptions.append(wc_relax_assumption)
+        elif model_variant == "dcf_standard":
+            growth_guardrail_config, growth_relax_assumption = (
+                _resolve_dcf_standard_growth_guardrail_config(
+                    config=guardrail_profile.growth_config,
+                    market_snapshot=market_snapshot,
+                )
+            )
+            if growth_relax_assumption is not None:
+                assumptions.append(growth_relax_assumption)
+            margin_guardrail_config, margin_relax_assumption = (
+                _resolve_dcf_standard_margin_guardrail_config(
+                    config=guardrail_profile.margin_config,
+                    params=params,
+                    market_snapshot=market_snapshot,
+                )
+            )
+            if margin_relax_assumption is not None:
+                assumptions.append(margin_relax_assumption)
+            capex_guardrail_config, capex_relax_assumption = (
+                _resolve_dcf_standard_capex_guardrail_config(
+                    config=guardrail_profile.capex_config,
+                    market_snapshot=market_snapshot,
+                )
+            )
+            if capex_relax_assumption is not None:
+                assumptions.append(capex_relax_assumption)
+            wc_guardrail_config, wc_relax_assumption = (
+                _resolve_dcf_standard_wc_guardrail_config(
                     config=guardrail_profile.wc_config,
                     market_snapshot=market_snapshot,
                 )
@@ -233,6 +486,7 @@ def build_dcf_variant_payload(
             assumptions=assumptions,
             trace_inputs=trace_inputs,
             profile=guardrail_profile,
+            config=growth_guardrail_config,
         )
         if guarded_growth_rates is not None:
             params["growth_rates"] = guarded_growth_rates
@@ -330,6 +584,7 @@ def _apply_variant_base_growth_guardrail(
     assumptions: list[str],
     trace_inputs: dict[str, object],
     profile: _VariantGuardrailProfile,
+    config: GrowthGuardrailConfig,
 ) -> list[float] | None:
     raw_growth = _coerce_numeric_series(params.get("growth_rates"))
     terminal_growth = _coerce_float(params.get("terminal_growth"))
@@ -339,7 +594,7 @@ def _apply_variant_base_growth_guardrail(
     result = apply_growth_guardrail(
         growth_rates=raw_growth,
         long_run_growth_target=terminal_growth,
-        config=profile.growth_config,
+        config=config,
     )
     if not result.hit:
         return None
@@ -390,7 +645,8 @@ def _apply_variant_terminal_growth_floor(
             f"effective_floor={effective_terminal_floor:.2%}, "
             f"target_consensus_applied={consensus_nudge.target_consensus_applied}, "
             f"source_count={consensus_nudge.source_count}, "
-            f"fallback_reason={consensus_nudge.fallback_reason or 'none'})"
+            f"fallback_reason={consensus_nudge.fallback_reason or 'none'}, "
+            f"quality_bucket={consensus_nudge.quality_bucket or 'unknown'})"
         )
 
     raw_terminal_growth = _coerce_float(params.get("terminal_growth"))
@@ -610,6 +866,7 @@ class _ConsensusTerminalNudge:
     target_consensus_applied: bool
     source_count: int
     fallback_reason: str | None
+    quality_bucket: str | None
 
 
 @dataclass(frozen=True)
@@ -619,6 +876,7 @@ class _ConsensusAnchorSignal:
     target_consensus_applied: bool
     source_count: int
     fallback_reason: str | None
+    quality_bucket: str | None
 
 
 def _resolve_consensus_terminal_nudge_enabled() -> bool:
@@ -668,8 +926,29 @@ def _resolve_consensus_anchor_signal(
         if isinstance(fallback_reason_raw, str) and fallback_reason_raw
         else None
     )
-
-    if target_consensus_applied and source_count >= 2:
+    quality_bucket_raw = market_snapshot.get("target_consensus_quality_bucket")
+    quality_bucket = (
+        quality_bucket_raw
+        if isinstance(quality_bucket_raw, str) and quality_bucket_raw
+        else None
+    )
+    confidence_weight_raw = market_snapshot.get("target_consensus_confidence_weight")
+    confidence_weight = (
+        float(confidence_weight_raw)
+        if isinstance(confidence_weight_raw, int | float)
+        else None
+    )
+    if confidence_weight is not None:
+        confidence = _clamp(confidence_weight, 0.0, 1.0)
+    elif quality_bucket == "high":
+        confidence = DCF_STANDARD_CONSENSUS_CONFIDENCE_FULL
+    elif quality_bucket == "medium":
+        confidence = DCF_STANDARD_CONSENSUS_CONFIDENCE_MULTI_SOURCE
+    elif quality_bucket == "low":
+        confidence = DCF_STANDARD_CONSENSUS_CONFIDENCE_SINGLE_SOURCE
+    elif quality_bucket == "degraded":
+        confidence = DCF_STANDARD_CONSENSUS_CONFIDENCE_FALLBACK
+    elif target_consensus_applied and source_count >= 2:
         confidence = DCF_STANDARD_CONSENSUS_CONFIDENCE_FULL
     elif source_count >= 2:
         confidence = DCF_STANDARD_CONSENSUS_CONFIDENCE_MULTI_SOURCE
@@ -678,12 +957,19 @@ def _resolve_consensus_anchor_signal(
     else:
         confidence = DCF_STANDARD_CONSENSUS_CONFIDENCE_SINGLE_SOURCE
 
+    if (
+        source_count <= 1
+        and confidence > DCF_STANDARD_CONSENSUS_CONFIDENCE_SINGLE_SOURCE
+    ):
+        confidence = DCF_STANDARD_CONSENSUS_CONFIDENCE_SINGLE_SOURCE
+
     return _ConsensusAnchorSignal(
         target_premium=premium,
         confidence=confidence,
         target_consensus_applied=target_consensus_applied,
         source_count=source_count,
         fallback_reason=fallback_reason,
+        quality_bucket=quality_bucket,
     )
 
 
@@ -745,8 +1031,17 @@ def _apply_dcf_growth_terminal_consensus_nudge(
     if nudge <= 0:
         return
 
+    degraded_high_premium = (
+        signal.target_premium > DCF_GROWTH_DEGRADED_HIGH_PREMIUM_TRIGGER
+        and (signal.fallback_reason is not None or signal.quality_bucket == "degraded")
+    )
+    max_terminal_cap = (
+        DCF_GROWTH_DEGRADED_HIGH_PREMIUM_TERMINAL_NUDGE_MAX_TERMINAL
+        if degraded_high_premium
+        else DCF_GROWTH_TERMINAL_NUDGE_MAX_TERMINAL
+    )
     adjusted_terminal = min(
-        DCF_GROWTH_TERMINAL_NUDGE_MAX_TERMINAL,
+        max_terminal_cap,
         raw_terminal + nudge,
     )
     if adjusted_terminal <= raw_terminal:
@@ -758,9 +1053,11 @@ def _apply_dcf_growth_terminal_consensus_nudge(
         f"(premium={signal.target_premium:.2%}, confidence={signal.confidence:.2f}, "
         f"nudge={nudge:.4f}, raw_terminal={raw_terminal:.4f}, "
         f"adjusted_terminal={adjusted_terminal:.4f}, "
+        f"max_terminal_cap={max_terminal_cap:.4f}, "
         f"target_consensus_applied={signal.target_consensus_applied}, "
         f"source_count={signal.source_count}, "
-        f"fallback_reason={signal.fallback_reason or 'none'})"
+        f"fallback_reason={signal.fallback_reason or 'none'}, "
+        f"quality_bucket={signal.quality_bucket or 'unknown'})"
     )
 
     trace_raw = trace_inputs.get("terminal_growth")
@@ -783,6 +1080,7 @@ def _resolve_consensus_terminal_nudge(
             target_consensus_applied=False,
             source_count=0,
             fallback_reason=None,
+            quality_bucket=None,
         )
     if not _resolve_consensus_terminal_nudge_enabled():
         return _ConsensusTerminalNudge(
@@ -792,6 +1090,7 @@ def _resolve_consensus_terminal_nudge(
             target_consensus_applied=False,
             source_count=0,
             fallback_reason=None,
+            quality_bucket=None,
         )
     signal = _resolve_consensus_anchor_signal(market_snapshot=market_snapshot)
     if signal is None:
@@ -802,6 +1101,7 @@ def _resolve_consensus_terminal_nudge(
             target_consensus_applied=False,
             source_count=0,
             fallback_reason=None,
+            quality_bucket=None,
         )
 
     premium = signal.target_premium
@@ -813,6 +1113,7 @@ def _resolve_consensus_terminal_nudge(
             target_consensus_applied=False,
             source_count=0,
             fallback_reason=None,
+            quality_bucket=None,
         )
     confidence = signal.confidence
 
@@ -832,16 +1133,144 @@ def _resolve_consensus_terminal_nudge(
         target_consensus_applied=signal.target_consensus_applied,
         source_count=signal.source_count,
         fallback_reason=signal.fallback_reason,
+        quality_bucket=signal.quality_bucket,
     )
+
+
+def _apply_dcf_growth_degraded_low_premium_terminal_cap(
+    *,
+    params: dict[str, object],
+    assumptions: list[str],
+    trace_inputs: dict[str, object],
+    market_snapshot: Mapping[str, object] | None,
+) -> None:
+    signal = _resolve_consensus_anchor_signal(market_snapshot=market_snapshot)
+    if signal is None:
+        return
+    if signal.target_premium > DCF_GROWTH_DEGRADED_LOW_PREMIUM_PREMIUM_THRESHOLD:
+        return
+    is_degraded = (
+        signal.fallback_reason is not None
+        or signal.quality_bucket == "degraded"
+        or (not signal.target_consensus_applied and signal.source_count <= 1)
+    )
+    if not is_degraded:
+        return
+    raw_terminal = _coerce_float(params.get("terminal_growth"))
+    if raw_terminal is None:
+        return
+    capped_terminal = min(raw_terminal, DCF_GROWTH_DEGRADED_LOW_PREMIUM_TERMINAL_CAP)
+    if capped_terminal >= raw_terminal:
+        return
+
+    params["terminal_growth"] = capped_terminal
+    assumptions.append(
+        "dcf_growth_degraded_low_premium_terminal_cap applied "
+        f"(target_premium={signal.target_premium:.2%}, "
+        f"raw_terminal={raw_terminal:.4f}, capped_terminal={capped_terminal:.4f}, "
+        f"fallback_reason={signal.fallback_reason or 'none'}, "
+        f"quality_bucket={signal.quality_bucket or 'unknown'}, "
+        f"source_count={signal.source_count})"
+    )
+
+    trace_raw = trace_inputs.get("terminal_growth")
+    if isinstance(trace_raw, TraceableField):
+        trace_inputs["terminal_growth"] = trace_raw.model_copy(
+            update={"value": capped_terminal}
+        )
 
 
 def _resolve_dcf_growth_capex_guardrail_config(
     *,
     config: ReinvestmentGuardrailConfig,
+    params: Mapping[str, object],
     market_snapshot: Mapping[str, object] | None,
+    shares_path: Mapping[str, object] | None,
+    reinvestment_clamp_profile: ReinvestmentClampProfileLoadResult,
 ) -> tuple[ReinvestmentGuardrailConfig, str | None]:
     signal = _resolve_consensus_anchor_signal(market_snapshot=market_snapshot)
     if signal is None:
+        return config, None
+    scope_mismatch_detected = _is_shares_scope_mismatch_detected(shares_path)
+    if signal.target_premium <= DCF_GROWTH_LOW_PREMIUM_REINVESTMENT_PREMIUM_THRESHOLD:
+        adjusted_lower = max(
+            config.terminal_lower, DCF_GROWTH_LOW_PREMIUM_CAPEX_TERMINAL_LOWER_FLOOR
+        )
+        base_adjusted_lower = adjusted_lower
+        adjusted_upper = config.terminal_upper
+        if scope_mismatch_detected:
+            adjusted_lower = max(
+                adjusted_lower,
+                DCF_GROWTH_MISMATCH_LOW_PREMIUM_CAPEX_TERMINAL_LOWER_FLOOR,
+            )
+            adjusted_upper = max(
+                adjusted_upper,
+                DCF_GROWTH_MISMATCH_LOW_PREMIUM_CAPEX_TERMINAL_UPPER_FLOOR,
+            )
+        severe_floor_applied = False
+        severe_floor_target: float | None = None
+        if _should_apply_severe_harmonized_mismatch_reinvestment_floor(
+            signal=signal,
+            shares_path=shares_path,
+            reinvestment_clamp_profile=reinvestment_clamp_profile,
+        ):
+            capex_year1 = _resolve_series_year1(params=params, field="capex_rates")
+            if capex_year1 is not None:
+                profile = reinvestment_clamp_profile.profile.dcf_growth
+                severe_floor_target = max(
+                    profile.severe_mismatch_capex_terminal_lower_min,
+                    capex_year1
+                    * profile.severe_mismatch_capex_terminal_lower_year1_ratio,
+                )
+                if severe_floor_target > adjusted_lower:
+                    severe_floor_applied = True
+                    adjusted_lower = severe_floor_target
+                    adjusted_upper = max(adjusted_upper, adjusted_lower + 0.005)
+        if (
+            adjusted_lower > config.terminal_lower
+            or adjusted_upper > config.terminal_upper
+        ):
+            adjusted_config = ReinvestmentGuardrailConfig(
+                min_series_rate=config.min_series_rate,
+                max_series_rate=config.max_series_rate,
+                terminal_lower=adjusted_lower,
+                terminal_upper=adjusted_upper,
+                final_fade_years=config.final_fade_years,
+            )
+            assumption_parts = [
+                "dcf_growth_capex_low_premium_conservative_floor applied "
+                f"(premium={signal.target_premium:.2%}, "
+                f"terminal_lower_raw={config.terminal_lower:.4f}, "
+                f"terminal_lower_adjusted={adjusted_lower:.4f}, "
+                f"target_consensus_applied={signal.target_consensus_applied}, "
+                f"source_count={signal.source_count}, "
+                f"fallback_reason={signal.fallback_reason or 'none'}, "
+                f"quality_bucket={signal.quality_bucket or 'unknown'})"
+            ]
+            if adjusted_upper > config.terminal_upper:
+                assumption_parts.append(
+                    "dcf_growth_capex_shares_mismatch_conservative_upper applied "
+                    f"(premium={signal.target_premium:.2%}, "
+                    f"terminal_upper_raw={config.terminal_upper:.4f}, "
+                    f"terminal_upper_adjusted={adjusted_upper:.4f})"
+                )
+            if adjusted_lower > base_adjusted_lower:
+                assumption_parts.append(
+                    "dcf_growth_capex_shares_mismatch_conservative_floor applied "
+                    f"(premium={signal.target_premium:.2%}, "
+                    f"terminal_lower_raw={base_adjusted_lower:.4f}, "
+                    f"terminal_lower_adjusted={adjusted_lower:.4f})"
+                )
+            if severe_floor_applied and severe_floor_target is not None:
+                assumption_parts.append(
+                    "dcf_growth_capex_harmonized_mismatch_severe_floor applied "
+                    f"(premium={signal.target_premium:.2%}, "
+                    f"terminal_lower_adjusted={severe_floor_target:.4f}, "
+                    f"profile_version={reinvestment_clamp_profile.profile.profile_version}, "
+                    f"rule=max({reinvestment_clamp_profile.profile.dcf_growth.severe_mismatch_capex_terminal_lower_min:.4f}, "
+                    f"year1*{reinvestment_clamp_profile.profile.dcf_growth.severe_mismatch_capex_terminal_lower_year1_ratio:.2f}))"
+                )
+            return adjusted_config, "; ".join(assumption_parts)
         return config, None
     if signal.target_premium <= DCF_GROWTH_CAPEX_RELAX_PREMIUM_TRIGGER:
         return config, None
@@ -861,6 +1290,33 @@ def _resolve_dcf_growth_capex_guardrail_config(
     adjusted_upper = max(
         config.terminal_lower + 0.005, config.terminal_upper - relax_delta
     )
+    capex_assumption = (
+        "dcf_growth_capex_consensus_relaxation applied "
+        f"(premium={signal.target_premium:.2%}, confidence={signal.confidence:.2f}, "
+        f"terminal_upper_raw={config.terminal_upper:.4f}, "
+        f"terminal_upper_adjusted={adjusted_upper:.4f}, "
+        f"target_consensus_applied={signal.target_consensus_applied}, "
+        f"source_count={signal.source_count}, "
+        f"fallback_reason={signal.fallback_reason or 'none'}, "
+        f"quality_bucket={signal.quality_bucket or 'unknown'})"
+    )
+
+    degraded_high_premium = (
+        signal.target_premium > DCF_GROWTH_DEGRADED_HIGH_PREMIUM_TRIGGER
+        and (signal.fallback_reason is not None or signal.quality_bucket == "degraded")
+    )
+    if (
+        degraded_high_premium
+        and adjusted_upper > DCF_GROWTH_DEGRADED_HIGH_PREMIUM_CAPEX_TERMINAL_UPPER
+    ):
+        adjusted_upper = DCF_GROWTH_DEGRADED_HIGH_PREMIUM_CAPEX_TERMINAL_UPPER
+        capex_assumption = (
+            f"{capex_assumption}; "
+            "dcf_growth_capex_degraded_high_premium_cap applied "
+            f"(premium={signal.target_premium:.2%}, "
+            f"capped_terminal_upper={adjusted_upper:.4f})"
+        )
+
     if adjusted_upper >= config.terminal_upper:
         return config, None
     adjusted_config = ReinvestmentGuardrailConfig(
@@ -870,16 +1326,7 @@ def _resolve_dcf_growth_capex_guardrail_config(
         terminal_upper=adjusted_upper,
         final_fade_years=config.final_fade_years,
     )
-    return (
-        adjusted_config,
-        "dcf_growth_capex_consensus_relaxation applied "
-        f"(premium={signal.target_premium:.2%}, confidence={signal.confidence:.2f}, "
-        f"terminal_upper_raw={config.terminal_upper:.4f}, "
-        f"terminal_upper_adjusted={adjusted_upper:.4f}, "
-        f"target_consensus_applied={signal.target_consensus_applied}, "
-        f"source_count={signal.source_count}, "
-        f"fallback_reason={signal.fallback_reason or 'none'})",
-    )
+    return adjusted_config, capex_assumption
 
 
 def _resolve_dcf_growth_margin_guardrail_config(
@@ -941,6 +1388,35 @@ def _resolve_dcf_growth_margin_guardrail_config(
     if adjusted_upper <= config.normalized_margin_lower:
         return config, None
 
+    degraded_high_premium = (
+        signal.target_premium > DCF_GROWTH_DEGRADED_HIGH_PREMIUM_TRIGGER
+        and (signal.fallback_reason is not None or signal.quality_bucket == "degraded")
+    )
+    margin_assumption = (
+        "dcf_growth_margin_consensus_relaxation applied "
+        f"(premium={signal.target_premium:.2%}, confidence={signal.confidence:.2f}, "
+        f"normalized_upper_raw={config.normalized_margin_upper:.4f}, "
+        f"normalized_upper_adjusted={adjusted_upper:.4f}, "
+        f"target_consensus_applied={signal.target_consensus_applied}, "
+        f"source_count={signal.source_count}, "
+        f"fallback_reason={signal.fallback_reason or 'none'}, "
+        f"quality_bucket={signal.quality_bucket or 'unknown'})"
+    )
+    if (
+        degraded_high_premium
+        and adjusted_upper < DCF_GROWTH_DEGRADED_HIGH_PREMIUM_MARGIN_UPPER_FLOOR
+    ):
+        adjusted_upper = min(
+            config.max_series_margin,
+            DCF_GROWTH_DEGRADED_HIGH_PREMIUM_MARGIN_UPPER_FLOOR,
+        )
+        margin_assumption = (
+            f"{margin_assumption}; "
+            "dcf_growth_margin_degraded_high_premium_floor applied "
+            f"(premium={signal.target_premium:.2%}, "
+            f"adjusted_upper={adjusted_upper:.4f})"
+        )
+
     adjusted_config = MarginGuardrailConfig(
         min_series_margin=config.min_series_margin,
         max_series_margin=config.max_series_margin,
@@ -948,25 +1424,99 @@ def _resolve_dcf_growth_margin_guardrail_config(
         normalized_margin_upper=adjusted_upper,
         final_fade_years=config.final_fade_years,
     )
-    return (
-        adjusted_config,
-        "dcf_growth_margin_consensus_relaxation applied "
-        f"(premium={signal.target_premium:.2%}, confidence={signal.confidence:.2f}, "
-        f"normalized_upper_raw={config.normalized_margin_upper:.4f}, "
-        f"normalized_upper_adjusted={adjusted_upper:.4f}, "
-        f"target_consensus_applied={signal.target_consensus_applied}, "
-        f"source_count={signal.source_count}, "
-        f"fallback_reason={signal.fallback_reason or 'none'})",
-    )
+    return adjusted_config, margin_assumption
 
 
 def _resolve_dcf_growth_wc_guardrail_config(
     *,
     config: ReinvestmentGuardrailConfig,
+    params: Mapping[str, object],
     market_snapshot: Mapping[str, object] | None,
+    shares_path: Mapping[str, object] | None,
+    reinvestment_clamp_profile: ReinvestmentClampProfileLoadResult,
 ) -> tuple[ReinvestmentGuardrailConfig, str | None]:
     signal = _resolve_consensus_anchor_signal(market_snapshot=market_snapshot)
     if signal is None:
+        return config, None
+    scope_mismatch_detected = _is_shares_scope_mismatch_detected(shares_path)
+    if signal.target_premium <= DCF_GROWTH_LOW_PREMIUM_REINVESTMENT_PREMIUM_THRESHOLD:
+        adjusted_lower = max(
+            config.terminal_lower, DCF_GROWTH_LOW_PREMIUM_WC_TERMINAL_LOWER_FLOOR
+        )
+        base_adjusted_lower = adjusted_lower
+        adjusted_upper = config.terminal_upper
+        if scope_mismatch_detected:
+            adjusted_lower = max(
+                adjusted_lower,
+                DCF_GROWTH_MISMATCH_LOW_PREMIUM_WC_TERMINAL_LOWER_FLOOR,
+            )
+            adjusted_upper = max(
+                adjusted_upper,
+                DCF_GROWTH_MISMATCH_LOW_PREMIUM_WC_TERMINAL_UPPER_FLOOR,
+            )
+        severe_floor_applied = False
+        severe_floor_target: float | None = None
+        if _should_apply_severe_harmonized_mismatch_reinvestment_floor(
+            signal=signal,
+            shares_path=shares_path,
+            reinvestment_clamp_profile=reinvestment_clamp_profile,
+        ):
+            wc_year1 = _resolve_series_year1(params=params, field="wc_rates")
+            if wc_year1 is not None:
+                profile = reinvestment_clamp_profile.profile.dcf_growth
+                severe_floor_target = max(
+                    profile.severe_mismatch_wc_terminal_lower_min,
+                    wc_year1 * profile.severe_mismatch_wc_terminal_lower_year1_ratio,
+                )
+                if severe_floor_target > adjusted_lower:
+                    severe_floor_applied = True
+                    adjusted_lower = severe_floor_target
+                    adjusted_upper = max(adjusted_upper, adjusted_lower + 0.005)
+        if (
+            adjusted_lower > config.terminal_lower
+            or adjusted_upper > config.terminal_upper
+        ):
+            adjusted_config = ReinvestmentGuardrailConfig(
+                min_series_rate=config.min_series_rate,
+                max_series_rate=config.max_series_rate,
+                terminal_lower=adjusted_lower,
+                terminal_upper=adjusted_upper,
+                final_fade_years=config.final_fade_years,
+            )
+            assumption_parts = [
+                "dcf_growth_wc_low_premium_conservative_floor applied "
+                f"(premium={signal.target_premium:.2%}, "
+                f"terminal_lower_raw={config.terminal_lower:.4f}, "
+                f"terminal_lower_adjusted={adjusted_lower:.4f}, "
+                f"target_consensus_applied={signal.target_consensus_applied}, "
+                f"source_count={signal.source_count}, "
+                f"fallback_reason={signal.fallback_reason or 'none'}, "
+                f"quality_bucket={signal.quality_bucket or 'unknown'})"
+            ]
+            if adjusted_upper > config.terminal_upper:
+                assumption_parts.append(
+                    "dcf_growth_wc_shares_mismatch_conservative_upper applied "
+                    f"(premium={signal.target_premium:.2%}, "
+                    f"terminal_upper_raw={config.terminal_upper:.4f}, "
+                    f"terminal_upper_adjusted={adjusted_upper:.4f})"
+                )
+            if adjusted_lower > base_adjusted_lower:
+                assumption_parts.append(
+                    "dcf_growth_wc_shares_mismatch_conservative_floor applied "
+                    f"(premium={signal.target_premium:.2%}, "
+                    f"terminal_lower_raw={base_adjusted_lower:.4f}, "
+                    f"terminal_lower_adjusted={adjusted_lower:.4f})"
+                )
+            if severe_floor_applied and severe_floor_target is not None:
+                assumption_parts.append(
+                    "dcf_growth_wc_harmonized_mismatch_severe_floor applied "
+                    f"(premium={signal.target_premium:.2%}, "
+                    f"terminal_lower_adjusted={severe_floor_target:.4f}, "
+                    f"profile_version={reinvestment_clamp_profile.profile.profile_version}, "
+                    f"rule=max({reinvestment_clamp_profile.profile.dcf_growth.severe_mismatch_wc_terminal_lower_min:.4f}, "
+                    f"year1*{reinvestment_clamp_profile.profile.dcf_growth.severe_mismatch_wc_terminal_lower_year1_ratio:.2f}))"
+                )
+            return adjusted_config, "; ".join(assumption_parts)
         return config, None
     if signal.target_premium <= DCF_GROWTH_WC_RELAX_PREMIUM_TRIGGER:
         return config, None
@@ -1002,9 +1552,304 @@ def _resolve_dcf_growth_wc_guardrail_config(
             f"terminal_lower_adjusted={adjusted_lower:.4f}, "
             f"target_consensus_applied={signal.target_consensus_applied}, "
             f"source_count={signal.source_count}, "
-            f"fallback_reason={signal.fallback_reason or 'none'})",
+            f"fallback_reason={signal.fallback_reason or 'none'}, "
+            f"quality_bucket={signal.quality_bucket or 'unknown'})",
         )
     return config, None
+
+
+def _is_shares_scope_mismatch_detected(
+    shares_path: Mapping[str, object] | None,
+) -> bool:
+    if not isinstance(shares_path, Mapping):
+        return False
+    raw_value = shares_path.get("scope_mismatch_detected")
+    return isinstance(raw_value, bool) and raw_value
+
+
+def _resolve_series_year1(
+    *,
+    params: Mapping[str, object],
+    field: str,
+) -> float | None:
+    series = _coerce_numeric_series(params.get(field))
+    if not series:
+        return None
+    return series[0]
+
+
+def _should_apply_severe_harmonized_mismatch_reinvestment_floor(
+    *,
+    signal: _ConsensusAnchorSignal,
+    shares_path: Mapping[str, object] | None,
+    reinvestment_clamp_profile: ReinvestmentClampProfileLoadResult,
+) -> bool:
+    if not _is_shares_scope_mismatch_detected(shares_path):
+        return False
+    if not isinstance(shares_path, Mapping):
+        return False
+    resolution_raw = shares_path.get("scope_policy_resolution")
+    if resolution_raw != "harmonized_market_class":
+        return False
+    mismatch_ratio = _coerce_float(shares_path.get("scope_mismatch_ratio"))
+    if (
+        mismatch_ratio is None
+        or mismatch_ratio
+        < reinvestment_clamp_profile.profile.dcf_growth.severe_scope_mismatch_ratio_threshold
+    ):
+        return False
+    if signal.target_premium > DCF_GROWTH_LOW_PREMIUM_REINVESTMENT_PREMIUM_THRESHOLD:
+        return False
+    if signal.fallback_reason is None and signal.quality_bucket != "degraded":
+        return False
+    return True
+
+
+def _supports_dcf_standard_consensus_relaxation(
+    signal: _ConsensusAnchorSignal | None,
+) -> bool:
+    if signal is None:
+        return False
+    if signal.confidence < DCF_STANDARD_RELAX_MIN_CONFIDENCE:
+        return False
+    return True
+
+
+def _resolve_dcf_standard_growth_guardrail_config(
+    *,
+    config: GrowthGuardrailConfig,
+    market_snapshot: Mapping[str, object] | None,
+) -> tuple[GrowthGuardrailConfig, str | None]:
+    signal = _resolve_consensus_anchor_signal(market_snapshot=market_snapshot)
+    if not _supports_dcf_standard_consensus_relaxation(signal):
+        return config, None
+    assert signal is not None
+    if signal.target_premium <= DCF_STANDARD_GROWTH_RELAX_PREMIUM_TRIGGER:
+        return config, None
+
+    premium_signal = _clamp(
+        signal.target_premium - DCF_STANDARD_GROWTH_RELAX_PREMIUM_TRIGGER,
+        0.0,
+        DCF_STANDARD_GROWTH_RELAX_PREMIUM_CAP,
+    )
+    relax_delta = min(
+        DCF_STANDARD_GROWTH_RELAX_MAX,
+        premium_signal * DCF_STANDARD_GROWTH_RELAX_SLOPE * signal.confidence,
+    )
+    if relax_delta <= 0:
+        return config, None
+
+    adjusted_max_year1 = min(
+        config.max_series_growth,
+        config.max_year1_growth + relax_delta,
+    )
+    adjusted_max_series = min(
+        DCF_STANDARD_GROWTH_RELAX_MAX_SERIES_CAP,
+        config.max_series_growth + relax_delta,
+    )
+    adjusted_max_terminal = min(
+        0.055,
+        config.max_terminal_growth + (relax_delta * 0.30),
+    )
+
+    if (
+        adjusted_max_year1 <= config.max_year1_growth
+        and adjusted_max_series <= config.max_series_growth
+        and adjusted_max_terminal <= config.max_terminal_growth
+    ):
+        return config, None
+
+    adjusted_config = GrowthGuardrailConfig(
+        max_year1_growth=adjusted_max_year1,
+        max_series_growth=adjusted_max_series,
+        min_series_growth=config.min_series_growth,
+        min_terminal_growth=config.min_terminal_growth,
+        max_terminal_growth=adjusted_max_terminal,
+        final_fade_years=config.final_fade_years,
+        enforce_nonincreasing_trend=config.enforce_nonincreasing_trend,
+    )
+    return (
+        adjusted_config,
+        "dcf_standard_growth_consensus_relaxation applied "
+        f"(premium={signal.target_premium:.2%}, confidence={signal.confidence:.2f}, "
+        f"max_year1_raw={config.max_year1_growth:.4f}, "
+        f"max_year1_adjusted={adjusted_max_year1:.4f}, "
+        f"max_series_raw={config.max_series_growth:.4f}, "
+        f"max_series_adjusted={adjusted_max_series:.4f}, "
+        f"max_terminal_raw={config.max_terminal_growth:.4f}, "
+        f"max_terminal_adjusted={adjusted_max_terminal:.4f}, "
+        f"target_consensus_applied={signal.target_consensus_applied}, "
+        f"source_count={signal.source_count}, "
+        f"fallback_reason={signal.fallback_reason or 'none'}, "
+        f"quality_bucket={signal.quality_bucket or 'unknown'})",
+    )
+
+
+def _resolve_dcf_standard_margin_guardrail_config(
+    *,
+    config: MarginGuardrailConfig,
+    params: Mapping[str, object],
+    market_snapshot: Mapping[str, object] | None,
+) -> tuple[MarginGuardrailConfig, str | None]:
+    growth_rates = _coerce_numeric_series(params.get("growth_rates"))
+    year1_growth = growth_rates[0] if growth_rates else None
+    if (
+        isinstance(year1_growth, float)
+        and year1_growth > DCF_STANDARD_MARGIN_RELAX_MAX_YEAR1_GROWTH
+    ):
+        return (
+            config,
+            "dcf_standard_margin_consensus_relaxation skipped "
+            f"(year1_growth={year1_growth:.4f} > "
+            f"threshold={DCF_STANDARD_MARGIN_RELAX_MAX_YEAR1_GROWTH:.4f})",
+        )
+
+    signal = _resolve_consensus_anchor_signal(market_snapshot=market_snapshot)
+    if not _supports_dcf_standard_consensus_relaxation(signal):
+        return config, None
+    assert signal is not None
+    if signal.target_premium <= DCF_STANDARD_MARGIN_RELAX_PREMIUM_TRIGGER:
+        return config, None
+
+    premium_signal = _clamp(
+        signal.target_premium - DCF_STANDARD_MARGIN_RELAX_PREMIUM_TRIGGER,
+        0.0,
+        DCF_STANDARD_MARGIN_RELAX_PREMIUM_CAP,
+    )
+    relax_delta = min(
+        DCF_STANDARD_MARGIN_RELAX_MAX,
+        premium_signal * DCF_STANDARD_MARGIN_RELAX_SLOPE * signal.confidence,
+    )
+    if relax_delta <= 0:
+        return config, None
+
+    adjusted_upper = min(
+        config.max_series_margin,
+        config.normalized_margin_upper + relax_delta,
+    )
+    if adjusted_upper <= config.normalized_margin_upper:
+        return config, None
+
+    adjusted_config = MarginGuardrailConfig(
+        min_series_margin=config.min_series_margin,
+        max_series_margin=config.max_series_margin,
+        normalized_margin_lower=config.normalized_margin_lower,
+        normalized_margin_upper=adjusted_upper,
+        final_fade_years=config.final_fade_years,
+    )
+    return (
+        adjusted_config,
+        "dcf_standard_margin_consensus_relaxation applied "
+        f"(premium={signal.target_premium:.2%}, confidence={signal.confidence:.2f}, "
+        f"normalized_upper_raw={config.normalized_margin_upper:.4f}, "
+        f"normalized_upper_adjusted={adjusted_upper:.4f}, "
+        f"target_consensus_applied={signal.target_consensus_applied}, "
+        f"source_count={signal.source_count}, "
+        f"fallback_reason={signal.fallback_reason or 'none'}, "
+        f"quality_bucket={signal.quality_bucket or 'unknown'})",
+    )
+
+
+def _resolve_dcf_standard_capex_guardrail_config(
+    *,
+    config: ReinvestmentGuardrailConfig,
+    market_snapshot: Mapping[str, object] | None,
+) -> tuple[ReinvestmentGuardrailConfig, str | None]:
+    signal = _resolve_consensus_anchor_signal(market_snapshot=market_snapshot)
+    if not _supports_dcf_standard_consensus_relaxation(signal):
+        return config, None
+    assert signal is not None
+    if signal.target_premium <= DCF_STANDARD_CAPEX_RELAX_PREMIUM_TRIGGER:
+        return config, None
+
+    premium_signal = _clamp(
+        signal.target_premium - DCF_STANDARD_CAPEX_RELAX_PREMIUM_TRIGGER,
+        0.0,
+        DCF_STANDARD_CAPEX_RELAX_PREMIUM_CAP,
+    )
+    relax_delta = min(
+        DCF_STANDARD_CAPEX_RELAX_MAX,
+        premium_signal * DCF_STANDARD_CAPEX_RELAX_SLOPE * signal.confidence,
+    )
+    if relax_delta <= 0:
+        return config, None
+
+    adjusted_upper = max(
+        config.terminal_lower + 0.005,
+        config.terminal_upper - relax_delta,
+    )
+    if adjusted_upper >= config.terminal_upper:
+        return config, None
+
+    adjusted_config = ReinvestmentGuardrailConfig(
+        min_series_rate=config.min_series_rate,
+        max_series_rate=config.max_series_rate,
+        terminal_lower=config.terminal_lower,
+        terminal_upper=adjusted_upper,
+        final_fade_years=config.final_fade_years,
+    )
+    return (
+        adjusted_config,
+        "dcf_standard_capex_consensus_relaxation applied "
+        f"(premium={signal.target_premium:.2%}, confidence={signal.confidence:.2f}, "
+        f"terminal_upper_raw={config.terminal_upper:.4f}, "
+        f"terminal_upper_adjusted={adjusted_upper:.4f}, "
+        f"target_consensus_applied={signal.target_consensus_applied}, "
+        f"source_count={signal.source_count}, "
+        f"fallback_reason={signal.fallback_reason or 'none'}, "
+        f"quality_bucket={signal.quality_bucket or 'unknown'})",
+    )
+
+
+def _resolve_dcf_standard_wc_guardrail_config(
+    *,
+    config: ReinvestmentGuardrailConfig,
+    market_snapshot: Mapping[str, object] | None,
+) -> tuple[ReinvestmentGuardrailConfig, str | None]:
+    signal = _resolve_consensus_anchor_signal(market_snapshot=market_snapshot)
+    if not _supports_dcf_standard_consensus_relaxation(signal):
+        return config, None
+    assert signal is not None
+    if signal.target_premium <= DCF_STANDARD_WC_RELAX_PREMIUM_TRIGGER:
+        return config, None
+
+    premium_signal = _clamp(
+        signal.target_premium - DCF_STANDARD_WC_RELAX_PREMIUM_TRIGGER,
+        0.0,
+        DCF_STANDARD_WC_RELAX_PREMIUM_CAP,
+    )
+    relax_delta = min(
+        DCF_STANDARD_WC_RELAX_MAX,
+        premium_signal * DCF_STANDARD_WC_RELAX_SLOPE * signal.confidence,
+    )
+    if relax_delta <= 0:
+        return config, None
+
+    adjusted_lower = min(
+        config.terminal_upper - 0.005,
+        config.terminal_lower - relax_delta,
+    )
+    if adjusted_lower >= config.terminal_lower:
+        return config, None
+
+    adjusted_config = ReinvestmentGuardrailConfig(
+        min_series_rate=config.min_series_rate,
+        max_series_rate=config.max_series_rate,
+        terminal_lower=adjusted_lower,
+        terminal_upper=config.terminal_upper,
+        final_fade_years=config.final_fade_years,
+    )
+    return (
+        adjusted_config,
+        "dcf_standard_wc_consensus_relaxation applied "
+        f"(premium={signal.target_premium:.2%}, confidence={signal.confidence:.2f}, "
+        f"terminal_lower_raw={config.terminal_lower:.4f}, "
+        f"terminal_lower_adjusted={adjusted_lower:.4f}, "
+        f"target_consensus_applied={signal.target_consensus_applied}, "
+        f"source_count={signal.source_count}, "
+        f"fallback_reason={signal.fallback_reason or 'none'}, "
+        f"quality_bucket={signal.quality_bucket or 'unknown'})",
+    )
 
 
 def _resolve_shares_scope_policy_mode() -> str:

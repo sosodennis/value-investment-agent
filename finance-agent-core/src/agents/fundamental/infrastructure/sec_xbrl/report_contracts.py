@@ -371,4 +371,4 @@ class FinancialReport(BaseModel):
     extension_type: Literal["Industrial", "FinancialServices", "RealEstate"] | None = (
         None
     )
-    filing_metadata: dict[str, str | int | None] | None = None
+    filing_metadata: dict[str, object] | None = None

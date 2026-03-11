@@ -104,6 +104,12 @@ def build_income_cashflow_config_bundle(
             "duration",
             usd_units,
         ),
+        build_config(
+            "us-gaap:IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments",
+            is_statement_tokens,
+            "duration",
+            usd_units,
+        ),
     ]
 
     interest_expense = resolve_configs("interest_expense") or [

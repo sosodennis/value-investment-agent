@@ -26,6 +26,8 @@ BASE_MARGIN_TARGET_CEILING = 0.42
 BASE_MARGIN_SERIES_CEILING = 0.55
 HIGH_MARGIN_TARGET_CEILING = 0.60
 HIGH_MARGIN_SERIES_CEILING = 0.70
+SHORT_HORIZON_YEARS = 5
+SHORT_HORIZON_TERMINAL_BRIDGE_SPREAD = 0.01
 
 
 def _growth_convergence_start(length: int) -> int:
@@ -37,8 +39,9 @@ def _growth_convergence_start(length: int) -> int:
 def _late_growth_rate_convergence_start(length: int) -> int:
     if length <= 3:
         return 1
-    # Keep the final 3 projection years as the growth fade window.
-    return max(1, length - 4)
+    # For short horizons, avoid over-compressing early growth.
+    # Keep at least the first 4 years before fading to terminal.
+    return max(3, length - 4)
 
 
 def converge_growth_rates_growth(
@@ -47,6 +50,10 @@ def converge_growth_rates_growth(
     if not growth_rates:
         raise ValueError("growth_rates cannot be empty")
     target = clamp(terminal_growth, -0.005, 0.05)
+    raw_last = clamp(growth_rates[-1], -0.50, 1.20)
+    if len(growth_rates) <= SHORT_HORIZON_YEARS and raw_last > target:
+        bridge_target = min(raw_last, target + SHORT_HORIZON_TERMINAL_BRIDGE_SPREAD)
+        target = max(target, bridge_target)
     return converge_series(
         growth_rates,
         target=target,

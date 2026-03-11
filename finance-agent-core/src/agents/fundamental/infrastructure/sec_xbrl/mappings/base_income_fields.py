@@ -98,6 +98,30 @@ def register_base_income_fields(registry: XbrlMappingRegistry) -> None:
                     period_type="duration",
                     unit_whitelist=USD_UNITS,
                 ),
+                SearchType.CONSOLIDATED(
+                    "us-gaap:IncomeBeforeIncomeTaxes",
+                    statement_types=IS_STATEMENT_TOKENS,
+                    period_type="duration",
+                    unit_whitelist=USD_UNITS,
+                ),
+                SearchType.CONSOLIDATED(
+                    "us-gaap:IncomeLossBeforeIncomeTaxesMinorityInterest",
+                    statement_types=IS_STATEMENT_TOKENS,
+                    period_type="duration",
+                    unit_whitelist=USD_UNITS,
+                ),
+                SearchType.CONSOLIDATED(
+                    "us-gaap:IncomeLossBeforeIncomeTaxesAndExtraordinaryItems",
+                    statement_types=IS_STATEMENT_TOKENS,
+                    period_type="duration",
+                    unit_whitelist=USD_UNITS,
+                ),
+                SearchType.CONSOLIDATED(
+                    "us-gaap:IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments",
+                    statement_types=IS_STATEMENT_TOKENS,
+                    period_type="duration",
+                    unit_whitelist=USD_UNITS,
+                ),
             ],
         ),
     )

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Protocol, TypedDict
 
 from src.shared.kernel.types import JSONObject
 
@@ -23,8 +23,17 @@ class IFundamentalReportRepo(Protocol):
     ) -> tuple[list[JSONObject], list[JSONObject] | None] | None: ...
 
 
+class FundamentalFinancialPayload(TypedDict):
+    financial_reports: list[JSONObject]
+    forward_signals: list[JSONObject] | None
+    diagnostics: JSONObject | None
+    quality_gates: JSONObject | None
+
+
 class IFundamentalFinancialPayloadProvider(Protocol):
-    def __call__(self, ticker: str, *, years: int = 3) -> JSONObject: ...
+    def __call__(
+        self, ticker: str, *, years: int = 3
+    ) -> FundamentalFinancialPayload: ...
 
 
 class IMarketSnapshot(Protocol):

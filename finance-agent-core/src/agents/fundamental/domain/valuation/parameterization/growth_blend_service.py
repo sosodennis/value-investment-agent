@@ -31,6 +31,95 @@ _SHORT_HORIZON_GROWTH_HORIZONS = {"short_term"}
 _MIN_GROWTH_SERIES_VALUE = -0.50
 _MAX_GROWTH_SERIES_VALUE = 1.20
 _LONG_HORIZON_DCF_PROJECTION_YEARS = 10
+_LOW_PREMIUM_DEGRADED_CONSENSUS_PREMIUM_THRESHOLD = 0.30
+_LOW_PREMIUM_DEGRADED_CONSENSUS_DECAY_DAMPING_FACTOR = 0.35
+
+
+def _coerce_float(value: object) -> float | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int | float):
+        return float(value)
+    if isinstance(value, str):
+        normalized = value.strip()
+        if not normalized:
+            return None
+        try:
+            return float(normalized)
+        except ValueError:
+            return None
+    return None
+
+
+def _coerce_bool(value: object) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    return None
+
+
+def _coerce_int(value: object) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        normalized = value.strip()
+        if not normalized:
+            return None
+        try:
+            return int(float(normalized))
+        except ValueError:
+            return None
+    return None
+
+
+def _resolve_low_premium_degraded_consensus_damping(
+    *,
+    market_snapshot: Mapping[str, object] | None,
+) -> tuple[float | None, float | None, str | None]:
+    if market_snapshot is None:
+        return None, None, None
+    current_price = market_float(market_snapshot, "current_price")
+    target_mean_price = market_float(market_snapshot, "target_mean_price")
+    if (
+        current_price is None
+        or current_price <= 0
+        or target_mean_price is None
+        or target_mean_price <= 0
+    ):
+        return None, None, None
+    premium = (target_mean_price / current_price) - 1.0
+    if premium > _LOW_PREMIUM_DEGRADED_CONSENSUS_PREMIUM_THRESHOLD:
+        return None, premium, None
+
+    fallback_reason_raw = market_snapshot.get("target_consensus_fallback_reason")
+    fallback_reason = (
+        fallback_reason_raw
+        if isinstance(fallback_reason_raw, str) and fallback_reason_raw.strip()
+        else None
+    )
+    quality_bucket_raw = market_snapshot.get("target_consensus_quality_bucket")
+    quality_bucket = (
+        quality_bucket_raw.strip().lower()
+        if isinstance(quality_bucket_raw, str) and quality_bucket_raw.strip()
+        else None
+    )
+    is_degraded = fallback_reason is not None or quality_bucket == "degraded"
+    if not is_degraded:
+        return None, premium, None
+    return (
+        _LOW_PREMIUM_DEGRADED_CONSENSUS_DECAY_DAMPING_FACTOR,
+        premium,
+        fallback_reason,
+    )
 
 
 def _clip_growth_observations(values: list[float]) -> tuple[list[float], int]:
@@ -211,6 +300,20 @@ def build_saas_growth_rates(
         decay_weights = build_linear_decay_weights(decay_window)
         anchor_growth = blend_result.blended_growth
         delta = consensus_growth - anchor_growth
+        (
+            damping_factor,
+            target_premium,
+            fallback_reason,
+        ) = _resolve_low_premium_degraded_consensus_damping(
+            market_snapshot=market_snapshot
+        )
+        if damping_factor is not None:
+            delta *= damping_factor
+            assumptions.append(
+                "consensus_growth_rate decay amplitude damped for low-premium degraded consensus "
+                f"(target_premium={target_premium:.2%}, damping_factor={damping_factor:.2f}, "
+                f"fallback_reason={fallback_reason or 'none'})"
+            )
         adjusted_series = list(blended_series)
         for idx, weight in enumerate(decay_weights):
             adjusted_series[idx] = _clamp_growth_rate(

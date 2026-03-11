@@ -34,6 +34,7 @@ class MarketBeatProvider(MarketDataProvider):
             fallback_patterns=(
                 r'"consensusPriceTarget"\s*:\s*([0-9][0-9.,]*)',
                 r"Average Price Target[^$]{0,40}\$([0-9][0-9.,]*)",
+                r"Consensus Price Target[^$]{0,40}\$([0-9][0-9.,]*)",
             ),
         )
         target_high, target_high_extract = extract_float_structured_first(

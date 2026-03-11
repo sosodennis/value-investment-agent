@@ -34,6 +34,31 @@ def load_backtest_cases(path: Path) -> list[BacktestCase]:
             mapping.get("consensus_target_price_median"),
             f"{context}.consensus_target_price_median",
         )
+        target_consensus_quality_bucket = coerce_optional_non_empty_string(
+            mapping.get("target_consensus_quality_bucket"),
+            f"{context}.target_consensus_quality_bucket",
+        )
+        target_consensus_confidence_weight = coerce_optional_number(
+            mapping.get("target_consensus_confidence_weight"),
+            f"{context}.target_consensus_confidence_weight",
+        )
+        target_consensus_warning_codes_raw = mapping.get(
+            "target_consensus_warning_codes"
+        )
+        target_consensus_warning_codes: tuple[str, ...] = ()
+        if target_consensus_warning_codes_raw is not None:
+            target_consensus_warning_codes = tuple(
+                coerce_non_empty_string(
+                    value,
+                    f"{context}.target_consensus_warning_codes[{idx}]",
+                )
+                for idx, value in enumerate(
+                    coerce_sequence(
+                        target_consensus_warning_codes_raw,
+                        f"{context}.target_consensus_warning_codes",
+                    )
+                )
+            )
 
         cases.append(
             BacktestCase(
@@ -42,6 +67,9 @@ def load_backtest_cases(path: Path) -> list[BacktestCase]:
                 params=params,
                 required_metrics=required_metrics,
                 consensus_target_price_median=consensus_target_price_median,
+                target_consensus_quality_bucket=target_consensus_quality_bucket,
+                target_consensus_confidence_weight=target_consensus_confidence_weight,
+                target_consensus_warning_codes=target_consensus_warning_codes,
             )
         )
     return cases
@@ -99,3 +127,11 @@ def coerce_optional_number(value: object, context: str) -> float | None:
     if isinstance(value, int | float):
         return float(value)
     raise TypeError(f"{context} must be numeric")
+
+
+def coerce_optional_non_empty_string(value: object, context: str) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    raise TypeError(f"{context} must be a non-empty string")

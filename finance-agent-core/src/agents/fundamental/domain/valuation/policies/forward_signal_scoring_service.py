@@ -37,7 +37,9 @@ def apply_forward_signal_policy(
     }
     weights: dict[str, float] = {"growth_outlook": 0.0, "margin_outlook": 0.0}
     evidence_count = 0
-    mapping_version: str | None = None
+    mapping_version: str | None = (
+        calibration_config.mapping_version if calibration_config is not None else None
+    )
     calibration_applied = False
 
     for signal in signals:

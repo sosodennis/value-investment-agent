@@ -6,6 +6,13 @@ from unittest.mock import patch
 import pytest
 from pydantic import BaseModel
 
+from src.agents.fundamental.infrastructure.sec_xbrl.cache.filing_cache_service import (
+    FilingCacheService,
+)
+from src.agents.fundamental.infrastructure.sec_xbrl.financial_payload_service import (
+    reset_filing_cache_service_for_tests,
+    set_filing_cache_service_for_tests,
+)
 from src.agents.fundamental.infrastructure.sec_xbrl.finbert_direction import (
     FinbertDirectionReview,
 )
@@ -33,6 +40,21 @@ class _SyntheticFinancialReport(BaseModel):
     industry_type: str
     extension_type: str | None = None
     extension: dict[str, object] | None = None
+
+
+@pytest.fixture(autouse=True)
+def _isolate_financial_payload_cache() -> None:
+    set_filing_cache_service_for_tests(
+        FilingCacheService(
+            l1_ttl_seconds=900,
+            l2_enabled=False,
+            l3_enabled=False,
+        )
+    )
+    try:
+        yield
+    finally:
+        reset_filing_cache_service_for_tests()
 
 
 def _assert_aligned_to_token_boundaries(snippet: str, normalized_text: str) -> None:
@@ -322,6 +344,8 @@ def test_fetch_financial_payload_normalizes_reports_to_canonical_json() -> None:
         return_value={
             "financial_reports": [report_model],
             "forward_signals": [{"signal_id": "sig-1"}],
+            "diagnostics": {"cache": {"cache_hit": False}},
+            "quality_gates": {"status": "not_evaluated"},
         },
     ):
         payload = fetch_financial_payload("AAPL", years=3)
@@ -335,6 +359,8 @@ def test_fetch_financial_payload_normalizes_reports_to_canonical_json() -> None:
     assert first["extension_type"] == "Industrial"
     assert isinstance(first.get("base"), dict)
     assert payload["forward_signals"] == [{"signal_id": "sig-1"}]
+    assert payload["diagnostics"] == {"cache": {"cache_hit": False}}
+    assert payload["quality_gates"] == {"status": "not_evaluated"}
 
 
 def test_fetch_financial_payload_rejects_extension_without_extension_type() -> None:

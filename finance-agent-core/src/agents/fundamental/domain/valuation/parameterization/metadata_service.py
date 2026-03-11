@@ -52,11 +52,27 @@ def build_result_metadata(
     target_consensus_fallback_reason = market_text(
         market_snapshot, "target_consensus_fallback_reason"
     )
+    target_consensus_quality_bucket = market_text(
+        market_snapshot, "target_consensus_quality_bucket"
+    )
+    target_consensus_confidence_weight_raw = (
+        None
+        if market_snapshot is None
+        else market_snapshot.get("target_consensus_confidence_weight")
+    )
+    target_consensus_confidence_weight = (
+        float(target_consensus_confidence_weight_raw)
+        if isinstance(target_consensus_confidence_weight_raw, int | float)
+        else None
+    )
     target_consensus_sources = market_text_list(
         market_snapshot, "target_consensus_sources"
     )
     target_consensus_warnings = market_text_list(
         market_snapshot, "target_consensus_warnings"
+    )
+    target_consensus_warning_codes = market_text_list(
+        market_snapshot, "target_consensus_warning_codes"
     )
     market_datums_raw = market_mapping(market_snapshot, "market_datums")
     market_datums: JSONObject = {}
@@ -74,6 +90,7 @@ def build_result_metadata(
             source_raw = datum_raw.get("source")
             as_of_raw = datum_raw.get("as_of")
             horizon_raw = datum_raw.get("horizon")
+            shares_scope_raw = datum_raw.get("shares_scope")
             source_detail_raw = datum_raw.get("source_detail")
             quality_raw = datum_raw.get("quality_flags")
             staleness_raw = datum_raw.get("staleness")
@@ -85,6 +102,8 @@ def build_result_metadata(
                 datum_payload["as_of"] = as_of_raw
             if isinstance(horizon_raw, str) and horizon_raw:
                 datum_payload["horizon"] = horizon_raw
+            if isinstance(shares_scope_raw, str) and shares_scope_raw:
+                datum_payload["shares_scope"] = shares_scope_raw
             if isinstance(source_detail_raw, str) and source_detail_raw:
                 datum_payload["source_detail"] = source_detail_raw
             if isinstance(quality_raw, list | tuple):
@@ -159,8 +178,11 @@ def build_result_metadata(
         target_consensus_applied is True
         or target_consensus_source_count is not None
         or target_consensus_fallback_reason is not None
+        or target_consensus_quality_bucket is not None
+        or target_consensus_confidence_weight is not None
         or bool(target_consensus_sources)
         or bool(target_consensus_warnings)
+        or bool(target_consensus_warning_codes)
     )
     if include_target_consensus_fields:
         if target_consensus_applied is not None:
@@ -171,10 +193,22 @@ def build_result_metadata(
             market_data["target_consensus_fallback_reason"] = (
                 target_consensus_fallback_reason
             )
+        if target_consensus_quality_bucket is not None:
+            market_data["target_consensus_quality_bucket"] = (
+                target_consensus_quality_bucket
+            )
+        if target_consensus_confidence_weight is not None:
+            market_data["target_consensus_confidence_weight"] = (
+                target_consensus_confidence_weight
+            )
         if target_consensus_sources:
             market_data["target_consensus_sources"] = target_consensus_sources
         if target_consensus_warnings:
             market_data["target_consensus_warnings"] = target_consensus_warnings
+        if target_consensus_warning_codes:
+            market_data["target_consensus_warning_codes"] = (
+                target_consensus_warning_codes
+            )
     if market_datums:
         market_data["market_datums"] = market_datums
 
@@ -233,8 +267,17 @@ def _build_parameter_source_summary(
     target_consensus_fallback_reason_raw = market_data.get(
         "target_consensus_fallback_reason"
     )
+    target_consensus_quality_bucket_raw = market_data.get(
+        "target_consensus_quality_bucket"
+    )
+    target_consensus_confidence_weight_raw = market_data.get(
+        "target_consensus_confidence_weight"
+    )
     target_consensus_sources_raw = market_data.get("target_consensus_sources")
     target_consensus_warnings_raw = market_data.get("target_consensus_warnings")
+    target_consensus_warning_codes_raw = market_data.get(
+        "target_consensus_warning_codes"
+    )
     if isinstance(provider_raw, str) and provider_raw:
         market_anchor["provider"] = provider_raw
     if isinstance(as_of_raw, str) and as_of_raw:
@@ -252,6 +295,17 @@ def _build_parameter_source_summary(
         market_anchor["target_consensus_fallback_reason"] = (
             target_consensus_fallback_reason_raw
         )
+    if (
+        isinstance(target_consensus_quality_bucket_raw, str)
+        and target_consensus_quality_bucket_raw
+    ):
+        market_anchor["target_consensus_quality_bucket"] = (
+            target_consensus_quality_bucket_raw
+        )
+    if isinstance(target_consensus_confidence_weight_raw, int | float):
+        market_anchor["target_consensus_confidence_weight"] = float(
+            target_consensus_confidence_weight_raw
+        )
     if isinstance(target_consensus_sources_raw, list):
         target_consensus_sources = [
             item
@@ -268,6 +322,16 @@ def _build_parameter_source_summary(
         ]
         if target_consensus_warnings:
             market_anchor["target_consensus_warnings"] = target_consensus_warnings
+    if isinstance(target_consensus_warning_codes_raw, list):
+        target_consensus_warning_codes = [
+            item
+            for item in target_consensus_warning_codes_raw
+            if isinstance(item, str) and item
+        ]
+        if target_consensus_warning_codes:
+            market_anchor["target_consensus_warning_codes"] = (
+                target_consensus_warning_codes
+            )
     if market_anchor:
         summary["market_data_anchor"] = market_anchor
 
@@ -394,6 +458,18 @@ def _build_terminal_growth_path_summary(
     fallback_mode_raw = terminal_growth_path.get("terminal_growth_fallback_mode")
     anchor_source_raw = terminal_growth_path.get("terminal_growth_anchor_source")
     market_anchor_raw = terminal_growth_path.get("long_run_growth_anchor_market")
+    market_anchor_raw_value_raw = terminal_growth_path.get(
+        "long_run_growth_anchor_market_raw"
+    )
+    market_anchor_basis_raw = terminal_growth_path.get(
+        "long_run_growth_anchor_market_basis"
+    )
+    market_anchor_source_detail_raw = terminal_growth_path.get(
+        "long_run_growth_anchor_source_detail"
+    )
+    nominal_bridge_inflation_raw = terminal_growth_path.get(
+        "long_run_growth_nominal_bridge_inflation"
+    )
     filing_anchor_raw = terminal_growth_path.get("long_run_growth_anchor_filing")
     staleness_raw = terminal_growth_path.get("long_run_growth_anchor_staleness")
 
@@ -403,6 +479,23 @@ def _build_terminal_growth_path_summary(
         summary["terminal_growth_anchor_source"] = anchor_source_raw
     if isinstance(market_anchor_raw, int | float):
         summary["long_run_growth_anchor_market"] = float(market_anchor_raw)
+    if isinstance(market_anchor_raw_value_raw, int | float):
+        summary["long_run_growth_anchor_market_raw"] = float(
+            market_anchor_raw_value_raw
+        )
+    if isinstance(market_anchor_basis_raw, str) and market_anchor_basis_raw:
+        summary["long_run_growth_anchor_market_basis"] = market_anchor_basis_raw
+    if (
+        isinstance(market_anchor_source_detail_raw, str)
+        and market_anchor_source_detail_raw
+    ):
+        summary["long_run_growth_anchor_source_detail"] = (
+            market_anchor_source_detail_raw
+        )
+    if isinstance(nominal_bridge_inflation_raw, int | float):
+        summary["long_run_growth_nominal_bridge_inflation"] = float(
+            nominal_bridge_inflation_raw
+        )
     if isinstance(filing_anchor_raw, int | float):
         summary["long_run_growth_anchor_filing"] = float(filing_anchor_raw)
 

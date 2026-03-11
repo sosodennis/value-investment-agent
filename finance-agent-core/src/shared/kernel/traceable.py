@@ -23,6 +23,8 @@ class XBRLProvenance(BaseModel):
     type: SourceType = SourceType.XBRL
     concept: str
     period: str
+    resolution_stage: str | None = None
+    confidence: float | None = None
 
 
 class ComputedProvenance(BaseModel):

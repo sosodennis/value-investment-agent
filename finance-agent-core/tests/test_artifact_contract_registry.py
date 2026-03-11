@@ -50,6 +50,8 @@ def test_canonicalize_financial_reports_uses_model_validation_only() -> None:
         {
             "ticker": "AAPL",
             "model_type": "saas",
+            "diagnostics": {"source": "arelle"},
+            "quality_gates": {"status": "pass", "blocking_count": 0},
             "company_name": None,
             "sector": None,
             "industry": None,
@@ -70,6 +72,8 @@ def test_canonicalize_financial_reports_uses_model_validation_only() -> None:
     assert canonical["ticker"] == "AAPL"
     assert canonical["company_name"] is None
     assert canonical["sector"] is None
+    assert canonical["diagnostics"]["source"] == "arelle"
+    assert canonical["quality_gates"]["status"] == "pass"
 
 
 def test_canonicalize_debate_uses_domain_normalization() -> None:

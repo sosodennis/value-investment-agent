@@ -86,6 +86,8 @@ async def run_financial_health_use_case(
         )
         reports_data = payload.financial_reports
         forward_signals = payload.forward_signals
+        diagnostics = payload.diagnostics
+        quality_gates = payload.quality_gates
         reports_artifact_id: str | None = None
         artifact: AgentOutputArtifactPayload | None = None
 
@@ -93,6 +95,10 @@ async def run_financial_health_use_case(
             artifact_payload: JSONObject = {"financial_reports": reports_data}
             if isinstance(forward_signals, list):
                 artifact_payload["forward_signals"] = forward_signals
+            if isinstance(diagnostics, dict):
+                artifact_payload["diagnostics"] = diagnostics
+            if isinstance(quality_gates, dict):
+                artifact_payload["quality_gates"] = quality_gates
             reports_artifact_id = await runtime.save_financial_reports(
                 data=artifact_payload,
                 produced_by="fundamental_analysis.financial_health",
@@ -139,12 +145,26 @@ async def run_financial_health_use_case(
                 "reports_count": reports_count,
                 "forward_signal_count": forward_signal_count,
                 "artifact_written": reports_artifact_id is not None,
+                "xbrl_quality_status": (
+                    quality_gates.get("status")
+                    if isinstance(quality_gates, Mapping)
+                    else None
+                ),
+                "xbrl_quality_blocking_count": (
+                    quality_gates.get("blocking_count")
+                    if isinstance(quality_gates, Mapping)
+                    else None
+                ),
             },
         )
         return FundamentalNodeResult(
             update=build_financial_health_success_update(
                 reports_artifact_id=reports_artifact_id,
                 artifact=artifact,
+                diagnostics=diagnostics if isinstance(diagnostics, dict) else None,
+                quality_gates=quality_gates
+                if isinstance(quality_gates, dict)
+                else None,
             ),
             goto="model_selection",
         )

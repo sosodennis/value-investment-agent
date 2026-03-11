@@ -1,0 +1,27 @@
+# Default posture: treat reports as generated runtime artifacts.
+*
+
+# Keep local policy docs tracked.
+!.gitignore
+!README.md
+
+# Allow commit of canonical release evidence artifacts only.
+!fundamental_backtest_report_*.json
+!fundamental_release_gate_snapshot_*.json
+!forward_signal_calibration_pipeline_report_*.json
+!fundamental_cohort_stability_report_*.json
+!fundamental_replay_manifest_live_*.json
+!fundamental_replay_checks_report_live_*.json
+!fundamental_replay_cohort_gate_*.json
+!fundamental_live_replay_cohort_run_*.json
+!fundamental_cohort_release_checklist_*.md
+!fundamental_reinvestment_clamp_profile_validation_report_*.json
+
+# Keep noise-heavy exploratory outputs ignored by default.
+fundamental_backtest_report_*probe*.json
+fundamental_backtest_report_*update_*.json
+*debug*.json
+*trial*.json
+
+# Never track staged replay input bundles.
+fundamental_replay_inputs/

@@ -1,0 +1,265 @@
+{
+  "cases": {
+    "dcf_growth_consensus_anchor_prod_01": {
+      "metrics": {
+        "consensus_gap_pct": -0.1485546680775277,
+        "consensus_target_price_median": 5.2,
+        "enterprise_value": 437.7515725996856,
+        "equity_value": 442.7515725996856,
+        "intrinsic_value": 4.427515725996856,
+        "target_consensus_confidence_weight": 0.65,
+        "target_consensus_quality_bucket": "high",
+        "upside_potential": -0.07760089041732163
+      },
+      "model": "dcf_growth"
+    },
+    "dcf_growth_consensus_anchor_prod_02": {
+      "metrics": {
+        "consensus_gap_pct": -0.1485546680775277,
+        "consensus_target_price_median": 5.2,
+        "enterprise_value": 437.7515725996856,
+        "equity_value": 442.7515725996856,
+        "intrinsic_value": 4.427515725996856,
+        "target_consensus_confidence_weight": 0.65,
+        "target_consensus_quality_bucket": "high",
+        "upside_potential": -0.07760089041732163
+      },
+      "model": "dcf_growth"
+    },
+    "dcf_growth_consensus_anchor_prod_03": {
+      "metrics": {
+        "consensus_gap_pct": -0.1485546680775277,
+        "consensus_target_price_median": 5.2,
+        "enterprise_value": 437.7515725996856,
+        "equity_value": 442.7515725996856,
+        "intrinsic_value": 4.427515725996856,
+        "target_consensus_confidence_weight": 0.65,
+        "target_consensus_quality_bucket": "high",
+        "upside_potential": -0.07760089041732163
+      },
+      "model": "dcf_growth"
+    },
+    "dcf_growth_consensus_anchor_prod_04": {
+      "metrics": {
+        "consensus_gap_pct": -0.1485546680775277,
+        "consensus_target_price_median": 5.2,
+        "enterprise_value": 437.7515725996856,
+        "equity_value": 442.7515725996856,
+        "intrinsic_value": 4.427515725996856,
+        "target_consensus_confidence_weight": 0.65,
+        "target_consensus_quality_bucket": "high",
+        "upside_potential": -0.07760089041732163
+      },
+      "model": "dcf_growth"
+    },
+    "dcf_growth_consensus_anchor_prod_05": {
+      "metrics": {
+        "consensus_gap_pct": -0.1485546680775277,
+        "consensus_target_price_median": 5.2,
+        "enterprise_value": 437.7515725996856,
+        "equity_value": 442.7515725996856,
+        "intrinsic_value": 4.427515725996856,
+        "target_consensus_confidence_weight": 0.65,
+        "target_consensus_quality_bucket": "high",
+        "upside_potential": -0.07760089041732163
+      },
+      "model": "dcf_growth"
+    },
+    "dcf_growth_consensus_anchor_prod_06": {
+      "metrics": {
+        "consensus_gap_pct": -0.1485546680775277,
+        "consensus_target_price_median": 5.2,
+        "enterprise_value": 437.7515725996856,
+        "equity_value": 442.7515725996856,
+        "intrinsic_value": 4.427515725996856,
+        "target_consensus_confidence_weight": 0.5,
+        "target_consensus_quality_bucket": "medium",
+        "upside_potential": -0.07760089041732163
+      },
+      "model": "dcf_growth"
+    },
+    "dcf_growth_consensus_anchor_prod_07": {
+      "metrics": {
+        "consensus_gap_pct": -0.1485546680775277,
+        "consensus_target_price_median": 5.2,
+        "enterprise_value": 437.7515725996856,
+        "equity_value": 442.7515725996856,
+        "intrinsic_value": 4.427515725996856,
+        "target_consensus_confidence_weight": 0.5,
+        "target_consensus_quality_bucket": "medium",
+        "upside_potential": -0.07760089041732163
+      },
+      "model": "dcf_growth"
+    },
+    "dcf_growth_consensus_anchor_prod_08": {
+      "metrics": {
+        "consensus_gap_pct": -0.1485546680775277,
+        "consensus_target_price_median": 5.2,
+        "enterprise_value": 437.7515725996856,
+        "equity_value": 442.7515725996856,
+        "intrinsic_value": 4.427515725996856,
+        "target_consensus_confidence_weight": 0.5,
+        "target_consensus_quality_bucket": "medium",
+        "upside_potential": -0.07760089041732163
+      },
+      "model": "dcf_growth"
+    },
+    "dcf_growth_consensus_anchor_prod_09": {
+      "metrics": {
+        "consensus_gap_pct": -0.1485546680775277,
+        "consensus_target_price_median": 5.2,
+        "enterprise_value": 437.7515725996856,
+        "equity_value": 442.7515725996856,
+        "intrinsic_value": 4.427515725996856,
+        "target_consensus_confidence_weight": 0.5,
+        "target_consensus_quality_bucket": "medium",
+        "upside_potential": -0.07760089041732163
+      },
+      "model": "dcf_growth"
+    },
+    "dcf_growth_consensus_anchor_prod_10": {
+      "metrics": {
+        "consensus_gap_pct": -0.1485546680775277,
+        "consensus_target_price_median": 5.2,
+        "enterprise_value": 437.7515725996856,
+        "equity_value": 442.7515725996856,
+        "intrinsic_value": 4.427515725996856,
+        "target_consensus_confidence_weight": 0.5,
+        "target_consensus_quality_bucket": "medium",
+        "upside_potential": -0.07760089041732163
+      },
+      "model": "dcf_growth"
+    },
+    "dcf_standard_consensus_anchor_prod_01": {
+      "metrics": {
+        "consensus_gap_pct": 0.01218192857721083,
+        "consensus_target_price_median": 2.9,
+        "enterprise_value": 288.5327592873911,
+        "equity_value": 293.5327592873911,
+        "intrinsic_value": 2.9353275928739113,
+        "target_consensus_confidence_weight": 0.7,
+        "target_consensus_quality_bucket": "high",
+        "upside_potential": 0.048331283169254106
+      },
+      "model": "dcf_standard"
+    },
+    "dcf_standard_consensus_anchor_prod_02": {
+      "metrics": {
+        "consensus_gap_pct": 0.01218192857721083,
+        "consensus_target_price_median": 2.9,
+        "enterprise_value": 288.5327592873911,
+        "equity_value": 293.5327592873911,
+        "intrinsic_value": 2.9353275928739113,
+        "target_consensus_confidence_weight": 0.7,
+        "target_consensus_quality_bucket": "high",
+        "upside_potential": 0.048331283169254106
+      },
+      "model": "dcf_standard"
+    },
+    "dcf_standard_consensus_anchor_prod_03": {
+      "metrics": {
+        "consensus_gap_pct": 0.01218192857721083,
+        "consensus_target_price_median": 2.9,
+        "enterprise_value": 288.5327592873911,
+        "equity_value": 293.5327592873911,
+        "intrinsic_value": 2.9353275928739113,
+        "target_consensus_confidence_weight": 0.7,
+        "target_consensus_quality_bucket": "high",
+        "upside_potential": 0.048331283169254106
+      },
+      "model": "dcf_standard"
+    },
+    "dcf_standard_consensus_anchor_prod_04": {
+      "metrics": {
+        "consensus_gap_pct": 0.01218192857721083,
+        "consensus_target_price_median": 2.9,
+        "enterprise_value": 288.5327592873911,
+        "equity_value": 293.5327592873911,
+        "intrinsic_value": 2.9353275928739113,
+        "target_consensus_confidence_weight": 0.7,
+        "target_consensus_quality_bucket": "high",
+        "upside_potential": 0.048331283169254106
+      },
+      "model": "dcf_standard"
+    },
+    "dcf_standard_consensus_anchor_prod_05": {
+      "metrics": {
+        "consensus_gap_pct": 0.01218192857721083,
+        "consensus_target_price_median": 2.9,
+        "enterprise_value": 288.5327592873911,
+        "equity_value": 293.5327592873911,
+        "intrinsic_value": 2.9353275928739113,
+        "target_consensus_confidence_weight": 0.7,
+        "target_consensus_quality_bucket": "high",
+        "upside_potential": 0.048331283169254106
+      },
+      "model": "dcf_standard"
+    },
+    "dcf_standard_consensus_anchor_prod_06": {
+      "metrics": {
+        "consensus_gap_pct": 0.01218192857721083,
+        "consensus_target_price_median": 2.9,
+        "enterprise_value": 288.5327592873911,
+        "equity_value": 293.5327592873911,
+        "intrinsic_value": 2.9353275928739113,
+        "target_consensus_confidence_weight": 0.55,
+        "target_consensus_quality_bucket": "medium",
+        "upside_potential": 0.048331283169254106
+      },
+      "model": "dcf_standard"
+    },
+    "dcf_standard_consensus_anchor_prod_07": {
+      "metrics": {
+        "consensus_gap_pct": 0.01218192857721083,
+        "consensus_target_price_median": 2.9,
+        "enterprise_value": 288.5327592873911,
+        "equity_value": 293.5327592873911,
+        "intrinsic_value": 2.9353275928739113,
+        "target_consensus_confidence_weight": 0.55,
+        "target_consensus_quality_bucket": "medium",
+        "upside_potential": 0.048331283169254106
+      },
+      "model": "dcf_standard"
+    },
+    "dcf_standard_consensus_anchor_prod_08": {
+      "metrics": {
+        "consensus_gap_pct": 0.01218192857721083,
+        "consensus_target_price_median": 2.9,
+        "enterprise_value": 288.5327592873911,
+        "equity_value": 293.5327592873911,
+        "intrinsic_value": 2.9353275928739113,
+        "target_consensus_confidence_weight": 0.55,
+        "target_consensus_quality_bucket": "medium",
+        "upside_potential": 0.048331283169254106
+      },
+      "model": "dcf_standard"
+    },
+    "dcf_standard_consensus_anchor_prod_09": {
+      "metrics": {
+        "consensus_gap_pct": 0.01218192857721083,
+        "consensus_target_price_median": 2.9,
+        "enterprise_value": 288.5327592873911,
+        "equity_value": 293.5327592873911,
+        "intrinsic_value": 2.9353275928739113,
+        "target_consensus_confidence_weight": 0.55,
+        "target_consensus_quality_bucket": "medium",
+        "upside_potential": 0.048331283169254106
+      },
+      "model": "dcf_standard"
+    },
+    "dcf_standard_consensus_anchor_prod_10": {
+      "metrics": {
+        "consensus_gap_pct": 0.01218192857721083,
+        "consensus_target_price_median": 2.9,
+        "enterprise_value": 288.5327592873911,
+        "equity_value": 293.5327592873911,
+        "intrinsic_value": 2.9353275928739113,
+        "target_consensus_confidence_weight": 0.55,
+        "target_consensus_quality_bucket": "medium",
+        "upside_potential": 0.048331283169254106
+      },
+      "model": "dcf_standard"
+    }
+  },
+  "generated_at": "2026-03-09T08:53:16+00:00"
+}

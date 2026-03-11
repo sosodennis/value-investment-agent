@@ -1,0 +1,253 @@
+{
+  "manifest_schema_version": "valuation_replay_manifest_v1",
+  "results": [
+    {
+      "case_id": "AAPL_dcf_standard_01",
+      "delta_by_parameter_group": {
+        "groups": {
+          "growth": {
+            "delta_vs_replay": 64.03863102020813,
+            "fields": [
+              "growth_rates"
+            ],
+            "intrinsic_if_reverted_to_baseline": 189.57455897038946,
+            "status": "ok"
+          },
+          "margin": {
+            "delta_vs_replay": 0.0,
+            "fields": [
+              "operating_margins"
+            ],
+            "intrinsic_if_reverted_to_baseline": 253.6131899905976,
+            "status": "ok"
+          },
+          "reinvestment": {
+            "delta_vs_replay": 0.7960495411360569,
+            "fields": [
+              "capex_rates",
+              "wc_rates",
+              "sbc_rates"
+            ],
+            "intrinsic_if_reverted_to_baseline": 252.81714044946153,
+            "status": "ok"
+          },
+          "terminal": {
+            "delta_vs_replay": 65.86973199538949,
+            "fields": [
+              "terminal_growth"
+            ],
+            "intrinsic_if_reverted_to_baseline": 187.7434579952081,
+            "status": "ok"
+          }
+        },
+        "method": "one_at_a_time_revert_to_baseline",
+        "total_intrinsic_delta_vs_baseline": 97.28094422987783
+      },
+      "input_path": "/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/reports/fundamental_replay_inputs/live_auto_s8_6tickers/AAPL_dcf_standard_01.json",
+      "intrinsic_delta": 97.28094422987783,
+      "latency_ms": 2491.443,
+      "latency_source": "replay_duration_ms",
+      "replay_duration_ms": 2491.443,
+      "status": "ok",
+      "trace_contract_passed": true
+    },
+    {
+      "case_id": "AMZN_dcf_growth_02",
+      "input_path": "/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/reports/fundamental_replay_inputs/live_auto_s8_6tickers/AMZN_dcf_growth_02.json",
+      "latency_ms": 1602.298,
+      "latency_source": "replay_duration_ms",
+      "replay_duration_ms": 1602.298,
+      "status": "ok",
+      "trace_contract_passed": true
+    },
+    {
+      "case_id": "GOOG_dcf_growth_03",
+      "delta_by_parameter_group": {
+        "groups": {
+          "growth": {
+            "delta_vs_replay": -56.69480421145306,
+            "fields": [
+              "growth_rates"
+            ],
+            "intrinsic_if_reverted_to_baseline": 455.4863694322115,
+            "status": "ok"
+          },
+          "margin": {
+            "delta_vs_replay": 0.0,
+            "fields": [
+              "operating_margins"
+            ],
+            "intrinsic_if_reverted_to_baseline": 398.79156522075846,
+            "status": "ok"
+          },
+          "reinvestment": {
+            "delta_vs_replay": 134.15677168295264,
+            "fields": [
+              "capex_rates",
+              "wc_rates",
+              "sbc_rates"
+            ],
+            "intrinsic_if_reverted_to_baseline": 264.6347935378058,
+            "status": "ok"
+          },
+          "terminal": {
+            "delta_vs_replay": 21.61323846596588,
+            "fields": [
+              "terminal_growth"
+            ],
+            "intrinsic_if_reverted_to_baseline": 377.1783267547926,
+            "status": "ok"
+          }
+        },
+        "method": "one_at_a_time_revert_to_baseline",
+        "total_intrinsic_delta_vs_baseline": 272.0202608189147
+      },
+      "input_path": "/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/reports/fundamental_replay_inputs/live_auto_s8_6tickers/GOOG_dcf_growth_03.json",
+      "intrinsic_delta": 272.0202608189147,
+      "latency_ms": 1604.915,
+      "latency_source": "replay_duration_ms",
+      "replay_duration_ms": 1604.915,
+      "status": "ok",
+      "trace_contract_passed": true
+    },
+    {
+      "case_id": "JPM_bank_04",
+      "error": "replay output missing terminal-growth path fields: replayed_terminal_growth_fallback_mode and/or replayed_terminal_growth_anchor_source",
+      "error_code": "terminal_growth_path_missing",
+      "input_path": "/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/reports/fundamental_replay_inputs/live_auto_s8_6tickers/JPM_bank_04.json",
+      "latency_ms": 1620.718,
+      "latency_source": "replay_duration_ms",
+      "replay_duration_ms": 1620.718,
+      "status": "error"
+    },
+    {
+      "case_id": "MSFT_dcf_growth_05",
+      "delta_by_parameter_group": {
+        "groups": {
+          "growth": {
+            "delta_vs_replay": 8.189477696360541,
+            "fields": [
+              "growth_rates"
+            ],
+            "intrinsic_if_reverted_to_baseline": 506.6316798173991,
+            "status": "ok"
+          },
+          "margin": {
+            "delta_vs_replay": 16.911642352806382,
+            "fields": [
+              "operating_margins"
+            ],
+            "intrinsic_if_reverted_to_baseline": 497.9095151609533,
+            "status": "ok"
+          },
+          "reinvestment": {
+            "delta_vs_replay": 89.29049047940077,
+            "fields": [
+              "capex_rates",
+              "wc_rates",
+              "sbc_rates"
+            ],
+            "intrinsic_if_reverted_to_baseline": 425.5306670343589,
+            "status": "ok"
+          },
+          "terminal": {
+            "delta_vs_replay": 137.88174518662743,
+            "fields": [
+              "terminal_growth"
+            ],
+            "intrinsic_if_reverted_to_baseline": 376.93941232713223,
+            "status": "ok"
+          }
+        },
+        "method": "one_at_a_time_revert_to_baseline",
+        "total_intrinsic_delta_vs_baseline": 223.13464610553092
+      },
+      "input_path": "/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/reports/fundamental_replay_inputs/live_auto_s8_6tickers/MSFT_dcf_growth_05.json",
+      "intrinsic_delta": 223.13464610553092,
+      "latency_ms": 1633.177,
+      "latency_source": "replay_duration_ms",
+      "replay_duration_ms": 1633.177,
+      "status": "ok",
+      "trace_contract_passed": true
+    },
+    {
+      "case_id": "NVDA_dcf_growth_06",
+      "delta_by_parameter_group": {
+        "groups": {
+          "growth": {
+            "delta_vs_replay": -25.163030480049713,
+            "fields": [
+              "growth_rates"
+            ],
+            "intrinsic_if_reverted_to_baseline": 289.8876680806023,
+            "status": "ok"
+          },
+          "margin": {
+            "delta_vs_replay": -17.552788085873033,
+            "fields": [
+              "operating_margins"
+            ],
+            "intrinsic_if_reverted_to_baseline": 282.2774256864256,
+            "status": "ok"
+          },
+          "reinvestment": {
+            "delta_vs_replay": 2.741019903152335,
+            "fields": [
+              "capex_rates",
+              "wc_rates",
+              "sbc_rates"
+            ],
+            "intrinsic_if_reverted_to_baseline": 261.98361769740023,
+            "status": "ok"
+          },
+          "terminal": {
+            "delta_vs_replay": 34.0389136721119,
+            "fields": [
+              "terminal_growth"
+            ],
+            "intrinsic_if_reverted_to_baseline": 230.68572392844067,
+            "status": "ok"
+          }
+        },
+        "method": "one_at_a_time_revert_to_baseline",
+        "total_intrinsic_delta_vs_baseline": -23.380237339842324
+      },
+      "input_path": "/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/reports/fundamental_replay_inputs/live_auto_s8_6tickers/NVDA_dcf_growth_06.json",
+      "intrinsic_delta": -23.380237339842324,
+      "latency_ms": 1622.898,
+      "latency_source": "replay_duration_ms",
+      "replay_duration_ms": 1622.898,
+      "status": "ok",
+      "trace_contract_passed": true
+    }
+  ],
+  "schema_version": "fundamental_replay_checks_report_v1",
+  "summary": {
+    "cache_hit_cases": 0,
+    "cache_hit_rate": 0.0,
+    "cold_latency_available_cases": 6,
+    "cold_latency_p50_ms": 1621.808,
+    "cold_latency_p90_ms": 2062.31,
+    "error_code_counts": {
+      "terminal_growth_path_missing": 1
+    },
+    "failed_cases": 1,
+    "intrinsic_delta_available_cases": 4,
+    "intrinsic_delta_p90_abs": 257.3545764048996,
+    "passed_cases": 5,
+    "quality_block_rate": 0.0,
+    "quality_blocked_cases": 0,
+    "replay_duration_available_cases": 6,
+    "replay_duration_p50_ms": 1621.808,
+    "replay_duration_p90_ms": 2062.31,
+    "total_cases": 6,
+    "trace_contract_pass_rate": 0.8333333333333334,
+    "trace_contract_passed_cases": 5,
+    "warm_latency_available_cases": 0,
+    "warm_latency_p50_ms": null,
+    "warm_latency_p90_ms": null,
+    "xbrl_latency_available_cases": 0,
+    "xbrl_latency_p50_ms": null,
+    "xbrl_latency_p90_ms": null
+  }
+}

@@ -216,6 +216,24 @@ def test_apply_forward_signal_policy_supports_custom_calibration_config() -> Non
     assert result.mapping_version == "custom_v1"
 
 
+def test_apply_forward_signal_policy_emits_mapping_version_with_empty_signals() -> None:
+    result = apply_forward_signal_policy(
+        (),
+        calibration_config=ForwardSignalCalibrationConfig(
+            mapping_version="custom_v1",
+            source_multiplier={"mda": 1.0},
+            metric_multiplier={"growth_outlook": 1.0},
+            mapping_bins=((100.0, 1.0),),
+        ),
+    )
+
+    assert result.total_count == 0
+    assert result.calibration_applied is False
+    assert result.mapping_version == "custom_v1"
+    assert result.raw_growth_adjustment_basis_points == pytest.approx(0.0)
+    assert result.growth_adjustment_basis_points == pytest.approx(0.0)
+
+
 def test_parse_forward_signals_accepts_xbrl_auto_source() -> None:
     signals = parse_forward_signals(
         [

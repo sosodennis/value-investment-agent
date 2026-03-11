@@ -26,9 +26,16 @@ from ..shared.common_output_assembly_service import (
     build_capm_market_trace_inputs,
     build_monte_carlo_params,
 )
-from ..shared.missing_metrics_service import collect_missing_metric_names
+from ..shared.missing_metrics_service import (
+    apply_missing_metric_policy,
+    collect_missing_metric_names,
+)
 
 DEFAULT_SAAS_RISK_FREE_RATE = 0.042
+DEFAULT_SAAS_TAX_RATE = 0.21
+DEFAULT_SAAS_CAPEX_RATE = 0.04
+DEFAULT_SAAS_SBC_RATE = 0.00
+DEFAULT_SAAS_WC_RATE = 0.00
 DEFAULT_SAAS_BETA = 1.0
 BETA_FLOOR = 0.50
 BETA_CEILING = 1.80
@@ -43,7 +50,25 @@ TERMINAL_GROWTH_STALE_FALLBACK_MODE_ENV = (
 )
 TERMINAL_GROWTH_STALE_FALLBACK_DEFAULT = "default_only"
 TERMINAL_GROWTH_STALE_FALLBACK_FILING_FIRST = "filing_first_then_default"
+LONG_RUN_GROWTH_NOMINAL_BRIDGE_INFLATION_ENV = (
+    "FUNDAMENTAL_LONG_RUN_GROWTH_NOMINAL_BRIDGE_INFLATION"
+)
+LONG_RUN_GROWTH_NOMINAL_BRIDGE_INFLATION_DEFAULT = 0.02
+LONG_RUN_GROWTH_REAL_SERIES_TOKEN = "a191rl1q225sbea"
 SHARES_SCOPE_MISMATCH_RATIO_THRESHOLD = 0.20
+BETA_MEAN_REVERSION_RAW_WEIGHT = 0.67
+BETA_MEAN_REVERSION_ANCHOR_WEIGHT = 0.33
+BETA_MEAN_REVERSION_ANCHOR = 1.0
+BETA_MEAN_REVERSION_MIN_RAW_BETA = 1.0
+BETA_MEAN_REVERSION_MAX_RAW_BETA = 1.5
+BETA_MEAN_REVERSION_DEGRADED_PREMIUM_TRIGGER = 0.30
+_SAAS_WARN_ONLY_MISSING_METRICS = (
+    "tax_rate",
+    "da_rates",
+    "capex_rates",
+    "wc_rates",
+    "sbc_rates",
+)
 
 
 @dataclass(frozen=True)
@@ -51,6 +76,10 @@ class _TerminalGrowthPathDiagnostics:
     fallback_mode: str
     anchor_source: str
     market_anchor_value: float | None
+    market_anchor_raw_value: float | None
+    market_anchor_basis: str
+    market_anchor_source_detail: str | None
+    nominal_bridge_inflation: float | None
     filing_anchor_value: float | None
     market_anchor_is_stale: bool | None
     market_anchor_staleness_days: int | None
@@ -60,9 +89,20 @@ class _TerminalGrowthPathDiagnostics:
         payload: dict[str, object] = {
             "terminal_growth_fallback_mode": self.fallback_mode,
             "terminal_growth_anchor_source": self.anchor_source,
+            "long_run_growth_anchor_market_basis": self.market_anchor_basis,
         }
         if self.market_anchor_value is not None:
             payload["long_run_growth_anchor_market"] = self.market_anchor_value
+        if self.market_anchor_raw_value is not None:
+            payload["long_run_growth_anchor_market_raw"] = self.market_anchor_raw_value
+        if isinstance(self.market_anchor_source_detail, str):
+            payload["long_run_growth_anchor_source_detail"] = (
+                self.market_anchor_source_detail
+            )
+        if self.nominal_bridge_inflation is not None:
+            payload["long_run_growth_nominal_bridge_inflation"] = (
+                self.nominal_bridge_inflation
+            )
         if self.filing_anchor_value is not None:
             payload["long_run_growth_anchor_filing"] = self.filing_anchor_value
 
@@ -155,6 +195,86 @@ def _to_int(value: object) -> int | None:
     return None
 
 
+def _resolve_target_premium(
+    market_snapshot: Mapping[str, object] | None,
+) -> float | None:
+    if not isinstance(market_snapshot, Mapping):
+        return None
+    current_price = _to_float(market_snapshot.get("current_price"))
+    target_mean_price = _to_float(market_snapshot.get("target_mean_price"))
+    if (
+        current_price is None
+        or current_price <= 0
+        or target_mean_price is None
+        or target_mean_price <= 0
+    ):
+        return None
+    return (target_mean_price / current_price) - 1.0
+
+
+def _resolve_beta_mean_reversion(
+    *,
+    raw_beta: float,
+    market_snapshot: Mapping[str, object] | None,
+    filing_shares: float | None,
+) -> tuple[float, str | None]:
+    if (
+        raw_beta <= BETA_MEAN_REVERSION_MIN_RAW_BETA
+        or raw_beta > BETA_MEAN_REVERSION_MAX_RAW_BETA
+    ):
+        return raw_beta, None
+
+    premium = _resolve_target_premium(market_snapshot)
+    if premium is None or premium <= 0:
+        return raw_beta, None
+
+    fallback_reason: str | None = None
+    market_shares: float | None = None
+    if isinstance(market_snapshot, Mapping):
+        fallback_reason_raw = market_snapshot.get("target_consensus_fallback_reason")
+        if isinstance(fallback_reason_raw, str) and fallback_reason_raw.strip():
+            fallback_reason = fallback_reason_raw.strip()
+        market_shares = _to_float(market_snapshot.get("shares_outstanding"))
+
+    if (
+        filing_shares is not None
+        and filing_shares > 0
+        and market_shares is not None
+        and market_shares > 0
+    ):
+        mismatch_ratio = abs(filing_shares - market_shares) / filing_shares
+        if mismatch_ratio >= SHARES_SCOPE_MISMATCH_RATIO_THRESHOLD:
+            return (
+                raw_beta,
+                "beta mean-reversion skipped "
+                f"(shares_scope_mismatch_ratio={mismatch_ratio:.2%})",
+            )
+
+    if (
+        fallback_reason is not None
+        and premium < BETA_MEAN_REVERSION_DEGRADED_PREMIUM_TRIGGER
+    ):
+        return (
+            raw_beta,
+            "beta mean-reversion skipped "
+            f"(degraded_low_premium_consensus premium={premium:.2%}, "
+            f"fallback_reason={fallback_reason})",
+        )
+
+    adjusted_beta = (raw_beta * BETA_MEAN_REVERSION_RAW_WEIGHT) + (
+        BETA_MEAN_REVERSION_ANCHOR * BETA_MEAN_REVERSION_ANCHOR_WEIGHT
+    )
+    if adjusted_beta >= raw_beta:
+        return raw_beta, None
+    return (
+        adjusted_beta,
+        "beta mean-reversion applied "
+        f"(method=blume_67_33, raw_beta={raw_beta:.3f}, "
+        f"adjusted_beta={adjusted_beta:.3f}, premium={premium:.2%}, "
+        f"fallback_reason={fallback_reason or 'none'})",
+    )
+
+
 def _extract_market_datum_staleness(
     market_snapshot: Mapping[str, object] | None,
     *,
@@ -180,6 +300,63 @@ def _extract_market_datum_staleness(
         max_days_raw if isinstance(max_days_raw, int) else _to_int(max_days_raw)
     )
     return is_stale, stale_days, stale_max_days
+
+
+def _extract_market_datum_source_detail(
+    market_snapshot: Mapping[str, object] | None,
+    *,
+    field: str,
+) -> str | None:
+    if market_snapshot is None:
+        return None
+    market_datums_raw = market_snapshot.get("market_datums")
+    if not isinstance(market_datums_raw, Mapping):
+        return None
+    datum_raw = market_datums_raw.get(field)
+    if not isinstance(datum_raw, Mapping):
+        return None
+    source_detail_raw = datum_raw.get("source_detail")
+    if isinstance(source_detail_raw, str):
+        source_detail = source_detail_raw.strip()
+        if source_detail:
+            return source_detail
+    return None
+
+
+def _resolve_nominal_growth_bridge_inflation() -> float:
+    raw = os.getenv(LONG_RUN_GROWTH_NOMINAL_BRIDGE_INFLATION_ENV)
+    if raw is None:
+        return LONG_RUN_GROWTH_NOMINAL_BRIDGE_INFLATION_DEFAULT
+    parsed = _to_float(raw)
+    if parsed is None:
+        return LONG_RUN_GROWTH_NOMINAL_BRIDGE_INFLATION_DEFAULT
+    if parsed > 1.0:
+        parsed /= 100.0
+    return _clamp(parsed, -0.01, 0.08)
+
+
+def _resolve_market_long_run_growth_anchor_nominal(
+    *,
+    market_anchor_raw: float | None,
+    market_anchor_source_detail: str | None,
+    assumptions: list[str],
+) -> tuple[float | None, str, float | None]:
+    if market_anchor_raw is None:
+        return None, "unknown", None
+    if not isinstance(market_anchor_source_detail, str):
+        return market_anchor_raw, "nominal_or_unknown", None
+    normalized_detail = market_anchor_source_detail.strip().lower()
+    if LONG_RUN_GROWTH_REAL_SERIES_TOKEN not in normalized_detail:
+        return market_anchor_raw, "nominal_or_unknown", None
+
+    inflation_bridge = _resolve_nominal_growth_bridge_inflation()
+    nominal_anchor = (1.0 + market_anchor_raw) * (1.0 + inflation_bridge) - 1.0
+    assumptions.append(
+        "terminal_growth market anchor converted from real to nominal "
+        f"(real={market_anchor_raw:.2%}, inflation_bridge={inflation_bridge:.2%}, "
+        f"nominal={nominal_anchor:.2%}, source_detail={market_anchor_source_detail})"
+    )
+    return nominal_anchor, "real_to_nominal_bridge", inflation_bridge
 
 
 def _derive_filing_terminal_growth_anchor(
@@ -495,10 +672,20 @@ def _build_saas_capm_terminal_inputs(
     )
     risk_free_rate = market_defaults.risk_free_rate
     raw_beta = market_defaults.beta
-    beta = _clamp(raw_beta, BETA_FLOOR, BETA_CEILING)
-    if beta != raw_beta:
+    beta_after_mean_reversion, beta_mean_reversion_assumption = (
+        _resolve_beta_mean_reversion(
+            raw_beta=raw_beta,
+            market_snapshot=market_snapshot,
+            filing_shares=shares_outstanding,
+        )
+    )
+    if beta_mean_reversion_assumption is not None:
+        assumptions.append(beta_mean_reversion_assumption)
+
+    beta = _clamp(beta_after_mean_reversion, BETA_FLOOR, BETA_CEILING)
+    if beta != beta_after_mean_reversion:
         assumptions.append(
-            f"beta clamped from {raw_beta:.3f} to {beta:.3f} "
+            f"beta clamped from {beta_after_mean_reversion:.3f} to {beta:.3f} "
             f"(bounds={BETA_FLOOR:.3f}-{BETA_CEILING:.3f})"
         )
     market_risk_premium = market_defaults.market_risk_premium
@@ -523,7 +710,20 @@ def _build_saas_capm_terminal_inputs(
         ),
     )
 
-    long_run_growth_anchor = market_float(market_snapshot, "long_run_growth_anchor")
+    market_anchor_raw = market_float(market_snapshot, "long_run_growth_anchor")
+    market_anchor_source_detail = _extract_market_datum_source_detail(
+        market_snapshot,
+        field="long_run_growth_anchor",
+    )
+    (
+        long_run_growth_anchor,
+        market_anchor_basis,
+        nominal_bridge_inflation,
+    ) = _resolve_market_long_run_growth_anchor_nominal(
+        market_anchor_raw=market_anchor_raw,
+        market_anchor_source_detail=market_anchor_source_detail,
+        assumptions=assumptions,
+    )
     fallback_mode = _resolve_terminal_growth_stale_fallback_mode()
     assumptions.append(f"terminal_growth stale fallback mode={fallback_mode}")
     anchor_is_stale, anchor_stale_days, anchor_stale_max_days = (
@@ -635,6 +835,10 @@ def _build_saas_capm_terminal_inputs(
         fallback_mode=fallback_mode,
         anchor_source=anchor_source,
         market_anchor_value=long_run_growth_anchor,
+        market_anchor_raw_value=market_anchor_raw,
+        market_anchor_basis=market_anchor_basis,
+        market_anchor_source_detail=market_anchor_source_detail,
+        nominal_bridge_inflation=nominal_bridge_inflation,
         filing_anchor_value=filing_anchor,
         market_anchor_is_stale=anchor_is_stale,
         market_anchor_staleness_days=anchor_stale_days,
@@ -701,6 +905,13 @@ def _build_saas_operating_rates(
         income_before_tax_tf,
         "IncomeTaxExpense / IncomeBeforeTax",
     )
+    if tax_rate_tf.value is None:
+        tax_rate_tf = assume_rate(
+            "Tax Rate",
+            DEFAULT_SAAS_TAX_RATE,
+            "Policy default tax rate for non-blocking missing tax inputs",
+        )
+        assumptions.append(f"tax_rate defaulted to {DEFAULT_SAAS_TAX_RATE:.2%}")
     da_rate_tf = ratio(
         "D&A Rate",
         da_tf,
@@ -724,12 +935,34 @@ def _build_saas_operating_rates(
         ratio_op=ratio,
         missing_field_op=missing_field,
     )
+    if capex_rate_tf.value is None:
+        da_anchor = _to_float(da_rate_tf.value)
+        capex_default = _clamp(
+            max(DEFAULT_SAAS_CAPEX_RATE, da_anchor or DEFAULT_SAAS_CAPEX_RATE),
+            0.0,
+            0.30,
+        )
+        capex_rate_tf = assume_rate(
+            "CapEx Rate",
+            capex_default,
+            "Policy default CapEx rate for non-blocking missing CapEx inputs",
+        )
+        assumptions.append(
+            "capex_rates defaulted to " f"{capex_default:.2%} (anchor=da_rate)"
+        )
     sbc_rate_tf = ratio(
         "SBC Rate",
         sbc_tf,
         revenue_tf,
         "ShareBasedCompensation / Revenue",
     )
+    if sbc_rate_tf.value is None:
+        sbc_rate_tf = assume_rate(
+            "SBC Rate",
+            DEFAULT_SAAS_SBC_RATE,
+            "Policy default SBC rate for non-blocking missing SBC inputs",
+        )
+        assumptions.append(f"sbc_rates defaulted to {DEFAULT_SAAS_SBC_RATE:.2%}")
 
     current_assets_tf = base.current_assets
     current_liabilities_tf = base.current_liabilities
@@ -762,7 +995,22 @@ def _build_saas_operating_rates(
         )
         wc_rate_tf = ratio("WC Rate", wc_delta, revenue_tf, "ChangeInWC / Revenue")
     else:
-        wc_rate_tf = missing_field("WC Rate", "Missing working capital history")
+        wc_rate_tf = assume_rate(
+            "WC Rate",
+            DEFAULT_SAAS_WC_RATE,
+            "Policy default WC rate for insufficient working capital history",
+        )
+        assumptions.append(
+            "wc_rates defaulted to "
+            f"{DEFAULT_SAAS_WC_RATE:.2%} (insufficient working capital history)"
+        )
+    if wc_rate_tf.value is None:
+        wc_rate_tf = assume_rate(
+            "WC Rate",
+            DEFAULT_SAAS_WC_RATE,
+            "Policy default WC rate for non-blocking missing WC inputs",
+        )
+        assumptions.append(f"wc_rates defaulted to {DEFAULT_SAAS_WC_RATE:.2%}")
 
     return _SaasOperatingRates(
         margin_tf=margin_tf,
@@ -1104,8 +1352,8 @@ def build_saas_payload(
         monte_carlo_sampler,
     ) = deps.resolve_monte_carlo_controls(market_snapshot, assumptions)
 
-    missing.extend(
-        _collect_saas_missing_metric_names(
+    missing_policy = apply_missing_metric_policy(
+        missing_fields=_collect_saas_missing_metric_names(
             growth_rates_tf=growth_rates_tf,
             operating_margins_tf=operating_margins_tf,
             tax_rate_tf=tax_rate_tf,
@@ -1113,8 +1361,15 @@ def build_saas_payload(
             capex_rates_tf=capex_rates_tf,
             wc_rates_tf=wc_rates_tf,
             sbc_rates_tf=sbc_rates_tf,
-        )
+        ),
+        warn_only_fields=_SAAS_WARN_ONLY_MISSING_METRICS,
     )
+    if missing_policy.warn_only_fields:
+        assumptions.append(
+            "xbrl_missing_input_policy downgraded non-critical metrics to warn "
+            f"(fields={sorted(set(missing_policy.warn_only_fields))})"
+        )
+    missing.extend(missing_policy.blocking_fields)
 
     capm_terminal_inputs = _build_saas_capm_terminal_inputs(
         reports=reports,

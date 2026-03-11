@@ -1,0 +1,69 @@
+{
+  "considered_count": 2,
+  "expected_profile": "prod_cohort_v1",
+  "generated_at": "2026-03-09T07:09:02+00:00",
+  "input_count": 2,
+  "min_runs": 2,
+  "runs": [
+    {
+      "consensus_confidence_weight_avg": 0.6,
+      "consensus_degraded_rate": 0.0,
+      "consensus_gap_count": 20,
+      "consensus_gap_median": -0.0955523731177651,
+      "consensus_gap_p90_abs": 0.203286674812741,
+      "consensus_quality_count": 20,
+      "failed_checks": [],
+      "gate_profile": "prod_cohort_v1",
+      "generated_at": "2026-03-09T06:47:22+00:00",
+      "kpi_passed": true,
+      "release_gate_exit_code": 0,
+      "replay_trace_contract_pass_rate": 1.0,
+      "report_path": "reports/fundamental_backtest_report_s14_prod.json",
+      "run_passed": true,
+      "snapshot_available": true,
+      "snapshot_path": "reports/fundamental_release_gate_snapshot_s14_prod.json"
+    },
+    {
+      "consensus_confidence_weight_avg": 0.6,
+      "consensus_degraded_rate": 0.0,
+      "consensus_gap_count": 20,
+      "consensus_gap_median": -0.0955523731177651,
+      "consensus_gap_p90_abs": 0.203286674812741,
+      "consensus_quality_count": 20,
+      "failed_checks": [],
+      "gate_profile": "prod_cohort_v1",
+      "generated_at": "2026-03-09T07:08:56+00:00",
+      "kpi_passed": true,
+      "release_gate_exit_code": 0,
+      "replay_trace_contract_pass_rate": 1.0,
+      "report_path": "reports/fundamental_backtest_report_s17_prod.json",
+      "run_passed": true,
+      "snapshot_available": true,
+      "snapshot_path": "reports/fundamental_release_gate_snapshot_s17_prod.json"
+    }
+  ],
+  "summary": {
+    "considered_runs": 2,
+    "kpi_pass_rate": 1.0,
+    "kpi_passed_count": 2,
+    "latest_snapshot_path": "reports/fundamental_release_gate_snapshot_s17_prod.json",
+    "median_abs_consensus_gap_median": 0.0955523731177651,
+    "median_consensus_gap_p90_abs": 0.203286674812741,
+    "min_consensus_gap_count": 20,
+    "min_consensus_quality_count": 20,
+    "run_pass_rate": 1.0,
+    "run_passed_count": 2,
+    "stability_reasons": [],
+    "stable": true
+  },
+  "thresholds": {
+    "max_consensus_degraded_rate": 0.8,
+    "max_consensus_gap_median_abs": 0.15,
+    "max_consensus_gap_p90_abs": 0.6,
+    "min_consensus_confidence_weight": 0.3,
+    "min_consensus_gap_count": 20,
+    "min_consensus_quality_count": 20,
+    "min_replay_trace_contract_pass_rate": 1.0
+  },
+  "window_size": 2
+}

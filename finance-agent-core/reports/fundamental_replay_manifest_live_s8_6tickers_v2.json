@@ -1,0 +1,29 @@
+{
+  "cases": [
+    {
+      "case_id": "AAPL_dcf_standard_01",
+      "input_path": "fundamental_replay_inputs/live_auto_s8_6tickers_v2/AAPL_dcf_standard_01.json"
+    },
+    {
+      "case_id": "AMZN_dcf_growth_02",
+      "input_path": "fundamental_replay_inputs/live_auto_s8_6tickers_v2/AMZN_dcf_growth_02.json"
+    },
+    {
+      "case_id": "GOOG_dcf_growth_03",
+      "input_path": "fundamental_replay_inputs/live_auto_s8_6tickers_v2/GOOG_dcf_growth_03.json"
+    },
+    {
+      "case_id": "JPM_bank_04",
+      "input_path": "fundamental_replay_inputs/live_auto_s8_6tickers_v2/JPM_bank_04.json"
+    },
+    {
+      "case_id": "MSFT_dcf_growth_05",
+      "input_path": "fundamental_replay_inputs/live_auto_s8_6tickers_v2/MSFT_dcf_growth_05.json"
+    },
+    {
+      "case_id": "NVDA_dcf_growth_06",
+      "input_path": "fundamental_replay_inputs/live_auto_s8_6tickers_v2/NVDA_dcf_growth_06.json"
+    }
+  ],
+  "schema_version": "valuation_replay_manifest_v1"
+}

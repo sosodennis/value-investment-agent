@@ -33,6 +33,8 @@ class TipRanksProvider(MarketDataProvider):
             fallback_patterns=(
                 r'"averagePriceTarget"\s*:\s*([0-9][0-9.,]*)',
                 r'"avgPriceTarget"\s*:\s*([0-9][0-9.,]*)',
+                r"average\s+price\s+target[^$]{0,24}\$([0-9][0-9.,]*)",
+                r"price\s+target\s+of\s+\$([0-9][0-9.,]*)",
             ),
         )
         target_high, target_high_extract = extract_float_structured_first(
@@ -45,6 +47,7 @@ class TipRanksProvider(MarketDataProvider):
             fallback_patterns=(
                 r'"highPriceTarget"\s*:\s*([0-9][0-9.,]*)',
                 r'"highestPriceTarget"\s*:\s*([0-9][0-9.,]*)',
+                r"(?:highest|high)\s+price\s+target[^$]{0,24}\$([0-9][0-9.,]*)",
             ),
         )
         target_low, target_low_extract = extract_float_structured_first(
@@ -57,6 +60,7 @@ class TipRanksProvider(MarketDataProvider):
             fallback_patterns=(
                 r'"lowPriceTarget"\s*:\s*([0-9][0-9.,]*)',
                 r'"lowestPriceTarget"\s*:\s*([0-9][0-9.,]*)',
+                r"(?:lowest|low)\s+price\s+target[^$]{0,24}\$([0-9][0-9.,]*)",
             ),
         )
         analyst_count, analyst_extract = extract_int_structured_first(
@@ -65,6 +69,8 @@ class TipRanksProvider(MarketDataProvider):
             fallback_patterns=(
                 r'"numberOfAnalysts"\s*:\s*([0-9][0-9,]*)',
                 r'"totalAnalysts"\s*:\s*([0-9][0-9,]*)',
+                r"([0-9][0-9,]*)\s+analysts?\s+offering",
+                r"based\s+on\s*([0-9][0-9,]*)\s+analysts?",
             ),
         )
 

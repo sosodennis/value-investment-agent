@@ -46,7 +46,7 @@ def collect_parsed_candidates(
             )
             continue
 
-        for ranked in rank_results(results, config):
+        for ranked in rank_results(results, config, field_name=name):
             res = ranked.result
             raw_val = res.value
 
@@ -175,12 +175,28 @@ def extract_field(
                 "selected_config_index": selected.config_index,
                 "selected_result_index": selected.ranked.result_index,
                 "resolution_stage": stage_name,
+                "resolution_confidence": round(selected.ranked.overall_confidence, 4),
+                "concept_match_score": round(selected.ranked.concept_match_score, 4),
+                "presentation_proximity_score": round(
+                    selected.ranked.presentation_proximity_score, 4
+                ),
+                "calculation_consistency_score": round(
+                    selected.ranked.calculation_consistency_score, 4
+                ),
+                "label_similarity_score": round(
+                    selected.ranked.label_similarity_score, 4
+                ),
+                "anchor_confidence_score": round(
+                    selected.ranked.anchor_confidence_score, 4
+                ),
             },
         )
 
         provenance = XBRLProvenance(
             concept=selected_result.concept,
             period=selected_result.period_key,
+            resolution_stage=stage_name,
+            confidence=round(selected.ranked.overall_confidence, 4),
         )
         return TraceableField(name=name, value=selected.value, provenance=provenance)
 

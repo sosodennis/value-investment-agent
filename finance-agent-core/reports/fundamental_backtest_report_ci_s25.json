@@ -1,0 +1,149 @@
+{
+  "baseline_path": "tests/fixtures/fundamental_backtest_baseline.json",
+  "calibration": {
+    "degraded_reason": null,
+    "gate_passed": true,
+    "mapping_artifact_name": "forward_signal_calibration.default.json",
+    "mapping_path": "/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/agents/fundamental/domain/valuation/parameterization/config/forward_signal_calibration.default.json",
+    "mapping_source": "default_artifact",
+    "mapping_version": "forward_signal_calibration_v1_2026_03_04"
+  },
+  "dataset_path": "tests/fixtures/fundamental_backtest_cases.json",
+  "drifts": [],
+  "generated_at": "2026-03-09T07:54:56+00:00",
+  "issues": [],
+  "results": [
+    {
+      "id": "saas_mc_seeded",
+      "metrics": {
+        "distribution_summary": {
+          "max": 4.18453832424063,
+          "mean": 2.39958148914796,
+          "median": 2.2597741844736694,
+          "min": 1.346964630287144,
+          "percentile_25": 2.0636279158939232,
+          "percentile_5": 1.8587959335652784,
+          "percentile_75": 2.5751695617621504,
+          "percentile_95": 3.245646009410965,
+          "std": 0.5313974264209241
+        },
+        "enterprise_value": 228.4630985151286,
+        "equity_value": 233.4630985151286,
+        "intrinsic_value": 2.334630985151286,
+        "upside_potential": 0.0
+      },
+      "model": "saas",
+      "status": "ok"
+    },
+    {
+      "id": "bank_capm_mc_seeded",
+      "metrics": {
+        "cost_of_equity": 0.095,
+        "distribution_summary": {
+          "max": 17.007955050813617,
+          "mean": 12.891586699343996,
+          "median": 12.618460571133893,
+          "min": 10.224146094736714,
+          "percentile_25": 11.59267834710443,
+          "percentile_5": 10.394657888468828,
+          "percentile_75": 13.919032652091259,
+          "percentile_95": 15.746684849393422,
+          "std": 1.6358832662768739
+        },
+        "equity_value": 1270.0193907549885,
+        "intrinsic_value": 12.700193907549885,
+        "upside_potential": 0.0
+      },
+      "model": "bank",
+      "status": "ok"
+    },
+    {
+      "id": "dcf_standard_consensus_anchor",
+      "metrics": {
+        "consensus_gap_pct": 0.01218192857721083,
+        "consensus_target_price_median": 2.9,
+        "enterprise_value": 288.5327592873911,
+        "equity_value": 293.5327592873911,
+        "intrinsic_value": 2.9353275928739113,
+        "upside_potential": 0.048331283169254106
+      },
+      "model": "dcf_standard",
+      "status": "ok"
+    },
+    {
+      "id": "dcf_growth_consensus_anchor",
+      "metrics": {
+        "consensus_gap_pct": -0.20328667481274101,
+        "consensus_target_price_median": 5.2,
+        "enterprise_value": 409.29092909737466,
+        "equity_value": 414.29092909737466,
+        "intrinsic_value": 4.142909290973747,
+        "upside_potential": -0.13689389771380273
+      },
+      "model": "dcf_growth",
+      "status": "ok"
+    },
+    {
+      "id": "reit_affo_mc_seeded",
+      "metrics": {
+        "distribution_summary": {
+          "max": 117.33628817135138,
+          "mean": 76.69813215068477,
+          "median": 77.002744080193,
+          "min": 52.14101768965069,
+          "percentile_25": 69.15863011067101,
+          "percentile_5": 56.682091430264165,
+          "percentile_75": 83.25511538776061,
+          "percentile_95": 96.50775395544846,
+          "std": 12.56332836785745
+        },
+        "enterprise_value": 840.0,
+        "equity_value": 800.0,
+        "intrinsic_value": 80.0,
+        "upside_potential": 0.0
+      },
+      "model": "reit_ffo",
+      "status": "ok"
+    },
+    {
+      "id": "bank_override_deterministic",
+      "metrics": {
+        "cost_of_equity": 0.2,
+        "equity_value": 507.55208333333337,
+        "intrinsic_value": 5.075520833333334,
+        "upside_potential": 0.0
+      },
+      "model": "bank",
+      "status": "ok"
+    }
+  ],
+  "summary": {
+    "baseline_updated": false,
+    "calibration_gate_passed": true,
+    "consensus_confidence_weight_avg": 0.0,
+    "consensus_degraded_rate": 0.0,
+    "consensus_gap_distribution": {
+      "available_count": 2,
+      "max_abs": 0.20328667481274101,
+      "mean": -0.0955523731177651,
+      "mean_abs": 0.10773430169497591,
+      "median": -0.0955523731177651,
+      "p10": -0.18173981447374582,
+      "p90": -0.009364931761784349,
+      "p90_abs": 0.184176200189188
+    },
+    "consensus_quality_distribution": {
+      "available_count": 0
+    },
+    "drift_count": 0,
+    "drifted_case_count": 0,
+    "errors": 0,
+    "extreme_upside_rate": 0.0,
+    "guardrail_hit_rate": 0.0,
+    "issue_count": 0,
+    "ok": 6,
+    "reinvestment_guardrail_hit_rate": 0.0,
+    "shares_scope_mismatch_rate": 0.0,
+    "total_cases": 6
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "manifest_schema_version": "valuation_replay_manifest_v1",
+  "results": [
+    {
+      "case_id": "AAPL_dcf_standard_01",
+      "input_path": "/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/reports/fundamental_replay_inputs/live_auto_s24_live/AAPL_dcf_standard_01.json",
+      "intrinsic_delta": 85.52600685419509,
+      "status": "ok",
+      "trace_contract_passed": true
+    },
+    {
+      "case_id": "GOOG_dcf_growth_02",
+      "input_path": "/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/reports/fundamental_replay_inputs/live_auto_s24_live/GOOG_dcf_growth_02.json",
+      "intrinsic_delta": 398.2130819885891,
+      "status": "ok",
+      "trace_contract_passed": true
+    },
+    {
+      "case_id": "MSFT_dcf_growth_03",
+      "input_path": "/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/reports/fundamental_replay_inputs/live_auto_s24_live/MSFT_dcf_growth_03.json",
+      "intrinsic_delta": 205.55119518753838,
+      "status": "ok",
+      "trace_contract_passed": true
+    },
+    {
+      "case_id": "NVDA_dcf_growth_04",
+      "input_path": "/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/reports/fundamental_replay_inputs/live_auto_s24_live/NVDA_dcf_growth_04.json",
+      "intrinsic_delta": -2.744390209943049,
+      "status": "ok",
+      "trace_contract_passed": true
+    }
+  ],
+  "schema_version": "fundamental_replay_checks_report_v1",
+  "summary": {
+    "error_code_counts": {},
+    "failed_cases": 0,
+    "passed_cases": 4,
+    "total_cases": 4,
+    "trace_contract_pass_rate": 1.0,
+    "trace_contract_passed_cases": 4
+  }
+}

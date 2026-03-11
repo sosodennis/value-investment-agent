@@ -62,15 +62,43 @@ jobs:
           --min-usable-rows 4
           --min-anchor-coverage 0.95
 
+      - name: Validate fundamental gate profiles config
+        run: >
+          uv run python scripts/validate_fundamental_gate_profiles.py
+          --path config/fundamental_gate_profiles.json
+
       - name: Run fundamental release gate
         env:
+          FUNDAMENTAL_GATE_PROFILE: "ci_cohort_v1"
+          FUNDAMENTAL_GATE_PROFILES_PATH: "config/fundamental_gate_profiles.json"
           FUNDAMENTAL_FORWARD_SIGNAL_CALIBRATION_MAPPING_PATH: ${{ env.CALIBRATION_ARTIFACT_PATH }}
           FUNDAMENTAL_REQUIRE_CALIBRATION_PIPELINE_REPORT: "1"
           FUNDAMENTAL_CALIBRATION_MIN_USABLE_ROWS: "4"
           FUNDAMENTAL_CALIBRATION_MIN_ANCHOR_COVERAGE: "0.95"
-          FUNDAMENTAL_REPLAY_MANIFEST_PATH: "tests/fixtures/fundamental_replay_manifest_ci.json"
-          FUNDAMENTAL_REPLAY_REPORT_PATH: "reports/fundamental_replay_checks_report_ci.json"
+          FUNDAMENTAL_LIVE_REPLAY_COHORT_CONFIG_PATH: "config/fundamental_live_replay_cohort_config_ci.json"
+          FUNDAMENTAL_LIVE_REPLAY_COHORT_OUTPUT_DIR: "reports"
+          FUNDAMENTAL_LIVE_REPLAY_COHORT_CYCLE_TAG: "ci"
+          FUNDAMENTAL_LIVE_REPLAY_COHORT_RUN_PATH: "reports/fundamental_live_replay_cohort_run_ci.json"
+          FUNDAMENTAL_LIVE_REPLAY_DISCOVER_ROOT: "tests/fixtures/fundamental_replay_inputs"
+          FUNDAMENTAL_REINVESTMENT_CLAMP_PROFILE_PATH: "src/agents/fundamental/domain/valuation/parameterization/config/reinvestment_clamp_profile.default.json"
+          FUNDAMENTAL_REINVESTMENT_CLAMP_PROFILE_VALIDATION_REPORT_PATH: "reports/fundamental_reinvestment_clamp_profile_validation_report_ci.json"
+          FUNDAMENTAL_REINVESTMENT_CLAMP_PROFILE_MAX_AGE_DAYS: "21"
+          FUNDAMENTAL_REINVESTMENT_CLAMP_PROFILE_MIN_EVIDENCE_REFS: "1"
         run: |
+          profile_exports="$(
+            uv run python scripts/resolve_fundamental_gate_profile.py \
+              --profile "${FUNDAMENTAL_GATE_PROFILE}" \
+              --path "${FUNDAMENTAL_GATE_PROFILES_PATH}" \
+              --format env
+          )"
+          while IFS='=' read -r key value; do
+            if [[ -z "${key}" ]]; then
+              continue
+            fi
+            export "${key}=${value}"
+            echo "${key}=${value}" >> "$GITHUB_ENV"
+          done <<< "${profile_exports}"
+
           set +e
           RELEASE_GATE_STDERR_PATH="${RUNNER_TEMP}/fundamental_release_gate.stderr.log"
           bash scripts/run_fundamental_release_gate.sh \
@@ -80,8 +108,39 @@ jobs:
           release_gate_status=$?
 
           echo "FUNDAMENTAL_RELEASE_GATE_EXIT_CODE=${release_gate_status}" >> "$GITHUB_ENV"
-          replay_error_codes="$(sed -n 's/.*error_code=\([^ ]*\).*/\1/p' "${RELEASE_GATE_STDERR_PATH}" | sort -u | tr '\n' ',' | sed 's/,$//')"
-          echo "FUNDAMENTAL_RELEASE_GATE_REPLAY_ERROR_CODES=${replay_error_codes}" >> "$GITHUB_ENV"
+          gate_error_codes="$(sed -n 's/.*error_code=\([^ ]*\).*/\1/p' "${RELEASE_GATE_STDERR_PATH}" | sort -u | tr '\n' ',' | sed 's/,$//')"
+          echo "FUNDAMENTAL_RELEASE_GATE_ERROR_CODES=${gate_error_codes}" >> "$GITHUB_ENV"
+
+          uv run python scripts/build_fundamental_release_gate_snapshot.py \
+            --report reports/fundamental_backtest_report_ci.json \
+            --output reports/fundamental_release_gate_snapshot_ci.json \
+            --exit-code "${release_gate_status}" \
+            --gate-profile "${FUNDAMENTAL_GATE_PROFILE:-unknown}" \
+            --gate-error-codes "${gate_error_codes}" \
+            --replay-report reports/fundamental_replay_checks_report_live_ci.json \
+            --live-replay-run-report "${FUNDAMENTAL_LIVE_REPLAY_COHORT_RUN_PATH}" \
+            --reinvestment-clamp-profile-report "${FUNDAMENTAL_REINVESTMENT_CLAMP_PROFILE_VALIDATION_REPORT_PATH}" \
+            --max-consensus-gap-median-abs "${FUNDAMENTAL_MAX_CONSENSUS_GAP_MEDIAN_ABS}" \
+            --max-consensus-gap-p90-abs "${FUNDAMENTAL_MAX_CONSENSUS_GAP_P90_ABS}" \
+            --min-consensus-gap-count "${FUNDAMENTAL_MIN_CONSENSUS_GAP_COUNT}" \
+            --max-consensus-degraded-rate "${FUNDAMENTAL_MAX_CONSENSUS_DEGRADED_RATE}" \
+            --min-consensus-confidence-weight "${FUNDAMENTAL_MIN_CONSENSUS_CONFIDENCE_WEIGHT}" \
+            --min-consensus-quality-count "${FUNDAMENTAL_MIN_CONSENSUS_QUALITY_COUNT}" \
+            --max-consensus-provider-blocked-rate "${FUNDAMENTAL_MAX_CONSENSUS_PROVIDER_BLOCKED_RATE}" \
+            --max-consensus-parse-missing-rate "${FUNDAMENTAL_MAX_CONSENSUS_PARSE_MISSING_RATE}" \
+            --min-consensus-warning-code-count "${FUNDAMENTAL_MIN_CONSENSUS_WARNING_CODE_COUNT}" \
+            --min-replay-trace-contract-pass-rate "${FUNDAMENTAL_MIN_REPLAY_TRACE_CONTRACT_PASS_RATE}" \
+            --max-replay-intrinsic-delta-p90-abs "${FUNDAMENTAL_MAX_REPLAY_INTRINSIC_DELTA_P90_ABS}" \
+            --max-replay-quality-block-rate "${FUNDAMENTAL_MAX_REPLAY_QUALITY_BLOCK_RATE}" \
+            --min-replay-cache-hit-rate "${FUNDAMENTAL_MIN_REPLAY_CACHE_HIT_RATE}" \
+            --max-replay-warm-latency-p90-ms "${FUNDAMENTAL_MAX_REPLAY_WARM_LATENCY_P90_MS}" \
+            --max-replay-cold-latency-p90-ms "${FUNDAMENTAL_MAX_REPLAY_COLD_LATENCY_P90_MS}" \
+            --max-replay-validation-rule-drift-count "${FUNDAMENTAL_MAX_REPLAY_VALIDATION_RULE_DRIFT_COUNT}"
+
+          uv run python scripts/build_fundamental_cohort_release_checklist.py \
+            --snapshot reports/fundamental_release_gate_snapshot_ci.json \
+            --output reports/fundamental_cohort_release_checklist_ci.md \
+            --owner "github-actions"
           exit "${release_gate_status}"
 
       - name: Summarize fundamental release gate
@@ -90,10 +149,30 @@ jobs:
           {
             echo "### Fundamental Release Gate"
             echo "- Exit code: ${FUNDAMENTAL_RELEASE_GATE_EXIT_CODE:-unknown}"
-            if [[ -n "${FUNDAMENTAL_RELEASE_GATE_REPLAY_ERROR_CODES:-}" ]]; then
-              echo "- Replay error codes: ${FUNDAMENTAL_RELEASE_GATE_REPLAY_ERROR_CODES}"
+            echo "- Gate profile: ${FUNDAMENTAL_GATE_PROFILE:-unknown}"
+            echo "- Gate thresholds:"
+            echo "  - max_consensus_gap_median_abs=${FUNDAMENTAL_MAX_CONSENSUS_GAP_MEDIAN_ABS:-unset}"
+            echo "  - max_consensus_gap_p90_abs=${FUNDAMENTAL_MAX_CONSENSUS_GAP_P90_ABS:-unset}"
+            echo "  - min_consensus_gap_count=${FUNDAMENTAL_MIN_CONSENSUS_GAP_COUNT:-unset}"
+            echo "  - max_consensus_degraded_rate=${FUNDAMENTAL_MAX_CONSENSUS_DEGRADED_RATE:-unset}"
+            echo "  - min_consensus_confidence_weight=${FUNDAMENTAL_MIN_CONSENSUS_CONFIDENCE_WEIGHT:-unset}"
+            echo "  - min_consensus_quality_count=${FUNDAMENTAL_MIN_CONSENSUS_QUALITY_COUNT:-unset}"
+            echo "  - max_consensus_provider_blocked_rate=${FUNDAMENTAL_MAX_CONSENSUS_PROVIDER_BLOCKED_RATE:-unset}"
+            echo "  - max_consensus_parse_missing_rate=${FUNDAMENTAL_MAX_CONSENSUS_PARSE_MISSING_RATE:-unset}"
+            echo "  - min_consensus_warning_code_count=${FUNDAMENTAL_MIN_CONSENSUS_WARNING_CODE_COUNT:-unset}"
+            echo "  - min_replay_trace_contract_pass_rate=${FUNDAMENTAL_MIN_REPLAY_TRACE_CONTRACT_PASS_RATE:-unset}"
+            echo "  - max_replay_intrinsic_delta_p90_abs=${FUNDAMENTAL_MAX_REPLAY_INTRINSIC_DELTA_P90_ABS:-unset}"
+            echo "  - max_replay_quality_block_rate=${FUNDAMENTAL_MAX_REPLAY_QUALITY_BLOCK_RATE:-unset}"
+            echo "  - min_replay_cache_hit_rate=${FUNDAMENTAL_MIN_REPLAY_CACHE_HIT_RATE:-unset}"
+            echo "  - max_replay_warm_latency_p90_ms=${FUNDAMENTAL_MAX_REPLAY_WARM_LATENCY_P90_MS:-unset}"
+            echo "  - max_replay_cold_latency_p90_ms=${FUNDAMENTAL_MAX_REPLAY_COLD_LATENCY_P90_MS:-unset}"
+            echo "  - max_replay_validation_rule_drift_count=${FUNDAMENTAL_MAX_REPLAY_VALIDATION_RULE_DRIFT_COUNT:-unset}"
+            echo "  - reinvestment_clamp_profile_max_age_days=${FUNDAMENTAL_REINVESTMENT_CLAMP_PROFILE_MAX_AGE_DAYS:-unset}"
+            echo "  - reinvestment_clamp_profile_min_evidence_refs=${FUNDAMENTAL_REINVESTMENT_CLAMP_PROFILE_MIN_EVIDENCE_REFS:-unset}"
+            if [[ -n "${FUNDAMENTAL_RELEASE_GATE_ERROR_CODES:-}" ]]; then
+              echo "- Gate error codes: ${FUNDAMENTAL_RELEASE_GATE_ERROR_CODES}"
             else
-              echo "- Replay error codes: none"
+              echo "- Gate error codes: none"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -105,12 +184,40 @@ jobs:
           path: finance-agent-core/reports/fundamental_backtest_report_ci.json
           if-no-files-found: warn
 
-      - name: Upload fundamental replay checks report
+      - name: Upload live replay cohort artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: fundamental-replay-checks-report
-          path: finance-agent-core/reports/fundamental_replay_checks_report_ci.json
+          name: fundamental-live-replay-cohort-artifacts
+          path: |
+            finance-agent-core/reports/fundamental_live_replay_cohort_run_ci.json
+            finance-agent-core/reports/fundamental_replay_manifest_live_ci.json
+            finance-agent-core/reports/fundamental_replay_checks_report_live_ci.json
+            finance-agent-core/reports/fundamental_replay_cohort_gate_ci.json
+          if-no-files-found: warn
+
+      - name: Validate fundamental release gate snapshot
+        if: always()
+        run: >
+          uv run python scripts/validate_fundamental_release_gate_snapshot.py
+          --path reports/fundamental_release_gate_snapshot_ci.json
+
+      - name: Upload fundamental release gate snapshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fundamental-release-gate-snapshot
+          path: |
+            finance-agent-core/reports/fundamental_release_gate_snapshot_ci.json
+            finance-agent-core/reports/fundamental_reinvestment_clamp_profile_validation_report_ci.json
+          if-no-files-found: warn
+
+      - name: Upload fundamental release checklist
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fundamental-release-checklist
+          path: finance-agent-core/reports/fundamental_cohort_release_checklist_ci.md
           if-no-files-found: warn
 
       - name: Upload calibration pipeline artifacts

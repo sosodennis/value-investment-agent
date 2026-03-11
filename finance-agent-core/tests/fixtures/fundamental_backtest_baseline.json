@@ -31,23 +31,23 @@
     },
     "dcf_growth_consensus_anchor": {
       "metrics": {
-        "consensus_gap_pct": -0.12748002317237034,
+        "consensus_gap_pct": -0.1485546680775277,
         "consensus_target_price_median": 5.2,
-        "enterprise_value": 448.7103879503675,
-        "equity_value": 453.7103879503675,
-        "intrinsic_value": 4.537103879503674,
-        "upside_potential": -0.05477002510340112
+        "enterprise_value": 437.7515725996856,
+        "equity_value": 442.7515725996856,
+        "intrinsic_value": 4.427515725996856,
+        "upside_potential": -0.07760089041732163
       },
       "model": "dcf_growth"
     },
     "dcf_standard_consensus_anchor": {
       "metrics": {
-        "consensus_gap_pct": 0.0691802933281569,
+        "consensus_gap_pct": 0.01218192857721083,
         "consensus_target_price_median": 2.9,
-        "enterprise_value": 305.0622850651655,
-        "equity_value": 310.0622850651655,
-        "intrinsic_value": 3.100622850651655,
-        "upside_potential": 0.10736530380416252
+        "enterprise_value": 288.5327592873911,
+        "equity_value": 293.5327592873911,
+        "intrinsic_value": 2.9353275928739113,
+        "upside_potential": 0.048331283169254106
       },
       "model": "dcf_standard"
     },
@@ -74,23 +74,23 @@
     "saas_mc_seeded": {
       "metrics": {
         "distribution_summary": {
-          "max": 4.9806237466016015,
-          "mean": 2.8156174321754435,
-          "median": 2.6780510976389933,
-          "min": 1.685620529235077,
-          "percentile_25": 2.4452029973318195,
-          "percentile_5": 2.215699863360125,
-          "percentile_75": 3.0365923768010474,
-          "percentile_95": 3.7983954384121468,
-          "std": 0.5981267412384048
+          "max": 4.18453832424063,
+          "mean": 2.39958148914796,
+          "median": 2.2597741844736694,
+          "min": 1.346964630287144,
+          "percentile_25": 2.0636279158939232,
+          "percentile_5": 1.8587959335652784,
+          "percentile_75": 2.5751695617621504,
+          "percentile_95": 3.245646009410965,
+          "std": 0.5313974264209241
         },
-        "enterprise_value": 268.9049437442796,
-        "equity_value": 273.9049437442796,
-        "intrinsic_value": 2.739049437442796,
+        "enterprise_value": 228.4630985151286,
+        "equity_value": 233.4630985151286,
+        "intrinsic_value": 2.334630985151286,
         "upside_potential": 0.0
       },
       "model": "saas"
     }
   },
-  "generated_at": "2026-03-07T02:59:25+00:00"
+  "generated_at": "2026-03-09T08:53:16+00:00"
 }

@@ -80,6 +80,12 @@ def test_build_report_payload_includes_monitoring_summary_metrics() -> None:
                     "base_wc_guardrail_applied": False,
                     "shares_scope_mismatch_detected": True,
                     "shares_scope_mismatch_resolved": False,
+                    "target_consensus_quality_bucket": "degraded",
+                    "target_consensus_confidence_weight": 0.30,
+                    "target_consensus_warning_codes": [
+                        "provider_blocked",
+                        "provider_fetch_failed",
+                    ],
                 },
             ),
             CaseResult(
@@ -94,6 +100,11 @@ def test_build_report_payload_includes_monitoring_summary_metrics() -> None:
                     "base_wc_guardrail_applied": False,
                     "shares_scope_mismatch_detected": True,
                     "shares_scope_mismatch_resolved": True,
+                    "target_consensus_quality_bucket": "high",
+                    "target_consensus_confidence_weight": 1.0,
+                    "target_consensus_warning_codes": [
+                        "provider_parse_missing",
+                    ],
                 },
             ),
             CaseResult(
@@ -114,10 +125,30 @@ def test_build_report_payload_includes_monitoring_summary_metrics() -> None:
     assert summary["guardrail_hit_rate"] == 0.5
     assert summary["reinvestment_guardrail_hit_rate"] == 0.5
     assert summary["shares_scope_mismatch_rate"] == 0.5
+    assert summary["consensus_confidence_weight_avg"] == pytest.approx(0.65)
+    assert summary["consensus_degraded_rate"] == pytest.approx(0.5)
     consensus_gap_distribution = summary["consensus_gap_distribution"]
     assert isinstance(consensus_gap_distribution, dict)
     assert consensus_gap_distribution["available_count"] == 2
     assert consensus_gap_distribution["median"] == pytest.approx(0.03333333333333333)
+    consensus_quality_distribution = summary["consensus_quality_distribution"]
+    assert isinstance(consensus_quality_distribution, dict)
+    assert consensus_quality_distribution["available_count"] == 2
+    assert consensus_quality_distribution["degraded_count"] == 1
+    assert consensus_quality_distribution["high_count"] == 1
+    warning_distribution = summary["consensus_warning_code_distribution"]
+    assert isinstance(warning_distribution, dict)
+    assert warning_distribution["available_count"] == 2
+    assert warning_distribution["code_case_counts"]["provider_blocked"] == 1
+    assert warning_distribution["code_case_counts"]["provider_parse_missing"] == 1
+    assert warning_distribution["code_case_rates"]["provider_blocked"] == pytest.approx(
+        0.5
+    )
+    assert warning_distribution["code_case_rates"][
+        "provider_parse_missing"
+    ] == pytest.approx(0.5)
+    assert summary["consensus_provider_blocked_rate"] == pytest.approx(0.5)
+    assert summary["consensus_parse_missing_rate"] == pytest.approx(0.5)
 
 
 def test_build_report_payload_defaults_monitoring_metrics_when_unavailable() -> None:
@@ -143,6 +174,16 @@ def test_build_report_payload_defaults_monitoring_metrics_when_unavailable() -> 
     assert summary["guardrail_hit_rate"] == 0.0
     assert summary["reinvestment_guardrail_hit_rate"] == 0.0
     assert summary["shares_scope_mismatch_rate"] == 0.0
+    assert summary["consensus_confidence_weight_avg"] == 0.0
+    assert summary["consensus_degraded_rate"] == 0.0
     consensus_gap_distribution = summary["consensus_gap_distribution"]
     assert isinstance(consensus_gap_distribution, dict)
     assert consensus_gap_distribution == {"available_count": 0}
+    consensus_quality_distribution = summary["consensus_quality_distribution"]
+    assert isinstance(consensus_quality_distribution, dict)
+    assert consensus_quality_distribution == {"available_count": 0}
+    warning_distribution = summary["consensus_warning_code_distribution"]
+    assert isinstance(warning_distribution, dict)
+    assert warning_distribution == {"available_count": 0}
+    assert summary["consensus_provider_blocked_rate"] == 0.0
+    assert summary["consensus_parse_missing_rate"] == 0.0

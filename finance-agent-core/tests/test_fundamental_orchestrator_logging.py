@@ -611,6 +611,9 @@ async def test_run_valuation_marks_completion_as_degraded_when_target_consensus_
                             "target_consensus_warnings": [
                                 "target consensus aggregate skipped: insufficient_sources=1 (<2)"
                             ],
+                            "target_consensus_warning_codes": [
+                                "insufficient_sources",
+                            ],
                             "source_warnings": [
                                 "tipranks fetch failed: timeout",
                             ],
@@ -624,6 +627,9 @@ async def test_run_valuation_marks_completion_as_degraded_when_target_consensus_
                             "target_consensus_fallback_reason": "insufficient_sources",
                             "target_consensus_warnings": [
                                 "target consensus aggregate skipped: insufficient_sources=1 (<2)"
+                            ],
+                            "target_consensus_warning_codes": [
+                                "insufficient_sources",
                             ],
                         },
                         "parameters": {
@@ -654,6 +660,7 @@ async def test_run_valuation_marks_completion_as_degraded_when_target_consensus_
     assert fields["target_consensus_warnings"] == [
         "target consensus aggregate skipped: insufficient_sources=1 (<2)"
     ]
+    assert fields["target_consensus_warning_codes"] == ["insufficient_sources"]
     assert fields["is_degraded"] is True
     degrade_reasons = fields.get("degrade_reasons")
     assert isinstance(degrade_reasons, list)
@@ -939,6 +946,8 @@ async def test_run_financial_health_persists_forward_signals_in_financial_report
                         ],
                     }
                 ],
+                "diagnostics": {"source": "test_fixture"},
+                "quality_gates": {"status": "pass"},
             },
             context="test.financial_health",
         ),
@@ -949,6 +958,115 @@ async def test_run_financial_health_persists_forward_signals_in_financial_report
     assert (
         fake_port.saved_data["forward_signals"][0]["signal_id"]
         == "sec_xbrl_growth_2025"
+    )
+    assert fake_port.saved_data["quality_gates"]["status"] == "pass"
+    fa_update = result.update["fundamental_analysis"]
+    assert isinstance(fa_update, Mapping)
+    assert isinstance(fa_update.get("xbrl_quality_gates"), Mapping)
+    assert fa_update["xbrl_quality_gates"]["status"] == "pass"
+
+
+@pytest.mark.asyncio
+async def test_run_valuation_blocks_when_xbrl_quality_gate_is_blocking() -> None:
+    orchestrator = _build_orchestrator()
+    state = _build_state()
+    state["fundamental_analysis"]["xbrl_quality_gates"] = {
+        "status": "block",
+        "blocking_count": 1,
+        "issues": [
+            {
+                "code": "DQC_CRITICAL_FIELD_MISSING",
+                "field_key": "income_before_tax",
+                "blocking": True,
+            }
+        ],
+    }
+
+    with patch(
+        "src.agents.fundamental.application.use_cases.run_valuation_use_case.log_event"
+    ) as mock_log:
+        result = await orchestrator.run_valuation(
+            state,
+            build_params_fn=lambda _model_type, _ticker, _reports, _forward_signals: (
+                _ for _ in ()
+            ).throw(
+                AssertionError("build_params should not run when quality gate blocks")
+            ),
+            get_model_runtime_fn=lambda _model_type: {
+                "schema": _ValuationParams,
+                "calculator": lambda _params: {"intrinsic_value": 123.0},
+                "auditor": lambda _params: _AuditResult(True, []),
+            },
+        )
+
+    assert result.goto == "END"
+    error_logs = result.update.get("error_logs")
+    assert isinstance(error_logs, list) and error_logs
+    error_text = str(error_logs[0].get("error", ""))
+    assert "FUNDAMENTAL_XBRL_QUALITY_BLOCKED" in error_text
+
+    blocked_call = next(
+        call
+        for call in mock_log.call_args_list
+        if call.kwargs.get("event") == "fundamental_valuation_quality_blocked"
+    )
+    assert blocked_call.kwargs["error_code"] == "FUNDAMENTAL_XBRL_QUALITY_BLOCKED"
+
+
+@pytest.mark.asyncio
+async def test_run_valuation_warn_only_missing_inputs_continue_when_quality_gate_non_blocking() -> (
+    None
+):
+    orchestrator = _build_orchestrator()
+    state = _build_state()
+    state["fundamental_analysis"]["xbrl_quality_gates"] = {
+        "status": "warn",
+        "blocking_count": 0,
+        "warning_count": 1,
+        "issues": [
+            {
+                "code": "DQC_NON_CRITICAL_FIELD_MISSING",
+                "field_key": "wc_rates",
+                "blocking": False,
+            }
+        ],
+    }
+
+    with patch(
+        "src.agents.fundamental.application.use_cases.run_valuation_use_case.log_event"
+    ) as mock_log:
+        result = await orchestrator.run_valuation(
+            state,
+            build_params_fn=lambda _model_type,
+            _ticker,
+            _reports,
+            _forward_signals: ParamBuildResult(
+                params={"wacc": 0.1},
+                trace_inputs={},
+                missing=["wc_rates"],
+                assumptions=[],
+                metadata={},
+            ),
+            get_model_runtime_fn=lambda _model_type: {
+                "schema": _ValuationParams,
+                "calculator": lambda _params: {"intrinsic_value": 123.0},
+                "auditor": lambda _params: _AuditResult(True, []),
+            },
+        )
+
+    assert result.goto == "END"
+    missing_policy_calls = [
+        call
+        for call in mock_log.call_args_list
+        if call.kwargs.get("event") == "fundamental_valuation_missing_policy_applied"
+    ]
+    assert len(missing_policy_calls) == 1
+    assert missing_policy_calls[0].kwargs["error_code"] == (
+        "FUNDAMENTAL_VALUATION_MISSING_INPUTS_WARN_ONLY"
+    )
+    assert not any(
+        call.kwargs.get("event") == "fundamental_valuation_missing_inputs"
+        for call in mock_log.call_args_list
     )
 
 
