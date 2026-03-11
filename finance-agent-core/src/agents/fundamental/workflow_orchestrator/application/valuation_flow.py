@@ -5,11 +5,11 @@ import logging
 from collections.abc import Callable, Mapping
 from typing import Protocol
 
+from src.agents.fundamental.core_valuation.domain.parameterization import (
+    apply_missing_metric_policy,
+)
 from src.agents.fundamental.core_valuation.domain.parameterization.contracts import (
     ParamBuildResult,
-)
-from src.agents.fundamental.core_valuation.domain.parameterization.model_builders.shared.missing_metrics_service import (
-    apply_missing_metric_policy,
 )
 from src.agents.fundamental.forward_signals.interface.contracts import (
     ForwardSignalPayload,

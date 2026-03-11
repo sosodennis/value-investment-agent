@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.agents.intent.domain.models import TickerCandidate
+from src.agents.intent.domain.ticker_candidate import TickerCandidate
 
 
 def should_request_clarification(

@@ -4,7 +4,7 @@ import logging
 
 import yfinance as yf
 
-from src.agents.intent.domain.models import TickerCandidate
+from src.agents.intent.domain.ticker_candidate import TickerCandidate
 from src.shared.kernel.tools.logger import bounded_text, get_logger, log_event
 
 logger = get_logger(__name__)

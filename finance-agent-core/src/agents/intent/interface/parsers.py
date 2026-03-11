@@ -3,9 +3,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from src.agents.intent.domain.models import TickerCandidate
+from src.agents.intent.domain.ticker_candidate import TickerCandidate
 from src.agents.intent.interface.contracts import TickerCandidateModel
-from src.agents.intent.interface.mappers import to_ticker_candidate
+from src.agents.intent.interface.ticker_candidate_mapper import to_ticker_candidate
 
 
 def parse_ticker_candidates(value: object) -> list[TickerCandidate]:

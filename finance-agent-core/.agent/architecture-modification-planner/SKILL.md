@@ -29,6 +29,7 @@ Collect these inputs before planning:
 - Identify directly changed files and indirectly impacted dependencies.
 - Map boundary crossings (`domain/application/interface/infrastructure`).
 - Flag potential subdomain split candidates (stable capability boundary, unique deps, or pipeline stages).
+- Identify over-fragmented clusters and deep import paths; plan consolidation and facade exports.
 
 3. Design phased execution plan.
 - Sequence changes into low-risk phases with clear entry/exit criteria.
@@ -57,6 +58,7 @@ Use this structure:
 - `Involved Files`
 - `Detailed Per-File Plan`
 - `Old → New Mapping`
+- `Cohesion/Facade Plan`
 - `Risk/Dependency Assessment`
 - `Validation and Rollout Gates`
 - `Assumptions/Open Questions`
@@ -72,6 +74,7 @@ Use this structure:
 - Tie every proposed change to a requirement or finding.
 - Prefer minimal and maintainable sequencing over large-batch rewrites.
 - Do not propose compatibility shims unless explicitly approved as a constraint.
+- Do not introduce deep imports without a facade/export plan.
 
 ## Ownership Decision Rubric (Boundary Placement)
 - `domain`: deterministic business concepts/policies; no I/O.

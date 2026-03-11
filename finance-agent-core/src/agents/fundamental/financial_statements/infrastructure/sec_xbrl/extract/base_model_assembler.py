@@ -6,7 +6,7 @@ from src.agents.fundamental.shared.contracts.traceable import (
 )
 
 from .base_model_context_balance_builder import ContextBalanceFields
-from .base_model_income_cashflow_builder import IncomeCashflowDerivedFields
+from .income_cashflow_pipeline import IncomeCashflowDerivedFields
 from .report_contracts import BaseFinancialModel
 
 

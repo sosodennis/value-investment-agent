@@ -10,7 +10,7 @@ from src.agents.fundamental.shared.contracts.traceable import (
 
 from ....report_contract import FinancialReport, RealEstateExtension
 from ...types import MonteCarloControls, TraceInput
-from ..shared.capital_structure_value_extraction_service import (
+from ..shared.market_value_extraction import (
     extract_filing_capital_structure_market_values,
 )
 from ..shared.parameter_assembly_service import (

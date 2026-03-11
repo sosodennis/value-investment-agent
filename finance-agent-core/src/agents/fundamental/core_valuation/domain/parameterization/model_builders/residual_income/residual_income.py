@@ -7,7 +7,7 @@ from src.agents.fundamental.shared.contracts.traceable import TraceableField
 
 from ....report_contract import FinancialReport
 from ...types import TraceInput
-from ..shared.equity_market_value_extraction_service import (
+from ..shared.market_value_extraction import (
     extract_filing_equity_market_values,
 )
 from ..shared.missing_metrics_service import extend_missing_fields

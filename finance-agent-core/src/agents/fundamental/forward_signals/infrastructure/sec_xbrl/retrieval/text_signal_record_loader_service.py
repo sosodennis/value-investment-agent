@@ -6,7 +6,7 @@ from datetime import date
 
 from edgar import Company
 
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.fetch.filing_fetcher import (
+from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl import (
     call_with_sec_retry,
 )
 from src.shared.kernel.tools.logger import log_event

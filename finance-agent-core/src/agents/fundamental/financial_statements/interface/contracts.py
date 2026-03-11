@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Literal
+from typing import Literal, Protocol
 
 from pydantic import (
     BaseModel,
@@ -323,3 +323,17 @@ def parse_financial_reports_model(
         )
         for index, report in enumerate(reports)
     ]
+
+
+class _SupportsTraceableValue(Protocol):
+    value: object | None
+
+
+class FinancialReportBaseLike(Protocol):
+    fiscal_year: _SupportsTraceableValue
+    total_revenue: _SupportsTraceableValue
+    operating_income: _SupportsTraceableValue
+
+
+class FinancialReportLike(Protocol):
+    base: FinancialReportBaseLike

@@ -17,10 +17,10 @@ from ....policies.manual_assumption_policy import (
 from ....report_contract import FinancialReport, IndustrialExtension
 from ...core_ops_service import ratio_with_optional_inputs
 from ...types import MonteCarloControls, TraceInput
-from ..shared.capital_structure_value_extraction_service import (
+from ..shared.capm_market_defaults_service import resolve_capm_market_defaults
+from ..shared.market_value_extraction import (
     extract_filing_capital_structure_market_values,
 )
-from ..shared.capm_market_defaults_service import resolve_capm_market_defaults
 from ..shared.missing_metrics_service import (
     apply_missing_metric_policy,
     collect_missing_metric_names,

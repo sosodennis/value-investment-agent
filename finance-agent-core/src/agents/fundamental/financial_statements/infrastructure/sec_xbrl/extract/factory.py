@@ -16,7 +16,6 @@ from ..map.extension_token_normalizer import normalize_extension_type_token
 from ..map.mapping import get_mapping_registry
 from .base_model_assembler import assemble_base_financial_model
 from .base_model_context_balance_builder import build_context_balance_fields
-from .base_model_debt_builder import DebtBuilderOps, build_total_debt_field
 from .base_model_debt_policy_service import (
     log_total_debt_diagnostics as log_total_debt_diagnostics_util,
 )
@@ -30,11 +29,10 @@ from .base_model_field_extraction_service import (
 from .base_model_field_extraction_service import (
     collect_parsed_candidates as collect_parsed_candidates_util,
 )
-from .base_model_field_extraction_service import extract_field as extract_field_util
-from .base_model_income_cashflow_builder import (
-    IncomeCashflowOps,
-    build_income_cashflow_and_derived_fields,
+from .base_model_field_extraction_service import (
+    extract_field as extract_field_util,
 )
+from .debt_pipeline import DebtBuilderOps, build_total_debt_field
 from .derived_field_service import (
     build_real_estate_debt_combined_ex_leases as build_real_estate_debt_combined_ex_leases_util,
 )
@@ -60,8 +58,10 @@ from .derived_field_service import (
     relax_statement_filters as relax_statement_filters_util,
 )
 from .extractor import SearchConfig, SECReportExtractor
-from .financial_services_extension_builder import (
-    build_financial_services_extension,
+from .financial_services_extension_builder import build_financial_services_extension
+from .income_cashflow_pipeline import (
+    IncomeCashflowOps,
+    build_income_cashflow_and_derived_fields,
 )
 from .industrial_extension_builder import build_industrial_extension
 from .real_estate_extension_builder import build_real_estate_extension

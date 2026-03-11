@@ -60,6 +60,14 @@ Treat hard rules as blocking unless the user explicitly requests a temporary exc
 - **Cohesion signal**: 4+ tightly-coupled owner modules in one area that change together repeatedly.
 - **Do not split** if it only reduces LOC or increases indirection without clear boundary value.
 
+## Cohesion and Facade Standards
+
+- Apply when deep imports or fine-grained modules appear after refactors.
+- Flag over-fragmentation: multiple single-purpose modules only used together in one workflow path.
+- Require facade exports for deep internals: external imports should target subdomain top-level or explicit `application`/`interface` entrypoints, not deep `infrastructure/...` or `.../extract/...`.
+- Allow deep nesting only for pipeline-stage grouping (fetch/extract/map/score/postprocess); otherwise flatten or add a facade.
+- Do not expose internal stage modules outside their subdomain.
+
 ## Output Contract
 
 Use this report structure:

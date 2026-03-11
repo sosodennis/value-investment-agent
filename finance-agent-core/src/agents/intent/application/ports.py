@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from src.agents.intent.domain.models import TickerCandidate
+from src.agents.intent.domain.ticker_candidate import TickerCandidate
 from src.shared.cross_agent.domain.market_identity import CompanyProfile
 
 

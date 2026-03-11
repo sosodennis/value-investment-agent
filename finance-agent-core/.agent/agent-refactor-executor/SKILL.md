@@ -19,6 +19,7 @@ Collect these before execution:
 - Rollback expectations and compatibility constraints.
 - Ownership decisions for any moved contracts/ports and old → new path mapping.
 - Legacy removal constraints (no compatibility shims unless explicitly approved).
+- Cohesion/facade plan (consolidation candidates and public export surface).
 
 ## Subdomain Split Criteria (Consistency Check)
 
@@ -54,6 +55,7 @@ Collect these before execution:
 2. Segment plan into executable slices.
 - Tag each slice as `small` or `medium`.
 - Define entry condition, expected output, and validation gate per slice.
+- Include consolidation or facade tasks in slices that introduce deep paths or over-fragmentation.
 
 3. Execute one slice at a time.
 - Apply only changes required for the current slice.
@@ -63,6 +65,7 @@ Collect these before execution:
 - Run required checks for that slice.
 - Record pass/fail with concise evidence.
 - Run legacy import/path sweep when migration is involved (for example `rg` old paths).
+- Confirm external imports route through the planned facade when introduced.
 
 5. Run compliance gate.
 - Invoke `$architecture-standard-enforcer` on changed paths.

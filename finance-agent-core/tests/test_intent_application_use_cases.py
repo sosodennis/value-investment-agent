@@ -1,4 +1,4 @@
-from src.agents.intent.application.intent_service import _heuristic_extract
+from src.agents.intent.application.intent_extraction_service import _heuristic_extract
 from src.agents.intent.interface.contracts import IntentExtraction
 
 

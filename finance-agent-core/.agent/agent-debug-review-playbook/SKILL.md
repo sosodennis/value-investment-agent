@@ -60,6 +60,12 @@ Produce actionable findings, not broad speculative rewrites.
 - **Cohesion signal**: 4+ tightly-coupled owner modules in one area that change together repeatedly.
 - **Do not split** if it only reduces LOC or increases indirection without clear boundary value.
 
+## Cohesion/Facade Diagnostic Lens
+
+- Use when refactors introduce deep imports, long import paths, or difficult traceability.
+- Assess over-fragmentation and missing facade exports; propose consolidation or facade creation.
+- Validate against `$architecture-standard-enforcer` cohesion/facade standards.
+
 ## Severity Baseline
 
 - `P0`: production outage/data corruption/security impact.

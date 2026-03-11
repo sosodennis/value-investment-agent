@@ -29,7 +29,7 @@
   - [x] Debug/Review (`agent-debug-review-playbook`)
   - [x] Implementation Extractor (`agent-implementation-extractor`)
 - Proposed update summary:
-  - Add boundary decision rubric, propagate explicit subdomain split criteria into planner/executor/enforcer/debug, add legacy-path sweep, empty layer cleanup checks, pipeline staging guidance, and explicit decision logging.
+  - Add boundary decision rubric, propagate explicit subdomain split criteria into planner/executor/enforcer/debug, add cohesion/facade rules to prevent over-fragmentation and deep-import leakage, add legacy-path sweep, empty layer cleanup checks, pipeline staging guidance, and explicit decision logging.
 - Exact file(s) to change:
   - `finance-agent-core/.agent/agent-refactor-executor/SKILL.md`
   - `finance-agent-core/.agent/architecture-modification-planner/SKILL.md`

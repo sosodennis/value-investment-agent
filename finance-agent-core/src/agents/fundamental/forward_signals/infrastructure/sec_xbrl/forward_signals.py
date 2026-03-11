@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.extract.report_contracts import (
-    FinancialReport,
+from src.agents.fundamental.financial_statements.interface.contracts import (
+    FinancialReportLike,
 )
 from src.agents.fundamental.forward_signals.interface.contracts import (
     ForwardSignalEvidence,
@@ -19,7 +19,7 @@ _SEC_SEARCH_URL_TEMPLATE = "https://www.sec.gov/edgar/search/#/entityName={ticke
 def extract_forward_signals_from_xbrl_reports(
     *,
     ticker: str,
-    reports: list[FinancialReport],
+    reports: list[FinancialReportLike],
 ) -> list[dict[str, object]]:
     """
     Build conservative forward signals from SEC XBRL report trends.
@@ -140,7 +140,7 @@ def _build_margin_delta_signal(
 
 
 def _build_yearly_series(
-    reports: list[FinancialReport],
+    reports: list[FinancialReportLike],
 ) -> list[tuple[int, float | None, float | None]]:
     points: list[tuple[int, float | None, float | None]] = []
     for report in reports:

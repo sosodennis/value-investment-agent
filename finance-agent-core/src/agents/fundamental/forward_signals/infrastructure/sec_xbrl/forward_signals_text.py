@@ -20,11 +20,6 @@ from .matching.pipeline_evidence_service import (
     _build_evidence_preview,
     _extract_snippet,
 )
-from .matching.pipeline_scalar_service import (
-    _as_float,
-    _as_int,
-    _clamp,
-)
 from .matching.record_processor import _process_records_for_signals
 from .matching.rules.signal_pattern_catalog import (
     FLS_SKIP_SIGNAL_PHRASES,
@@ -81,6 +76,28 @@ _FORM_SOURCE_TYPE: dict[str, str] = {
 
 _SOURCE_WEIGHT: dict[str, float] = {"mda": 1.0, "press_release": 0.75}
 _SIGNAL_MIN_SCORE = 1.0
+
+
+def _as_float(value: object) -> float:
+    if isinstance(value, bool):
+        return float(int(value))
+    if isinstance(value, int | float):
+        return float(value)
+    return 0.0
+
+
+def _as_int(value: object) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    return 0
+
+
+def _clamp(value: float, minimum: float, maximum: float) -> float:
+    return max(minimum, min(maximum, value))
 
 
 def _env_int(name: str, default: int, *, minimum: int) -> int:

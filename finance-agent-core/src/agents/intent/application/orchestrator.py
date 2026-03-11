@@ -4,25 +4,24 @@ import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from src.agents.intent.application.intent_service import (
-    deduplicate_candidates as deduplicate_candidates_service,
-)
-from src.agents.intent.application.intent_service import (
+from src.agents.intent.application.intent_extraction_service import (
     extract_candidates_from_search as extract_candidates_from_search_service,
 )
-from src.agents.intent.application.intent_service import (
+from src.agents.intent.application.intent_extraction_service import (
     extract_intent as extract_intent_service,
 )
 from src.agents.intent.application.ports import (
     IntentCompanyProfileLookup,
     IntentRuntimePorts,
 )
-from src.agents.intent.domain.models import TickerCandidate
-from src.agents.intent.domain.policies import should_request_clarification
+from src.agents.intent.domain.candidate_deduplication_policy import (
+    deduplicate_candidates,
+)
+from src.agents.intent.domain.clarification_policy import should_request_clarification
+from src.agents.intent.domain.ticker_candidate import TickerCandidate
 from src.agents.intent.interface.contracts import IntentExtraction, SearchExtraction
-from src.agents.intent.interface.mappers import (
+from src.agents.intent.interface.intent_preview_projection_service import (
     summarize_intent_for_preview,
-    to_ticker_candidate,
 )
 from src.agents.intent.interface.parsers import (
     parse_resume_selection_input,
@@ -32,6 +31,7 @@ from src.agents.intent.interface.serializers import (
     serialize_ticker_candidates,
     serialize_ticker_selection_interrupt_payload,
 )
+from src.agents.intent.interface.ticker_candidate_mapper import to_ticker_candidate
 from src.interface.events.schemas import build_artifact_payload
 from src.shared.cross_agent.domain.market_identity import CompanyProfile
 from src.shared.kernel.contracts import OUTPUT_KIND_INTENT_EXTRACTION
@@ -126,7 +126,7 @@ class IntentOrchestrator:
                 candidate_map[candidate.symbol] = candidate
 
         return _SearchCandidatesOutcome(
-            candidates=deduplicate_candidates_service(list(candidate_map.values())),
+            candidates=deduplicate_candidates(list(candidate_map.values())),
             is_degraded=web_search_result.failure_code is not None,
             degrade_error_code=web_search_result.failure_code,
             degrade_reason=web_search_result.failure_reason,

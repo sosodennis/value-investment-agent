@@ -6,13 +6,12 @@ Uses LLM to extract intent (Company, Model Preference) from user query.
 from __future__ import annotations
 
 import logging
-import re
 from collections.abc import Callable
 from typing import Protocol
 
 from src.agents.intent.application.ports import IIntentLlmProvider
-from src.agents.intent.domain.extraction_policies import heuristic_extract_intent
-from src.agents.intent.domain.models import TickerCandidate
+from src.agents.intent.domain.heuristic_intent_policy import heuristic_extract_intent
+from src.agents.intent.domain.ticker_candidate import TickerCandidate
 from src.agents.intent.interface.prompt_renderers import (
     build_intent_extraction_chat_prompt,
     build_search_extraction_chat_prompt,
@@ -57,28 +56,6 @@ def _heuristic_extract(
         is_valuation_request=heuristic.is_valuation_request,
         reasoning=heuristic.reasoning,
     )
-
-
-def deduplicate_candidates(candidates: list[TickerCandidate]) -> list[TickerCandidate]:
-    """
-    De-duplicate ticker candidates that are likely the same security (e.g., BRK.B vs BRK-B).
-    """
-    seen_normalized: dict[str, TickerCandidate] = {}
-    unique_candidates: list[TickerCandidate] = []
-
-    for candidate in candidates:
-        norm_symbol = re.sub(r"[\.\-]", "", candidate.symbol.upper())
-
-        if norm_symbol not in seen_normalized:
-            seen_normalized[norm_symbol] = candidate
-            unique_candidates.append(candidate)
-        else:
-            if candidate.confidence > seen_normalized[norm_symbol].confidence:
-                idx = unique_candidates.index(seen_normalized[norm_symbol])
-                unique_candidates[idx] = candidate
-                seen_normalized[norm_symbol] = candidate
-
-    return unique_candidates
 
 
 def extract_candidates_from_search(

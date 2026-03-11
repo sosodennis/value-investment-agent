@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from src.agents.intent.domain.models import TickerCandidate
+from src.agents.intent.domain.ticker_candidate import TickerCandidate
 from src.agents.intent.interface.contracts import IntentExtraction
-from src.agents.intent.interface.mappers import from_ticker_candidate
+from src.agents.intent.interface.ticker_candidate_mapper import from_ticker_candidate
 from src.shared.kernel.types import JSONObject
 
 

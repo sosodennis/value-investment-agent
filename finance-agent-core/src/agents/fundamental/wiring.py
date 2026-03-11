@@ -3,7 +3,7 @@ from __future__ import annotations
 from src.agents.fundamental.artifacts_provenance.infrastructure.fundamental_artifact_repository import (
     fundamental_artifact_repository,
 )
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.fetch.provider import (
+from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl import (
     fetch_financial_payload,
 )
 from src.agents.fundamental.forward_signals.interface.parsers import (

@@ -13,11 +13,9 @@ from ....report_contract import FinancialReport, FinancialServicesExtension
 from ...core_ops_service import ratio_with_optional_inputs
 from ...types import MonteCarloControls, TraceInput
 from ..shared.capm_market_defaults_service import resolve_capm_market_defaults
-from ..shared.equity_market_value_extraction_service import (
-    extract_xbrl_filing_equity_market_values,
-)
-from ..shared.market_value_extraction_service import (
+from ..shared.market_value_extraction import (
     extract_required_values,
+    extract_xbrl_filing_equity_market_values,
 )
 from ..shared.missing_metrics_service import collect_missing_metric_names
 from ..shared.parameter_assembly_service import (

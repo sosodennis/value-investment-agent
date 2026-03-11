@@ -4,7 +4,7 @@ from unittest.mock import patch
 import pytest
 
 from src.agents.intent.application.orchestrator import _SearchCandidatesOutcome
-from src.agents.intent.domain.models import TickerCandidate
+from src.agents.intent.domain.ticker_candidate import TickerCandidate
 from src.workflow.nodes.intent_extraction.nodes import (
     decision_node,
     extraction_node,
