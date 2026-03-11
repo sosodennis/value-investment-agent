@@ -11,6 +11,12 @@ from src.agents.fundamental.core_valuation.domain.parameterization.contracts imp
 from src.agents.fundamental.core_valuation.domain.parameterization.model_builders.shared.missing_metrics_service import (
     apply_missing_metric_policy,
 )
+from src.agents.fundamental.forward_signals.interface.contracts import (
+    ForwardSignalPayload,
+)
+from src.agents.fundamental.forward_signals.interface.serializers import (
+    serialize_forward_signals,
+)
 from src.agents.fundamental.workflow_orchestrator.application.services.valuation_completion_fields_service import (
     build_forward_signal_completion_fields,
     build_monte_carlo_completion_fields,
@@ -1226,7 +1232,9 @@ def _build_valuation_snapshot_payload(
         "replay_assumptions": list(assumptions),
     }
     if execution_context.forward_signals is not None:
-        payload["forward_signals"] = list(execution_context.forward_signals)
+        signals_payload = serialize_forward_signals(execution_context.forward_signals)
+        if signals_payload is not None:
+            payload["forward_signals"] = signals_payload
     if isinstance(replay_market_snapshot, Mapping):
         payload["replay_market_snapshot"] = dict(replay_market_snapshot)
     if isinstance(build_metadata, Mapping):
@@ -1534,7 +1542,7 @@ async def run_valuation_flow(
             model_type_raw: str,
             ticker_raw: str | None,
             reports_raw: list[JSONObject],
-            forward_signals_raw: list[JSONObject] | None,
+            forward_signals_raw: list[ForwardSignalPayload] | None,
         ) -> ParamBuildResult:
             base_result = build_params_fn(
                 model_type_raw,

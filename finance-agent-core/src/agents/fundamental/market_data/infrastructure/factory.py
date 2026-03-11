@@ -3,9 +3,7 @@ from __future__ import annotations
 from src.agents.fundamental.market_data.application.market_data_service import (
     MarketDataService,
 )
-from src.agents.fundamental.market_data.domain.provider_contracts import (
-    MarketDataProvider,
-)
+from src.agents.fundamental.market_data.application.ports import MarketDataProvider
 from src.agents.fundamental.market_data.infrastructure.fred_macro_provider import (
     FredMacroProvider,
 )

@@ -7,6 +7,12 @@ from typing import Protocol, cast
 from src.agents.fundamental.financial_statements.interface.contracts import (
     parse_financial_reports_model,
 )
+from src.agents.fundamental.forward_signals.interface.contracts import (
+    ForwardSignalPayload,
+)
+from src.agents.fundamental.forward_signals.interface.parsers import (
+    parse_forward_signals,
+)
 from src.shared.kernel.types import JSONObject, JSONValue
 
 
@@ -41,19 +47,15 @@ class ValuationModelRuntime:
 @dataclass(frozen=True)
 class FinancialHealthPayload:
     financial_reports: list[JSONObject]
-    forward_signals: list[JSONObject] | None
+    forward_signals: list[ForwardSignalPayload] | None
     diagnostics: JSONObject | None
     quality_gates: JSONObject | None
 
 
-def _parse_forward_signals(value: object) -> list[JSONObject] | None:
-    if not isinstance(value, list):
-        return None
-    normalized: list[JSONObject] = []
-    for item in value:
-        if isinstance(item, Mapping):
-            normalized.append(dict(item))
-    return normalized or None
+def _parse_forward_signals(
+    value: object, *, context: str
+) -> list[ForwardSignalPayload] | None:
+    return parse_forward_signals(value, context=context)
 
 
 def _parse_optional_object(
@@ -102,7 +104,9 @@ def parse_financial_health_payload(
             reports_raw,
             context=f"{context}.financial_reports",
         ),
-        forward_signals=_parse_forward_signals(forward_signals_raw),
+        forward_signals=_parse_forward_signals(
+            forward_signals_raw, context=f"{context}.forward_signals"
+        ),
         diagnostics=_parse_optional_object(
             diagnostics_raw,
             context=f"{context}.diagnostics",

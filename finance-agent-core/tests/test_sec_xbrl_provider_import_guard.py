@@ -13,7 +13,7 @@ def test_non_sec_xbrl_modules_use_provider_entrypoint() -> None:
     banned_imports = (
         "src.agents.fundamental.forward_signals.infrastructure.sec_xbrl.forward_signals_text",
         "src.agents.fundamental.forward_signals.infrastructure.sec_xbrl.forward_signals",
-        "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.financial_payload_service",
+        "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.extract.financial_payload_service",
     )
 
     violations: list[str] = []

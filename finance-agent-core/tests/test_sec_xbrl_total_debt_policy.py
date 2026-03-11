@@ -1,22 +1,22 @@
 from __future__ import annotations
 
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.base_model_debt_policy_service import (
+from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.extract.base_model_debt_policy_service import (
     resolve_total_debt_policy as resolve_total_debt_policy_util,
 )
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.extractor import (
-    SearchType,
-)
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.factory_derived_utils import (
+from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.extract.derived_field_service import (
     build_real_estate_debt_combined_ex_leases as build_real_estate_debt_combined_ex_leases_util,
 )
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.factory_derived_utils import (
+from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.extract.derived_field_service import (
     build_total_debt_with_policy as build_total_debt_with_policy_util,
 )
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.factory_derived_utils import (
+from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.extract.derived_field_service import (
     relax_statement_filters as relax_statement_filters_util,
 )
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.report_factory_common_utils import (
-    sum_fields as sum_fields_util,
+from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.extract.extractor import (
+    SearchType,
+)
+from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.extract.factory import (
+    FinancialReportFactory,
 )
 from src.agents.fundamental.shared.contracts.traceable import (
     ComputedProvenance,
@@ -61,7 +61,7 @@ def test_total_debt_include_policy_prefers_combined_with_leases() -> None:
         finance_lease_current=_manual_field("Lease Current", None),
         finance_lease_noncurrent=_manual_field("Lease Noncurrent", None),
         policy="include_finance_leases",
-        sum_fields_fn=sum_fields_util,
+        sum_fields_fn=FinancialReportFactory._sum_fields,
     )
 
     assert total_debt.value == 100.0
@@ -82,7 +82,7 @@ def test_total_debt_include_policy_falls_back_to_debt_plus_lease() -> None:
             "Lease Noncurrent", 15.0, "us-gaap:FinanceLeaseLiabilityNoncurrent"
         ),
         policy="include_finance_leases",
-        sum_fields_fn=sum_fields_util,
+        sum_fields_fn=FinancialReportFactory._sum_fields,
     )
 
     assert total_debt.value == 100.0
@@ -105,7 +105,7 @@ def test_total_debt_exclude_policy_ignores_finance_lease() -> None:
         finance_lease_current=_manual_field("Lease Current", None),
         finance_lease_noncurrent=_manual_field("Lease Noncurrent", None),
         policy="exclude_finance_leases",
-        sum_fields_fn=sum_fields_util,
+        sum_fields_fn=FinancialReportFactory._sum_fields,
     )
 
     assert total_debt.value == 100.0
@@ -157,7 +157,7 @@ def test_real_estate_debt_combined_prefers_note_split_and_adds_components() -> N
         commercial_paper=_xbrl_field(
             "Commercial Paper", 10.0, "us-gaap:CommercialPaper"
         ),
-        sum_fields_fn=sum_fields_util,
+        sum_fields_fn=FinancialReportFactory._sum_fields,
     )
 
     assert total.value == 130.0
@@ -176,7 +176,7 @@ def test_real_estate_debt_combined_deduplicates_same_tag_period_and_value() -> N
         loans_payable=_xbrl_field("Loans Payable", 100.0, "us-gaap:NotesPayable"),
         loans_payable_current=_manual_field("Loans Payable (Current)", None),
         commercial_paper=_manual_field("Commercial Paper", None),
-        sum_fields_fn=sum_fields_util,
+        sum_fields_fn=FinancialReportFactory._sum_fields,
     )
 
     assert total.value == 100.0

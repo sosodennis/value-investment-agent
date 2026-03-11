@@ -7,63 +7,63 @@ from collections.abc import Callable
 from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import JSONObject
 
-from . import focus_text_extractor as _focus_text_extractor
-from .filing_section_selector import is_8k_form, refine_8k_analysis_text
-from .finbert_direction import review_signal_direction_with_finbert
-from .fls_filter import filter_forward_looking_sentences_with_stats
-from .hybrid_retriever import retrieve_relevant_sentences_batch
-from .matchers.dependency_signal_matcher import find_metric_dependency_hits
-from .matchers.lemma_signal_matcher import find_metric_lemma_hits
-from .matchers.regex_signal_extractor import (
+from .filtering.fls_filter import filter_forward_looking_sentences_with_stats
+from .matching.matchers.dependency_signal_matcher import find_metric_dependency_hits
+from .matching.matchers.lemma_signal_matcher import find_metric_lemma_hits
+from .matching.matchers.regex_signal_extractor import (
     contains_numeric_guidance_cue,
     extract_metric_regex_hits,
     has_forward_tense_cue,
 )
-from .pipeline_evidence_service import (
+from .matching.pipeline_evidence_service import (
     _append_unique_evidence,
     _build_evidence_preview,
     _extract_snippet,
 )
-from .pipeline_filing_metadata_service import (
+from .matching.pipeline_scalar_service import (
+    _as_float,
+    _as_int,
+    _clamp,
+)
+from .matching.record_processor import _process_records_for_signals
+from .matching.rules.signal_pattern_catalog import (
+    FLS_SKIP_SIGNAL_PHRASES,
+    load_runtime_signal_catalog,
+)
+from .postprocess.finbert_direction import review_signal_direction_with_finbert
+from .postprocess.pipeline_filing_metadata_service import (
     _build_doc_type,
     _build_sec_source_url,
     _filing_age_days,
     _staleness_confidence_penalty,
 )
-from .pipeline_runner import (
+from .postprocess.pipeline_runner import (
     _build_pipeline_diagnostics_fields,
     _emit_signals_from_grouped,
     _summarize_focus_usage,
 )
-from .pipeline_scalar_service import (
-    _as_float,
-    _as_int,
-    _clamp,
-)
-from .pipeline_text_normalization_service import (
-    _normalize_text as _normalize_text_util,
-)
-from .record_processor import _process_records_for_signals
-from .rules.signal_pattern_catalog import (
-    FLS_SKIP_SIGNAL_PHRASES,
-    load_runtime_signal_catalog,
-)
-from .sentence_pipeline import join_sentences, split_text_into_sentences
-from .text_record import FilingTextRecord
-from .text_signal_diagnostics_service import build_text_signal_log_fields
-from .text_signal_postprocess_service import (
+from .postprocess.text_signal_diagnostics_service import build_text_signal_log_fields
+from .postprocess.text_signal_postprocess_service import (
     apply_finbert_direction_reviews as apply_finbert_direction_reviews_util,
 )
-from .text_signal_postprocess_service import (
+from .postprocess.text_signal_postprocess_service import (
     build_forward_signal_payload as build_forward_signal_payload_util,
 )
-from .text_signal_postprocess_service import (
+from .postprocess.text_signal_postprocess_service import (
     preview_sentence as preview_sentence_util,
 )
-from .text_signal_postprocess_service import (
+from .postprocess.text_signal_postprocess_service import (
     should_fast_skip_fls_with_phrases as should_fast_skip_fls_with_phrases_util,
 )
-from .text_signal_record_loader_service import load_sec_text_records
+from .retrieval import focus_text_extractor as _focus_text_extractor
+from .retrieval.filing_section_selector import is_8k_form, refine_8k_analysis_text
+from .retrieval.hybrid_retriever import retrieve_relevant_sentences_batch
+from .retrieval.pipeline_text_normalization_service import (
+    _normalize_text as _normalize_text_util,
+)
+from .retrieval.sentence_pipeline import join_sentences, split_text_into_sentences
+from .retrieval.text_record import FilingTextRecord
+from .retrieval.text_signal_record_loader_service import load_sec_text_records
 
 logger = get_logger(__name__)
 _extract_focus_text = _focus_text_extractor._extract_focus_text

@@ -9,15 +9,12 @@ from pydantic import BaseModel
 from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.cache.filing_cache_service import (
     FilingCacheService,
 )
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.financial_payload_service import (
+from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.extract.financial_payload_service import (
     reset_filing_cache_service_for_tests,
     set_filing_cache_service_for_tests,
 )
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.provider import (
+from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.fetch.provider import (
     fetch_financial_payload,
-)
-from src.agents.fundamental.forward_signals.infrastructure.sec_xbrl.finbert_direction import (
-    FinbertDirectionReview,
 )
 from src.agents.fundamental.forward_signals.infrastructure.sec_xbrl.forward_signals_text import (
     _apply_finbert_direction_reviews,
@@ -25,14 +22,17 @@ from src.agents.fundamental.forward_signals.infrastructure.sec_xbrl.forward_sign
     _normalize_text,
     extract_forward_signals_from_sec_text,
 )
-from src.agents.fundamental.forward_signals.infrastructure.sec_xbrl.matchers.regex_signal_extractor import (
+from src.agents.fundamental.forward_signals.infrastructure.sec_xbrl.matching.matchers.regex_signal_extractor import (
     MetricRegexHits,
     PatternHit,
 )
-from src.agents.fundamental.forward_signals.infrastructure.sec_xbrl.pipeline_evidence_service import (
+from src.agents.fundamental.forward_signals.infrastructure.sec_xbrl.matching.pipeline_evidence_service import (
     _extract_snippet,
 )
-from src.agents.fundamental.forward_signals.infrastructure.sec_xbrl.text_record import (
+from src.agents.fundamental.forward_signals.infrastructure.sec_xbrl.postprocess.finbert_direction import (
+    FinbertDirectionReview,
+)
+from src.agents.fundamental.forward_signals.infrastructure.sec_xbrl.retrieval.text_record import (
     FilingTextRecord,
 )
 
@@ -271,11 +271,11 @@ def test_extract_forward_signals_from_sec_text_prefers_mda_section_for_10k() -> 
 def test_fetch_financial_payload_combines_xbrl_and_sec_text_signals() -> None:
     with (
         patch(
-            "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.financial_payload_service.fetch_financial_data",
+            "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.extract.financial_payload_service.fetch_financial_data",
             return_value=[],
         ),
         patch(
-            "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.financial_payload_service.extract_forward_signals_from_xbrl_reports",
+            "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.extract.financial_payload_service.extract_forward_signals_from_xbrl_reports",
             return_value=[
                 {
                     "signal_id": "xbrl-growth",
@@ -296,7 +296,7 @@ def test_fetch_financial_payload_combines_xbrl_and_sec_text_signals() -> None:
             ],
         ),
         patch(
-            "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.financial_payload_service.extract_forward_signals_from_sec_text",
+            "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.extract.financial_payload_service.extract_forward_signals_from_sec_text",
             return_value=[
                 {
                     "signal_id": "text-margin",
@@ -342,7 +342,7 @@ def test_fetch_financial_payload_normalizes_reports_to_canonical_json() -> None:
     )
 
     with patch(
-        "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.provider._fetch_financial_payload",
+        "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.fetch.provider._fetch_financial_payload",
         return_value={
             "financial_reports": [report_model],
             "forward_signals": [{"signal_id": "sig-1"}],
@@ -373,7 +373,7 @@ def test_fetch_financial_payload_rejects_extension_without_extension_type() -> N
     )
 
     with patch(
-        "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.provider._fetch_financial_payload",
+        "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.fetch.provider._fetch_financial_payload",
         return_value={
             "financial_reports": [report_model],
             "forward_signals": [],

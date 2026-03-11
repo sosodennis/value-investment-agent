@@ -8,6 +8,9 @@ from src.agents.fundamental.financial_statements.interface.parsers import (
     ValuationModelRuntime,
     parse_valuation_model_runtime,
 )
+from src.agents.fundamental.forward_signals.interface.contracts import (
+    ForwardSignalPayload,
+)
 from src.agents.fundamental.workflow_orchestrator.application.state_readers import (
     read_fundamental_state,
     read_intent_state,
@@ -19,7 +22,7 @@ class ValuationBundleRuntime(Protocol):
     async def load_financial_reports_bundle(
         self,
         artifact_id: str,
-    ) -> tuple[list[JSONObject], list[JSONObject] | None] | None: ...
+    ) -> tuple[list[JSONObject], list[ForwardSignalPayload] | None] | None: ...
 
 
 @dataclass(frozen=True)
@@ -30,7 +33,7 @@ class ValuationExecutionContext:
     ticker: str | None
     reports_artifact_id: str
     reports_raw: list[JSONObject]
-    forward_signals: list[JSONObject] | None
+    forward_signals: list[ForwardSignalPayload] | None
     model_runtime: ValuationModelRuntime
 
 

@@ -1,1 +1,0 @@
-"""artifacts provenance domain layer."""

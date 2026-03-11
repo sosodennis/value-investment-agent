@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from src.agents.fundamental.shared.contracts.traceable import TraceableField
 
-from .value_extraction_common_service import (
+from .market_value_extraction_service import (
     MarketFloatOp,
     SharesSourceResolver,
     ValueOrMissingOp,

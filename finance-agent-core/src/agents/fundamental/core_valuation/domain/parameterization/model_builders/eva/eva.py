@@ -10,12 +10,12 @@ from ...types import TraceInput
 from ..shared.capital_structure_value_extraction_service import (
     extract_filing_capital_structure_market_values,
 )
-from ..shared.common_output_assembly_service import (
+from ..shared.missing_metrics_service import extend_missing_fields
+from ..shared.parameter_assembly_service import (
     build_capital_structure_params,
     build_capital_structure_trace_inputs,
     build_sec_xbrl_base_params,
 )
-from ..shared.missing_metrics_service import extend_missing_fields
 
 
 def _resolve_eva_invested_capital_field(

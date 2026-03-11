@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import pandas as pd
 import pytest
 
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl import (
+from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.extract import (
     extractor as extractor_module,
 )
 from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.providers import (

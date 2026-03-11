@@ -5,11 +5,8 @@ from typing import cast
 
 import yfinance as yf
 
-from ..domain.provider_contracts import (
-    MarketDataProvider,
-    MarketDatum,
-    ProviderFetch,
-)
+from ..application.ports import MarketDataProvider, ProviderFetch
+from ..domain.market_datum import MarketDatum
 
 
 class YahooFinanceProvider(MarketDataProvider):

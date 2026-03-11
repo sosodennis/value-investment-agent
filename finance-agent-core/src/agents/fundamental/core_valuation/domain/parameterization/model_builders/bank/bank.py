@@ -13,7 +13,14 @@ from ....report_contract import FinancialReport, FinancialServicesExtension
 from ...core_ops_service import ratio_with_optional_inputs
 from ...types import MonteCarloControls, TraceInput
 from ..shared.capm_market_defaults_service import resolve_capm_market_defaults
-from ..shared.common_output_assembly_service import (
+from ..shared.equity_market_value_extraction_service import (
+    extract_xbrl_filing_equity_market_values,
+)
+from ..shared.market_value_extraction_service import (
+    extract_required_values,
+)
+from ..shared.missing_metrics_service import collect_missing_metric_names
+from ..shared.parameter_assembly_service import (
     build_capm_market_params,
     build_capm_market_trace_inputs,
     build_equity_value_params,
@@ -21,13 +28,6 @@ from ..shared.common_output_assembly_service import (
     build_sec_xbrl_base_params,
     build_shares_trace_inputs,
     resolve_optional_trace_input,
-)
-from ..shared.equity_market_value_extraction_service import (
-    extract_xbrl_filing_equity_market_values,
-)
-from ..shared.missing_metrics_service import collect_missing_metric_names
-from ..shared.value_extraction_common_service import (
-    extract_required_values,
 )
 
 DEFAULT_BANK_RISK_FREE_RATE = 0.042

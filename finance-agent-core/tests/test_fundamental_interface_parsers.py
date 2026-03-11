@@ -10,6 +10,10 @@ from src.agents.fundamental.financial_statements.interface.parsers import (
     parse_financial_health_payload,
     parse_valuation_model_runtime,
 )
+from src.agents.fundamental.forward_signals.interface.contracts import (
+    ForwardSignalEvidence,
+    ForwardSignalPayload,
+)
 
 
 def test_parse_valuation_model_runtime_accepts_mapping() -> None:
@@ -168,6 +172,23 @@ def test_parse_financial_reports_model_rejects_legacy_extension_type_token() -> 
 
 
 def test_parse_financial_health_payload_normalizes_reports_and_signals() -> None:
+    signal = ForwardSignalPayload(
+        signal_id="sig-1",
+        source_type="mda",
+        metric="growth_outlook",
+        direction="up",
+        value=120.0,
+        unit="basis_points",
+        confidence=0.72,
+        as_of="2026-03-10T00:00:00Z",
+        evidence=[
+            ForwardSignalEvidence(
+                preview_text="Guidance raised.",
+                full_text="Guidance raised with stronger outlook.",
+                source_url="https://www.sec.gov/edgar/search/?q=AAPL",
+            )
+        ],
+    )
     payload = parse_financial_health_payload(
         {
             "financial_reports": [
@@ -179,7 +200,7 @@ def test_parse_financial_health_payload_normalizes_reports_and_signals() -> None
                 }
             ],
             "forward_signals": [
-                {"signal_id": "sig-1", "metric": "growth_outlook"},
+                signal.model_dump(exclude_none=True),
                 "invalid",
             ],
             "diagnostics": {"parser": "xbrl", "confidence": 0.9},
@@ -189,9 +210,9 @@ def test_parse_financial_health_payload_normalizes_reports_and_signals() -> None
     )
     assert len(payload.financial_reports) == 1
     assert payload.financial_reports[0]["industry_type"] == "Industrial"
-    assert payload.forward_signals == [
-        {"signal_id": "sig-1", "metric": "growth_outlook"}
-    ]
+    assert payload.forward_signals is not None
+    assert len(payload.forward_signals) == 1
+    assert payload.forward_signals[0].signal_id == "sig-1"
     assert payload.diagnostics == {"parser": "xbrl", "confidence": 0.9}
     assert payload.quality_gates == {"status": "pass", "blocking_count": 0}
 

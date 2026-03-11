@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from src.shared.kernel.types import JSONObject
+from src.agents.fundamental.forward_signals.interface.contracts import (
+    ForwardSignalPayload,
+)
 
 from .valuation_distribution_preview_service import extract_distribution_summary
 
@@ -48,7 +50,7 @@ def build_monte_carlo_completion_fields(
 
 def build_forward_signal_completion_fields(
     *,
-    forward_signals: list[JSONObject] | None,
+    forward_signals: list[ForwardSignalPayload] | None,
     build_metadata: Mapping[str, object] | None,
 ) -> dict[str, object]:
     raw_count = len(forward_signals or [])
@@ -69,13 +71,9 @@ def build_forward_signal_completion_fields(
             if parsed_sources:
                 source_types = parsed_sources
 
-    if not source_types and isinstance(forward_signals, list):
+    if not source_types and forward_signals:
         source_types = _normalize_source_types(
-            [
-                item.get("source_type")
-                for item in forward_signals
-                if isinstance(item, Mapping)
-            ]
+            [item.source_type for item in forward_signals]
         )
 
     source_label = ",".join(source_types) if source_types else "none"

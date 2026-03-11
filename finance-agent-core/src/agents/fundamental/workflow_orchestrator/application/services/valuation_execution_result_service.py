@@ -9,6 +9,9 @@ from src.agents.fundamental.core_valuation.domain.parameterization.contracts imp
 from src.agents.fundamental.financial_statements.interface.parsers import (
     parse_calculation_metrics,
 )
+from src.agents.fundamental.forward_signals.interface.contracts import (
+    ForwardSignalPayload,
+)
 from src.shared.kernel.types import JSONObject
 
 from .valuation_execution_context_service import ValuationExecutionContext
@@ -64,7 +67,7 @@ def execute_valuation_calculation(
     *,
     context: ValuationExecutionContext,
     build_params_fn: Callable[
-        [str, str | None, list[JSONObject], list[JSONObject] | None],
+        [str, str | None, list[JSONObject], list[ForwardSignalPayload] | None],
         ParamBuildResult,
     ],
 ) -> ValuationExecutionResult:

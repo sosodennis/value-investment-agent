@@ -18,6 +18,12 @@ from src.agents.fundamental.financial_statements.interface.contracts import (
 from src.agents.fundamental.financial_statements.interface.parsers import (
     parse_financial_health_payload,
 )
+from src.agents.fundamental.forward_signals.interface.contracts import (
+    ForwardSignalPayload,
+)
+from src.agents.fundamental.forward_signals.interface.serializers import (
+    serialize_forward_signals,
+)
 from src.agents.fundamental.model_selection.domain.model_selection import (
     select_valuation_model,
 )
@@ -144,7 +150,7 @@ class FundamentalWorkflowRunner:
             model_type: str,
             ticker: str | None,
             reports_raw: list[dict[str, object]],
-            forward_signals: list[dict[str, object]] | None,
+            forward_signals: list[ForwardSignalPayload] | None,
         ) -> ParamBuildResult:
             canonical_reports = parse_financial_reports_model(
                 reports_raw,
@@ -156,10 +162,12 @@ class FundamentalWorkflowRunner:
                 market_snapshot = self.market_data_service.get_market_snapshot(
                     ticker
                 ).to_mapping()
-            if market_snapshot is None and isinstance(forward_signals, list):
+            if market_snapshot is None and forward_signals:
                 market_snapshot = {}
-            if isinstance(market_snapshot, dict) and isinstance(forward_signals, list):
-                market_snapshot["forward_signals"] = forward_signals
+            if isinstance(market_snapshot, dict) and forward_signals:
+                serialized_signals = serialize_forward_signals(forward_signals)
+                if serialized_signals is not None:
+                    market_snapshot["forward_signals"] = serialized_signals
             build_result = build_params(
                 model_type,
                 ticker,

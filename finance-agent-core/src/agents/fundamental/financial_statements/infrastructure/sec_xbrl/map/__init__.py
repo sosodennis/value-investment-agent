@@ -1,0 +1,1 @@
+"""SEC XBRL mapping utilities."""

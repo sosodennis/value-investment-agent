@@ -1,0 +1,1 @@
+"""SEC XBRL extraction helpers."""

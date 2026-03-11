@@ -6,9 +6,7 @@ from src.agents.fundamental.market_data.domain.consensus_anchor_aggregator impor
     FREE_CONSENSUS_AGGREGATE_SOURCE,
     build_target_consensus_anchor_datums,
 )
-from src.agents.fundamental.market_data.domain.provider_contracts import (
-    MarketDatum,
-)
+from src.agents.fundamental.market_data.domain.market_datum import MarketDatum
 
 
 def test_build_target_consensus_anchor_uses_cross_source_median() -> None:

@@ -6,6 +6,12 @@ from src.agents.fundamental.artifacts_provenance.interface.contracts import (
 from src.agents.fundamental.financial_statements.interface.contracts import (
     parse_financial_reports_model,
 )
+from src.agents.fundamental.forward_signals.interface.contracts import (
+    ForwardSignalPayload,
+)
+from src.agents.fundamental.forward_signals.interface.serializers import (
+    serialize_forward_signals,
+)
 from src.interface.events.schemas import ArtifactReference, build_artifact_payload
 from src.shared.kernel.contracts import (
     ARTIFACT_KIND_FINANCIAL_REPORTS,
@@ -31,7 +37,7 @@ def build_model_selection_report_payload(
     industry: str,
     reasoning: str,
     normalized_reports: list[JSONObject],
-    forward_signals: list[JSONObject] | None = None,
+    forward_signals: list[ForwardSignalPayload] | None = None,
 ) -> JSONObject:
     payload: JSONObject = {
         "ticker": ticker,
@@ -43,8 +49,10 @@ def build_model_selection_report_payload(
         "financial_reports": normalized_reports,
         "status": "done",
     }
-    if isinstance(forward_signals, list):
-        payload["forward_signals"] = forward_signals
+    if forward_signals:
+        serialized_signals = serialize_forward_signals(forward_signals)
+        if serialized_signals is not None:
+            payload["forward_signals"] = serialized_signals
     return parse_fundamental_artifact_model(payload)
 
 

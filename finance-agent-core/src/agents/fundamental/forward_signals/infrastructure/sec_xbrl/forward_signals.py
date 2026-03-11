@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.report_contracts import (
+from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.extract.report_contracts import (
     FinancialReport,
 )
+from src.agents.fundamental.forward_signals.interface.contracts import (
+    ForwardSignalEvidence,
+    ForwardSignalPayload,
+)
 from src.shared.kernel.tools.logger import get_logger, log_event
-
-from .signal_schema import ForwardSignalEvidencePayload, ForwardSignalPayload
 
 logger = get_logger(__name__)
 
@@ -180,7 +182,7 @@ def _signal_payload(
         confidence=confidence,
         as_of=as_of,
         evidence=[
-            ForwardSignalEvidencePayload(
+            ForwardSignalEvidence(
                 preview_text=snippet,
                 full_text=snippet,
                 source_url=source_url,

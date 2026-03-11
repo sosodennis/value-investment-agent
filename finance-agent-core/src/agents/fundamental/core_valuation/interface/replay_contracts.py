@@ -7,6 +7,9 @@ from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 from src.agents.fundamental.financial_statements.interface.contracts import (
     FinancialReportModel,
 )
+from src.agents.fundamental.forward_signals.interface.contracts import (
+    ForwardSignalPayload,
+)
 
 
 class ReplayBaselineModel(BaseModel):
@@ -27,7 +30,7 @@ class ValuationReplayInputModel(BaseModel):
     ticker: str | None = None
     reports: list[FinancialReportModel]
     market_snapshot: dict[str, object] | None = None
-    forward_signals: list[dict[str, object]] | None = None
+    forward_signals: list[ForwardSignalPayload] | None = None
     staleness_mode: Literal["snapshot", "recompute"] = "snapshot"
     override: dict[str, object] | None = None
     baseline: ReplayBaselineModel | None = None

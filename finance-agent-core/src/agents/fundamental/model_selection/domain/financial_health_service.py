@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from src.agents.fundamental.model_selection.domain.entities import (
     FinancialHealthInsights,
-    FundamentalPreviewMetrics,
     FundamentalSelectionReport,
 )
 from src.agents.fundamental.model_selection.domain.financial_math_service import (
@@ -52,23 +51,6 @@ def build_latest_health_context(
     return "".join(lines)
 
 
-def extract_latest_preview_metrics(
-    financial_reports: list[FundamentalSelectionReport],
-) -> FundamentalPreviewMetrics | None:
-    if not financial_reports:
-        return None
-
-    latest = financial_reports[0]
-    net_income = latest.net_income
-    total_equity = latest.total_equity
-    return FundamentalPreviewMetrics(
-        revenue_raw=latest.total_revenue,
-        net_income_raw=net_income,
-        total_assets_raw=latest.total_assets,
-        roe_ratio=safe_ratio(net_income, total_equity),
-    )
-
-
 def calculate_revenue_cagr(
     financial_reports: list[FundamentalSelectionReport],
 ) -> float | None:
@@ -84,5 +66,4 @@ __all__ = [
     "build_latest_health_context",
     "calculate_revenue_cagr",
     "extract_latest_health_insights",
-    "extract_latest_preview_metrics",
 ]

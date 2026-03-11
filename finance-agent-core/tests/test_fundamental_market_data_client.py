@@ -8,13 +8,11 @@ from src.agents.fundamental.market_data.application.market_data_service import (
     MarketDataService,
     recompute_market_snapshot_staleness,
 )
+from src.agents.fundamental.market_data.application.ports import ProviderFetch
 from src.agents.fundamental.market_data.domain.consensus_anchor_aggregator import (
     FREE_CONSENSUS_AGGREGATE_SOURCE,
 )
-from src.agents.fundamental.market_data.domain.provider_contracts import (
-    MarketDatum,
-    ProviderFetch,
-)
+from src.agents.fundamental.market_data.domain.market_datum import MarketDatum
 
 
 class _StaticProvider:

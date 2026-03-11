@@ -12,6 +12,13 @@ from src.agents.fundamental.core_valuation.domain.parameterization.contracts imp
 from src.agents.fundamental.financial_statements.interface.parsers import (
     parse_financial_health_payload,
 )
+from src.agents.fundamental.forward_signals.interface.contracts import (
+    ForwardSignalEvidence,
+    ForwardSignalPayload,
+)
+from src.agents.fundamental.forward_signals.interface.serializers import (
+    serialize_forward_signals,
+)
 from src.agents.fundamental.model_selection.domain.model_selection import (
     select_valuation_model,
 )
@@ -25,8 +32,34 @@ from src.agents.fundamental.workflow_orchestrator.application.services.valuation
 from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
 
 
+def _build_forward_signal(
+    *,
+    signal_id: str = "sig-1",
+    source_type: str = "mda",
+) -> ForwardSignalPayload:
+    return ForwardSignalPayload(
+        signal_id=signal_id,
+        source_type=source_type,
+        metric="growth_outlook",
+        direction="up",
+        value=120.0,
+        unit="basis_points",
+        confidence=0.72,
+        as_of="2026-03-10T00:00:00Z",
+        evidence=[
+            ForwardSignalEvidence(
+                preview_text="Guidance raised.",
+                full_text="Guidance raised with stronger outlook.",
+                source_url="https://www.sec.gov/edgar/search/?q=AAPL",
+            )
+        ],
+    )
+
+
 class _FakePort:
-    def __init__(self, forward_signals: list[JSONObject] | None = None) -> None:
+    def __init__(
+        self, forward_signals: list[ForwardSignalPayload] | None = None
+    ) -> None:
         self._forward_signals = forward_signals
         self.saved_data: JSONObject | None = None
 
@@ -49,7 +82,7 @@ class _FakePort:
 
     async def load_financial_reports_bundle(
         self, artifact_id: object
-    ) -> tuple[list[JSONObject], list[JSONObject] | None] | None:
+    ) -> tuple[list[JSONObject], list[ForwardSignalPayload] | None] | None:
         _ = artifact_id
         return ([{"base": {"fiscal_year": {"value": 2025}}}], self._forward_signals)
 
@@ -86,7 +119,7 @@ class _AuditResult:
 
 
 def _build_orchestrator(
-    *, forward_signals: list[JSONObject] | None = None
+    *, forward_signals: list[ForwardSignalPayload] | None = None
 ) -> FundamentalOrchestrator:
     def _build_progress_artifact(
         summary: str, preview: JSONObject
@@ -345,13 +378,7 @@ async def test_run_valuation_logs_mc_completion_defaults_when_diagnostics_missin
 @pytest.mark.asyncio
 async def test_run_valuation_logs_forward_signal_completion_fields() -> None:
     orchestrator = _build_orchestrator(
-        forward_signals=[
-            {
-                "signal_id": "sig-1",
-                "source_type": "mda",
-                "metric": "growth_outlook",
-            }
-        ]
+        forward_signals=[_build_forward_signal(source_type="mda")]
     )
 
     def _calculator(_params: _ValuationParams) -> Mapping[str, object]:
@@ -845,9 +872,7 @@ async def test_run_valuation_logs_effective_inputs_in_metrics_snapshot() -> None
 async def test_run_valuation_passes_forward_signals_from_financial_reports_artifact() -> (
     None
 ):
-    orchestrator = _build_orchestrator(
-        forward_signals=[{"signal_id": "sig-1", "metric": "growth_outlook"}]
-    )
+    orchestrator = _build_orchestrator(forward_signals=[_build_forward_signal()])
     captured: dict[str, object] = {}
 
     def _calculator(_params: _ValuationParams) -> Mapping[str, object]:
@@ -866,9 +891,8 @@ async def test_run_valuation_passes_forward_signals_from_financial_reports_artif
         },
     )
 
-    assert captured["forward_signals"] == [
-        {"signal_id": "sig-1", "metric": "growth_outlook"}
-    ]
+    assert isinstance(captured["forward_signals"], list)
+    assert captured["forward_signals"][0].signal_id == "sig-1"
 
 
 @pytest.mark.asyncio
@@ -922,49 +946,36 @@ async def test_run_financial_health_persists_forward_signals_in_financial_report
     fake_port = orchestrator.port
     assert isinstance(fake_port, _FakePort)
 
+    forward_signal = _build_forward_signal(
+        signal_id="sec_xbrl_growth_2025",
+        source_type="manual",
+    )
+    payload = parse_financial_health_payload(
+        {
+            "financial_reports": [
+                {
+                    "base": {},
+                    "industry_type": "Industrial",
+                    "extension_type": "Industrial",
+                    "extension": {},
+                }
+            ],
+            "forward_signals": [forward_signal.model_dump(exclude_none=True)],
+            "diagnostics": {"source": "test_fixture"},
+            "quality_gates": {"status": "pass"},
+        },
+        context="test.financial_health",
+    )
+
     result = await orchestrator.run_financial_health(
         _build_health_state(),
-        fetch_financial_data_fn=lambda _ticker: parse_financial_health_payload(
-            {
-                "financial_reports": [
-                    {
-                        "base": {},
-                        "industry_type": "Industrial",
-                        "extension_type": "Industrial",
-                        "extension": {},
-                    }
-                ],
-                "forward_signals": [
-                    {
-                        "signal_id": "sec_xbrl_growth_2025",
-                        "metric": "growth_outlook",
-                        "direction": "up",
-                        "value": 80.0,
-                        "unit": "basis_points",
-                        "confidence": 0.62,
-                        "source_type": "manual",
-                        "evidence": [
-                            {
-                                "preview_text": "Revenue growth accelerated.",
-                                "full_text": "Revenue growth accelerated.",
-                                "source_url": "https://www.sec.gov/edgar/search/#/entityName=AAPL",
-                            }
-                        ],
-                    }
-                ],
-                "diagnostics": {"source": "test_fixture"},
-                "quality_gates": {"status": "pass"},
-            },
-            context="test.financial_health",
-        ),
+        fetch_financial_data_fn=lambda _ticker: payload,
     )
 
     assert result.goto == "model_selection"
     assert isinstance(fake_port.saved_data, dict)
-    assert (
-        fake_port.saved_data["forward_signals"][0]["signal_id"]
-        == "sec_xbrl_growth_2025"
-    )
+    expected_forward_signals = serialize_forward_signals(payload.forward_signals)
+    assert fake_port.saved_data["forward_signals"] == expected_forward_signals
     assert fake_port.saved_data["quality_gates"]["status"] == "pass"
     fa_update = result.update["fundamental_analysis"]
     assert isinstance(fa_update, Mapping)

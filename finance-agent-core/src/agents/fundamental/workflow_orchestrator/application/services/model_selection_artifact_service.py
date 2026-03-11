@@ -4,6 +4,9 @@ import time
 from collections.abc import Callable
 from typing import Protocol
 
+from src.agents.fundamental.forward_signals.interface.contracts import (
+    ForwardSignalPayload,
+)
 from src.agents.fundamental.model_selection.domain.entities import (
     FundamentalSelectionReport,
 )
@@ -50,7 +53,7 @@ class _BuildModelSelectionReportPayloadFn(Protocol):
         industry: str,
         reasoning: str,
         normalized_reports: list[JSONObject],
-        forward_signals: list[JSONObject] | None = None,
+        forward_signals: list[ForwardSignalPayload] | None = None,
     ) -> JSONObject: ...
 
 
@@ -80,7 +83,7 @@ async def build_and_store_model_selection_artifact(
     model_type: str,
     reasoning: str,
     financial_reports: list[JSONObject],
-    forward_signals: list[JSONObject] | None,
+    forward_signals: list[ForwardSignalPayload] | None,
     port: IFundamentalReportRepo,
     summarize_preview: Callable[
         [FundamentalAppContextDTO, list[JSONObject]], JSONObject

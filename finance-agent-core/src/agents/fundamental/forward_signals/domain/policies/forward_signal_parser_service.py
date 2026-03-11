@@ -19,9 +19,10 @@ def parse_forward_signals(raw: object) -> tuple[ForwardSignal, ...]:
 
     parsed: list[ForwardSignal] = []
     for index, item in enumerate(raw):
-        if not isinstance(item, Mapping):
+        mapping = _coerce_mapping(item)
+        if mapping is None:
             continue
-        signal = _parse_forward_signal(item, index=index)
+        signal = _parse_forward_signal(mapping, index=index)
         if signal is not None:
             parsed.append(signal)
     return tuple(parsed)
@@ -179,4 +180,15 @@ def _to_float(value: object) -> float | None:
             return float(value)
         except ValueError:
             return None
+    return None
+
+
+def _coerce_mapping(item: object) -> Mapping[str, object] | None:
+    if isinstance(item, Mapping):
+        return item
+    model_dump = getattr(item, "model_dump", None)
+    if callable(model_dump):
+        dumped = model_dump()
+        if isinstance(dumped, Mapping):
+            return dumped
     return None

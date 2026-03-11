@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl import (
+from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.fetch import (
     sec_identity_service as service,
 )
 

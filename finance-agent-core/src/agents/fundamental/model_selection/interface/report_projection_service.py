@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from src.agents.fundamental.financial_statements.interface.contracts import (
     FinancialReportModel,
     RealEstateExtensionModel,
@@ -8,7 +10,18 @@ from src.agents.fundamental.financial_statements.interface.contracts import (
 from src.agents.fundamental.model_selection.domain.entities import (
     FundamentalSelectionReport,
 )
+from src.agents.fundamental.model_selection.domain.financial_math_service import (
+    safe_ratio,
+)
 from src.shared.kernel.types import JSONObject
+
+
+@dataclass(frozen=True)
+class FundamentalPreviewMetrics:
+    revenue_raw: float | None
+    net_income_raw: float | None
+    total_assets_raw: float | None
+    roe_ratio: float | None
 
 
 def _traceable_to_float(field: TraceableFieldModel | None) -> float | None:
@@ -81,3 +94,20 @@ def project_selection_reports_from_models(
             )
         )
     return projections
+
+
+def extract_latest_preview_metrics(
+    financial_reports: list[FundamentalSelectionReport],
+) -> FundamentalPreviewMetrics | None:
+    if not financial_reports:
+        return None
+
+    latest = financial_reports[0]
+    net_income = latest.net_income
+    total_equity = latest.total_equity
+    return FundamentalPreviewMetrics(
+        revenue_raw=latest.total_revenue,
+        net_income_raw=net_income,
+        total_assets_raw=latest.total_assets,
+        roe_ratio=safe_ratio(net_income, total_equity),
+    )

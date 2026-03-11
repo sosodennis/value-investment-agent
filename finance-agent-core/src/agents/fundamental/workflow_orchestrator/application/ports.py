@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from typing import Protocol, TypedDict
 
+from src.agents.fundamental.forward_signals.interface.contracts import (
+    ForwardSignalPayload,
+)
 from src.shared.kernel.types import JSONObject
 
 
@@ -20,12 +23,12 @@ class IFundamentalReportRepo(Protocol):
 
     async def load_financial_reports_bundle(
         self, artifact_id: str
-    ) -> tuple[list[JSONObject], list[JSONObject] | None] | None: ...
+    ) -> tuple[list[JSONObject], list[ForwardSignalPayload] | None] | None: ...
 
 
 class FundamentalFinancialPayload(TypedDict):
     financial_reports: list[JSONObject]
-    forward_signals: list[JSONObject] | None
+    forward_signals: list[ForwardSignalPayload] | None
     diagnostics: JSONObject | None
     quality_gates: JSONObject | None
 

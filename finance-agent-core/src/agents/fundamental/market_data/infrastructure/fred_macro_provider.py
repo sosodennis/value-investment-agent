@@ -8,11 +8,8 @@ from urllib.error import URLError
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
-from ..domain.provider_contracts import (
-    MarketDataProvider,
-    MarketDatum,
-    ProviderFetch,
-)
+from ..application.ports import MarketDataProvider, ProviderFetch
+from ..domain.market_datum import MarketDatum
 
 DEFAULT_HTTP_TIMEOUT_SECONDS = 4.0
 FRED_10Y_SERIES_ID = "DGS10"

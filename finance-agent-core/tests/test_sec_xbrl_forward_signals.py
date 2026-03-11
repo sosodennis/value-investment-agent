@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.report_contracts import (
+from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.extract.report_contracts import (
     BaseFinancialModel,
     FinancialReport,
 )

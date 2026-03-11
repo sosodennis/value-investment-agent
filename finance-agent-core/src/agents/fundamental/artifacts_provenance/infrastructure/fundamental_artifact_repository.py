@@ -5,6 +5,12 @@ from dataclasses import dataclass
 from src.agents.fundamental.financial_statements.interface.contracts import (
     FinancialReportModel,
 )
+from src.agents.fundamental.forward_signals.interface.contracts import (
+    ForwardSignalPayload,
+)
+from src.agents.fundamental.forward_signals.interface.parsers import (
+    parse_forward_signals,
+)
 from src.interface.artifacts.artifact_data_models import FinancialReportsArtifactData
 from src.services.artifact_manager import artifact_manager
 from src.shared.cross_agent.data.typed_artifact_port import TypedArtifactPort
@@ -12,14 +18,10 @@ from src.shared.kernel.contracts import ARTIFACT_KIND_FINANCIAL_REPORTS
 from src.shared.kernel.types import JSONObject
 
 
-def _normalize_forward_signals(raw: object) -> list[JSONObject] | None:
-    if not isinstance(raw, list):
+def _normalize_forward_signals(raw: object) -> list[ForwardSignalPayload] | None:
+    if not isinstance(raw, list | tuple):
         return None
-    normalized: list[JSONObject] = []
-    for item in raw:
-        if isinstance(item, dict):
-            normalized.append(item)
-    return normalized or None
+    return parse_forward_signals(raw, context="financial_reports.forward_signals")
 
 
 @dataclass
@@ -71,7 +73,7 @@ class FundamentalArtifactRepository:
 
     async def load_financial_reports_bundle(
         self, artifact_id: str
-    ) -> tuple[list[JSONObject], list[JSONObject] | None] | None:
+    ) -> tuple[list[JSONObject], list[ForwardSignalPayload] | None] | None:
         payload = await self.financial_reports_port.load_json(
             artifact_id,
             context=f"artifact {artifact_id} financial_reports data",

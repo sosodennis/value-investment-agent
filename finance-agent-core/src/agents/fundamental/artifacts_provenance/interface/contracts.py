@@ -10,6 +10,9 @@ from src.agents.fundamental.financial_statements.interface.contracts import (
 from src.agents.fundamental.financial_statements.interface.types import (
     FundamentalText,
 )
+from src.agents.fundamental.forward_signals.interface.contracts import (
+    ForwardSignalPayload,
+)
 from src.interface.artifacts.artifact_model_shared import (
     as_mapping,
     to_optional_string,
@@ -29,7 +32,7 @@ class FundamentalArtifactModel(BaseModel):
     industry: FundamentalText
     reasoning: FundamentalText
     financial_reports: list[FinancialReportModel]
-    forward_signals: list[dict[str, object]] | None = None
+    forward_signals: list[ForwardSignalPayload] | None = None
     valuation_diagnostics: dict[str, object] | None = None
     status: Literal["done"]
 

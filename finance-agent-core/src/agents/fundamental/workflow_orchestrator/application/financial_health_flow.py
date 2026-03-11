@@ -8,6 +8,9 @@ from typing import Protocol
 from src.agents.fundamental.financial_statements.interface.parsers import (
     FinancialHealthPayload,
 )
+from src.agents.fundamental.forward_signals.interface.serializers import (
+    serialize_forward_signals,
+)
 from src.agents.fundamental.workflow_orchestrator.application.context_mapper_service import (
     build_fundamental_app_context,
 )
@@ -99,8 +102,10 @@ async def run_financial_health_flow(
 
         if reports_data:
             artifact_payload: JSONObject = {"financial_reports": reports_data}
-            if isinstance(forward_signals, list):
-                artifact_payload["forward_signals"] = forward_signals
+            if forward_signals:
+                serialized_signals = serialize_forward_signals(forward_signals)
+                if serialized_signals is not None:
+                    artifact_payload["forward_signals"] = serialized_signals
             if isinstance(diagnostics, dict):
                 artifact_payload["diagnostics"] = diagnostics
             if isinstance(quality_gates, dict):

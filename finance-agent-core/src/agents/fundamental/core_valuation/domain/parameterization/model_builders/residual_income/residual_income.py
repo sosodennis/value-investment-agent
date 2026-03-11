@@ -7,15 +7,15 @@ from src.agents.fundamental.shared.contracts.traceable import TraceableField
 
 from ....report_contract import FinancialReport
 from ...types import TraceInput
-from ..shared.common_output_assembly_service import (
-    build_equity_value_params,
-    build_sec_xbrl_base_params,
-    build_shares_trace_inputs,
-)
 from ..shared.equity_market_value_extraction_service import (
     extract_filing_equity_market_values,
 )
 from ..shared.missing_metrics_service import extend_missing_fields
+from ..shared.parameter_assembly_service import (
+    build_equity_value_params,
+    build_sec_xbrl_base_params,
+    build_shares_trace_inputs,
+)
 
 
 def _extend_residual_income_missing_fields(*, missing: list[str]) -> None:

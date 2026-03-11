@@ -7,6 +7,9 @@ from typing import Protocol
 from src.agents.fundamental.core_valuation.domain.valuation_model_type_service import (
     resolve_calculator_model_type,
 )
+from src.agents.fundamental.forward_signals.interface.contracts import (
+    ForwardSignalPayload,
+)
 from src.agents.fundamental.model_selection.domain.entities import (
     FundamentalSelectionReport,
 )
@@ -34,7 +37,7 @@ FundamentalNodeResult = WorkflowNodeResult
 class ModelSelectionRuntime(Protocol):
     async def load_financial_reports_bundle(
         self, artifact_id: str
-    ) -> tuple[list[JSONObject], list[JSONObject] | None] | None: ...
+    ) -> tuple[list[JSONObject], list[ForwardSignalPayload] | None] | None: ...
 
     def enrich_reasoning_with_health_context(
         self,
@@ -50,7 +53,7 @@ class ModelSelectionRuntime(Protocol):
         model_type: str,
         reasoning: str,
         financial_reports: list[JSONObject],
-        forward_signals: list[JSONObject] | None,
+        forward_signals: list[ForwardSignalPayload] | None,
     ) -> tuple[AgentOutputArtifactPayload | None, str | None]: ...
 
 
@@ -104,7 +107,7 @@ async def run_model_selection_flow(
         fundamental_state = read_fundamental_state(state)
         reports_artifact_id = fundamental_state.financial_reports_artifact_id
         financial_reports: list[JSONObject] = []
-        forward_signals: list[JSONObject] | None = None
+        forward_signals: list[ForwardSignalPayload] | None = None
         selection_reports: list[FundamentalSelectionReport] = []
         if reports_artifact_id is not None:
             bundle = await runtime.load_financial_reports_bundle(reports_artifact_id)

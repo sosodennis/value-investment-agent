@@ -6,6 +6,9 @@ from dataclasses import dataclass
 from src.agents.fundamental.core_valuation.domain.parameterization.contracts import (
     ParamBuildResult,
 )
+from src.agents.fundamental.forward_signals.interface.contracts import (
+    ForwardSignalPayload,
+)
 from src.agents.fundamental.model_selection.domain.entities import (
     FundamentalSelectionReport,
 )
@@ -50,7 +53,16 @@ class FundamentalOrchestrator:
     build_progress_artifact: Callable[[str, JSONObject], AgentOutputArtifactPayload]
     normalize_model_selection_reports: Callable[[list[JSONObject]], list[JSONObject]]
     build_model_selection_report_payload: Callable[
-        [str, str, str, str, str, str, list[JSONObject], list[JSONObject] | None],
+        [
+            str,
+            str,
+            str,
+            str,
+            str,
+            str,
+            list[JSONObject],
+            list[ForwardSignalPayload] | None,
+        ],
         JSONObject,
     ]
     build_model_selection_artifact: Callable[
@@ -78,7 +90,7 @@ class FundamentalOrchestrator:
 
     async def load_financial_reports_bundle(
         self, artifact_id: str
-    ) -> tuple[list[JSONObject], list[JSONObject] | None] | None:
+    ) -> tuple[list[JSONObject], list[ForwardSignalPayload] | None] | None:
         return await self.port.load_financial_reports_bundle(artifact_id)
 
     def enrich_reasoning_with_health_context(
@@ -96,7 +108,7 @@ class FundamentalOrchestrator:
         model_type: str,
         reasoning: str,
         financial_reports: list[JSONObject],
-        forward_signals: list[JSONObject] | None,
+        forward_signals: list[ForwardSignalPayload] | None,
     ) -> tuple[AgentOutputArtifactPayload | None, str | None]:
         return await build_and_store_model_selection_artifact(
             intent_ctx=intent_ctx,

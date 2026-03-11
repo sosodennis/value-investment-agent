@@ -13,7 +13,7 @@ from ...types import MonteCarloControls, TraceInput
 from ..shared.capital_structure_value_extraction_service import (
     extract_filing_capital_structure_market_values,
 )
-from ..shared.common_output_assembly_service import (
+from ..shared.parameter_assembly_service import (
     build_capital_structure_params,
     build_capital_structure_trace_inputs,
     build_monte_carlo_params,

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from statistics import median
 
-from .provider_contracts import MarketDatum
+from .market_datum import MarketDatum
 
 DEFAULT_TARGET_CONSENSUS_MAX_AGE_DAYS = 90
 DEFAULT_TARGET_CONSENSUS_MIN_ANALYST_COUNT = 8

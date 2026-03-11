@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from ..domain.provider_contracts import MarketDataProvider, MarketDatum, ProviderFetch
+from ..application.ports import MarketDataProvider, ProviderFetch
+from ..domain.market_datum import MarketDatum
 from .free_consensus_web_parser import (
     extract_first_href_by_patterns,
     extract_first_match,

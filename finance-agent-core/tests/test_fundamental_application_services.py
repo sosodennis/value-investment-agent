@@ -2,6 +2,13 @@ from __future__ import annotations
 
 import pytest
 
+from src.agents.fundamental.forward_signals.interface.contracts import (
+    ForwardSignalEvidence,
+    ForwardSignalPayload,
+)
+from src.agents.fundamental.forward_signals.interface.serializers import (
+    serialize_forward_signals,
+)
 from src.agents.fundamental.workflow_orchestrator.application.services.model_selection_artifact_service import (
     build_and_store_model_selection_artifact,
 )
@@ -10,6 +17,30 @@ from src.agents.fundamental.workflow_orchestrator.application.services.valuation
     build_valuation_missing_inputs_update,
     build_valuation_success_update,
 )
+
+
+def _build_forward_signal(
+    *,
+    signal_id: str = "sig-1",
+    source_type: str = "mda",
+) -> ForwardSignalPayload:
+    return ForwardSignalPayload(
+        signal_id=signal_id,
+        source_type=source_type,
+        metric="growth_outlook",
+        direction="up",
+        value=120.0,
+        unit="basis_points",
+        confidence=0.72,
+        as_of="2026-03-10T00:00:00Z",
+        evidence=[
+            ForwardSignalEvidence(
+                preview_text="Guidance raised.",
+                full_text="Guidance raised with stronger outlook.",
+                source_url="https://www.sec.gov/edgar/search/?q=GME",
+            )
+        ],
+    )
 
 
 def test_build_valuation_missing_inputs_update_sets_error_shape() -> None:
@@ -576,6 +607,8 @@ async def test_build_and_store_model_selection_artifact_supports_keyword_seriali
     None
 ):
     repo = _FakeReportRepo()
+    forward_signals = [_build_forward_signal()]
+    expected_forward_signals = serialize_forward_signals(forward_signals)
     artifact, report_id = await build_and_store_model_selection_artifact(
         intent_ctx={
             "company_profile": {
@@ -588,7 +621,7 @@ async def test_build_and_store_model_selection_artifact_supports_keyword_seriali
         model_type="saas",
         reasoning="Model selected",
         financial_reports=[],
-        forward_signals=[{"signal_id": "sig-1", "metric": "growth_outlook"}],
+        forward_signals=forward_signals,
         port=repo,
         summarize_preview=lambda ctx, _reports: {
             "company_name": ctx.company_name,
@@ -611,7 +644,7 @@ async def test_build_and_store_model_selection_artifact_supports_keyword_seriali
             "industry": industry,
             "reasoning": reasoning,
             "financial_reports": normalized_reports,
-            "forward_signals": forward_signals,
+            "forward_signals": serialize_forward_signals(forward_signals),
             "status": "done",
         },
         build_model_selection_artifact_fn=lambda *, ticker, report_id, preview: {
@@ -632,6 +665,4 @@ async def test_build_and_store_model_selection_artifact_supports_keyword_seriali
     assert artifact["reference"]["artifact_id"] == "report-1"
     assert artifact["preview"]["company_name"] == "GameStop Corp."
     assert isinstance(repo.saved_data, dict)
-    assert repo.saved_data["forward_signals"] == [
-        {"signal_id": "sig-1", "metric": "growth_outlook"}
-    ]
+    assert repo.saved_data["forward_signals"] == expected_forward_signals

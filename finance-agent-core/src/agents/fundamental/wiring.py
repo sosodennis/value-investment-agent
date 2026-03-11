@@ -3,8 +3,11 @@ from __future__ import annotations
 from src.agents.fundamental.artifacts_provenance.infrastructure.fundamental_artifact_repository import (
     fundamental_artifact_repository,
 )
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.provider import (
+from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.fetch.provider import (
     fetch_financial_payload,
+)
+from src.agents.fundamental.forward_signals.interface.parsers import (
+    parse_forward_signals,
 )
 from src.agents.fundamental.market_data.infrastructure.factory import (
     market_data_service,
@@ -25,9 +28,9 @@ def _normalize_financial_payload_contract(
     reports_raw = payload.get("financial_reports")
     financial_reports = reports_raw if isinstance(reports_raw, list) else []
 
-    forward_signals_raw = payload.get("forward_signals")
-    forward_signals = (
-        forward_signals_raw if isinstance(forward_signals_raw, list) else None
+    forward_signals = parse_forward_signals(
+        payload.get("forward_signals"),
+        context="fundamental.financial_payload.forward_signals",
     )
 
     diagnostics_raw = payload.get("diagnostics")
