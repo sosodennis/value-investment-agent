@@ -20,6 +20,7 @@ Collect these before execution:
 - Ownership decisions for any moved contracts/ports and old → new path mapping.
 - Legacy removal constraints (no compatibility shims unless explicitly approved).
 - Cohesion/facade plan (consolidation candidates and public export surface).
+- Target layer topology and shared kernel placement rules.
 
 ## Subdomain Split Criteria (Consistency Check)
 
@@ -39,6 +40,7 @@ Collect these before execution:
 3. Use `small` slices for high-risk changes:
 - Cross-layer boundary rewiring.
 - Contract relocation across layers or subdomains.
+- Root-layer topology moves or shared-kernel relocation.
 - Async/runtime boundary changes.
 - State/error contract changes.
 - Migration/removal of compatibility paths.
@@ -56,6 +58,7 @@ Collect these before execution:
 - Tag each slice as `small` or `medium`.
 - Define entry condition, expected output, and validation gate per slice.
 - Include consolidation or facade tasks in slices that introduce deep paths or over-fragmentation.
+- Order topology moves first (root layers, shared kernel), then subdomain internal refactors.
 
 3. Execute one slice at a time.
 - Apply only changes required for the current slice.
@@ -66,6 +69,7 @@ Collect these before execution:
 - Record pass/fail with concise evidence.
 - Run legacy import/path sweep when migration is involved (for example `rg` old paths).
 - Confirm external imports route through the planned facade when introduced.
+- Confirm root topology and shared kernel placement match the plan after topology-related slices.
 
 5. Run compliance gate.
 - Invoke `$architecture-standard-enforcer` on changed paths.

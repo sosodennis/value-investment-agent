@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import json
 
-from src.agents.fundamental.core_valuation.domain.parameterization.forward_signal_calibration_mapping_service import (
+from src.agents.fundamental.subdomains.core_valuation.domain.parameterization.forward_signal_calibration_mapping_service import (
     FORWARD_SIGNAL_CALIBRATION_MAPPING_PATH_ENV,
     clear_forward_signal_calibration_mapping_cache,
     load_forward_signal_calibration_mapping,
 )
-from src.agents.fundamental.forward_signals.domain.policies.forward_signal_calibration_service import (
+from src.agents.fundamental.subdomains.forward_signals.domain.policies.forward_signal_calibration_service import (
     DEFAULT_FORWARD_SIGNAL_CALIBRATION_MAPPING_VERSION,
 )
 

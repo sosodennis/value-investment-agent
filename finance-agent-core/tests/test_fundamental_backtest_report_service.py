@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from src.agents.fundamental.core_valuation.domain.backtest import (
+from src.agents.fundamental.subdomains.core_valuation.domain.backtest import (
     CaseResult,
     build_report_payload,
 )

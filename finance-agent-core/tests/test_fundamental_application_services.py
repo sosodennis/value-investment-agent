@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from src.agents.fundamental.forward_signals.interface.contracts import (
+from src.agents.fundamental.subdomains.forward_signals.interface.contracts import (
     ForwardSignalEvidence,
     ForwardSignalPayload,
 )
-from src.agents.fundamental.forward_signals.interface.serializers import (
+from src.agents.fundamental.subdomains.forward_signals.interface.serializers import (
     serialize_forward_signals,
 )
 from src.agents.fundamental.workflow_orchestrator.application.services.model_selection_artifact_service import (

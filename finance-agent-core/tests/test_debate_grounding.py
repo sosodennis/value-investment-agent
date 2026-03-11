@@ -1,6 +1,6 @@
 from src.agents.debate.domain.models import EvidenceFact
 from src.agents.debate.domain.validators import FactValidator
-from src.agents.fundamental.shared.contracts.traceable import ManualProvenance
+from src.agents.fundamental.domain.shared.contracts.traceable import ManualProvenance
 
 
 def test_fact_extraction_regex():

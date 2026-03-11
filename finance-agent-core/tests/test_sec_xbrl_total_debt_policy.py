@@ -1,28 +1,28 @@
 from __future__ import annotations
 
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.extract.base_model_debt_policy_service import (
-    resolve_total_debt_policy as resolve_total_debt_policy_util,
-)
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.extract.derived_field_service import (
-    build_real_estate_debt_combined_ex_leases as build_real_estate_debt_combined_ex_leases_util,
-)
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.extract.derived_field_service import (
-    build_total_debt_with_policy as build_total_debt_with_policy_util,
-)
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.extract.derived_field_service import (
-    relax_statement_filters as relax_statement_filters_util,
-)
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.extract.extractor import (
-    SearchType,
-)
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.extract.factory import (
-    FinancialReportFactory,
-)
-from src.agents.fundamental.shared.contracts.traceable import (
+from src.agents.fundamental.domain.shared.contracts.traceable import (
     ComputedProvenance,
     ManualProvenance,
     TraceableField,
     XBRLProvenance,
+)
+from src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.extract.base_model_debt_policy_service import (
+    resolve_total_debt_policy as resolve_total_debt_policy_util,
+)
+from src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.extract.derived_field_service import (
+    build_real_estate_debt_combined_ex_leases as build_real_estate_debt_combined_ex_leases_util,
+)
+from src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.extract.derived_field_service import (
+    build_total_debt_with_policy as build_total_debt_with_policy_util,
+)
+from src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.extract.derived_field_service import (
+    relax_statement_filters as relax_statement_filters_util,
+)
+from src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.extract.extractor import (
+    SearchType,
+)
+from src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.extract.factory import (
+    FinancialReportFactory,
 )
 from src.shared.kernel.tools.logger import get_logger
 

@@ -7,15 +7,15 @@ from functools import lru_cache
 import pytest
 import requests
 
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.extract.factory import (
-    FinancialReportFactory,
-)
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.extract.report_contracts import (
-    FinancialReport,
-)
-from src.agents.fundamental.shared.contracts.traceable import (
+from src.agents.fundamental.domain.shared.contracts.traceable import (
     TraceableField,
     XBRLProvenance,
+)
+from src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.extract.factory import (
+    FinancialReportFactory,
+)
+from src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.extract.report_contracts import (
+    FinancialReport,
 )
 
 RUN_LIVE_TESTS = os.getenv("SEC_XBRL_LIVE_TESTS", "0").strip() == "1"

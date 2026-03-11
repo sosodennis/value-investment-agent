@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import requests
 
-from src.agents.fundamental.market_data.infrastructure.free_consensus_web_parser import (
+from src.agents.fundamental.subdomains.market_data.infrastructure.free_consensus_web_parser import (
     ConsensusFetchError,
     extract_first_float_from_structured_data,
     extract_first_href_by_patterns,
@@ -75,7 +75,7 @@ def test_fetch_html_raises_coded_consensus_fetch_error_for_403(monkeypatch) -> N
             return _FakeResponse()
 
     monkeypatch.setattr(
-        "src.agents.fundamental.market_data.infrastructure.free_consensus_web_parser._http_session",
+        "src.agents.fundamental.subdomains.market_data.infrastructure.free_consensus_web_parser._http_session",
         lambda: _FakeSession(),
     )
 

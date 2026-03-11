@@ -1,0 +1,1 @@
+"""Fundamental application layer."""

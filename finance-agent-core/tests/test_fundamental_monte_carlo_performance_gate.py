@@ -5,7 +5,7 @@ import time
 
 import numpy as np
 
-from src.agents.fundamental.core_valuation.domain.engine.monte_carlo import (
+from src.agents.fundamental.subdomains.core_valuation.domain.engine.monte_carlo import (
     CorrelationGroup,
     DistributionSpec,
     MonteCarloConfig,

@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import pytest
 
-from src.agents.fundamental.financial_statements.interface.contracts import (
+from src.agents.fundamental.subdomains.financial_statements.interface.contracts import (
     parse_financial_reports_model,
 )
-from src.agents.fundamental.financial_statements.interface.parsers import (
+from src.agents.fundamental.subdomains.financial_statements.interface.parsers import (
     parse_calculation_metrics,
     parse_financial_health_payload,
     parse_valuation_model_runtime,
 )
-from src.agents.fundamental.forward_signals.interface.contracts import (
+from src.agents.fundamental.subdomains.forward_signals.interface.contracts import (
     ForwardSignalEvidence,
     ForwardSignalPayload,
 )

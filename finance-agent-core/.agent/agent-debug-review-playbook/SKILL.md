@@ -20,12 +20,14 @@ Produce actionable findings, not broad speculative rewrites.
 - Isolate failure by layer and owner (`domain/application/interface/infrastructure`).
 - Identify whether the issue is contract, runtime, data-shape, async, or dependency drift.
 - Check for boundary leaks (interface → domain/application, application → infrastructure).
+- Check enterprise topology compliance: root layers, cross-subdomain orchestration placement, shared kernel location.
 
 3. Evidence collection.
 - Collect stack traces, logs, state snapshots, and contract mismatches.
 - Validate whether degraded behavior is typed and observable.
 - Check for circular imports introduced by refactors.
 - Sweep for legacy path imports or empty layer packages left behind.
+- Flag root-level `workflow_orchestrator` packages that bypass root `application/`.
 - For runtime quality checks (similarity/scoring/consensus detectors), verify input provenance:
   - confirm reader path matches writer path in workflow state.
   - confirm logs expose bounded input diagnostics (for example text length/hash) to detect empty/wrong-source inputs.

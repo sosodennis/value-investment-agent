@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from src.agents.fundamental.core_valuation.domain.parameterization.reinvestment_clamp_profile_service import (
+from src.agents.fundamental.subdomains.core_valuation.domain.parameterization.reinvestment_clamp_profile_service import (
     REINVESTMENT_CLAMP_PROFILE_PATH_ENV,
     clear_reinvestment_clamp_profile_cache,
     load_reinvestment_clamp_profile,

@@ -67,6 +67,7 @@ Create a new skill only if all three checks pass.
 1. Intake the change signal.
 - Gather trigger evidence: incident, repeated review finding, regression, or repeated refactor friction.
 - Confirm this is a reusable pattern, not a one-off case.
+- Determine whether the change impacts enterprise layer topology or shared kernel rules.
 
 2. Classify ownership.
 - Route updates to one owner class:
@@ -78,6 +79,7 @@ Create a new skill only if all three checks pass.
 3. Create SCR.
 - Fill `.agent/references/skill-change-request-template.md` completely.
 - Include scope, severity, generalization rationale, risk, compatibility, and validation plan.
+- Explicitly record topology impact: root layer layout, shared kernel placement, cross-subdomain orchestration.
 
 4. Decide update vs create.
 - Apply the `Update-First Decision Gate`.
@@ -108,6 +110,7 @@ For each governance run, output:
 - `Classification`: target skill owner and reason.
 - `Update-vs-Create Decision`: gate result and rationale.
 - `SCR Checklist`: completed vs missing fields.
+- `Topology Impact`: yes/no and affected rules.
 - `Change Plan`: exact skill files to modify.
 - `Validation Plan`: commands and expected pass criteria.
 - `Sync Plan`: direction and command to keep mirrors aligned.

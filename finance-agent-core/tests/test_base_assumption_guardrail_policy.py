@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.agents.fundamental.core_valuation.domain.policies.base_assumption_guardrail_policy import (
+from src.agents.fundamental.subdomains.core_valuation.domain.policies.base_assumption_guardrail_policy import (
     DEFAULT_BASE_ASSUMPTION_GUARDRAIL_VERSION,
     ReinvestmentGuardrailConfig,
     apply_base_assumption_guardrail,

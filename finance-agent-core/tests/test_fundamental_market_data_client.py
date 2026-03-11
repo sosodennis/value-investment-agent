@@ -2,17 +2,21 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from src.agents.fundamental.market_data.application.market_data_service import (
+from src.agents.fundamental.subdomains.market_data.application.market_data_service import (
     DEFAULT_BETA,
     DEFAULT_RISK_FREE_RATE,
     MarketDataService,
     recompute_market_snapshot_staleness,
 )
-from src.agents.fundamental.market_data.application.ports import ProviderFetch
-from src.agents.fundamental.market_data.domain.consensus_anchor_aggregator import (
+from src.agents.fundamental.subdomains.market_data.application.ports import (
+    ProviderFetch,
+)
+from src.agents.fundamental.subdomains.market_data.domain.consensus_anchor_aggregator import (
     FREE_CONSENSUS_AGGREGATE_SOURCE,
 )
-from src.agents.fundamental.market_data.domain.market_datum import MarketDatum
+from src.agents.fundamental.subdomains.market_data.domain.market_datum import (
+    MarketDatum,
+)
 
 
 class _StaticProvider:

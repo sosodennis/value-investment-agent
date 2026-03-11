@@ -3,13 +3,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from src.agents.fundamental.forward_signals.domain.calibration.fitting_service import (
+from src.agents.fundamental.subdomains.forward_signals.domain.calibration.fitting_service import (
     fit_forward_signal_calibration_config,
 )
-from src.agents.fundamental.forward_signals.domain.calibration.io_service import (
+from src.agents.fundamental.subdomains.forward_signals.domain.calibration.io_service import (
     load_forward_signal_calibration_observations,
 )
-from src.agents.fundamental.forward_signals.domain.policies.forward_signal_calibration_service import (
+from src.agents.fundamental.subdomains.forward_signals.domain.policies.forward_signal_calibration_service import (
     DEFAULT_FORWARD_SIGNAL_CALIBRATION_CONFIG,
 )
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.agents.fundamental.forward_signals.domain.calibration.dataset_builder_service import (
+from src.agents.fundamental.subdomains.forward_signals.domain.calibration.dataset_builder_service import (
     build_forward_signal_calibration_observations,
     serialize_observations,
 )

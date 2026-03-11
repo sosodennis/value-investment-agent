@@ -86,12 +86,12 @@ def test_no_legacy_generic_fundamental_imports() -> None:
         "src.agents.fundamental.domain.models",
         "src.agents.fundamental.domain.rules",
         "src.agents.fundamental.domain.services",
-        "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.models",
-        "src.agents.fundamental.core_valuation.domain.backtest_contracts",
-        "src.agents.fundamental.core_valuation.domain.backtest_io_service",
-        "src.agents.fundamental.core_valuation.domain.backtest_runtime_service",
-        "src.agents.fundamental.core_valuation.domain.backtest_drift_service",
-        "src.agents.fundamental.core_valuation.domain.backtest_report_service",
+        "src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.models",
+        "src.agents.fundamental.subdomains.core_valuation.domain.backtest_contracts",
+        "src.agents.fundamental.subdomains.core_valuation.domain.backtest_io_service",
+        "src.agents.fundamental.subdomains.core_valuation.domain.backtest_runtime_service",
+        "src.agents.fundamental.subdomains.core_valuation.domain.backtest_drift_service",
+        "src.agents.fundamental.subdomains.core_valuation.domain.backtest_report_service",
     ]
 
     violations: list[str] = []

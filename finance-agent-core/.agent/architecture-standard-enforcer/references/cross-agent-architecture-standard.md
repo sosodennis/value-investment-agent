@@ -38,6 +38,18 @@ This is the canonical cross-agent architecture standard. Keep this file short an
    - Repository adapters are storage gateways only; do not mix domain projection/aggregation logic into repository owners.
    - Must not own workflow orchestration or domain policy decisions.
 
+## 2.5 Enterprise Layer Topology (Hard Rules)
+
+1. Default topology for new/major refactors:
+   - root: `application/`, `domain/`, `interface/`, `subdomains/`
+   - `subdomains/<capability>/{domain,application,interface,infrastructure}`
+2. Cross-subdomain orchestration lives in root `application/`.
+   - `workflow_orchestrator` is a subpackage name under `application/`, not a root peer of subdomains.
+3. Shared kernel location:
+   - Allowed: `domain/shared/` only.
+   - `application/shared/` allowed only for cross-use-case orchestration utilities with explicit justification.
+   - `interface/shared/` and `infrastructure/shared/` are disallowed unless a cross-subdomain dependency cannot be owned elsewhere and is explicitly justified in the plan.
+
 ## 3. Naming Contract (Hard Rules)
 
 1. Suffix semantics are mandatory:
@@ -173,6 +185,9 @@ This is the canonical cross-agent architecture standard. Keep this file short an
 24. Any heavy compute path inside async use-cases still running directly on the event loop?
 25. For changed heavy-compute code, is the reproducible performance baseline/test updated and within threshold?
 26. For runtime quality checks, do state writer/reader paths align and do logs include comparator input diagnostics (`*_chars`/hash)?
+27. For enterprise topology, are root directories exactly `application/`, `domain/`, `interface/`, `subdomains/`?
+28. Is cross-subdomain orchestration placed under root `application/` (not a root peer of subdomains)?
+29. Is the shared kernel limited to `domain/shared/` and any `application/shared/` explicitly justified?
 
 ## 10. Standard Update Policy
 

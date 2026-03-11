@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.agents.fundamental.market_data.infrastructure.investing_provider import (
+from src.agents.fundamental.subdomains.market_data.infrastructure.investing_provider import (
     InvestingProvider,
 )
-from src.agents.fundamental.market_data.infrastructure.marketbeat_provider import (
+from src.agents.fundamental.subdomains.market_data.infrastructure.marketbeat_provider import (
     MarketBeatProvider,
 )
-from src.agents.fundamental.market_data.infrastructure.tipranks_provider import (
+from src.agents.fundamental.subdomains.market_data.infrastructure.tipranks_provider import (
     TipRanksProvider,
 )
 
@@ -32,7 +32,7 @@ def test_tipranks_provider_prefers_structured_json(monkeypatch) -> None:
     </script>
     """
     monkeypatch.setattr(
-        "src.agents.fundamental.market_data.infrastructure.tipranks_provider.fetch_html",
+        "src.agents.fundamental.subdomains.market_data.infrastructure.tipranks_provider.fetch_html",
         lambda _: html,
     )
 
@@ -62,7 +62,7 @@ def test_investing_provider_resolves_search_url_and_extracts_structured_data(
         return page_html
 
     monkeypatch.setattr(
-        "src.agents.fundamental.market_data.infrastructure.investing_provider.fetch_html",
+        "src.agents.fundamental.subdomains.market_data.infrastructure.investing_provider.fetch_html",
         _fake_fetch,
     )
 
@@ -86,7 +86,7 @@ def test_marketbeat_provider_surfaces_parse_missing_warning(monkeypatch) -> None
         return page_html
 
     monkeypatch.setattr(
-        "src.agents.fundamental.market_data.infrastructure.marketbeat_provider.fetch_html",
+        "src.agents.fundamental.subdomains.market_data.infrastructure.marketbeat_provider.fetch_html",
         _fake_fetch,
     )
 
@@ -102,7 +102,7 @@ def test_marketbeat_provider_surfaces_parse_missing_warning(monkeypatch) -> None
 def test_tipranks_provider_parses_text_fallback_fixture(monkeypatch) -> None:
     page_html = _fixture_text("tipranks_page_text_variant.html")
     monkeypatch.setattr(
-        "src.agents.fundamental.market_data.infrastructure.tipranks_provider.fetch_html",
+        "src.agents.fundamental.subdomains.market_data.infrastructure.tipranks_provider.fetch_html",
         lambda _: page_html,
     )
 
@@ -128,7 +128,7 @@ def test_investing_provider_parses_text_fallback_fixture(monkeypatch) -> None:
         return page_html
 
     monkeypatch.setattr(
-        "src.agents.fundamental.market_data.infrastructure.investing_provider.fetch_html",
+        "src.agents.fundamental.subdomains.market_data.infrastructure.investing_provider.fetch_html",
         _fake_fetch,
     )
 
@@ -156,7 +156,7 @@ def test_marketbeat_provider_parses_consensus_text_fallback_fixture(
         return page_html
 
     monkeypatch.setattr(
-        "src.agents.fundamental.market_data.infrastructure.marketbeat_provider.fetch_html",
+        "src.agents.fundamental.subdomains.market_data.infrastructure.marketbeat_provider.fetch_html",
         _fake_fetch,
     )
 

@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from src.agents.fundamental.forward_signals.infrastructure.sec_xbrl.filtering.fls_filter import (
+from src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl.filtering.fls_filter import (
     filter_forward_looking_sentences,
     filter_forward_looking_sentences_with_stats,
 )
-from src.agents.fundamental.forward_signals.infrastructure.sec_xbrl.retrieval.hybrid_retriever import (
+from src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl.retrieval.hybrid_retriever import (
     retrieve_relevant_sentences,
     retrieve_relevant_sentences_batch,
 )
-from src.agents.fundamental.forward_signals.infrastructure.sec_xbrl.retrieval.sentence_pipeline import (
+from src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl.retrieval.sentence_pipeline import (
     split_text_into_sentences,
 )
 

@@ -6,28 +6,28 @@ from unittest.mock import patch
 import pytest
 from pydantic import BaseModel, Field
 
-from src.agents.fundamental.core_valuation.domain.parameterization.contracts import (
+from src.agents.fundamental.application.workflow_orchestrator.orchestrator import (
+    FundamentalOrchestrator,
+)
+from src.agents.fundamental.application.workflow_orchestrator.services.valuation_replay_contracts import (
+    INTERNAL_REPLAY_MARKET_SNAPSHOT_KEY,
+    VALUATION_REPLAY_SCHEMA_VERSION,
+)
+from src.agents.fundamental.subdomains.core_valuation.domain.parameterization.contracts import (
     ParamBuildResult,
 )
-from src.agents.fundamental.financial_statements.interface.parsers import (
+from src.agents.fundamental.subdomains.financial_statements.interface.parsers import (
     parse_financial_health_payload,
 )
-from src.agents.fundamental.forward_signals.interface.contracts import (
+from src.agents.fundamental.subdomains.forward_signals.interface.contracts import (
     ForwardSignalEvidence,
     ForwardSignalPayload,
 )
-from src.agents.fundamental.forward_signals.interface.serializers import (
+from src.agents.fundamental.subdomains.forward_signals.interface.serializers import (
     serialize_forward_signals,
 )
-from src.agents.fundamental.model_selection.domain.model_selection import (
+from src.agents.fundamental.subdomains.model_selection.domain.model_selection import (
     select_valuation_model,
-)
-from src.agents.fundamental.workflow_orchestrator.application.orchestrator import (
-    FundamentalOrchestrator,
-)
-from src.agents.fundamental.workflow_orchestrator.application.services.valuation_replay_contracts import (
-    INTERNAL_REPLAY_MARKET_SNAPSHOT_KEY,
-    VALUATION_REPLAY_SCHEMA_VERSION,
 )
 from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
 
@@ -303,7 +303,7 @@ async def test_run_valuation_logs_mc_completion_fields_from_diagnostics() -> Non
         }
 
     with patch(
-        "src.agents.fundamental.workflow_orchestrator.application.valuation_flow.log_event"
+        "src.agents.fundamental.application.workflow_orchestrator.valuation_flow.log_event"
     ) as mock_log:
         result = await orchestrator.run_valuation(
             _build_state(),
@@ -344,7 +344,7 @@ async def test_run_valuation_logs_mc_completion_defaults_when_diagnostics_missin
         return {"intrinsic_value": 80.0}
 
     with patch(
-        "src.agents.fundamental.workflow_orchestrator.application.valuation_flow.log_event"
+        "src.agents.fundamental.application.workflow_orchestrator.valuation_flow.log_event"
     ) as mock_log:
         result = await orchestrator.run_valuation(
             _build_state(),
@@ -385,7 +385,7 @@ async def test_run_valuation_logs_forward_signal_completion_fields() -> None:
         return {"intrinsic_value": 140.0}
 
     with patch(
-        "src.agents.fundamental.workflow_orchestrator.application.valuation_flow.log_event"
+        "src.agents.fundamental.application.workflow_orchestrator.valuation_flow.log_event"
     ) as mock_log:
         result = await orchestrator.run_valuation(
             _build_state(),
@@ -427,7 +427,7 @@ async def test_run_valuation_logs_parameter_source_completion_fields() -> None:
         return {"intrinsic_value": 125.0}
 
     with patch(
-        "src.agents.fundamental.workflow_orchestrator.application.valuation_flow.log_event"
+        "src.agents.fundamental.application.workflow_orchestrator.valuation_flow.log_event"
     ) as mock_log:
         result = await orchestrator.run_valuation(
             _build_state(),
@@ -517,7 +517,7 @@ async def test_run_valuation_does_not_mark_scope_mismatch_degraded_when_resolved
         return {"intrinsic_value": 125.0}
 
     with patch(
-        "src.agents.fundamental.workflow_orchestrator.application.valuation_flow.log_event"
+        "src.agents.fundamental.application.workflow_orchestrator.valuation_flow.log_event"
     ) as mock_log:
         result = await orchestrator.run_valuation(
             _build_state(),
@@ -573,7 +573,7 @@ async def test_run_valuation_marks_completion_as_degraded_when_market_data_is_st
         return {"intrinsic_value": 125.0}
 
     with patch(
-        "src.agents.fundamental.workflow_orchestrator.application.valuation_flow.log_event"
+        "src.agents.fundamental.application.workflow_orchestrator.valuation_flow.log_event"
     ) as mock_log:
         result = await orchestrator.run_valuation(
             _build_state(),
@@ -626,7 +626,7 @@ async def test_run_valuation_marks_completion_as_degraded_when_target_consensus_
         return {"intrinsic_value": 125.0}
 
     with patch(
-        "src.agents.fundamental.workflow_orchestrator.application.valuation_flow.log_event"
+        "src.agents.fundamental.application.workflow_orchestrator.valuation_flow.log_event"
     ) as mock_log:
         result = await orchestrator.run_valuation(
             _build_state(),
@@ -741,7 +741,7 @@ async def test_run_valuation_logs_effective_inputs_in_metrics_snapshot() -> None
         }
 
     with patch(
-        "src.agents.fundamental.workflow_orchestrator.application.valuation_flow.log_event"
+        "src.agents.fundamental.application.workflow_orchestrator.valuation_flow.log_event"
     ) as mock_log:
         result = await orchestrator.run_valuation(
             _build_state(),
@@ -903,7 +903,7 @@ async def test_run_valuation_stops_on_audit_failure_before_calculator() -> None:
         raise AssertionError("calculator must not run when audit fails")
 
     with patch(
-        "src.agents.fundamental.workflow_orchestrator.application.valuation_flow.log_event"
+        "src.agents.fundamental.application.workflow_orchestrator.valuation_flow.log_event"
     ) as mock_log:
         result = await orchestrator.run_valuation(
             _build_state(),
@@ -1000,7 +1000,7 @@ async def test_run_valuation_blocks_when_xbrl_quality_gate_is_blocking() -> None
     }
 
     with patch(
-        "src.agents.fundamental.workflow_orchestrator.application.valuation_flow.log_event"
+        "src.agents.fundamental.application.workflow_orchestrator.valuation_flow.log_event"
     ) as mock_log:
         result = await orchestrator.run_valuation(
             state,
@@ -1050,7 +1050,7 @@ async def test_run_valuation_warn_only_missing_inputs_continue_when_quality_gate
     }
 
     with patch(
-        "src.agents.fundamental.workflow_orchestrator.application.valuation_flow.log_event"
+        "src.agents.fundamental.application.workflow_orchestrator.valuation_flow.log_event"
     ) as mock_log:
         result = await orchestrator.run_valuation(
             state,
@@ -1098,7 +1098,7 @@ async def test_run_valuation_offloads_execution_calculation_to_thread() -> None:
         return func(*args, **kwargs)  # type: ignore[misc]
 
     with patch(
-        "src.agents.fundamental.workflow_orchestrator.application.valuation_flow.asyncio.to_thread",
+        "src.agents.fundamental.application.workflow_orchestrator.valuation_flow.asyncio.to_thread",
         side_effect=_fake_to_thread,
     ):
         result = await orchestrator.run_valuation(
@@ -1209,7 +1209,7 @@ async def test_run_model_selection_fails_fast_when_reports_artifact_id_missing()
     state = _build_health_state()
 
     with patch(
-        "src.agents.fundamental.workflow_orchestrator.application.model_selection_flow.log_event"
+        "src.agents.fundamental.application.workflow_orchestrator.model_selection_flow.log_event"
     ) as mock_log:
         result = await orchestrator.run_model_selection(
             state,

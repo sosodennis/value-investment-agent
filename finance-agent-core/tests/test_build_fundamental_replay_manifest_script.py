@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from src.agents.fundamental.core_valuation.interface.replay_contracts import (
+from src.agents.fundamental.subdomains.core_valuation.interface.replay_contracts import (
     parse_valuation_replay_manifest_model,
 )
 

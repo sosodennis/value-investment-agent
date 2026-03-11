@@ -5,7 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from src.agents.debate.interface.contracts import EvidenceFactModel
-from src.agents.fundamental.financial_statements.interface.contracts import (
+from src.agents.fundamental.subdomains.financial_statements.interface.contracts import (
     FinancialReportModel,
 )
 from src.agents.news.interface.contracts import (

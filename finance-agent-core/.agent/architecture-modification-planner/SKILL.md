@@ -18,6 +18,7 @@ Collect these inputs before planning:
 - Findings from architecture review (recommended: `$architecture-standard-enforcer`).
 - Relevant code context and affected module boundaries.
 - Ownership decisions needed for moved contracts/ports (domain vs application vs interface).
+- Target layer topology (root `application/domain/interface/subdomains`) and shared kernel placement rules.
 
 ## Workflow
 
@@ -28,6 +29,7 @@ Collect these inputs before planning:
 2. Build impact map.
 - Identify directly changed files and indirectly impacted dependencies.
 - Map boundary crossings (`domain/application/interface/infrastructure`).
+- Map root layer layout vs subdomain layout; identify cross-subdomain orchestration owners.
 - Flag potential subdomain split candidates (stable capability boundary, unique deps, or pipeline stages).
 - Identify over-fragmented clusters and deep import paths; plan consolidation and facade exports.
 
@@ -56,6 +58,7 @@ Use this structure:
 - `Requirement Breakdown`
 - `Technical Objectives and Strategy`
 - `Involved Files`
+- `Layer Topology and Shared Kernel Placement`
 - `Detailed Per-File Plan`
 - `Old → New Mapping`
 - `Cohesion/Facade Plan`

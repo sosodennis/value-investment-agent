@@ -26,8 +26,9 @@ Prioritize evidence-backed mechanics over generic summaries.
 
 ### Step 1: Structure and State
 1. Extract a concise package tree for the target module.
-2. Map layer ownership from paths and import direction; highlight vertical-slice boundaries and shared kernel usage.
-3. Extract state and contract payloads from likely files:
+2. Map layer ownership from paths and import direction; highlight root layer vs subdomain layout, vertical-slice boundaries, and shared kernel usage.
+3. Identify cross-subdomain orchestration location (root `application/` vs subdomain) and note deviations.
+4. Extract state and contract payloads from likely files:
 - `interface/types.py`
 - `interface/contracts.py`
 - `application/state_readers.py`

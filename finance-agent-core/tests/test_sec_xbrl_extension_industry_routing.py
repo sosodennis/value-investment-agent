@@ -4,25 +4,25 @@ from typing import Any
 
 import pytest
 
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.extract.extractor import (
+from src.agents.fundamental.domain.shared.contracts.traceable import (
+    ManualProvenance,
+    TraceableField,
+)
+from src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.extract.extractor import (
     SearchConfig,
 )
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.extract.factory import (
+from src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.extract.factory import (
     BaseFinancialModelFactory,
     FinancialReportFactory,
 )
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.extract.report_contracts import (
+from src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.extract.report_contracts import (
     BaseFinancialModel,
     FinancialServicesExtension,
     IndustrialExtension,
     RealEstateExtension,
 )
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.map.mapping import (
+from src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.map.mapping import (
     get_mapping_registry,
-)
-from src.agents.fundamental.shared.contracts.traceable import (
-    ManualProvenance,
-    TraceableField,
 )
 
 
@@ -218,7 +218,7 @@ def test_create_report_sets_canonical_extension_type(
             }
 
     monkeypatch.setattr(
-        "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.extract.factory.SECReportExtractor",
+        "src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.extract.factory.SECReportExtractor",
         DummyExtractor,
     )
     monkeypatch.setattr(

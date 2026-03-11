@@ -2,19 +2,19 @@ from __future__ import annotations
 
 import pytest
 
-from src.agents.fundamental.core_valuation.domain.calculators.dcf_standard_calculator import (
+from src.agents.fundamental.subdomains.core_valuation.domain.calculators.dcf_standard_calculator import (
     calculate_dcf_standard_valuation,
 )
-from src.agents.fundamental.core_valuation.domain.calculators.dcf_variant_contracts import (
+from src.agents.fundamental.subdomains.core_valuation.domain.calculators.dcf_variant_contracts import (
     DcfMonteCarloPolicy,
 )
-from src.agents.fundamental.core_valuation.domain.calculators.dcf_variant_result_service import (
+from src.agents.fundamental.subdomains.core_valuation.domain.calculators.dcf_variant_result_service import (
     build_dcf_variant_static_inputs,
 )
-from src.agents.fundamental.core_valuation.domain.calculators.dcf_variant_sensitivity_service import (
+from src.agents.fundamental.subdomains.core_valuation.domain.calculators.dcf_variant_sensitivity_service import (
     run_dcf_variant_sensitivity,
 )
-from src.agents.fundamental.core_valuation.domain.models.dcf_standard.contracts import (
+from src.agents.fundamental.subdomains.core_valuation.domain.models.dcf_standard.contracts import (
     DCFStandardParams,
 )
 

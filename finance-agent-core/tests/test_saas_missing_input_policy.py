@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from src.agents.fundamental.core_valuation.domain.parameterization.model_builders.shared.missing_metrics_service import (
+from src.agents.fundamental.subdomains.core_valuation.domain.parameterization.model_builders.shared.missing_metrics_service import (
     apply_missing_metric_policy,
 )
-from src.agents.fundamental.core_valuation.domain.parameterization.orchestrator import (
+from src.agents.fundamental.subdomains.core_valuation.domain.parameterization.orchestrator import (
     build_params,
 )
-from src.agents.fundamental.financial_statements.interface.contracts import (
+from src.agents.fundamental.subdomains.financial_statements.interface.contracts import (
     parse_financial_reports_model,
 )
 

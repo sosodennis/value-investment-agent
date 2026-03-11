@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from src.agents.fundamental.shared.contracts.traceable import (
+from src.agents.fundamental.domain.shared.contracts.traceable import (
     ComputedProvenance,
     ManualProvenance,
     XBRLProvenance,

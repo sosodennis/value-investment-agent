@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from src.agents.fundamental.market_data.domain.consensus_anchor_aggregator import (
+from src.agents.fundamental.subdomains.market_data.domain.consensus_anchor_aggregator import (
     FREE_CONSENSUS_AGGREGATE_SOURCE,
     build_target_consensus_anchor_datums,
 )
-from src.agents.fundamental.market_data.domain.market_datum import MarketDatum
+from src.agents.fundamental.subdomains.market_data.domain.market_datum import (
+    MarketDatum,
+)
 
 
 def test_build_target_consensus_anchor_uses_cross_source_median() -> None:

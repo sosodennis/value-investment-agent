@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.agents.fundamental.forward_signals.infrastructure.sec_xbrl.retrieval.filing_section_selector import (
+from src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl.retrieval.filing_section_selector import (
     is_8k_form,
     refine_8k_analysis_text,
 )

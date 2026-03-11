@@ -1,4 +1,4 @@
-from src.agents.fundamental.core_valuation.domain.valuation_model_type_service import (
+from src.agents.fundamental.subdomains.core_valuation.domain.valuation_model_type_service import (
     resolve_calculator_model_type,
 )
 

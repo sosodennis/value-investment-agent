@@ -2,18 +2,18 @@ from __future__ import annotations
 
 import logging
 
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.fetch.extractor_search_processing_service import (
+from src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.fetch.extractor_search_processing_service import (
     normalize_unit,
     period_sort_key,
 )
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.map.anchor.extension_anchor_service import (
+from src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.map.anchor.extension_anchor_service import (
     ANCHOR_RULE_NOT_FOUND,
     build_default_extension_anchor_service,
 )
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.map.base_model_mapping_resolver_service import (
+from src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.map.base_model_mapping_resolver_service import (
     resolve_configs,
 )
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.map.mapping import (
+from src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.map.mapping import (
     FIELD_MAPPING_NOT_FOUND,
     FieldSpec,
     XbrlMappingRegistry,

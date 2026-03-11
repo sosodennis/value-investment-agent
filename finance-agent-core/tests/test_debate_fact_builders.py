@@ -6,7 +6,7 @@ from src.agents.debate.domain.fact_builders import (
     render_strict_facts_registry,
     summarize_facts_by_source,
 )
-from src.agents.fundamental.shared.contracts.traceable import (
+from src.agents.fundamental.domain.shared.contracts.traceable import (
     ManualProvenance,
     XBRLProvenance,
 )

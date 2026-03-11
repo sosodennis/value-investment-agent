@@ -19,11 +19,13 @@ Treat hard rules as blocking unless the user explicitly requests a temporary exc
 2. Map ownership and layer boundaries.
 - Classify each changed module as `domain`, `application`, `interface`, or `infrastructure`.
 - Flag cross-layer leakage and wrong owner placement.
+- For enterprise topology, validate root layer layout and shared kernel placement (`domain/shared`).
 
 3. Enforce naming and packaging contracts.
 - Validate class suffix semantics and filename-role consistency.
 - Flag generic catch-all modules in mature paths.
 - Flag empty layer packages (`application/`, `domain/`, `interface/`, `infrastructure`).
+- Flag root-level `workflow_orchestrator` packages that are not under `application/`.
 
 4. Validate runtime/type/async boundaries.
 - Flag avoidable `object` propagation beyond allowed decode/state-entry boundaries.

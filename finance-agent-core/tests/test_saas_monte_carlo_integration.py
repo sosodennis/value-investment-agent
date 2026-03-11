@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import pytest
 
-from src.agents.fundamental.core_valuation.domain.calculators.saas_calculator import (
-    calculate_saas_valuation,
-)
-from src.agents.fundamental.core_valuation.domain.models.saas.contracts import (
-    SaaSParams,
-)
-from src.agents.fundamental.shared.contracts.traceable import (
+from src.agents.fundamental.domain.shared.contracts.traceable import (
     ManualProvenance,
     TraceableField,
+)
+from src.agents.fundamental.subdomains.core_valuation.domain.calculators.saas_calculator import (
+    calculate_saas_valuation,
+)
+from src.agents.fundamental.subdomains.core_valuation.domain.models.saas.contracts import (
+    SaaSParams,
 )
 
 

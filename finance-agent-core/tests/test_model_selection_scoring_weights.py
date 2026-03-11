@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from src.agents.fundamental.core_valuation.domain.valuation_model import ValuationModel
-from src.agents.fundamental.model_selection.domain.model_selection import (
+from src.agents.fundamental.subdomains.core_valuation.domain.valuation_model import (
+    ValuationModel,
+)
+from src.agents.fundamental.subdomains.model_selection.domain.model_selection import (
     DEFAULT_SCORING_WEIGHTS,
     MODEL_SPECS,
     ScoringWeights,

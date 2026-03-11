@@ -1,0 +1,4 @@
+interface:
+  display_name: "Backlog Consolidator"
+  short_description: "Merge scattered backlogs into one master artifact"
+  default_prompt: "Use $backlog-consolidator to merge scattered backlog documents into one master artifact and mark superseded items with evidence."

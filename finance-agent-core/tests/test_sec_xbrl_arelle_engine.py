@@ -5,18 +5,18 @@ from dataclasses import dataclass
 import pandas as pd
 import pytest
 
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.extract import (
+from src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.extract import (
     extractor as extractor_module,
 )
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.providers import (
+from src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.providers import (
     arelle_engine as arelle_engine_module,
 )
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.providers.arelle_engine import (
+from src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.providers.arelle_engine import (
     ArelleEngineUnavailableError,
     ArelleParseResult,
     ArelleXbrlEngine,
 )
-from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.providers.engine_contracts import (
+from src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.providers.engine_contracts import (
     ArelleRuntimeMetadata,
     ArelleValidationIssue,
     ArelleValidationProfile,
