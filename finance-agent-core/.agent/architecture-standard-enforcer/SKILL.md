@@ -23,6 +23,7 @@ Treat hard rules as blocking unless the user explicitly requests a temporary exc
 3. Enforce naming and packaging contracts.
 - Validate class suffix semantics and filename-role consistency.
 - Flag generic catch-all modules in mature paths.
+- Flag empty layer packages (`application/`, `domain/`, `interface/`, `infrastructure`).
 
 4. Validate runtime/type/async boundaries.
 - Flag avoidable `object` propagation beyond allowed decode/state-entry boundaries.
@@ -39,6 +40,9 @@ Treat hard rules as blocking unless the user explicitly requests a temporary exc
 - Ensure call-site migration is atomic per slice when feasible.
 - Remove compatibility shims/aliases after migration validation.
 - Add hygiene guards for removed legacy imports/modules when relevant.
+- Scan for legacy path imports after refactors (old → new path).
+- Ensure pipeline-heavy infrastructure is grouped by stage when applicable.
+- Confirm preview/projection contracts live in `interface`, not `domain`.
 
 7. Report findings and remediation direction.
 - Rank findings by severity.

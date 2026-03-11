@@ -26,7 +26,7 @@ Prioritize evidence-backed mechanics over generic summaries.
 
 ### Step 1: Structure and State
 1. Extract a concise package tree for the target module.
-2. Map layer ownership from paths and import direction.
+2. Map layer ownership from paths and import direction; highlight vertical-slice boundaries and shared kernel usage.
 3. Extract state and contract payloads from likely files:
 - `interface/types.py`
 - `interface/contracts.py`
@@ -85,6 +85,7 @@ Extract:
 1. Identify upstream inputs and downstream outputs.
 2. Identify cross-agent or kernel dependencies, ports, repositories, and shared contracts.
 3. Mark boundary assumptions as `Inferred` unless directly wired in code.
+4. Note any legacy path usage or empty layer packages as deviations.
 
 ## Boilerplate Filter Policy
 - Ignore: simple pass-through logging, generic try/except wrappers, obvious serializer plumbing.
@@ -117,6 +118,7 @@ For section details:
 - `Workflow Graph`: Mermaid `stateDiagram-v2`, node roles, edge conditions.
 - `Implementation Deep Dive`: split into Infrastructure, Domain, Application with evidence.
 - `Deviations, Risks, and Unknowns`: mark unknowns explicitly and separate observed facts from inferences.
+  - Include legacy path residues and empty layer packages if observed.
 
 ## Quality Gate
 Pass all checks before final output:

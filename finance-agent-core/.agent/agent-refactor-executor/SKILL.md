@@ -17,6 +17,8 @@ Collect these before execution:
 - Scope boundaries and non-goals.
 - Required validation gates (lint, tests, contract checks, logging checks).
 - Rollback expectations and compatibility constraints.
+- Ownership decisions for any moved contracts/ports and old → new path mapping.
+- Legacy removal constraints (no compatibility shims unless explicitly approved).
 
 ## Slice Policy (Hard Rules)
 
@@ -24,6 +26,7 @@ Collect these before execution:
 2. Default to `medium` slices to preserve throughput.
 3. Use `small` slices for high-risk changes:
 - Cross-layer boundary rewiring.
+- Contract relocation across layers or subdomains.
 - Async/runtime boundary changes.
 - State/error contract changes.
 - Migration/removal of compatibility paths.
@@ -35,6 +38,7 @@ Collect these before execution:
 
 1. Initialize execution context.
 - Restate objective, in-scope files, out-of-scope files, and acceptance gates.
+- Confirm ownership decisions for moved contracts and old → new path mapping.
 
 2. Segment plan into executable slices.
 - Tag each slice as `small` or `medium`.
@@ -47,6 +51,7 @@ Collect these before execution:
 4. Validate immediately after each slice.
 - Run required checks for that slice.
 - Record pass/fail with concise evidence.
+- Run legacy import/path sweep when migration is involved (for example `rg` old paths).
 
 5. Run compliance gate.
 - Invoke `$architecture-standard-enforcer` on changed paths.
@@ -58,6 +63,7 @@ Collect these before execution:
 
 7. Close and hand off.
 - Summarize completed slices, residual risks, and next pending slice.
+- Confirm empty layer directories were removed after migration.
 
 ## Output Contract (Per Iteration)
 
@@ -80,3 +86,4 @@ Collect these before execution:
 - Do not batch multiple high-risk changes in one slice.
 - Do not continue if a hard compliance violation is unresolved.
 - Keep change sets minimal, reversible, and test-backed.
+- Do not leave compatibility shims or re-export modules unless explicitly approved.
