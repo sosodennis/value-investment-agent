@@ -78,3 +78,11 @@ Use this structure:
 - `application`: use-case ports and orchestration boundaries.
 - `interface`: boundary DTOs/serializers/projections and prompt specs.
 - `infrastructure`: adapters, providers, repositories, wiring only.
+
+## Subdomain Split Criteria (When to Split)
+- **Capability boundary**: a coherent capability has a stable API and can evolve independently.
+- **Dependency boundary**: distinct external dependencies or data sources justify a separate subdomain.
+- **Pipeline boundary**: multi-stage pipelines (fetch/extract/map/score/postprocess) benefit from stage grouping or subdomain split.
+- **Ownership boundary**: different teams or lifecycles need isolated changes and tests.
+- **Cohesion signal**: 4+ tightly-coupled owner modules in one area that change together repeatedly.
+- **Do not split** if it only reduces LOC or increases indirection without clear boundary value.

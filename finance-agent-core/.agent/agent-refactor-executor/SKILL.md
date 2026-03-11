@@ -20,6 +20,17 @@ Collect these before execution:
 - Ownership decisions for any moved contracts/ports and old → new path mapping.
 - Legacy removal constraints (no compatibility shims unless explicitly approved).
 
+## Subdomain Split Criteria (Consistency Check)
+
+- Apply when a slice introduces or removes a subdomain boundary.
+- **Capability boundary**: a coherent capability has a stable API and can evolve independently.
+- **Dependency boundary**: distinct external dependencies or data sources justify a separate subdomain.
+- **Pipeline boundary**: multi-stage pipelines (fetch/extract/map/score/postprocess) benefit from stage grouping or subdomain split.
+- **Ownership boundary**: different teams or lifecycles need isolated changes and tests.
+- **Cohesion signal**: 4+ tightly-coupled owner modules in one area that change together repeatedly.
+- **Do not split** if it only reduces LOC or increases indirection without clear boundary value.
+- If criteria are not met or ambiguous, stop and route back to `$architecture-modification-planner`.
+
 ## Slice Policy (Hard Rules)
 
 1. Only `small` and `medium` slices are allowed by default.

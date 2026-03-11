@@ -49,6 +49,17 @@ Treat hard rules as blocking unless the user explicitly requests a temporary exc
 - Recommend the smallest maintainable remediation path.
 - State residual risks and test gaps.
 
+## Subdomain Split Enforcement
+
+- Apply when a change introduces or removes a subdomain.
+- Validate justification using the criteria below and flag violations as findings.
+- **Capability boundary**: a coherent capability has a stable API and can evolve independently.
+- **Dependency boundary**: distinct external dependencies or data sources justify a separate subdomain.
+- **Pipeline boundary**: multi-stage pipelines (fetch/extract/map/score/postprocess) benefit from stage grouping or subdomain split.
+- **Ownership boundary**: different teams or lifecycles need isolated changes and tests.
+- **Cohesion signal**: 4+ tightly-coupled owner modules in one area that change together repeatedly.
+- **Do not split** if it only reduces LOC or increases indirection without clear boundary value.
+
 ## Output Contract
 
 Use this report structure:

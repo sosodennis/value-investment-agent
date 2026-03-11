@@ -8,7 +8,7 @@
   - `agent-debug-review-playbook`
   - `agent-implementation-extractor`
 - Why this change is needed:
-  - Encode reusable refactor decisions (boundary placement, legacy removal, pipeline staging, empty layer cleanup).
+  - Encode reusable refactor decisions (boundary placement, subdomain split criteria, legacy removal, pipeline staging, empty layer cleanup) consistently across planning, execution, and review.
 - Linked SCR / incident / issue:
   - `docs/rfcs/skill-change-request-vertical-slice-refactor.md`
 
@@ -47,6 +47,7 @@ Validation details:
 - `python /Users/denniswong/.codex/skills/.system/skill-creator/scripts/quick_validate.py finance-agent-core/.agent/agent-implementation-extractor`
 - Results:
 - All checks passed.
+- Revalidated on 2026-03-11 after subdomain criteria propagation in executor/enforcer/debug.
 - Remaining gaps:
 - Dogfooding run pending.
 
