@@ -67,7 +67,7 @@
 3. Replay/backtest observability
 - `finance-agent-core/scripts/replay_fundamental_valuation.py`
 - `finance-agent-core/scripts/run_fundamental_backtest.py`
-- `finance-agent-core/src/agents/fundamental/application/use_cases/run_valuation_use_case.py`
+- `finance-agent-core/src/agents/fundamental/application/use_cases/run_valuation_flow.py`
 
 4. Market consensus diagnostics
 - `finance-agent-core/src/agents/fundamental/infrastructure/market_data/market_data_service.py`
@@ -99,7 +99,7 @@
   - 歷史平滑 + clamp + 成熟型 profile。
   - 輸出 `raw/guarded/reason`。
 
-4. `metadata_service.py` + `run_valuation_use_case.py`
+4. `metadata_service.py` + `run_valuation_flow.py`
 - 擴充 metadata/completion fields：
   - `shares_scope`
   - `equity_value_scope`

@@ -2,19 +2,22 @@ from __future__ import annotations
 
 import pytest
 
-from src.agents.fundamental.domain.valuation.calculators.bank_calculator import (
+from src.agents.fundamental.core_valuation.domain.calculators.bank_calculator import (
     calculate_bank_valuation,
 )
-from src.agents.fundamental.domain.valuation.calculators.reit_ffo_calculator import (
+from src.agents.fundamental.core_valuation.domain.calculators.reit_ffo_calculator import (
     calculate_reit_ffo_valuation,
 )
-from src.agents.fundamental.domain.valuation.models.bank.contracts import (
+from src.agents.fundamental.core_valuation.domain.models.bank.contracts import (
     BankParams,
 )
-from src.agents.fundamental.domain.valuation.models.reit_ffo.contracts import (
+from src.agents.fundamental.core_valuation.domain.models.reit_ffo.contracts import (
     ReitFfoParams,
 )
-from src.shared.kernel.traceable import ManualProvenance, TraceableField
+from src.agents.fundamental.shared.contracts.traceable import (
+    ManualProvenance,
+    TraceableField,
+)
 
 
 def test_bank_valuation_uses_capm_when_strategy_is_capm() -> None:

@@ -1,7 +1,7 @@
-from src.agents.fundamental.domain.valuation.models.dcf_standard.contracts import (
+from src.agents.fundamental.core_valuation.domain.models.dcf_standard.contracts import (
     DCFStandardParams,
 )
-from src.agents.fundamental.domain.valuation.valuation_model_registry import (
+from src.agents.fundamental.core_valuation.domain.valuation_model_registry import (
     ValuationModelRegistry,
 )
 

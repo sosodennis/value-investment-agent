@@ -5,14 +5,16 @@ from pathlib import Path
 
 import pytest
 
-from src.agents.fundamental.domain.valuation.parameterization.orchestrator import (
+from src.agents.fundamental.core_valuation.domain.parameterization.orchestrator import (
     build_params,
 )
-from src.agents.fundamental.domain.valuation.parameterization.reinvestment_clamp_profile_service import (
+from src.agents.fundamental.core_valuation.domain.parameterization.reinvestment_clamp_profile_service import (
     REINVESTMENT_CLAMP_PROFILE_PATH_ENV,
     clear_reinvestment_clamp_profile_cache,
 )
-from src.agents.fundamental.interface.contracts import parse_financial_reports_model
+from src.agents.fundamental.financial_statements.interface.contracts import (
+    parse_financial_reports_model,
+)
 
 
 def _tf(value: float | str) -> dict[str, object]:

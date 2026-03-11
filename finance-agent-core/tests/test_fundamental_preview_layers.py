@@ -1,5 +1,7 @@
-from src.agents.fundamental.interface.formatters import format_fundamental_preview
-from src.agents.fundamental.interface.preview_projection_service import (
+from src.agents.fundamental.workflow_orchestrator.interface.formatters import (
+    format_fundamental_preview,
+)
+from src.agents.fundamental.workflow_orchestrator.interface.preview_projection_service import (
     project_fundamental_preview,
 )
 

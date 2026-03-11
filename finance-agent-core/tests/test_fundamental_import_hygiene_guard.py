@@ -55,6 +55,7 @@ def test_domain_report_semantics_has_no_source_label_normalizer() -> None:
         / "src"
         / "agents"
         / "fundamental"
+        / "financial_statements"
         / "domain"
         / "report_semantics.py"
     )
@@ -85,12 +86,12 @@ def test_no_legacy_generic_fundamental_imports() -> None:
         "src.agents.fundamental.domain.models",
         "src.agents.fundamental.domain.rules",
         "src.agents.fundamental.domain.services",
-        "src.agents.fundamental.infrastructure.sec_xbrl.models",
-        "src.agents.fundamental.domain.valuation.backtest_contracts",
-        "src.agents.fundamental.domain.valuation.backtest_io_service",
-        "src.agents.fundamental.domain.valuation.backtest_runtime_service",
-        "src.agents.fundamental.domain.valuation.backtest_drift_service",
-        "src.agents.fundamental.domain.valuation.backtest_report_service",
+        "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.models",
+        "src.agents.fundamental.core_valuation.domain.backtest_contracts",
+        "src.agents.fundamental.core_valuation.domain.backtest_io_service",
+        "src.agents.fundamental.core_valuation.domain.backtest_runtime_service",
+        "src.agents.fundamental.core_valuation.domain.backtest_drift_service",
+        "src.agents.fundamental.core_valuation.domain.backtest_report_service",
     ]
 
     violations: list[str] = []

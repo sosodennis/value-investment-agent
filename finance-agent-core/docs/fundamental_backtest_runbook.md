@@ -42,7 +42,7 @@ UV_CACHE_DIR=/tmp/.uv-cache uv run --project finance-agent-core python finance-a
 
 ```bash
 UV_CACHE_DIR=/tmp/.uv-cache uv run --project finance-agent-core python finance-agent-core/scripts/validate_fundamental_reinvestment_clamp_profile.py \
-  --path finance-agent-core/src/agents/fundamental/domain/valuation/parameterization/config/reinvestment_clamp_profile.default.json \
+  --path finance-agent-core/src/agents/fundamental/core_valuation/domain/parameterization/config/reinvestment_clamp_profile.default.json \
   --max-age-days 21 \
   --min-evidence-refs 1
 ```

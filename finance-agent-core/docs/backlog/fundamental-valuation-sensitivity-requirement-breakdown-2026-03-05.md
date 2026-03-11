@@ -60,7 +60,7 @@
 - `finance-agent-core/src/agents/fundamental/domain/valuation/calculators/dcf_variant_result_service.py`
 - `finance-agent-core/src/agents/fundamental/application/services/valuation_update_service.py`
 - `finance-agent-core/src/agents/fundamental/application/services/valuation_assumption_breakdown_service.py`
-- `finance-agent-core/src/agents/fundamental/application/use_cases/run_valuation_use_case.py`
+- `finance-agent-core/src/agents/fundamental/application/use_cases/run_valuation_flow.py`
 
 2. Frontend Contract / UI
 - `frontend/src/types/agents/fundamental-preview-parser.ts`
@@ -108,7 +108,7 @@
   - `scenario_count`
   - `top_drivers`
 
-7. `run_valuation_use_case.py`
+7. `run_valuation_flow.py`
 - completion snapshot 補欄位：
   - `sensitivity_enabled`
   - `sensitivity_scenario_count`

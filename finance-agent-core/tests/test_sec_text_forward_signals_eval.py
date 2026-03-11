@@ -6,10 +6,12 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from src.agents.fundamental.infrastructure.sec_xbrl.forward_signals_text import (
+from src.agents.fundamental.forward_signals.infrastructure.sec_xbrl.forward_signals_text import (
     extract_forward_signals_from_sec_text,
 )
-from src.agents.fundamental.infrastructure.sec_xbrl.text_record import FilingTextRecord
+from src.agents.fundamental.forward_signals.infrastructure.sec_xbrl.text_record import (
+    FilingTextRecord,
+)
 
 
 @dataclass(frozen=True)

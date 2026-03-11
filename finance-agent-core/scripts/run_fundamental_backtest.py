@@ -10,7 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
 
-from src.agents.fundamental.domain.valuation.backtest import (  # noqa: E402
+from src.agents.fundamental.core_valuation.domain.backtest import (  # noqa: E402
     BacktestConfig,
     build_baseline_payload,
     build_report_payload,
@@ -19,7 +19,7 @@ from src.agents.fundamental.domain.valuation.backtest import (  # noqa: E402
     load_cases,
     run_cases,
 )
-from src.agents.fundamental.domain.valuation.parameterization.forward_signal_calibration_mapping_service import (  # noqa: E402
+from src.agents.fundamental.core_valuation.domain.parameterization.forward_signal_calibration_mapping_service import (  # noqa: E402
     load_forward_signal_calibration_mapping,
 )
 

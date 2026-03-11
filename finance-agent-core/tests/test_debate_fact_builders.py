@@ -6,7 +6,10 @@ from src.agents.debate.domain.fact_builders import (
     render_strict_facts_registry,
     summarize_facts_by_source,
 )
-from src.shared.kernel.traceable import ManualProvenance, XBRLProvenance
+from src.agents.fundamental.shared.contracts.traceable import (
+    ManualProvenance,
+    XBRLProvenance,
+)
 
 
 def test_build_financial_facts_uses_xbrl_provenance_when_available():

@@ -6,7 +6,10 @@ from src.agents.debate.domain.models import EvidenceFact
 from src.agents.debate.domain.report_compression_service import (
     compress_financial_data,
 )
-from src.shared.kernel.traceable import ManualProvenance, XBRLProvenance
+from src.agents.fundamental.shared.contracts.traceable import (
+    ManualProvenance,
+    XBRLProvenance,
+)
 from src.shared.kernel.types import JSONObject
 
 

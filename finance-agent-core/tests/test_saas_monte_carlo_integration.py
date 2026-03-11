@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import pytest
 
-from src.agents.fundamental.domain.valuation.calculators.saas_calculator import (
+from src.agents.fundamental.core_valuation.domain.calculators.saas_calculator import (
     calculate_saas_valuation,
 )
-from src.agents.fundamental.domain.valuation.models.saas.contracts import (
+from src.agents.fundamental.core_valuation.domain.models.saas.contracts import (
     SaaSParams,
 )
-from src.shared.kernel.traceable import ManualProvenance, TraceableField
+from src.agents.fundamental.shared.contracts.traceable import (
+    ManualProvenance,
+    TraceableField,
+)
 
 
 def test_saas_valuation_includes_distribution_summary_when_mc_enabled() -> None:

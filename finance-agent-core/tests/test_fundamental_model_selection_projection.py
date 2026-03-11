@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from src.agents.fundamental.domain.model_selection import select_valuation_model
-from src.agents.fundamental.domain.valuation_model import ValuationModel
-from src.agents.fundamental.interface.report_projection_service import (
+from src.agents.fundamental.core_valuation.domain.valuation_model import ValuationModel
+from src.agents.fundamental.model_selection.domain.model_selection import (
+    select_valuation_model,
+)
+from src.agents.fundamental.model_selection.interface.report_projection_service import (
     project_selection_reports,
 )
 from src.shared.cross_agent.domain.market_identity import CompanyProfile

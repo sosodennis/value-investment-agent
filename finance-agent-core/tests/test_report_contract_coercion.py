@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from src.agents.fundamental.domain.valuation.report_contract import (
+from src.agents.fundamental.core_valuation.domain.report_contract import (
     parse_domain_financial_reports,
 )
-from src.shared.kernel.traceable import ManualProvenance, TraceableField
+from src.agents.fundamental.shared.contracts.traceable import (
+    ManualProvenance,
+    TraceableField,
+)
 
 
 def test_parse_domain_financial_reports_rejects_scalar_field_fallback() -> None:

@@ -1,19 +1,21 @@
 from __future__ import annotations
 
-from src.agents.fundamental.application.factory import (
+from src.agents.fundamental.artifacts_provenance.infrastructure.fundamental_artifact_repository import (
+    fundamental_artifact_repository,
+)
+from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.provider import (
+    fetch_financial_payload,
+)
+from src.agents.fundamental.market_data.infrastructure.factory import (
+    market_data_service,
+)
+from src.agents.fundamental.workflow_orchestrator.application.factory import (
     FundamentalWorkflowRunner,
     build_fundamental_orchestrator,
     build_fundamental_workflow_runner,
 )
-from src.agents.fundamental.application.ports import FundamentalFinancialPayload
-from src.agents.fundamental.infrastructure.artifacts.fundamental_artifact_repository import (
-    fundamental_artifact_repository,
-)
-from src.agents.fundamental.infrastructure.market_data.market_data_service import (
-    market_data_service,
-)
-from src.agents.fundamental.infrastructure.sec_xbrl.provider import (
-    fetch_financial_payload,
+from src.agents.fundamental.workflow_orchestrator.application.ports import (
+    FundamentalFinancialPayload,
 )
 
 

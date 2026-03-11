@@ -41,7 +41,7 @@
 ### Existing Parameterization, Metadata, and Logging
 1. `finance-agent-core/src/agents/fundamental/domain/valuation/parameterization/forward_signal_adjustment_service.py`
 2. `finance-agent-core/src/agents/fundamental/domain/valuation/parameterization/orchestrator.py`
-3. `finance-agent-core/src/agents/fundamental/application/use_cases/run_valuation_use_case.py`
+3. `finance-agent-core/src/agents/fundamental/application/use_cases/run_valuation_flow.py`
 4. `finance-agent-core/src/agents/fundamental/application/services/valuation_assumption_breakdown_service.py`
 
 ### Existing Signal Producer (Minimal Standardization Only)
@@ -84,7 +84,7 @@
    - assumptions 加入 `raw->calibrated` 摘要；保留現有 series apply 邏輯。
 9. `parameterization/orchestrator.py`
    - log fields 加入 `mapping_version`、`calibration_applied`、`coverage_bucket`。
-10. `run_valuation_use_case.py`
+10. `run_valuation_flow.py`
     - completion log 擴充 calibration metadata，支持事後審計。
 11. `valuation_assumption_breakdown_service.py`
     - 對外暴露校準摘要，避免只看到最終 bp。

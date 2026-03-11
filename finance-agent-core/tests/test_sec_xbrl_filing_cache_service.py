@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.agents.fundamental.infrastructure.sec_xbrl.cache.filing_cache_service import (
+from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.cache.filing_cache_service import (
     FilingCacheCoordinates,
     FilingCacheService,
     build_arelle_taxonomy_cache_token,

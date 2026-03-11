@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from src.agents.fundamental.domain.valuation.backtest import (
+from src.agents.fundamental.core_valuation.domain.backtest import (
     BacktestCase,
     BacktestConfig,
     build_baseline_payload,

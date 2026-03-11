@@ -1,28 +1,30 @@
 from __future__ import annotations
 
-from src.agents.fundamental.infrastructure.sec_xbrl.base_model_debt_policy_service import (
+from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.base_model_debt_policy_service import (
     resolve_total_debt_policy as resolve_total_debt_policy_util,
 )
-from src.agents.fundamental.infrastructure.sec_xbrl.extractor import SearchType
-from src.agents.fundamental.infrastructure.sec_xbrl.factory_derived_utils import (
+from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.extractor import (
+    SearchType,
+)
+from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.factory_derived_utils import (
     build_real_estate_debt_combined_ex_leases as build_real_estate_debt_combined_ex_leases_util,
 )
-from src.agents.fundamental.infrastructure.sec_xbrl.factory_derived_utils import (
+from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.factory_derived_utils import (
     build_total_debt_with_policy as build_total_debt_with_policy_util,
 )
-from src.agents.fundamental.infrastructure.sec_xbrl.factory_derived_utils import (
+from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.factory_derived_utils import (
     relax_statement_filters as relax_statement_filters_util,
 )
-from src.agents.fundamental.infrastructure.sec_xbrl.report_factory_common_utils import (
+from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.report_factory_common_utils import (
     sum_fields as sum_fields_util,
 )
-from src.shared.kernel.tools.logger import get_logger
-from src.shared.kernel.traceable import (
+from src.agents.fundamental.shared.contracts.traceable import (
     ComputedProvenance,
     ManualProvenance,
     TraceableField,
     XBRLProvenance,
 )
+from src.shared.kernel.tools.logger import get_logger
 
 logger = get_logger(__name__)
 

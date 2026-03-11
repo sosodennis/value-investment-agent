@@ -64,7 +64,7 @@
 - `finance-agent-core/src/agents/fundamental/domain/valuation/parameterization/forward_signal_adjustment_service.py`
 - `finance-agent-core/src/agents/fundamental/domain/valuation/parameterization/orchestrator.py`
 - `finance-agent-core/src/agents/fundamental/application/services/valuation_assumption_breakdown_service.py`
-- `finance-agent-core/src/agents/fundamental/application/use_cases/run_valuation_use_case.py`
+- `finance-agent-core/src/agents/fundamental/application/use_cases/run_valuation_flow.py`
 
 5. Replay/Backtest
 - `finance-agent-core/scripts/replay_fundamental_valuation.py`
@@ -91,7 +91,7 @@
 - 保留 direction 訊號，僅校準幅度。
 - 覆蓋率不足時 fallback raw path，並寫入 fallback reason。
 
-5. `forward_signal_adjustment_service.py` + `orchestrator.py` + `run_valuation_use_case.py` + `valuation_assumption_breakdown_service.py`
+5. `forward_signal_adjustment_service.py` + `orchestrator.py` + `run_valuation_flow.py` + `valuation_assumption_breakdown_service.py`
 - 對外統一輸出 `raw/guarded/calibrated` 三段值與版本欄位。
 - assumptions/log 統一記錄 `policy_profile_version`、`mapping_version`、`data_quality_flags`。
 

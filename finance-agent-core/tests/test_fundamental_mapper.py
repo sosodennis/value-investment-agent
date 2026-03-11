@@ -1,5 +1,9 @@
-from src.agents.fundamental.interface.contracts import FundamentalPreviewInputModel
-from src.agents.fundamental.interface.mappers import summarize_fundamental_for_preview
+from src.agents.fundamental.workflow_orchestrator.interface.contracts import (
+    FundamentalPreviewInputModel,
+)
+from src.agents.fundamental.workflow_orchestrator.interface.mappers import (
+    summarize_fundamental_for_preview,
+)
 
 
 def test_summarize_fundamental_for_preview_empty():

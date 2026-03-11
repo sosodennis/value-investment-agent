@@ -10,7 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
 
-from src.agents.fundamental.domain.valuation.parameterization.forward_signal_calibration_mapping_service import (  # noqa: E402
+from src.agents.fundamental.core_valuation.domain.parameterization.forward_signal_calibration_mapping_service import (  # noqa: E402
     FORWARD_SIGNAL_CALIBRATION_MAPPING_PATH_ENV,
     clear_forward_signal_calibration_mapping_cache,
     load_forward_signal_calibration_mapping,

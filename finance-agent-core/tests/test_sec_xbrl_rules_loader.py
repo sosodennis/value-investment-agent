@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.agents.fundamental.infrastructure.sec_xbrl.rules.loader import (
+from src.agents.fundamental.forward_signals.infrastructure.sec_xbrl.rules.loader import (
     load_merged_lexicon,
     load_pattern_catalog,
 )

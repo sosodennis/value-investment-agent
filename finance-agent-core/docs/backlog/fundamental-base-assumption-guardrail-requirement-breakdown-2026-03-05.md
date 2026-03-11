@@ -70,7 +70,7 @@
 - `finance-agent-core/src/agents/fundamental/domain/valuation/parameterization/forward_signal_adjustment_service.py`
 
 2. Application / Observability
-- `finance-agent-core/src/agents/fundamental/application/use_cases/run_valuation_use_case.py`
+- `finance-agent-core/src/agents/fundamental/application/use_cases/run_valuation_flow.py`
 - `finance-agent-core/src/agents/fundamental/application/services/valuation_assumption_breakdown_service.py`
 - `finance-agent-core/src/agents/fundamental/application/services/valuation_update_service.py`
 
@@ -115,7 +115,7 @@
 - 固化順序 `guardrail -> forward_signal_calibration`。
 - 新增 assumptions 文案：`raw -> guarded -> calibrated`。
 
-7. `run_valuation_use_case.py`
+7. `run_valuation_flow.py`
 - snapshot 補欄位：`base_growth_raw/guarded`、`base_margin_raw/guarded`、`guardrail_hit`、`guardrail_version`。
 - completion log 補監控欄位與降級訊號。
 

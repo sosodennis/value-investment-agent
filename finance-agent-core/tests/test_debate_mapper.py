@@ -6,7 +6,7 @@ from src.agents.debate.interface.serializers import (
     build_compressed_report_payload,
     build_final_report_payload,
 )
-from src.shared.kernel.traceable import ManualProvenance
+from src.agents.fundamental.shared.contracts.traceable import ManualProvenance
 
 
 def test_summarize_debate_for_preview_full():

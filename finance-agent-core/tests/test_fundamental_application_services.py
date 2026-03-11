@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from src.agents.fundamental.application.services.model_selection_artifact_service import (
+from src.agents.fundamental.workflow_orchestrator.application.services.model_selection_artifact_service import (
     build_and_store_model_selection_artifact,
 )
-from src.agents.fundamental.application.services.valuation_update_service import (
+from src.agents.fundamental.workflow_orchestrator.application.services.valuation_update_service import (
     build_valuation_error_update,
     build_valuation_missing_inputs_update,
     build_valuation_success_update,

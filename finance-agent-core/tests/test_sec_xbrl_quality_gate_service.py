@@ -1,15 +1,18 @@
 from __future__ import annotations
 
-from src.agents.fundamental.infrastructure.sec_xbrl.quality.dqc_efm_gate_service import (
+from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.quality.dqc_efm_gate_service import (
     FUNDAMENTAL_XBRL_QUALITY_BLOCKED,
     evaluate_xbrl_quality_gates,
     normalize_dqc_efm_issue,
 )
-from src.agents.fundamental.infrastructure.sec_xbrl.report_contracts import (
+from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.report_contracts import (
     BaseFinancialModel,
     FinancialReport,
 )
-from src.shared.kernel.traceable import ManualProvenance, TraceableField
+from src.agents.fundamental.shared.contracts.traceable import (
+    ManualProvenance,
+    TraceableField,
+)
 
 
 def _report_with_missing_critical_fields() -> FinancialReport:

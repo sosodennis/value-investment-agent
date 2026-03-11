@@ -23,12 +23,14 @@ the artifact pointer:
 the agent package:
 
 1. Domain:
-   - `src/agents/fundamental/domain/model_selection.py`
-   - `src/agents/fundamental/domain/valuation/**`
+   - `src/agents/fundamental/model_selection/domain/model_selection.py`
+   - `src/agents/fundamental/core_valuation/domain/**`
 2. Data clients:
-   - `src/agents/fundamental/data/clients/sec_xbrl/**`
+   - `src/agents/fundamental/financial_statements/infrastructure/sec_xbrl/**`
+   - `src/agents/fundamental/market_data/infrastructure/**`
+   - `src/agents/fundamental/artifacts_provenance/infrastructure/**`
    - (Ticker resolution/search clients now live under `src/agents/intent/infrastructure/**`)
 3. Application entrypoint:
-   - `src/agents/fundamental/application/orchestrator.py`
+   - `src/agents/fundamental/workflow_orchestrator/application/orchestrator.py`
 
 The workflow layer should not contain a local `tools/` package anymore.

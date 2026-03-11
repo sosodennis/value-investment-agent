@@ -23,7 +23,7 @@ Status Update (2026-02-16):
 16. Debate verdict normalization (history text, citation audit payload, final update mapping) now lives in `debate/interface/mappers.py`.
 17. Debate workflow nodes no longer import domain prompt constants; prompt config is routed via `debate/application/factory.py`.
 18. Technical prompt policy has been moved to `technical/domain/prompt_builder.py`; runtime semantic layer now consumes domain prompt specs.
-19. Fundamental cross-agent context mapping has been moved to `fundamental/interface/mappers.py::build_mapper_context`.
+19. Fundamental cross-agent context mapping has been moved to `fundamental/workflow_orchestrator/interface/mappers.py::summarize_fundamental_for_preview`.
 20. Fundamental model-selection details serialization has been moved to `fundamental/interface/serializers.py::serialize_model_selection_details`.
 21. Fundamental valuation execution now validates skill runtime and calculator output through typed interface parsers (`fundamental/interface/parsers.py`).
 22. News analyzer/aggregator input now enforces typed interface parsing for stored news items (`news/interface/parsers.py::parse_news_items`).

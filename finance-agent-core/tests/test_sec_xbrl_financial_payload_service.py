@@ -1,19 +1,22 @@
 from __future__ import annotations
 
-from src.agents.fundamental.infrastructure.sec_xbrl.cache.filing_cache_service import (
+from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.cache.filing_cache_service import (
     FilingCacheService,
 )
-from src.agents.fundamental.infrastructure.sec_xbrl.financial_payload_service import (
+from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.financial_payload_service import (
     fetch_financial_data,
     fetch_financial_payload,
     reset_filing_cache_service_for_tests,
     set_filing_cache_service_for_tests,
 )
-from src.agents.fundamental.infrastructure.sec_xbrl.report_contracts import (
+from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.report_contracts import (
     BaseFinancialModel,
     FinancialReport,
 )
-from src.shared.kernel.traceable import ManualProvenance, TraceableField
+from src.agents.fundamental.shared.contracts.traceable import (
+    ManualProvenance,
+    TraceableField,
+)
 
 
 def _report(
@@ -58,7 +61,7 @@ def test_fetch_financial_data_prioritizes_latest_filing_then_descending_history(
     requested_years: list[int] = []
 
     monkeypatch.setattr(
-        "src.agents.fundamental.infrastructure.sec_xbrl.financial_payload_service.FinancialReportFactory.create_latest_report",
+        "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.financial_payload_service.FinancialReportFactory.create_latest_report",
         staticmethod(lambda _ticker: latest),
     )
 
@@ -72,7 +75,7 @@ def test_fetch_financial_data_prioritizes_latest_filing_then_descending_history(
         return report
 
     monkeypatch.setattr(
-        "src.agents.fundamental.infrastructure.sec_xbrl.financial_payload_service.FinancialReportFactory.create_report",
+        "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.financial_payload_service.FinancialReportFactory.create_report",
         staticmethod(_create_report),
     )
 
@@ -96,7 +99,7 @@ def test_fetch_financial_data_uses_five_year_default_window(monkeypatch) -> None
     requested_years: list[int] = []
 
     monkeypatch.setattr(
-        "src.agents.fundamental.infrastructure.sec_xbrl.financial_payload_service.FinancialReportFactory.create_latest_report",
+        "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.financial_payload_service.FinancialReportFactory.create_latest_report",
         staticmethod(lambda _ticker: latest),
     )
 
@@ -110,7 +113,7 @@ def test_fetch_financial_data_uses_five_year_default_window(monkeypatch) -> None
         return report
 
     monkeypatch.setattr(
-        "src.agents.fundamental.infrastructure.sec_xbrl.financial_payload_service.FinancialReportFactory.create_report",
+        "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.financial_payload_service.FinancialReportFactory.create_report",
         staticmethod(_create_report),
     )
 
@@ -141,15 +144,15 @@ def test_fetch_financial_payload_uses_cache_on_warm_path(
         return [_report(2025, selection_mode=f"latest_available_{years}")]
 
     monkeypatch.setattr(
-        "src.agents.fundamental.infrastructure.sec_xbrl.financial_payload_service.fetch_financial_data",
+        "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.financial_payload_service.fetch_financial_data",
         _fetch,
     )
     monkeypatch.setattr(
-        "src.agents.fundamental.infrastructure.sec_xbrl.financial_payload_service.extract_forward_signals_from_xbrl_reports",
+        "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.financial_payload_service.extract_forward_signals_from_xbrl_reports",
         lambda **_kwargs: [],
     )
     monkeypatch.setattr(
-        "src.agents.fundamental.infrastructure.sec_xbrl.financial_payload_service.extract_forward_signals_from_sec_text",
+        "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.financial_payload_service.extract_forward_signals_from_sec_text",
         lambda **_kwargs: [],
     )
 
@@ -172,17 +175,17 @@ def test_fetch_financial_payload_uses_cache_on_warm_path(
 
 def test_fetch_financial_payload_emits_quality_gate_payload(monkeypatch) -> None:
     monkeypatch.setattr(
-        "src.agents.fundamental.infrastructure.sec_xbrl.financial_payload_service.fetch_financial_data",
+        "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.financial_payload_service.fetch_financial_data",
         lambda _ticker, years=5: [
             _report(2025, selection_mode=f"latest_available_{years}")
         ],
     )
     monkeypatch.setattr(
-        "src.agents.fundamental.infrastructure.sec_xbrl.financial_payload_service.extract_forward_signals_from_xbrl_reports",
+        "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.financial_payload_service.extract_forward_signals_from_xbrl_reports",
         lambda **_kwargs: [],
     )
     monkeypatch.setattr(
-        "src.agents.fundamental.infrastructure.sec_xbrl.financial_payload_service.extract_forward_signals_from_sec_text",
+        "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.financial_payload_service.extract_forward_signals_from_sec_text",
         lambda **_kwargs: [],
     )
 
@@ -206,7 +209,7 @@ def test_fetch_financial_payload_projects_arelle_validation_issues_into_diagnost
     set_filing_cache_service_for_tests(cache_service)
 
     monkeypatch.setattr(
-        "src.agents.fundamental.infrastructure.sec_xbrl.financial_payload_service.fetch_financial_data",
+        "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.financial_payload_service.fetch_financial_data",
         lambda _ticker, years=5: [
             _report(
                 2025,
@@ -224,11 +227,11 @@ def test_fetch_financial_payload_projects_arelle_validation_issues_into_diagnost
         ],
     )
     monkeypatch.setattr(
-        "src.agents.fundamental.infrastructure.sec_xbrl.financial_payload_service.extract_forward_signals_from_xbrl_reports",
+        "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.financial_payload_service.extract_forward_signals_from_xbrl_reports",
         lambda **_kwargs: [],
     )
     monkeypatch.setattr(
-        "src.agents.fundamental.infrastructure.sec_xbrl.financial_payload_service.extract_forward_signals_from_sec_text",
+        "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.financial_payload_service.extract_forward_signals_from_sec_text",
         lambda **_kwargs: [],
     )
 
@@ -265,7 +268,7 @@ def test_fetch_financial_payload_emits_arelle_runtime_diagnostics(
     )
     set_filing_cache_service_for_tests(cache_service)
     monkeypatch.setattr(
-        "src.agents.fundamental.infrastructure.sec_xbrl.financial_payload_service.fetch_financial_data",
+        "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.financial_payload_service.fetch_financial_data",
         lambda _ticker, years=5: [
             _report(
                 2025,
@@ -280,11 +283,11 @@ def test_fetch_financial_payload_emits_arelle_runtime_diagnostics(
         ],
     )
     monkeypatch.setattr(
-        "src.agents.fundamental.infrastructure.sec_xbrl.financial_payload_service.extract_forward_signals_from_xbrl_reports",
+        "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.financial_payload_service.extract_forward_signals_from_xbrl_reports",
         lambda **_kwargs: [],
     )
     monkeypatch.setattr(
-        "src.agents.fundamental.infrastructure.sec_xbrl.financial_payload_service.extract_forward_signals_from_sec_text",
+        "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.financial_payload_service.extract_forward_signals_from_sec_text",
         lambda **_kwargs: [],
     )
 
@@ -315,7 +318,7 @@ def test_fetch_financial_payload_cache_key_includes_validation_profile(
     )
     set_filing_cache_service_for_tests(cache_service)
     monkeypatch.setattr(
-        "src.agents.fundamental.infrastructure.sec_xbrl.financial_payload_service.fetch_financial_data",
+        "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.financial_payload_service.fetch_financial_data",
         lambda _ticker, years=5: [
             _report(
                 2025,
@@ -334,11 +337,11 @@ def test_fetch_financial_payload_cache_key_includes_validation_profile(
         ],
     )
     monkeypatch.setattr(
-        "src.agents.fundamental.infrastructure.sec_xbrl.financial_payload_service.extract_forward_signals_from_xbrl_reports",
+        "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.financial_payload_service.extract_forward_signals_from_xbrl_reports",
         lambda **_kwargs: [],
     )
     monkeypatch.setattr(
-        "src.agents.fundamental.infrastructure.sec_xbrl.financial_payload_service.extract_forward_signals_from_sec_text",
+        "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.financial_payload_service.extract_forward_signals_from_sec_text",
         lambda **_kwargs: [],
     )
 

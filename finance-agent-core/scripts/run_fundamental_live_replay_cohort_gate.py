@@ -607,7 +607,7 @@ def _resolve_prewarm_fetch_payload_fn() -> (
     if str(PROJECT_ROOT) not in sys.path:
         sys.path.append(str(PROJECT_ROOT))
     try:
-        from src.agents.fundamental.infrastructure.sec_xbrl.provider import (
+        from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.provider import (
             fetch_financial_payload,
         )
     except Exception:

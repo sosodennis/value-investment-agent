@@ -1,11 +1,13 @@
-from src.agents.fundamental.domain.entities import FundamentalSelectionReport
-from src.agents.fundamental.domain.financial_health_service import (
+from src.agents.fundamental.core_valuation.domain.valuation_output_service import (
+    extract_equity_value_from_metrics,
+)
+from src.agents.fundamental.model_selection.domain.entities import (
+    FundamentalSelectionReport,
+)
+from src.agents.fundamental.model_selection.domain.financial_health_service import (
     build_latest_health_context,
     calculate_revenue_cagr,
     extract_latest_health_insights,
-)
-from src.agents.fundamental.domain.valuation_output_service import (
-    extract_equity_value_from_metrics,
 )
 
 

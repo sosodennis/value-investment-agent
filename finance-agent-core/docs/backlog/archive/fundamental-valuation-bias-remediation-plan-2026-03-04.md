@@ -58,7 +58,7 @@
 - `finance-agent-core/src/agents/fundamental/infrastructure/sec_xbrl/forward_signals.py`
 
 3. Application Logging/Assumptions
-- `finance-agent-core/src/agents/fundamental/application/use_cases/run_valuation_use_case.py`
+- `finance-agent-core/src/agents/fundamental/application/use_cases/run_valuation_flow.py`
 - `finance-agent-core/src/agents/fundamental/application/services/valuation_assumption_breakdown_service.py`
 
 4. Frontend Compatibility Check

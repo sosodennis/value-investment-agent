@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from src.agents.fundamental.domain.model_selection import (
+from src.agents.fundamental.core_valuation.domain.valuation_model import ValuationModel
+from src.agents.fundamental.model_selection.domain.model_selection import (
     DEFAULT_SCORING_WEIGHTS,
     MODEL_SPECS,
     ScoringWeights,
     SelectionSignals,
     _evaluate_spec,
 )
-from src.agents.fundamental.domain.valuation_model import ValuationModel
 
 
 def test_evaluate_spec_uses_configurable_scoring_weights() -> None:

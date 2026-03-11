@@ -29,7 +29,7 @@ uv run --project finance-agent-core python finance-agent-core/scripts/build_fund
 - Env override:
   - `FUNDAMENTAL_REINVESTMENT_CLAMP_PROFILE_PATH=/abs/path/to/profile.json`
 - If env path is absent, runtime uses default artifact:
-  - `src/agents/fundamental/domain/valuation/parameterization/config/reinvestment_clamp_profile.default.json`
+  - `src/agents/fundamental/core_valuation/domain/parameterization/config/reinvestment_clamp_profile.default.json`
 - If load/parse fails, runtime falls back to embedded default and writes degraded reason in assumptions.
 
 ## Release Gate Wiring

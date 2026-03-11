@@ -7,7 +7,7 @@ import pytest
 
 from api.server import app
 from src.agents.debate.interface.contracts import parse_debate_artifact_model
-from src.agents.fundamental.interface.contracts import (
+from src.agents.fundamental.artifacts_provenance.interface.contracts import (
     parse_fundamental_artifact_model,
 )
 from src.agents.news.interface.contracts import parse_news_artifact_model

@@ -48,7 +48,7 @@ validator_status=0
 uv run python scripts/validate_forward_signal_calibration_artifact.py || validator_status=$?
 
 reinvestment_profile_status=0
-reinvestment_profile_path="${FUNDAMENTAL_REINVESTMENT_CLAMP_PROFILE_PATH:-src/agents/fundamental/domain/valuation/parameterization/config/reinvestment_clamp_profile.default.json}"
+reinvestment_profile_path="${FUNDAMENTAL_REINVESTMENT_CLAMP_PROFILE_PATH:-src/agents/fundamental/core_valuation/domain/parameterization/config/reinvestment_clamp_profile.default.json}"
 reinvestment_profile_validation_report_path="${FUNDAMENTAL_REINVESTMENT_CLAMP_PROFILE_VALIDATION_REPORT_PATH:-reports/fundamental_reinvestment_clamp_profile_validation_report.json}"
 export FUNDAMENTAL_REINVESTMENT_CLAMP_PROFILE_VALIDATION_REPORT_PATH="${reinvestment_profile_validation_report_path}"
 uv run python scripts/validate_fundamental_reinvestment_clamp_profile.py \

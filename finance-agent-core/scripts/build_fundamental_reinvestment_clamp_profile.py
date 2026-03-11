@@ -11,7 +11,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
 
-from src.agents.fundamental.domain.valuation.parameterization.reinvestment_clamp_profile_service import (  # noqa: E402
+from src.agents.fundamental.core_valuation.domain.parameterization.reinvestment_clamp_profile_service import (  # noqa: E402
     REINVESTMENT_CLAMP_PROFILE_SCHEMA_VERSION,
     ReinvestmentClampProfile,
     parse_reinvestment_clamp_profile,

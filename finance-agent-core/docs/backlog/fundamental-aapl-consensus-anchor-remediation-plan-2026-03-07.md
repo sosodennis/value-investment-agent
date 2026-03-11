@@ -112,7 +112,7 @@
 
 2. Metadata / completion / degrade signaling
 - `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/agents/fundamental/domain/valuation/parameterization/metadata_service.py`
-- `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/agents/fundamental/application/use_cases/run_valuation_use_case.py`
+- `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/agents/fundamental/application/use_cases/run_valuation_flow.py`
 - `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/agents/fundamental/application/services/valuation_update_service.py`
 
 3. 動態參數（AAPL 偏保守修復）
@@ -151,7 +151,7 @@
 5. `metadata_service.py`
 - 將 `source_warnings` 納入 `data_freshness.market_data`，供 completion/degrade 流程消費。
 
-6. `run_valuation_use_case.py` / `valuation_update_service.py`
+6. `run_valuation_flow.py` / `valuation_update_service.py`
 - completion fields 增補 consensus degrade 專用欄位。
 - 將 consensus fallback 納入 `is_degraded` 判定（條件式，不影響完全不可用以外的主流程返回）。
 
@@ -234,7 +234,7 @@ Completed slices:
 - `market_data_service.py` now normalizes warning/fallback signals into stable codes (for example: `insufficient_sources`, `provider_blocked`, `provider_blocked_http`, `provider_governance_review_required`, `single_source_consensus`).
 - Metadata/completion propagation wired:
   - `metadata_service.py`: includes `target_consensus_warning_codes` under `data_freshness.market_data` and `parameter_source_summary.market_data_anchor`.
-  - `run_valuation_use_case.py`: emits `target_consensus_warning_codes` in valuation completion fields.
+  - `run_valuation_flow.py`: emits `target_consensus_warning_codes` in valuation completion fields.
 - Test coverage updates:
   - `test_fundamental_market_data_client.py`: asserts warning-code propagation for aggregate, insufficient-sources fallback, blocked-provider fallback, and single-source degraded scenarios.
   - `test_fundamental_orchestrator_logging.py`: asserts completion field includes warning codes on fallback-degraded path.

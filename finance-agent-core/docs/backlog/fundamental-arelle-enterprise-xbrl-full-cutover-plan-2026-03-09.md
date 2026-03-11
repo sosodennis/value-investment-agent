@@ -67,7 +67,7 @@
 
 3. Valuation dependency interfaces
 - `finance-agent-core/src/agents/fundamental/domain/valuation/parameterization/model_builders/saas/saas.py`
-- `finance-agent-core/src/agents/fundamental/application/use_cases/run_valuation_use_case.py`
+- `finance-agent-core/src/agents/fundamental/application/use_cases/run_valuation_flow.py`
 
 4. New modules (planned)
 - `finance-agent-core/src/agents/fundamental/infrastructure/sec_xbrl/providers/engine_contracts.py`
@@ -103,7 +103,7 @@
   - label similarity
   - anchor confidence score
 
-5. `saas.py` / `run_valuation_use_case.py`
+5. `saas.py` / `run_valuation_flow.py`
 - 同步調整「缺失輸入」政策與品質閘門對齊，避免出現可算但被 missing-metric 阻斷的策略衝突。
 - 對 DQC/EFM `Block` 等級錯誤直接阻斷估值，並回傳明確 error code。
 
@@ -226,7 +226,7 @@
 - Goal: 落地 `Block/Warn` 分級閘門，將關鍵質量錯誤納入估值阻斷條件。
 - Scope:
   - `finance-agent-core/src/agents/fundamental/infrastructure/sec_xbrl/quality/dqc_efm_gate_service.py`
-  - `finance-agent-core/src/agents/fundamental/application/use_cases/run_valuation_use_case.py`
+  - `finance-agent-core/src/agents/fundamental/application/use_cases/run_valuation_flow.py`
   - `finance-agent-core/src/agents/fundamental/infrastructure/sec_xbrl/financial_payload_service.py`
 - Deliverables:
   - DQC/EFM 錯誤分級映射與 critical-field policy（第一版）。
@@ -260,7 +260,7 @@
 - Goal: 對齊 missing-input 政策與 quality gate，消除「可算但被缺失策略終止」衝突。
 - Scope:
   - `finance-agent-core/src/agents/fundamental/domain/valuation/parameterization/model_builders/saas/saas.py`
-  - `finance-agent-core/src/agents/fundamental/application/use_cases/run_valuation_use_case.py`
+  - `finance-agent-core/src/agents/fundamental/application/use_cases/run_valuation_flow.py`
   - `finance-agent-core/src/agents/fundamental/domain/valuation/parameterization/model_builders/shared/missing_metrics_service.py`
 - Deliverables:
   - 缺失策略與 `Block/Warn` gate 統一。

@@ -45,7 +45,7 @@ async def test_model_selection_node_error_log():
     }
 
     with patch(
-        "src.agents.fundamental.application.factory.select_valuation_model"
+        "src.agents.fundamental.workflow_orchestrator.application.factory.select_valuation_model"
     ) as mock_select:
         mock_select.side_effect = Exception("Selection Logic Error")
 
@@ -93,11 +93,11 @@ async def test_model_selection_node_accepts_canonical_report_shape():
 
     with (
         patch(
-            "src.agents.fundamental.infrastructure.artifacts.fundamental_artifact_repository.FundamentalArtifactRepository.load_financial_reports_bundle",
+            "src.agents.fundamental.artifacts_provenance.infrastructure.fundamental_artifact_repository.FundamentalArtifactRepository.load_financial_reports_bundle",
             new=AsyncMock(return_value=(canonical_reports, None)),
         ),
         patch(
-            "src.agents.fundamental.infrastructure.artifacts.fundamental_artifact_repository.FundamentalArtifactRepository.save_financial_reports",
+            "src.agents.fundamental.artifacts_provenance.infrastructure.fundamental_artifact_repository.FundamentalArtifactRepository.save_financial_reports",
             new=AsyncMock(return_value="artifact_saved"),
         ),
     ):

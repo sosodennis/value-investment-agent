@@ -7,13 +7,16 @@ from functools import lru_cache
 import pytest
 import requests
 
-from src.agents.fundamental.infrastructure.sec_xbrl.factory import (
+from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.factory import (
     FinancialReportFactory,
 )
-from src.agents.fundamental.infrastructure.sec_xbrl.report_contracts import (
+from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.report_contracts import (
     FinancialReport,
 )
-from src.shared.kernel.traceable import TraceableField, XBRLProvenance
+from src.agents.fundamental.shared.contracts.traceable import (
+    TraceableField,
+    XBRLProvenance,
+)
 
 RUN_LIVE_TESTS = os.getenv("SEC_XBRL_LIVE_TESTS", "0").strip() == "1"
 

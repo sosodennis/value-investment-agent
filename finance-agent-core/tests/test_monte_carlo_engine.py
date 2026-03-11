@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from src.agents.fundamental.domain.valuation.engine.monte_carlo import (
+from src.agents.fundamental.core_valuation.domain.engine.monte_carlo import (
     CorrelationGroup,
     DistributionSpec,
     MonteCarloConfig,

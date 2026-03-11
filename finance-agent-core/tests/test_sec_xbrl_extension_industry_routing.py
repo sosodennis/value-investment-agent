@@ -4,19 +4,26 @@ from typing import Any
 
 import pytest
 
-from src.agents.fundamental.infrastructure.sec_xbrl.extractor import SearchConfig
-from src.agents.fundamental.infrastructure.sec_xbrl.factory import (
+from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.extractor import (
+    SearchConfig,
+)
+from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.factory import (
     BaseFinancialModelFactory,
     FinancialReportFactory,
 )
-from src.agents.fundamental.infrastructure.sec_xbrl.mapping import get_mapping_registry
-from src.agents.fundamental.infrastructure.sec_xbrl.report_contracts import (
+from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.mapping import (
+    get_mapping_registry,
+)
+from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.report_contracts import (
     BaseFinancialModel,
     FinancialServicesExtension,
     IndustrialExtension,
     RealEstateExtension,
 )
-from src.shared.kernel.traceable import ManualProvenance, TraceableField
+from src.agents.fundamental.shared.contracts.traceable import (
+    ManualProvenance,
+    TraceableField,
+)
 
 
 def _fake_extract(
@@ -211,7 +218,7 @@ def test_create_report_sets_canonical_extension_type(
             }
 
     monkeypatch.setattr(
-        "src.agents.fundamental.infrastructure.sec_xbrl.factory.SECReportExtractor",
+        "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.factory.SECReportExtractor",
         DummyExtractor,
     )
     monkeypatch.setattr(

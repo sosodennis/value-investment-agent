@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from src.agents.fundamental.domain.valuation.parameterization.model_builders.shared.missing_metrics_service import (
+from src.agents.fundamental.core_valuation.domain.parameterization.model_builders.shared.missing_metrics_service import (
     apply_missing_metric_policy,
 )
-from src.agents.fundamental.domain.valuation.parameterization.orchestrator import (
+from src.agents.fundamental.core_valuation.domain.parameterization.orchestrator import (
     build_params,
 )
-from src.agents.fundamental.interface.contracts import parse_financial_reports_model
+from src.agents.fundamental.financial_statements.interface.contracts import (
+    parse_financial_reports_model,
+)
 
 
 def _tf(value: float | str | None) -> dict[str, object]:
