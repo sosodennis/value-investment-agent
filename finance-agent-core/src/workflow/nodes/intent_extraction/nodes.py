@@ -9,7 +9,7 @@ from collections.abc import Mapping
 from langgraph.graph import END
 from langgraph.types import Command, interrupt
 
-from src.agents.intent.wiring import get_intent_orchestrator
+from src.agents.intent.application.wiring import get_intent_orchestrator
 from src.shared.kernel.tools.logger import get_logger, log_event
 from src.workflow.command_adapter import command_from_result, command_from_update
 
