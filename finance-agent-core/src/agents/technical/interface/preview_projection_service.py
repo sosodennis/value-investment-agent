@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from src.agents.technical.interface.formatters import format_ta_preview
 from src.shared.kernel.types import JSONObject
 
 
@@ -25,3 +26,8 @@ def project_ta_preview(ctx: JSONObject) -> JSONObject:
         "optimal_d": ctx.get("optimal_d"),
         "strength": ctx.get("statistical_strength"),
     }
+
+
+def summarize_ta_for_preview(ctx: JSONObject) -> JSONObject:
+    preview_projection = project_ta_preview(ctx)
+    return format_ta_preview(preview_projection)

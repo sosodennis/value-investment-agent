@@ -18,7 +18,9 @@ from src.agents.technical.domain.signal_policy import (
     SemanticTagPolicyInput,
     SemanticTagPolicyResult,
 )
-from src.agents.technical.interface.mappers import summarize_ta_for_preview
+from src.agents.technical.interface.preview_projection_service import (
+    summarize_ta_for_preview,
+)
 from src.agents.technical.interface.serializers import build_full_report_payload
 from src.interface.events.schemas import ArtifactReference, build_artifact_payload
 from src.shared.kernel.contracts import (

@@ -80,7 +80,9 @@ async def test_semantic_translate_node_error():
     }
 
     # Simulate Assembler Crash
-    with patch("src.agents.technical.wiring.assemble_semantic_tags") as mock_assemble:
+    with patch(
+        "src.agents.technical.application.wiring.assemble_semantic_tags"
+    ) as mock_assemble:
         mock_assemble.side_effect = Exception("Assembler Crash")
 
         command = await semantic_translate_node(state)
