@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from src.agents.news.application.news_item_entity_mapper import to_news_item_entities
 from src.agents.news.domain.aggregation.aggregation_service import aggregate_news_items
-from src.agents.news.domain.news_item_projection_service import to_news_item_entities
 
 
 def test_to_news_item_entities_projects_expected_fields() -> None:

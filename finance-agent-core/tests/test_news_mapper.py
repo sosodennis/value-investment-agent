@@ -1,6 +1,8 @@
 import json
 
-from src.agents.news.interface.mappers import summarize_news_for_preview
+from src.agents.news.interface.preview_projection_service import (
+    summarize_news_for_preview,
+)
 
 
 def test_summarize_news_for_preview_success():

@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.agents.news.wiring import get_news_workflow_runner
+from src.agents.news.application.wiring import get_news_workflow_runner
 from src.workflow.nodes.financial_news_research.nodes import (
     aggregator_node,
     analyst_node,
@@ -21,7 +21,9 @@ async def test_search_node_error_log():
         "error_logs": [],
     }
 
-    with patch("src.agents.news.wiring.news_search_multi_timeframe") as mock_search:
+    with patch(
+        "src.agents.news.application.wiring.news_search_multi_timeframe"
+    ) as mock_search:
         mock_search.side_effect = Exception("Search API Error")
 
         command = await search_node(state)
@@ -48,7 +50,7 @@ async def test_selector_node_error_log():
             "src.services.artifact_manager.artifact_manager.save_artifact",
             new=AsyncMock(return_value="selection-artifact-1"),
         ):
-            with patch("src.agents.news.wiring.get_llm") as mock_llm:
+            with patch("src.agents.news.application.wiring.get_llm") as mock_llm:
                 # Simulate LLM failure
                 mock_chain = MagicMock()
                 mock_chain.invoke.side_effect = Exception("LLM Timeout")
@@ -123,8 +125,10 @@ async def test_analyst_node_error_log():
         "src.services.artifact_manager.artifact_manager.get_artifact_data",
         side_effect=mock_get_artifact_data,
     ):
-        with patch("src.agents.news.wiring.get_llm") as mock_llm:
-            with patch("src.agents.news.wiring.get_finbert_analyzer") as mock_finbert:
+        with patch("src.agents.news.application.wiring.get_llm") as mock_llm:
+            with patch(
+                "src.agents.news.application.wiring.get_finbert_analyzer"
+            ) as mock_finbert:
                 # Ensure finbert doesn't crash test
                 mock_finbert.return_value.is_available.return_value = False
 

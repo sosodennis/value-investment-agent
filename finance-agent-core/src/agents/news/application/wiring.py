@@ -7,7 +7,7 @@ from src.agents.news.application.factory import (
     build_news_workflow_runner,
 )
 from src.agents.news.application.ports import FetchContentResult
-from src.agents.news.infrastructure.artifacts.news_artifact_repository import (
+from src.agents.news.infrastructure.artifacts import (
     build_default_news_artifact_repository,
 )
 from src.agents.news.infrastructure.content_fetch import fetch_clean_text_async

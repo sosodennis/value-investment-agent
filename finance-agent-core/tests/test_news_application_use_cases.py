@@ -14,6 +14,7 @@ from src.agents.news.application.fetch_service import (
     build_news_items_from_fetch_results,
     parse_published_at,
 )
+from src.agents.news.application.news_item_entity_mapper import to_news_item_entities
 from src.agents.news.application.ports import FetchContentResult
 from src.agents.news.application.selection_service import (
     build_selector_degraded_indices,
@@ -50,7 +51,6 @@ from src.agents.news.domain.aggregation.aggregation_service import aggregate_new
 from src.agents.news.domain.aggregation.summary_message_service import (
     build_news_summary_message,
 )
-from src.agents.news.domain.news_item_projection_service import to_news_item_entities
 from src.agents.news.infrastructure.content_fetch.trafilatura_content_fetch_provider import (
     close_shared_async_client,
     get_shared_async_client,

@@ -19,7 +19,9 @@ from src.agents.news.interface.contracts import (
     FinancialNewsItemModel,
     SourceInfoModel,
 )
-from src.agents.news.interface.mappers import summarize_news_for_preview
+from src.agents.news.interface.preview_projection_service import (
+    summarize_news_for_preview,
+)
 from src.agents.news.interface.prompt_specs import (
     build_analyst_prompt_spec,
     build_selector_prompt_spec,

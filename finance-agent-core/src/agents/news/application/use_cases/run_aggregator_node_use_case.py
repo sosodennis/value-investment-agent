@@ -6,6 +6,7 @@ from collections.abc import Callable, Mapping
 
 from langchain_core.messages import AIMessage
 
+from src.agents.news.application.news_item_entity_mapper import to_news_item_entities
 from src.agents.news.application.ports import INewsArtifactRepository
 from src.agents.news.application.state_readers import (
     aggregator_ticker_from_state,
@@ -17,7 +18,6 @@ from src.agents.news.domain.aggregation.contracts import NewsAggregationResult
 from src.agents.news.domain.aggregation.summary_message_service import (
     build_news_summary_message,
 )
-from src.agents.news.domain.news_item_projection_service import to_news_item_entities
 from src.agents.news.interface.contracts import parse_news_artifact_model
 from src.agents.news.interface.parsers import parse_news_items
 from src.shared.kernel.tools.incident_logging import (
