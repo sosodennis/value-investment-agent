@@ -25,7 +25,7 @@ from .matching.rules.signal_pattern_catalog import (
     FLS_SKIP_SIGNAL_PHRASES,
     load_runtime_signal_catalog,
 )
-from .postprocess.finbert_direction import review_signal_direction_with_finbert
+from .postprocess.finbert_direction import disabled_finbert_direction_reviewer
 from .postprocess.pipeline_filing_metadata_service import (
     _build_doc_type,
     _build_sec_source_url,
@@ -38,6 +38,9 @@ from .postprocess.pipeline_runner import (
     _summarize_focus_usage,
 )
 from .postprocess.text_signal_diagnostics_service import build_text_signal_log_fields
+from .postprocess.text_signal_postprocess_service import (
+    ReviewSignalDirectionWithFinbertFn,
+)
 from .postprocess.text_signal_postprocess_service import (
     apply_finbert_direction_reviews as apply_finbert_direction_reviews_util,
 )
@@ -128,6 +131,8 @@ def extract_forward_signals_from_sec_text(
     max_filings_per_form: int = 2,
     fetch_records_fn: Callable[[str, int], list[FilingTextRecord]] | None = None,
     rules_sector: str | None = None,
+    review_signal_direction_with_finbert_fn: ReviewSignalDirectionWithFinbertFn
+    | None = None,
 ) -> list[dict[str, object]]:
     records = load_sec_text_records(
         ticker=ticker,
@@ -201,7 +206,10 @@ def extract_forward_signals_from_sec_text(
         build_forward_signal_payload_fn=_build_forward_signal_payload,
         on_payload_invalid=_on_payload_invalid,
     )
-    finbert_direction_diag = _apply_finbert_direction_reviews(signals)
+    finbert_direction_diag = _apply_finbert_direction_reviews(
+        signals,
+        review_signal_direction_with_finbert_fn=review_signal_direction_with_finbert_fn,
+    )
 
     if signals:
         log_event(
@@ -292,9 +300,15 @@ def _preview_sentence(sentence: str) -> str | None:
 
 def _apply_finbert_direction_reviews(
     signals: list[dict[str, object]],
+    *,
+    review_signal_direction_with_finbert_fn: ReviewSignalDirectionWithFinbertFn
+    | None = None,
 ) -> dict[str, object]:
+    review_fn = (
+        review_signal_direction_with_finbert_fn or disabled_finbert_direction_reviewer
+    )
     return apply_finbert_direction_reviews_util(
         signals=signals,
-        review_signal_direction_with_finbert_fn=review_signal_direction_with_finbert,
+        review_signal_direction_with_finbert_fn=review_fn,
         clamp_fn=_clamp,
     )

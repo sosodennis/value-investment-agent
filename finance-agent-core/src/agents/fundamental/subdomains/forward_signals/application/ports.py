@@ -23,6 +23,21 @@ class ForwardSignalTextExtractor(Protocol):
     ) -> list[dict[str, object]]: ...
 
 
+class FinbertAnalysisResult(Protocol):
+    label: str
+    score: float
+
+
+class FinbertAnalyzer(Protocol):
+    def is_available(self) -> bool: ...
+
+    def analyze(self, text: str) -> FinbertAnalysisResult | None: ...
+
+
+class FinbertAnalyzerProvider(Protocol):
+    def __call__(self) -> FinbertAnalyzer: ...
+
+
 class ForwardSignalsProvider(Protocol):
     def __call__(
         self, *, ticker: str, reports_raw: list[JSONObject]
@@ -30,6 +45,9 @@ class ForwardSignalsProvider(Protocol):
 
 
 __all__ = [
+    "FinbertAnalysisResult",
+    "FinbertAnalyzer",
+    "FinbertAnalyzerProvider",
     "ForwardSignalTextExtractor",
     "ForwardSignalXbrlExtractor",
     "ForwardSignalsProvider",

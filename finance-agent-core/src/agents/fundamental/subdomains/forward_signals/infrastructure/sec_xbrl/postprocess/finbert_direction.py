@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import os
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 
-from src.agents.news.infrastructure.sentiment.finbert_sentiment_provider import (
-    get_finbert_analyzer,
+from src.agents.fundamental.subdomains.forward_signals.application.ports import (
+    FinbertAnalyzerProvider,
 )
 
 _FINBERT_DIRECTION_ENABLED = os.getenv(
@@ -36,11 +37,47 @@ class FinbertDirectionReview:
     reason: str
 
 
+def build_finbert_direction_reviewer(
+    get_analyzer_fn: FinbertAnalyzerProvider,
+) -> Callable[[str, str, list[dict[str, object]]], FinbertDirectionReview]:
+    def _review_signal_direction_with_finbert(
+        metric: str,
+        baseline_direction: str,
+        evidence: list[dict[str, object]],
+    ) -> FinbertDirectionReview:
+        return review_signal_direction_with_finbert(
+            metric=metric,
+            baseline_direction=baseline_direction,
+            evidence=evidence,
+            get_analyzer_fn=get_analyzer_fn,
+        )
+
+    return _review_signal_direction_with_finbert
+
+
+def disabled_finbert_direction_reviewer(
+    *,
+    metric: str,
+    baseline_direction: str,
+    evidence: list[dict[str, object]],
+) -> FinbertDirectionReview:
+    return _review_result(
+        elapsed_ms=0.0,
+        reviewed=False,
+        accepted=False,
+        direction=None,
+        confidence=0.0,
+        label=None,
+        reason="disabled",
+    )
+
+
 def review_signal_direction_with_finbert(
     *,
     metric: str,
     baseline_direction: str,
     evidence: list[dict[str, object]],
+    get_analyzer_fn: FinbertAnalyzerProvider,
 ) -> FinbertDirectionReview:
     started = time.perf_counter()
     if not _FINBERT_DIRECTION_ENABLED:
@@ -86,7 +123,7 @@ def review_signal_direction_with_finbert(
             reason="empty_text",
         )
 
-    analyzer = get_finbert_analyzer()
+    analyzer = get_analyzer_fn()
     if not analyzer.is_available():
         return _review_result(
             elapsed_ms=_elapsed_ms(started),

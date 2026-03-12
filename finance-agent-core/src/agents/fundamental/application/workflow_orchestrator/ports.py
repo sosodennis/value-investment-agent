@@ -50,3 +50,7 @@ class IMarketSnapshot(Protocol):
 
 class IFundamentalMarketDataService(Protocol):
     def get_market_snapshot(self, ticker_symbol: str) -> IMarketSnapshot: ...
+
+    async def get_market_snapshot_async(
+        self, ticker_symbol: str
+    ) -> IMarketSnapshot: ...

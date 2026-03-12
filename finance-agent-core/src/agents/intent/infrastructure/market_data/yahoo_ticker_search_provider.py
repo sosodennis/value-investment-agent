@@ -4,13 +4,14 @@ import logging
 
 import yfinance as yf
 
+from src.agents.intent.application.ports import IntentTickerSearchResult
 from src.agents.intent.domain.ticker_candidate import TickerCandidate
 from src.shared.kernel.tools.logger import bounded_text, get_logger, log_event
 
 logger = get_logger(__name__)
 
 
-def search_ticker(query: str, limit: int = 5) -> list[TickerCandidate]:
+def search_ticker(query: str, limit: int = 5) -> IntentTickerSearchResult:
     try:
         search = yf.Search(query)
         quotes = getattr(search, "quotes", [])
@@ -34,7 +35,21 @@ def search_ticker(query: str, limit: int = 5) -> list[TickerCandidate]:
             )
 
         if candidates:
-            return candidates
+            return IntentTickerSearchResult(candidates=candidates)
+        log_event(
+            logger,
+            event="intent_yfinance_search_empty",
+            message="yfinance ticker search returned no equity candidates",
+            level=logging.WARNING,
+            error_code="INTENT_YFINANCE_SEARCH_EMPTY",
+            fields={"query": query},
+        )
+        return IntentTickerSearchResult(
+            candidates=[],
+            failure_code="INTENT_YFINANCE_SEARCH_EMPTY",
+            failure_reason="no equity candidates returned",
+            fallback_mode="web_search_only",
+        )
     except Exception as exc:
         log_event(
             logger,
@@ -44,5 +59,16 @@ def search_ticker(query: str, limit: int = 5) -> list[TickerCandidate]:
             error_code="INTENT_YFINANCE_SEARCH_FAILED",
             fields={"query": query, "exception": bounded_text(exc)},
         )
+        return IntentTickerSearchResult(
+            candidates=[],
+            failure_code="INTENT_YFINANCE_SEARCH_FAILED",
+            failure_reason=bounded_text(exc),
+            fallback_mode="web_search_only",
+        )
 
-    return []
+    return IntentTickerSearchResult(
+        candidates=[],
+        failure_code="INTENT_YFINANCE_SEARCH_FAILED",
+        failure_reason="unknown_failure",
+        fallback_mode="web_search_only",
+    )

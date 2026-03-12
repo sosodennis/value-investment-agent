@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Callable, Mapping
 from typing import Protocol
@@ -122,7 +123,11 @@ async def run_fracdiff_compute_use_case(
         volumes = pd.Series(price_data.volume_series)
         volumes.index = pd.to_datetime(volumes.index)
 
-        result = fracdiff_runtime.compute(prices=prices, volumes=volumes)
+        result = await asyncio.to_thread(
+            fracdiff_runtime.compute,
+            prices=prices,
+            volumes=volumes,
+        )
 
         chart_data_id = await runtime.save_chart_data(
             data=result.chart_data,

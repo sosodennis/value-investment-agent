@@ -20,6 +20,9 @@ from src.agents.fundamental.application.workflow_orchestrator.ports import (
 from src.agents.fundamental.application.workflow_orchestrator.services.valuation_replay_contracts import (
     INTERNAL_REPLAY_MARKET_SNAPSHOT_KEY,
 )
+from src.agents.fundamental.application.workflow_orchestrator.state_readers import (
+    read_intent_state,
+)
 from src.agents.fundamental.interface.workflow_orchestrator.contracts import (
     FundamentalPreviewInputModel,
 )
@@ -156,6 +159,14 @@ class FundamentalWorkflowRunner:
         )
 
     async def run_valuation(self, state: Mapping[str, object]) -> FundamentalNodeResult:
+        market_snapshot_override: dict[str, object] | None = None
+        intent_state = read_intent_state(state)
+        if intent_state.resolved_ticker:
+            snapshot = await self.market_data_service.get_market_snapshot_async(
+                intent_state.resolved_ticker
+            )
+            market_snapshot_override = snapshot.to_mapping()
+
         def _build_params_with_market_data(
             model_type: str,
             ticker: str | None,
@@ -167,8 +178,8 @@ class FundamentalWorkflowRunner:
                 context="valuation.financial_reports",
                 inject_default_provenance=True,
             )
-            market_snapshot: dict[str, object] | None = None
-            if ticker:
+            market_snapshot: dict[str, object] | None = market_snapshot_override
+            if market_snapshot is None and ticker:
                 market_snapshot = self.market_data_service.get_market_snapshot(
                     ticker
                 ).to_mapping()

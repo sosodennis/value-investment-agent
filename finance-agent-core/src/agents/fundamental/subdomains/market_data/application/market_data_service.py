@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import time
@@ -111,6 +112,9 @@ class MarketDataService:
                 time.sleep(self._retry_delay_seconds * float(attempt + 1))
 
         return self._fallback_snapshot(symbol, reason="unreachable")
+
+    async def get_market_snapshot_async(self, ticker_symbol: str) -> MarketSnapshot:
+        return await asyncio.to_thread(self.get_market_snapshot, ticker_symbol)
 
     def _fetch_once(self, ticker_symbol: str) -> MarketSnapshot:
         provider_results: dict[str, dict[str, MarketDatum]] = {}

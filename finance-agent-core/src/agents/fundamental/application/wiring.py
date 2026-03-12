@@ -18,11 +18,15 @@ from src.agents.fundamental.subdomains.forward_signals.application.extraction_se
     extract_forward_signals,
 )
 from src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl import (
+    build_finbert_direction_reviewer,
     extract_forward_signals_from_sec_text,
     extract_forward_signals_from_xbrl_reports,
 )
 from src.agents.fundamental.subdomains.market_data.infrastructure.factory import (
     market_data_service,
+)
+from src.agents.news.infrastructure.sentiment.finbert_sentiment_provider import (
+    get_finbert_analyzer,
 )
 
 
@@ -47,12 +51,25 @@ def _normalize_financial_reports_contract(
     }
 
 
+_finbert_direction_reviewer = build_finbert_direction_reviewer(get_finbert_analyzer)
+
+
+def _extract_forward_signals_text(
+    *, ticker: str, rules_sector: str | None = None
+) -> list[dict[str, object]]:
+    return extract_forward_signals_from_sec_text(
+        ticker=ticker,
+        rules_sector=rules_sector,
+        review_signal_direction_with_finbert_fn=_finbert_direction_reviewer,
+    )
+
+
 def _extract_forward_signals(ticker: str, reports_raw: list[dict[str, object]]):
     return extract_forward_signals(
         ticker=ticker,
         reports_raw=reports_raw,
         extract_xbrl_fn=extract_forward_signals_from_xbrl_reports,
-        extract_text_fn=extract_forward_signals_from_sec_text,
+        extract_text_fn=_extract_forward_signals_text,
     )
 
 

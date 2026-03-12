@@ -55,6 +55,7 @@ class _SearchCandidatesOutcome:
     degrade_error_code: str | None = None
     degrade_reason: str | None = None
     fallback_mode: str | None = None
+    degrade_source: str | None = None
 
 
 @dataclass
@@ -99,10 +100,20 @@ class IntentOrchestrator:
 
     def search_candidates(self, search_queries: list[str]) -> _SearchCandidatesOutcome:
         candidate_map: dict[str, TickerCandidate] = {}
+        ticker_degraded = False
+        ticker_error_code: str | None = None
+        ticker_reason: str | None = None
+        ticker_fallback: str | None = None
 
         for query in search_queries:
-            yf_candidates = self.runtime_ports.search_ticker(query)
-            for candidate in yf_candidates:
+            ticker_result = self.runtime_ports.search_ticker(query)
+            if ticker_result.failure_code:
+                ticker_degraded = True
+                if ticker_error_code is None:
+                    ticker_error_code = ticker_result.failure_code
+                    ticker_reason = ticker_result.failure_reason
+                    ticker_fallback = ticker_result.fallback_mode
+            for candidate in ticker_result.candidates:
                 existing = candidate_map.get(candidate.symbol)
                 if existing is None or candidate.confidence > existing.confidence:
                     candidate_map[candidate.symbol] = candidate
@@ -125,12 +136,23 @@ class IntentOrchestrator:
             if existing is None or candidate.confidence > existing.confidence:
                 candidate_map[candidate.symbol] = candidate
 
+        web_degraded = web_search_result.failure_code is not None
+        if web_degraded and ticker_degraded:
+            degrade_source = "multi"
+        elif web_degraded:
+            degrade_source = "web_search"
+        elif ticker_degraded:
+            degrade_source = "ticker_search"
+        else:
+            degrade_source = None
+
         return _SearchCandidatesOutcome(
             candidates=deduplicate_candidates(list(candidate_map.values())),
-            is_degraded=web_search_result.failure_code is not None,
-            degrade_error_code=web_search_result.failure_code,
-            degrade_reason=web_search_result.failure_reason,
-            fallback_mode=web_search_result.fallback_mode,
+            is_degraded=web_degraded or ticker_degraded,
+            degrade_error_code=web_search_result.failure_code or ticker_error_code,
+            degrade_reason=web_search_result.failure_reason or ticker_reason,
+            fallback_mode=web_search_result.fallback_mode or ticker_fallback,
+            degrade_source=degrade_source,
         )
 
     def parse_candidates(self, raw_candidates: object) -> list[TickerCandidate]:
@@ -428,13 +450,13 @@ class IntentOrchestrator:
             if search_outcome.is_degraded:
                 log_event(
                     logger,
-                    event="intent_search_degraded_web_channel",
-                    message="intent search web channel degraded; using yahoo-first fallback",
+                    event="intent_search_degraded",
+                    message="intent search degraded; using fallback mode",
                     level=logging.WARNING,
                     error_code=search_outcome.degrade_error_code
                     or "INTENT_SEARCH_WEB_DEGRADED",
                     fields={
-                        "degrade_source": "web_search",
+                        "degrade_source": search_outcome.degrade_source,
                         "fallback_mode": search_outcome.fallback_mode,
                         "degraded_reason": search_outcome.degrade_reason,
                         "candidate_count": len(final_candidates),

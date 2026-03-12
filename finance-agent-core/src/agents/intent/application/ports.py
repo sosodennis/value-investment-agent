@@ -22,7 +22,15 @@ class IIntentLlmProvider(Protocol):
 
 
 class IIntentTickerSearchProvider(Protocol):
-    def __call__(self, query: str) -> list[TickerCandidate]: ...
+    def __call__(self, query: str) -> IntentTickerSearchResult: ...
+
+
+@dataclass(frozen=True)
+class IntentTickerSearchResult:
+    candidates: list[TickerCandidate]
+    failure_code: str | None = None
+    failure_reason: str | None = None
+    fallback_mode: str | None = None
 
 
 @dataclass(frozen=True)

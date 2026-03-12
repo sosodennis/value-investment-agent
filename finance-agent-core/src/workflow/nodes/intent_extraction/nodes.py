@@ -3,6 +3,7 @@ Intent Extraction Nodes.
 Handles extraction, searching, decision, and clarification for ticker resolution.
 """
 
+import asyncio
 import logging
 from collections.abc import Mapping
 
@@ -19,25 +20,25 @@ logger = get_logger(__name__)
 intent_orchestrator = get_intent_orchestrator()
 
 
-def extraction_node(state: IntentExtractionState) -> Command:
+async def extraction_node(state: IntentExtractionState) -> Command:
     """Extract company and model from user query."""
-    result = intent_orchestrator.run_extraction(state)
+    result = await asyncio.to_thread(intent_orchestrator.run_extraction, state)
     return command_from_result(result, end_node=END)
 
 
-def searching_node(state: IntentExtractionState) -> Command:
+async def searching_node(state: IntentExtractionState) -> Command:
     """Search for the ticker based on extracted intent."""
-    result = intent_orchestrator.run_searching(state)
+    result = await asyncio.to_thread(intent_orchestrator.run_searching, state)
     return command_from_result(result, end_node=END)
 
 
-def decision_node(state: IntentExtractionState) -> Command:
+async def decision_node(state: IntentExtractionState) -> Command:
     """Decide if ticker is resolved or needs clarification."""
-    result = intent_orchestrator.run_decision(state)
+    result = await asyncio.to_thread(intent_orchestrator.run_decision, state)
     return command_from_result(result, end_node=END)
 
 
-def clarification_node(state: IntentExtractionState) -> Command:
+async def clarification_node(state: IntentExtractionState) -> Command:
     """
     Triggers an interrupt to ask the user to select a ticker or provide clarification.
     """
@@ -115,5 +116,7 @@ def clarification_node(state: IntentExtractionState) -> Command:
             "resolved_ticker": None,
         },
     )
-    result = intent_orchestrator.build_clarification_retry_update()
+    result = await asyncio.to_thread(
+        intent_orchestrator.build_clarification_retry_update
+    )
     return command_from_result(result, end_node=END)

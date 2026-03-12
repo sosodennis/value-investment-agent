@@ -13,7 +13,7 @@ from src.agents.technical.application.fracdiff_runtime_service import (
     TechnicalFracdiffRuntimeService,
 )
 from src.agents.technical.domain.signal_policy import assemble_semantic_tags
-from src.agents.technical.infrastructure.artifacts.technical_artifact_repository import (
+from src.agents.technical.infrastructure.artifacts import (
     build_default_technical_artifact_repository,
 )
 from src.agents.technical.infrastructure.llm import TechnicalInterpretationProvider

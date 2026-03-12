@@ -20,7 +20,7 @@ async def test_extraction_node_error_degraded_path():
         "src.workflow.nodes.intent_extraction.nodes.intent_orchestrator.extract_intent",
         side_effect=Exception("LLM Error"),
     ):
-        command = extraction_node(state)
+        command = await extraction_node(state)
 
         assert command.goto == "clarifying"
         assert command.update["node_statuses"]["intent_extraction"] == "degraded"
@@ -41,7 +41,7 @@ async def test_searching_node_error_degraded_path():
         "src.workflow.nodes.intent_extraction.nodes.intent_orchestrator.search_candidates",
         side_effect=Exception("Search Error"),
     ):
-        command = searching_node(state)
+        command = await searching_node(state)
 
         assert command.goto == "clarifying"
         assert command.update["node_statuses"]["intent_extraction"] == "degraded"
@@ -60,7 +60,7 @@ async def test_decision_node_error_degraded_path():
         "src.workflow.nodes.intent_extraction.nodes.intent_orchestrator.parse_candidates",
         side_effect=Exception("Validation Error"),
     ):
-        command = decision_node(state)
+        command = await decision_node(state)
 
         assert command.goto == "clarifying"
         assert command.update["node_statuses"]["intent_extraction"] == "degraded"
@@ -83,9 +83,12 @@ async def test_searching_node_serializes_domain_candidates_to_json():
 
     with patch(
         "src.workflow.nodes.intent_extraction.nodes.intent_orchestrator.search_candidates",
-        return_value=candidates,
+        return_value=_SearchCandidatesOutcome(
+            candidates=candidates,
+            is_degraded=False,
+        ),
     ):
-        command = searching_node(state)
+        command = await searching_node(state)
 
     assert command.goto == "deciding"
     serialized = command.update["intent_extraction"]["ticker_candidates"]
@@ -111,6 +114,7 @@ async def test_searching_node_marks_degraded_when_web_channel_degraded(caplog):
         degrade_error_code="INTENT_WEB_SEARCH_EMPTY",
         degrade_reason="no results found",
         fallback_mode="yahoo_only",
+        degrade_source="web_search",
     )
 
     with patch(
@@ -118,7 +122,7 @@ async def test_searching_node_marks_degraded_when_web_channel_degraded(caplog):
         return_value=outcome,
     ):
         with caplog.at_level(logging.INFO):
-            command = searching_node(state)
+            command = await searching_node(state)
 
     assert command.goto == "deciding"
     completed = [
@@ -132,7 +136,7 @@ async def test_searching_node_marks_degraded_when_web_channel_degraded(caplog):
     degraded_reason_logs = [
         record
         for record in caplog.records
-        if getattr(record, "event", None) == "intent_search_degraded_web_channel"
+        if getattr(record, "event", None) == "intent_search_degraded"
     ]
     assert degraded_reason_logs
     assert degraded_reason_logs[-1].error_code == "INTENT_WEB_SEARCH_EMPTY"
@@ -161,7 +165,7 @@ async def test_extraction_completed_uses_null_resolved_ticker_for_empty_value(ca
         return_value=_IntentStub(),
     ):
         with caplog.at_level(logging.INFO):
-            command = extraction_node(state)
+            command = await extraction_node(state)
 
     assert command.goto == "searching"
     completed = [
