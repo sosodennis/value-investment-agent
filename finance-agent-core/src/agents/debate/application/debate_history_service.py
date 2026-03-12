@@ -2,17 +2,8 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from src.agents.debate.domain.models import EvidenceFact
-from src.agents.debate.interface.formatters import format_debate_preview
-from src.agents.debate.interface.preview_projection_service import (
-    project_debate_preview,
-)
+from src.agents.debate.domain.entities import EvidenceFact
 from src.shared.kernel.types import JSONObject
-
-
-def summarize_debate_for_preview(ctx: JSONObject) -> JSONObject:
-    view_model = project_debate_preview(ctx)
-    return format_debate_preview(view_model)
 
 
 class HistoryMessageLike(Protocol):
@@ -49,25 +40,3 @@ def build_citation_audit_payload(
         "bull": validate_citations_fn(bull_transcript, valid_facts),
         "bear": validate_citations_fn(bear_transcript, valid_facts),
     }
-
-
-def build_debate_success_update(
-    *,
-    conclusion_data: JSONObject,
-    report_id: str | None,
-    artifact: JSONObject | None,
-) -> dict[str, object]:
-    update: dict[str, object] = {
-        "status": "success",
-        "final_verdict": conclusion_data.get("decision")
-        or conclusion_data.get("final_verdict"),
-        "kelly_confidence": conclusion_data.get("kelly_confidence"),
-        "winning_thesis": conclusion_data.get("winning_thesis"),
-        "primary_catalyst": conclusion_data.get("primary_catalyst"),
-        "primary_risk": conclusion_data.get("primary_risk"),
-        "report_id": report_id,
-        "current_round": 3,
-    }
-    if artifact is not None:
-        update["artifact"] = artifact
-    return update

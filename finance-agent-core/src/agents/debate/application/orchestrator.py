@@ -9,6 +9,10 @@ from typing import Protocol
 
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
 
+from src.agents.debate.application.debate_history_service import (
+    build_citation_audit_payload,
+    build_verdict_history_text,
+)
 from src.agents.debate.application.debate_llm_retry_service import (
     call_with_debate_llm_retry,
 )
@@ -33,16 +37,12 @@ from src.agents.debate.application.prompt_runtime import (
 )
 from src.agents.debate.application.report_service import prepare_debate_reports
 from src.agents.debate.application.state_readers import resolved_ticker_from_state
-from src.agents.debate.domain.models import DebateConclusion, EvidenceFact
+from src.agents.debate.application.state_updates import build_debate_success_update
+from src.agents.debate.domain.entities import DebateConclusion, EvidenceFact
 from src.agents.debate.domain.pragmatic_verdict_policy import (
     calculate_pragmatic_verdict,
 )
 from src.agents.debate.domain.validators import FactValidator
-from src.agents.debate.interface.mappers import (
-    build_citation_audit_payload,
-    build_debate_success_update,
-    build_verdict_history_text,
-)
 from src.agents.debate.interface.serializers import build_final_report_payload
 from src.shared.kernel.tools.incident_logging import (
     CONTRACT_KIND_ARTIFACT_JSON,

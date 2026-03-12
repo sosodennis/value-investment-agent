@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from src.agents.debate.domain.models import EvidenceFact
+from src.agents.debate.domain.entities import EvidenceFact
 from src.shared.kernel.types import JSONObject
 
 

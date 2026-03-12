@@ -92,7 +92,7 @@ async def test_agent_uses_cached_reports():
             "src.agents.debate.application.report_service.prepare_debate_reports",
             new_mock=AsyncMock(),
         ) as mock_prepare,
-        patch("src.agents.debate.wiring.get_llm") as mock_get_llm,
+        patch("src.agents.debate.application.wiring.get_llm") as mock_get_llm,
     ):
         mock_llm = AsyncMock()
         mock_llm.ainvoke.return_value = MagicMock(content="thesis")
@@ -123,7 +123,7 @@ async def test_agent_fallbacks_if_no_cache():
             "src.agents.debate.application.report_service.compress_reports",
             return_value="data",
         ) as mock_compress,
-        patch("src.agents.debate.wiring.get_llm") as mock_get_llm,
+        patch("src.agents.debate.application.wiring.get_llm") as mock_get_llm,
     ):
         mock_llm = AsyncMock()
         mock_llm.ainvoke.return_value = MagicMock(content="thesis")

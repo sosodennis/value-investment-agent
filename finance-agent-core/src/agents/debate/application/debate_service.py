@@ -37,6 +37,7 @@ from src.agents.debate.application.prompt_runtime import (
 from src.agents.debate.application.report_service import (
     get_debate_prompt_context_text,
 )
+from src.agents.debate.domain.entities import EvidenceFact, FactBundle
 from src.agents.debate.domain.fact_builders import (
     build_financial_facts,
     build_news_facts,
@@ -45,7 +46,6 @@ from src.agents.debate.domain.fact_builders import (
     render_strict_facts_registry,
     summarize_facts_by_source,
 )
-from src.agents.debate.domain.models import EvidenceFact, FactBundle
 from src.shared.kernel.tools.logger import get_logger, log_event
 
 logger = get_logger(__name__)

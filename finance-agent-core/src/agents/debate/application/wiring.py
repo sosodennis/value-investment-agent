@@ -5,20 +5,18 @@ from src.agents.debate.application.factory import (
     build_debate_workflow_runner,
 )
 from src.agents.debate.application.orchestrator import DebateOrchestrator
-from src.agents.debate.infrastructure.artifacts.debate_artifact_repository import (
+from src.agents.debate.infrastructure.artifacts import (
     debate_artifact_repository,
-)
-from src.agents.debate.infrastructure.artifacts.debate_source_reader_repository import (
     debate_source_reader_repository,
 )
-from src.agents.debate.infrastructure.market_data.capm_market_data_provider import (
+from src.agents.debate.infrastructure.market_data import (
     get_current_risk_free_rate,
     get_dynamic_payoff_map,
 )
-from src.agents.debate.infrastructure.sycophancy.sycophancy_detector_provider import (
-    get_sycophancy_detector_provider,
+from src.agents.debate.infrastructure.sycophancy import get_sycophancy_detector_provider
+from src.agents.debate.interface.preview_projection_service import (
+    summarize_debate_for_preview,
 )
-from src.agents.debate.interface.mappers import summarize_debate_for_preview
 from src.infrastructure.llm.provider import get_llm
 from src.interface.events.schemas import ArtifactReference, build_artifact_payload
 from src.shared.kernel.contracts import (

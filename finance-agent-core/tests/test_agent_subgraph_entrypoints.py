@@ -1,4 +1,4 @@
-from src.agents.debate.subgraph import build_debate_subgraph
+from src.agents.debate.application.subgraph import build_debate_subgraph
 from src.agents.fundamental.application.subgraph import build_fundamental_subgraph
 from src.agents.intent.application.subgraph import build_intent_extraction_subgraph
 from src.agents.news.application.subgraph import build_financial_news_subgraph

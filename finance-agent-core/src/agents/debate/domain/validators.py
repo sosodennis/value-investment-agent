@@ -1,6 +1,6 @@
 import re
 
-from .models import EvidenceFact
+from .entities import EvidenceFact
 
 
 class FactValidator:

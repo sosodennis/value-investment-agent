@@ -1,4 +1,4 @@
-from src.agents.debate.domain.models import EvidenceFact
+from src.agents.debate.domain.entities import EvidenceFact
 from src.agents.debate.domain.validators import FactValidator
 from src.agents.fundamental.domain.shared.contracts.traceable import ManualProvenance
 

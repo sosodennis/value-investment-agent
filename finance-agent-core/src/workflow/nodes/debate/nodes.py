@@ -4,7 +4,7 @@ from langgraph.graph import END
 from langgraph.types import Command
 
 from src.agents.debate.application.orchestrator import DebateNodeResult
-from src.agents.debate.wiring import get_debate_workflow_runner
+from src.agents.debate.application.wiring import get_debate_workflow_runner
 from src.workflow.command_adapter import command_from_fanout_result
 
 from .subgraph_state import DebateState
