@@ -7,12 +7,8 @@ from src.agents.fundamental.subdomains.financial_statements.interface.contracts 
 )
 from src.agents.fundamental.subdomains.financial_statements.interface.parsers import (
     parse_calculation_metrics,
-    parse_financial_health_payload,
+    parse_financial_statements_payload,
     parse_valuation_model_runtime,
-)
-from src.agents.fundamental.subdomains.forward_signals.interface.contracts import (
-    ForwardSignalEvidence,
-    ForwardSignalPayload,
 )
 
 
@@ -171,25 +167,8 @@ def test_parse_financial_reports_model_rejects_legacy_extension_type_token() -> 
         )
 
 
-def test_parse_financial_health_payload_normalizes_reports_and_signals() -> None:
-    signal = ForwardSignalPayload(
-        signal_id="sig-1",
-        source_type="mda",
-        metric="growth_outlook",
-        direction="up",
-        value=120.0,
-        unit="basis_points",
-        confidence=0.72,
-        as_of="2026-03-10T00:00:00Z",
-        evidence=[
-            ForwardSignalEvidence(
-                preview_text="Guidance raised.",
-                full_text="Guidance raised with stronger outlook.",
-                source_url="https://www.sec.gov/edgar/search/?q=AAPL",
-            )
-        ],
-    )
-    payload = parse_financial_health_payload(
+def test_parse_financial_statements_payload_normalizes_reports() -> None:
+    payload = parse_financial_statements_payload(
         {
             "financial_reports": [
                 {
@@ -199,10 +178,6 @@ def test_parse_financial_health_payload_normalizes_reports_and_signals() -> None
                     "extension": {},
                 }
             ],
-            "forward_signals": [
-                signal.model_dump(exclude_none=True),
-                "invalid",
-            ],
             "diagnostics": {"parser": "xbrl", "confidence": 0.9},
             "quality_gates": {"status": "pass", "blocking_count": 0},
         },
@@ -210,16 +185,13 @@ def test_parse_financial_health_payload_normalizes_reports_and_signals() -> None
     )
     assert len(payload.financial_reports) == 1
     assert payload.financial_reports[0]["industry_type"] == "Industrial"
-    assert payload.forward_signals is not None
-    assert len(payload.forward_signals) == 1
-    assert payload.forward_signals[0].signal_id == "sig-1"
     assert payload.diagnostics == {"parser": "xbrl", "confidence": 0.9}
     assert payload.quality_gates == {"status": "pass", "blocking_count": 0}
 
 
-def test_parse_financial_health_payload_rejects_non_mapping() -> None:
+def test_parse_financial_statements_payload_rejects_non_mapping() -> None:
     with pytest.raises(TypeError, match="must be a mapping"):
-        parse_financial_health_payload(
+        parse_financial_statements_payload(
             [
                 {
                     "base": {},
@@ -230,15 +202,14 @@ def test_parse_financial_health_payload_rejects_non_mapping() -> None:
         )
 
 
-def test_parse_financial_health_payload_rejects_missing_required_key() -> None:
+def test_parse_financial_statements_payload_rejects_missing_required_key() -> None:
     with pytest.raises(
         TypeError,
         match="financial_health.payload.diagnostics is required",
     ):
-        parse_financial_health_payload(
+        parse_financial_statements_payload(
             {
                 "financial_reports": [],
-                "forward_signals": None,
                 "quality_gates": None,
             },
             context="financial_health.payload",

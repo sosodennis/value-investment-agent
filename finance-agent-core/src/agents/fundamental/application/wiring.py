@@ -6,32 +6,31 @@ from src.agents.fundamental.application.workflow_orchestrator.factory import (
     build_fundamental_workflow_runner,
 )
 from src.agents.fundamental.application.workflow_orchestrator.ports import (
-    FundamentalFinancialPayload,
+    FundamentalFinancialStatementsPayload,
 )
 from src.agents.fundamental.subdomains.artifacts_provenance.infrastructure.fundamental_artifact_repository import (
     fundamental_artifact_repository,
 )
 from src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl import (
-    fetch_financial_payload,
+    fetch_financial_reports_payload,
 )
-from src.agents.fundamental.subdomains.forward_signals.interface.parsers import (
-    parse_forward_signals,
+from src.agents.fundamental.subdomains.forward_signals.application.extraction_service import (
+    extract_forward_signals,
+)
+from src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl import (
+    extract_forward_signals_from_sec_text,
+    extract_forward_signals_from_xbrl_reports,
 )
 from src.agents.fundamental.subdomains.market_data.infrastructure.factory import (
     market_data_service,
 )
 
 
-def _normalize_financial_payload_contract(
+def _normalize_financial_reports_contract(
     payload: dict[str, object],
-) -> FundamentalFinancialPayload:
+) -> FundamentalFinancialStatementsPayload:
     reports_raw = payload.get("financial_reports")
     financial_reports = reports_raw if isinstance(reports_raw, list) else []
-
-    forward_signals = parse_forward_signals(
-        payload.get("forward_signals"),
-        context="fundamental.financial_payload.forward_signals",
-    )
 
     diagnostics_raw = payload.get("diagnostics")
     diagnostics = dict(diagnostics_raw) if isinstance(diagnostics_raw, dict) else None
@@ -43,21 +42,30 @@ def _normalize_financial_payload_contract(
 
     return {
         "financial_reports": financial_reports,
-        "forward_signals": forward_signals,
         "diagnostics": diagnostics,
         "quality_gates": quality_gates,
     }
+
+
+def _extract_forward_signals(ticker: str, reports_raw: list[dict[str, object]]):
+    return extract_forward_signals(
+        ticker=ticker,
+        reports_raw=reports_raw,
+        extract_xbrl_fn=extract_forward_signals_from_xbrl_reports,
+        extract_text_fn=extract_forward_signals_from_sec_text,
+    )
 
 
 def build_default_fundamental_workflow_runner() -> FundamentalWorkflowRunner:
     orchestrator = build_fundamental_orchestrator(port=fundamental_artifact_repository)
     return build_fundamental_workflow_runner(
         orchestrator=orchestrator,
-        fetch_financial_payload_fn=(
-            lambda ticker, *, years=5: _normalize_financial_payload_contract(
-                fetch_financial_payload(ticker=ticker, years=years)
+        fetch_financial_reports_fn=(
+            lambda ticker, *, years=5: _normalize_financial_reports_contract(
+                fetch_financial_reports_payload(ticker=ticker, years=years)
             )
         ),
+        extract_forward_signals_fn=_extract_forward_signals,
         market_data_service=market_data_service,
     )
 

@@ -26,17 +26,22 @@ class IFundamentalReportRepo(Protocol):
     ) -> tuple[list[JSONObject], list[ForwardSignalPayload] | None] | None: ...
 
 
-class FundamentalFinancialPayload(TypedDict):
+class FundamentalFinancialStatementsPayload(TypedDict):
     financial_reports: list[JSONObject]
-    forward_signals: list[ForwardSignalPayload] | None
     diagnostics: JSONObject | None
     quality_gates: JSONObject | None
 
 
-class IFundamentalFinancialPayloadProvider(Protocol):
+class IFundamentalFinancialStatementsProvider(Protocol):
     def __call__(
         self, ticker: str, *, years: int = 3
-    ) -> FundamentalFinancialPayload: ...
+    ) -> FundamentalFinancialStatementsPayload: ...
+
+
+class IFundamentalForwardSignalsProvider(Protocol):
+    def __call__(
+        self, *, ticker: str, reports_raw: list[JSONObject]
+    ) -> list[ForwardSignalPayload] | None: ...
 
 
 class IMarketSnapshot(Protocol):

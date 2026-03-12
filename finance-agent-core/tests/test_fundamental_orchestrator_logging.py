@@ -17,7 +17,7 @@ from src.agents.fundamental.subdomains.core_valuation.domain.parameterization.co
     ParamBuildResult,
 )
 from src.agents.fundamental.subdomains.financial_statements.interface.parsers import (
-    parse_financial_health_payload,
+    parse_financial_statements_payload,
 )
 from src.agents.fundamental.subdomains.forward_signals.interface.contracts import (
     ForwardSignalEvidence,
@@ -950,7 +950,7 @@ async def test_run_financial_health_persists_forward_signals_in_financial_report
         signal_id="sec_xbrl_growth_2025",
         source_type="manual",
     )
-    payload = parse_financial_health_payload(
+    payload = parse_financial_statements_payload(
         {
             "financial_reports": [
                 {
@@ -960,7 +960,6 @@ async def test_run_financial_health_persists_forward_signals_in_financial_report
                     "extension": {},
                 }
             ],
-            "forward_signals": [forward_signal.model_dump(exclude_none=True)],
             "diagnostics": {"source": "test_fixture"},
             "quality_gates": {"status": "pass"},
         },
@@ -969,12 +968,13 @@ async def test_run_financial_health_persists_forward_signals_in_financial_report
 
     result = await orchestrator.run_financial_health(
         _build_health_state(),
-        fetch_financial_data_fn=lambda _ticker: payload,
+        fetch_financial_reports_fn=lambda _ticker: payload,
+        extract_forward_signals_fn=lambda _ticker, _reports: [forward_signal],
     )
 
     assert result.goto == "model_selection"
     assert isinstance(fake_port.saved_data, dict)
-    expected_forward_signals = serialize_forward_signals(payload.forward_signals)
+    expected_forward_signals = serialize_forward_signals([forward_signal])
     assert fake_port.saved_data["forward_signals"] == expected_forward_signals
     assert fake_port.saved_data["quality_gates"]["status"] == "pass"
     fa_update = result.update["fundamental_analysis"]

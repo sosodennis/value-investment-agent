@@ -1,7 +1,7 @@
-from src.agents.fundamental.workflow_orchestrator.interface.contracts import (
+from src.agents.fundamental.interface.workflow_orchestrator.contracts import (
     FundamentalPreviewInputModel,
 )
-from src.agents.fundamental.workflow_orchestrator.interface.mappers import (
+from src.agents.fundamental.interface.workflow_orchestrator.mappers import (
     summarize_fundamental_for_preview,
 )
 

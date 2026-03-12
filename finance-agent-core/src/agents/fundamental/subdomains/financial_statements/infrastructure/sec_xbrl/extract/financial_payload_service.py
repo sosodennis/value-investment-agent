@@ -10,12 +10,6 @@ from src.agents.fundamental.domain.shared.contracts.traceable import (
     ManualProvenance,
     TraceableField,
 )
-from src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl.forward_signals import (
-    extract_forward_signals_from_xbrl_reports,
-)
-from src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl.forward_signals_text import (
-    extract_forward_signals_from_sec_text,
-)
 from src.interface.artifacts.artifact_model_shared import to_json
 from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import JSONObject
@@ -220,7 +214,7 @@ def fetch_financial_data(ticker: str, years: int = 5) -> list[FinancialReport]:
     return reports
 
 
-def fetch_financial_payload(ticker: str, years: int = 5) -> dict[str, object]:
+def fetch_financial_reports_payload(ticker: str, years: int = 5) -> dict[str, object]:
     started = time.perf_counter()
     cache_lookup = _filing_cache_service.lookup_payload(
         ticker=ticker,
@@ -228,30 +222,38 @@ def fetch_financial_payload(ticker: str, years: int = 5) -> dict[str, object]:
         field_key=_FINANCIAL_PAYLOAD_CACHE_FIELD_KEY,
     )
     if cache_lookup.hit and isinstance(cache_lookup.payload, dict):
-        payload = dict(cache_lookup.payload)
-        payload["diagnostics"] = _merge_arelle_validation_diagnostics(
-            diagnostics=payload.get("diagnostics"),
-            reports_raw=payload.get("financial_reports"),
+        cached_payload = dict(cache_lookup.payload)
+        reports_raw = cached_payload.get("financial_reports")
+        if not isinstance(reports_raw, list):
+            reports_raw = []
+        diagnostics = _merge_arelle_validation_diagnostics(
+            diagnostics=cached_payload.get("diagnostics"),
+            reports_raw=reports_raw,
         )
-        payload["diagnostics"] = _merge_arelle_runtime_diagnostics(
-            diagnostics=payload.get("diagnostics"),
-            reports_raw=payload.get("financial_reports"),
+        diagnostics = _merge_arelle_runtime_diagnostics(
+            diagnostics=diagnostics,
+            reports_raw=reports_raw,
         )
-        if payload.get("quality_gates") is None:
-            payload["quality_gates"] = evaluate_xbrl_quality_gates(
-                reports_raw=payload.get("financial_reports"),
-                diagnostics=payload.get("diagnostics")
-                if isinstance(payload.get("diagnostics"), Mapping)
-                else None,
+        quality_gates_raw = cached_payload.get("quality_gates")
+        quality_gates = (
+            dict(quality_gates_raw) if isinstance(quality_gates_raw, Mapping) else None
+        )
+        if quality_gates is None:
+            quality_gates = evaluate_xbrl_quality_gates(
+                reports_raw=reports_raw,
+                diagnostics=diagnostics if isinstance(diagnostics, Mapping) else None,
             )
         diagnostics = _merge_cache_diagnostics(
-            diagnostics=payload.get("diagnostics"),
+            diagnostics=diagnostics,
             lookup=cache_lookup,
             total_latency_ms=(time.perf_counter() - started) * 1000.0,
             payload_key_override=cache_lookup.payload_key,
         )
-        payload["diagnostics"] = diagnostics
-        payload.setdefault("quality_gates", None)
+        payload = {
+            "financial_reports": reports_raw,
+            "diagnostics": diagnostics,
+            "quality_gates": quality_gates,
+        }
         log_event(
             logger,
             event="fundamental_xbrl_payload_cache_hit",
@@ -280,45 +282,8 @@ def fetch_financial_payload(ticker: str, years: int = 5) -> dict[str, object]:
     )
 
     reports = fetch_financial_data(ticker, years=years)
-    rules_sector = _infer_rules_sector_from_reports(reports)
-    forward_signals: list[dict[str, object]] = []
-    try:
-        xbrl_signals = extract_forward_signals_from_xbrl_reports(
-            ticker=ticker,
-            reports=reports,
-        )
-        if xbrl_signals:
-            forward_signals.extend(xbrl_signals)
-    except Exception as exc:
-        log_event(
-            logger,
-            event="fundamental_forward_signal_producer_failed",
-            message="forward signal producer failed; proceeding without signals",
-            level=logging.WARNING,
-            error_code="FUNDAMENTAL_FORWARD_SIGNAL_PRODUCER_FAILED",
-            fields={"ticker": ticker, "exception": str(exc)},
-        )
-
-    try:
-        text_signals = extract_forward_signals_from_sec_text(
-            ticker=ticker,
-            rules_sector=rules_sector,
-        )
-        if text_signals:
-            forward_signals.extend(text_signals)
-    except Exception as exc:
-        log_event(
-            logger,
-            event="fundamental_forward_signal_text_producer_failed",
-            message="forward signal text producer failed; proceeding without text signals",
-            level=logging.WARNING,
-            error_code="FUNDAMENTAL_FORWARD_SIGNAL_TEXT_PRODUCER_FAILED",
-            fields={"ticker": ticker, "exception": str(exc)},
-        )
-
     payload: dict[str, object] = {
         "financial_reports": reports,
-        "forward_signals": forward_signals,
         "diagnostics": _merge_cache_diagnostics(
             diagnostics=_merge_arelle_runtime_diagnostics(
                 diagnostics=_merge_arelle_validation_diagnostics(
@@ -707,16 +672,6 @@ def _round_or_none(value: float | None) -> float | None:
     if value is None:
         return None
     return round(value, 3)
-
-
-def _infer_rules_sector_from_reports(reports: list[FinancialReport]) -> str | None:
-    for report in reports:
-        normalized_type = str(report.industry_type or "").strip().lower()
-        if not normalized_type:
-            continue
-        if "financial" in normalized_type:
-            return "financials"
-    return None
 
 
 def _report_year(report: FinancialReport) -> int | None:

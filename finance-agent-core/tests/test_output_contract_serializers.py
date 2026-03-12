@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from src.agents.debate.interface.contracts import parse_debate_artifact_model
-from src.agents.fundamental.artifacts_provenance.interface.contracts import (
+from src.agents.fundamental.subdomains.artifacts_provenance.interface.contracts import (
     parse_fundamental_artifact_model,
 )
 from src.agents.news.interface.contracts import parse_news_artifact_model

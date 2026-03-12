@@ -7,12 +7,6 @@ from typing import Protocol, cast
 from src.agents.fundamental.subdomains.financial_statements.interface.contracts import (
     parse_financial_reports_model,
 )
-from src.agents.fundamental.subdomains.forward_signals.interface.contracts import (
-    ForwardSignalPayload,
-)
-from src.agents.fundamental.subdomains.forward_signals.interface.parsers import (
-    parse_forward_signals,
-)
 from src.shared.kernel.types import JSONObject, JSONValue
 
 
@@ -45,17 +39,10 @@ class ValuationModelRuntime:
 
 
 @dataclass(frozen=True)
-class FinancialHealthPayload:
+class FinancialStatementsPayload:
     financial_reports: list[JSONObject]
-    forward_signals: list[ForwardSignalPayload] | None
     diagnostics: JSONObject | None
     quality_gates: JSONObject | None
-
-
-def _parse_forward_signals(
-    value: object, *, context: str
-) -> list[ForwardSignalPayload] | None:
-    return parse_forward_signals(value, context=context)
 
 
 def _parse_optional_object(
@@ -76,17 +63,16 @@ def _parse_optional_object(
     return normalized
 
 
-def parse_financial_health_payload(
+def parse_financial_statements_payload(
     value: object,
     *,
     context: str,
-) -> FinancialHealthPayload:
+) -> FinancialStatementsPayload:
     if not isinstance(value, Mapping):
         raise TypeError(f"{context} must be a mapping")
 
     required_keys = (
         "financial_reports",
-        "forward_signals",
         "diagnostics",
         "quality_gates",
     )
@@ -95,17 +81,13 @@ def parse_financial_health_payload(
             raise TypeError(f"{context}.{key} is required")
 
     reports_raw = value.get("financial_reports")
-    forward_signals_raw = value.get("forward_signals")
     diagnostics_raw = value.get("diagnostics")
     quality_gates_raw = value.get("quality_gates")
 
-    return FinancialHealthPayload(
+    return FinancialStatementsPayload(
         financial_reports=parse_financial_reports_model(
             reports_raw,
             context=f"{context}.financial_reports",
-        ),
-        forward_signals=_parse_forward_signals(
-            forward_signals_raw, context=f"{context}.forward_signals"
         ),
         diagnostics=_parse_optional_object(
             diagnostics_raw,

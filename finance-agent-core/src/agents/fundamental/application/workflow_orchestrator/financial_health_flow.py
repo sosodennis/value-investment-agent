@@ -20,7 +20,10 @@ from src.agents.fundamental.application.workflow_orchestrator.state_updates impo
     build_node_error_update,
 )
 from src.agents.fundamental.subdomains.financial_statements.interface.parsers import (
-    FinancialHealthPayload,
+    FinancialStatementsPayload,
+)
+from src.agents.fundamental.subdomains.forward_signals.interface.contracts import (
+    ForwardSignalPayload,
 )
 from src.agents.fundamental.subdomains.forward_signals.interface.serializers import (
     serialize_forward_signals,
@@ -52,7 +55,10 @@ async def run_financial_health_flow(
     runtime: FinancialHealthRuntime,
     state: Mapping[str, object],
     *,
-    fetch_financial_data_fn: Callable[[str], FinancialHealthPayload],
+    fetch_financial_reports_fn: Callable[[str], FinancialStatementsPayload],
+    extract_forward_signals_fn: Callable[
+        [str, list[JSONObject]], list[ForwardSignalPayload] | None
+    ],
 ) -> FundamentalNodeResult:
     intent_state = read_intent_state(state)
     resolved_ticker = intent_state.resolved_ticker
@@ -90,13 +96,17 @@ async def run_financial_health_flow(
         )
     try:
         payload = await asyncio.to_thread(
-            fetch_financial_data_fn,
+            fetch_financial_reports_fn,
             resolved_ticker,
         )
         reports_data = payload.financial_reports
-        forward_signals = payload.forward_signals
         diagnostics = payload.diagnostics
         quality_gates = payload.quality_gates
+        forward_signals = await asyncio.to_thread(
+            extract_forward_signals_fn,
+            resolved_ticker,
+            reports_data,
+        )
         reports_artifact_id: str | None = None
         artifact: AgentOutputArtifactPayload | None = None
 

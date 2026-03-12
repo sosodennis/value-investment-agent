@@ -6,11 +6,9 @@ from datetime import date
 
 from edgar import Company
 
-from src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl import (
-    call_with_sec_retry,
-)
 from src.shared.kernel.tools.logger import log_event
 
+from ..sec_retry import call_with_sec_retry
 from . import focus_text_extractor as _focus_text_extractor
 from .filing_text_loader import _load_recent_filing_text_records
 from .pipeline_filing_access_service import _safe_get_filing, _safe_get_filing_text

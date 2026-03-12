@@ -9,7 +9,7 @@ from src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_x
 )
 from src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.extract.financial_payload_service import (
     fetch_financial_data,
-    fetch_financial_payload,
+    fetch_financial_reports_payload,
     reset_filing_cache_service_for_tests,
     set_filing_cache_service_for_tests,
 )
@@ -124,7 +124,7 @@ def test_fetch_financial_data_uses_five_year_default_window(monkeypatch) -> None
     assert requested_years[:4] == [2024, 2023, 2022, 2021]
 
 
-def test_fetch_financial_payload_uses_cache_on_warm_path(
+def test_fetch_financial_reports_payload_uses_cache_on_warm_path(
     monkeypatch,
     tmp_path,
 ) -> None:
@@ -147,18 +147,10 @@ def test_fetch_financial_payload_uses_cache_on_warm_path(
         "src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.extract.financial_payload_service.fetch_financial_data",
         _fetch,
     )
-    monkeypatch.setattr(
-        "src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.extract.financial_payload_service.extract_forward_signals_from_xbrl_reports",
-        lambda **_kwargs: [],
-    )
-    monkeypatch.setattr(
-        "src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.extract.financial_payload_service.extract_forward_signals_from_sec_text",
-        lambda **_kwargs: [],
-    )
 
     try:
-        cold_payload = fetch_financial_payload("AMZN", years=3)
-        warm_payload = fetch_financial_payload("AMZN", years=3)
+        cold_payload = fetch_financial_reports_payload("AMZN", years=3)
+        warm_payload = fetch_financial_reports_payload("AMZN", years=3)
     finally:
         reset_filing_cache_service_for_tests()
 
@@ -173,30 +165,24 @@ def test_fetch_financial_payload_uses_cache_on_warm_path(
     assert isinstance(warm_payload.get("financial_reports"), list)
 
 
-def test_fetch_financial_payload_emits_quality_gate_payload(monkeypatch) -> None:
+def test_fetch_financial_reports_payload_emits_quality_gate_payload(
+    monkeypatch,
+) -> None:
     monkeypatch.setattr(
         "src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.extract.financial_payload_service.fetch_financial_data",
         lambda _ticker, years=5: [
             _report(2025, selection_mode=f"latest_available_{years}")
         ],
     )
-    monkeypatch.setattr(
-        "src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.extract.financial_payload_service.extract_forward_signals_from_xbrl_reports",
-        lambda **_kwargs: [],
-    )
-    monkeypatch.setattr(
-        "src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.extract.financial_payload_service.extract_forward_signals_from_sec_text",
-        lambda **_kwargs: [],
-    )
 
-    payload = fetch_financial_payload("AMZN", years=3)
+    payload = fetch_financial_reports_payload("AMZN", years=3)
     quality_gates = payload.get("quality_gates")
     assert isinstance(quality_gates, dict)
     assert quality_gates.get("status") in {"pass", "warn", "block"}
     assert isinstance(quality_gates.get("issues"), list)
 
 
-def test_fetch_financial_payload_projects_arelle_validation_issues_into_diagnostics(
+def test_fetch_financial_reports_payload_projects_arelle_validation_issues_into_diagnostics(
     monkeypatch,
     tmp_path,
 ) -> None:
@@ -226,17 +212,9 @@ def test_fetch_financial_payload_projects_arelle_validation_issues_into_diagnost
             )
         ],
     )
-    monkeypatch.setattr(
-        "src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.extract.financial_payload_service.extract_forward_signals_from_xbrl_reports",
-        lambda **_kwargs: [],
-    )
-    monkeypatch.setattr(
-        "src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.extract.financial_payload_service.extract_forward_signals_from_sec_text",
-        lambda **_kwargs: [],
-    )
 
     try:
-        payload = fetch_financial_payload("AMZN", years=3)
+        payload = fetch_financial_reports_payload("AMZN", years=3)
     finally:
         reset_filing_cache_service_for_tests()
 
@@ -256,7 +234,7 @@ def test_fetch_financial_payload_projects_arelle_validation_issues_into_diagnost
     assert quality_gates.get("status") == "block"
 
 
-def test_fetch_financial_payload_emits_arelle_runtime_diagnostics(
+def test_fetch_financial_reports_payload_emits_arelle_runtime_diagnostics(
     monkeypatch,
     tmp_path,
 ) -> None:
@@ -282,17 +260,9 @@ def test_fetch_financial_payload_emits_arelle_runtime_diagnostics(
             )
         ],
     )
-    monkeypatch.setattr(
-        "src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.extract.financial_payload_service.extract_forward_signals_from_xbrl_reports",
-        lambda **_kwargs: [],
-    )
-    monkeypatch.setattr(
-        "src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.extract.financial_payload_service.extract_forward_signals_from_sec_text",
-        lambda **_kwargs: [],
-    )
 
     try:
-        payload = fetch_financial_payload("AMZN", years=3)
+        payload = fetch_financial_reports_payload("AMZN", years=3)
     finally:
         reset_filing_cache_service_for_tests()
 
@@ -307,7 +277,7 @@ def test_fetch_financial_payload_emits_arelle_runtime_diagnostics(
     assert arelle_runtime.get("validation_modes") == ["efm_validate"]
 
 
-def test_fetch_financial_payload_cache_key_includes_validation_profile(
+def test_fetch_financial_reports_payload_cache_key_includes_validation_profile(
     monkeypatch, tmp_path
 ) -> None:
     cache_service = FilingCacheService(
@@ -336,17 +306,9 @@ def test_fetch_financial_payload_cache_key_includes_validation_profile(
             )
         ],
     )
-    monkeypatch.setattr(
-        "src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.extract.financial_payload_service.extract_forward_signals_from_xbrl_reports",
-        lambda **_kwargs: [],
-    )
-    monkeypatch.setattr(
-        "src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.extract.financial_payload_service.extract_forward_signals_from_sec_text",
-        lambda **_kwargs: [],
-    )
 
     try:
-        payload = fetch_financial_payload("AMZN", years=3)
+        payload = fetch_financial_reports_payload("AMZN", years=3)
     finally:
         reset_filing_cache_service_for_tests()
 

@@ -14,7 +14,10 @@ from src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_x
     set_filing_cache_service_for_tests,
 )
 from src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.fetch.provider import (
-    fetch_financial_payload,
+    fetch_financial_reports_payload,
+)
+from src.agents.fundamental.subdomains.forward_signals.application.extraction_service import (
+    extract_forward_signals,
 )
 from src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl.forward_signals_text import (
     _apply_finbert_direction_reviews,
@@ -268,65 +271,57 @@ def test_extract_forward_signals_from_sec_text_prefers_mda_section_for_10k() -> 
     assert evidence[0]["doc_type"] == "10-K_focused"
 
 
-def test_fetch_financial_payload_combines_xbrl_and_sec_text_signals() -> None:
-    with (
-        patch(
-            "src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.extract.financial_payload_service.fetch_financial_data",
-            return_value=[],
-        ),
-        patch(
-            "src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.extract.financial_payload_service.extract_forward_signals_from_xbrl_reports",
-            return_value=[
-                {
-                    "signal_id": "xbrl-growth",
-                    "source_type": "xbrl_auto",
-                    "metric": "growth_outlook",
-                    "direction": "up",
-                    "value": 80.0,
-                    "unit": "basis_points",
-                    "confidence": 0.61,
-                    "evidence": [
-                        {
-                            "preview_text": "xbrl",
-                            "full_text": "xbrl",
-                            "source_url": "https://sec",
-                        }
-                    ],
-                }
-            ],
-        ),
-        patch(
-            "src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.extract.financial_payload_service.extract_forward_signals_from_sec_text",
-            return_value=[
-                {
-                    "signal_id": "text-margin",
-                    "source_type": "mda",
-                    "metric": "margin_outlook",
-                    "direction": "down",
-                    "value": 60.0,
-                    "unit": "basis_points",
-                    "confidence": 0.59,
-                    "evidence": [
-                        {
-                            "preview_text": "text",
-                            "full_text": "text",
-                            "source_url": "https://sec",
-                        }
-                    ],
-                }
-            ],
-        ),
-    ):
-        payload = fetch_financial_payload("AAPL", years=3)
+def test_extract_forward_signals_combines_xbrl_and_sec_text_signals() -> None:
+    signals = extract_forward_signals(
+        ticker="AAPL",
+        reports_raw=[],
+        extract_xbrl_fn=lambda **_kwargs: [
+            {
+                "signal_id": "xbrl-growth",
+                "source_type": "xbrl_auto",
+                "metric": "growth_outlook",
+                "direction": "up",
+                "value": 80.0,
+                "unit": "basis_points",
+                "confidence": 0.61,
+                "as_of": "2026-03-10T00:00:00Z",
+                "evidence": [
+                    {
+                        "preview_text": "xbrl",
+                        "full_text": "xbrl",
+                        "source_url": "https://sec",
+                    }
+                ],
+            }
+        ],
+        extract_text_fn=lambda **_kwargs: [
+            {
+                "signal_id": "text-margin",
+                "source_type": "mda",
+                "metric": "margin_outlook",
+                "direction": "down",
+                "value": 60.0,
+                "unit": "basis_points",
+                "confidence": 0.59,
+                "as_of": "2026-03-10T00:00:00Z",
+                "evidence": [
+                    {
+                        "preview_text": "text",
+                        "full_text": "text",
+                        "source_url": "https://sec",
+                    }
+                ],
+            }
+        ],
+    )
 
-    assert payload["financial_reports"] == []
-    assert isinstance(payload["forward_signals"], list)
-    signal_ids = [item.get("signal_id") for item in payload["forward_signals"]]
+    assert signals is not None
+    signal_ids = [signal.signal_id for signal in signals]
     assert "xbrl-growth" in signal_ids
     assert "text-margin" in signal_ids
 
 
-def test_fetch_financial_payload_normalizes_reports_to_canonical_json() -> None:
+def test_fetch_financial_reports_payload_normalizes_reports_to_canonical_json() -> None:
     report_model = _SyntheticFinancialReport(
         base={
             "fiscal_year": {"value": "2025"},
@@ -342,15 +337,14 @@ def test_fetch_financial_payload_normalizes_reports_to_canonical_json() -> None:
     )
 
     with patch(
-        "src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.fetch.provider._fetch_financial_payload",
+        "src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.fetch.provider._fetch_financial_reports_payload",
         return_value={
             "financial_reports": [report_model],
-            "forward_signals": [{"signal_id": "sig-1"}],
             "diagnostics": {"cache": {"cache_hit": False}},
             "quality_gates": {"status": "not_evaluated"},
         },
     ):
-        payload = fetch_financial_payload("AAPL", years=3)
+        payload = fetch_financial_reports_payload("AAPL", years=3)
 
     reports = payload["financial_reports"]
     assert isinstance(reports, list)
@@ -360,12 +354,13 @@ def test_fetch_financial_payload_normalizes_reports_to_canonical_json() -> None:
     assert first["industry_type"] == "Industrial"
     assert first["extension_type"] == "Industrial"
     assert isinstance(first.get("base"), dict)
-    assert payload["forward_signals"] == [{"signal_id": "sig-1"}]
     assert payload["diagnostics"] == {"cache": {"cache_hit": False}}
     assert payload["quality_gates"] == {"status": "not_evaluated"}
 
 
-def test_fetch_financial_payload_rejects_extension_without_extension_type() -> None:
+def test_fetch_financial_reports_payload_rejects_extension_without_extension_type() -> (
+    None
+):
     report_model = _SyntheticFinancialReport(
         base={"fiscal_year": {"value": "2025"}},
         industry_type="Industrial",
@@ -373,14 +368,13 @@ def test_fetch_financial_payload_rejects_extension_without_extension_type() -> N
     )
 
     with patch(
-        "src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.fetch.provider._fetch_financial_payload",
+        "src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.fetch.provider._fetch_financial_reports_payload",
         return_value={
             "financial_reports": [report_model],
-            "forward_signals": [],
         },
     ):
         with pytest.raises(TypeError, match="extension requires extension_type"):
-            fetch_financial_payload("AAPL", years=3)
+            fetch_financial_reports_payload("AAPL", years=3)
 
 
 def test_extract_forward_signals_from_sec_text_logs_focus_diagnostics() -> None:
