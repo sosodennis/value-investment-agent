@@ -9,14 +9,14 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
 
-from src.agents.fundamental.forward_signals.domain.calibration import (  # noqa: E402
+from src.agents.fundamental.market_data.infrastructure.factory import (  # noqa: E402
+    market_data_service,
+)
+from src.agents.fundamental.subdomains.forward_signals.domain.calibration import (  # noqa: E402
     build_forward_signal_calibration_observations,
     fit_forward_signal_calibration_config,
     serialize_observations,
     write_forward_signal_calibration_artifact,
-)
-from src.agents.fundamental.market_data.infrastructure.factory import (  # noqa: E402
-    market_data_service,
 )
 
 
