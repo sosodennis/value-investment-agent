@@ -18,45 +18,50 @@ The probabilistic side of the system is a **LangGraph** workflow that orchestrat
 
 ```mermaid
 graph TD
-    Start([Start]) --> FA[Fundamental Analysis]
-    FA --> FNR[Financial News Research]
-    FNR --> Debate[Debate]
-    Debate --> Executor[Executor]
-    Executor --> Auditor[Auditor]
-    Auditor --> Approval{Approval}
-    Approval -->|Approved| Calc[Calculator]
-    Approval -->|Rejected| End([End])
-    Calc --> End
+    Start([Start]) --> Intent[Intent Extraction]
+    Intent --> FA[Fundamental Analysis]
+    Intent --> FNR[Financial News Research]
+    Intent --> TA[Technical Analysis]
+
+    FA --> Consolidate[Research Consolidation]
+    FNR --> Consolidate
+    TA --> Consolidate
+
+    Consolidate --> Debate[Debate]
+    Debate --> End([End])
 ```
 
 #### Agent Hierarchy
 
-*   **`fundamental_analysis`** (Subgraph): Resolves the ticker, checks financial health, and selects the valuation model.
-    *   `extraction`: Identifies user intent (company and desired model) from the query.
-    *   `searching`: Performs dual-channel search (Yahoo Finance + Web) to find candidates.
-    *   `deciding`: Logic to resolve ambiguity or request clarification.
-    *   `financial_health`: Fetches XBRL data from SEC EDGAR and generates a health report.
-    *   `model_selection`: Selects the appropriate valuation model (e.g., SaaS, Bank) based on industry.
-    *   `clarifying`: Handles Human-in-the-Loop (HITL) interactions for ambiguity resolution.
-*   **`financial_news_research`** (Subgraph): Gathers and analyzes market sentiment.
+*   **`intent_extraction`** (Subgraph): Identifies the user's intent, resolves ambiguity, and locks in the target company.
+    *   `extraction`: Extracts company name, ticker, and analysis goals from the initial query.
+    *   `searching`: Performs web or Yahoo Finance searches to find valid stock tickers if missing.
+    *   `deciding`: Determines if the collected information is sufficient or if user clarification is needed.
+    *   `clarifying`: Handles Human-in-the-Loop (HITL) interactions to resolve ambiguity with the user.
+*   **`fundamental_analysis`** (Subgraph): Fetches financial data and computes intrinsic valuation.
+    *   `financial_health`: Fetches XBRL data from SEC EDGAR and generates a baseline health report.
+    *   `model_selection`: Selects the appropriate valuation model (e.g., SaaS, Bank) based on the company's industry profile.
+    *   `calculation`: Bridges to the deterministic calculation engine to execute the selected financial model.
+*   **`financial_news_research`** (Subgraph): Gathers and analyzes market sentiment in parallel.
     *   `search_node`: Finds relevant news articles across multiple timeframes.
     *   `selector_node`: Filters articles for relevance using an LLM.
     *   `fetch_node`: Retrieves full text content for selected articles in parallel.
     *   `analyst_node`: Performs deep analysis on each article (Sentiment + Key Facts).
     *   `aggregator_node`: Synthesizes all analyses into a final sentiment score and summary.
-*   **`debate`** (Subgraph): Challenges assumptions through multi-agent discourse.
-    *   `debate_aggregator`: Prepares topics for debate based on research.
-    *   `bull`: Argues for the investment case.
-    *   `bear`: Argues against the investment case (risk focus).
-    *   `moderator`: Evaluates arguments and decides the winner/conclusion.
-*   **`executor`** (Node): The "Parameter Hunter". Scans financial documents to extract specific inputs required for the selected model.
-*   **`auditor`** (Node): Validates extracted parameters against logical constraints and flags potential hallucinations.
-*   **`approval`** (Node): A Human-in-the-Loop checkpoint where the user reviews and approves assumptions before calculation.
-*   **`calculator`** (Node): The bridge to the deterministic engine.
+*   **`technical_analysis`** (Subgraph): Extracts technical indicators and price action features.
+    *   `data_fetch`: Retrieves historical price and volume data.
+    *   `fracdiff_compute`: Computes fractional differentiation and other quantitative momentum features.
+    *   `semantic_translate`: Translates raw technical data into an LLM-readable narrative.
+*   **`consolidate_research`** (Node): A synchronization point that aggregates output from Fundamental, News, and Technical agents into a unified context.
+*   **`debate`** (Subgraph): Challenges assumptions through structured, multi-round agent discourse.
+    *   `debate_aggregator`: Prepares topics and context for debate based on consolidated research.
+    *   `fact_extractor`: Pulls out core, undisputed facts to ground the debate.
+    *   `Round 1, 2, 3`: Iterative discourse involving a `bull` (arguing for), `bear` (arguing against), and a `moderator` (evaluating arguments).
+    *   `verdict`: The final synthesized conclusion and investment recommendation.
 
 ### 2. Calculation Engine (The "Math")
 
-The deterministic side is handled by the **`CalculationGraph`** (`src/engine/core.py`).
+The deterministic side is handled by the **`CalculationGraph`** (`src/agents/fundamental/subdomains/core_valuation/domain/engine/core.py`).
 
 *   **Dependency Inference**: It automatically builds a Directed Acyclic Graph (DAG) by inspecting function signatures.
 *   **Topological Execution**: Uses NetworkX to determine the correct order of operations, ensuring variable dependencies (e.g., `revenue` -> `ebit` -> `fcff`) are resolved before calculation.
@@ -66,13 +71,19 @@ The deterministic side is handled by the **`CalculationGraph`** (`src/engine/cor
 
 ### 📊 Valuation Models
 Currently supported models:
+*   **DCF Standard**: Standard Discounted Cash Flow.
+*   **DCF Growth**: Discounted Cash Flow assuming a high-growth phase followed by stable growth.
+*   **EV Multiple**: Enterprise Value Multiple valuation.
+*   **EVA**: Economic Value Added model.
+*   **REIT FFO**: Funds From Operations valuation tailored for Real Estate Investment Trusts.
+*   **Residual Income**: Residual Income valuation model.
 *   **SaaS FCFF**: Free Cash Flow to Firm model tailored for Software-as-a-Service companies.
 *   **Bank DDM**: Dividend Discount Model for valuing financial institutions.
 
 ## 🏗️ Architecture
 
 *   **Frontend**: [Next.js 16](https://nextjs.org/), React 19, TypeScript.
-*   **Backend**: Python, [FastAPI](https://fastapi.tiangolo.com/), [LangGraph](https://langchain-ai.github.io/langgraph/).
+*   **Backend**: Python, [FastAPI](https://fastapi.tiangolo.com/), [LangGraph](https://langchain-ai.github.io/langgraph/). Structured using **Clean Architecture** and **Domain-Driven Design (DDD)** principles to ensure decoupling of core domain logic (e.g., valuation models) from infrastructure and application details.
 *   **Database**: PostgreSQL (for state persistence and checkpointing).
 *   **Infrastructure**: Docker Compose.
 
