@@ -3,6 +3,7 @@ Shared state definitions for the workflow graph.
 Refactored to comply with Engineering Charter v3.1 (TypedDict + Artifact Store).
 """
 
+from collections.abc import Mapping
 from typing import Annotated, NotRequired
 
 from langchain_core.messages import AnyMessage
@@ -32,6 +33,45 @@ def last_value(a: object | None, b: object | None) -> object | None:
 def append_logs(a: list[dict], b: list[dict]) -> list[dict]:
     """Simple list-append reducer for logs."""
     return (a or []) + (b or [])
+
+
+def _is_pandas_frame_or_series(value: object) -> bool:
+    if value is None:
+        return False
+    value_type = type(value)
+    module = getattr(value_type, "__module__", "")
+    name = getattr(value_type, "__name__", "")
+    if module == "pandas.core.frame" and name == "DataFrame":
+        return True
+    if module == "pandas.core.series" and name == "Series":
+        return True
+    return False
+
+
+def find_state_hygiene_violations(
+    value: object,
+    *,
+    path: str = "",
+) -> list[str]:
+    violations: list[str] = []
+    if _is_pandas_frame_or_series(value):
+        violations.append(path or "<root>")
+        return violations
+
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            key_text = str(key)
+            next_path = f"{path}.{key_text}" if path else key_text
+            violations.extend(find_state_hygiene_violations(item, path=next_path))
+        return violations
+
+    if isinstance(value, list | tuple | set):
+        for idx, item in enumerate(value):
+            next_path = f"{path}[{idx}]" if path else f"[{idx}]"
+            violations.extend(find_state_hygiene_violations(item, path=next_path))
+        return violations
+
+    return violations
 
 
 # --- Context Definitions (TypedDict) ---
@@ -124,6 +164,13 @@ class TechnicalAnalysisContext(TypedDict):
 
     price_artifact_id: NotRequired[str | None]
     chart_data_id: NotRequired[str | None]
+    timeseries_bundle_id: NotRequired[str | None]
+    indicator_series_id: NotRequired[str | None]
+    alerts_id: NotRequired[str | None]
+    feature_pack_id: NotRequired[str | None]
+    pattern_pack_id: NotRequired[str | None]
+    fusion_report_id: NotRequired[str | None]
+    verification_report_id: NotRequired[str | None]
     artifact: NotRequired[AgentOutputArtifactPayload | None]
 
 

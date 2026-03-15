@@ -119,88 +119,59 @@ def build_technical_facts(
     facts: list[EvidenceFact] = []
     next_index = start_index
 
-    signal_raw = ta_data.get("signal_state")
-    signal = signal_raw if isinstance(signal_raw, Mapping) else {}
-    direction = _coerce_text(signal.get("direction"))
-    z_score = _coerce_float(signal.get("z_score"))
-    if direction is not None or z_score is not None:
+    direction = _coerce_text(ta_data.get("direction"))
+    risk_level = _coerce_text(ta_data.get("risk_level"))
+    confidence = _coerce_float(ta_data.get("confidence"))
+    if direction is not None or risk_level is not None or confidence is not None:
         facts.append(
             EvidenceFact(
                 fact_id=f"T{next_index:03d}",
                 source_type="technicals",
                 source_weight="HIGH",
                 summary=(
-                    f"Technical signal direction: {direction or 'unknown'} "
-                    f"(Z-Score: {z_score if z_score is not None else 'n/a'})"
+                    f"Technical direction: {direction or 'unknown'}, "
+                    f"risk level: {risk_level or 'n/a'}, "
+                    f"confidence: {confidence if confidence is not None else 'n/a'}"
                 ),
-                value=z_score,
+                value=confidence,
                 provenance=ManualProvenance(
-                    description=(
-                        "Technical Signal (Z-Score Analysis) "
-                        f"from Artifact {ta_artifact_id}"
-                    ),
+                    description=f"Technical summary from Artifact {ta_artifact_id}",
                     author="TechnicalAnalyst",
                 ),
             )
         )
         next_index += 1
 
-    frac_raw = ta_data.get("frac_diff_metrics")
-    frac_metrics = frac_raw if isinstance(frac_raw, Mapping) else {}
-    optimal_d = _coerce_float(frac_metrics.get("optimal_d"))
-    if optimal_d is not None:
+    summary_tags = ta_data.get("summary_tags")
+    if isinstance(summary_tags, list) and summary_tags:
         facts.append(
             EvidenceFact(
                 fact_id=f"T{next_index:03d}",
                 source_type="technicals",
                 source_weight="MEDIUM",
-                summary=f"FracDiff optimal_d: {optimal_d:.4f}",
-                value=optimal_d,
+                summary=f"Technical summary tags: {', '.join([str(tag) for tag in summary_tags])}",
+                value=", ".join([str(tag) for tag in summary_tags]),
                 provenance=ManualProvenance(
-                    description=f"Technical FracDiff metrics from Artifact {ta_artifact_id}",
+                    description=f"Technical tags from Artifact {ta_artifact_id}",
                     author="TechnicalAnalyst",
                 ),
             )
         )
         next_index += 1
 
-    memory_strength = _coerce_text(frac_metrics.get("memory_strength"))
-    if memory_strength is not None:
+    diagnostics_raw = ta_data.get("diagnostics")
+    diagnostics = diagnostics_raw if isinstance(diagnostics_raw, Mapping) else {}
+    degraded_reasons = diagnostics.get("degraded_reasons")
+    if isinstance(degraded_reasons, list) and degraded_reasons:
         facts.append(
             EvidenceFact(
                 fact_id=f"T{next_index:03d}",
                 source_type="technicals",
-                source_weight="MEDIUM",
-                summary=f"Memory strength classification: {memory_strength}",
-                value=memory_strength,
+                source_weight="LOW",
+                summary=f"Technical data degraded: {', '.join([str(reason) for reason in degraded_reasons])}",
+                value=", ".join([str(reason) for reason in degraded_reasons]),
                 provenance=ManualProvenance(
-                    description=f"Technical FracDiff metrics from Artifact {ta_artifact_id}",
-                    author="TechnicalAnalyst",
-                ),
-            )
-        )
-        next_index += 1
-
-    confluence_raw = signal.get("confluence")
-    confluence = confluence_raw if isinstance(confluence_raw, Mapping) else {}
-    confluence_specs = (
-        ("bollinger_state", "Bollinger state"),
-        ("macd_momentum", "MACD momentum"),
-        ("obv_state", "OBV state"),
-    )
-    for key, label in confluence_specs:
-        value = _coerce_text(confluence.get(key))
-        if value is None:
-            continue
-        facts.append(
-            EvidenceFact(
-                fact_id=f"T{next_index:03d}",
-                source_type="technicals",
-                source_weight="MEDIUM",
-                summary=f"{label}: {value}",
-                value=value,
-                provenance=ManualProvenance(
-                    description=f"Technical confluence metrics from Artifact {ta_artifact_id}",
+                    description=f"Technical diagnostics from Artifact {ta_artifact_id}",
                     author="TechnicalAnalyst",
                 ),
             )

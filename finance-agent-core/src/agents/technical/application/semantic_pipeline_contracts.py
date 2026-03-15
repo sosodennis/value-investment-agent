@@ -3,7 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from src.agents.technical.domain.signal_policy import SemanticTagPolicyResult
+from src.agents.technical.subdomains.signal_fusion import SemanticTagPolicyResult
+from src.interface.artifacts.artifact_data_models import (
+    TechnicalVerificationReportArtifactData,
+)
 from src.shared.kernel.types import JSONObject
 
 
@@ -54,3 +57,8 @@ class TechnicalPortLike(Protocol):
         price_artifact_id: str | None,
         chart_artifact_id: str | None,
     ) -> tuple[PriceSeriesDataLike | None, TechnicalChartDataLike | None]: ...
+
+    async def load_verification_report(
+        self,
+        artifact_id: str | None,
+    ) -> TechnicalVerificationReportArtifactData | None: ...

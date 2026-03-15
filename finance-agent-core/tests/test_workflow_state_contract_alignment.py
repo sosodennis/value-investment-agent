@@ -49,6 +49,13 @@ def test_technical_context_contract_is_canonical() -> None:
         "obv",
         "price_artifact_id",
         "chart_data_id",
+        "timeseries_bundle_id",
+        "indicator_series_id",
+        "alerts_id",
+        "feature_pack_id",
+        "pattern_pack_id",
+        "fusion_report_id",
+        "verification_report_id",
         "artifact",
     }
     assert "status" not in keys

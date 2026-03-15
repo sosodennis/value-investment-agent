@@ -6,69 +6,49 @@ from src.interface.artifacts.artifact_model_shared import validate_and_dump
 from src.shared.kernel.types import JSONObject
 
 from .types import (
-    ConfluenceText,
-    FracDiffNumber,
-    MemoryStrength,
-    NormalizedSeriesMap,
+    OptionalConfidenceScore,
     OptionalTechnicalText,
     RiskLevel,
+    SchemaVersion,
     SignalDirection,
-    StatisticalState,
-    StatisticalStrength,
     TechnicalStringList,
     TechnicalText,
-    WindowLength,
-    ZScore,
 )
 
 
-class FracDiffMetricsModel(BaseModel):
+class ArtifactRefsModel(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    optimal_d: FracDiffNumber
-    window_length: WindowLength
-    adf_statistic: FracDiffNumber
-    adf_pvalue: FracDiffNumber
-    memory_strength: MemoryStrength
+    chart_data_id: OptionalTechnicalText = None
+    timeseries_bundle_id: OptionalTechnicalText = None
+    indicator_series_id: OptionalTechnicalText = None
+    alerts_id: OptionalTechnicalText = None
+    feature_pack_id: OptionalTechnicalText = None
+    pattern_pack_id: OptionalTechnicalText = None
+    fusion_report_id: OptionalTechnicalText = None
+    verification_report_id: OptionalTechnicalText = None
 
 
-class ConfluenceEvidenceModel(BaseModel):
+class DiagnosticsModel(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    bollinger_state: ConfluenceText
-    macd_momentum: ConfluenceText
-    obv_state: ConfluenceText
-    statistical_strength: StatisticalStrength
-
-
-class SignalStateModel(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    z_score: ZScore
-    statistical_state: StatisticalState
-    direction: SignalDirection
-    risk_level: RiskLevel
-    confluence: ConfluenceEvidenceModel
-
-
-class RawDataModel(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    price_series: NormalizedSeriesMap = None
-    fracdiff_series: NormalizedSeriesMap = None
-    z_score_series: NormalizedSeriesMap = None
+    is_degraded: bool | None = None
+    degraded_reasons: list[str] | None = None
 
 
 class TechnicalArtifactModel(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
+    schema_version: SchemaVersion
     ticker: TechnicalText
-    timestamp: TechnicalText
-    frac_diff_metrics: FracDiffMetricsModel
-    signal_state: SignalStateModel
-    semantic_tags: TechnicalStringList
+    as_of: TechnicalText
+    direction: SignalDirection
+    risk_level: RiskLevel
+    confidence: OptionalConfidenceScore = None
     llm_interpretation: OptionalTechnicalText = None
-    raw_data: RawDataModel | None = None
+    artifact_refs: ArtifactRefsModel
+    summary_tags: TechnicalStringList
+    diagnostics: DiagnosticsModel | None = None
 
 
 def parse_technical_artifact_model(value: object) -> JSONObject:

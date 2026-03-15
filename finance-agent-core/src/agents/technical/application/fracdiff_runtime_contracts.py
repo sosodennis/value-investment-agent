@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TypeAlias
 
-from src.agents.technical.domain.fracdiff import (
+from src.agents.technical.subdomains.features.domain import (
     BollingerIndicator,
     MacdIndicator,
     ObvIndicator,

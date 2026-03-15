@@ -3,13 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from src.agents.technical.application.ports import (
-    ITechnicalBacktestRuntime,
-    ITechnicalFracdiffRuntime,
     ITechnicalInterpretationProvider,
-    ITechnicalMarketDataProvider,
-)
-from src.agents.technical.application.semantic_backtest_context_service import (
-    assemble_backtest_context,
 )
 from src.agents.technical.application.semantic_finalize_service import (
     assemble_semantic_finalize,
@@ -22,7 +16,10 @@ from src.agents.technical.application.semantic_policy_input_service import (
     build_semantic_policy_input,
     semantic_tags_to_dict,
 )
-from src.agents.technical.domain.signal_policy import (
+from src.agents.technical.application.semantic_verification_context_service import (
+    assemble_verification_context,
+)
+from src.agents.technical.subdomains.signal_fusion import (
     SemanticTagPolicyInput,
     SemanticTagPolicyResult,
 )
@@ -35,23 +32,15 @@ async def execute_semantic_pipeline(
     technical_context: JSONObject,
     assemble_fn: Callable[[SemanticTagPolicyInput], SemanticTagPolicyResult],
     interpretation_provider: ITechnicalInterpretationProvider,
-    fracdiff_runtime: ITechnicalFracdiffRuntime,
-    market_data_provider: ITechnicalMarketDataProvider,
-    backtest_runtime: ITechnicalBacktestRuntime,
     technical_port: TechnicalPortLike,
-    price_artifact_id: str | None,
-    chart_artifact_id: str | None,
+    verification_report_id: str | None,
     build_full_report_payload_fn: Callable[..., JSONObject],
 ) -> SemanticPipelineResult:
     tags_result = assemble_fn(build_semantic_policy_input(technical_context))
 
-    backtest_context_result = await assemble_backtest_context(
+    backtest_context_result = await assemble_verification_context(
         technical_port=technical_port,
-        price_artifact_id=price_artifact_id,
-        chart_artifact_id=chart_artifact_id,
-        fracdiff_runtime=fracdiff_runtime,
-        market_data_provider=market_data_provider,
-        backtest_runtime=backtest_runtime,
+        verification_report_id=verification_report_id,
     )
 
     interpretation_result = await interpretation_provider.generate_interpretation(
@@ -75,7 +64,7 @@ async def execute_semantic_pipeline(
     if backtest_context_result.is_degraded:
         degraded_reasons.append(
             backtest_context_result.failure_code
-            or "TECHNICAL_SEMANTIC_BACKTEST_CONTEXT_FAILED"
+            or "TECHNICAL_VERIFICATION_CONTEXT_FAILED"
         )
     if interpretation_result.is_fallback:
         degraded_reasons.append(

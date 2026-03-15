@@ -10,15 +10,15 @@ from src.agents.technical.application.fracdiff_runtime_contracts import (
     ObvInput,
     StatisticalStrengthInput,
 )
-from src.agents.technical.domain.backtest import (
+from src.agents.technical.interface.semantic_context_formatter_service import (
+    format_backtest_for_llm,
+    format_wfa_for_llm,
+)
+from src.agents.technical.subdomains.verification import (
     BacktestResults,
     CombinedBacktester,
     WalkForwardOptimizer,
     WalkForwardResult,
-)
-from src.agents.technical.interface.semantic_context_formatter_service import (
-    format_backtest_for_llm,
-    format_wfa_for_llm,
 )
 
 

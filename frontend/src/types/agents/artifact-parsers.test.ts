@@ -4,6 +4,14 @@ import {
     parseFundamentalArtifact,
     parseNewsArtifact,
     parseTechnicalArtifact,
+    parseTechnicalAlertsArtifact,
+    parseTechnicalChartData,
+    parseTechnicalFeaturePackArtifact,
+    parseTechnicalFusionReportArtifact,
+    parseTechnicalIndicatorSeriesArtifact,
+    parseTechnicalPatternPackArtifact,
+    parseTechnicalTimeseriesBundleArtifact,
+    parseTechnicalVerificationReportArtifact,
     parseUnknownArtifact,
 } from './artifact-parsers';
 
@@ -313,67 +321,306 @@ describe('artifact parsers', () => {
 
     it('parses technical artifact', () => {
         const parsed = parseTechnicalArtifact({
+            schema_version: 'v2',
             ticker: 'AAPL',
-            timestamp: '2026-02-12T00:00:00Z',
-            frac_diff_metrics: {
-                optimal_d: 0.4,
-                window_length: 120,
-                adf_statistic: -3.2,
-                adf_pvalue: 0.02,
-                memory_strength: 'balanced',
+            as_of: '2026-02-12T00:00:00Z',
+            direction: 'BULLISH_EXTENSION',
+            risk_level: 'low',
+            confidence: 0.78,
+            llm_interpretation: 'Signal aligns across timeframes.',
+            artifact_refs: {
+                feature_pack_id: 'feature-123',
+                alerts_id: 'alerts-789',
+                fusion_report_id: 'fusion-456',
             },
-            signal_state: {
-                z_score: 1.2,
-                statistical_state: 'deviating',
-                direction: 'up',
-                risk_level: 'medium',
-                confluence: {
-                    bollinger_state: 'inside',
-                    macd_momentum: 'positive',
-                    obv_state: 'rising',
-                    statistical_strength: 0.7,
-                },
-            },
-            semantic_tags: ['momentum'],
-            raw_data: {
-                z_score_series: {
-                    '2026-02-10': 1.1,
-                },
+            summary_tags: ['momentum', 'trend'],
+            diagnostics: {
+                is_degraded: true,
+                degraded_reasons: ['HOURLY_DATA_MISSING'],
             },
         });
 
-        expect(parsed.signal_state.risk_level).toBe('medium');
-        expect(parsed.raw_data?.z_score_series?.['2026-02-10']).toBe(1.1);
+        expect(parsed.ticker).toBe('AAPL');
+        expect('schema_version' in parsed).toBe(true);
+        if (!('schema_version' in parsed)) {
+            throw new Error('Expected technical analysis report.');
+        }
+        expect(parsed.risk_level).toBe('low');
+        expect(parsed.artifact_refs.feature_pack_id).toBe('feature-123');
+        expect(parsed.artifact_refs.alerts_id).toBe('alerts-789');
+        expect(parsed.diagnostics?.is_degraded).toBe(true);
+        expect(parsed.summary_tags).toContain('momentum');
     });
 
     it('accepts nullable llm_interpretation in technical artifact', () => {
         const parsed = parseTechnicalArtifact({
+            schema_version: 'v2',
             ticker: 'AAPL',
-            timestamp: '2026-02-12T00:00:00Z',
-            frac_diff_metrics: {
-                optimal_d: 0.4,
-                window_length: 120,
-                adf_statistic: -3.2,
-                adf_pvalue: 0.02,
-                memory_strength: 'balanced',
+            as_of: '2026-02-12T00:00:00Z',
+            direction: 'BULLISH_EXTENSION',
+            risk_level: 'low',
+            artifact_refs: {
+                feature_pack_id: 'feature-123',
             },
-            signal_state: {
-                z_score: 1.2,
-                statistical_state: 'deviating',
-                direction: 'up',
-                risk_level: 'medium',
-                confluence: {
-                    bollinger_state: 'inside',
-                    macd_momentum: 'positive',
-                    obv_state: 'rising',
-                    statistical_strength: 0.7,
-                },
-            },
-            semantic_tags: ['momentum'],
+            summary_tags: ['momentum'],
             llm_interpretation: null,
         });
 
         expect(parsed.llm_interpretation).toBeUndefined();
+    });
+
+    it('parses technical chart data artifact', () => {
+        const parsed = parseTechnicalChartData({
+            fracdiff_series: {
+                '2026-02-10': 0.12,
+                '2026-02-11': null,
+            },
+            z_score_series: {
+                '2026-02-10': 1.2,
+                '2026-02-11': -0.5,
+            },
+            indicators: {
+                bollinger: { upper: 2.1 },
+            },
+        });
+
+        expect(parsed.fracdiff_series['2026-02-10']).toBe(0.12);
+        expect(parsed.fracdiff_series['2026-02-11']).toBeNull();
+        expect(parsed.z_score_series['2026-02-11']).toBe(-0.5);
+        expect(parsed.indicators.bollinger).toEqual({ upper: 2.1 });
+    });
+
+    it('parses technical timeseries bundle artifact', () => {
+        const parsed = parseTechnicalTimeseriesBundleArtifact({
+            ticker: 'AAPL',
+            as_of: '2026-02-12T00:00:00Z',
+            frames: {
+                daily: {
+                    timeframe: 'daily',
+                    start: '2026-02-01T00:00:00Z',
+                    end: '2026-02-12T00:00:00Z',
+                    open_series: {
+                        '2026-02-10': 180.5,
+                        '2026-02-11': null,
+                    },
+                    high_series: {
+                        '2026-02-10': 184.1,
+                        '2026-02-11': 183.2,
+                    },
+                    low_series: {
+                        '2026-02-10': 178.9,
+                        '2026-02-11': 179.4,
+                    },
+                    close_series: {
+                        '2026-02-10': 182.4,
+                        '2026-02-11': 181.2,
+                    },
+                    price_series: {
+                        '2026-02-10': 182.4,
+                        '2026-02-11': 181.2,
+                    },
+                    volume_series: {
+                        '2026-02-10': 1223000,
+                        '2026-02-11': 1104500,
+                    },
+                    timezone: 'UTC',
+                    metadata: {
+                        source: 'yfinance',
+                    },
+                },
+            },
+            degraded_reasons: ['HOURLY_DATA_MISSING'],
+        });
+
+        expect(parsed.ticker).toBe('AAPL');
+        expect(parsed.frames.daily.open_series['2026-02-10']).toBe(180.5);
+        expect(parsed.frames.daily.open_series['2026-02-11']).toBeNull();
+        expect(parsed.frames.daily.timezone).toBe('UTC');
+        expect(parsed.degraded_reasons).toContain('HOURLY_DATA_MISSING');
+    });
+
+    it('parses technical indicator series artifact', () => {
+        const parsed = parseTechnicalIndicatorSeriesArtifact({
+            ticker: 'AAPL',
+            as_of: '2026-02-12T00:00:00Z',
+            timeframes: {
+                daily: {
+                    timeframe: '1d',
+                    start: '2026-02-01T00:00:00Z',
+                    end: '2026-02-12T00:00:00Z',
+                    series: {
+                        RSI_14: {
+                            '2026-02-10': 45.0,
+                            '2026-02-11': null,
+                        },
+                        MACD: {
+                            '2026-02-10': 1.2,
+                        },
+                    },
+                    timezone: 'UTC',
+                    metadata: { source_points: 2, downsample_step: 1 },
+                },
+            },
+            degraded_reasons: ['QUANT_SKIPPED'],
+        });
+
+        expect(parsed.ticker).toBe('AAPL');
+        expect(parsed.timeframes.daily.series.RSI_14['2026-02-11']).toBeNull();
+        expect(parsed.timeframes.daily.timezone).toBe('UTC');
+        expect(parsed.degraded_reasons).toContain('QUANT_SKIPPED');
+    });
+
+    it('parses technical feature pack artifact', () => {
+        const parsed = parseTechnicalFeaturePackArtifact({
+            ticker: 'AAPL',
+            as_of: '2026-02-12T00:00:00Z',
+            timeframes: {
+                daily: {
+                    classic_indicators: {
+                        rsi: { name: 'RSI', value: 45.2, state: 'neutral' },
+                    },
+                    quant_features: {
+                        fracdiff_rsi: { name: 'FracDiff RSI', value: 0.12 },
+                    },
+                },
+            },
+            degraded_reasons: ['HOURLY_DATA_MISSING'],
+        });
+
+        expect(parsed.ticker).toBe('AAPL');
+        expect(parsed.timeframes.daily.classic_indicators.rsi.name).toBe('RSI');
+        expect(parsed.degraded_reasons).toContain('HOURLY_DATA_MISSING');
+    });
+
+    it('parses technical pattern pack artifact', () => {
+        const parsed = parseTechnicalPatternPackArtifact({
+            ticker: 'AAPL',
+            as_of: '2026-02-12T00:00:00Z',
+            timeframes: {
+                daily: {
+                    support_levels: [
+                        { price: 120.5, strength: 0.8, touches: 3, label: 's1' },
+                    ],
+                    resistance_levels: [
+                        { price: 135.2, strength: 0.6, touches: 2, label: 'r1' },
+                    ],
+                    breakouts: [{ name: 'breakout_up', confidence: 0.7 }],
+                    trendlines: [{ name: 'uptrend', confidence: 0.65 }],
+                    pattern_flags: [{ name: 'higher_lows', confidence: 0.55 }],
+                    confidence_scores: { support_confidence: 0.7 },
+                },
+            },
+            degraded_reasons: ['WEEKLY_DATA_MISSING'],
+        });
+
+        expect(parsed.ticker).toBe('AAPL');
+        expect(parsed.timeframes.daily.support_levels[0]?.price).toBe(120.5);
+        expect(parsed.timeframes.daily.breakouts[0]?.name).toBe('breakout_up');
+        expect(parsed.degraded_reasons).toContain('WEEKLY_DATA_MISSING');
+    });
+
+    it('parses technical alerts artifact', () => {
+        const parsed = parseTechnicalAlertsArtifact({
+            ticker: 'AAPL',
+            as_of: '2026-02-12T00:00:00Z',
+            alerts: [
+                {
+                    code: 'RSI_OVERBOUGHT',
+                    severity: 'warning',
+                    timeframe: '1d',
+                    title: 'RSI Overbought',
+                    message: 'RSI above threshold',
+                    value: 72.4,
+                    threshold: 70,
+                    direction: 'above',
+                    triggered_at: '2026-02-12T00:00:00Z',
+                    source: 'indicator_series',
+                },
+            ],
+            summary: {
+                total: 1,
+                severity_counts: { warning: 1, critical: 0, info: 0 },
+                generated_at: '2026-02-12T00:00:00Z',
+            },
+            degraded_reasons: ['PATTERN_PACK_MISSING'],
+            source_artifacts: { indicator_series_id: 'series-1' },
+        });
+
+        expect(parsed.ticker).toBe('AAPL');
+        expect(parsed.alerts).toHaveLength(1);
+        expect(parsed.alerts[0]?.severity).toBe('warning');
+        expect(parsed.summary?.total).toBe(1);
+        expect(parsed.degraded_reasons).toContain('PATTERN_PACK_MISSING');
+        expect(parsed.source_artifacts?.indicator_series_id).toBe('series-1');
+    });
+
+    it('parses technical fusion report artifact', () => {
+        const parsed = parseTechnicalFusionReportArtifact({
+            schema_version: '1.0',
+            ticker: 'AAPL',
+            as_of: '2026-02-12T00:00:00Z',
+            direction: 'BULLISH_EXTENSION',
+            risk_level: 'low',
+            confidence: 0.62,
+            confluence_matrix: {
+                daily: {
+                    classic: 'bullish',
+                    quant: 'neutral',
+                    pattern: 'bullish',
+                    classic_score: 0.9,
+                    quant_score: 0.1,
+                    pattern_score: 0.6,
+                },
+            },
+            conflict_reasons: ['daily:CLASSIC_BULLISH_VS_QUANT_NEUTRAL'],
+            alignment_report: { anchor_timeframe: 'daily' },
+            source_artifacts: { feature_pack_id: 'feature-123' },
+            degraded_reasons: ['DAILY_PATTERN_FRAME_MISSING'],
+        });
+
+        expect(parsed.ticker).toBe('AAPL');
+        expect(parsed.risk_level).toBe('low');
+        expect(parsed.confluence_matrix?.daily?.classic).toBe('bullish');
+        expect(parsed.conflict_reasons).toContain('daily:CLASSIC_BULLISH_VS_QUANT_NEUTRAL');
+        expect(parsed.degraded_reasons).toContain('DAILY_PATTERN_FRAME_MISSING');
+    });
+
+    it('parses technical verification report artifact', () => {
+        const parsed = parseTechnicalVerificationReportArtifact({
+            schema_version: '1.0',
+            ticker: 'AAPL',
+            as_of: '2026-02-12T00:00:00Z',
+            backtest_summary: {
+                strategy_name: 'baseline',
+                win_rate: 0.55,
+                profit_factor: 1.4,
+                sharpe_ratio: 0.8,
+                max_drawdown: 0.12,
+                total_trades: 42,
+            },
+            wfa_summary: {
+                wfa_sharpe: 0.5,
+                wfe_ratio: 0.7,
+                wfa_max_drawdown: 0.15,
+                period_count: 6,
+            },
+            robustness_flags: ['LOW_SAMPLE'],
+            baseline_gates: {
+                min_trades: true,
+                sharpe_threshold: false,
+            },
+            source_artifacts: {
+                fusion_report_id: 'fusion-123',
+            },
+            degraded_reasons: ['WFA_DATA_MISSING'],
+        });
+
+        expect(parsed.ticker).toBe('AAPL');
+        expect(parsed.backtest_summary?.win_rate).toBe(0.55);
+        expect(parsed.wfa_summary?.period_count).toBe(6);
+        expect(parsed.robustness_flags).toContain('LOW_SAMPLE');
+        expect(parsed.baseline_gates?.min_trades).toBe(true);
+        expect(parsed.degraded_reasons).toContain('WFA_DATA_MISSING');
     });
 
     it('rejects non-json value for unknown artifact parser', () => {

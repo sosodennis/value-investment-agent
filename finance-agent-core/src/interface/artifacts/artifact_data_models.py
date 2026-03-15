@@ -53,6 +53,192 @@ class TechnicalChartArtifactData(BaseModel):
     indicators: dict[str, object]
 
 
+class TechnicalTimeseriesFrameData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    timeframe: str
+    start: str
+    end: str
+    open_series: dict[str, float | None]
+    high_series: dict[str, float | None]
+    low_series: dict[str, float | None]
+    close_series: dict[str, float | None]
+    price_series: dict[str, float | None]
+    volume_series: dict[str, float | None]
+    timezone: str | None = None
+    metadata: dict[str, object] | None = None
+
+
+class TechnicalTimeseriesBundleArtifactData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ticker: str
+    as_of: str
+    frames: dict[str, TechnicalTimeseriesFrameData]
+    degraded_reasons: list[str] | None = None
+
+
+class TechnicalIndicatorSeriesFrameData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    timeframe: str
+    start: str
+    end: str
+    series: dict[str, dict[str, float | None]]
+    timezone: str | None = None
+    metadata: dict[str, object] | None = None
+
+
+class TechnicalIndicatorSeriesArtifactData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ticker: str
+    as_of: str
+    timeframes: dict[str, TechnicalIndicatorSeriesFrameData]
+    degraded_reasons: list[str] | None = None
+
+
+class TechnicalAlertSignalData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+    severity: Literal["info", "warning", "critical"]
+    timeframe: str
+    title: str
+    message: str | None = None
+    value: float | None = None
+    threshold: float | None = None
+    direction: str | None = None
+    triggered_at: str | None = None
+    source: str | None = None
+    metadata: dict[str, object] | None = None
+
+
+class TechnicalAlertsArtifactData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ticker: str
+    as_of: str
+    alerts: list[TechnicalAlertSignalData]
+    summary: dict[str, object] | None = None
+    degraded_reasons: list[str] | None = None
+    source_artifacts: dict[str, str | None] | None = None
+
+
+class TechnicalFeatureIndicatorData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    value: float | None
+    state: str | None = None
+    metadata: dict[str, object] | None = None
+
+
+class TechnicalFeatureFrameData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    classic_indicators: dict[str, TechnicalFeatureIndicatorData]
+    quant_features: dict[str, TechnicalFeatureIndicatorData]
+
+
+class TechnicalFeaturePackArtifactData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ticker: str
+    as_of: str
+    timeframes: dict[str, TechnicalFeatureFrameData]
+    feature_summary: dict[str, object] | None = None
+    degraded_reasons: list[str] | None = None
+
+
+class TechnicalPatternLevelData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    price: float
+    strength: float | None = None
+    touches: int | None = None
+    label: str | None = None
+
+
+class TechnicalPatternFlagData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    confidence: float | None = None
+    notes: str | None = None
+
+
+class TechnicalPatternFrameData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    support_levels: list[TechnicalPatternLevelData]
+    resistance_levels: list[TechnicalPatternLevelData]
+    breakouts: list[TechnicalPatternFlagData]
+    trendlines: list[TechnicalPatternFlagData]
+    pattern_flags: list[TechnicalPatternFlagData]
+    confidence_scores: dict[str, float] = {}
+
+
+class TechnicalPatternPackArtifactData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ticker: str
+    as_of: str
+    timeframes: dict[str, TechnicalPatternFrameData]
+    pattern_summary: dict[str, object] | None = None
+    degraded_reasons: list[str] | None = None
+
+
+class TechnicalFusionReportArtifactData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: str
+    ticker: str
+    as_of: str
+    direction: str
+    risk_level: str
+    confidence: float | None = None
+    confluence_matrix: dict[str, dict[str, object]] | None = None
+    conflict_reasons: list[str] | None = None
+    alignment_report: dict[str, object] | None = None
+    source_artifacts: dict[str, str | None] | None = None
+    degraded_reasons: list[str] | None = None
+
+
+class TechnicalBacktestSummaryData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    strategy_name: str | None = None
+    win_rate: float | None = None
+    profit_factor: float | None = None
+    sharpe_ratio: float | None = None
+    max_drawdown: float | None = None
+    total_trades: int | None = None
+
+
+class TechnicalWfaSummaryData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    wfa_sharpe: float | None = None
+    wfe_ratio: float | None = None
+    wfa_max_drawdown: float | None = None
+    period_count: int | None = None
+
+
+class TechnicalVerificationReportArtifactData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: str
+    ticker: str
+    as_of: str
+    backtest_summary: TechnicalBacktestSummaryData | None = None
+    wfa_summary: TechnicalWfaSummaryData | None = None
+    robustness_flags: list[str] | None = None
+    baseline_gates: dict[str, object] | None = None
+    source_artifacts: dict[str, str | None] | None = None
+    degraded_reasons: list[str] | None = None
+
+
 class SearchResultsArtifactData(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

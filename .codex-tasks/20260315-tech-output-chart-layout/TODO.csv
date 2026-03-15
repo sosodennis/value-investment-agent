@@ -1,0 +1,4 @@
+id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
+1,Remove chart show/hide toggles and gating,DONE,"No showAdvanced state or Show/Hide chart UI; chart artifacts fetch without gating","rg -n \"showAdvanced|Show Charts|Hide Charts|Enable charts\" /Users/denniswong/Desktop/Project/value-investment-agent/frontend/src/components/agent-outputs/TechnicalAnalysisOutput.tsx || true","2026-03-15 08:14",0,
+2,Align Classic + Fracdiff panels in same row,DONE,"Classic and Fracdiff panels share a desktop row and stack on small screens","rg -n \"Classic Indicator Panels|Fracdiff Panel\" /Users/denniswong/Desktop/Project/value-investment-agent/frontend/src/components/agent-outputs/TechnicalAnalysisOutput.tsx","2026-03-15 08:14",0,
+3,Validation pass,DONE,"Typecheck passes or explicitly SKIP with reason","cd /Users/denniswong/Desktop/Project/value-investment-agent/frontend && npm run typecheck","2026-03-15 08:15",0,

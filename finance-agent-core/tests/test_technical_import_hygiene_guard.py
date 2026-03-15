@@ -65,8 +65,13 @@ def test_no_legacy_generic_technical_imports() -> None:
         "src.agents.technical.domain.services",
         "src.agents.technical.domain.policies",
         "src.agents.technical.domain.prompt_builder",
+        "src.agents.technical.domain.backtest",
+        "src.agents.technical.domain.fracdiff",
+        "src.agents.technical.domain.signal_policy",
         "src.agents.technical.application.semantic_service",
         "src.agents.technical.application.semantic_context_formatter_service",
+        "src.agents.technical.infrastructure",
+        "src.agents.technical.infrastructure.market_data",
     ]
 
     violations: list[str] = []
@@ -154,6 +159,53 @@ def test_no_legacy_generic_technical_module_files() -> None:
         / "technical"
         / "data"
         / "__init__.py",
+        repo_root
+        / "finance-agent-core"
+        / "src"
+        / "agents"
+        / "technical"
+        / "infrastructure"
+        / "__init__.py",
+        repo_root
+        / "finance-agent-core"
+        / "src"
+        / "agents"
+        / "technical"
+        / "infrastructure"
+        / "artifacts"
+        / "technical_artifact_repository.py",
+        repo_root
+        / "finance-agent-core"
+        / "src"
+        / "agents"
+        / "technical"
+        / "infrastructure"
+        / "llm"
+        / "technical_interpretation_provider.py",
+        repo_root
+        / "finance-agent-core"
+        / "src"
+        / "agents"
+        / "technical"
+        / "infrastructure"
+        / "market_data"
+        / "yahoo_market_data_provider.py",
+        repo_root
+        / "finance-agent-core"
+        / "src"
+        / "agents"
+        / "technical"
+        / "infrastructure"
+        / "market_data"
+        / "yahoo_ohlcv_provider.py",
+        repo_root
+        / "finance-agent-core"
+        / "src"
+        / "agents"
+        / "technical"
+        / "infrastructure"
+        / "market_data"
+        / "yahoo_risk_free_rate_provider.py",
     ]
 
     existing = [path for path in banned_paths if path.exists()]

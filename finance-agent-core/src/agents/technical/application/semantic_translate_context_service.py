@@ -14,8 +14,7 @@ from src.shared.kernel.types import JSONObject
 class SemanticTranslateContext:
     ticker: str
     technical_context: JSONObject
-    price_artifact_id: str | None
-    chart_artifact_id: str | None
+    verification_report_id: str | None
 
 
 @dataclass(frozen=True)
@@ -42,20 +41,11 @@ def resolve_semantic_translate_context(
         )
 
     technical_state = technical_state_from_state(state)
-    if technical_state.optimal_d is None or technical_state.z_score_latest is None:
-        return None, SemanticTranslateContextError(
-            event="technical_semantic_translate_missing_metrics",
-            log_message="technical semantic translation failed due to missing fracdiff metrics",
-            error_code="TECHNICAL_SEMANTIC_METRICS_MISSING",
-            user_message="No FracDiff metrics available for translation",
-        )
-
     return (
         SemanticTranslateContext(
             ticker=ticker,
             technical_context=dict(ctx),
-            price_artifact_id=technical_state.price_artifact_id,
-            chart_artifact_id=technical_state.chart_data_id,
+            verification_report_id=technical_state.verification_report_id,
         ),
         None,
     )

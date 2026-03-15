@@ -8,6 +8,13 @@ from dataclasses import dataclass
 class TechnicalStateContext:
     price_artifact_id: str | None
     chart_data_id: str | None
+    timeseries_bundle_id: str | None
+    indicator_series_id: str | None
+    alerts_id: str | None
+    feature_pack_id: str | None
+    pattern_pack_id: str | None
+    fusion_report_id: str | None
+    verification_report_id: str | None
     optimal_d: float | None
     z_score_latest: float | None
 
@@ -41,6 +48,19 @@ def technical_state_from_state(state: Mapping[str, object]) -> TechnicalStateCon
             technical_ctx.get("price_artifact_id")
         ),
         chart_data_id=_read_non_empty_string(technical_ctx.get("chart_data_id")),
+        timeseries_bundle_id=_read_non_empty_string(
+            technical_ctx.get("timeseries_bundle_id")
+        ),
+        indicator_series_id=_read_non_empty_string(
+            technical_ctx.get("indicator_series_id")
+        ),
+        alerts_id=_read_non_empty_string(technical_ctx.get("alerts_id")),
+        feature_pack_id=_read_non_empty_string(technical_ctx.get("feature_pack_id")),
+        pattern_pack_id=_read_non_empty_string(technical_ctx.get("pattern_pack_id")),
+        fusion_report_id=_read_non_empty_string(technical_ctx.get("fusion_report_id")),
+        verification_report_id=_read_non_empty_string(
+            technical_ctx.get("verification_report_id")
+        ),
         optimal_d=_read_optional_number(technical_ctx.get("optimal_d")),
         z_score_latest=_read_optional_number(technical_ctx.get("z_score_latest")),
     )

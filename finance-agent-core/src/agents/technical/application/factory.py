@@ -9,19 +9,27 @@ from src.agents.technical.application.orchestrator import (
 )
 from src.agents.technical.application.ports import (
     ITechnicalArtifactRepository,
-    ITechnicalBacktestRuntime,
-    ITechnicalFracdiffRuntime,
     ITechnicalInterpretationProvider,
-    ITechnicalMarketDataProvider,
-)
-from src.agents.technical.domain.signal_policy import (
-    SemanticTagPolicyInput,
-    SemanticTagPolicyResult,
 )
 from src.agents.technical.interface.preview_projection_service import (
     summarize_ta_for_preview,
 )
 from src.agents.technical.interface.serializers import build_full_report_payload
+from src.agents.technical.subdomains.alerts import AlertRuntimeService
+from src.agents.technical.subdomains.features import (
+    FeatureRuntimeService,
+    IndicatorSeriesRuntimeService,
+)
+from src.agents.technical.subdomains.market_data.application.ports import (
+    IMarketDataProvider,
+)
+from src.agents.technical.subdomains.patterns import PatternRuntimeService
+from src.agents.technical.subdomains.signal_fusion import (
+    FusionRuntimeService,
+    SemanticTagPolicyInput,
+    SemanticTagPolicyResult,
+)
+from src.agents.technical.subdomains.verification import VerificationRuntimeService
 from src.interface.events.schemas import ArtifactReference, build_artifact_payload
 from src.shared.kernel.contracts import (
     ARTIFACT_KIND_TA_FULL_REPORT,
@@ -69,10 +77,14 @@ def build_technical_orchestrator(
 
 @dataclass(frozen=True)
 class TechnicalWorkflowDependencies:
-    market_data_provider: ITechnicalMarketDataProvider
+    market_data_provider: IMarketDataProvider
     interpretation_provider: ITechnicalInterpretationProvider
-    backtest_runtime: ITechnicalBacktestRuntime
-    fracdiff_runtime: ITechnicalFracdiffRuntime
+    feature_runtime: FeatureRuntimeService
+    indicator_series_runtime: IndicatorSeriesRuntimeService
+    alert_runtime: AlertRuntimeService
+    pattern_runtime: PatternRuntimeService
+    fusion_runtime: FusionRuntimeService
+    verification_runtime: VerificationRuntimeService
     assemble_semantic_tags_fn: Callable[
         [SemanticTagPolicyInput], SemanticTagPolicyResult
     ]
@@ -90,12 +102,45 @@ class TechnicalWorkflowRunner:
             market_data_provider=self.deps.market_data_provider,
         )
 
-    async def run_fracdiff_compute(
+    async def run_feature_compute(
         self, state: Mapping[str, object]
     ) -> TechnicalNodeResult:
-        return await self.orchestrator.run_fracdiff_compute(
+        return await self.orchestrator.run_feature_compute(
             state,
-            fracdiff_runtime=self.deps.fracdiff_runtime,
+            feature_runtime=self.deps.feature_runtime,
+            indicator_series_runtime=self.deps.indicator_series_runtime,
+        )
+
+    async def run_pattern_compute(
+        self, state: Mapping[str, object]
+    ) -> TechnicalNodeResult:
+        return await self.orchestrator.run_pattern_compute(
+            state,
+            pattern_runtime=self.deps.pattern_runtime,
+        )
+
+    async def run_alerts_compute(
+        self, state: Mapping[str, object]
+    ) -> TechnicalNodeResult:
+        return await self.orchestrator.run_alerts_compute(
+            state,
+            alert_runtime=self.deps.alert_runtime,
+        )
+
+    async def run_fusion_compute(
+        self, state: Mapping[str, object]
+    ) -> TechnicalNodeResult:
+        return await self.orchestrator.run_fusion_compute(
+            state,
+            fusion_runtime=self.deps.fusion_runtime,
+        )
+
+    async def run_verification_compute(
+        self, state: Mapping[str, object]
+    ) -> TechnicalNodeResult:
+        return await self.orchestrator.run_verification_compute(
+            state,
+            verification_runtime=self.deps.verification_runtime,
         )
 
     async def run_semantic_translate(
@@ -105,10 +150,7 @@ class TechnicalWorkflowRunner:
             state,
             assemble_fn=self.deps.assemble_semantic_tags_fn,
             build_full_report_payload_fn=self.deps.build_full_report_payload_fn,
-            fracdiff_runtime=self.deps.fracdiff_runtime,
-            market_data_provider=self.deps.market_data_provider,
             interpretation_provider=self.deps.interpretation_provider,
-            backtest_runtime=self.deps.backtest_runtime,
         )
 
 

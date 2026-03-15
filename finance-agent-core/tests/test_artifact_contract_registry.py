@@ -159,28 +159,22 @@ def test_parse_artifact_data_json_for_technical_report() -> None:
     parsed = parse_artifact_data_json(
         ARTIFACT_KIND_TA_FULL_REPORT,
         {
+            "schema_version": "2.0",
             "ticker": "AAPL",
-            "timestamp": "2026-01-01T00:00:00+00:00",
-            "frac_diff_metrics": {
-                "optimal_d": 0.4,
-                "window_length": 120,
-                "adf_statistic": -3.1,
-                "adf_pvalue": 0.03,
-                "memory_strength": "balanced",
+            "as_of": "2026-01-01T00:00:00+00:00",
+            "direction": "BULLISH_EXTENSION",
+            "risk_level": "medium",
+            "confidence": 0.55,
+            "artifact_refs": {
+                "chart_data_id": "chart-1",
+                "timeseries_bundle_id": "bundle-1",
+                "feature_pack_id": "feature-1",
+                "pattern_pack_id": "pattern-1",
+                "fusion_report_id": "fusion-1",
+                "verification_report_id": "verification-1",
             },
-            "signal_state": {
-                "z_score": 1.2,
-                "statistical_state": "deviating",
-                "direction": "bullish",
-                "risk_level": "medium",
-                "confluence": {
-                    "bollinger_state": "upper_band_touch",
-                    "macd_momentum": "positive",
-                    "obv_state": "accumulation",
-                    "statistical_strength": 0.7,
-                },
-            },
-            "semantic_tags": ["mean-reversion"],
+            "summary_tags": ["mean-reversion"],
+            "diagnostics": {"is_degraded": False, "degraded_reasons": []},
         },
         context="unit-test",
     )

@@ -1,6 +1,14 @@
 from __future__ import annotations
 
-from src.agents.technical.domain.backtest import BacktestResults, WalkForwardResult
+from src.agents.technical.subdomains.verification import (
+    BacktestResults,
+    WalkForwardResult,
+)
+from src.interface.artifacts.artifact_data_models import (
+    TechnicalBacktestSummaryData,
+    TechnicalVerificationReportArtifactData,
+    TechnicalWfaSummaryData,
+)
 
 
 def format_backtest_for_llm(results: BacktestResults, min_trades: int = 3) -> str:
@@ -90,3 +98,103 @@ I simulated realistic adaptive trading by re-selecting strategies quarterly base
 
 (Context: WFE > 0.7 is excellent, 0.5-0.7 is acceptable, < 0.5 suggests overfitting risk.)
 """
+
+
+def format_verification_backtest_summary_for_llm(
+    report: TechnicalVerificationReportArtifactData,
+) -> str:
+    summary = report.backtest_summary
+    gate = report.baseline_gates or {}
+    status = str(gate.get("status") or "unknown").upper()
+    blocking = gate.get("blocking_count", 0)
+    warnings = gate.get("warning_count", 0)
+    issues = gate.get("issues", [])
+    issue_codes = _extract_issue_codes(issues)
+
+    lines = [
+        "[Statistical Verification Summary]",
+        f"Baseline Gate: {status} (blocking {blocking}, warnings {warnings})",
+    ]
+
+    summary_lines = _format_backtest_summary_lines(summary)
+    lines.extend(summary_lines)
+
+    if issue_codes:
+        lines.append(f"Issues: {', '.join(issue_codes)}")
+    if report.robustness_flags:
+        lines.append(f"Robustness Flags: {', '.join(report.robustness_flags)}")
+    if report.degraded_reasons:
+        lines.append(f"Caveats: {', '.join(report.degraded_reasons)}")
+
+    return "\n".join(lines)
+
+
+def format_verification_wfa_summary_for_llm(
+    report: TechnicalVerificationReportArtifactData,
+) -> str:
+    summary = report.wfa_summary
+    if summary is None:
+        return ""
+    lines = ["[Walk-Forward Summary]"]
+    lines.extend(_format_wfa_summary_lines(summary))
+    return "\n".join(lines)
+
+
+def _format_backtest_summary_lines(
+    summary: TechnicalBacktestSummaryData | None,
+) -> list[str]:
+    if summary is None:
+        return ["No backtest summary available for this asset."]
+
+    trade_count = (
+        str(summary.total_trades) if isinstance(summary.total_trades, int) else "N/A"
+    )
+    win_rate = _format_pct(summary.win_rate)
+    profit_factor = _format_float(summary.profit_factor)
+    sharpe = _format_float(summary.sharpe_ratio)
+    drawdown = _format_pct(summary.max_drawdown)
+    strategy = summary.strategy_name or "N/A"
+
+    return [
+        f"Strategy: {strategy}",
+        f"Win Rate: {win_rate} | Profit Factor: {profit_factor} | Sharpe: {sharpe}",
+        f"Max Drawdown: {drawdown} | Total Trades: {trade_count}",
+    ]
+
+
+def _format_wfa_summary_lines(summary: TechnicalWfaSummaryData) -> list[str]:
+    wfa_sharpe = _format_float(summary.wfa_sharpe)
+    wfe = _format_float(summary.wfe_ratio)
+    drawdown = _format_pct(summary.wfa_max_drawdown)
+    periods = (
+        str(summary.period_count) if isinstance(summary.period_count, int) else "N/A"
+    )
+    return [
+        f"WFA Sharpe: {wfa_sharpe} | WFE Ratio: {wfe}",
+        f"WFA Max Drawdown: {drawdown} | Periods: {periods}",
+    ]
+
+
+def _format_pct(value: float | None) -> str:
+    if not isinstance(value, int | float):
+        return "N/A"
+    return f"{value * 100:.1f}%"
+
+
+def _format_float(value: float | None) -> str:
+    if not isinstance(value, int | float):
+        return "N/A"
+    return f"{value:.2f}"
+
+
+def _extract_issue_codes(issues: object) -> list[str]:
+    if not isinstance(issues, list):
+        return []
+    codes: list[str] = []
+    for issue in issues:
+        if not isinstance(issue, dict):
+            continue
+        code = issue.get("code")
+        if isinstance(code, str) and code:
+            codes.append(code)
+    return codes

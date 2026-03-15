@@ -77,27 +77,24 @@ def compress_ta_data(ta_output: JSONObject | None) -> JSONObject | None:
     if not ta_output:
         return None
 
-    signal_state = _mapping_or_empty(ta_output.get("signal_state"))
-    frac_diff = _mapping_or_empty(ta_output.get("frac_diff_metrics"))
-    semantic_tags = ta_output.get("semantic_tags")
+    artifact_refs = _mapping_or_empty(ta_output.get("artifact_refs"))
+    diagnostics = _mapping_or_empty(ta_output.get("diagnostics"))
+    summary_tags = ta_output.get("summary_tags")
 
     return {
         "ticker": _string_or(ta_output.get("ticker"), default=""),
-        "timestamp": _string_or(ta_output.get("timestamp"), default=""),
+        "as_of": _string_or(ta_output.get("as_of"), default=""),
         "signal_summary": {
-            "z_score": signal_state.get("z_score"),
-            "direction": _string_or(signal_state.get("direction"), default=""),
-            "risk_level": _string_or(signal_state.get("risk_level"), default=""),
-            "statistical_state": _string_or(
-                signal_state.get("statistical_state"),
-                default="",
-            ),
+            "direction": _string_or(ta_output.get("direction"), default=""),
+            "risk_level": _string_or(ta_output.get("risk_level"), default=""),
+            "confidence": ta_output.get("confidence"),
         },
-        "memory_metrics": {
-            "optimal_d": frac_diff.get("optimal_d"),
-            "memory_strength": _string_or(frac_diff.get("memory_strength"), default=""),
+        "summary_tags": summary_tags if isinstance(summary_tags, list) else [],
+        "diagnostics": {
+            "is_degraded": diagnostics.get("is_degraded"),
+            "degraded_reasons": diagnostics.get("degraded_reasons"),
         },
-        "semantic_tags": semantic_tags if isinstance(semantic_tags, list) else [],
+        "artifact_refs": artifact_refs,
         "interpretation": _string_or(ta_output.get("llm_interpretation"), default=""),
     }
 

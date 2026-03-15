@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.agents.technical.interface.formatters import format_ta_preview
+from src.agents.technical.interface.preview_formatter_service import format_ta_preview
 from src.shared.kernel.types import JSONObject
 
 

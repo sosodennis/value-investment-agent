@@ -89,6 +89,16 @@ def _parse_string_list(value: object) -> list[str]:
     return [to_string(item, "technical.semantic_tags[]") for item in value]
 
 
+def _parse_schema_version(value: object) -> str:
+    return to_string(value, "technical.schema_version")
+
+
+def _parse_optional_confidence(value: object) -> float | None:
+    if value is None:
+        return None
+    return to_number(value, "technical.confidence")
+
+
 FracDiffNumber: TypeAlias = Annotated[float, BeforeValidator(_parse_fracdiff_number)]
 WindowLength: TypeAlias = Annotated[int, BeforeValidator(_parse_window_length)]
 MemoryStrength: TypeAlias = Annotated[
@@ -121,6 +131,11 @@ TechnicalText: TypeAlias = Annotated[str, BeforeValidator(_parse_required_text)]
 OptionalTechnicalText: TypeAlias = Annotated[
     str | None,
     BeforeValidator(_parse_optional_text),
+]
+SchemaVersion: TypeAlias = Annotated[str, BeforeValidator(_parse_schema_version)]
+OptionalConfidenceScore: TypeAlias = Annotated[
+    float | None,
+    BeforeValidator(_parse_optional_confidence),
 ]
 TechnicalStringList: TypeAlias = Annotated[
     list[str],

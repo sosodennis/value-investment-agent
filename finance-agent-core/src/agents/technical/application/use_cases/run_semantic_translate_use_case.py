@@ -5,10 +5,7 @@ from collections.abc import Callable, Mapping
 from typing import Protocol
 
 from src.agents.technical.application.ports import (
-    ITechnicalBacktestRuntime,
-    ITechnicalFracdiffRuntime,
     ITechnicalInterpretationProvider,
-    ITechnicalMarketDataProvider,
 )
 from src.agents.technical.application.report_service import (
     build_semantic_report_update,
@@ -25,13 +22,12 @@ from src.agents.technical.application.semantic_translate_context_service import 
 from src.agents.technical.application.state_updates import (
     build_semantic_error_update,
 )
-from src.agents.technical.domain.signal_policy import (
+from src.agents.technical.subdomains.signal_fusion import (
     SemanticTagPolicyInput,
     SemanticTagPolicyResult,
 )
 from src.interface.artifacts.artifact_data_models import (
-    PriceSeriesArtifactData,
-    TechnicalChartArtifactData,
+    TechnicalVerificationReportArtifactData,
 )
 from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import JSONObject
@@ -48,11 +44,10 @@ class SemanticTranslateRuntime(Protocol):
 
 
 class _SemanticPort(Protocol):
-    async def load_price_and_chart_data(
+    async def load_verification_report(
         self,
-        price_artifact_id: str | None,
-        chart_artifact_id: str | None,
-    ) -> tuple[PriceSeriesArtifactData | None, TechnicalChartArtifactData | None]: ...
+        artifact_id: str | None,
+    ) -> TechnicalVerificationReportArtifactData | None: ...
 
     async def save_full_report_canonical(
         self,
@@ -69,15 +64,13 @@ async def run_semantic_translate_use_case(
     *,
     assemble_fn: Callable[[SemanticTagPolicyInput], SemanticTagPolicyResult],
     build_full_report_payload_fn: Callable[..., JSONObject],
-    fracdiff_runtime: ITechnicalFracdiffRuntime,
-    market_data_provider: ITechnicalMarketDataProvider,
     interpretation_provider: ITechnicalInterpretationProvider,
-    backtest_runtime: ITechnicalBacktestRuntime,
 ) -> TechnicalNodeResult:
     log_event(
         logger,
         event="technical_semantic_translate_started",
         message="technical semantic translation started",
+        fields={"input_count": 0},
     )
 
     context, context_error = resolve_semantic_translate_context(state)
@@ -99,6 +92,8 @@ async def run_semantic_translate_use_case(
                 "is_degraded": True,
                 "error_code": context_error.error_code,
                 "artifact_written": False,
+                "input_count": 0,
+                "output_count": 0,
             },
         )
         error_update = build_semantic_error_update(context_error.user_message)
@@ -111,12 +106,8 @@ async def run_semantic_translate_use_case(
             technical_context=context.technical_context,
             assemble_fn=assemble_fn,
             interpretation_provider=interpretation_provider,
-            fracdiff_runtime=fracdiff_runtime,
-            market_data_provider=market_data_provider,
-            backtest_runtime=backtest_runtime,
             technical_port=runtime.port,
-            price_artifact_id=context.price_artifact_id,
-            chart_artifact_id=context.chart_artifact_id,
+            verification_report_id=context.verification_report_id,
             build_full_report_payload_fn=build_full_report_payload_fn,
         )
         ta_update = await build_semantic_report_update(
@@ -166,6 +157,8 @@ async def run_semantic_translate_use_case(
                 "semantic_tag_count": len(pipeline_result.tags_result.tags),
                 "degraded_reason_count": len(degraded_reasons),
                 "degraded_reasons": degraded_reasons,
+                "input_count": len(pipeline_result.tags_result.tags),
+                "output_count": len(ta_update),
             },
         )
         return TechnicalNodeResult(update=success_update.update, goto="END")
@@ -189,6 +182,8 @@ async def run_semantic_translate_use_case(
                 "is_degraded": True,
                 "error_code": "TECHNICAL_SEMANTIC_TRANSLATION_FAILED",
                 "artifact_written": False,
+                "input_count": 1,
+                "output_count": 0,
             },
         )
         error_update = build_semantic_error_update(

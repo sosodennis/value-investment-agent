@@ -4,7 +4,16 @@ import { isRecord } from '../preview';
 type ArtifactEnvelopeResponse =
     operations['get_artifact_api_artifacts__artifact_id__get']['responses'][200]['content']['application/json'];
 
-export type ArtifactKind = ArtifactEnvelopeResponse['kind'];
+export type ArtifactKind =
+    | ArtifactEnvelopeResponse['kind']
+    | 'ta_chart_data'
+    | 'ta_timeseries_bundle'
+    | 'ta_indicator_series'
+    | 'ta_feature_pack'
+    | 'ta_pattern_pack'
+    | 'ta_alerts'
+    | 'ta_fusion_report'
+    | 'ta_verification_report';
 
 const toRecord = (
     value: unknown,
@@ -20,7 +29,14 @@ const parseArtifactKind = (value: unknown, context: string): ArtifactKind => {
     if (value === 'financial_reports') return value;
     if (value === 'price_series') return value;
     if (value === 'ta_chart_data') return value;
+    if (value === 'ta_timeseries_bundle') return value;
+    if (value === 'ta_indicator_series') return value;
     if (value === 'ta_full_report') return value;
+    if (value === 'ta_feature_pack') return value;
+    if (value === 'ta_pattern_pack') return value;
+    if (value === 'ta_alerts') return value;
+    if (value === 'ta_fusion_report') return value;
+    if (value === 'ta_verification_report') return value;
     if (value === 'search_results') return value;
     if (value === 'news_selection') return value;
     if (value === 'news_article') return value;

@@ -15,7 +15,14 @@ from src.interface.artifacts.artifact_data_models import (
     NewsSelectionArtifactData,
     PriceSeriesArtifactData,
     SearchResultsArtifactData,
+    TechnicalAlertsArtifactData,
     TechnicalChartArtifactData,
+    TechnicalFeaturePackArtifactData,
+    TechnicalFusionReportArtifactData,
+    TechnicalIndicatorSeriesArtifactData,
+    TechnicalPatternPackArtifactData,
+    TechnicalTimeseriesBundleArtifactData,
+    TechnicalVerificationReportArtifactData,
 )
 from src.shared.kernel.contracts import (
     ARTIFACT_KIND_DEBATE_FACTS,
@@ -27,8 +34,15 @@ from src.shared.kernel.contracts import (
     ARTIFACT_KIND_NEWS_SELECTION,
     ARTIFACT_KIND_PRICE_SERIES,
     ARTIFACT_KIND_SEARCH_RESULTS,
+    ARTIFACT_KIND_TA_ALERTS,
     ARTIFACT_KIND_TA_CHART_DATA,
+    ARTIFACT_KIND_TA_FEATURE_PACK,
     ARTIFACT_KIND_TA_FULL_REPORT,
+    ARTIFACT_KIND_TA_FUSION_REPORT,
+    ARTIFACT_KIND_TA_INDICATOR_SERIES,
+    ARTIFACT_KIND_TA_PATTERN_PACK,
+    ARTIFACT_KIND_TA_TIMESERIES_BUNDLE,
+    ARTIFACT_KIND_TA_VERIFICATION_REPORT,
 )
 
 
@@ -51,6 +65,34 @@ ARTIFACT_CONTRACT_SPECS: tuple[ArtifactContractSpec, ...] = (
     ArtifactContractSpec(
         kind=ARTIFACT_KIND_TA_CHART_DATA,
         model=TechnicalChartArtifactData,
+    ),
+    ArtifactContractSpec(
+        kind=ARTIFACT_KIND_TA_INDICATOR_SERIES,
+        model=TechnicalIndicatorSeriesArtifactData,
+    ),
+    ArtifactContractSpec(
+        kind=ARTIFACT_KIND_TA_ALERTS,
+        model=TechnicalAlertsArtifactData,
+    ),
+    ArtifactContractSpec(
+        kind=ARTIFACT_KIND_TA_TIMESERIES_BUNDLE,
+        model=TechnicalTimeseriesBundleArtifactData,
+    ),
+    ArtifactContractSpec(
+        kind=ARTIFACT_KIND_TA_FEATURE_PACK,
+        model=TechnicalFeaturePackArtifactData,
+    ),
+    ArtifactContractSpec(
+        kind=ARTIFACT_KIND_TA_PATTERN_PACK,
+        model=TechnicalPatternPackArtifactData,
+    ),
+    ArtifactContractSpec(
+        kind=ARTIFACT_KIND_TA_FUSION_REPORT,
+        model=TechnicalFusionReportArtifactData,
+    ),
+    ArtifactContractSpec(
+        kind=ARTIFACT_KIND_TA_VERIFICATION_REPORT,
+        model=TechnicalVerificationReportArtifactData,
     ),
     ArtifactContractSpec(
         kind=ARTIFACT_KIND_TA_FULL_REPORT,

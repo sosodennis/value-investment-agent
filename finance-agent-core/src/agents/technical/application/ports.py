@@ -13,13 +13,20 @@ from src.agents.technical.application.fracdiff_runtime_contracts import (
     ObvInput,
     StatisticalStrengthInput,
 )
-from src.agents.technical.domain.backtest import (
+from src.agents.technical.subdomains.verification import (
     BacktestResults,
     WalkForwardResult,
 )
 from src.interface.artifacts.artifact_data_models import (
     PriceSeriesArtifactData,
+    TechnicalAlertsArtifactData,
     TechnicalChartArtifactData,
+    TechnicalFeaturePackArtifactData,
+    TechnicalFusionReportArtifactData,
+    TechnicalIndicatorSeriesArtifactData,
+    TechnicalPatternPackArtifactData,
+    TechnicalTimeseriesBundleArtifactData,
+    TechnicalVerificationReportArtifactData,
 )
 from src.shared.kernel.types import JSONObject
 
@@ -29,18 +36,6 @@ class TechnicalProviderFailure:
     failure_code: str
     reason: str | None = None
     http_status: int | None = None
-
-
-@dataclass(frozen=True)
-class TechnicalOhlcvFetchResult:
-    data: pd.DataFrame | None
-    failure: TechnicalProviderFailure | None = None
-
-
-@dataclass(frozen=True)
-class TechnicalRiskFreeRateFetchResult:
-    data: pd.Series | None
-    failure: TechnicalProviderFailure | None = None
 
 
 @dataclass(frozen=True)
@@ -75,6 +70,90 @@ class ITechnicalArtifactRepository(Protocol):
         self, artifact_id: str | None
     ) -> TechnicalChartArtifactData | None: ...
 
+    async def save_indicator_series(
+        self,
+        data: JSONObject,
+        *,
+        produced_by: str,
+        key_prefix: str | None = None,
+    ) -> str: ...
+
+    async def load_indicator_series(
+        self, artifact_id: str | None
+    ) -> TechnicalIndicatorSeriesArtifactData | None: ...
+
+    async def save_alerts(
+        self,
+        data: JSONObject,
+        *,
+        produced_by: str,
+        key_prefix: str | None = None,
+    ) -> str: ...
+
+    async def load_alerts(
+        self, artifact_id: str | None
+    ) -> TechnicalAlertsArtifactData | None: ...
+
+    async def save_timeseries_bundle(
+        self,
+        data: JSONObject,
+        *,
+        produced_by: str,
+        key_prefix: str | None = None,
+    ) -> str: ...
+
+    async def load_timeseries_bundle(
+        self, artifact_id: str | None
+    ) -> TechnicalTimeseriesBundleArtifactData | None: ...
+
+    async def save_feature_pack(
+        self,
+        data: JSONObject,
+        *,
+        produced_by: str,
+        key_prefix: str | None = None,
+    ) -> str: ...
+
+    async def load_feature_pack(
+        self, artifact_id: str | None
+    ) -> TechnicalFeaturePackArtifactData | None: ...
+
+    async def save_pattern_pack(
+        self,
+        data: JSONObject,
+        *,
+        produced_by: str,
+        key_prefix: str | None = None,
+    ) -> str: ...
+
+    async def load_pattern_pack(
+        self, artifact_id: str | None
+    ) -> TechnicalPatternPackArtifactData | None: ...
+
+    async def save_fusion_report(
+        self,
+        data: JSONObject,
+        *,
+        produced_by: str,
+        key_prefix: str | None = None,
+    ) -> str: ...
+
+    async def load_fusion_report(
+        self, artifact_id: str | None
+    ) -> TechnicalFusionReportArtifactData | None: ...
+
+    async def save_verification_report(
+        self,
+        data: JSONObject,
+        *,
+        produced_by: str,
+        key_prefix: str | None = None,
+    ) -> str: ...
+
+    async def load_verification_report(
+        self, artifact_id: str | None
+    ) -> TechnicalVerificationReportArtifactData | None: ...
+
     async def save_full_report_canonical(
         self,
         data: JSONObject,
@@ -88,16 +167,6 @@ class ITechnicalArtifactRepository(Protocol):
         price_artifact_id: str | None,
         chart_artifact_id: str | None,
     ) -> tuple[PriceSeriesArtifactData | None, TechnicalChartArtifactData | None]: ...
-
-
-class ITechnicalMarketDataProvider(Protocol):
-    def fetch_daily_ohlcv(
-        self, ticker_symbol: str, period: str = "5y"
-    ) -> TechnicalOhlcvFetchResult: ...
-
-    def fetch_risk_free_series(
-        self, period: str = "5y"
-    ) -> TechnicalRiskFreeRateFetchResult: ...
 
 
 class ITechnicalInterpretationProvider(Protocol):

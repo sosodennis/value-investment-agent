@@ -1,23 +1,32 @@
 from __future__ import annotations
 
-from src.agents.technical.application.backtest_runtime_service import (
-    TechnicalBacktestRuntimeService,
-)
 from src.agents.technical.application.factory import (
     TechnicalWorkflowDependencies,
     TechnicalWorkflowRunner,
     build_technical_orchestrator,
     build_technical_workflow_runner,
 )
-from src.agents.technical.application.fracdiff_runtime_service import (
-    TechnicalFracdiffRuntimeService,
-)
-from src.agents.technical.domain.signal_policy import assemble_semantic_tags
-from src.agents.technical.infrastructure.artifacts import (
+from src.agents.technical.subdomains.alerts import AlertRuntimeService
+from src.agents.technical.subdomains.artifacts import (
     build_default_technical_artifact_repository,
 )
-from src.agents.technical.infrastructure.llm import TechnicalInterpretationProvider
-from src.agents.technical.infrastructure.market_data import YahooMarketDataProvider
+from src.agents.technical.subdomains.features import (
+    FeatureRuntimeService,
+    IndicatorSeriesRuntimeService,
+)
+from src.agents.technical.subdomains.features.infrastructure import (
+    PandasTaIndicatorEngine,
+)
+from src.agents.technical.subdomains.interpretation import (
+    TechnicalInterpretationProvider,
+)
+from src.agents.technical.subdomains.market_data import YahooMarketDataProvider
+from src.agents.technical.subdomains.patterns import PatternRuntimeService
+from src.agents.technical.subdomains.signal_fusion import (
+    FusionRuntimeService,
+    assemble_semantic_tags,
+)
+from src.agents.technical.subdomains.verification import VerificationRuntimeService
 
 
 def _assemble_semantic_tags_default(*args, **kwargs):
@@ -29,15 +38,26 @@ def build_default_technical_workflow_runner() -> TechnicalWorkflowRunner:
     orchestrator = build_technical_orchestrator(port=repository)
     market_data_provider = YahooMarketDataProvider()
     interpretation_provider = TechnicalInterpretationProvider()
-    backtest_runtime = TechnicalBacktestRuntimeService()
-    fracdiff_runtime = TechnicalFracdiffRuntimeService()
+    indicator_engine = PandasTaIndicatorEngine()
+    if not indicator_engine.availability().available:
+        indicator_engine = None
+    feature_runtime = FeatureRuntimeService(indicator_engine=indicator_engine)
+    indicator_series_runtime = IndicatorSeriesRuntimeService()
+    alert_runtime = AlertRuntimeService()
+    pattern_runtime = PatternRuntimeService()
+    fusion_runtime = FusionRuntimeService()
+    verification_runtime = VerificationRuntimeService()
     return build_technical_workflow_runner(
         orchestrator=orchestrator,
         deps=TechnicalWorkflowDependencies(
             market_data_provider=market_data_provider,
             interpretation_provider=interpretation_provider,
-            backtest_runtime=backtest_runtime,
-            fracdiff_runtime=fracdiff_runtime,
+            feature_runtime=feature_runtime,
+            indicator_series_runtime=indicator_series_runtime,
+            alert_runtime=alert_runtime,
+            pattern_runtime=pattern_runtime,
+            fusion_runtime=fusion_runtime,
+            verification_runtime=verification_runtime,
             assemble_semantic_tags_fn=_assemble_semantic_tags_default,
         ),
     )

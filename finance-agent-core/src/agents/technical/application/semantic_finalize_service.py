@@ -10,7 +10,7 @@ from src.agents.technical.application.semantic_pipeline_contracts import (
 from src.agents.technical.application.semantic_policy_input_service import (
     semantic_tags_to_dict,
 )
-from src.agents.technical.domain.signal_policy import SemanticTagPolicyResult
+from src.agents.technical.subdomains.signal_fusion import SemanticTagPolicyResult
 from src.shared.kernel.types import JSONObject
 
 

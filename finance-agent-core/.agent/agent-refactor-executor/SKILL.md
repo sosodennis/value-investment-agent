@@ -17,6 +17,7 @@ Collect these before execution:
 - Scope boundaries and non-goals.
 - Required validation gates (lint, tests, contract checks, logging checks).
 - Rollback expectations and compatibility constraints.
+- Consumer impact map (API/artifacts/UI) and compatibility stance (breaking vs preserved) with downstream update list.
 - Ownership decisions for any moved contracts/ports and old → new path mapping.
 - Legacy removal constraints (no compatibility shims unless explicitly approved).
 - Cohesion/facade plan (consolidation candidates and public export surface).
@@ -44,6 +45,7 @@ Collect these before execution:
 - Async/runtime boundary changes.
 - State/error contract changes.
 - Migration/removal of compatibility paths.
+- Output contract/schema changes consumed by other modules or UI.
 4. Disallow `micro` slices with no independent verification value.
 5. If a slice cannot be validated independently, merge it with adjacent work into one verifiable slice.
 6. `large` slices require explicit exception approval with risk note, rollback point, and validation plan.
@@ -70,6 +72,8 @@ Collect these before execution:
 - Run legacy import/path sweep when migration is involved (for example `rg` old paths).
 - Confirm external imports route through the planned facade when introduced.
 - Confirm root topology and shared kernel placement match the plan after topology-related slices.
+- When output contracts change, update parsers/serializers and at least one consumer test/fixture in the same slice.
+- For large time-series artifacts, add a payload-size sanity check or sampling guard.
 
 5. Run compliance gate.
 - Invoke `$architecture-standard-enforcer` on changed paths.
@@ -82,6 +86,7 @@ Collect these before execution:
 7. Close and hand off.
 - Summarize completed slices, residual risks, and next pending slice.
 - Confirm empty layer directories were removed after migration.
+- Confirm planned contract/docs updates were applied when outputs changed.
 
 ## Output Contract (Per Iteration)
 
@@ -90,6 +95,7 @@ Collect these before execution:
 - `Validation Results`: checks run and status.
 - `Compliance Results`: pass/fail and blocking violations.
 - `Risk/Rollback Notes`: current risk and fallback point.
+- `Consumer Updates`: contracts/parsers/UI updates completed or explicitly deferred.
 - `Next Slice`: next planned slice or stop condition.
 
 ## References
@@ -104,4 +110,6 @@ Collect these before execution:
 - Do not batch multiple high-risk changes in one slice.
 - Do not continue if a hard compliance violation is unresolved.
 - Keep change sets minimal, reversible, and test-backed.
+- Do not change output contracts without updating known consumers in the same slice unless explicitly approved.
+- Do not pass large datasets through agent state when artifact storage is available.
 - Do not leave compatibility shims or re-export modules unless explicitly approved.

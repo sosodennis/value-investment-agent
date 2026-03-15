@@ -10,10 +10,6 @@ import pytest
 from src.agents.technical.application.fracdiff_runtime_contracts import (
     FracdiffRuntimeResult,
 )
-from src.agents.technical.application.ports import (
-    TechnicalOhlcvFetchResult,
-    TechnicalProviderFailure,
-)
 from src.agents.technical.application.semantic_finalize_service import (
     assemble_semantic_finalize,
 )
@@ -33,29 +29,59 @@ from src.agents.technical.application.state_updates import (
     build_semantic_error_update,
     build_semantic_success_update,
 )
+from src.agents.technical.application.use_cases.run_alerts_compute_use_case import (
+    run_alerts_compute_use_case,
+)
 from src.agents.technical.application.use_cases.run_data_fetch_use_case import (
     run_data_fetch_use_case,
+)
+from src.agents.technical.application.use_cases.run_feature_compute_use_case import (
+    run_feature_compute_use_case,
 )
 from src.agents.technical.application.use_cases.run_fracdiff_compute_use_case import (
     run_fracdiff_compute_use_case,
 )
+from src.agents.technical.application.use_cases.run_fusion_compute_use_case import (
+    run_fusion_compute_use_case,
+)
 from src.agents.technical.application.use_cases.run_semantic_translate_use_case import (
     run_semantic_translate_use_case,
 )
-from src.agents.technical.domain.fracdiff.serialization_service import (
+from src.agents.technical.domain.shared import FeatureFrame, FeaturePack
+from src.agents.technical.interface.serializers import build_full_report_payload
+from src.agents.technical.subdomains.alerts import AlertRuntimeService
+from src.agents.technical.subdomains.features import (
+    FeatureRuntimeResult,
+    IndicatorSeriesFrameResult,
+    IndicatorSeriesRuntimeResult,
+)
+from src.agents.technical.subdomains.features.domain import (
     serialize_fracdiff_outputs,
 )
-from src.agents.technical.domain.signal_policy import (
+from src.agents.technical.subdomains.market_data.application.ports import (
+    MarketDataOhlcvFetchResult,
+    MarketDataProviderFailure,
+)
+from src.agents.technical.subdomains.signal_fusion import (
+    FusionRuntimeService,
     SemanticConfluenceResult,
     SemanticTagPolicyResult,
     derive_memory_strength,
     derive_statistical_state,
     safe_float,
 )
-from src.agents.technical.interface.serializers import build_full_report_payload
 from src.interface.artifacts.artifact_data_models import (
     PriceSeriesArtifactData,
     TechnicalChartArtifactData,
+    TechnicalFeatureFrameData,
+    TechnicalFeatureIndicatorData,
+    TechnicalFeaturePackArtifactData,
+    TechnicalIndicatorSeriesArtifactData,
+    TechnicalPatternFlagData,
+    TechnicalPatternFrameData,
+    TechnicalPatternPackArtifactData,
+    TechnicalTimeseriesBundleArtifactData,
+    TechnicalTimeseriesFrameData,
 )
 from src.shared.kernel.types import JSONObject
 
@@ -119,12 +145,9 @@ def test_build_full_report_payload_derives_states() -> None:
         raw_data={"price_series": {"2025-01-01": 1.0}},
     )
 
-    frac_metrics = payload["frac_diff_metrics"]
-    signal_state = payload["signal_state"]
-
-    assert frac_metrics["memory_strength"] == "fragile"
-    assert signal_state["statistical_state"] == "anomaly"
-    assert signal_state["direction"] == "BULLISH"
+    assert payload["direction"] == "BULLISH"
+    assert payload["risk_level"] == "medium"
+    assert payload["summary_tags"] == ["A", "B"]
     assert derive_memory_strength(0.2) == "structurally_stable"
     assert derive_statistical_state(0.2) == "equilibrium"
 
@@ -178,9 +201,7 @@ def test_assemble_semantic_finalize_builds_update_and_raw_data() -> None:
     assert result.ta_update["signal"] == "bullish"
     assert result.ta_update["memory_strength"] == "balanced"
     assert result.raw_data["price_series"]["2025-01-01"] == 10.0
-    assert (
-        result.full_report_data_raw["signal_state"]["statistical_state"] == "deviating"
-    )
+    assert result.full_report_data_raw["direction"] == "BULLISH"
 
 
 def test_semantic_command_update_builders() -> None:
@@ -202,6 +223,7 @@ def test_semantic_command_update_builders() -> None:
 def test_data_fetch_update_builders() -> None:
     success = build_data_fetch_success_update(
         price_artifact_id="price-1",
+        timeseries_bundle_id="bundle-1",
         artifact={
             "kind": "technical_analysis.output",
             "version": "v1",
@@ -247,6 +269,7 @@ def test_fracdiff_update_builders() -> None:
 @dataclass
 class _FakeDataFetchRuntime:
     saved_data: JSONObject | None = None
+    saved_bundle: JSONObject | None = None
 
     async def save_price_series(
         self,
@@ -258,6 +281,17 @@ class _FakeDataFetchRuntime:
         _ = (produced_by, key_prefix)
         self.saved_data = data
         return "price-artifact-id"
+
+    async def save_timeseries_bundle(
+        self,
+        data: JSONObject,
+        *,
+        produced_by: str,
+        key_prefix: str | None = None,
+    ) -> str:
+        _ = (produced_by, key_prefix)
+        self.saved_bundle = data
+        return "bundle-artifact-id"
 
     def build_progress_artifact(
         self, summary: str, preview: JSONObject
@@ -271,13 +305,17 @@ class _FakeDataFetchRuntime:
 
 
 class _ProviderFailureOnly:
-    def fetch_daily_ohlcv(
-        self, ticker_symbol: str, period: str = "5y"
-    ) -> TechnicalOhlcvFetchResult:
-        _ = (ticker_symbol, period)
-        return TechnicalOhlcvFetchResult(
+    def fetch_ohlcv(
+        self,
+        ticker_symbol: str,
+        *,
+        period: str = "5y",
+        interval: str = "1d",
+    ) -> MarketDataOhlcvFetchResult:
+        _ = (ticker_symbol, period, interval)
+        return MarketDataOhlcvFetchResult(
             data=None,
-            failure=TechnicalProviderFailure(
+            failure=MarketDataProviderFailure(
                 failure_code="TECHNICAL_OHLCV_FETCH_FAILED",
                 reason="upstream timeout",
             ),
@@ -341,6 +379,211 @@ class _FracdiffRuntime:
         )
 
 
+@dataclass
+class _FeatureRuntimeStub:
+    def compute(self, request: object) -> FeatureRuntimeResult:
+        feature_pack = FeaturePack(
+            ticker=getattr(request, "ticker", "AAPL"),
+            as_of=getattr(request, "as_of", "2026-02-12T00:00:00Z"),
+            timeframes={"1d": FeatureFrame()},
+            feature_summary={
+                "classic_count": 0,
+                "quant_count": 0,
+                "timeframe_count": 1,
+            },
+        )
+        return FeatureRuntimeResult(feature_pack=feature_pack, degraded_reasons=[])
+
+
+@dataclass
+class _IndicatorSeriesRuntimeStub:
+    def compute(self, request: object) -> IndicatorSeriesRuntimeResult:
+        frame = IndicatorSeriesFrameResult(
+            timeframe="1d",
+            start="2026-02-01T00:00:00Z",
+            end="2026-02-12T00:00:00Z",
+            series={"RSI_14": {"2026-02-10": 45.0}},
+            timezone="UTC",
+            metadata={"source_points": 1, "max_points": 1500, "downsample_step": 1},
+        )
+        return IndicatorSeriesRuntimeResult(
+            ticker=getattr(request, "ticker", "AAPL"),
+            as_of=getattr(request, "as_of", "2026-02-12T00:00:00Z"),
+            timeframes={"1d": frame},
+            degraded_reasons=[],
+        )
+
+
+@dataclass
+class _FeatureComputeRuntimeStub:
+    saved_feature_pack: JSONObject | None = None
+    saved_indicator_series: JSONObject | None = None
+
+    async def load_timeseries_bundle(
+        self, artifact_id: str
+    ) -> TechnicalTimeseriesBundleArtifactData | None:
+        _ = artifact_id
+        frame = TechnicalTimeseriesFrameData(
+            timeframe="1d",
+            start="2026-02-01T00:00:00Z",
+            end="2026-02-12T00:00:00Z",
+            open_series={"2026-02-10": 100.0},
+            high_series={"2026-02-10": 101.0},
+            low_series={"2026-02-10": 99.0},
+            close_series={"2026-02-10": 100.5},
+            price_series={"2026-02-10": 100.5},
+            volume_series={"2026-02-10": 1500.0},
+            timezone="UTC",
+            metadata=None,
+        )
+        return TechnicalTimeseriesBundleArtifactData(
+            ticker="AAPL",
+            as_of="2026-02-12T00:00:00Z",
+            frames={"1d": frame},
+        )
+
+    async def save_feature_pack(
+        self,
+        *,
+        data: JSONObject,
+        produced_by: str,
+        key_prefix: str | None = None,
+    ) -> str:
+        _ = (produced_by, key_prefix)
+        self.saved_feature_pack = data
+        return "feature-1"
+
+    async def save_indicator_series(
+        self,
+        data: JSONObject,
+        *,
+        produced_by: str,
+        key_prefix: str | None = None,
+    ) -> str:
+        _ = (produced_by, key_prefix)
+        self.saved_indicator_series = data
+        return "series-1"
+
+    def build_progress_artifact(
+        self, summary: str, preview: JSONObject
+    ) -> dict[str, object]:
+        _ = (summary, preview)
+        return {
+            "kind": "technical_analysis.output",
+            "summary": summary,
+            "preview": preview,
+        }
+
+
+@dataclass
+class _AlertsComputeRuntimeStub:
+    saved_alerts: JSONObject | None = None
+
+    async def load_indicator_series(
+        self, artifact_id: str
+    ) -> TechnicalIndicatorSeriesArtifactData | None:
+        _ = artifact_id
+        return None
+
+    async def load_pattern_pack(
+        self, artifact_id: str
+    ) -> TechnicalPatternPackArtifactData | None:
+        _ = artifact_id
+        return None
+
+    async def save_alerts(
+        self,
+        data: JSONObject,
+        *,
+        produced_by: str,
+        key_prefix: str | None = None,
+    ) -> str:
+        _ = (produced_by, key_prefix)
+        self.saved_alerts = data
+        return "alerts-1"
+
+    def build_progress_artifact(
+        self, summary: str, preview: JSONObject
+    ) -> dict[str, object]:
+        _ = (summary, preview)
+        return {
+            "kind": "technical_analysis.output",
+            "summary": summary,
+            "preview": preview,
+        }
+
+
+@dataclass
+class _FusionComputeRuntimeStub:
+    saved_fusion_report: JSONObject | None = None
+
+    async def load_timeseries_bundle(
+        self, artifact_id: str
+    ) -> TechnicalTimeseriesBundleArtifactData | None:
+        _ = artifact_id
+        return None
+
+    async def load_feature_pack(
+        self, artifact_id: str
+    ) -> TechnicalFeaturePackArtifactData | None:
+        _ = artifact_id
+        indicator = TechnicalFeatureIndicatorData(
+            name="RSI",
+            value=45.0,
+            state="neutral",
+        )
+        frame = TechnicalFeatureFrameData(
+            classic_indicators={"rsi": indicator},
+            quant_features={},
+        )
+        return TechnicalFeaturePackArtifactData(
+            ticker="AAPL",
+            as_of="2026-02-12T00:00:00Z",
+            timeframes={"1d": frame},
+        )
+
+    async def load_pattern_pack(
+        self, artifact_id: str
+    ) -> TechnicalPatternPackArtifactData | None:
+        _ = artifact_id
+        frame = TechnicalPatternFrameData(
+            support_levels=[],
+            resistance_levels=[],
+            breakouts=[
+                TechnicalPatternFlagData(name="breakout_up", confidence=0.7),
+            ],
+            trendlines=[],
+            pattern_flags=[],
+            confidence_scores={},
+        )
+        return TechnicalPatternPackArtifactData(
+            ticker="AAPL",
+            as_of="2026-02-12T00:00:00Z",
+            timeframes={"1d": frame},
+        )
+
+    async def save_fusion_report(
+        self,
+        data: JSONObject,
+        *,
+        produced_by: str,
+        key_prefix: str | None = None,
+    ) -> str:
+        _ = (produced_by, key_prefix)
+        self.saved_fusion_report = data
+        return "fusion-1"
+
+    def build_progress_artifact(
+        self, summary: str, preview: JSONObject
+    ) -> dict[str, object]:
+        _ = (summary, preview)
+        return {
+            "kind": "technical_analysis.output",
+            "summary": summary,
+            "preview": preview,
+        }
+
+
 @pytest.mark.asyncio
 async def test_run_data_fetch_handles_typed_provider_failure() -> None:
     runtime = _FakeDataFetchRuntime()
@@ -353,7 +596,7 @@ async def test_run_data_fetch_handles_typed_provider_failure() -> None:
 
     assert result.goto == "END"
     assert result.update["node_statuses"]["technical_analysis"] == "error"
-    assert "TECHNICAL_OHLCV_FETCH_FAILED" in result.update["error_logs"][0]["error"]
+    assert "Empty daily data returned" in result.update["error_logs"][0]["error"]
 
 
 @pytest.mark.asyncio
@@ -375,6 +618,71 @@ async def test_run_fracdiff_compute_uses_resolved_ticker_for_artifact_key_prefix
 
     assert result.goto == "semantic_translate"
     assert runtime.captured_key_prefix == "AAPL"
+
+
+@pytest.mark.asyncio
+async def test_run_feature_compute_writes_indicator_series_id() -> None:
+    runtime = _FeatureComputeRuntimeStub()
+    state: dict[str, object] = {
+        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "technical_analysis": {"timeseries_bundle_id": "bundle-1"},
+    }
+
+    result = await run_feature_compute_use_case(
+        runtime,
+        state,
+        feature_runtime=_FeatureRuntimeStub(),
+        indicator_series_runtime=_IndicatorSeriesRuntimeStub(),
+    )
+
+    assert result.goto == "pattern_compute"
+    assert runtime.saved_indicator_series is not None
+    technical_state = result.update["technical_analysis"]
+    assert technical_state["indicator_series_id"] == "series-1"
+
+
+@pytest.mark.asyncio
+async def test_run_alerts_compute_writes_alerts_id() -> None:
+    runtime = _AlertsComputeRuntimeStub()
+    state: dict[str, object] = {
+        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "technical_analysis": {
+            "indicator_series_id": "series-1",
+            "pattern_pack_id": "pattern-1",
+        },
+    }
+
+    result = await run_alerts_compute_use_case(
+        runtime,
+        state,
+        alert_runtime=AlertRuntimeService(),
+    )
+
+    assert result.goto == "fusion_compute"
+    assert runtime.saved_alerts is not None
+    technical_state = result.update["technical_analysis"]
+    assert technical_state["alerts_id"] == "alerts-1"
+
+
+@pytest.mark.asyncio
+async def test_run_fusion_compute_handles_pydantic_payloads() -> None:
+    runtime = _FusionComputeRuntimeStub()
+    state: dict[str, object] = {
+        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "technical_analysis": {
+            "feature_pack_id": "feature-1",
+            "pattern_pack_id": "pattern-1",
+        },
+    }
+
+    result = await run_fusion_compute_use_case(
+        runtime,
+        state,
+        fusion_runtime=FusionRuntimeService(),
+    )
+
+    assert result.goto == "verification_compute"
+    assert runtime.saved_fusion_report is not None
 
 
 @dataclass
@@ -424,7 +732,7 @@ async def test_run_semantic_translate_marks_degraded_when_pipeline_degraded() ->
             price_data=None,
             chart_data=None,
             is_degraded=True,
-            failure_code="TECHNICAL_SEMANTIC_BACKTEST_CONTEXT_FAILED",
+            failure_code="TECHNICAL_VERIFICATION_CONTEXT_FAILED",
         ),
         semantic_finalize_result=SemanticFinalizeResult(
             direction="BULLISH_EXTENSION",
@@ -437,7 +745,7 @@ async def test_run_semantic_translate_marks_degraded_when_pipeline_degraded() ->
         llm_failure_code="TECHNICAL_LLM_INTERPRETATION_FAILED",
         is_degraded=True,
         degraded_reasons=(
-            "TECHNICAL_SEMANTIC_BACKTEST_CONTEXT_FAILED",
+            "TECHNICAL_VERIFICATION_CONTEXT_FAILED",
             "TECHNICAL_LLM_INTERPRETATION_FAILED",
         ),
     )
@@ -451,8 +759,7 @@ async def test_run_semantic_translate_marks_degraded_when_pipeline_degraded() ->
                 SemanticTranslateContext(
                     ticker="AAPL",
                     technical_context={"optimal_d": 0.5, "z_score_latest": 1.2},
-                    price_artifact_id="p1",
-                    chart_artifact_id="c1",
+                    verification_report_id="vr1",
                 ),
                 None,
             ),
@@ -477,10 +784,7 @@ async def test_run_semantic_translate_marks_degraded_when_pipeline_degraded() ->
             context_state,
             assemble_fn=lambda _payload: pipeline_result.tags_result,
             build_full_report_payload_fn=lambda **_kwargs: {},
-            fracdiff_runtime=object(),  # unused due patched execute_semantic_pipeline
-            market_data_provider=object(),  # unused due patched execute_semantic_pipeline
             interpretation_provider=object(),  # unused due patched execute_semantic_pipeline
-            backtest_runtime=object(),  # unused due patched execute_semantic_pipeline
         )
 
     assert result.goto == "END"
@@ -496,6 +800,6 @@ async def test_run_semantic_translate_marks_degraded_when_pipeline_degraded() ->
     technical_state = result.update["technical_analysis"]
     assert technical_state["is_degraded"] is True
     assert technical_state["degraded_reasons"] == [
-        "TECHNICAL_SEMANTIC_BACKTEST_CONTEXT_FAILED",
+        "TECHNICAL_VERIFICATION_CONTEXT_FAILED",
         "TECHNICAL_LLM_INTERPRETATION_FAILED",
     ]

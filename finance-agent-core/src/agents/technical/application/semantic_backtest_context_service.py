@@ -10,11 +10,13 @@ import pandas as pd
 from src.agents.technical.application.ports import (
     ITechnicalBacktestRuntime,
     ITechnicalFracdiffRuntime,
-    ITechnicalMarketDataProvider,
 )
 from src.agents.technical.application.semantic_pipeline_contracts import (
     BacktestContextResult,
     TechnicalPortLike,
+)
+from src.agents.technical.subdomains.market_data.application.ports import (
+    IMarketDataProvider,
 )
 from src.shared.kernel.tools.logger import get_logger, log_event
 
@@ -48,7 +50,7 @@ async def assemble_backtest_context(
     price_artifact_id: str | None,
     chart_artifact_id: str | None,
     fracdiff_runtime: ITechnicalFracdiffRuntime,
-    market_data_provider: ITechnicalMarketDataProvider,
+    market_data_provider: IMarketDataProvider,
     backtest_runtime: ITechnicalBacktestRuntime,
 ) -> BacktestContextResult:
     price_data = None

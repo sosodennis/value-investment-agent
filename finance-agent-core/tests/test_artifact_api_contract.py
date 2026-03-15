@@ -160,35 +160,30 @@ async def test_get_artifact_returns_canonical_news_and_debate_payload() -> None:
 
     technical_payload = parse_technical_artifact_model(
         {
+            "schema_version": "2.0",
             "ticker": "TSLA",
-            "timestamp": "2026-02-12T12:00:00Z",
-            "frac_diff_metrics": {
-                "optimal_d": 0.41,
-                "window_length": 252,
-                "adf_statistic": -3.2,
-                "adf_pvalue": 0.01,
-                "memory_strength": "balanced",
+            "as_of": "2026-02-12T12:00:00Z",
+            "direction": "BULLISH_EXTENSION",
+            "risk_level": "medium",
+            "confidence": 0.66,
+            "llm_interpretation": "Trend remains constructive.",
+            "artifact_refs": {
+                "chart_data_id": "chart-1",
+                "timeseries_bundle_id": "bundle-1",
+                "feature_pack_id": "feature-1",
+                "pattern_pack_id": "pattern-1",
+                "fusion_report_id": "fusion-1",
+                "verification_report_id": "verification-1",
             },
-            "signal_state": {
-                "z_score": 1.2,
-                "statistical_state": "deviating",
-                "direction": "BULLISH_EXTENSION",
-                "risk_level": "medium",
-                "confluence": {
-                    "bollinger_state": "INSIDE",
-                    "macd_momentum": "BULLISH_EXPANDING",
-                    "obv_state": "ACCUMULATING",
-                    "statistical_strength": 62.3,
-                },
-            },
-            "semantic_tags": ["TREND_ACTIVE"],
+            "summary_tags": ["TREND_ACTIVE"],
+            "diagnostics": {"is_degraded": False, "degraded_reasons": []},
         }
     )
 
     for artifact_id, kind, payload, expected_key in (
         ("art_news", "news_analysis_report", news_payload, "overall_sentiment"),
         ("art_debate", "debate_final_report", debate_payload, "final_verdict"),
-        ("art_ta", "ta_full_report", technical_payload, "signal_state"),
+        ("art_ta", "ta_full_report", technical_payload, "artifact_refs"),
     ):
         envelope = build_artifact_envelope(
             kind=kind,

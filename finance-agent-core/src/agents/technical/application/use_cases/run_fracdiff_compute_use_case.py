@@ -77,6 +77,8 @@ async def run_fracdiff_compute_use_case(
                 "status": "error",
                 "is_degraded": True,
                 "error_code": "TECHNICAL_PRICE_ARTIFACT_ID_MISSING",
+                "input_count": 0,
+                "output_count": 0,
                 "artifact_written": False,
             },
         )
@@ -110,6 +112,8 @@ async def run_fracdiff_compute_use_case(
                     "is_degraded": True,
                     "error_code": "TECHNICAL_PRICE_ARTIFACT_NOT_FOUND",
                     "price_artifact_id": price_artifact_id,
+                    "input_count": 1,
+                    "output_count": 0,
                     "artifact_written": False,
                 },
             )
@@ -153,6 +157,8 @@ async def run_fracdiff_compute_use_case(
                 "status": "error",
                 "is_degraded": True,
                 "error_code": "TECHNICAL_FRACDIFF_FAILED",
+                "input_count": 1,
+                "output_count": 0,
                 "artifact_written": False,
             },
         )
@@ -183,6 +189,8 @@ async def run_fracdiff_compute_use_case(
             "is_degraded": False,
             "price_artifact_id": price_artifact_id,
             "chart_data_id": chart_data_id,
+            "input_count": 1,
+            "output_count": 1,
             "artifact_written": True,
         },
     )

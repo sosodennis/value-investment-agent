@@ -1,0 +1,6 @@
+id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
+1,Map new section layout + move Overview block,DONE,"Overview section contains header, direction/risk/confidence, LLM summary, diagnostics","rg -n \"Overview\" frontend/src/components/agent-outputs/TechnicalAnalysisOutput.tsx",2026-03-14 23:16,0,
+2,Implement Classic section grouping,DONE,"Classic section shows OHLC + classic indicator charts/summary","rg -n \"Classic\" frontend/src/components/agent-outputs/TechnicalAnalysisOutput.tsx",2026-03-14 23:16,0,
+3,Implement Fracdiff section grouping,DONE,"Fracdiff section shows FD chart/summary","rg -n \"Fracdiff\" frontend/src/components/agent-outputs/TechnicalAnalysisOutput.tsx",2026-03-14 23:16,0,
+4,Implement Other section with Alerts + Verification/Baseline subpanels,DONE,"Other section renders Alerts + Verification/Baseline toggles","rg -n \"Other\" frontend/src/components/agent-outputs/TechnicalAnalysisOutput.tsx",2026-03-14 23:16,0,
+5,Validate UI behavior + typecheck,DONE,"Typecheck passes","cd frontend && npm run typecheck",2026-03-14 23:16,0,

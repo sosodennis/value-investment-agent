@@ -12,7 +12,7 @@ from src.agents.technical.application.fracdiff_runtime_contracts import (
     ObvInput,
     StatisticalStrengthInput,
 )
-from src.agents.technical.domain.fracdiff import (
+from src.agents.technical.subdomains.features.domain import (
     MacdIndicator,
     RollingFracdiffOutput,
     calculate_fd_bollinger,
@@ -22,11 +22,9 @@ from src.agents.technical.domain.fracdiff import (
     calculate_rolling_z_score,
     calculate_statistical_strength,
     compute_z_score,
-)
-from src.agents.technical.domain.fracdiff.serialization_service import (
     serialize_fracdiff_outputs,
 )
-from src.agents.technical.domain.signal_policy import safe_float
+from src.agents.technical.subdomains.signal_fusion import safe_float
 
 
 @dataclass(frozen=True)

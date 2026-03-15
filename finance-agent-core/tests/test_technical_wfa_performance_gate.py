@@ -7,8 +7,8 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from src.agents.technical.domain.backtest.contracts import BacktestResult
-from src.agents.technical.domain.backtest.walk_forward_service import (
+from src.agents.technical.subdomains.verification import (
+    BacktestResult,
     WalkForwardOptimizer,
 )
 

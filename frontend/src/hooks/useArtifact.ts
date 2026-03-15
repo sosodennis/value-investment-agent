@@ -10,6 +10,9 @@ import {
 const API_URL = process.env.NEXT_PUBLIC_LANGGRAPH_URL || 'http://localhost:8000';
 
 type ArtifactParser<T> = (value: unknown, context: string) => T;
+type ArtifactCacheOptions = {
+    dedupingInterval?: number;
+};
 
 const readErrorMessage = async (response: Response): Promise<string> => {
     try {
@@ -68,7 +71,8 @@ export function useArtifact<T>(
     artifactId: string | null | undefined,
     parser: ArtifactParser<T>,
     context: string,
-    expectedKind?: ArtifactKind
+    expectedKind?: ArtifactKind,
+    cacheOptions?: ArtifactCacheOptions
 ) {
     const fetcher = useCallback(
         (url: string) => fetchArtifact(url, parser, context, expectedKind),
@@ -80,7 +84,7 @@ export function useArtifact<T>(
         fetcher,
         {
             revalidateOnFocus: false,
-            dedupingInterval: 60000, // Cache for 1 minute
+            dedupingInterval: cacheOptions?.dedupingInterval ?? 60000, // Cache for 1 minute
             shouldRetryOnError: false,
         }
     );

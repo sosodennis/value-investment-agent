@@ -1,11 +1,11 @@
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from src.workflow.nodes.technical_analysis.nodes import (
     data_fetch_node,
-    fracdiff_compute_node,
     semantic_translate_node,
+    verification_compute_node,
 )
 
 
@@ -17,7 +17,7 @@ async def test_data_fetch_node_error():
     }
 
     with patch(
-        "src.agents.technical.infrastructure.market_data.yahoo_market_data_provider.YahooMarketDataProvider.fetch_daily_ohlcv"
+        "src.agents.technical.subdomains.market_data.infrastructure.yahoo_market_data_provider.YahooMarketDataProvider.fetch_ohlcv"
     ) as mock_fetch:
         mock_fetch.side_effect = Exception("YF API Error")
 
@@ -30,41 +30,42 @@ async def test_data_fetch_node_error():
 
 
 @pytest.mark.asyncio
-async def test_fracdiff_compute_node_error_missing_artifact():
+async def test_verification_compute_node_error_missing_inputs():
     state = {
         "technical_analysis": {
-            # Missing price_artifact_id
+            # Missing timeseries_bundle_id/feature_pack_id/fusion_report_id
         }
     }
 
-    command = await fracdiff_compute_node(state)
+    command = await verification_compute_node(state)
 
     assert command.update["node_statuses"]["technical_analysis"] == "error"
-    assert "Missing price artifact ID" in command.update["error_logs"][0]["error"]
+    assert (
+        "Missing timeseries/feature/fusion inputs"
+        in command.update["error_logs"][0]["error"]
+    )
     assert command.goto == "__end__"
 
 
 @pytest.mark.asyncio
-async def test_fracdiff_compute_node_crash():
-    state = {"technical_analysis": {"price_artifact_id": "p1"}}
+async def test_verification_compute_node_crash():
+    state = {
+        "technical_analysis": {
+            "timeseries_bundle_id": "bundle-1",
+            "feature_pack_id": "features-1",
+            "fusion_report_id": "fusion-1",
+        },
+        "intent_extraction": {"resolved_ticker": "AAPL"},
+    }
 
     with patch(
-        "src.services.artifact_manager.artifact_manager.get_artifact_data"
-    ) as mock_get:
-        mock_get.return_value = {
-            "price_series": {"2021-01-01": 100.0},
-            "volume_series": {"2021-01-01": 1000.0},
-        }
+        "src.agents.technical.subdomains.artifacts.infrastructure.technical_artifact_repository.TechnicalArtifactRepository.load_timeseries_bundle",
+        new=AsyncMock(side_effect=Exception("Load Error")),
+    ):
+        command = await verification_compute_node(state)
 
-        with patch(
-            "src.agents.technical.application.fracdiff_runtime_service.TechnicalFracdiffRuntimeService.compute"
-        ) as mock_compute:
-            mock_compute.side_effect = Exception("Math Error")
-
-            command = await fracdiff_compute_node(state)
-
-            assert command.update["node_statuses"]["technical_analysis"] == "error"
-            assert "Computation crashed" in command.update["error_logs"][0]["error"]
+    assert command.update["node_statuses"]["technical_analysis"] == "error"
+    assert "Verification compute failed" in command.update["error_logs"][0]["error"]
 
 
 @pytest.mark.asyncio

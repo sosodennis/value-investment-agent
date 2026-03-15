@@ -74,6 +74,7 @@ Scope: `finance-agent-core/src/agents/technical` and directly affected boundary 
 - Accept breaking changes to `TechnicalArtifactModel` where needed.
 - Define new canonical report schema with version field, and map which fields are required vs optional.
 - Update documentation to reflect breaking change policy.
+- Status: Completed (2026-03-12)
 
 ### Phase 1: Subdomain Skeleton + Shared Types
 - Create `domain/shared/`:
@@ -86,14 +87,17 @@ Scope: `finance-agent-core/src/agents/technical` and directly affected boundary 
   - `time_alignment_guard.py`: `TimeAlignmentGuard`, `AlignmentReport`
 - Create `subdomains/<capability>/{domain,application,interface,infrastructure}` with minimal facades.
 - Add `__init__.py` exports per subdomain; prohibit deep imports from outside.
+- Status: Completed (2026-03-12)
 
 ### Phase 2: Market Data Subdomain
 - Move `yahoo_ohlcv_provider.py` and `yahoo_risk_free_rate_provider.py` into `subdomains/market_data/infrastructure/`.
 - Define `IMarketDataProvider` in `subdomains/market_data/application/ports.py` with typed failures.
 - Add `multi_timeframe_fetch_service.py` in `subdomains/market_data/application/` to fetch D/W/60m with degrade diagnostics.
 - Add cache layer in `subdomains/market_data/infrastructure/`:\n  - Daily/Weekly cached per ticker per day\n  - 60m cached per ticker for 15 minutes\n  - Cache metadata included in provider logs
+- Status: Completed (2026-03-12)
 
 ### Phase 3: Features Subdomain
+- Status: In progress (2026-03-12)
 - Move fracdiff modules into `subdomains/features/domain/fracdiff/`.
 - Add classic indicators package: `subdomains/features/domain/classic/` with RSI, SMA/EMA, ATR, VWAP, MFI, MACD (price-based).
 - Create `FeatureRuntimeService` in `subdomains/features/application/`:
@@ -102,12 +106,15 @@ Scope: `finance-agent-core/src/agents/technical` and directly affected boundary 
 - Ensure FD-based indicators remain distinct from classic indicators to avoid definition confusion.
 - Add an anti-corruption layer for third-party indicator libs:\n  - Define `IIndicatorEngine` in `subdomains/features/application/ports.py`\n  - Implement `PandasTaIndicatorEngine` in `subdomains/features/infrastructure/`\n  - Normalize outputs into `IndicatorSnapshot`/`FeaturePack` (no raw pandas-ta frames outside infrastructure)
 - Add **Feature Dependency DAG** support:\n  - Allow features to declare dependencies (e.g., `FRACDIFF_RSI` depends on `RSI`)\n  - Execute with topological sort and explicit stage ordering (classic price-based → derived/quant)\n  - Emit a degraded failure if cyclic dependencies are detected
+  - Notes: fracdiff domain modules moved to features subdomain; classic indicators + FeatureRuntimeService added; timeseries bundle + feature pack artifact wiring complete; feature DAG execution with degraded issue logging implemented; indicator anti-corruption layer with optional pandas-ta engine wired (2026-03-12)
 
 ### Phase 4: Patterns Subdomain
 - Implement support/resistance (peak clustering + KDE bins), trendlines, breakouts.
 - Add `PatternRuntimeService` to produce `PatternPack` with confidence scores and key levels.
 - Store pattern outputs in `TA_PATTERN_PACK` artifact.
 - Ensure pattern detection uses offloaded compute with bounded concurrency.
+- Status: Completed (2026-03-12)
+- Notes: patterns subdomain + pattern pack artifact + workflow integration completed (2026-03-12)
 
 ### Phase 5: Signal Fusion Subdomain
 - Move `signal_policy/*` into `subdomains/signal_fusion/domain/`.
@@ -115,12 +122,16 @@ Scope: `finance-agent-core/src/agents/technical` and directly affected boundary 
   - Inputs: `FeaturePack`, `PatternPack`, multi-timeframe context
   - Outputs: `FusionSignal` with risk, direction, confidence, confluence matrix, conflict reasons
 - Define a clear policy for conflicts between classic indicators and quant features.
+- Status: Completed (2026-03-12)
+- Notes: signal policy moved into signal_fusion domain; fusion runtime + `TA_FUSION_REPORT` artifact + workflow node integrated; basic alignment guard used to detect look-ahead (2026-03-12)
 
 ### Phase 6: Verification Subdomain
 - Move `backtest/*` into `subdomains/verification/domain/`.
 - Add performance gate baseline (fixed inputs + thresholds).
 - Expose `VerificationRuntimeService` for backtest and walk-forward results.
 - Ensure walk-forward is always offloaded (no synchronous execution in async nodes).
+- Status: Completed (2026-03-12)
+- Notes: backtest domain moved into verification; baseline gate policy + verification runtime service + TA_VERIFICATION_REPORT artifact + fixed-input tests added (workflow wiring completed in Phase 8).
 
 ### Phase 7: Reporting + Interface
 - Redesign canonical report schema in `interface/contracts.py` to accept:
@@ -132,6 +143,8 @@ Scope: `finance-agent-core/src/agents/technical` and directly affected boundary 
 - Replace direct calls to fracdiff/backtest/signal_policy with subdomain application facades.
 - Root `application/orchestrator` becomes a thin coordinator of subdomain runtimes.
 - Graph state hygiene:\n  - LangGraph state must never contain DataFrame objects\n  - State only carries primitive scalars, Pydantic models, or artifact IDs\n  - Enforce via runtime guards in state updates
+- Status: Completed (2026-03-12)
+- Notes: root orchestration rewired to `data_fetch → feature_compute → pattern_compute → fusion_compute → verification_compute → semantic_translate`; semantic pipeline now uses verification reports instead of backtest/fracdiff runtime services. State hygiene guard implemented in T11.
 
 ## Old → New Mapping (High-Level)
 - `domain/fracdiff/*` → `subdomains/features/domain/fracdiff/*`

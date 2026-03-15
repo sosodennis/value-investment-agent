@@ -1,0 +1,4 @@
+id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
+1,Design summary card model + helper functions,DONE,"Helper functions defined and wired into summary view","rg -n \"summary\" frontend/src/components/agent-outputs/TechnicalAnalysisOutput.tsx",2026-03-14 21:49,0,
+2,Implement micro cards + sparklines,DONE,"Summary cards render value + status + sparkline","rg -n \"sparkline\" frontend/src/components/agent-outputs/TechnicalAnalysisOutput.tsx",2026-03-14 21:49,0,
+3,Validate UI behavior + typecheck,DONE,"Typecheck passes","cd frontend && npm run typecheck",2026-03-14 21:49,0,

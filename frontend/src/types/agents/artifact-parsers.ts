@@ -25,13 +25,29 @@ import {
 } from './fundamental';
 import { parseFinancialPreview } from './fundamental-preview-parser';
 import {
-    ConfluenceEvidence,
-    FracDiffMetrics,
-    MemoryStrength,
+    AlertSeverity,
     RiskLevel,
-    SignalState,
-    StatisticalState,
+    TechnicalAlertSignal,
+    TechnicalAlertSummary,
+    TechnicalAlertsArtifact,
+    TechnicalAnalysisReport,
     TechnicalAnalysisSuccess,
+    TechnicalArtifactRefs,
+    TechnicalChartData,
+    TechnicalDiagnostics,
+    TechnicalFeatureFrame,
+    TechnicalFeatureIndicator,
+    TechnicalFeaturePack,
+    TechnicalFusionReport,
+    TechnicalVerificationReport,
+    TechnicalPatternFlag,
+    TechnicalPatternFrame,
+    TechnicalPatternLevel,
+    TechnicalPatternPack,
+    TechnicalIndicatorSeriesArtifact,
+    TechnicalIndicatorSeriesFrame,
+    TechnicalTimeseriesBundle,
+    TechnicalTimeseriesFrame,
 } from './technical';
 import { isRecord } from '../preview';
 
@@ -655,31 +671,6 @@ export const parseDebateArtifact = (
     return artifact;
 };
 
-const parseMemoryStrength = (value: unknown, context: string): MemoryStrength => {
-    if (
-        value === MemoryStrength.STRUCTURALLY_STABLE ||
-        value === MemoryStrength.BALANCED ||
-        value === MemoryStrength.FRAGILE
-    ) {
-        return value;
-    }
-    throw new TypeError(`${context} has unsupported memory strength value.`);
-};
-
-const parseStatisticalState = (
-    value: unknown,
-    context: string
-): StatisticalState => {
-    if (
-        value === StatisticalState.EQUILIBRIUM ||
-        value === StatisticalState.DEVIATING ||
-        value === StatisticalState.STATISTICAL_ANOMALY
-    ) {
-        return value;
-    }
-    throw new TypeError(`${context} has unsupported statistical state value.`);
-};
-
 const parseRiskLevel = (value: unknown, context: string): RiskLevel => {
     if (
         value === RiskLevel.LOW ||
@@ -691,72 +682,929 @@ const parseRiskLevel = (value: unknown, context: string): RiskLevel => {
     throw new TypeError(`${context} has unsupported risk level value.`);
 };
 
-const parseConfluenceEvidence = (
+const parseAlertSeverity = (value: unknown, context: string): AlertSeverity => {
+    if (value === 'info' || value === 'warning' || value === 'critical') {
+        return value;
+    }
+    throw new TypeError(`${context} must be info | warning | critical.`);
+};
+
+const parseTechnicalAlertSignal = (
     value: unknown,
     context: string
-): ConfluenceEvidence => {
+): TechnicalAlertSignal => {
     const record = toRecord(value, context);
+    const metadata =
+        record.metadata === undefined || record.metadata === null
+            ? undefined
+            : toRecord(record.metadata, `${context}.metadata`);
+    const message = parseNullableOptionalString(record.message, `${context}.message`);
+    const direction = parseNullableOptionalString(
+        record.direction,
+        `${context}.direction`
+    );
+    const triggeredAt = parseNullableOptionalString(
+        record.triggered_at,
+        `${context}.triggered_at`
+    );
+    const source = parseNullableOptionalString(record.source, `${context}.source`);
+    const valueNum = parseNullableOptionalNumber(record.value, `${context}.value`);
+    const thresholdNum = parseNullableOptionalNumber(
+        record.threshold,
+        `${context}.threshold`
+    );
+
+    const signal: TechnicalAlertSignal = {
+        code: parseString(record.code, `${context}.code`),
+        severity: parseAlertSeverity(record.severity, `${context}.severity`),
+        timeframe: parseString(record.timeframe, `${context}.timeframe`),
+        title: parseString(record.title, `${context}.title`),
+    };
+
+    if (message !== undefined) signal.message = message;
+    if (valueNum !== undefined) signal.value = valueNum;
+    if (thresholdNum !== undefined) signal.threshold = thresholdNum;
+    if (direction !== undefined) signal.direction = direction;
+    if (triggeredAt !== undefined) signal.triggered_at = triggeredAt;
+    if (source !== undefined) signal.source = source;
+    if (metadata !== undefined) signal.metadata = metadata;
+
+    return signal;
+};
+
+const parseTechnicalAlertSummary = (
+    value: unknown,
+    context: string
+): TechnicalAlertSummary => {
+    const record = toRecord(value, context);
+    const total = parseNullableOptionalNumber(record.total, `${context}.total`);
+    const generatedAt = parseNullableOptionalString(
+        record.generated_at,
+        `${context}.generated_at`
+    );
+    const severityCountsRecord =
+        record.severity_counts === undefined || record.severity_counts === null
+            ? undefined
+            : toRecord(record.severity_counts, `${context}.severity_counts`);
+    const severityCounts: Record<string, number> = {};
+    if (severityCountsRecord) {
+        for (const [key, entry] of Object.entries(severityCountsRecord)) {
+            severityCounts[key] = parseNumber(
+                entry,
+                `${context}.severity_counts.${key}`
+            );
+        }
+    }
+
+    const summary: TechnicalAlertSummary = {};
+    if (total !== undefined) summary.total = total;
+    if (generatedAt !== undefined) summary.generated_at = generatedAt;
+    if (Object.keys(severityCounts).length > 0) {
+        summary.severity_counts = severityCounts;
+    }
+    return summary;
+};
+
+const parseTechnicalFeatureIndicator = (
+    value: unknown,
+    context: string
+): TechnicalFeatureIndicator => {
+    const record = toRecord(value, context);
+    const metadata =
+        record.metadata === undefined || record.metadata === null
+            ? undefined
+            : toRecord(record.metadata, `${context}.metadata`);
+    const state = parseNullableOptionalString(record.state, `${context}.state`);
+    const rawValue = record.value;
+    let parsedValue: number | null = null;
+    if (rawValue === null) {
+        parsedValue = null;
+    } else if (rawValue !== undefined) {
+        parsedValue = parseNumber(rawValue, `${context}.value`);
+    }
+
+    const indicator: TechnicalFeatureIndicator = {
+        name: parseString(record.name, `${context}.name`),
+        value: parsedValue,
+    };
+    if (typeof state === 'string') {
+        indicator.state = state;
+    }
+    if (metadata) {
+        indicator.metadata = metadata;
+    }
+    return indicator;
+};
+
+const parseTechnicalFeatureFrame = (
+    value: unknown,
+    context: string
+): TechnicalFeatureFrame => {
+    const record = toRecord(value, context);
+    const classic = toRecord(record.classic_indicators, `${context}.classic_indicators`);
+    const quant = toRecord(record.quant_features, `${context}.quant_features`);
+
+    const classicIndicators: TechnicalFeatureFrame['classic_indicators'] = {};
+    for (const [key, entry] of Object.entries(classic)) {
+        classicIndicators[key] = parseTechnicalFeatureIndicator(
+            entry,
+            `${context}.classic_indicators.${key}`
+        );
+    }
+
+    const quantFeatures: TechnicalFeatureFrame['quant_features'] = {};
+    for (const [key, entry] of Object.entries(quant)) {
+        quantFeatures[key] = parseTechnicalFeatureIndicator(
+            entry,
+            `${context}.quant_features.${key}`
+        );
+    }
+
     return {
-        bollinger_state: parseString(
-            record.bollinger_state,
-            `${context}.bollinger_state`
-        ),
-        macd_momentum: parseString(record.macd_momentum, `${context}.macd_momentum`),
-        obv_state: parseString(record.obv_state, `${context}.obv_state`),
-        statistical_strength: parseNumber(
-            record.statistical_strength,
-            `${context}.statistical_strength`
-        ),
+        classic_indicators: classicIndicators,
+        quant_features: quantFeatures,
     };
 };
 
-const parseFracDiffMetrics = (
+export const parseTechnicalFeaturePackArtifact = (
+    value: unknown,
+    context = 'technical feature pack'
+): TechnicalFeaturePack => {
+    const record = toRecord(value, context);
+    const timeframes = toRecord(record.timeframes, `${context}.timeframes`);
+    const parsedTimeframes: TechnicalFeaturePack['timeframes'] = {};
+    for (const [key, frame] of Object.entries(timeframes)) {
+        parsedTimeframes[key] = parseTechnicalFeatureFrame(
+            frame,
+            `${context}.timeframes.${key}`
+        );
+    }
+
+    const featureSummary =
+        record.feature_summary === undefined || record.feature_summary === null
+            ? undefined
+            : toRecord(record.feature_summary, `${context}.feature_summary`);
+    const degradedReasons =
+        record.degraded_reasons === undefined || record.degraded_reasons === null
+            ? undefined
+            : parseStringArray(
+                  record.degraded_reasons,
+                  `${context}.degraded_reasons`
+              );
+
+    const pack: TechnicalFeaturePack = {
+        ticker: parseString(record.ticker, `${context}.ticker`),
+        as_of: parseString(record.as_of, `${context}.as_of`),
+        timeframes: parsedTimeframes,
+    };
+    if (featureSummary) {
+        pack.feature_summary = featureSummary;
+    }
+    if (degradedReasons) {
+        pack.degraded_reasons = degradedReasons;
+    }
+    return pack;
+};
+
+const parseTechnicalPatternLevel = (
     value: unknown,
     context: string
-): FracDiffMetrics => {
+): TechnicalPatternLevel => {
     const record = toRecord(value, context);
+    const strength = parseNullableOptionalNumber(
+        record.strength,
+        `${context}.strength`
+    );
+    const touches = parseNullableOptionalNumber(
+        record.touches,
+        `${context}.touches`
+    );
+    const label = parseNullableOptionalString(record.label, `${context}.label`);
     return {
-        optimal_d: parseNumber(record.optimal_d, `${context}.optimal_d`),
-        window_length: parseNumber(record.window_length, `${context}.window_length`),
-        adf_statistic: parseNumber(record.adf_statistic, `${context}.adf_statistic`),
-        adf_pvalue: parseNumber(record.adf_pvalue, `${context}.adf_pvalue`),
-        memory_strength: parseMemoryStrength(
-            record.memory_strength,
-            `${context}.memory_strength`
-        ),
+        price: parseNumber(record.price, `${context}.price`),
+        strength: strength ?? null,
+        touches: touches ?? null,
+        label: label ?? null,
     };
 };
 
-const parseSignalState = (value: unknown, context: string): SignalState => {
+const parseTechnicalPatternFlag = (
+    value: unknown,
+    context: string
+): TechnicalPatternFlag => {
     const record = toRecord(value, context);
+    const confidence = parseNullableOptionalNumber(
+        record.confidence,
+        `${context}.confidence`
+    );
+    const notes = parseNullableOptionalString(record.notes, `${context}.notes`);
     return {
-        z_score: parseNumber(record.z_score, `${context}.z_score`),
-        statistical_state: parseStatisticalState(
-            record.statistical_state,
-            `${context}.statistical_state`
-        ),
+        name: parseString(record.name, `${context}.name`),
+        confidence: confidence ?? null,
+        notes: notes ?? null,
+    };
+};
+
+const parseTechnicalPatternFrame = (
+    value: unknown,
+    context: string
+): TechnicalPatternFrame => {
+    const record = toRecord(value, context);
+    const supportLevels = Array.isArray(record.support_levels)
+        ? record.support_levels.map((entry, idx) =>
+              parseTechnicalPatternLevel(
+                  entry,
+                  `${context}.support_levels[${idx}]`
+              )
+          )
+        : (() => {
+              throw new TypeError(`${context}.support_levels must be an array.`);
+          })();
+    const resistanceLevels = Array.isArray(record.resistance_levels)
+        ? record.resistance_levels.map((entry, idx) =>
+              parseTechnicalPatternLevel(
+                  entry,
+                  `${context}.resistance_levels[${idx}]`
+              )
+          )
+        : (() => {
+              throw new TypeError(`${context}.resistance_levels must be an array.`);
+          })();
+    const breakouts = Array.isArray(record.breakouts)
+        ? record.breakouts.map((entry, idx) =>
+              parseTechnicalPatternFlag(entry, `${context}.breakouts[${idx}]`)
+          )
+        : (() => {
+              throw new TypeError(`${context}.breakouts must be an array.`);
+          })();
+    const trendlines = Array.isArray(record.trendlines)
+        ? record.trendlines.map((entry, idx) =>
+              parseTechnicalPatternFlag(entry, `${context}.trendlines[${idx}]`)
+          )
+        : (() => {
+              throw new TypeError(`${context}.trendlines must be an array.`);
+          })();
+    const patternFlags = Array.isArray(record.pattern_flags)
+        ? record.pattern_flags.map((entry, idx) =>
+              parseTechnicalPatternFlag(entry, `${context}.pattern_flags[${idx}]`)
+          )
+        : (() => {
+              throw new TypeError(`${context}.pattern_flags must be an array.`);
+          })();
+
+    const confidenceScoresRecord =
+        record.confidence_scores === undefined || record.confidence_scores === null
+            ? undefined
+            : toRecord(record.confidence_scores, `${context}.confidence_scores`);
+    const confidenceScores: Record<string, number> = {};
+    if (confidenceScoresRecord) {
+        for (const [key, entry] of Object.entries(confidenceScoresRecord)) {
+            confidenceScores[key] = parseNumber(
+                entry,
+                `${context}.confidence_scores.${key}`
+            );
+        }
+    }
+
+    return {
+        support_levels: supportLevels,
+        resistance_levels: resistanceLevels,
+        breakouts,
+        trendlines,
+        pattern_flags: patternFlags,
+        confidence_scores: confidenceScores,
+    };
+};
+
+export const parseTechnicalPatternPackArtifact = (
+    value: unknown,
+    context = 'technical pattern pack'
+): TechnicalPatternPack => {
+    const record = toRecord(value, context);
+    const timeframes = toRecord(record.timeframes, `${context}.timeframes`);
+    const parsedTimeframes: TechnicalPatternPack['timeframes'] = {};
+    for (const [key, frame] of Object.entries(timeframes)) {
+        parsedTimeframes[key] = parseTechnicalPatternFrame(
+            frame,
+            `${context}.timeframes.${key}`
+        );
+    }
+
+    const patternSummary =
+        record.pattern_summary === undefined || record.pattern_summary === null
+            ? undefined
+            : toRecord(record.pattern_summary, `${context}.pattern_summary`);
+    const degradedReasons =
+        record.degraded_reasons === undefined || record.degraded_reasons === null
+            ? undefined
+            : parseStringArray(
+                  record.degraded_reasons,
+                  `${context}.degraded_reasons`
+              );
+
+    const pack: TechnicalPatternPack = {
+        ticker: parseString(record.ticker, `${context}.ticker`),
+        as_of: parseString(record.as_of, `${context}.as_of`),
+        timeframes: parsedTimeframes,
+    };
+    if (patternSummary) {
+        pack.pattern_summary = patternSummary;
+    }
+    if (degradedReasons) {
+        pack.degraded_reasons = degradedReasons;
+    }
+    return pack;
+};
+
+export const parseTechnicalAlertsArtifact = (
+    value: unknown,
+    context = 'technical alerts'
+): TechnicalAlertsArtifact => {
+    const record = toRecord(value, context);
+    if (!Array.isArray(record.alerts)) {
+        throw new TypeError(`${context}.alerts must be an array.`);
+    }
+    const alerts = record.alerts.map((entry, idx) =>
+        parseTechnicalAlertSignal(entry, `${context}.alerts[${idx}]`)
+    );
+    const summaryRecord =
+        record.summary === undefined || record.summary === null
+            ? undefined
+            : parseTechnicalAlertSummary(record.summary, `${context}.summary`);
+    const degradedReasons =
+        record.degraded_reasons === undefined || record.degraded_reasons === null
+            ? undefined
+            : parseStringArray(
+                  record.degraded_reasons,
+                  `${context}.degraded_reasons`
+              );
+    const sourceArtifactsRecord =
+        record.source_artifacts === undefined || record.source_artifacts === null
+            ? undefined
+            : toRecord(record.source_artifacts, `${context}.source_artifacts`);
+    const sourceArtifacts: Record<string, string | null> = {};
+    if (sourceArtifactsRecord) {
+        for (const [key, entry] of Object.entries(sourceArtifactsRecord)) {
+            if (entry === null) {
+                sourceArtifacts[key] = null;
+            } else {
+                sourceArtifacts[key] = parseString(
+                    entry,
+                    `${context}.source_artifacts.${key}`
+                );
+            }
+        }
+    }
+
+    const artifact: TechnicalAlertsArtifact = {
+        ticker: parseString(record.ticker, `${context}.ticker`),
+        as_of: parseString(record.as_of, `${context}.as_of`),
+        alerts,
+    };
+    if (summaryRecord && Object.keys(summaryRecord).length > 0) {
+        artifact.summary = summaryRecord;
+    }
+    if (degradedReasons) {
+        artifact.degraded_reasons = degradedReasons;
+    }
+    if (Object.keys(sourceArtifacts).length > 0) {
+        artifact.source_artifacts = sourceArtifacts;
+    }
+    return artifact;
+};
+
+export const parseTechnicalFusionReportArtifact = (
+    value: unknown,
+    context = 'technical fusion report'
+): TechnicalFusionReport => {
+    const record = toRecord(value, context);
+    const confidence = parseNullableOptionalNumber(
+        record.confidence,
+        `${context}.confidence`
+    );
+    const confluenceMatrixRecord =
+        record.confluence_matrix === undefined || record.confluence_matrix === null
+            ? undefined
+            : toRecord(record.confluence_matrix, `${context}.confluence_matrix`);
+    const confluenceMatrix: Record<string, Record<string, unknown>> = {};
+    if (confluenceMatrixRecord) {
+        for (const [key, entry] of Object.entries(confluenceMatrixRecord)) {
+            confluenceMatrix[key] = toRecord(
+                entry,
+                `${context}.confluence_matrix.${key}`
+            );
+        }
+    }
+
+    const conflictReasons =
+        record.conflict_reasons === undefined || record.conflict_reasons === null
+            ? undefined
+            : parseStringArray(
+                  record.conflict_reasons,
+                  `${context}.conflict_reasons`
+              );
+
+    const alignmentReport =
+        record.alignment_report === undefined || record.alignment_report === null
+            ? undefined
+            : toRecord(record.alignment_report, `${context}.alignment_report`);
+
+    const sourceArtifactsRecord =
+        record.source_artifacts === undefined || record.source_artifacts === null
+            ? undefined
+            : toRecord(record.source_artifacts, `${context}.source_artifacts`);
+    const sourceArtifacts: Record<string, string | null> = {};
+    if (sourceArtifactsRecord) {
+        for (const [key, entry] of Object.entries(sourceArtifactsRecord)) {
+            if (entry === null) {
+                sourceArtifacts[key] = null;
+            } else {
+                sourceArtifacts[key] = parseString(
+                    entry,
+                    `${context}.source_artifacts.${key}`
+                );
+            }
+        }
+    }
+
+    const degradedReasons =
+        record.degraded_reasons === undefined || record.degraded_reasons === null
+            ? undefined
+            : parseStringArray(
+                  record.degraded_reasons,
+                  `${context}.degraded_reasons`
+              );
+
+    const report: TechnicalFusionReport = {
+        schema_version: parseString(record.schema_version, `${context}.schema_version`),
+        ticker: parseString(record.ticker, `${context}.ticker`),
+        as_of: parseString(record.as_of, `${context}.as_of`),
         direction: parseString(record.direction, `${context}.direction`),
         risk_level: parseRiskLevel(record.risk_level, `${context}.risk_level`),
-        confluence: parseConfluenceEvidence(
-            record.confluence,
-            `${context}.confluence`
-        ),
     };
+    if (confidence !== undefined) report.confidence = confidence;
+    if (Object.keys(confluenceMatrix).length > 0) {
+        report.confluence_matrix = confluenceMatrix;
+    }
+    if (conflictReasons) report.conflict_reasons = conflictReasons;
+    if (alignmentReport) report.alignment_report = alignmentReport;
+    if (Object.keys(sourceArtifacts).length > 0) {
+        report.source_artifacts = sourceArtifacts;
+    }
+    if (degradedReasons) report.degraded_reasons = degradedReasons;
+    return report;
 };
 
-const parseSeriesMap = (
+export const parseTechnicalVerificationReportArtifact = (
+    value: unknown,
+    context = 'technical verification report'
+): TechnicalVerificationReport => {
+    const record = toRecord(value, context);
+    const backtestSummaryRecord =
+        record.backtest_summary === undefined || record.backtest_summary === null
+            ? undefined
+            : toRecord(record.backtest_summary, `${context}.backtest_summary`);
+    const wfaSummaryRecord =
+        record.wfa_summary === undefined || record.wfa_summary === null
+            ? undefined
+            : toRecord(record.wfa_summary, `${context}.wfa_summary`);
+
+    const baselineGates =
+        record.baseline_gates === undefined || record.baseline_gates === null
+            ? undefined
+            : toRecord(record.baseline_gates, `${context}.baseline_gates`);
+
+    const robustnessFlags =
+        record.robustness_flags === undefined || record.robustness_flags === null
+            ? undefined
+            : parseStringArray(
+                  record.robustness_flags,
+                  `${context}.robustness_flags`
+              );
+
+    const sourceArtifactsRecord =
+        record.source_artifacts === undefined || record.source_artifacts === null
+            ? undefined
+            : toRecord(record.source_artifacts, `${context}.source_artifacts`);
+    const sourceArtifacts: Record<string, string | null> = {};
+    if (sourceArtifactsRecord) {
+        for (const [key, entry] of Object.entries(sourceArtifactsRecord)) {
+            if (entry === null) {
+                sourceArtifacts[key] = null;
+            } else {
+                sourceArtifacts[key] = parseString(
+                    entry,
+                    `${context}.source_artifacts.${key}`
+                );
+            }
+        }
+    }
+
+    const degradedReasons =
+        record.degraded_reasons === undefined || record.degraded_reasons === null
+            ? undefined
+            : parseStringArray(
+                  record.degraded_reasons,
+                  `${context}.degraded_reasons`
+              );
+
+    const report: TechnicalVerificationReport = {
+        schema_version: parseString(record.schema_version, `${context}.schema_version`),
+        ticker: parseString(record.ticker, `${context}.ticker`),
+        as_of: parseString(record.as_of, `${context}.as_of`),
+    };
+
+    if (backtestSummaryRecord) {
+        report.backtest_summary = {
+            strategy_name: parseNullableOptionalString(
+                backtestSummaryRecord.strategy_name,
+                `${context}.backtest_summary.strategy_name`
+            ) ?? null,
+            win_rate: parseNullableOptionalNumber(
+                backtestSummaryRecord.win_rate,
+                `${context}.backtest_summary.win_rate`
+            ) ?? null,
+            profit_factor: parseNullableOptionalNumber(
+                backtestSummaryRecord.profit_factor,
+                `${context}.backtest_summary.profit_factor`
+            ) ?? null,
+            sharpe_ratio: parseNullableOptionalNumber(
+                backtestSummaryRecord.sharpe_ratio,
+                `${context}.backtest_summary.sharpe_ratio`
+            ) ?? null,
+            max_drawdown: parseNullableOptionalNumber(
+                backtestSummaryRecord.max_drawdown,
+                `${context}.backtest_summary.max_drawdown`
+            ) ?? null,
+            total_trades: parseNullableOptionalNumber(
+                backtestSummaryRecord.total_trades,
+                `${context}.backtest_summary.total_trades`
+            ) ?? null,
+        };
+    }
+
+    if (wfaSummaryRecord) {
+        report.wfa_summary = {
+            wfa_sharpe: parseNullableOptionalNumber(
+                wfaSummaryRecord.wfa_sharpe,
+                `${context}.wfa_summary.wfa_sharpe`
+            ) ?? null,
+            wfe_ratio: parseNullableOptionalNumber(
+                wfaSummaryRecord.wfe_ratio,
+                `${context}.wfa_summary.wfe_ratio`
+            ) ?? null,
+            wfa_max_drawdown: parseNullableOptionalNumber(
+                wfaSummaryRecord.wfa_max_drawdown,
+                `${context}.wfa_summary.wfa_max_drawdown`
+            ) ?? null,
+            period_count: parseNullableOptionalNumber(
+                wfaSummaryRecord.period_count,
+                `${context}.wfa_summary.period_count`
+            ) ?? null,
+        };
+    }
+
+    if (baselineGates) report.baseline_gates = baselineGates;
+    if (robustnessFlags) report.robustness_flags = robustnessFlags;
+    if (Object.keys(sourceArtifacts).length > 0) {
+        report.source_artifacts = sourceArtifacts;
+    }
+    if (degradedReasons) report.degraded_reasons = degradedReasons;
+    return report;
+};
+
+const parseTechnicalArtifactRefs = (
     value: unknown,
     context: string
-): Record<string, number> => {
+): TechnicalArtifactRefs => {
     const record = toRecord(value, context);
-    const parsed: Record<string, number> = {};
+    const chartDataId = parseNullableOptionalString(
+        record.chart_data_id,
+        `${context}.chart_data_id`
+    );
+    const timeseriesBundleId = parseNullableOptionalString(
+        record.timeseries_bundle_id,
+        `${context}.timeseries_bundle_id`
+    );
+    const indicatorSeriesId = parseNullableOptionalString(
+        record.indicator_series_id,
+        `${context}.indicator_series_id`
+    );
+    const featurePackId = parseNullableOptionalString(
+        record.feature_pack_id,
+        `${context}.feature_pack_id`
+    );
+    const patternPackId = parseNullableOptionalString(
+        record.pattern_pack_id,
+        `${context}.pattern_pack_id`
+    );
+    const alertsId = parseNullableOptionalString(
+        record.alerts_id,
+        `${context}.alerts_id`
+    );
+    const fusionReportId = parseNullableOptionalString(
+        record.fusion_report_id,
+        `${context}.fusion_report_id`
+    );
+    const verificationReportId = parseNullableOptionalString(
+        record.verification_report_id,
+        `${context}.verification_report_id`
+    );
+
+    const refs: TechnicalArtifactRefs = {};
+    if (typeof chartDataId === 'string') {
+        refs.chart_data_id = chartDataId;
+    }
+    if (typeof timeseriesBundleId === 'string') {
+        refs.timeseries_bundle_id = timeseriesBundleId;
+    }
+    if (typeof indicatorSeriesId === 'string') {
+        refs.indicator_series_id = indicatorSeriesId;
+    }
+    if (typeof featurePackId === 'string') {
+        refs.feature_pack_id = featurePackId;
+    }
+    if (typeof patternPackId === 'string') {
+        refs.pattern_pack_id = patternPackId;
+    }
+    if (typeof alertsId === 'string') {
+        refs.alerts_id = alertsId;
+    }
+    if (typeof fusionReportId === 'string') {
+        refs.fusion_report_id = fusionReportId;
+    }
+    if (typeof verificationReportId === 'string') {
+        refs.verification_report_id = verificationReportId;
+    }
+    return refs;
+};
+
+const parseTechnicalDiagnostics = (
+    value: unknown,
+    context: string
+): TechnicalDiagnostics => {
+    const record = toRecord(value, context);
+    const isDegraded = parseNullableOptionalBoolean(
+        record.is_degraded,
+        `${context}.is_degraded`
+    );
+    const degradedReasons =
+        record.degraded_reasons === undefined || record.degraded_reasons === null
+            ? undefined
+            : parseStringArray(
+                  record.degraded_reasons,
+                  `${context}.degraded_reasons`
+              );
+
+    const diagnostics: TechnicalDiagnostics = {};
+    if (typeof isDegraded === 'boolean') {
+        diagnostics.is_degraded = isDegraded;
+    }
+    if (degradedReasons !== undefined) {
+        diagnostics.degraded_reasons = degradedReasons;
+    }
+    return diagnostics;
+};
+
+const parseSeriesMapNullable = (
+    value: unknown,
+    context: string
+): Record<string, number | null> => {
+    const record = toRecord(value, context);
+    const parsed: Record<string, number | null> = {};
     for (const [key, seriesValue] of Object.entries(record)) {
+        if (seriesValue === null) {
+            parsed[key] = null;
+            continue;
+        }
         if (typeof seriesValue !== 'number') {
-            throw new TypeError(`${context}.${key} must be a number.`);
+            throw new TypeError(`${context}.${key} must be a number or null.`);
         }
         parsed[key] = seriesValue;
     }
     return parsed;
+};
+
+const parseTechnicalTimeseriesFrame = (
+    value: unknown,
+    context: string
+): TechnicalTimeseriesFrame => {
+    const record = toRecord(value, context);
+    const timezone = parseNullableOptionalString(
+        record.timezone,
+        `${context}.timezone`
+    );
+    const metadata =
+        record.metadata === undefined || record.metadata === null
+            ? undefined
+            : toRecord(record.metadata, `${context}.metadata`);
+
+    const frame: TechnicalTimeseriesFrame = {
+        timeframe: parseString(record.timeframe, `${context}.timeframe`),
+        start: parseString(record.start, `${context}.start`),
+        end: parseString(record.end, `${context}.end`),
+        open_series: parseSeriesMapNullable(
+            record.open_series,
+            `${context}.open_series`
+        ),
+        high_series: parseSeriesMapNullable(
+            record.high_series,
+            `${context}.high_series`
+        ),
+        low_series: parseSeriesMapNullable(
+            record.low_series,
+            `${context}.low_series`
+        ),
+        close_series: parseSeriesMapNullable(
+            record.close_series,
+            `${context}.close_series`
+        ),
+        price_series: parseSeriesMapNullable(
+            record.price_series,
+            `${context}.price_series`
+        ),
+        volume_series: parseSeriesMapNullable(
+            record.volume_series,
+            `${context}.volume_series`
+        ),
+    };
+
+    if (timezone !== undefined) {
+        frame.timezone = timezone;
+    }
+    if (metadata !== undefined) {
+        frame.metadata = metadata;
+    }
+
+    return frame;
+};
+
+export const parseTechnicalTimeseriesBundleArtifact = (
+    value: unknown,
+    context = 'technical timeseries bundle'
+): TechnicalTimeseriesBundle => {
+    const record = toRecord(value, context);
+    const frames = toRecord(record.frames, `${context}.frames`);
+    const parsedFrames: TechnicalTimeseriesBundle['frames'] = {};
+    for (const [key, frame] of Object.entries(frames)) {
+        parsedFrames[key] = parseTechnicalTimeseriesFrame(
+            frame,
+            `${context}.frames.${key}`
+        );
+    }
+
+    const degradedReasons =
+        record.degraded_reasons === undefined || record.degraded_reasons === null
+            ? undefined
+            : parseStringArray(
+                  record.degraded_reasons,
+                  `${context}.degraded_reasons`
+              );
+
+    const bundle: TechnicalTimeseriesBundle = {
+        ticker: parseString(record.ticker, `${context}.ticker`),
+        as_of: parseString(record.as_of, `${context}.as_of`),
+        frames: parsedFrames,
+    };
+    if (degradedReasons) {
+        bundle.degraded_reasons = degradedReasons;
+    }
+    return bundle;
+};
+
+const parseIndicatorSeriesFrame = (
+    value: unknown,
+    context: string
+): TechnicalIndicatorSeriesFrame => {
+    const record = toRecord(value, context);
+    const timezone = parseNullableOptionalString(
+        record.timezone,
+        `${context}.timezone`
+    );
+    const metadata =
+        record.metadata === undefined || record.metadata === null
+            ? undefined
+            : toRecord(record.metadata, `${context}.metadata`);
+
+    const seriesRecord = toRecord(record.series, `${context}.series`);
+    const parsedSeries: TechnicalIndicatorSeriesFrame['series'] = {};
+    for (const [seriesKey, seriesValue] of Object.entries(seriesRecord)) {
+        parsedSeries[seriesKey] = parseSeriesMapNullable(
+            seriesValue,
+            `${context}.series.${seriesKey}`
+        );
+    }
+
+    const frame: TechnicalIndicatorSeriesFrame = {
+        timeframe: parseString(record.timeframe, `${context}.timeframe`),
+        start: parseString(record.start, `${context}.start`),
+        end: parseString(record.end, `${context}.end`),
+        series: parsedSeries,
+    };
+    if (timezone !== undefined) {
+        frame.timezone = timezone;
+    }
+    if (metadata !== undefined) {
+        frame.metadata = metadata;
+    }
+    return frame;
+};
+
+export const parseTechnicalIndicatorSeriesArtifact = (
+    value: unknown,
+    context = 'technical indicator series'
+): TechnicalIndicatorSeriesArtifact => {
+    const record = toRecord(value, context);
+    const timeframes = toRecord(record.timeframes, `${context}.timeframes`);
+    const parsedFrames: TechnicalIndicatorSeriesArtifact['timeframes'] = {};
+    for (const [key, frame] of Object.entries(timeframes)) {
+        parsedFrames[key] = parseIndicatorSeriesFrame(
+            frame,
+            `${context}.timeframes.${key}`
+        );
+    }
+
+    const degradedReasons =
+        record.degraded_reasons === undefined || record.degraded_reasons === null
+            ? undefined
+            : parseStringArray(
+                  record.degraded_reasons,
+                  `${context}.degraded_reasons`
+              );
+
+    const artifact: TechnicalIndicatorSeriesArtifact = {
+        ticker: parseString(record.ticker, `${context}.ticker`),
+        as_of: parseString(record.as_of, `${context}.as_of`),
+        timeframes: parsedFrames,
+    };
+    if (degradedReasons) {
+        artifact.degraded_reasons = degradedReasons;
+    }
+    return artifact;
+};
+
+export const parseTechnicalChartData = (
+    value: unknown,
+    context = 'technical chart data'
+): TechnicalChartData => {
+    const record = toRecord(value, context);
+    return {
+        fracdiff_series: parseSeriesMapNullable(
+            record.fracdiff_series,
+            `${context}.fracdiff_series`
+        ),
+        z_score_series: parseSeriesMapNullable(
+            record.z_score_series,
+            `${context}.z_score_series`
+        ),
+        indicators: toRecord(record.indicators, `${context}.indicators`),
+    };
+};
+
+const parseTechnicalAnalysisReport = (
+    record: Record<string, unknown>,
+    context: string
+): TechnicalAnalysisReport => {
+    const report: TechnicalAnalysisReport = {
+        schema_version: parseString(record.schema_version, `${context}.schema_version`),
+        ticker: parseString(record.ticker, `${context}.ticker`),
+        as_of: parseString(record.as_of, `${context}.as_of`),
+        direction: parseString(record.direction, `${context}.direction`),
+        risk_level: parseRiskLevel(record.risk_level, `${context}.risk_level`),
+        artifact_refs: parseTechnicalArtifactRefs(
+            record.artifact_refs,
+            `${context}.artifact_refs`
+        ),
+        summary_tags: parseStringArray(record.summary_tags, `${context}.summary_tags`),
+    };
+
+    const confidence = parseNullableOptionalNumber(
+        record.confidence,
+        `${context}.confidence`
+    );
+    if (typeof confidence === 'number') {
+        report.confidence = confidence;
+    }
+
+    const llmInterpretation = parseNullableOptionalString(
+        record.llm_interpretation,
+        `${context}.llm_interpretation`
+    );
+    if (typeof llmInterpretation === 'string') {
+        report.llm_interpretation = llmInterpretation;
+    }
+
+    if (record.diagnostics !== undefined && record.diagnostics !== null) {
+        const diagnostics = parseTechnicalDiagnostics(
+            record.diagnostics,
+            `${context}.diagnostics`
+        );
+        if (Object.keys(diagnostics).length > 0) {
+            report.diagnostics = diagnostics;
+        }
+    }
+
+    return report;
 };
 
 export const parseTechnicalArtifact = (
@@ -764,60 +1612,7 @@ export const parseTechnicalArtifact = (
     context = 'technical artifact'
 ): TechnicalAnalysisSuccess => {
     const record = toRecord(value, context);
-    const rawDataRecord =
-        record.raw_data === undefined
-            ? undefined
-            : toRecord(record.raw_data, `${context}.raw_data`);
-
-    const artifact: TechnicalAnalysisSuccess = {
-        ticker: parseString(record.ticker, `${context}.ticker`),
-        timestamp: parseString(record.timestamp, `${context}.timestamp`),
-        frac_diff_metrics: parseFracDiffMetrics(
-            record.frac_diff_metrics,
-            `${context}.frac_diff_metrics`
-        ),
-        signal_state: parseSignalState(record.signal_state, `${context}.signal_state`),
-        semantic_tags: parseStringArray(record.semantic_tags, `${context}.semantic_tags`),
-    };
-
-    const llmInterpretation = parseNullableOptionalString(
-        record.llm_interpretation,
-        `${context}.llm_interpretation`
-    );
-    if (typeof llmInterpretation === 'string') {
-        artifact.llm_interpretation = llmInterpretation;
-    }
-
-    if (rawDataRecord !== undefined) {
-        const rawData: NonNullable<TechnicalAnalysisSuccess['raw_data']> = {};
-        if ('price_series' in rawDataRecord && rawDataRecord.price_series !== undefined) {
-            rawData.price_series = parseSeriesMap(
-                rawDataRecord.price_series,
-                `${context}.raw_data.price_series`
-            );
-        }
-        if (
-            'fracdiff_series' in rawDataRecord &&
-            rawDataRecord.fracdiff_series !== undefined
-        ) {
-            rawData.fracdiff_series = parseSeriesMap(
-                rawDataRecord.fracdiff_series,
-                `${context}.raw_data.fracdiff_series`
-            );
-        }
-        if (
-            'z_score_series' in rawDataRecord &&
-            rawDataRecord.z_score_series !== undefined
-        ) {
-            rawData.z_score_series = parseSeriesMap(
-                rawDataRecord.z_score_series,
-                `${context}.raw_data.z_score_series`
-            );
-        }
-        artifact.raw_data = rawData;
-    }
-
-    return artifact;
+    return parseTechnicalAnalysisReport(record, context);
 };
 
 export const parseFundamentalArtifact = (

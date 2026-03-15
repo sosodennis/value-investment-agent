@@ -15,9 +15,33 @@ async def data_fetch_node(state: TechnicalAnalysisState) -> Command:
     return command_from_result(result, end_node=END)
 
 
-async def fracdiff_compute_node(state: TechnicalAnalysisState) -> Command:
+async def feature_compute_node(state: TechnicalAnalysisState) -> Command:
     technical_workflow_runner = get_technical_workflow_runner()
-    result = await technical_workflow_runner.run_fracdiff_compute(state)
+    result = await technical_workflow_runner.run_feature_compute(state)
+    return command_from_result(result, end_node=END)
+
+
+async def pattern_compute_node(state: TechnicalAnalysisState) -> Command:
+    technical_workflow_runner = get_technical_workflow_runner()
+    result = await technical_workflow_runner.run_pattern_compute(state)
+    return command_from_result(result, end_node=END)
+
+
+async def alerts_compute_node(state: TechnicalAnalysisState) -> Command:
+    technical_workflow_runner = get_technical_workflow_runner()
+    result = await technical_workflow_runner.run_alerts_compute(state)
+    return command_from_result(result, end_node=END)
+
+
+async def fusion_compute_node(state: TechnicalAnalysisState) -> Command:
+    technical_workflow_runner = get_technical_workflow_runner()
+    result = await technical_workflow_runner.run_fusion_compute(state)
+    return command_from_result(result, end_node=END)
+
+
+async def verification_compute_node(state: TechnicalAnalysisState) -> Command:
+    technical_workflow_runner = get_technical_workflow_runner()
+    result = await technical_workflow_runner.run_verification_compute(state)
     return command_from_result(result, end_node=END)
 
 
