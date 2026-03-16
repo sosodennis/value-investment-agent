@@ -29,6 +29,17 @@ export interface TechnicalConfidenceCalibration {
     calibration_applied?: boolean | null;
 }
 
+export interface TechnicalMomentumExtremes {
+    timeframe?: string | null;
+    source?: string | null;
+    rsi_value?: number | null;
+    rsi_bias?: string | null;
+    fd_z_score?: number | null;
+    fd_label?: string | null;
+    fd_polarity?: string | null;
+    fd_risk_hint?: string | null;
+}
+
 export interface TechnicalChartData {
     fracdiff_series: Record<string, number | null>;
     z_score_series: Record<string, number | null>;
@@ -245,6 +256,7 @@ export interface TechnicalAnalysisReport {
     confidence_raw?: number | null;
     confidence_calibrated?: number | null;
     confidence_calibration?: TechnicalConfidenceCalibration;
+    momentum_extremes?: TechnicalMomentumExtremes;
     llm_interpretation?: string;
     artifact_refs: TechnicalArtifactRefs;
     summary_tags: string[];

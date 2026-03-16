@@ -446,8 +446,8 @@ const renderScorecardContributions = (
                     item.contribution > 0
                         ? 'text-emerald-200'
                         : item.contribution < 0
-                          ? 'text-rose-200'
-                          : 'text-slate-400';
+                            ? 'text-rose-200'
+                            : 'text-slate-400';
                 return (
                     <div
                         key={`${item.name}-${idx}`}
@@ -780,15 +780,15 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         () =>
             volumeSeries.length > 0
                 ? [
-                      {
-                          id: 'Volume',
-                          data: volumeSeries.map((point) => ({
-                              time: point.time,
-                              value: point.value,
-                              color: point.color,
-                          })),
-                      },
-                  ]
+                    {
+                        id: 'Volume',
+                        data: volumeSeries.map((point) => ({
+                            time: point.time,
+                            value: point.value,
+                            color: point.color,
+                        })),
+                    },
+                ]
                 : [],
         [volumeSeries]
     );
@@ -974,9 +974,8 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         }),
         [visibleIndicators]
     );
-    const hasOverviewIndicators =
+    const hasEvidenceIndicators =
         visibleIndicators.rsi || visibleIndicators.macd || visibleIndicators.fd;
-    const hasFracdiffIndicators = visibleIndicators.fd;
     const classicIndicatorKeys: Array<'rsi' | 'macd'> = ['rsi', 'macd'];
 
     const bottomTimeScalePane = useMemo(() => {
@@ -1002,6 +1001,21 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
     const latestMacdSignal =
         macdSignalSeries.length > 0 ? macdSignalSeries[macdSignalSeries.length - 1].value : null;
     const latestFd = fdSeries.length > 0 ? fdSeries[fdSeries.length - 1].value : null;
+    const momentumExtremes = reportData?.momentum_extremes;
+    const momentumRsiValue =
+        momentumExtremes && momentumExtremes.rsi_value !== undefined
+            ? momentumExtremes.rsi_value
+            : latestRsi;
+    const momentumFdValue =
+        momentumExtremes && momentumExtremes.fd_z_score !== undefined
+            ? momentumExtremes.fd_z_score
+            : latestFd;
+    const momentumTimeframe =
+        momentumExtremes?.timeframe ?? indicatorTimeframe ?? null;
+    const hasMomentumExtremes =
+        momentumExtremes !== undefined ||
+        momentumRsiValue !== null ||
+        momentumFdValue !== null;
     const toSparklineValues = (series: { value: number }[], count = 12) =>
         series
             .slice(-count)
@@ -1021,12 +1035,49 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         [fdSeries]
     );
 
-    const rsiTone = useMemo(() => resolveRsiTone(latestRsi), [latestRsi]);
+    const momentumRsiTone = useMemo(
+        () => resolveRsiTone(momentumRsiValue ?? null),
+        [momentumRsiValue]
+    );
     const macdTone = useMemo(
         () => resolveMacdTone(latestMacd, latestMacdSignal),
         [latestMacd, latestMacdSignal]
     );
-    const fdTone = useMemo(() => resolveFdTone(latestFd), [latestFd]);
+    const momentumFdTone = useMemo(
+        () => resolveFdTone(momentumFdValue ?? null),
+        [momentumFdValue]
+    );
+    const momentumRsiLabel =
+        momentumExtremes && momentumExtremes.rsi_bias !== undefined
+            ? formatLabel(momentumExtremes.rsi_bias ?? 'No Data')
+            : momentumRsiTone.label;
+    const momentumFdLabel =
+        momentumExtremes && momentumExtremes.fd_label !== undefined
+            ? formatLabel(momentumExtremes.fd_label ?? 'No Data')
+            : momentumFdTone.label;
+    const momentumFdRiskHint =
+        momentumExtremes && momentumExtremes.fd_risk_hint !== undefined
+            ? formatLabel(momentumExtremes.fd_risk_hint ?? 'No Data')
+            : null;
+    const momentumSummary = useMemo(() => {
+        if (!hasMomentumExtremes) return null;
+        const parts: string[] = [];
+        if (momentumFdValue !== null) {
+            const label = momentumFdLabel === 'No Data' ? 'FD' : momentumFdLabel;
+            parts.push(`FD ${label} (${formatIndicatorValue(momentumFdValue)})`);
+        }
+        if (momentumRsiValue !== null) {
+            const label = momentumRsiLabel === 'No Data' ? 'RSI' : momentumRsiLabel;
+            parts.push(`RSI ${label} (${formatIndicatorValue(momentumRsiValue)})`);
+        }
+        return parts.length > 0 ? parts.join(' · ') : null;
+    }, [
+        hasMomentumExtremes,
+        momentumFdLabel,
+        momentumFdValue,
+        momentumRsiLabel,
+        momentumRsiValue,
+    ]);
 
     const rsiLines = useMemo<IndicatorLineSeries[]>(
         () => [
@@ -1231,8 +1282,8 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
             const indicatorMeta = indicatorFrame?.metadata;
             const sourcePoints =
                 indicatorMeta &&
-                isRecord(indicatorMeta) &&
-                typeof indicatorMeta.source_points === 'number'
+                    isRecord(indicatorMeta) &&
+                    typeof indicatorMeta.source_points === 'number'
                     ? indicatorMeta.source_points
                     : null;
             return {
@@ -1437,7 +1488,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
             0,
             Math.round(
                 (chartData[chartData.length - 1].timestamp - chartData[0].timestamp) /
-                    86400000
+                86400000
             )
         );
         return {
@@ -1568,486 +1619,565 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-700">
-                <header className="space-y-4">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-600/20 border border-cyan-500/30 flex items-center justify-center shadow-inner">
-                            <LineChart className="text-cyan-400" size={20} />
+            <header className="space-y-4">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-600/20 border border-cyan-500/30 flex items-center justify-center shadow-inner">
+                        <LineChart className="text-cyan-400" size={20} />
+                    </div>
+                    <div>
+                        <h3 className="text-xl font-bold text-white tracking-tight">Technical Intelligence</h3>
+                        <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                            <span className="text-cyan-400">{reportData.ticker}</span>
+                            <span className="opacity-30">|</span>
+                            <span>{formatLabel(reportData.schema_version)}</span>
+                            <span className="opacity-30">|</span>
+                            <span>As of {reportData.as_of}</span>
                         </div>
-                        <div>
-                            <h3 className="text-xl font-bold text-white tracking-tight">Technical Intelligence</h3>
-                            <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                                <span className="text-cyan-400">{reportData.ticker}</span>
-                                <span className="opacity-30">|</span>
-                                <span>{formatLabel(reportData.schema_version)}</span>
-                                <span className="opacity-30">|</span>
-                                <span>As of {reportData.as_of}</span>
+                    </div>
+                </div>
+            </header>
+
+            <section className="space-y-4">
+                <div className="flex items-center gap-2">
+                    <Activity size={14} className="text-cyan-400 opacity-70" />
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Overview</span>
+                </div>
+
+                <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="tech-card p-4 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 rounded-lg bg-white/5 backdrop-blur-md">
+                                <DirectionIcon size={20} className="text-cyan-400" />
+                            </div>
+                            <div>
+                                <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Direction</div>
+                                <div className="text-lg font-black text-white">{formatLabel(reportData.direction)}</div>
                             </div>
                         </div>
                     </div>
-                </header>
+                    <div className={`tech-card p-4 border ${riskTone.border} ${riskTone.bg}`}>
+                        <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Risk Level</div>
+                        <div className={`text-lg font-black ${riskTone.color}`}>{riskTone.label}</div>
+                        {isDegraded && (
+                            <div className="text-[9px] font-bold uppercase tracking-widest text-rose-300 mt-1">
+                                Degraded Data Path
+                            </div>
+                        )}
+                    </div>
+                    <div className="tech-card p-4">
+                        <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Confidence</div>
+                        <div className="text-lg font-black text-white">{confidenceDisplay}</div>
+                        <div className="text-[9px] text-slate-500 uppercase tracking-widest mt-1">{confidenceLabel}</div>
+                    </div>
+                </section>
 
+                {momentumSummary && (
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                        <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                            <Zap size={12} className="text-amber-300" />
+                            Momentum & Extremes
+                        </span>
+                        {momentumTimeframe && (
+                            <span className="text-[9px] text-slate-600 uppercase">
+                                {momentumTimeframe.toUpperCase()}
+                            </span>
+                        )}
+                        <span className="text-slate-300">{momentumSummary}</span>
+                    </div>
+                )}
+
+                <section className="tech-card p-6 relative overflow-hidden group shadow-2xl bg-indigo-500/[0.03] border-indigo-500/20">
+                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                        <BrainCircuit size={80} className="text-indigo-400" />
+                    </div>
+                    <div className="flex items-center gap-2 mb-4">
+                        <BrainCircuit size={18} className="text-indigo-400" />
+                        <span className="text-xs font-black text-indigo-200 uppercase tracking-[0.2em]">Analyst Perspective</span>
+                    </div>
+                    <div className="text-base text-slate-200 leading-relaxed font-light italic">
+                        {reportData.llm_interpretation ? (
+                            <ReactMarkdown
+                                components={{
+                                    strong: (props) => <span className="font-bold text-indigo-300 not-italic" {...props} />,
+                                    p: (props) => <p className="mb-2 last:mb-0" {...props} />
+                                }}
+                            >
+                                {reportData.llm_interpretation}
+                            </ReactMarkdown>
+                        ) : (
+                            "Summarizing multi-timeframe signals into actionable insight..."
+                        )}
+                    </div>
+                    <div className="flex flex-wrap gap-2 mt-6">
+                        {reportData.summary_tags.length > 0 ? (
+                            reportData.summary_tags.map((tag) => (
+                                <span key={tag} className="px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-[10px] font-bold text-indigo-300 uppercase tracking-wider">
+                                    #{tag.replace('_', ' ')}
+                                </span>
+                            ))
+                        ) : (
+                            <span className="text-xs text-slate-500">No summary tags available.</span>
+                        )}
+                    </div>
+                </section>
+
+            </section>
+
+            {(hasEvidenceIndicators || indicatorSeriesId) && (
                 <section className="space-y-4">
                     <div className="flex items-center gap-2">
-                        <Activity size={14} className="text-cyan-400 opacity-70" />
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Overview</span>
+                        <Zap size={14} className="text-amber-300 opacity-70" />
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Setup Evidence</span>
                     </div>
-
-                    <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="tech-card p-4 flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                                <div className="p-2 rounded-lg bg-white/5 backdrop-blur-md">
-                                    <DirectionIcon size={20} className="text-cyan-400" />
-                                </div>
-                                <div>
-                                    <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Direction</div>
-                                    <div className="text-lg font-black text-white">{formatLabel(reportData.direction)}</div>
-                                </div>
-                            </div>
+                    {momentumFdRiskHint && (
+                        <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[10px] font-bold uppercase text-amber-200">
+                            <AlertTriangle size={14} className="text-amber-300" />
+                            <span>Risk Hint: {momentumFdRiskHint}</span>
                         </div>
-                        <div className={`tech-card p-4 border ${riskTone.border} ${riskTone.bg}`}>
-                            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Risk Level</div>
-                            <div className={`text-lg font-black ${riskTone.color}`}>{riskTone.label}</div>
-                            {isDegraded && (
-                                <div className="text-[9px] font-bold uppercase tracking-widest text-rose-300 mt-1">
-                                    Degraded Data Path
-                                </div>
-                            )}
-                        </div>
-                        <div className="tech-card p-4">
-                            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Confidence</div>
-                            <div className="text-lg font-black text-white">{confidenceDisplay}</div>
-                            <div className="text-[9px] text-slate-500 uppercase tracking-widest mt-1">{confidenceLabel}</div>
-                        </div>
-                    </section>
-
-                    {hasOverviewIndicators && (
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            {visibleIndicators.rsi && (
-                                <div className="relative overflow-hidden bg-slate-950/70 border border-slate-800 rounded-xl p-4">
-                                    <div className="flex items-start justify-between gap-3 mb-3">
-                                        <div>
-                                            <div className="text-[9px] font-black text-slate-500 uppercase">RSI (14)</div>
-                                            <div
-                                                className={`text-xl font-mono font-bold ${tonePalette[rsiTone.tone].value} ${tonePalette[rsiTone.tone].glow}`}
-                                            >
-                                                {formatIndicatorValue(latestRsi)}
-                                            </div>
-                                        </div>
-                                        <span
-                                            className={`px-2 py-1 rounded-full border text-[9px] font-bold uppercase tracking-wide ${tonePalette[rsiTone.tone].badge}`}
-                                        >
-                                            {rsiTone.label}
-                                        </span>
+                    )}
+                    {hasEvidenceIndicators ? (
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                            {(visibleIndicators.rsi || visibleIndicators.fd) && (
+                                <div className="space-y-3 flex flex-col h-full lg:col-span-2">
+                                    <div className="flex items-center justify-between text-[10px] font-black text-slate-500 uppercase">
+                                        <span>Momentum & Extremes</span>
+                                        {momentumTimeframe && (
+                                            <span className="text-[9px] text-slate-600 uppercase">
+                                                {momentumTimeframe.toUpperCase()}
+                                            </span>
+                                        )}
                                     </div>
-                                    <div className="flex items-center justify-between gap-3">
-                                        <div className="text-[10px] text-slate-500 uppercase">Momentum</div>
-                                        {rsiSparkline ? (
-                                            <svg width={120} height={32} viewBox="0 0 120 32" className="flex-none">
-                                                <polyline
-                                                    points={rsiSparkline}
-                                                    fill="none"
-                                                    stroke={tonePalette[rsiTone.tone].spark}
-                                                    strokeWidth={2}
-                                                />
-                                            </svg>
-                                        ) : (
-                                            <div className="text-[10px] text-slate-600 uppercase">No trend</div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
+                                        {visibleIndicators.rsi && (
+                                            <div className="relative overflow-hidden flex flex-col justify-between h-full bg-slate-950/70 border border-slate-800 rounded-xl p-4">
+                                                <div className="flex items-start justify-between gap-3 mb-3">
+                                                    <div>
+                                                        <div className="text-[9px] font-black text-slate-500 uppercase">RSI (14)</div>
+                                                        <div
+                                                            className={`text-xl font-mono font-bold ${tonePalette[momentumRsiTone.tone].value} ${tonePalette[momentumRsiTone.tone].glow}`}
+                                                        >
+                                                            {formatIndicatorValue(momentumRsiValue)}
+                                                        </div>
+                                                    </div>
+                                                    <span
+                                                        className={`px-2 py-1 rounded-full border text-[9px] font-bold uppercase tracking-wide ${tonePalette[momentumRsiTone.tone].badge}`}
+                                                    >
+                                                        {momentumRsiLabel}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <div className="text-[10px] text-slate-500 uppercase">Momentum</div>
+                                                    {rsiSparkline ? (
+                                                        <svg width={120} height={32} viewBox="0 0 120 32" className="flex-none">
+                                                            <polyline
+                                                                points={rsiSparkline}
+                                                                fill="none"
+                                                                stroke={tonePalette[momentumRsiTone.tone].spark}
+                                                                strokeWidth={2}
+                                                            />
+                                                        </svg>
+                                                    ) : (
+                                                        <div className="text-[10px] text-slate-600 uppercase">No trend</div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+                                        {visibleIndicators.fd && (
+                                            <div className="relative overflow-hidden flex flex-col justify-between h-full bg-slate-950/70 border border-slate-800 rounded-xl p-4">
+                                                <div className="flex items-start justify-between gap-3 mb-3">
+                                                    <div>
+                                                        <div className="text-[9px] font-black text-slate-500 uppercase">FD Z-Score</div>
+                                                        <div
+                                                            className={`text-xl font-mono font-bold ${tonePalette[momentumFdTone.tone].value} ${tonePalette[momentumFdTone.tone].glow}`}
+                                                        >
+                                                            {formatIndicatorValue(momentumFdValue)}
+                                                        </div>
+                                                    </div>
+                                                    <span
+                                                        className={`px-2 py-1 rounded-full border text-[9px] font-bold uppercase tracking-wide ${tonePalette[momentumFdTone.tone].badge}`}
+                                                    >
+                                                        {momentumFdLabel}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <div className="text-[10px] text-slate-500 uppercase">Stability</div>
+                                                    {fdSparkline ? (
+                                                        <svg width={120} height={32} viewBox="0 0 120 32" className="flex-none">
+                                                            <polyline
+                                                                points={fdSparkline}
+                                                                fill="none"
+                                                                stroke={tonePalette[momentumFdTone.tone].spark}
+                                                                strokeWidth={2}
+                                                            />
+                                                        </svg>
+                                                    ) : (
+                                                        <div className="text-[10px] text-slate-600 uppercase">No trend</div>
+                                                    )}
+                                                </div>
+                                            </div>
                                         )}
                                     </div>
                                 </div>
                             )}
                             {visibleIndicators.macd && (
-                                <div className="relative overflow-hidden bg-slate-950/70 border border-slate-800 rounded-xl p-4">
-                                    <div className="flex items-start justify-between gap-3 mb-3">
-                                        <div>
-                                            <div className="text-[9px] font-black text-slate-500 uppercase">MACD</div>
-                                            <div
-                                                className={`text-xl font-mono font-bold ${tonePalette[macdTone.tone].value} ${tonePalette[macdTone.tone].glow}`}
-                                            >
-                                                {formatIndicatorValue(latestMacd)}
-                                            </div>
-                                            <div className="text-[10px] text-slate-500 uppercase">
-                                                Signal: {formatIndicatorValue(latestMacdSignal)}
-                                            </div>
-                                        </div>
-                                        <span
-                                            className={`px-2 py-1 rounded-full border text-[9px] font-bold uppercase tracking-wide ${tonePalette[macdTone.tone].badge}`}
-                                        >
-                                            {macdTone.label}
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center justify-between gap-3">
-                                        <div className="text-[10px] text-slate-500 uppercase">Trend</div>
-                                        {macdSparkline ? (
-                                            <svg width={120} height={32} viewBox="0 0 120 32" className="flex-none">
-                                                <polyline
-                                                    points={macdSparkline}
-                                                    fill="none"
-                                                    stroke={tonePalette[macdTone.tone].spark}
-                                                    strokeWidth={2}
-                                                />
-                                            </svg>
-                                        ) : (
-                                            <div className="text-[10px] text-slate-600 uppercase">No trend</div>
+                                <div className="space-y-3 flex flex-col h-full lg:col-span-1">
+                                    <div className="flex items-center justify-between text-[10px] font-black text-slate-500 uppercase">
+                                        <span>Trend & Momentum</span>
+                                        {momentumTimeframe && (
+                                            <span className="text-[9px] text-slate-600 uppercase">
+                                                {momentumTimeframe.toUpperCase()}
+                                            </span>
                                         )}
                                     </div>
-                                </div>
-                            )}
-                            {visibleIndicators.fd && (
-                                <div className="relative overflow-hidden bg-slate-950/70 border border-slate-800 rounded-xl p-4">
-                                    <div className="flex items-start justify-between gap-3 mb-3">
-                                        <div>
-                                            <div className="text-[9px] font-black text-slate-500 uppercase">FD Z-Score</div>
-                                            <div
-                                                className={`text-xl font-mono font-bold ${tonePalette[fdTone.tone].value} ${tonePalette[fdTone.tone].glow}`}
-                                            >
-                                                {formatIndicatorValue(latestFd)}
+                                    <div className="grid grid-cols-1 gap-4 flex-1">
+                                        <div className="relative overflow-hidden flex flex-col justify-between h-full bg-slate-950/70 border border-slate-800 rounded-xl p-4">
+                                            <div className="flex items-start justify-between gap-3 mb-3">
+                                                <div>
+                                                    <div className="text-[9px] font-black text-slate-500 uppercase">MACD</div>
+                                                    <div
+                                                        className={`text-xl font-mono font-bold ${tonePalette[macdTone.tone].value} ${tonePalette[macdTone.tone].glow}`}
+                                                    >
+                                                        {formatIndicatorValue(latestMacd)}
+                                                    </div>
+                                                    <div className="text-[10px] text-slate-500 uppercase">
+                                                        Signal: {formatIndicatorValue(latestMacdSignal)}
+                                                    </div>
+                                                </div>
+                                                <span
+                                                    className={`px-2 py-1 rounded-full border text-[9px] font-bold uppercase tracking-wide ${tonePalette[macdTone.tone].badge}`}
+                                                >
+                                                    {macdTone.label}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center justify-between gap-3">
+                                                <div className="text-[10px] text-slate-500 uppercase">Trend</div>
+                                                {macdSparkline ? (
+                                                    <svg width={120} height={32} viewBox="0 0 120 32" className="flex-none">
+                                                        <polyline
+                                                            points={macdSparkline}
+                                                            fill="none"
+                                                            stroke={tonePalette[macdTone.tone].spark}
+                                                            strokeWidth={2}
+                                                        />
+                                                    </svg>
+                                                ) : (
+                                                    <div className="text-[10px] text-slate-600 uppercase">No trend</div>
+                                                )}
                                             </div>
                                         </div>
-                                        <span
-                                            className={`px-2 py-1 rounded-full border text-[9px] font-bold uppercase tracking-wide ${tonePalette[fdTone.tone].badge}`}
-                                        >
-                                            {fdTone.label}
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center justify-between gap-3">
-                                        <div className="text-[10px] text-slate-500 uppercase">Stability</div>
-                                        {fdSparkline ? (
-                                            <svg width={120} height={32} viewBox="0 0 120 32" className="flex-none">
-                                                <polyline
-                                                    points={fdSparkline}
-                                                    fill="none"
-                                                    stroke={tonePalette[fdTone.tone].spark}
-                                                    strokeWidth={2}
-                                                />
-                                            </svg>
-                                        ) : (
-                                            <div className="text-[10px] text-slate-600 uppercase">No trend</div>
-                                        )}
                                     </div>
                                 </div>
                             )}
                         </div>
-                    )}
-
-                    {!hasOverviewIndicators && indicatorSeriesId && (
+                    ) : (
                         <div className="text-xs text-slate-500">
-                            Enable indicator panels to load key indicator snapshots.
+                            Indicator evidence unavailable for this run.
                         </div>
-                    )}
-
-                    <section className="tech-card p-6 relative overflow-hidden group shadow-2xl bg-indigo-500/[0.03] border-indigo-500/20">
-                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                            <BrainCircuit size={80} className="text-indigo-400" />
-                        </div>
-                        <div className="flex items-center gap-2 mb-4">
-                            <BrainCircuit size={18} className="text-indigo-400" />
-                            <span className="text-xs font-black text-indigo-200 uppercase tracking-[0.2em]">Analyst Perspective</span>
-                        </div>
-                        <div className="text-base text-slate-200 leading-relaxed font-light italic">
-                            {reportData.llm_interpretation ? (
-                                <ReactMarkdown
-                                    components={{
-                                        strong: (props) => <span className="font-bold text-indigo-300 not-italic" {...props} />,
-                                        p: (props) => <p className="mb-2 last:mb-0" {...props} />
-                                    }}
-                                >
-                                    {reportData.llm_interpretation}
-                                </ReactMarkdown>
-                            ) : (
-                                "Summarizing multi-timeframe signals into actionable insight..."
-                            )}
-                        </div>
-                        <div className="flex flex-wrap gap-2 mt-6">
-                            {reportData.summary_tags.length > 0 ? (
-                                reportData.summary_tags.map((tag) => (
-                                    <span key={tag} className="px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-[10px] font-bold text-indigo-300 uppercase tracking-wider">
-                                        #{tag.replace('_', ' ')}
-                                    </span>
-                                ))
-                            ) : (
-                                <span className="text-xs text-slate-500">No summary tags available.</span>
-                            )}
-                        </div>
-                    </section>
-
-                    {(isDegraded || degradedReasons.length > 0) && (
-                        <section className="tech-card p-5 border border-rose-500/20 bg-rose-500/5">
-                            <div className="flex items-center gap-2 mb-3">
-                                <AlertTriangle size={16} className="text-rose-400" />
-                                <span className="text-xs font-black text-rose-200 uppercase tracking-[0.2em]">Diagnostics</span>
-                            </div>
-                            <div className="text-xs text-slate-300">
-                                One or more data sources were degraded or missing. Review the notes below before taking action.
-                            </div>
-                            {degradedReasons.length > 0 && (
-                                <div className="flex flex-wrap gap-2 mt-3">
-                                    {degradedReasons.map((reason) => (
-                                        <span key={reason} className="px-3 py-1 bg-rose-500/10 border border-rose-500/20 rounded-full text-[10px] font-bold text-rose-200 uppercase tracking-wider">
-                                            {reason.replace('_', ' ')}
-                                        </span>
-                                    ))}
-                                </div>
-                            )}
-                        </section>
                     )}
                 </section>
+            )}
 
-                <section className="space-y-4">
-                    {timeseriesBundleError && (
-                        <div className="text-xs text-rose-300">
-                            Unable to load OHLC series. Please retry later.
-                        </div>
-                    )}
-                    {indicatorSeriesError && (
-                        <div className="text-xs text-rose-300">
-                            Unable to load indicator series. Please retry later.
-                        </div>
-                    )}
-
-                    {timeseriesSummary && (
-                        <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
-                            <div className="text-[9px] font-black text-slate-500 uppercase mb-2">OHLC Series</div>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-slate-200">
-                                <div>Frames: {timeseriesSummary.frameCount}</div>
-                                <div>Max Points: {timeseriesSummary.maxPoints}</div>
-                                <div>Selected: {priceTimeframe ? priceTimeframe.toUpperCase() : 'n/a'}</div>
+            <section className="space-y-4">
+                {timeseriesBundleData && (
+                    <div className="bg-slate-950/40 border border-slate-800 rounded-xl p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+                            <div className="flex items-center gap-2">
+                                <Layers size={14} className="text-cyan-400 opacity-50" />
+                                <span className={sectionHeaderTextClass}>Multi-pane Chart Stack</span>
                             </div>
-                            {timeseriesSummary.degradedReasons.length > 0 && (
-                                <div className="mt-2 text-[10px] text-amber-300">
-                                    Degraded: {timeseriesSummary.degradedReasons.join(', ')}
-                                </div>
-                            )}
-                        </div>
-                    )}
-                    {indicatorSeriesSummary && (
-                        <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
-                            <div className="text-[9px] font-black text-slate-500 uppercase mb-2">Indicator Series</div>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-slate-200">
-                                <div>Frames: {indicatorSeriesSummary.timeframeCount}</div>
-                                <div>Series: {indicatorSeriesSummary.seriesTotal}</div>
-                                <div>Max Points: {indicatorSeriesSummary.maxPoints}</div>
-                            </div>
-                            {indicatorSeriesSummary.degradedReasons.length > 0 && (
-                                <div className="mt-2 text-[10px] text-amber-300">
-                                    Degraded: {indicatorSeriesSummary.degradedReasons.join(', ')}
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {timeseriesBundleData && (
-                        <div className="bg-slate-950/40 border border-slate-800 rounded-xl p-4">
-                            <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-                                <div className="flex items-center gap-2">
-                                    <Layers size={14} className="text-cyan-400 opacity-50" />
-                                    <span className={sectionHeaderTextClass}>Multi-pane Chart Stack</span>
-                                </div>
-                                <div className="flex flex-wrap items-center gap-4">
-                                    {availableTimeseriesFrames.length > 0 ? (
-                                        <div className="flex items-center bg-slate-800/50 rounded-lg p-0.5 border border-slate-700/50">
-                                            {availableTimeseriesFrames.map((frame) => (
-                                                <button
-                                                    key={frame}
-                                                    onClick={() => setPriceTimeframe(frame)}
-                                                    className={`px-2 py-1 rounded text-[9px] font-bold transition-all ${priceTimeframe === frame
-                                                        ? 'bg-cyan-500/20 text-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.1)]'
-                                                        : 'text-slate-500 hover:text-slate-300'
-                                                        }`}
-                                                >
-                                                    {frame.toUpperCase()}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    ) : (
-                                        <div className="text-[10px] text-slate-500 uppercase">
-                                            No OHLC frames
-                                        </div>
-                                    )}
-                                    {indicatorTimeframe && (
-                                        <div className="text-[10px] font-bold uppercase text-slate-600">
-                                            Indicators: {indicatorTimeframe.toUpperCase()}
-                                        </div>
-                                    )}
-                                    {timeseriesWindow && (
-                                        <div className="text-[10px] font-bold uppercase text-slate-600">
-                                            {timeseriesWindow.start} → {timeseriesWindow.end}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            <div
-                                ref={chartStackRef}
-                                className="relative rounded-xl border border-slate-800/70 bg-slate-950/55"
-                            >
-                                <div className="divide-y divide-slate-800/60">
-                                    <div className="px-4 py-3">
-                                        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                                            <div className="text-[9px] font-black text-slate-500 uppercase">
-                                                Price Action (OHLCV)
-                                            </div>
-                                            {priceOverlays.length > 0 && (
-                                                <div className="flex flex-wrap items-center gap-3 text-[9px] text-slate-500 uppercase">
-                                                    {priceOverlays.map((overlay) => (
-                                                        <span key={overlay.id} className="inline-flex items-center gap-1">
-                                                            <span
-                                                                className="h-2 w-2 rounded-full"
-                                                                style={{ backgroundColor: overlay.color }}
-                                                            />
-                                                            {overlay.id}
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                        <TechnicalCandlestickChart
-                                            candles={candlestickSeries}
-                                            volumes={volumeSeries}
-                                            overlays={priceOverlays}
-                                            height={CHART_PANE_HEIGHTS.price}
-                                            showTime={isIntradayTimeseries}
-                                            showTimeScale={bottomTimeScalePane === 'price'}
-                                            showVolume={false}
-                                            syncId="price"
-                                            syncState={crosshairSync}
-                                        />
+                            <div className="flex flex-wrap items-center gap-4">
+                                {availableTimeseriesFrames.length > 0 ? (
+                                    <div className="flex items-center bg-slate-800/50 rounded-lg p-0.5 border border-slate-700/50">
+                                        {availableTimeseriesFrames.map((frame) => (
+                                            <button
+                                                key={frame}
+                                                onClick={() => setPriceTimeframe(frame)}
+                                                className={`px-2 py-1 rounded text-[9px] font-bold transition-all ${priceTimeframe === frame
+                                                    ? 'bg-cyan-500/20 text-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.1)]'
+                                                    : 'text-slate-500 hover:text-slate-300'
+                                                    }`}
+                                            >
+                                                {frame.toUpperCase()}
+                                            </button>
+                                        ))}
                                     </div>
-
-                                    <div className="px-4 py-3">
-                                        <div className="text-[9px] font-black text-slate-500 uppercase mb-2">Volume</div>
-                                        {volumeHistogram.length > 0 ? (
-                                            <TechnicalIndicatorChart
-                                                lines={[]}
-                                                histograms={volumeHistogram}
-                                                height={CHART_PANE_HEIGHTS.volume}
-                                                showTime={isIntradayTimeseries}
-                                                showTimeScale={bottomTimeScalePane === 'volume'}
-                                                histogramScaleMargins={{ top: 0.2, bottom: 0.08 }}
-                                                syncId="volume"
-                                                syncState={crosshairSync}
-                                            />
-                                        ) : (
-                                            <div className="text-xs text-slate-500">Volume data unavailable.</div>
-                                        )}
+                                ) : (
+                                    <div className="text-[10px] text-slate-500 uppercase">
+                                        No OHLC frames
                                     </div>
-
-                                    <div className="px-4 py-3">
-                                        <div className="text-[9px] font-black text-slate-500 uppercase mb-2">RSI (14)</div>
-                                        {indicatorAvailability.rsi ? (
-                                            <TechnicalIndicatorChart
-                                                lines={rsiLines}
-                                                priceLines={rsiPriceLines}
-                                                height={CHART_PANE_HEIGHTS.rsi}
-                                                showTime={isIntradayTimeseries}
-                                                showTimeScale={bottomTimeScalePane === 'rsi'}
-                                                syncId="rsi"
-                                                syncState={crosshairSync}
-                                            />
-                                        ) : (
-                                            <div className="text-xs text-slate-500">RSI data unavailable.</div>
-                                        )}
+                                )}
+                                {indicatorTimeframe && (
+                                    <div className="text-[10px] font-bold uppercase text-slate-600">
+                                        Indicators: {indicatorTimeframe.toUpperCase()}
                                     </div>
-
-                                    <div className="px-4 py-3">
-                                        <div className="text-[9px] font-black text-slate-500 uppercase mb-2">MACD</div>
-                                        {indicatorAvailability.macd ? (
-                                            <TechnicalIndicatorChart
-                                                lines={macdLines}
-                                                histograms={macdHistogram}
-                                                priceLines={macdPriceLines}
-                                                height={CHART_PANE_HEIGHTS.macd}
-                                                showTime={isIntradayTimeseries}
-                                                showTimeScale={bottomTimeScalePane === 'macd'}
-                                                syncId="macd"
-                                                syncState={crosshairSync}
-                                            />
-                                        ) : (
-                                            <div className="text-xs text-slate-500">MACD data unavailable.</div>
-                                        )}
-                                    </div>
-
-                                    <div className="px-4 py-3">
-                                        <div className="text-[9px] font-black text-slate-500 uppercase mb-2">FracDiff</div>
-                                        {indicatorAvailability.fd ? (
-                                            <TechnicalIndicatorChart
-                                                lines={fdLines}
-                                                priceLines={fdPriceLines}
-                                                height={CHART_PANE_HEIGHTS.fracdiff}
-                                                showTime={isIntradayTimeseries}
-                                                showTimeScale={bottomTimeScalePane === 'fd'}
-                                                syncId="fd"
-                                                syncState={crosshairSync}
-                                            />
-                                        ) : (
-                                            <div className="text-xs text-slate-500">Fracdiff data unavailable.</div>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {tooltipPosition && tooltipPayload && (
-                                    <div
-                                        className="pointer-events-none absolute z-20 w-60 rounded-xl border border-slate-700/60 bg-slate-950/80 backdrop-blur-md p-3 text-[10px] text-slate-100 shadow-lg"
-                                        style={{ left: tooltipPosition.x, top: tooltipPosition.y }}
-                                    >
-                                        <div className="text-[9px] font-black uppercase text-slate-400 mb-2">
-                                            {formatTooltipTimestamp(tooltipPayload.time, isIntradayTimeseries)}
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
-                                            <div>O: {tooltipPayload.candle ? formatPrice(tooltipPayload.candle.open) : 'n/a'}</div>
-                                            <div>H: {tooltipPayload.candle ? formatPrice(tooltipPayload.candle.high) : 'n/a'}</div>
-                                            <div>L: {tooltipPayload.candle ? formatPrice(tooltipPayload.candle.low) : 'n/a'}</div>
-                                            <div>C: {tooltipPayload.candle ? formatPrice(tooltipPayload.candle.close) : 'n/a'}</div>
-                                        </div>
-                                        <div className="mt-2 border-t border-slate-800 pt-2 space-y-1">
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-slate-400">Volume</span>
-                                                <span>{formatVolume(tooltipPayload.volume as number | null)}</span>
-                                            </div>
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-slate-400">RSI</span>
-                                                <span>{formatIndicatorValue(tooltipPayload.rsi as number | null)}</span>
-                                            </div>
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-slate-400">MACD</span>
-                                                <span>{formatIndicatorValue(tooltipPayload.macd as number | null)}</span>
-                                            </div>
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-slate-400">Signal</span>
-                                                <span>{formatIndicatorValue(tooltipPayload.macdSignal as number | null)}</span>
-                                            </div>
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-slate-400">Hist</span>
-                                                <span>{formatIndicatorValue(tooltipPayload.macdHist as number | null)}</span>
-                                            </div>
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-slate-400">FracDiff</span>
-                                                <span>{formatIndicatorValue(tooltipPayload.fd as number | null)}</span>
-                                            </div>
-                                        </div>
+                                )}
+                                {timeseriesWindow && (
+                                    <div className="text-[10px] font-bold uppercase text-slate-600">
+                                        {timeseriesWindow.start} → {timeseriesWindow.end}
                                     </div>
                                 )}
                             </div>
-                            <div className="mt-2 flex justify-end text-[9px] text-slate-500">
-                                <a
-                                    href="https://www.tradingview.com/"
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="hover:text-slate-300 underline"
+                        </div>
+
+                        <div
+                            ref={chartStackRef}
+                            className="relative rounded-xl border border-slate-800/70 bg-slate-950/55"
+                        >
+                            <div className="divide-y divide-slate-800/60">
+                                <div className="px-4 py-3">
+                                    <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                                        <div className="text-[9px] font-black text-slate-500 uppercase">
+                                            Price Action (OHLCV)
+                                        </div>
+                                        {priceOverlays.length > 0 && (
+                                            <div className="flex flex-wrap items-center gap-3 text-[9px] text-slate-500 uppercase">
+                                                {priceOverlays.map((overlay) => (
+                                                    <span key={overlay.id} className="inline-flex items-center gap-1">
+                                                        <span
+                                                            className="h-2 w-2 rounded-full"
+                                                            style={{ backgroundColor: overlay.color }}
+                                                        />
+                                                        {overlay.id}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <TechnicalCandlestickChart
+                                        candles={candlestickSeries}
+                                        volumes={volumeSeries}
+                                        overlays={priceOverlays}
+                                        height={CHART_PANE_HEIGHTS.price}
+                                        showTime={isIntradayTimeseries}
+                                        showTimeScale={bottomTimeScalePane === 'price'}
+                                        showVolume={false}
+                                        syncId="price"
+                                        syncState={crosshairSync}
+                                    />
+                                </div>
+
+                                <div className="px-4 py-3">
+                                    <div className="text-[9px] font-black text-slate-500 uppercase mb-2">Volume</div>
+                                    {volumeHistogram.length > 0 ? (
+                                        <TechnicalIndicatorChart
+                                            lines={[]}
+                                            histograms={volumeHistogram}
+                                            height={CHART_PANE_HEIGHTS.volume}
+                                            showTime={isIntradayTimeseries}
+                                            showTimeScale={bottomTimeScalePane === 'volume'}
+                                            histogramScaleMargins={{ top: 0.2, bottom: 0.08 }}
+                                            syncId="volume"
+                                            syncState={crosshairSync}
+                                        />
+                                    ) : (
+                                        <div className="text-xs text-slate-500">Volume data unavailable.</div>
+                                    )}
+                                </div>
+
+                                <div className="px-4 py-3">
+                                    <div className="text-[9px] font-black text-slate-500 uppercase mb-2">RSI (14)</div>
+                                    {indicatorAvailability.rsi ? (
+                                        <TechnicalIndicatorChart
+                                            lines={rsiLines}
+                                            priceLines={rsiPriceLines}
+                                            height={CHART_PANE_HEIGHTS.rsi}
+                                            showTime={isIntradayTimeseries}
+                                            showTimeScale={bottomTimeScalePane === 'rsi'}
+                                            syncId="rsi"
+                                            syncState={crosshairSync}
+                                        />
+                                    ) : (
+                                        <div className="text-xs text-slate-500">RSI data unavailable.</div>
+                                    )}
+                                </div>
+
+                                <div className="px-4 py-3">
+                                    <div className="text-[9px] font-black text-slate-500 uppercase mb-2">MACD</div>
+                                    {indicatorAvailability.macd ? (
+                                        <TechnicalIndicatorChart
+                                            lines={macdLines}
+                                            histograms={macdHistogram}
+                                            priceLines={macdPriceLines}
+                                            height={CHART_PANE_HEIGHTS.macd}
+                                            showTime={isIntradayTimeseries}
+                                            showTimeScale={bottomTimeScalePane === 'macd'}
+                                            syncId="macd"
+                                            syncState={crosshairSync}
+                                        />
+                                    ) : (
+                                        <div className="text-xs text-slate-500">MACD data unavailable.</div>
+                                    )}
+                                </div>
+
+                                <div className="px-4 py-3">
+                                    <div className="text-[9px] font-black text-slate-500 uppercase mb-2">FracDiff</div>
+                                    {indicatorAvailability.fd ? (
+                                        <TechnicalIndicatorChart
+                                            lines={fdLines}
+                                            priceLines={fdPriceLines}
+                                            height={CHART_PANE_HEIGHTS.fracdiff}
+                                            showTime={isIntradayTimeseries}
+                                            showTimeScale={bottomTimeScalePane === 'fd'}
+                                            syncId="fd"
+                                            syncState={crosshairSync}
+                                        />
+                                    ) : (
+                                        <div className="text-xs text-slate-500">Fracdiff data unavailable.</div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {tooltipPosition && tooltipPayload && (
+                                <div
+                                    className="pointer-events-none absolute z-20 w-60 rounded-xl border border-slate-700/60 bg-slate-950/80 backdrop-blur-md p-3 text-[10px] text-slate-100 shadow-lg"
+                                    style={{ left: tooltipPosition.x, top: tooltipPosition.y }}
                                 >
-                                    Charts by TradingView
-                                </a>
+                                    <div className="text-[9px] font-black uppercase text-slate-400 mb-2">
+                                        {formatTooltipTimestamp(tooltipPayload.time, isIntradayTimeseries)}
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+                                        <div>O: {tooltipPayload.candle ? formatPrice(tooltipPayload.candle.open) : 'n/a'}</div>
+                                        <div>H: {tooltipPayload.candle ? formatPrice(tooltipPayload.candle.high) : 'n/a'}</div>
+                                        <div>L: {tooltipPayload.candle ? formatPrice(tooltipPayload.candle.low) : 'n/a'}</div>
+                                        <div>C: {tooltipPayload.candle ? formatPrice(tooltipPayload.candle.close) : 'n/a'}</div>
+                                    </div>
+                                    <div className="mt-2 border-t border-slate-800 pt-2 space-y-1">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-slate-400">Volume</span>
+                                            <span>{formatVolume(tooltipPayload.volume as number | null)}</span>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-slate-400">RSI</span>
+                                            <span>{formatIndicatorValue(tooltipPayload.rsi as number | null)}</span>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-slate-400">MACD</span>
+                                            <span>{formatIndicatorValue(tooltipPayload.macd as number | null)}</span>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-slate-400">Signal</span>
+                                            <span>{formatIndicatorValue(tooltipPayload.macdSignal as number | null)}</span>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-slate-400">Hist</span>
+                                            <span>{formatIndicatorValue(tooltipPayload.macdHist as number | null)}</span>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-slate-400">FracDiff</span>
+                                            <span>{formatIndicatorValue(tooltipPayload.fd as number | null)}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        <div className="mt-2 flex justify-end text-[9px] text-slate-500">
+                            <a
+                                href="https://www.tradingview.com/"
+                                target="_blank"
+                                rel="noreferrer"
+                                className="hover:text-slate-300 underline"
+                            >
+                                Charts by TradingView
+                            </a>
+                        </div>
+                    </div>
+                )}
+            </section>
+
+            <section className="space-y-4">
+                <div className="flex items-center gap-2">
+                    <AlertTriangle size={14} className="text-rose-400 opacity-70" />
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Diagnostics</span>
+                </div>
+                {timeseriesBundleError && (
+                    <div className="text-xs text-rose-300">
+                        Unable to load OHLC series. Please retry later.
+                    </div>
+                )}
+                {indicatorSeriesError && (
+                    <div className="text-xs text-rose-300">
+                        Unable to load indicator series. Please retry later.
+                    </div>
+                )}
+                {(isDegraded || degradedReasons.length > 0) && (
+                    <section className="tech-card p-5 border border-rose-500/20 bg-rose-500/5">
+                        <div className="flex items-center gap-2 mb-3">
+                            <AlertTriangle size={16} className="text-rose-400" />
+                            <span className="text-xs font-black text-rose-200 uppercase tracking-[0.2em]">Degraded Data Path</span>
+                        </div>
+                        <div className="text-xs text-slate-300">
+                            One or more data sources were degraded or missing. Review the notes below before taking action.
+                        </div>
+                        {degradedReasons.length > 0 && (
+                            <div className="flex flex-wrap gap-2 mt-3">
+                                {degradedReasons.map((reason) => (
+                                    <span key={reason} className="px-3 py-1 bg-rose-500/10 border border-rose-500/20 rounded-full text-[10px] font-bold text-rose-200 uppercase tracking-wider">
+                                        {reason.replace('_', ' ')}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+                    </section>
+                )}
+
+                {timeseriesSummary && (
+                    <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
+                        <div className="text-[9px] font-black text-slate-500 uppercase mb-2">OHLC Series</div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-slate-200">
+                            <div>Frames: {timeseriesSummary.frameCount}</div>
+                            <div>Max Points: {timeseriesSummary.maxPoints}</div>
+                            <div>Selected: {priceTimeframe ? priceTimeframe.toUpperCase() : 'n/a'}</div>
+                        </div>
+                        {timeseriesSummary.degradedReasons.length > 0 && (
+                            <div className="mt-2 text-[10px] text-amber-300">
+                                Degraded: {timeseriesSummary.degradedReasons.join(', ')}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {indicatorSeriesSummary && (
+                    <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
+                        <div className="text-[9px] font-black text-slate-500 uppercase mb-2">Indicator Series</div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-slate-200">
+                            <div>Frames: {indicatorSeriesSummary.timeframeCount}</div>
+                            <div>Series: {indicatorSeriesSummary.seriesTotal}</div>
+                            <div>Max Points: {indicatorSeriesSummary.maxPoints}</div>
+                        </div>
+                        {indicatorSeriesSummary.degradedReasons.length > 0 && (
+                            <div className="mt-2 text-[10px] text-amber-300">
+                                Degraded: {indicatorSeriesSummary.degradedReasons.join(', ')}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {hasMomentumExtremes && (
+                    <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
+                        <div className="text-[9px] font-black text-slate-500 uppercase mb-2">Raw Momentum & Extremes Data</div>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs text-slate-200">
+                            <div>
+                                Timeframe: {momentumTimeframe ? momentumTimeframe.toUpperCase() : 'n/a'}
+                            </div>
+                            <div>
+                                Source: {momentumExtremes?.source ?? 'n/a'}
+                            </div>
+                            <div>
+                                FD Z-Score: {formatIndicatorValue(momentumFdValue)}
+                            </div>
+                            <div>
+                                RSI (14): {formatIndicatorValue(momentumRsiValue)}
                             </div>
                         </div>
-                    )}
-                </section>
-
-
-                <section className="space-y-4">
-                    <div className="flex items-center gap-2">
-                        <Layers size={14} className="text-cyan-400 opacity-70" />
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Other</span>
                     </div>
+                )}
+            </section>
+
+            <section className="space-y-4">
+                <div className="flex items-center gap-2">
+                    <Layers size={14} className="text-cyan-400 opacity-70" />
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Other</span>
+                </div>
 
                 {alertsId && (
                     <section className="tech-card overflow-hidden transition-all duration-300">
@@ -2469,12 +2599,12 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                             <div className="flex items-center gap-4">
                                 {showFusionReport &&
                                     (isFusionReportLoading || isDirectionScorecardLoading) && (
-                                    <AgentLoadingState
-                                        type="header"
-                                        title="Loading Fusion Report..."
-                                        colorClass="text-cyan-400"
-                                    />
-                                )}
+                                        <AgentLoadingState
+                                            type="header"
+                                            title="Loading Fusion Report..."
+                                            colorClass="text-cyan-400"
+                                        />
+                                    )}
                                 {showFusionReport ? (
                                     <ChevronUp size={16} className="text-slate-500" />
                                 ) : (
@@ -2783,9 +2913,9 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                         <div className="text-xs text-slate-500">No linked artifacts available.</div>
                     )}
                 </section>
-                </section>
-            </div>
-        );
+            </section>
+        </div >
+    );
 };
 
 export const TechnicalAnalysisOutput = memo(TechnicalAnalysisOutputComponent);

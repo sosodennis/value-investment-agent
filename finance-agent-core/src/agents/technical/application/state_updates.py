@@ -79,6 +79,7 @@ def build_feature_compute_success_update(
     *,
     feature_pack_id: str,
     indicator_series_id: str | None = None,
+    momentum_extremes: JSONObject | None = None,
     artifact: AgentOutputArtifactPayload,
 ) -> JSONObject:
     return _guard_state_update(
@@ -87,6 +88,7 @@ def build_feature_compute_success_update(
             "technical_analysis": {
                 "feature_pack_id": feature_pack_id,
                 "indicator_series_id": indicator_series_id,
+                "momentum_extremes": momentum_extremes,
                 "artifact": artifact,
             },
             "current_node": "feature_compute",

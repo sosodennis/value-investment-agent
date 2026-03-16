@@ -52,6 +52,7 @@ import {
     TechnicalIndicatorSeriesFrame,
     TechnicalTimeseriesBundle,
     TechnicalTimeseriesFrame,
+    TechnicalMomentumExtremes,
 } from './technical';
 import { isRecord } from '../preview';
 
@@ -154,6 +155,58 @@ const parseConfidenceCalibration = (
         return undefined;
     }
     return calibration;
+};
+
+const parseMomentumExtremes = (
+    value: unknown,
+    context: string
+): TechnicalMomentumExtremes | undefined => {
+    if (value === undefined || value === null) return undefined;
+    const record = toRecord(value, context);
+    const timeframe = parseNullableOptionalString(
+        record.timeframe,
+        `${context}.timeframe`
+    );
+    const source = parseNullableOptionalString(record.source, `${context}.source`);
+    const rsiValue = parseNullableOptionalNumber(
+        record.rsi_value,
+        `${context}.rsi_value`
+    );
+    const rsiBias = parseNullableOptionalString(
+        record.rsi_bias,
+        `${context}.rsi_bias`
+    );
+    const fdZScore = parseNullableOptionalNumber(
+        record.fd_z_score,
+        `${context}.fd_z_score`
+    );
+    const fdLabel = parseNullableOptionalString(
+        record.fd_label,
+        `${context}.fd_label`
+    );
+    const fdPolarity = parseNullableOptionalString(
+        record.fd_polarity,
+        `${context}.fd_polarity`
+    );
+    const fdRiskHint = parseNullableOptionalString(
+        record.fd_risk_hint,
+        `${context}.fd_risk_hint`
+    );
+
+    const momentum: TechnicalMomentumExtremes = {};
+    if (timeframe !== undefined) momentum.timeframe = timeframe ?? null;
+    if (source !== undefined) momentum.source = source ?? null;
+    if (rsiValue !== undefined) momentum.rsi_value = rsiValue;
+    if (rsiBias !== undefined) momentum.rsi_bias = rsiBias ?? null;
+    if (fdZScore !== undefined) momentum.fd_z_score = fdZScore;
+    if (fdLabel !== undefined) momentum.fd_label = fdLabel ?? null;
+    if (fdPolarity !== undefined) momentum.fd_polarity = fdPolarity ?? null;
+    if (fdRiskHint !== undefined) momentum.fd_risk_hint = fdRiskHint ?? null;
+
+    if (Object.keys(momentum).length === 0) {
+        return undefined;
+    }
+    return momentum;
 };
 
 const parseForwardSignalDirection = (
@@ -1818,6 +1871,13 @@ const parseTechnicalAnalysisReport = (
     );
     if (confidenceCalibration) {
         report.confidence_calibration = confidenceCalibration;
+    }
+    const momentumExtremes = parseMomentumExtremes(
+        record.momentum_extremes,
+        `${context}.momentum_extremes`
+    );
+    if (momentumExtremes) {
+        report.momentum_extremes = momentumExtremes;
     }
 
     const llmInterpretation = parseNullableOptionalString(

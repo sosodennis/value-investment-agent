@@ -254,6 +254,10 @@ def build_full_report_payload(
     confidence_calibration = (
         calibration_raw if isinstance(calibration_raw, dict) else None
     )
+    momentum_extremes_raw = technical_context.get("momentum_extremes")
+    momentum_extremes = (
+        momentum_extremes_raw if isinstance(momentum_extremes_raw, dict) else None
+    )
     return {
         "schema_version": "2.0",
         "ticker": ticker,
@@ -264,6 +268,7 @@ def build_full_report_payload(
         "confidence_raw": confidence_raw_val,
         "confidence_calibrated": confidence_calibrated_val,
         "confidence_calibration": confidence_calibration,
+        "momentum_extremes": momentum_extremes,
         "llm_interpretation": llm_interpretation,
         "artifact_refs": {
             "chart_data_id": technical_context.get("chart_data_id"),

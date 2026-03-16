@@ -337,6 +337,16 @@ describe('artifact parsers', () => {
                 mapping_version: 'technical_direction_calibration_v1_2026_03_16',
                 calibration_applied: true,
             },
+            momentum_extremes: {
+                timeframe: '1d',
+                source: 'indicator_series',
+                rsi_value: 34.55,
+                rsi_bias: 'BEARISH_BIAS',
+                fd_z_score: -2.12,
+                fd_label: 'EXTREME',
+                fd_polarity: 'NEGATIVE',
+                fd_risk_hint: 'MEAN_REVERSION_RISK',
+            },
             llm_interpretation: 'Signal aligns across timeframes.',
             artifact_refs: {
                 feature_pack_id: 'feature-123',
@@ -361,6 +371,8 @@ describe('artifact parsers', () => {
         expect(parsed.confidence_raw).toBe(0.62);
         expect(parsed.confidence_calibrated).toBe(0.78);
         expect(parsed.confidence_calibration?.mapping_source).toBe('default_artifact');
+        expect(parsed.momentum_extremes?.fd_label).toBe('EXTREME');
+        expect(parsed.momentum_extremes?.rsi_bias).toBe('BEARISH_BIAS');
         expect(parsed.diagnostics?.is_degraded).toBe(true);
         expect(parsed.summary_tags).toContain('momentum');
     });

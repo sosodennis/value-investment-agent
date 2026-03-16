@@ -47,6 +47,19 @@ class ConfidenceCalibrationModel(BaseModel):
     calibration_applied: bool | None = None
 
 
+class MomentumExtremesModel(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    timeframe: OptionalTechnicalText = None
+    source: OptionalTechnicalText = None
+    rsi_value: OptionalConfidenceScore = None
+    rsi_bias: OptionalTechnicalText = None
+    fd_z_score: OptionalConfidenceScore = None
+    fd_label: OptionalTechnicalText = None
+    fd_polarity: OptionalTechnicalText = None
+    fd_risk_hint: OptionalTechnicalText = None
+
+
 class TechnicalArtifactModel(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -59,6 +72,7 @@ class TechnicalArtifactModel(BaseModel):
     confidence_raw: OptionalConfidenceScore = None
     confidence_calibrated: OptionalConfidenceScore = None
     confidence_calibration: ConfidenceCalibrationModel | None = None
+    momentum_extremes: MomentumExtremesModel | None = None
     llm_interpretation: OptionalTechnicalText = None
     artifact_refs: ArtifactRefsModel
     summary_tags: TechnicalStringList

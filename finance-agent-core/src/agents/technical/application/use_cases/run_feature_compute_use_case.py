@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 from collections.abc import Callable, Mapping
 from typing import Protocol
 
@@ -18,6 +19,7 @@ from src.agents.technical.interface.serializers import build_feature_compute_pre
 from src.agents.technical.subdomains.features import (
     FeatureRuntimeRequest,
     FeatureRuntimeService,
+    IndicatorSeriesFrameResult,
     IndicatorSeriesRuntimeRequest,
     IndicatorSeriesRuntimeResult,
     IndicatorSeriesRuntimeService,
@@ -275,6 +277,7 @@ async def run_feature_compute_use_case(
         update=build_feature_compute_success_update(
             feature_pack_id=feature_pack_id,
             indicator_series_id=indicator_series_id,
+            momentum_extremes=_build_momentum_extremes_snapshot(indicator_result),
             artifact=artifact,
         ),
         goto="pattern_compute",
@@ -350,3 +353,92 @@ def _indicator_series_to_payload(
         "timeframes": timeframes_payload,
         "degraded_reasons": result.degraded_reasons or None,
     }
+
+
+def _build_momentum_extremes_snapshot(
+    result: IndicatorSeriesRuntimeResult,
+) -> dict[str, object] | None:
+    timeframe = _select_momentum_timeframe(result.timeframes)
+    if timeframe is None:
+        return None
+    frame = result.timeframes.get(timeframe)
+    if frame is None or not isinstance(frame.series, dict):
+        return None
+    rsi_value = _latest_numeric_value(frame.series.get("RSI_14"))
+    fd_value = _latest_numeric_value(frame.series.get("FD_ZSCORE"))
+    if rsi_value is None and fd_value is None:
+        return None
+    return {
+        "timeframe": timeframe,
+        "source": "indicator_series",
+        "rsi_value": rsi_value,
+        "rsi_bias": _resolve_rsi_bias(rsi_value),
+        "fd_z_score": fd_value,
+        "fd_label": _resolve_fd_label(fd_value),
+        "fd_polarity": _resolve_fd_polarity(fd_value),
+        "fd_risk_hint": _resolve_fd_risk_hint(fd_value),
+    }
+
+
+def _select_momentum_timeframe(
+    frames: Mapping[str, IndicatorSeriesFrameResult],
+) -> str | None:
+    preferred = ("1d", "1wk", "1h")
+    for timeframe in preferred:
+        if timeframe in frames:
+            return timeframe
+    return next(iter(frames), None)
+
+
+def _latest_numeric_value(series: Mapping[str, float | None] | None) -> float | None:
+    if not series:
+        return None
+    keys = list(series.keys())
+    for key in reversed(keys):
+        value = series.get(key)
+        if isinstance(value, int | float) and math.isfinite(value):
+            return float(value)
+    return None
+
+
+def _resolve_rsi_bias(value: float | None) -> str:
+    if value is None or not math.isfinite(value):
+        return "NO_DATA"
+    if value >= 70:
+        return "OVERBOUGHT"
+    if value <= 30:
+        return "OVERSOLD"
+    if value >= 55:
+        return "BULLISH_BIAS"
+    if value <= 45:
+        return "BEARISH_BIAS"
+    return "NEUTRAL"
+
+
+def _resolve_fd_label(value: float | None) -> str:
+    if value is None or not math.isfinite(value):
+        return "NO_DATA"
+    if value >= 2 or value <= -2:
+        return "EXTREME"
+    if value >= 1 or value <= -1:
+        return "ELEVATED"
+    return "BALANCED"
+
+
+def _resolve_fd_polarity(value: float | None) -> str | None:
+    if value is None or not math.isfinite(value):
+        return None
+    if value > 0:
+        return "POSITIVE"
+    if value < 0:
+        return "NEGATIVE"
+    return "NEUTRAL"
+
+
+def _resolve_fd_risk_hint(value: float | None) -> str:
+    label = _resolve_fd_label(value)
+    if label in {"EXTREME", "ELEVATED"}:
+        return "MEAN_REVERSION_RISK"
+    if label == "NO_DATA":
+        return "NO_DATA"
+    return "NORMAL"
