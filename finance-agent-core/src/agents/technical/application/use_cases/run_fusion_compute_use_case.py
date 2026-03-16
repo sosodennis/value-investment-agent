@@ -341,6 +341,7 @@ async def run_fusion_compute_use_case(
     return TechnicalNodeResult(
         update=build_fusion_compute_success_update(
             fusion_report_id=fusion_report_id,
+            confidence=fusion_result.fusion_signal.confidence,
             artifact=artifact,
         ),
         goto="verification_compute",

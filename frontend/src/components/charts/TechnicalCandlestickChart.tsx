@@ -45,6 +45,7 @@ interface TechnicalCandlestickChartProps {
     overlays?: OverlayLineSeries[];
     height?: number;
     showTime?: boolean;
+    showTimeScale?: boolean;
     showVolume?: boolean;
     syncId: string;
     syncState: CrosshairSyncState;
@@ -101,6 +102,7 @@ export const TechnicalCandlestickChart: React.FC<TechnicalCandlestickChartProps>
     overlays = [],
     height = DEFAULT_HEIGHT,
     showTime = false,
+    showTimeScale = true,
     showVolume = true,
     syncId,
     syncState,
@@ -121,7 +123,6 @@ export const TechnicalCandlestickChart: React.FC<TechnicalCandlestickChartProps>
     const {
         requestCrosshair,
         requestVisibleTimeRange,
-        requestScrollPosition,
         activateCrosshairSource,
         clearCrosshairSource,
     } = syncState;
@@ -151,6 +152,7 @@ export const TechnicalCandlestickChart: React.FC<TechnicalCandlestickChartProps>
                 textColor: '#94a3b8',
                 fontSize: 11,
                 fontFamily: 'ui-sans-serif, system-ui, -apple-system, sans-serif',
+                attributionLogo: false,
             },
             grid: {
                 vertLines: { color: 'rgba(30, 41, 59, 0.6)' },
@@ -164,8 +166,14 @@ export const TechnicalCandlestickChart: React.FC<TechnicalCandlestickChartProps>
             },
             timeScale: {
                 borderColor: 'rgba(51, 65, 85, 0.7)',
+                visible: showTimeScale,
                 timeVisible: showTime,
                 secondsVisible: showTime,
+                rightOffset: 0,
+                barSpacing: 6,
+                fixLeftEdge: true,
+                fixRightEdge: true,
+                lockVisibleTimeRangeOnResize: true,
             },
             handleScroll: {
                 mouseWheel: true,
@@ -305,7 +313,6 @@ export const TechnicalCandlestickChart: React.FC<TechnicalCandlestickChartProps>
             }
             if (!range) return;
             requestVisibleTimeRange(syncId, range);
-            requestScrollPosition(syncId, chart.timeScale().scrollPosition());
         };
         chart.timeScale().subscribeVisibleTimeRangeChange(handleVisibleRangeChange);
 
@@ -329,7 +336,6 @@ export const TechnicalCandlestickChart: React.FC<TechnicalCandlestickChartProps>
         clearCrosshairSource,
         height,
         requestCrosshair,
-        requestScrollPosition,
         requestVisibleTimeRange,
         showVolume,
         syncId,
@@ -371,11 +377,12 @@ export const TechnicalCandlestickChart: React.FC<TechnicalCandlestickChartProps>
         if (!chartRef.current) return;
         chartRef.current.applyOptions({
             timeScale: {
+                visible: showTimeScale,
                 timeVisible: showTime,
                 secondsVisible: showTime,
             },
         });
-    }, [showTime]);
+    }, [showTime, showTimeScale]);
 
     useEffect(() => {
         if (!chartRef.current || !candleSeriesRef.current) return;
@@ -396,17 +403,10 @@ export const TechnicalCandlestickChart: React.FC<TechnicalCandlestickChartProps>
     useEffect(() => {
         if (!chartRef.current) return;
         if (syncState.activeRangeSourceId === syncId) return;
-        const hasRange = Boolean(syncState.visibleTimeRange);
-        const hasScroll = typeof syncState.scrollPosition === 'number';
-        if (!hasRange && !hasScroll) return;
-        rangeSyncGateRef.current = (hasRange ? 1 : 0) + (hasScroll ? 1 : 0);
-        if (hasRange) {
-            chartRef.current.timeScale().setVisibleRange(syncState.visibleTimeRange!);
-        }
-        if (hasScroll) {
-            chartRef.current.timeScale().scrollToPosition(syncState.scrollPosition!, false);
-        }
-    }, [syncId, syncState.activeRangeSourceId, syncState.scrollPosition, syncState.visibleTimeRange]);
+        if (!syncState.visibleTimeRange) return;
+        rangeSyncGateRef.current = 1;
+        chartRef.current.timeScale().setVisibleRange(syncState.visibleTimeRange);
+    }, [syncId, syncState.activeRangeSourceId, syncState.visibleTimeRange]);
 
     return (
         <div className="w-full">

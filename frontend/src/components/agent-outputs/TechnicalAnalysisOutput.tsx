@@ -67,6 +67,13 @@ const ALERT_SEVERITY_ORDER: Record<AlertSeverity, number> = {
     warning: 1,
     info: 2,
 };
+const CHART_PANE_HEIGHTS = {
+    price: 260,
+    volume: 90,
+    rsi: 100,
+    macd: 110,
+    fracdiff: 90,
+} as const;
 
 // --- 1. Semantic Helpers ---
 
@@ -268,6 +275,36 @@ const buildIndicatorSeries = (series?: Record<string, number | null>) => {
             value: point.value,
         }));
     return entries;
+};
+
+const alignLineSeriesToTimes = (
+    series: { time: CandlestickDatum['time']; value: number }[],
+    times: CandlestickDatum['time'][]
+) => {
+    if (times.length === 0) return series;
+    const map = new Map(series.map((point) => [point.time, point.value]));
+    return times.map((time) => {
+        const value = map.get(time);
+        if (value === undefined) {
+            return { time };
+        }
+        return { time, value };
+    });
+};
+
+const alignHistogramSeriesToTimes = (
+    series: { time: CandlestickDatum['time']; value: number; color?: string }[],
+    times: CandlestickDatum['time'][]
+) => {
+    if (times.length === 0) return series;
+    const map = new Map(series.map((point) => [point.time, point]));
+    return times.map((time) => {
+        const point = map.get(time);
+        if (!point) {
+            return { time };
+        }
+        return { time, value: point.value, color: point.color };
+    });
 };
 
 type EpochTime = CandlestickDatum['time'];
@@ -775,6 +812,39 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         return buildIndicatorSeries(indicatorFrame?.series?.['FD']);
     }, [indicatorFrame]);
 
+    const baseTimes = useMemo(() => {
+        if (candlestickSeries.length > 0) {
+            return candlestickSeries.map((point) => point.time);
+        }
+        if (rsiSeries.length > 0) return rsiSeries.map((point) => point.time);
+        if (macdSeries.length > 0) return macdSeries.map((point) => point.time);
+        if (macdSignalSeries.length > 0) return macdSignalSeries.map((point) => point.time);
+        if (macdHistSeries.length > 0) return macdHistSeries.map((point) => point.time);
+        if (fdSeries.length > 0) return fdSeries.map((point) => point.time);
+        return [];
+    }, [candlestickSeries, rsiSeries, macdSeries, macdSignalSeries, macdHistSeries, fdSeries]);
+
+    const alignedRsiSeries = useMemo(
+        () => alignLineSeriesToTimes(rsiSeries, baseTimes),
+        [rsiSeries, baseTimes]
+    );
+    const alignedMacdSeries = useMemo(
+        () => alignLineSeriesToTimes(macdSeries, baseTimes),
+        [macdSeries, baseTimes]
+    );
+    const alignedMacdSignalSeries = useMemo(
+        () => alignLineSeriesToTimes(macdSignalSeries, baseTimes),
+        [macdSignalSeries, baseTimes]
+    );
+    const alignedMacdHistSeries = useMemo(
+        () => alignHistogramSeriesToTimes(macdHistSeries, baseTimes),
+        [macdHistSeries, baseTimes]
+    );
+    const alignedFdSeries = useMemo(
+        () => alignLineSeriesToTimes(fdSeries, baseTimes),
+        [fdSeries, baseTimes]
+    );
+
     const indicatorAvailability = useMemo(
         () => ({
             rsi: rsiSeries.length > 0,
@@ -804,6 +874,14 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         visibleIndicators.rsi || visibleIndicators.macd || visibleIndicators.fd;
     const hasFracdiffIndicators = visibleIndicators.fd;
     const classicIndicatorKeys: Array<'rsi' | 'macd'> = ['rsi', 'macd'];
+
+    const bottomTimeScalePane = useMemo(() => {
+        if (indicatorAvailability.fd) return 'fd';
+        if (indicatorAvailability.macd) return 'macd';
+        if (indicatorAvailability.rsi) return 'rsi';
+        if (volumeHistogram.length > 0) return 'volume';
+        return 'price';
+    }, [indicatorAvailability, volumeHistogram.length]);
 
     useEffect(() => {
         const candidates = classicIndicatorKeys.filter((key) => classicVisibleIndicators[key]);
@@ -850,40 +928,40 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         () => [
             {
                 id: 'RSI 14',
-                data: rsiSeries,
+                data: alignedRsiSeries,
                 color: '#38bdf8',
                 lineWidth: 2,
             },
         ],
-        [rsiSeries]
+        [alignedRsiSeries]
     );
     const macdLines = useMemo<IndicatorLineSeries[]>(
         () => [
-            { id: 'MACD', data: macdSeries, color: '#fbbf24', lineWidth: 2 },
-            { id: 'Signal', data: macdSignalSeries, color: '#22d3ee', lineWidth: 2 },
+            { id: 'MACD', data: alignedMacdSeries, color: '#fbbf24', lineWidth: 2 },
+            { id: 'Signal', data: alignedMacdSignalSeries, color: '#22d3ee', lineWidth: 2 },
         ],
-        [macdSeries, macdSignalSeries]
+        [alignedMacdSeries, alignedMacdSignalSeries]
     );
     const macdHistogram = useMemo<IndicatorHistogramSeries[]>(
         () => [
             {
                 id: 'Histogram',
-                data: macdHistSeries,
+                data: alignedMacdHistSeries,
                 color: 'rgba(148, 163, 184, 0.35)',
             },
         ],
-        [macdHistSeries]
+        [alignedMacdHistSeries]
     );
     const fdLines = useMemo<IndicatorLineSeries[]>(
         () => [
             {
                 id: indicatorFrame?.series?.['FD_ZSCORE'] ? 'FD Z-Score' : 'FracDiff',
-                data: fdSeries,
+                data: alignedFdSeries,
                 color: '#a855f7',
                 lineWidth: 2,
             },
         ],
-        [fdSeries, indicatorFrame]
+        [alignedFdSeries, indicatorFrame]
     );
 
     const candleIndex = useMemo(() => buildCandleIndex(candlestickSeries), [candlestickSeries]);
@@ -1622,8 +1700,8 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                     )}
 
                     {timeseriesBundleData && (
-                        <div className="bg-slate-950/40 border border-slate-800 rounded-xl p-6">
-                            <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+                        <div className="bg-slate-950/40 border border-slate-800 rounded-xl p-4">
+                            <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
                                 <div className="flex items-center gap-2">
                                     <Layers size={14} className="text-cyan-400 opacity-50" />
                                     <span className={sectionHeaderTextClass}>Multi-pane Chart Stack</span>
@@ -1662,101 +1740,112 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 </div>
                             </div>
 
-                            <div ref={chartStackRef} className="relative space-y-6">
-                                <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4">
-                                    <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                                        <div className="text-[10px] font-black text-slate-500 uppercase">
-                                            Price Action (OHLCV)
-                                        </div>
-                                        {priceOverlays.length > 0 && (
-                                            <div className="flex flex-wrap items-center gap-3 text-[9px] text-slate-500 uppercase">
-                                                {priceOverlays.map((overlay) => (
-                                                    <span key={overlay.id} className="inline-flex items-center gap-1">
-                                                        <span
-                                                            className="h-2 w-2 rounded-full"
-                                                            style={{ backgroundColor: overlay.color }}
-                                                        />
-                                                        {overlay.id}
-                                                    </span>
-                                                ))}
+                            <div
+                                ref={chartStackRef}
+                                className="relative rounded-xl border border-slate-800/70 bg-slate-950/55"
+                            >
+                                <div className="divide-y divide-slate-800/60">
+                                    <div className="px-4 py-3">
+                                        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                                            <div className="text-[9px] font-black text-slate-500 uppercase">
+                                                Price Action (OHLCV)
                                             </div>
+                                            {priceOverlays.length > 0 && (
+                                                <div className="flex flex-wrap items-center gap-3 text-[9px] text-slate-500 uppercase">
+                                                    {priceOverlays.map((overlay) => (
+                                                        <span key={overlay.id} className="inline-flex items-center gap-1">
+                                                            <span
+                                                                className="h-2 w-2 rounded-full"
+                                                                style={{ backgroundColor: overlay.color }}
+                                                            />
+                                                            {overlay.id}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <TechnicalCandlestickChart
+                                            candles={candlestickSeries}
+                                            volumes={volumeSeries}
+                                            overlays={priceOverlays}
+                                            height={CHART_PANE_HEIGHTS.price}
+                                            showTime={isIntradayTimeseries}
+                                            showTimeScale={bottomTimeScalePane === 'price'}
+                                            showVolume={false}
+                                            syncId="price"
+                                            syncState={crosshairSync}
+                                        />
+                                    </div>
+
+                                    <div className="px-4 py-3">
+                                        <div className="text-[9px] font-black text-slate-500 uppercase mb-2">Volume</div>
+                                        {volumeHistogram.length > 0 ? (
+                                            <TechnicalIndicatorChart
+                                                lines={[]}
+                                                histograms={volumeHistogram}
+                                                height={CHART_PANE_HEIGHTS.volume}
+                                                showTime={isIntradayTimeseries}
+                                                showTimeScale={bottomTimeScalePane === 'volume'}
+                                                histogramScaleMargins={{ top: 0.2, bottom: 0.08 }}
+                                                syncId="volume"
+                                                syncState={crosshairSync}
+                                            />
+                                        ) : (
+                                            <div className="text-xs text-slate-500">Volume data unavailable.</div>
                                         )}
                                     </div>
-                                    <TechnicalCandlestickChart
-                                        candles={candlestickSeries}
-                                        volumes={volumeSeries}
-                                        overlays={priceOverlays}
-                                        height={320}
-                                        showTime={isIntradayTimeseries}
-                                        showVolume={false}
-                                        syncId="price"
-                                        syncState={crosshairSync}
-                                    />
-                                </div>
 
-                                <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4">
-                                    <div className="text-[10px] font-black text-slate-500 uppercase mb-3">Volume</div>
-                                    {volumeHistogram.length > 0 ? (
-                                        <TechnicalIndicatorChart
-                                            lines={[]}
-                                            histograms={volumeHistogram}
-                                            height={120}
-                                            showTime={isIntradayTimeseries}
-                                            syncId="volume"
-                                            syncState={crosshairSync}
-                                        />
-                                    ) : (
-                                        <div className="text-xs text-slate-500">Volume data unavailable.</div>
-                                    )}
-                                </div>
+                                    <div className="px-4 py-3">
+                                        <div className="text-[9px] font-black text-slate-500 uppercase mb-2">RSI (14)</div>
+                                        {indicatorAvailability.rsi ? (
+                                            <TechnicalIndicatorChart
+                                                lines={rsiLines}
+                                                priceLines={rsiPriceLines}
+                                                height={CHART_PANE_HEIGHTS.rsi}
+                                                showTime={isIntradayTimeseries}
+                                                showTimeScale={bottomTimeScalePane === 'rsi'}
+                                                syncId="rsi"
+                                                syncState={crosshairSync}
+                                            />
+                                        ) : (
+                                            <div className="text-xs text-slate-500">RSI data unavailable.</div>
+                                        )}
+                                    </div>
 
-                                <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4">
-                                    <div className="text-[10px] font-black text-slate-500 uppercase mb-3">RSI (14)</div>
-                                    {indicatorAvailability.rsi ? (
-                                        <TechnicalIndicatorChart
-                                            lines={rsiLines}
-                                            priceLines={rsiPriceLines}
-                                            height={160}
-                                            showTime={isIntradayTimeseries}
-                                            syncId="rsi"
-                                            syncState={crosshairSync}
-                                        />
-                                    ) : (
-                                        <div className="text-xs text-slate-500">RSI data unavailable.</div>
-                                    )}
-                                </div>
+                                    <div className="px-4 py-3">
+                                        <div className="text-[9px] font-black text-slate-500 uppercase mb-2">MACD</div>
+                                        {indicatorAvailability.macd ? (
+                                            <TechnicalIndicatorChart
+                                                lines={macdLines}
+                                                histograms={macdHistogram}
+                                                priceLines={macdPriceLines}
+                                                height={CHART_PANE_HEIGHTS.macd}
+                                                showTime={isIntradayTimeseries}
+                                                showTimeScale={bottomTimeScalePane === 'macd'}
+                                                syncId="macd"
+                                                syncState={crosshairSync}
+                                            />
+                                        ) : (
+                                            <div className="text-xs text-slate-500">MACD data unavailable.</div>
+                                        )}
+                                    </div>
 
-                                <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4">
-                                    <div className="text-[10px] font-black text-slate-500 uppercase mb-3">MACD</div>
-                                    {indicatorAvailability.macd ? (
-                                        <TechnicalIndicatorChart
-                                            lines={macdLines}
-                                            histograms={macdHistogram}
-                                            priceLines={macdPriceLines}
-                                            height={170}
-                                            showTime={isIntradayTimeseries}
-                                            syncId="macd"
-                                            syncState={crosshairSync}
-                                        />
-                                    ) : (
-                                        <div className="text-xs text-slate-500">MACD data unavailable.</div>
-                                    )}
-                                </div>
-
-                                <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4">
-                                    <div className="text-[10px] font-black text-slate-500 uppercase mb-3">FracDiff</div>
-                                    {indicatorAvailability.fd ? (
-                                        <TechnicalIndicatorChart
-                                            lines={fdLines}
-                                            priceLines={fdPriceLines}
-                                            height={150}
-                                            showTime={isIntradayTimeseries}
-                                            syncId="fd"
-                                            syncState={crosshairSync}
-                                        />
-                                    ) : (
-                                        <div className="text-xs text-slate-500">Fracdiff data unavailable.</div>
-                                    )}
+                                    <div className="px-4 py-3">
+                                        <div className="text-[9px] font-black text-slate-500 uppercase mb-2">FracDiff</div>
+                                        {indicatorAvailability.fd ? (
+                                            <TechnicalIndicatorChart
+                                                lines={fdLines}
+                                                priceLines={fdPriceLines}
+                                                height={CHART_PANE_HEIGHTS.fracdiff}
+                                                showTime={isIntradayTimeseries}
+                                                showTimeScale={bottomTimeScalePane === 'fd'}
+                                                syncId="fd"
+                                                syncState={crosshairSync}
+                                            />
+                                        ) : (
+                                            <div className="text-xs text-slate-500">Fracdiff data unavailable.</div>
+                                        )}
+                                    </div>
                                 </div>
 
                                 {tooltipPosition && tooltipPayload && (
@@ -1801,6 +1890,16 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                         </div>
                                     </div>
                                 )}
+                            </div>
+                            <div className="mt-2 flex justify-end text-[9px] text-slate-500">
+                                <a
+                                    href="https://www.tradingview.com/"
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="hover:text-slate-300 underline"
+                                >
+                                    Charts by TradingView
+                                </a>
                             </div>
                         </div>
                     )}

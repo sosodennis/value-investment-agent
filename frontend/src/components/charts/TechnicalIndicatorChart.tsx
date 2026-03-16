@@ -16,16 +16,21 @@ import {
 } from 'lightweight-charts';
 import { CrosshairSyncState } from './useCrosshairSync';
 
+export type IndicatorLinePoint = { time: UTCTimestamp; value: number } | { time: UTCTimestamp };
+export type IndicatorHistogramPoint =
+    | { time: UTCTimestamp; value: number; color?: string }
+    | { time: UTCTimestamp };
+
 export interface IndicatorLineSeries {
     id: string;
-    data: { time: UTCTimestamp; value: number }[];
+    data: IndicatorLinePoint[];
     color: string;
     lineWidth?: 1 | 2 | 3 | 4;
 }
 
 export interface IndicatorHistogramSeries {
     id: string;
-    data: { time: UTCTimestamp; value: number; color?: string }[];
+    data: IndicatorHistogramPoint[];
     color?: string;
 }
 
@@ -46,6 +51,8 @@ interface TechnicalIndicatorChartProps {
     priceLines?: IndicatorPriceLine[];
     height?: number;
     showTime?: boolean;
+    showTimeScale?: boolean;
+    histogramScaleMargins?: { top?: number; bottom?: number };
     syncId: string;
     syncState: CrosshairSyncState;
 }
@@ -104,6 +111,8 @@ export const TechnicalIndicatorChart: React.FC<TechnicalIndicatorChartProps> = (
     priceLines = [],
     height = DEFAULT_HEIGHT,
     showTime = false,
+    showTimeScale = true,
+    histogramScaleMargins,
     syncId,
     syncState,
 }) => {
@@ -123,26 +132,35 @@ export const TechnicalIndicatorChart: React.FC<TechnicalIndicatorChartProps> = (
     const {
         requestCrosshair,
         requestVisibleTimeRange,
-        requestScrollPosition,
         activateCrosshairSource,
         clearCrosshairSource,
     } = syncState;
 
-    const hasData = useMemo(
-        () => lines.some((line) => line.data.length > 0) || histograms.some((hist) => hist.data.length > 0),
-        [lines, histograms]
-    );
+    const hasData = useMemo(() => {
+        const lineHasValue = lines.some((line) =>
+            line.data.some((point) => 'value' in point && typeof point.value === 'number')
+        );
+        const histHasValue = histograms.some((hist) =>
+            hist.data.some((point) => 'value' in point && typeof point.value === 'number')
+        );
+        return lineHasValue || histHasValue;
+    }, [lines, histograms]);
     const primarySeriesMap = useMemo(() => {
         const map = new Map<UTCTimestamp, number>();
         const source = lines[0]?.data ?? histograms[0]?.data ?? [];
         source.forEach((point) => {
-            map.set(point.time, point.value);
+            if ('value' in point && typeof point.value === 'number') {
+                map.set(point.time, point.value);
+            }
         });
         return map;
     }, [lines, histograms]);
     const primarySeriesTimes = useMemo(() => {
         const source = lines[0]?.data ?? histograms[0]?.data ?? [];
-        return source.map((point) => point.time).sort((a, b) => a - b);
+        return source
+            .filter((point) => 'value' in point && typeof point.value === 'number')
+            .map((point) => point.time)
+            .sort((a, b) => a - b);
     }, [lines, histograms]);
 
     useEffect(() => {
@@ -160,6 +178,7 @@ export const TechnicalIndicatorChart: React.FC<TechnicalIndicatorChartProps> = (
                 textColor: '#94a3b8',
                 fontSize: 11,
                 fontFamily: 'ui-sans-serif, system-ui, -apple-system, sans-serif',
+                attributionLogo: false,
             },
             grid: {
                 vertLines: { color: 'rgba(30, 41, 59, 0.6)' },
@@ -169,8 +188,14 @@ export const TechnicalIndicatorChart: React.FC<TechnicalIndicatorChartProps> = (
             rightPriceScale: { borderColor: 'rgba(51, 65, 85, 0.7)' },
             timeScale: {
                 borderColor: 'rgba(51, 65, 85, 0.7)',
+                visible: showTimeScale,
                 timeVisible: showTime,
                 secondsVisible: showTime,
+                rightOffset: 0,
+                barSpacing: 6,
+                fixLeftEdge: true,
+                fixRightEdge: true,
+                lockVisibleTimeRangeOnResize: true,
             },
             handleScroll: {
                 mouseWheel: true,
@@ -197,8 +222,12 @@ export const TechnicalIndicatorChart: React.FC<TechnicalIndicatorChartProps> = (
             })
         );
 
+        const resolvedHistogramMargins = {
+            top: histogramScaleMargins?.top ?? 0.7,
+            bottom: histogramScaleMargins?.bottom ?? 0,
+        };
         histogramSeries.forEach((series) => {
-            series.priceScale().applyOptions({ scaleMargins: { top: 0.7, bottom: 0 } });
+            series.priceScale().applyOptions({ scaleMargins: resolvedHistogramMargins });
         });
 
         chartRef.current = chart;
@@ -296,7 +325,6 @@ export const TechnicalIndicatorChart: React.FC<TechnicalIndicatorChartProps> = (
             }
             if (!range) return;
             requestVisibleTimeRange(syncId, range);
-            requestScrollPosition(syncId, chart.timeScale().scrollPosition());
         };
         chart.timeScale().subscribeVisibleTimeRangeChange(handleVisibleRangeChange);
 
@@ -315,7 +343,16 @@ export const TechnicalIndicatorChart: React.FC<TechnicalIndicatorChartProps> = (
             histogramSeriesRef.current = [];
             priceLinesRef.current = [];
         };
-    }, [activateCrosshairSource, clearCrosshairSource, height, histograms.length, lines.length, requestCrosshair, requestScrollPosition, requestVisibleTimeRange, syncId]);
+    }, [
+        activateCrosshairSource,
+        clearCrosshairSource,
+        height,
+        histograms.length,
+        lines.length,
+        requestCrosshair,
+        requestVisibleTimeRange,
+        syncId,
+    ]);
 
     useEffect(() => {
         if (!chartRef.current) return;
@@ -337,11 +374,23 @@ export const TechnicalIndicatorChart: React.FC<TechnicalIndicatorChartProps> = (
         if (!chartRef.current) return;
         chartRef.current.applyOptions({
             timeScale: {
+                visible: showTimeScale,
                 timeVisible: showTime,
                 secondsVisible: showTime,
             },
         });
-    }, [showTime]);
+    }, [showTime, showTimeScale]);
+
+    useEffect(() => {
+        if (!chartRef.current) return;
+        const margins = {
+            top: histogramScaleMargins?.top ?? 0.7,
+            bottom: histogramScaleMargins?.bottom ?? 0,
+        };
+        histogramSeriesRef.current.forEach((series) => {
+            series.priceScale().applyOptions({ scaleMargins: margins });
+        });
+    }, [histogramScaleMargins]);
 
     useEffect(() => {
         if (!chartRef.current) return;
@@ -367,17 +416,10 @@ export const TechnicalIndicatorChart: React.FC<TechnicalIndicatorChartProps> = (
     useEffect(() => {
         if (!chartRef.current) return;
         if (syncState.activeRangeSourceId === syncId) return;
-        const hasRange = Boolean(syncState.visibleTimeRange);
-        const hasScroll = typeof syncState.scrollPosition === 'number';
-        if (!hasRange && !hasScroll) return;
-        rangeSyncGateRef.current = (hasRange ? 1 : 0) + (hasScroll ? 1 : 0);
-        if (hasRange) {
-            chartRef.current.timeScale().setVisibleRange(syncState.visibleTimeRange!);
-        }
-        if (hasScroll) {
-            chartRef.current.timeScale().scrollToPosition(syncState.scrollPosition!, false);
-        }
-    }, [syncId, syncState.activeRangeSourceId, syncState.scrollPosition, syncState.visibleTimeRange]);
+        if (!syncState.visibleTimeRange) return;
+        rangeSyncGateRef.current = 1;
+        chartRef.current.timeScale().setVisibleRange(syncState.visibleTimeRange);
+    }, [syncId, syncState.activeRangeSourceId, syncState.visibleTimeRange]);
 
     useEffect(() => {
         const series = lineSeriesRef.current[0];
