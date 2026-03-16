@@ -200,7 +200,11 @@ def build_fusion_compute_error_update(error_message: str) -> JSONObject:
 def build_fusion_compute_success_update(
     *,
     fusion_report_id: str,
+    direction_scorecard_id: str | None,
     confidence: float | None,
+    confidence_raw: float | None,
+    confidence_calibrated: float | None,
+    confidence_calibration: dict[str, object] | None,
     artifact: AgentOutputArtifactPayload,
 ) -> JSONObject:
     return _guard_state_update(
@@ -208,7 +212,11 @@ def build_fusion_compute_success_update(
         {
             "technical_analysis": {
                 "fusion_report_id": fusion_report_id,
+                "direction_scorecard_id": direction_scorecard_id,
                 "confidence": confidence,
+                "confidence_raw": confidence_raw,
+                "confidence_calibrated": confidence_calibrated,
+                "confidence_calibration": confidence_calibration,
                 "artifact": artifact,
             },
             "current_node": "fusion_compute",

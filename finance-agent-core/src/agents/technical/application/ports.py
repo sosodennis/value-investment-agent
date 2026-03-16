@@ -21,6 +21,7 @@ from src.interface.artifacts.artifact_data_models import (
     PriceSeriesArtifactData,
     TechnicalAlertsArtifactData,
     TechnicalChartArtifactData,
+    TechnicalDirectionScorecardArtifactData,
     TechnicalFeaturePackArtifactData,
     TechnicalFusionReportArtifactData,
     TechnicalIndicatorSeriesArtifactData,
@@ -141,6 +142,18 @@ class ITechnicalArtifactRepository(Protocol):
     async def load_fusion_report(
         self, artifact_id: str | None
     ) -> TechnicalFusionReportArtifactData | None: ...
+
+    async def save_direction_scorecard(
+        self,
+        data: JSONObject,
+        *,
+        produced_by: str,
+        key_prefix: str | None = None,
+    ) -> str: ...
+
+    async def load_direction_scorecard(
+        self, artifact_id: str | None
+    ) -> TechnicalDirectionScorecardArtifactData | None: ...
 
     async def save_verification_report(
         self,

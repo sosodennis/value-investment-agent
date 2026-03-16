@@ -3,7 +3,9 @@
 __all__ = [
     "alerts",
     "artifacts",
+    "calibration",
     "features",
+    "governance",
     "interpretation",
     "market_data",
     "patterns",

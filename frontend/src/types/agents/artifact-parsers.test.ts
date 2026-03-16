@@ -8,6 +8,7 @@ import {
     parseTechnicalChartData,
     parseTechnicalFeaturePackArtifact,
     parseTechnicalFusionReportArtifact,
+    parseTechnicalDirectionScorecardArtifact,
     parseTechnicalIndicatorSeriesArtifact,
     parseTechnicalPatternPackArtifact,
     parseTechnicalTimeseriesBundleArtifact,
@@ -327,6 +328,15 @@ describe('artifact parsers', () => {
             direction: 'BULLISH_EXTENSION',
             risk_level: 'low',
             confidence: 0.78,
+            confidence_raw: 0.62,
+            confidence_calibrated: 0.78,
+            confidence_calibration: {
+                mapping_source: 'default_artifact',
+                mapping_path: '/tmp/technical_direction_calibration.json',
+                degraded_reason: null,
+                mapping_version: 'technical_direction_calibration_v1_2026_03_16',
+                calibration_applied: true,
+            },
             llm_interpretation: 'Signal aligns across timeframes.',
             artifact_refs: {
                 feature_pack_id: 'feature-123',
@@ -348,6 +358,9 @@ describe('artifact parsers', () => {
         expect(parsed.risk_level).toBe('low');
         expect(parsed.artifact_refs.feature_pack_id).toBe('feature-123');
         expect(parsed.artifact_refs.alerts_id).toBe('alerts-789');
+        expect(parsed.confidence_raw).toBe(0.62);
+        expect(parsed.confidence_calibrated).toBe(0.78);
+        expect(parsed.confidence_calibration?.mapping_source).toBe('default_artifact');
         expect(parsed.diagnostics?.is_degraded).toBe(true);
         expect(parsed.summary_tags).toContain('momentum');
     });
@@ -562,6 +575,15 @@ describe('artifact parsers', () => {
             direction: 'BULLISH_EXTENSION',
             risk_level: 'low',
             confidence: 0.62,
+            confidence_raw: 0.48,
+            confidence_calibrated: 0.62,
+            confidence_calibration: {
+                mapping_source: 'default_artifact',
+                mapping_path: '/tmp/technical_direction_calibration.json',
+                degraded_reason: null,
+                mapping_version: 'technical_direction_calibration_v1_2026_03_16',
+                calibration_applied: true,
+            },
             confluence_matrix: {
                 daily: {
                     classic: 'bullish',
@@ -583,6 +605,57 @@ describe('artifact parsers', () => {
         expect(parsed.confluence_matrix?.daily?.classic).toBe('bullish');
         expect(parsed.conflict_reasons).toContain('daily:CLASSIC_BULLISH_VS_QUANT_NEUTRAL');
         expect(parsed.degraded_reasons).toContain('DAILY_PATTERN_FRAME_MISSING');
+        expect(parsed.confidence_calibrated).toBe(0.62);
+        expect(parsed.confidence_raw).toBe(0.48);
+        expect(parsed.confidence_calibration?.mapping_version).toBe(
+            'technical_direction_calibration_v1_2026_03_16'
+        );
+    });
+
+    it('parses technical direction scorecard artifact', () => {
+        const parsed = parseTechnicalDirectionScorecardArtifact({
+            schema_version: '1.0',
+            ticker: 'AAPL',
+            as_of: '2026-02-12T00:00:00Z',
+            direction: 'BEARISH_EXTENSION',
+            risk_level: 'medium',
+            confidence: 0.55,
+            neutral_threshold: 0.5,
+            overall_score: -0.8,
+            model_version: 'ta_fusion_v1',
+            timeframes: {
+                '1d': {
+                    timeframe: '1d',
+                    classic_score: -1.0,
+                    quant_score: -0.5,
+                    pattern_score: 0.0,
+                    total_score: -1.5,
+                    classic_label: 'bearish',
+                    quant_label: 'bearish',
+                    pattern_label: 'neutral',
+                    contributions: {
+                        classic: [
+                            {
+                                name: 'RSI_14',
+                                value: 72.4,
+                                state: 'OVERBOUGHT',
+                                contribution: -1.0,
+                            },
+                        ],
+                        quant: [],
+                        pattern: [],
+                    },
+                },
+            },
+            conflict_reasons: ['1d:CLASSIC_BEARISH_VS_PATTERN_NEUTRAL'],
+            degraded_reasons: [],
+            source_artifacts: { fusion_report_id: 'fusion-1' },
+        });
+
+        expect(parsed.ticker).toBe('AAPL');
+        expect(parsed.timeframes['1d']?.classic_score).toBe(-1.0);
+        expect(parsed.timeframes['1d']?.contributions.classic[0]?.name).toBe('RSI_14');
+        expect(parsed.overall_score).toBe(-0.8);
     });
 
     it('parses technical verification report artifact', () => {

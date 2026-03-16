@@ -12,6 +12,8 @@ from src.agents.technical.domain.shared import IndicatorSnapshot
 class FeatureExecutionContext:
     price_series: pd.Series
     volume_series: pd.Series
+    high_series: pd.Series
+    low_series: pd.Series
     latest_price: float | None
     outputs: dict[str, IndicatorSnapshot] = field(default_factory=dict)
     output_stages: dict[str, str] = field(default_factory=dict)

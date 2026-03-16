@@ -1,9 +1,13 @@
 """signal_fusion subdomain facade."""
 
 from .application import (
+    FUSION_SCORECARD_MODEL_VERSION,
+    DirectionScorecard,
     FusionRuntimeRequest,
     FusionRuntimeResult,
     FusionRuntimeService,
+    IndicatorContribution,
+    ScorecardFrame,
 )
 from .domain import (
     SemanticConfluenceInput,
@@ -17,6 +21,10 @@ from .domain import (
 )
 
 __all__ = [
+    "DirectionScorecard",
+    "FUSION_SCORECARD_MODEL_VERSION",
+    "IndicatorContribution",
+    "ScorecardFrame",
     "FusionRuntimeRequest",
     "FusionRuntimeResult",
     "FusionRuntimeService",

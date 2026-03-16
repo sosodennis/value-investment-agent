@@ -1,0 +1,5 @@
+id,task,status,notes
+1,Add calibration mapping loader + runtime confidence calibration helper,done,technical mapping loader added + cached env/default fallback
+2,Wire calibrated confidence into fusion compute + update report contracts/serializers/state,done,fusion compute now applies calibration + stores raw/calibrated + metadata
+3,Update frontend types/parsers/UI to show calibrated confidence + source,done,parsers+UI updated with calibration label + raw display
+4,Run validation gates + update progress docs,done,ruff checks + progress logs updated

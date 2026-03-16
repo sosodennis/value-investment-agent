@@ -198,11 +198,57 @@ class TechnicalFusionReportArtifactData(BaseModel):
     direction: str
     risk_level: str
     confidence: float | None = None
+    confidence_raw: float | None = None
+    confidence_calibrated: float | None = None
+    confidence_calibration: dict[str, object] | None = None
     confluence_matrix: dict[str, dict[str, object]] | None = None
     conflict_reasons: list[str] | None = None
     alignment_report: dict[str, object] | None = None
     source_artifacts: dict[str, str | None] | None = None
     degraded_reasons: list[str] | None = None
+
+
+class TechnicalScorecardContributionData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    value: float | None
+    state: str | None = None
+    contribution: float
+    weight: float | None = None
+    notes: str | None = None
+
+
+class TechnicalScorecardFrameData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    timeframe: str
+    classic_score: float
+    quant_score: float
+    pattern_score: float
+    total_score: float
+    classic_label: str
+    quant_label: str
+    pattern_label: str
+    contributions: dict[str, list[TechnicalScorecardContributionData]]
+
+
+class TechnicalDirectionScorecardArtifactData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: str
+    ticker: str
+    as_of: str
+    direction: str
+    risk_level: str
+    confidence: float | None = None
+    neutral_threshold: float
+    overall_score: float
+    model_version: str | None = None
+    timeframes: dict[str, TechnicalScorecardFrameData]
+    conflict_reasons: list[str] | None = None
+    degraded_reasons: list[str] | None = None
+    source_artifacts: dict[str, str | None] | None = None
 
 
 class TechnicalBacktestSummaryData(BaseModel):

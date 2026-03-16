@@ -10,6 +10,7 @@ from src.interface.artifacts.artifact_data_models import (
     PriceSeriesArtifactData,
     TechnicalAlertsArtifactData,
     TechnicalChartArtifactData,
+    TechnicalDirectionScorecardArtifactData,
     TechnicalFeaturePackArtifactData,
     TechnicalFusionReportArtifactData,
     TechnicalIndicatorSeriesArtifactData,
@@ -23,6 +24,7 @@ from src.shared.kernel.contracts import (
     ARTIFACT_KIND_PRICE_SERIES,
     ARTIFACT_KIND_TA_ALERTS,
     ARTIFACT_KIND_TA_CHART_DATA,
+    ARTIFACT_KIND_TA_DIRECTION_SCORECARD,
     ARTIFACT_KIND_TA_FEATURE_PACK,
     ARTIFACT_KIND_TA_FULL_REPORT,
     ARTIFACT_KIND_TA_FUSION_REPORT,
@@ -44,6 +46,7 @@ class TechnicalArtifactRepository:
     feature_pack_port: TypedArtifactPort[TechnicalFeaturePackArtifactData]
     pattern_pack_port: TypedArtifactPort[TechnicalPatternPackArtifactData]
     fusion_report_port: TypedArtifactPort[TechnicalFusionReportArtifactData]
+    direction_scorecard_port: TypedArtifactPort[TechnicalDirectionScorecardArtifactData]
     verification_report_port: TypedArtifactPort[TechnicalVerificationReportArtifactData]
     full_report_port: TypedArtifactPort[TechnicalArtifactModel]
 
@@ -215,6 +218,27 @@ class TechnicalArtifactRepository:
             context=f"artifact {artifact_id} ta_fusion_report",
         )
 
+    async def save_direction_scorecard(
+        self,
+        data: JSONObject,
+        *,
+        produced_by: str,
+        key_prefix: str | None = None,
+    ) -> str:
+        return await self.direction_scorecard_port.save(
+            data,
+            produced_by=produced_by,
+            key_prefix=key_prefix,
+        )
+
+    async def load_direction_scorecard(
+        self, artifact_id: str | None
+    ) -> TechnicalDirectionScorecardArtifactData | None:
+        return await self.direction_scorecard_port.load(
+            artifact_id,
+            context=f"artifact {artifact_id} ta_direction_scorecard",
+        )
+
     async def save_verification_report(
         self,
         data: JSONObject,
@@ -314,6 +338,11 @@ def build_default_technical_artifact_repository() -> TechnicalArtifactRepository
             manager=artifact_manager,
             kind=ARTIFACT_KIND_TA_FUSION_REPORT,
             model=TechnicalFusionReportArtifactData,
+        ),
+        direction_scorecard_port=TypedArtifactPort(
+            manager=artifact_manager,
+            kind=ARTIFACT_KIND_TA_DIRECTION_SCORECARD,
+            model=TechnicalDirectionScorecardArtifactData,
         ),
         verification_report_port=TypedArtifactPort(
             manager=artifact_manager,

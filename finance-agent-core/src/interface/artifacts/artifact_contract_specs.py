@@ -17,6 +17,7 @@ from src.interface.artifacts.artifact_data_models import (
     SearchResultsArtifactData,
     TechnicalAlertsArtifactData,
     TechnicalChartArtifactData,
+    TechnicalDirectionScorecardArtifactData,
     TechnicalFeaturePackArtifactData,
     TechnicalFusionReportArtifactData,
     TechnicalIndicatorSeriesArtifactData,
@@ -36,6 +37,7 @@ from src.shared.kernel.contracts import (
     ARTIFACT_KIND_SEARCH_RESULTS,
     ARTIFACT_KIND_TA_ALERTS,
     ARTIFACT_KIND_TA_CHART_DATA,
+    ARTIFACT_KIND_TA_DIRECTION_SCORECARD,
     ARTIFACT_KIND_TA_FEATURE_PACK,
     ARTIFACT_KIND_TA_FULL_REPORT,
     ARTIFACT_KIND_TA_FUSION_REPORT,
@@ -89,6 +91,10 @@ ARTIFACT_CONTRACT_SPECS: tuple[ArtifactContractSpec, ...] = (
     ArtifactContractSpec(
         kind=ARTIFACT_KIND_TA_FUSION_REPORT,
         model=TechnicalFusionReportArtifactData,
+    ),
+    ArtifactContractSpec(
+        kind=ARTIFACT_KIND_TA_DIRECTION_SCORECARD,
+        model=TechnicalDirectionScorecardArtifactData,
     ),
     ArtifactContractSpec(
         kind=ARTIFACT_KIND_TA_VERIFICATION_REPORT,

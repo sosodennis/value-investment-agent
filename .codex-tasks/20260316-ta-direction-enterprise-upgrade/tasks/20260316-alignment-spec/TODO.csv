@@ -1,0 +1,4 @@
+id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
+1,Extract fundamental calibration contract and IO patterns,DONE,"Key contract+IO patterns summarized in notes",echo SKIP,2026-03-16,0,Reviewed forward_signals calibration contracts/io/policy/mapping services.
+2,Write technical alignment spec doc,DONE,"Spec doc created with mapping sections",test -f docs/reports/technical-calibration-alignment-spec.md,2026-03-16,0,Document written.
+3,Validate deliverable,DONE,"Spec doc exists",test -f docs/reports/technical-calibration-alignment-spec.md,2026-03-16,0,File exists.

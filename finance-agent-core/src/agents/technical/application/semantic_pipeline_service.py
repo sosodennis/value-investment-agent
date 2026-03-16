@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 
 from src.agents.technical.application.ports import (
     ITechnicalInterpretationProvider,
+    TechnicalInterpretationResult,
+    TechnicalProviderFailure,
 )
 from src.agents.technical.application.semantic_finalize_service import (
     assemble_semantic_finalize,
@@ -19,11 +22,17 @@ from src.agents.technical.application.semantic_policy_input_service import (
 from src.agents.technical.application.semantic_verification_context_service import (
     assemble_verification_context,
 )
+from src.agents.technical.subdomains.interpretation.domain import (
+    apply_interpretation_guardrail,
+)
 from src.agents.technical.subdomains.signal_fusion import (
     SemanticTagPolicyInput,
     SemanticTagPolicyResult,
 )
+from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import JSONObject
+
+logger = get_logger(__name__)
 
 
 async def execute_semantic_pipeline(
@@ -49,6 +58,36 @@ async def execute_semantic_pipeline(
         backtest_context_result.backtest_context,
         backtest_context_result.wfa_context,
     )
+
+    if not interpretation_result.is_fallback:
+        guardrail_outcome = apply_interpretation_guardrail(
+            direction=tags_result.direction,
+            risk_level=tags_result.risk_level,
+            interpretation=interpretation_result.content,
+        )
+        if not guardrail_outcome.is_aligned:
+            log_event(
+                logger,
+                event="technical_llm_guardrail_triggered",
+                message="technical llm guardrail replaced interpretation",
+                level=logging.WARNING,
+                error_code="TECHNICAL_LLM_GUARDRAIL_MISMATCH",
+                fields={
+                    "ticker": ticker,
+                    "expected_direction": tags_result.direction,
+                    "detected_direction": guardrail_outcome.detected_direction,
+                    "guardrail_version": guardrail_outcome.guardrail_version,
+                    "violation_reason": guardrail_outcome.violation_reason,
+                },
+            )
+            interpretation_result = TechnicalInterpretationResult(
+                content=guardrail_outcome.content,
+                is_fallback=True,
+                failure=TechnicalProviderFailure(
+                    failure_code="TECHNICAL_LLM_GUARDRAIL_MISMATCH",
+                    reason=guardrail_outcome.violation_reason,
+                ),
+            )
 
     semantic_finalize_result = assemble_semantic_finalize(
         ticker=ticker,

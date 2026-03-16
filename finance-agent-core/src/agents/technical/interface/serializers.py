@@ -238,6 +238,22 @@ def build_full_report_payload(
 ) -> JSONObject:
     confidence = technical_context.get("confidence")
     confidence_val = float(confidence) if isinstance(confidence, int | float) else None
+    confidence_raw = technical_context.get("confidence_raw")
+    confidence_raw_val = (
+        float(confidence_raw) if isinstance(confidence_raw, int | float) else None
+    )
+    confidence_calibrated = technical_context.get("confidence_calibrated")
+    confidence_calibrated_val = (
+        float(confidence_calibrated)
+        if isinstance(confidence_calibrated, int | float)
+        else None
+    )
+    if confidence_val is None and confidence_calibrated_val is not None:
+        confidence_val = confidence_calibrated_val
+    calibration_raw = technical_context.get("confidence_calibration")
+    confidence_calibration = (
+        calibration_raw if isinstance(calibration_raw, dict) else None
+    )
     return {
         "schema_version": "2.0",
         "ticker": ticker,
@@ -245,6 +261,9 @@ def build_full_report_payload(
         "direction": str(tags_dict.get("direction") or "NEUTRAL").upper(),
         "risk_level": str(tags_dict.get("risk_level") or "medium").lower(),
         "confidence": confidence_val,
+        "confidence_raw": confidence_raw_val,
+        "confidence_calibrated": confidence_calibrated_val,
+        "confidence_calibration": confidence_calibration,
         "llm_interpretation": llm_interpretation,
         "artifact_refs": {
             "chart_data_id": technical_context.get("chart_data_id"),
@@ -254,6 +273,7 @@ def build_full_report_payload(
             "feature_pack_id": technical_context.get("feature_pack_id"),
             "pattern_pack_id": technical_context.get("pattern_pack_id"),
             "fusion_report_id": technical_context.get("fusion_report_id"),
+            "direction_scorecard_id": technical_context.get("direction_scorecard_id"),
             "verification_report_id": technical_context.get("verification_report_id"),
         },
         "summary_tags": tags_dict.get("tags", []),

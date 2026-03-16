@@ -34,11 +34,15 @@ import {
     TechnicalAnalysisSuccess,
     TechnicalArtifactRefs,
     TechnicalChartData,
+    TechnicalConfidenceCalibration,
     TechnicalDiagnostics,
     TechnicalFeatureFrame,
     TechnicalFeatureIndicator,
     TechnicalFeaturePack,
     TechnicalFusionReport,
+    TechnicalDirectionScorecard,
+    TechnicalScorecardContribution,
+    TechnicalScorecardFrame,
     TechnicalVerificationReport,
     TechnicalPatternFlag,
     TechnicalPatternFrame,
@@ -101,6 +105,55 @@ const parseNullableOptionalString = (
 ): string | null | undefined => {
     if (value === undefined || value === null) return value;
     return parseString(value, context);
+};
+
+const parseConfidenceCalibration = (
+    value: unknown,
+    context: string
+): TechnicalConfidenceCalibration | undefined => {
+    if (value === undefined || value === null) return undefined;
+    const record = toRecord(value, context);
+    const mappingSource = parseNullableOptionalString(
+        record.mapping_source,
+        `${context}.mapping_source`
+    );
+    const mappingPath = parseNullableOptionalString(
+        record.mapping_path,
+        `${context}.mapping_path`
+    );
+    const degradedReason = parseNullableOptionalString(
+        record.degraded_reason,
+        `${context}.degraded_reason`
+    );
+    const mappingVersion = parseNullableOptionalString(
+        record.mapping_version,
+        `${context}.mapping_version`
+    );
+    const calibrationApplied = parseNullableOptionalBoolean(
+        record.calibration_applied,
+        `${context}.calibration_applied`
+    );
+
+    const calibration: TechnicalConfidenceCalibration = {};
+    if (typeof mappingSource === 'string') {
+        calibration.mapping_source = mappingSource;
+    }
+    if (mappingPath !== undefined) {
+        calibration.mapping_path = mappingPath ?? null;
+    }
+    if (degradedReason !== undefined) {
+        calibration.degraded_reason = degradedReason ?? null;
+    }
+    if (mappingVersion !== undefined) {
+        calibration.mapping_version = mappingVersion ?? null;
+    }
+    if (calibrationApplied !== undefined) {
+        calibration.calibration_applied = calibrationApplied;
+    }
+    if (Object.keys(calibration).length === 0) {
+        return undefined;
+    }
+    return calibration;
 };
 
 const parseForwardSignalDirection = (
@@ -1082,6 +1135,18 @@ export const parseTechnicalFusionReportArtifact = (
         record.confidence,
         `${context}.confidence`
     );
+    const confidenceRaw = parseNullableOptionalNumber(
+        record.confidence_raw,
+        `${context}.confidence_raw`
+    );
+    const confidenceCalibrated = parseNullableOptionalNumber(
+        record.confidence_calibrated,
+        `${context}.confidence_calibrated`
+    );
+    const confidenceCalibration = parseConfidenceCalibration(
+        record.confidence_calibration,
+        `${context}.confidence_calibration`
+    );
     const confluenceMatrixRecord =
         record.confluence_matrix === undefined || record.confluence_matrix === null
             ? undefined
@@ -1143,6 +1208,13 @@ export const parseTechnicalFusionReportArtifact = (
         risk_level: parseRiskLevel(record.risk_level, `${context}.risk_level`),
     };
     if (confidence !== undefined) report.confidence = confidence;
+    if (confidenceRaw !== undefined) report.confidence_raw = confidenceRaw;
+    if (confidenceCalibrated !== undefined) {
+        report.confidence_calibrated = confidenceCalibrated;
+    }
+    if (confidenceCalibration) {
+        report.confidence_calibration = confidenceCalibration;
+    }
     if (Object.keys(confluenceMatrix).length > 0) {
         report.confluence_matrix = confluenceMatrix;
     }
@@ -1153,6 +1225,140 @@ export const parseTechnicalFusionReportArtifact = (
     }
     if (degradedReasons) report.degraded_reasons = degradedReasons;
     return report;
+};
+
+const parseScorecardContribution = (
+    value: unknown,
+    context: string
+): TechnicalScorecardContribution => {
+    const record = toRecord(value, context);
+    const valueField = parseNullableOptionalNumber(record.value, `${context}.value`);
+    const state = parseNullableOptionalString(record.state, `${context}.state`);
+    const weight = parseNullableOptionalNumber(record.weight, `${context}.weight`);
+    const notes = parseNullableOptionalString(record.notes, `${context}.notes`);
+    const contribution = parseNumber(record.contribution, `${context}.contribution`);
+    const result: TechnicalScorecardContribution = {
+        name: parseString(record.name, `${context}.name`),
+        value: valueField ?? null,
+        contribution,
+    };
+    if (state !== undefined) result.state = state;
+    if (weight !== undefined) result.weight = weight;
+    if (notes !== undefined) result.notes = notes;
+    return result;
+};
+
+const parseScorecardFrame = (
+    value: unknown,
+    context: string
+): TechnicalScorecardFrame => {
+    const record = toRecord(value, context);
+    const contributionsRecord = toRecord(
+        record.contributions,
+        `${context}.contributions`
+    );
+    const contributions: Record<string, TechnicalScorecardContribution[]> = {};
+    for (const [key, entry] of Object.entries(contributionsRecord)) {
+        if (!Array.isArray(entry)) {
+            throw new TypeError(`${context}.contributions.${key} must be an array.`);
+        }
+        contributions[key] = entry.map((item, idx) =>
+            parseScorecardContribution(
+                item,
+                `${context}.contributions.${key}[${idx}]`
+            )
+        );
+    }
+
+    return {
+        timeframe: parseString(record.timeframe, `${context}.timeframe`),
+        classic_score: parseNumber(record.classic_score, `${context}.classic_score`),
+        quant_score: parseNumber(record.quant_score, `${context}.quant_score`),
+        pattern_score: parseNumber(record.pattern_score, `${context}.pattern_score`),
+        total_score: parseNumber(record.total_score, `${context}.total_score`),
+        classic_label: parseString(record.classic_label, `${context}.classic_label`),
+        quant_label: parseString(record.quant_label, `${context}.quant_label`),
+        pattern_label: parseString(record.pattern_label, `${context}.pattern_label`),
+        contributions,
+    };
+};
+
+export const parseTechnicalDirectionScorecardArtifact = (
+    value: unknown,
+    context = 'technical direction scorecard'
+): TechnicalDirectionScorecard => {
+    const record = toRecord(value, context);
+    const confidence = parseNullableOptionalNumber(
+        record.confidence,
+        `${context}.confidence`
+    );
+    const modelVersion = parseNullableOptionalString(
+        record.model_version,
+        `${context}.model_version`
+    );
+    const conflictReasons =
+        record.conflict_reasons === undefined || record.conflict_reasons === null
+            ? undefined
+            : parseStringArray(
+                  record.conflict_reasons,
+                  `${context}.conflict_reasons`
+              );
+    const degradedReasons =
+        record.degraded_reasons === undefined || record.degraded_reasons === null
+            ? undefined
+            : parseStringArray(
+                  record.degraded_reasons,
+                  `${context}.degraded_reasons`
+              );
+    const sourceArtifactsRecord =
+        record.source_artifacts === undefined || record.source_artifacts === null
+            ? undefined
+            : toRecord(record.source_artifacts, `${context}.source_artifacts`);
+    const sourceArtifacts: Record<string, string | null> = {};
+    if (sourceArtifactsRecord) {
+        for (const [key, entry] of Object.entries(sourceArtifactsRecord)) {
+            if (entry === null) {
+                sourceArtifacts[key] = null;
+            } else {
+                sourceArtifacts[key] = parseString(
+                    entry,
+                    `${context}.source_artifacts.${key}`
+                );
+            }
+        }
+    }
+
+    const timeframesRecord = toRecord(record.timeframes, `${context}.timeframes`);
+    const timeframes: Record<string, TechnicalScorecardFrame> = {};
+    for (const [key, frame] of Object.entries(timeframesRecord)) {
+        timeframes[key] = parseScorecardFrame(
+            frame,
+            `${context}.timeframes.${key}`
+        );
+    }
+
+    const scorecard: TechnicalDirectionScorecard = {
+        schema_version: parseString(record.schema_version, `${context}.schema_version`),
+        ticker: parseString(record.ticker, `${context}.ticker`),
+        as_of: parseString(record.as_of, `${context}.as_of`),
+        direction: parseString(record.direction, `${context}.direction`),
+        risk_level: parseRiskLevel(record.risk_level, `${context}.risk_level`),
+        neutral_threshold: parseNumber(
+            record.neutral_threshold,
+            `${context}.neutral_threshold`
+        ),
+        overall_score: parseNumber(record.overall_score, `${context}.overall_score`),
+        timeframes,
+    };
+
+    if (confidence !== undefined) scorecard.confidence = confidence;
+    if (modelVersion !== undefined) scorecard.model_version = modelVersion;
+    if (conflictReasons) scorecard.conflict_reasons = conflictReasons;
+    if (degradedReasons) scorecard.degraded_reasons = degradedReasons;
+    if (Object.keys(sourceArtifacts).length > 0) {
+        scorecard.source_artifacts = sourceArtifacts;
+    }
+    return scorecard;
 };
 
 export const parseTechnicalVerificationReportArtifact = (
@@ -1306,6 +1512,10 @@ const parseTechnicalArtifactRefs = (
         record.fusion_report_id,
         `${context}.fusion_report_id`
     );
+    const directionScorecardId = parseNullableOptionalString(
+        record.direction_scorecard_id,
+        `${context}.direction_scorecard_id`
+    );
     const verificationReportId = parseNullableOptionalString(
         record.verification_report_id,
         `${context}.verification_report_id`
@@ -1332,6 +1542,9 @@ const parseTechnicalArtifactRefs = (
     }
     if (typeof fusionReportId === 'string') {
         refs.fusion_report_id = fusionReportId;
+    }
+    if (typeof directionScorecardId === 'string') {
+        refs.direction_scorecard_id = directionScorecardId;
     }
     if (typeof verificationReportId === 'string') {
         refs.verification_report_id = verificationReportId;
@@ -1584,6 +1797,27 @@ const parseTechnicalAnalysisReport = (
     );
     if (typeof confidence === 'number') {
         report.confidence = confidence;
+    }
+    const confidenceRaw = parseNullableOptionalNumber(
+        record.confidence_raw,
+        `${context}.confidence_raw`
+    );
+    if (typeof confidenceRaw === 'number') {
+        report.confidence_raw = confidenceRaw;
+    }
+    const confidenceCalibrated = parseNullableOptionalNumber(
+        record.confidence_calibrated,
+        `${context}.confidence_calibrated`
+    );
+    if (typeof confidenceCalibrated === 'number') {
+        report.confidence_calibrated = confidenceCalibrated;
+    }
+    const confidenceCalibration = parseConfidenceCalibration(
+        record.confidence_calibration,
+        `${context}.confidence_calibration`
+    );
+    if (confidenceCalibration) {
+        report.confidence_calibration = confidenceCalibration;
     }
 
     const llmInterpretation = parseNullableOptionalString(

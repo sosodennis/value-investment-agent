@@ -21,6 +21,7 @@ import {
     parseTechnicalPatternPackArtifact,
     parseTechnicalAlertsArtifact,
     parseTechnicalFusionReportArtifact,
+    parseTechnicalDirectionScorecardArtifact,
     parseTechnicalVerificationReportArtifact,
     parseTechnicalIndicatorSeriesArtifact,
     parseTechnicalTimeseriesBundleArtifact,
@@ -30,8 +31,11 @@ import {
     RiskLevel,
     TechnicalAlertsArtifact,
     TechnicalChartData,
+    TechnicalConfidenceCalibration,
     TechnicalFeaturePack,
     TechnicalFusionReport,
+    TechnicalDirectionScorecard,
+    TechnicalScorecardContribution,
     TechnicalVerificationReport,
     TechnicalPatternPack,
     TechnicalIndicatorSeriesArtifact,
@@ -150,6 +154,42 @@ const formatConfidence = (value?: number) => {
     return `${normalized.toFixed(1)}%`;
 };
 
+type ConfidencePayload = {
+    confidence?: number | null;
+    confidence_raw?: number | null;
+    confidence_calibrated?: number | null;
+    confidence_calibration?: TechnicalConfidenceCalibration;
+};
+
+const resolveConfidenceValue = (payload?: ConfidencePayload | null): number | undefined => {
+    if (!payload) return undefined;
+    const calibrated = payload.confidence_calibrated ?? undefined;
+    const primary = payload.confidence ?? undefined;
+    const raw = payload.confidence_raw ?? undefined;
+    if (typeof calibrated === 'number') return calibrated;
+    if (typeof primary === 'number') return primary;
+    if (typeof raw === 'number') return raw;
+    return undefined;
+};
+
+const formatCalibrationSource = (source?: string | null) => {
+    if (!source) return 'Unknown';
+    if (source === 'env_path') return 'Custom';
+    if (source === 'default_artifact') return 'Default';
+    if (source === 'embedded_default') return 'Fallback';
+    return formatLabel(source);
+};
+
+const buildCalibrationLabel = (calibration?: TechnicalConfidenceCalibration) => {
+    if (!calibration) return 'Fusion Estimate';
+    const applied = calibration.calibration_applied;
+    const sourceLabel = formatCalibrationSource(calibration.mapping_source);
+    if (applied === false) {
+        return `Uncalibrated · ${sourceLabel}`;
+    }
+    return `Calibrated · ${sourceLabel}`;
+};
+
 const formatArtifactLabel = (value: string) =>
     formatLabel(value.replace(/_id$/i, ''));
 
@@ -159,6 +199,12 @@ const formatArtifactId = (value: string) =>
 const formatIndicatorValue = (value: number | null | undefined) => {
     if (value === null || value === undefined || Number.isNaN(value)) return 'n/a';
     return value.toFixed(3);
+};
+
+const formatContributionValue = (value: number | null | undefined) => {
+    if (value === null || value === undefined || Number.isNaN(value)) return '0.00';
+    const rounded = value.toFixed(2);
+    return value > 0 ? `+${rounded}` : rounded;
 };
 
 type IndicatorTone = 'positive' | 'neutral' | 'warning' | 'danger';
@@ -382,6 +428,51 @@ const renderIndicatorHighlights = (indicators: TechnicalFeaturePack['timeframes'
     );
 };
 
+const renderScorecardContributions = (
+    items: TechnicalScorecardContribution[]
+) => {
+    if (items.length === 0) {
+        return <div className="text-[10px] text-slate-500">No contributions.</div>;
+    }
+    return (
+        <div className="space-y-2">
+            {items.map((item, idx) => {
+                const valueText =
+                    item.value === null || item.value === undefined
+                        ? null
+                        : formatIndicatorValue(item.value);
+                const stateText = item.state ? formatLabel(item.state) : 'Neutral';
+                const contributionTone =
+                    item.contribution > 0
+                        ? 'text-emerald-200'
+                        : item.contribution < 0
+                          ? 'text-rose-200'
+                          : 'text-slate-400';
+                return (
+                    <div
+                        key={`${item.name}-${idx}`}
+                        className="flex items-center justify-between gap-3 text-[11px]"
+                    >
+                        <div>
+                            <div className="text-slate-200 font-semibold">
+                                {formatLabel(item.name)}
+                            </div>
+                            <div className="text-[10px] text-slate-500">
+                                {stateText}
+                                {valueText ? ` · ${valueText}` : ''}
+                                {item.notes ? ` · ${item.notes}` : ''}
+                            </div>
+                        </div>
+                        <div className={`font-mono font-semibold ${contributionTone}`}>
+                            {formatContributionValue(item.contribution)}
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
 const MarketStatusBadge = ({ zScore }: { zScore: number }) => {
     let status = "Market Equilibrium";
     let accentText = "text-slate-200";
@@ -521,6 +612,19 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         parseTechnicalFusionReportArtifact,
         'technical_output.fusion_report',
         'ta_fusion_report'
+    );
+
+    const directionScorecardId =
+        reportData?.artifact_refs.direction_scorecard_id ?? null;
+    const {
+        data: directionScorecardData,
+        isLoading: isDirectionScorecardLoading,
+        error: directionScorecardError,
+    } = useArtifact<TechnicalDirectionScorecard>(
+        showFusionReport ? directionScorecardId : null,
+        parseTechnicalDirectionScorecardArtifact,
+        'technical_output.direction_scorecard',
+        'ta_direction_scorecard'
     );
 
     const verificationReportId =
@@ -1286,6 +1390,28 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         };
     }, [fusionReportData]);
 
+    const scorecardSummary = useMemo(() => {
+        if (!directionScorecardData) return null;
+        const priority = (frame: string) => {
+            const idx = PRICE_TIMEFRAME_PREFERENCE.indexOf(
+                frame as (typeof PRICE_TIMEFRAME_PREFERENCE)[number]
+            );
+            return idx === -1 ? 99 : idx;
+        };
+        const entries = Object.entries(directionScorecardData.timeframes)
+            .map(([frameKey, frame]) => ({
+                timeframe: frameKey,
+                frame,
+            }))
+            .sort((a, b) => priority(a.timeframe) - priority(b.timeframe));
+        return {
+            entries,
+            modelVersion: directionScorecardData.model_version ?? null,
+            overallScore: directionScorecardData.overall_score,
+            neutralThreshold: directionScorecardData.neutral_threshold,
+        };
+    }, [directionScorecardData]);
+
     const verificationSummary = useMemo(() => {
         if (!verificationReportData) return null;
         const gatesCount = verificationReportData.baseline_gates
@@ -1421,7 +1547,18 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
 
     const DirectionIcon = getDirectionIcon(reportData.direction);
     const riskTone = getRiskTone(reportData.risk_level);
-    const confidenceDisplay = formatConfidence(reportData.confidence);
+    const confidenceValue = resolveConfidenceValue(reportData);
+    const confidenceDisplay = formatConfidence(confidenceValue);
+    const confidenceLabel = buildCalibrationLabel(reportData.confidence_calibration);
+    const fusionConfidenceValue = resolveConfidenceValue(fusionReportData);
+    const fusionConfidenceDisplay = formatConfidence(fusionConfidenceValue);
+    const fusionConfidenceLabel = buildCalibrationLabel(
+        fusionReportData?.confidence_calibration
+    );
+    const fusionRawDisplay =
+        fusionReportData?.confidence_raw !== undefined
+            ? formatConfidence(fusionReportData.confidence_raw ?? undefined)
+            : null;
     const degradedReasons = reportData.diagnostics?.degraded_reasons ?? [];
     const isDegraded = reportData.diagnostics?.is_degraded === true;
     const artifactEntries = Object.entries(reportData.artifact_refs).filter(
@@ -1479,7 +1616,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                         <div className="tech-card p-4">
                             <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Confidence</div>
                             <div className="text-lg font-black text-white">{confidenceDisplay}</div>
-                            <div className="text-[9px] text-slate-500 uppercase tracking-widest mt-1">Fusion Estimate</div>
+                            <div className="text-[9px] text-slate-500 uppercase tracking-widest mt-1">{confidenceLabel}</div>
                         </div>
                     </section>
 
@@ -2330,7 +2467,8 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Fusion Report</span>
                             </div>
                             <div className="flex items-center gap-4">
-                                {showFusionReport && isFusionReportLoading && (
+                                {showFusionReport &&
+                                    (isFusionReportLoading || isDirectionScorecardLoading) && (
                                     <AgentLoadingState
                                         type="header"
                                         title="Loading Fusion Report..."
@@ -2353,6 +2491,12 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                     </div>
                                 )}
 
+                                {directionScorecardError && (
+                                    <div className="text-xs text-rose-300">
+                                        Unable to load direction scorecard. Please retry later.
+                                    </div>
+                                )}
+
                                 {!fusionReportData && !fusionReportError && (
                                     <div className="text-xs text-slate-500">
                                         Fusion report data will appear here once loaded.
@@ -2372,7 +2516,13 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                             </div>
                                             <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
                                                 <div className="text-[9px] font-black text-slate-500 uppercase mb-1">Confidence</div>
-                                                <div className="text-lg font-black text-white">{formatConfidence(fusionReportData.confidence ?? undefined)}</div>
+                                                <div className="text-lg font-black text-white">{fusionConfidenceDisplay}</div>
+                                                <div className="text-[9px] text-slate-500 uppercase tracking-widest mt-1">{fusionConfidenceLabel}</div>
+                                                {fusionRawDisplay && (
+                                                    <div className="text-[9px] text-slate-600 uppercase tracking-widest mt-1">
+                                                        Raw {fusionRawDisplay}
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
 
@@ -2427,6 +2577,53 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                                         </div>
                                                     </div>
                                                 ))}
+                                            </div>
+                                        )}
+
+                                        {directionScorecardData && scorecardSummary && scorecardSummary.entries.length > 0 && (
+                                            <div className="space-y-4">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                                        Direction Scorecard
+                                                    </div>
+                                                    <div className="text-[10px] text-slate-500 font-bold uppercase">
+                                                        Model {scorecardSummary.modelVersion ?? 'n/a'} · Neutral {scorecardSummary.neutralThreshold.toFixed(2)}
+                                                    </div>
+                                                </div>
+                                                <div className="grid grid-cols-1 gap-4">
+                                                    {scorecardSummary.entries.map(({ timeframe, frame }) => (
+                                                        <div key={timeframe} className="bg-slate-950/50 p-5 rounded-xl border border-slate-800 space-y-4">
+                                                            <div className="flex items-center justify-between">
+                                                                <div className="text-xs font-black uppercase tracking-widest text-slate-400">
+                                                                    {formatLabel(timeframe)}
+                                                                </div>
+                                                                <div className="text-[10px] text-slate-500 font-bold uppercase">
+                                                                    Total {formatContributionValue(frame.total_score)}
+                                                                </div>
+                                                            </div>
+                                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                                                <div className="bg-slate-900/40 p-3 rounded-lg border border-slate-800 space-y-2">
+                                                                    <div className="text-[9px] text-slate-500 font-bold uppercase">Classic</div>
+                                                                    <div className="text-sm font-black text-white">{formatLabel(frame.classic_label)}</div>
+                                                                    <div className="text-[10px] text-slate-500">Score {frame.classic_score.toFixed(2)}</div>
+                                                                    {renderScorecardContributions(frame.contributions?.classic ?? [])}
+                                                                </div>
+                                                                <div className="bg-slate-900/40 p-3 rounded-lg border border-slate-800 space-y-2">
+                                                                    <div className="text-[9px] text-slate-500 font-bold uppercase">Quant</div>
+                                                                    <div className="text-sm font-black text-white">{formatLabel(frame.quant_label)}</div>
+                                                                    <div className="text-[10px] text-slate-500">Score {frame.quant_score.toFixed(2)}</div>
+                                                                    {renderScorecardContributions(frame.contributions?.quant ?? [])}
+                                                                </div>
+                                                                <div className="bg-slate-900/40 p-3 rounded-lg border border-slate-800 space-y-2">
+                                                                    <div className="text-[9px] text-slate-500 font-bold uppercase">Pattern</div>
+                                                                    <div className="text-sm font-black text-white">{formatLabel(frame.pattern_label)}</div>
+                                                                    <div className="text-[10px] text-slate-500">Score {frame.pattern_score.toFixed(2)}</div>
+                                                                    {renderScorecardContributions(frame.contributions?.pattern ?? [])}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
                                             </div>
                                         )}
 

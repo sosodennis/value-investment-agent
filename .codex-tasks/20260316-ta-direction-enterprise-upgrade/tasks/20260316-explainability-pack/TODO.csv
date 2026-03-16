@@ -1,0 +1,5 @@
+id,task,status,notes
+1,Add direction scorecard artifact model + contract kind + repository port,done,backend artifact kind + repo port added
+2,Compute scorecard in fusion runtime and save artifact; propagate id to state + full report,done,fusion runtime + state updates wired
+3,Update frontend types/parsers and render scorecard breakdown UI,done,scorecard parser + UI breakdown added
+4,Run validation gates + update progress docs,done,rg checks + ruff run

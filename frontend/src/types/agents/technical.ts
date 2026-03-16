@@ -12,12 +12,21 @@ export interface TechnicalArtifactRefs {
     pattern_pack_id?: string;
     alerts_id?: string;
     fusion_report_id?: string;
+    direction_scorecard_id?: string;
     verification_report_id?: string;
 }
 
 export interface TechnicalDiagnostics {
     is_degraded?: boolean;
     degraded_reasons?: string[];
+}
+
+export interface TechnicalConfidenceCalibration {
+    mapping_source?: string | null;
+    mapping_path?: string | null;
+    degraded_reason?: string | null;
+    mapping_version?: string | null;
+    calibration_applied?: boolean | null;
 }
 
 export interface TechnicalChartData {
@@ -151,11 +160,51 @@ export interface TechnicalFusionReport {
     direction: string;
     risk_level: RiskLevel;
     confidence?: number | null;
+    confidence_raw?: number | null;
+    confidence_calibrated?: number | null;
+    confidence_calibration?: TechnicalConfidenceCalibration;
     confluence_matrix?: Record<string, Record<string, unknown>>;
     conflict_reasons?: string[];
     alignment_report?: Record<string, unknown>;
     source_artifacts?: Record<string, string | null>;
     degraded_reasons?: string[];
+}
+
+export interface TechnicalScorecardContribution {
+    name: string;
+    value: number | null;
+    state?: string | null;
+    contribution: number;
+    weight?: number | null;
+    notes?: string | null;
+}
+
+export interface TechnicalScorecardFrame {
+    timeframe: string;
+    classic_score: number;
+    quant_score: number;
+    pattern_score: number;
+    total_score: number;
+    classic_label: string;
+    quant_label: string;
+    pattern_label: string;
+    contributions: Record<string, TechnicalScorecardContribution[]>;
+}
+
+export interface TechnicalDirectionScorecard {
+    schema_version: string;
+    ticker: string;
+    as_of: string;
+    direction: string;
+    risk_level: RiskLevel;
+    confidence?: number | null;
+    neutral_threshold: number;
+    overall_score: number;
+    model_version?: string | null;
+    timeframes: Record<string, TechnicalScorecardFrame>;
+    conflict_reasons?: string[];
+    degraded_reasons?: string[];
+    source_artifacts?: Record<string, string | null>;
 }
 
 export interface TechnicalBacktestSummary {
@@ -193,6 +242,9 @@ export interface TechnicalAnalysisReport {
     direction: string;
     risk_level: RiskLevel;
     confidence?: number;
+    confidence_raw?: number | null;
+    confidence_calibrated?: number | null;
+    confidence_calibration?: TechnicalConfidenceCalibration;
     llm_interpretation?: string;
     artifact_refs: TechnicalArtifactRefs;
     summary_tags: string[];

@@ -243,6 +243,19 @@ class _FusionComputeRuntimeAdapter:
             key_prefix=key_prefix,
         )
 
+    async def save_direction_scorecard(
+        self,
+        *,
+        data: JSONObject,
+        produced_by: str,
+        key_prefix: str | None = None,
+    ) -> str:
+        return await self.port.save_direction_scorecard(
+            data=data,
+            produced_by=produced_by,
+            key_prefix=key_prefix,
+        )
+
 
 @dataclass(frozen=True)
 class TechnicalOrchestrator:

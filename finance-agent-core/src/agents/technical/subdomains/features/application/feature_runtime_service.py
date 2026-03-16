@@ -69,6 +69,8 @@ class FeatureRuntimeService:
         for timeframe, series in request.series_by_timeframe.items():
             price_series = _build_series(series.price_series)
             volume_series = _build_series(series.volume_series)
+            high_series = _build_series(series.high_series)
+            low_series = _build_series(series.low_series)
             if price_series.empty:
                 degraded.append(f"{timeframe}_PRICE_EMPTY")
                 frames[timeframe] = FeatureFrame()
@@ -78,6 +80,8 @@ class FeatureRuntimeService:
             ctx = FeatureExecutionContext(
                 price_series=price_series,
                 volume_series=volume_series,
+                high_series=high_series,
+                low_series=low_series,
                 latest_price=latest_price,
             )
 
@@ -312,7 +316,25 @@ def _task_mfi_14(ctx: FeatureExecutionContext) -> None:
 
 
 def _task_atr_14(ctx: FeatureExecutionContext) -> None:
-    atr_series = compute_atr(None, None, ctx.price_series, window=14)
+    if ctx.high_series.empty or ctx.low_series.empty:
+        ctx.add_output(
+            "ATR_14",
+            _snapshot(
+                "ATR_14",
+                None,
+                state="UNAVAILABLE",
+                metadata={"reason": "missing_high_low"},
+            ),
+            CLASSIC_STAGE,
+        )
+        return
+
+    atr_series = compute_atr(
+        ctx.high_series,
+        ctx.low_series,
+        ctx.price_series,
+        window=14,
+    )
     atr_val = _latest_value(atr_series) if atr_series is not None else None
     ctx.add_output(
         "ATR_14",
@@ -320,7 +342,6 @@ def _task_atr_14(ctx: FeatureExecutionContext) -> None:
             "ATR_14",
             atr_val,
             state="UNAVAILABLE" if atr_series is None else None,
-            metadata={"reason": "missing_high_low"} if atr_series is None else {},
         ),
         CLASSIC_STAGE,
     )

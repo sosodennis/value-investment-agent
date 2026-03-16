@@ -14,6 +14,7 @@ from src.agents.technical.application.state_updates import (
     build_fusion_compute_success_update,
 )
 from src.agents.technical.domain.shared import (
+    AlignmentReport,
     FeatureFrame,
     FeaturePack,
     IndicatorSnapshot,
@@ -25,9 +26,15 @@ from src.agents.technical.domain.shared import (
     TimeAlignmentGuardService,
 )
 from src.agents.technical.interface.serializers import build_fusion_compute_preview
+from src.agents.technical.subdomains.calibration.domain import (
+    calibrate_direction_confidence,
+    load_technical_direction_calibration_mapping,
+)
 from src.agents.technical.subdomains.signal_fusion import (
+    DirectionScorecard,
     FusionRuntimeRequest,
     FusionRuntimeService,
+    IndicatorContribution,
 )
 from src.interface.artifacts.artifact_data_models import (
     TechnicalFeaturePackArtifactData,
@@ -57,6 +64,14 @@ class FusionComputeRuntime(Protocol):
     ) -> TechnicalPatternPackArtifactData | None: ...
 
     async def save_fusion_report(
+        self,
+        data: JSONObject,
+        *,
+        produced_by: str,
+        key_prefix: str | None = None,
+    ) -> str: ...
+
+    async def save_direction_scorecard(
         self,
         data: JSONObject,
         *,
@@ -120,6 +135,7 @@ async def run_fusion_compute_use_case(
     degraded_reasons: list[str] = []
     alignment_report: dict[str, object] | None = None
     alignment = None
+    direction_scorecard_id: str | None = None
 
     try:
         feature_pack_payload = await runtime.load_feature_pack(feature_pack_id)
@@ -245,6 +261,37 @@ async def run_fusion_compute_use_case(
 
         degraded_reasons.extend(fusion_result.degraded_reasons)
 
+        confidence_raw = fusion_result.fusion_signal.confidence
+        overall_score = (
+            fusion_result.scorecard.overall_score if fusion_result.scorecard else 0.0
+        )
+        calibration_timeframe = _resolve_calibration_timeframe(
+            alignment=alignment,
+            feature_pack=feature_pack,
+            pattern_pack=pattern_pack,
+        )
+        calibration_load_result = load_technical_direction_calibration_mapping()
+        calibrated_confidence, calibration_applied, mapping_version = (
+            calibrate_direction_confidence(
+                raw_score=overall_score,
+                timeframe=calibration_timeframe,
+                direction=fusion_result.fusion_signal.direction,
+                calibration_config=calibration_load_result.config,
+            )
+        )
+        confidence_calibrated = (
+            calibrated_confidence if calibration_applied else confidence_raw
+        )
+        if confidence_calibrated is None:
+            confidence_calibrated = calibrated_confidence
+        confidence_calibration = {
+            "mapping_source": calibration_load_result.mapping_source,
+            "mapping_path": calibration_load_result.mapping_path,
+            "degraded_reason": calibration_load_result.degraded_reason,
+            "mapping_version": mapping_version,
+            "calibration_applied": calibration_applied,
+        }
+
         fusion_report_payload = _fusion_report_to_payload(
             fusion_result,
             alignment_report=alignment_report,
@@ -252,6 +299,9 @@ async def run_fusion_compute_use_case(
             pattern_pack_id=pattern_pack_id,
             timeseries_bundle_id=timeseries_bundle_id,
             degraded_reasons=degraded_reasons,
+            confidence_raw=confidence_raw,
+            confidence_calibrated=confidence_calibrated,
+            confidence_calibration=confidence_calibration,
         )
 
         fusion_report_id = await runtime.save_fusion_report(
@@ -259,6 +309,37 @@ async def run_fusion_compute_use_case(
             produced_by="technical_analysis.fusion_compute",
             key_prefix=ticker_value,
         )
+
+        if fusion_result.scorecard is not None:
+            scorecard_payload = _scorecard_to_payload(
+                fusion_result.scorecard,
+                degraded_reasons=degraded_reasons,
+                source_artifacts={
+                    "feature_pack_id": feature_pack_id,
+                    "pattern_pack_id": pattern_pack_id,
+                    "timeseries_bundle_id": timeseries_bundle_id,
+                    "fusion_report_id": fusion_report_id,
+                },
+            )
+            try:
+                direction_scorecard_id = await runtime.save_direction_scorecard(
+                    data=scorecard_payload,
+                    produced_by="technical_analysis.fusion_compute",
+                    key_prefix=ticker_value,
+                )
+            except Exception as exc:
+                degraded_reasons.append("DIRECTION_SCORECARD_SAVE_FAILED")
+                log_event(
+                    logger,
+                    event="technical_fusion_scorecard_save_failed",
+                    message="direction scorecard save failed",
+                    level=logging.WARNING,
+                    error_code="TECHNICAL_FUSION_SCORECARD_SAVE_FAILED",
+                    fields={
+                        "ticker": ticker_value,
+                        "exception": str(exc),
+                    },
+                )
     except Exception as exc:
         log_event(
             logger,
@@ -294,7 +375,7 @@ async def run_fusion_compute_use_case(
         ticker=ticker_value or "N/A",
         direction=fusion_result.fusion_signal.direction,
         risk_level=fusion_result.fusion_signal.risk_level,
-        confidence=fusion_result.fusion_signal.confidence,
+        confidence=confidence_calibrated,
     )
     artifact = runtime.build_progress_artifact(
         f"Technical Analysis: Signal fusion computed for {ticker_value or 'N/A'}",
@@ -341,7 +422,11 @@ async def run_fusion_compute_use_case(
     return TechnicalNodeResult(
         update=build_fusion_compute_success_update(
             fusion_report_id=fusion_report_id,
-            confidence=fusion_result.fusion_signal.confidence,
+            direction_scorecard_id=direction_scorecard_id,
+            confidence=confidence_calibrated,
+            confidence_raw=confidence_raw,
+            confidence_calibrated=confidence_calibrated,
+            confidence_calibration=confidence_calibration,
             artifact=artifact,
         ),
         goto="verification_compute",
@@ -467,6 +552,9 @@ def _fusion_report_to_payload(
     pattern_pack_id: str | None,
     timeseries_bundle_id: str | None,
     degraded_reasons: list[str],
+    confidence_raw: float | None,
+    confidence_calibrated: float | None,
+    confidence_calibration: dict[str, object] | None,
 ) -> JSONObject:
     if isinstance(result, TechnicalFusionReportArtifactData):
         payload = result.model_dump(mode="json")
@@ -483,7 +571,10 @@ def _fusion_report_to_payload(
         "as_of": fusion_signal.as_of,
         "direction": fusion_signal.direction,
         "risk_level": fusion_signal.risk_level,
-        "confidence": fusion_signal.confidence,
+        "confidence": confidence_calibrated,
+        "confidence_raw": confidence_raw,
+        "confidence_calibrated": confidence_calibrated,
+        "confidence_calibration": confidence_calibration,
         "confluence_matrix": diagnostics.confluence_matrix if diagnostics else {},
         "conflict_reasons": diagnostics.conflict_reasons if diagnostics else [],
         "alignment_report": alignment_report,
@@ -493,4 +584,82 @@ def _fusion_report_to_payload(
             "pattern_pack_id": pattern_pack_id,
         },
         "degraded_reasons": list(degraded_reasons),
+    }
+
+
+def _scorecard_to_payload(
+    scorecard: DirectionScorecard,
+    *,
+    degraded_reasons: list[str],
+    source_artifacts: dict[str, str | None],
+) -> JSONObject:
+    frames: dict[str, dict[str, object]] = {}
+    for timeframe, frame in scorecard.timeframes.items():
+        frames[timeframe] = {
+            "timeframe": frame.timeframe,
+            "classic_score": frame.classic_score,
+            "quant_score": frame.quant_score,
+            "pattern_score": frame.pattern_score,
+            "total_score": frame.total_score,
+            "classic_label": frame.classic_label,
+            "quant_label": frame.quant_label,
+            "pattern_label": frame.pattern_label,
+            "contributions": _scorecard_contributions_payload(frame.contributions),
+        }
+
+    return {
+        "schema_version": "1.0",
+        "ticker": scorecard.ticker,
+        "as_of": scorecard.as_of,
+        "direction": scorecard.direction,
+        "risk_level": scorecard.risk_level,
+        "confidence": scorecard.confidence,
+        "neutral_threshold": scorecard.neutral_threshold,
+        "overall_score": scorecard.overall_score,
+        "model_version": scorecard.model_version,
+        "timeframes": frames,
+        "conflict_reasons": list(scorecard.conflict_reasons),
+        "degraded_reasons": list(degraded_reasons),
+        "source_artifacts": dict(source_artifacts),
+    }
+
+
+def _resolve_calibration_timeframe(
+    *,
+    alignment: AlignmentReport | None,
+    feature_pack: FeaturePack,
+    pattern_pack: PatternPack,
+) -> str:
+    if alignment is not None:
+        return alignment.anchor_timeframe
+    if "1d" in feature_pack.timeframes:
+        return "1d"
+    if feature_pack.timeframes:
+        return next(iter(feature_pack.timeframes))
+    if "1d" in pattern_pack.timeframes:
+        return "1d"
+    if pattern_pack.timeframes:
+        return next(iter(pattern_pack.timeframes))
+    return "1d"
+
+
+def _scorecard_contributions_payload(
+    contributions: dict[str, list[IndicatorContribution]],
+) -> dict[str, list[dict[str, object]]]:
+    payload: dict[str, list[dict[str, object]]] = {}
+    for category, items in contributions.items():
+        payload[category] = [_scorecard_contribution_payload(item) for item in items]
+    return payload
+
+
+def _scorecard_contribution_payload(
+    item: IndicatorContribution,
+) -> dict[str, object]:
+    return {
+        "name": item.name,
+        "value": item.value,
+        "state": item.state,
+        "contribution": item.contribution,
+        "weight": item.weight,
+        "notes": item.notes,
     }

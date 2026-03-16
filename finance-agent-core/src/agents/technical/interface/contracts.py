@@ -26,6 +26,7 @@ class ArtifactRefsModel(BaseModel):
     feature_pack_id: OptionalTechnicalText = None
     pattern_pack_id: OptionalTechnicalText = None
     fusion_report_id: OptionalTechnicalText = None
+    direction_scorecard_id: OptionalTechnicalText = None
     verification_report_id: OptionalTechnicalText = None
 
 
@@ -34,6 +35,16 @@ class DiagnosticsModel(BaseModel):
 
     is_degraded: bool | None = None
     degraded_reasons: list[str] | None = None
+
+
+class ConfidenceCalibrationModel(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    mapping_source: OptionalTechnicalText = None
+    mapping_path: OptionalTechnicalText = None
+    degraded_reason: OptionalTechnicalText = None
+    mapping_version: OptionalTechnicalText = None
+    calibration_applied: bool | None = None
 
 
 class TechnicalArtifactModel(BaseModel):
@@ -45,6 +56,9 @@ class TechnicalArtifactModel(BaseModel):
     direction: SignalDirection
     risk_level: RiskLevel
     confidence: OptionalConfidenceScore = None
+    confidence_raw: OptionalConfidenceScore = None
+    confidence_calibrated: OptionalConfidenceScore = None
+    confidence_calibration: ConfidenceCalibrationModel | None = None
     llm_interpretation: OptionalTechnicalText = None
     artifact_refs: ArtifactRefsModel
     summary_tags: TechnicalStringList

@@ -13,6 +13,7 @@ export type ArtifactKind =
     | 'ta_pattern_pack'
     | 'ta_alerts'
     | 'ta_fusion_report'
+    | 'ta_direction_scorecard'
     | 'ta_verification_report';
 
 const toRecord = (
@@ -36,6 +37,7 @@ const parseArtifactKind = (value: unknown, context: string): ArtifactKind => {
     if (value === 'ta_pattern_pack') return value;
     if (value === 'ta_alerts') return value;
     if (value === 'ta_fusion_report') return value;
+    if (value === 'ta_direction_scorecard') return value;
     if (value === 'ta_verification_report') return value;
     if (value === 'search_results') return value;
     if (value === 'news_selection') return value;

@@ -16,6 +16,44 @@ from src.agents.technical.domain.shared import (
 Scalar = float | int | str | bool | None
 
 _TIMEFRAME_PRIORITY: dict[str, int] = {"1wk": 0, "1d": 1, "1h": 2}
+FUSION_SCORECARD_MODEL_VERSION = "ta_fusion_v1"
+
+
+@dataclass(frozen=True)
+class IndicatorContribution:
+    name: str
+    value: float | None
+    state: str | None
+    contribution: float
+    weight: float | None = None
+    notes: str | None = None
+
+
+@dataclass(frozen=True)
+class ScorecardFrame:
+    timeframe: TimeframeCode
+    classic_score: float
+    quant_score: float
+    pattern_score: float
+    total_score: float
+    classic_label: str
+    quant_label: str
+    pattern_label: str
+    contributions: dict[str, list[IndicatorContribution]] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class DirectionScorecard:
+    ticker: str
+    as_of: str
+    direction: str
+    risk_level: str
+    confidence: float | None
+    neutral_threshold: float
+    overall_score: float
+    model_version: str
+    timeframes: dict[TimeframeCode, ScorecardFrame]
+    conflict_reasons: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -31,6 +69,7 @@ class FusionRuntimeRequest:
 class FusionRuntimeResult:
     fusion_signal: FusionSignal
     degraded_reasons: list[str] = field(default_factory=list)
+    scorecard: DirectionScorecard | None = None
 
 
 @dataclass(frozen=True)
@@ -52,6 +91,7 @@ class FusionRuntimeService:
         stat_strengths: list[float] = []
         extreme_detected = False
 
+        scorecard_frames: dict[TimeframeCode, ScorecardFrame] = {}
         for timeframe in timeframes:
             feature_frame = feature_pack.timeframes.get(timeframe)
             pattern_frame = pattern_pack.timeframes.get(timeframe)
@@ -62,11 +102,13 @@ class FusionRuntimeService:
                 degraded.append(f"{timeframe}_PATTERN_FRAME_MISSING")
                 pattern_frame = PatternFrame()
 
-            classic_score = _score_classic(feature_frame.classic_indicators)
-            quant_score, quant_extreme, stat_strength = _score_quant(
+            classic_score, classic_contribs = _score_classic(
+                feature_frame.classic_indicators
+            )
+            quant_score, quant_extreme, stat_strength, quant_contribs = _score_quant(
                 feature_frame.quant_features
             )
-            pattern_score = _score_pattern(pattern_frame)
+            pattern_score, pattern_contribs = _score_pattern(pattern_frame)
 
             extreme_detected = extreme_detected or quant_extreme
             if stat_strength is not None:
@@ -92,7 +134,24 @@ class FusionRuntimeService:
                 "quant_score": round(quant_score, 3),
                 "pattern_score": round(pattern_score, 3),
             }
-            timeframe_scores.append(classic_score + quant_score + pattern_score)
+            total_score = classic_score + quant_score + pattern_score
+            timeframe_scores.append(total_score)
+
+            scorecard_frames[timeframe] = ScorecardFrame(
+                timeframe=timeframe,
+                classic_score=round(classic_score, 3),
+                quant_score=round(quant_score, 3),
+                pattern_score=round(pattern_score, 3),
+                total_score=round(total_score, 3),
+                classic_label=classic_label,
+                quant_label=quant_label,
+                pattern_label=pattern_label,
+                contributions={
+                    "classic": classic_contribs,
+                    "quant": quant_contribs,
+                    "pattern": pattern_contribs,
+                },
+            )
 
         if not timeframes:
             degraded.append("FUSION_NO_TIMEFRAMES")
@@ -131,8 +190,23 @@ class FusionRuntimeService:
             diagnostics=diagnostics,
         )
 
+        scorecard = DirectionScorecard(
+            ticker=request.ticker,
+            as_of=request.as_of,
+            direction=direction,
+            risk_level=risk_level,
+            confidence=confidence,
+            neutral_threshold=self.neutral_threshold,
+            overall_score=round(overall_score, 3),
+            model_version=FUSION_SCORECARD_MODEL_VERSION,
+            timeframes=scorecard_frames,
+            conflict_reasons=conflict_reasons,
+        )
+
         return FusionRuntimeResult(
-            fusion_signal=fusion_signal, degraded_reasons=degraded
+            fusion_signal=fusion_signal,
+            degraded_reasons=degraded,
+            scorecard=scorecard,
         )
 
 
@@ -140,92 +214,164 @@ def _sorted_timeframes(timeframes: set[TimeframeCode]) -> list[TimeframeCode]:
     return sorted(timeframes, key=lambda tf: _TIMEFRAME_PRIORITY.get(tf, 99))
 
 
-def _score_classic(indicators: dict[str, IndicatorSnapshot]) -> float:
+def _score_classic(
+    indicators: dict[str, IndicatorSnapshot],
+) -> tuple[float, list[IndicatorContribution]]:
     score = 0.0
-    for name, snapshot in indicators.items():
+    contributions: list[IndicatorContribution] = []
+    for name in sorted(indicators):
+        snapshot = indicators[name]
         state = (snapshot.state or "").upper()
+        contribution = 0.0
         if name in {"SMA_20", "EMA_20", "VWAP"}:
             if state == "ABOVE":
-                score += 1.0
+                contribution = 1.0
             elif state == "BELOW":
-                score -= 1.0
+                contribution = -1.0
         elif name in {"RSI_14", "MFI_14"}:
             if state == "OVERSOLD":
-                score += 1.0
+                contribution = 1.0
             elif state == "OVERBOUGHT":
-                score -= 1.0
+                contribution = -1.0
         elif name == "MACD":
             if state == "BULLISH":
-                score += 1.0
+                contribution = 1.0
             elif state == "BEARISH":
-                score -= 1.0
-    return score
+                contribution = -1.0
+
+        score += contribution
+        contributions.append(
+            IndicatorContribution(
+                name=snapshot.name,
+                value=snapshot.value,
+                state=snapshot.state,
+                contribution=round(contribution, 3),
+                notes=_metadata_note(snapshot),
+            )
+        )
+    return score, contributions
 
 
 def _score_quant(
     indicators: dict[str, IndicatorSnapshot],
-) -> tuple[float, bool, float | None]:
+) -> tuple[float, bool, float | None, list[IndicatorContribution]]:
     score = 0.0
     extreme = False
     stat_strength: float | None = None
+    contributions: list[IndicatorContribution] = []
 
-    z_snapshot = indicators.get("FD_Z_SCORE")
-    if z_snapshot is not None and z_snapshot.value is not None:
-        z_val = float(z_snapshot.value)
-        if z_val >= 0.5:
-            score += 1.0
-        elif z_val <= -0.5:
-            score -= 1.0
-        if abs(z_val) >= 2.0:
-            extreme = True
+    for name in sorted(indicators):
+        snapshot = indicators[name]
+        state = (snapshot.state or "").upper()
+        contribution = 0.0
 
-    obv_snapshot = indicators.get("FD_OBV_Z")
-    if obv_snapshot is not None:
-        state = (obv_snapshot.state or "").upper()
-        if state in {"ACCUMULATION_ANOMALY", "MILD_ACCUMULATION"}:
-            score += 0.5
-        elif state in {"DISTRIBUTION_ANOMALY", "MILD_DISTRIBUTION"}:
-            score -= 0.5
+        if name == "FD_Z_SCORE" and snapshot.value is not None:
+            z_val = float(snapshot.value)
+            if z_val >= 0.5:
+                contribution = 1.0
+            elif z_val <= -0.5:
+                contribution = -1.0
+            if abs(z_val) >= 2.0:
+                extreme = True
 
-    boll_snapshot = indicators.get("FD_BOLLINGER_BW")
-    if boll_snapshot is not None:
-        state = (boll_snapshot.state or "").upper()
-        if state == "BREAKOUT_UPPER":
-            score += 0.25
-        elif state == "BREAKOUT_LOWER":
-            score -= 0.25
+        elif name == "FD_OBV_Z":
+            if state in {"ACCUMULATION_ANOMALY", "MILD_ACCUMULATION"}:
+                contribution = 0.5
+            elif state in {"DISTRIBUTION_ANOMALY", "MILD_DISTRIBUTION"}:
+                contribution = -0.5
 
-    stat_snapshot = indicators.get("FD_STAT_STRENGTH")
-    if stat_snapshot is not None and stat_snapshot.value is not None:
-        stat_strength = float(stat_snapshot.value)
+        elif name == "FD_BOLLINGER_BW":
+            if state == "BREAKOUT_UPPER":
+                contribution = 0.25
+            elif state == "BREAKOUT_LOWER":
+                contribution = -0.25
 
-    return score, extreme, stat_strength
+        elif name == "FD_STAT_STRENGTH" and snapshot.value is not None:
+            stat_strength = float(snapshot.value)
+
+        score += contribution
+        contributions.append(
+            IndicatorContribution(
+                name=snapshot.name,
+                value=snapshot.value,
+                state=snapshot.state,
+                contribution=round(contribution, 3),
+                notes=_metadata_note(snapshot),
+            )
+        )
+
+    return score, extreme, stat_strength, contributions
 
 
-def _score_pattern(frame: PatternFrame) -> float:
+def _score_pattern(
+    frame: PatternFrame,
+) -> tuple[float, list[IndicatorContribution]]:
     score = 0.0
+    contributions: list[IndicatorContribution] = []
+
     for flag in frame.breakouts:
         name = flag.name.upper()
+        contribution = 0.0
         if name == "BREAKOUT_UP":
-            score += 1.0
+            contribution = 1.0
         elif name == "BREAKOUT_DOWN":
-            score -= 1.0
+            contribution = -1.0
+        score += contribution
+        contributions.append(
+            IndicatorContribution(
+                name=flag.name,
+                value=flag.confidence,
+                state=None,
+                contribution=round(contribution, 3),
+                notes=flag.notes,
+            )
+        )
 
     for flag in frame.trendlines:
         name = flag.name.upper()
+        contribution = 0.0
         if name == "UPTREND":
-            score += 0.5
+            contribution = 0.5
         elif name == "DOWNTREND":
-            score -= 0.5
+            contribution = -0.5
+        score += contribution
+        contributions.append(
+            IndicatorContribution(
+                name=flag.name,
+                value=flag.confidence,
+                state=None,
+                contribution=round(contribution, 3),
+                notes=flag.notes,
+            )
+        )
 
     for flag in frame.pattern_flags:
         name = flag.name.upper()
+        contribution = 0.0
         if name == "NEAR_SUPPORT":
-            score += 0.25
+            contribution = 0.25
         elif name == "NEAR_RESISTANCE":
-            score -= 0.25
+            contribution = -0.25
+        score += contribution
+        contributions.append(
+            IndicatorContribution(
+                name=flag.name,
+                value=flag.confidence,
+                state=None,
+                contribution=round(contribution, 3),
+                notes=flag.notes,
+            )
+        )
 
-    return score
+    return score, contributions
+
+
+def _metadata_note(snapshot: IndicatorSnapshot) -> str | None:
+    metadata = snapshot.metadata or {}
+    reason = metadata.get("reason")
+    if isinstance(reason, str) and reason.strip():
+        return reason
+    return None
 
 
 def _label_score(score: float, threshold: float) -> str:
