@@ -22,6 +22,7 @@ from src.interface.artifacts.artifact_data_models import (
     TechnicalFusionReportArtifactData,
     TechnicalIndicatorSeriesArtifactData,
     TechnicalPatternPackArtifactData,
+    TechnicalRegimePackArtifactData,
     TechnicalTimeseriesBundleArtifactData,
     TechnicalVerificationReportArtifactData,
 )
@@ -43,6 +44,7 @@ from src.shared.kernel.contracts import (
     ARTIFACT_KIND_TA_FUSION_REPORT,
     ARTIFACT_KIND_TA_INDICATOR_SERIES,
     ARTIFACT_KIND_TA_PATTERN_PACK,
+    ARTIFACT_KIND_TA_REGIME_PACK,
     ARTIFACT_KIND_TA_TIMESERIES_BUNDLE,
     ARTIFACT_KIND_TA_VERIFICATION_REPORT,
 )
@@ -87,6 +89,10 @@ ARTIFACT_CONTRACT_SPECS: tuple[ArtifactContractSpec, ...] = (
     ArtifactContractSpec(
         kind=ARTIFACT_KIND_TA_PATTERN_PACK,
         model=TechnicalPatternPackArtifactData,
+    ),
+    ArtifactContractSpec(
+        kind=ARTIFACT_KIND_TA_REGIME_PACK,
+        model=TechnicalRegimePackArtifactData,
     ),
     ArtifactContractSpec(
         kind=ARTIFACT_KIND_TA_FUSION_REPORT,

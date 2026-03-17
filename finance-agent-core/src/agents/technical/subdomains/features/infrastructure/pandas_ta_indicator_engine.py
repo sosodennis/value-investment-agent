@@ -12,6 +12,12 @@ from src.agents.technical.subdomains.features.application.ports import (
     IndicatorEngineAvailability,
     IndicatorEngineResult,
 )
+from src.agents.technical.subdomains.features.domain import (
+    compute_adx,
+    compute_atr,
+    compute_atrp,
+    compute_bollinger_bandwidth,
+)
 from src.shared.kernel.tools.logger import bounded_text, get_logger, log_event
 
 logger = get_logger(__name__)
@@ -36,6 +42,8 @@ class PandasTaIndicatorEngine(IIndicatorEngine):
         self,
         *,
         price_series: pd.Series,
+        high_series: pd.Series,
+        low_series: pd.Series,
         volume_series: pd.Series,
         latest_price: float | None,
     ) -> IndicatorEngineResult:
@@ -56,6 +64,8 @@ class PandasTaIndicatorEngine(IIndicatorEngine):
         try:
             return _compute_classic_indicators(
                 price_series=price_series,
+                high_series=high_series,
+                low_series=low_series,
                 volume_series=volume_series,
                 latest_price=latest_price,
             )
@@ -77,6 +87,8 @@ class PandasTaIndicatorEngine(IIndicatorEngine):
 def _compute_classic_indicators(
     *,
     price_series: pd.Series,
+    high_series: pd.Series,
+    low_series: pd.Series,
     volume_series: pd.Series,
     latest_price: float | None,
 ) -> IndicatorEngineResult:
@@ -84,6 +96,8 @@ def _compute_classic_indicators(
     degraded: list[str] = []
 
     price_series = _clean_series(price_series)
+    high_series = _clean_series(high_series)
+    low_series = _clean_series(low_series)
     volume_series = _clean_series(volume_series)
 
     if price_series.empty:
@@ -154,11 +168,48 @@ def _compute_classic_indicators(
             "MFI_14", mfi_val, state=_momentum_state(mfi_val)
         )
 
-    indicators["ATR_14"] = _snapshot(
-        "ATR_14",
-        None,
-        state="UNAVAILABLE",
-        metadata={"reason": "missing_high_low"},
+    if high_series.empty or low_series.empty:
+        indicators["ATR_14"] = _snapshot(
+            "ATR_14",
+            None,
+            state="UNAVAILABLE",
+            metadata={"reason": "missing_high_low"},
+        )
+        indicators["ADX_14"] = _snapshot(
+            "ADX_14",
+            None,
+            state="UNAVAILABLE",
+            metadata={"reason": "missing_high_low"},
+        )
+        indicators["ATRP_14"] = _snapshot(
+            "ATRP_14",
+            None,
+            state="UNAVAILABLE",
+            metadata={"reason": "missing_high_low"},
+        )
+    else:
+        atr_series = compute_atr(high_series, low_series, price_series, window=14)
+        atr_val = _latest_value(atr_series)
+        indicators["ATR_14"] = _snapshot("ATR_14", atr_val)
+
+        adx_series = compute_adx(high_series, low_series, price_series, window=14)
+        adx_val = _latest_value(adx_series)
+        indicators["ADX_14"] = _snapshot("ADX_14", adx_val, state=_adx_state(adx_val))
+
+        atrp_series = compute_atrp(high_series, low_series, price_series, window=14)
+        atrp_val = _latest_value(atrp_series)
+        indicators["ATRP_14"] = _snapshot(
+            "ATRP_14",
+            atrp_val,
+            state=_atrp_state(atrp_val),
+        )
+
+    bb_bandwidth = compute_bollinger_bandwidth(price_series, window=20, num_std=2.0)
+    bb_bandwidth_val = _latest_value(bb_bandwidth)
+    indicators["BB_BANDWIDTH_20"] = _snapshot(
+        "BB_BANDWIDTH_20",
+        bb_bandwidth_val,
+        state=_bandwidth_state(bb_bandwidth_val),
     )
 
     return IndicatorEngineResult(indicators=indicators, degraded_reasons=degraded)
@@ -242,4 +293,34 @@ def _macd_state(macd_val: float | None, signal_val: float | None) -> str | None:
         return "BULLISH"
     if macd_val < signal_val:
         return "BEARISH"
+    return "NEUTRAL"
+
+
+def _adx_state(value: float | None) -> str | None:
+    if value is None:
+        return "UNAVAILABLE"
+    if value >= 25.0:
+        return "TRENDING"
+    if value <= 15.0:
+        return "RANGING"
+    return "NEUTRAL"
+
+
+def _atrp_state(value: float | None) -> str | None:
+    if value is None:
+        return "UNAVAILABLE"
+    if value >= 0.035:
+        return "EXPANDING"
+    if value <= 0.015:
+        return "COMPRESSED"
+    return "NEUTRAL"
+
+
+def _bandwidth_state(value: float | None) -> str | None:
+    if value is None:
+        return "UNAVAILABLE"
+    if value >= 0.12:
+        return "EXPANDING"
+    if value <= 0.08:
+        return "COMPRESSED"
     return "NEUTRAL"

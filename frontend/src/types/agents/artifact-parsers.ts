@@ -29,6 +29,8 @@ import {
     RiskLevel,
     TechnicalAlertSignal,
     TechnicalAlertSummary,
+    TechnicalAnalystPerspective,
+    TechnicalAnalystPerspectiveEvidenceItem,
     TechnicalAlertsArtifact,
     TechnicalAnalysisReport,
     TechnicalAnalysisSuccess,
@@ -207,6 +209,102 @@ const parseMomentumExtremes = (
         return undefined;
     }
     return momentum;
+};
+
+const parseAnalystPerspectiveEvidenceItem = (
+    value: unknown,
+    context: string
+): TechnicalAnalystPerspectiveEvidenceItem => {
+    const record = toRecord(value, context);
+    const item: TechnicalAnalystPerspectiveEvidenceItem = {
+        label: parseString(record.label, `${context}.label`),
+        rationale: parseString(record.rationale, `${context}.rationale`),
+    };
+    const valueText = parseNullableOptionalString(
+        record.value_text,
+        `${context}.value_text`
+    );
+    const timeframe = parseNullableOptionalString(
+        record.timeframe,
+        `${context}.timeframe`
+    );
+    if (valueText !== undefined) {
+        item.value_text = valueText;
+    }
+    if (timeframe !== undefined) {
+        item.timeframe = timeframe;
+    }
+    return item;
+};
+
+const parseAnalystPerspective = (
+    value: unknown,
+    context: string
+): TechnicalAnalystPerspective | undefined => {
+    if (value === undefined || value === null) return undefined;
+    const record = toRecord(value, context);
+    const perspective: TechnicalAnalystPerspective = {
+        stance: parseString(record.stance, `${context}.stance`),
+        stance_summary: parseString(
+            record.stance_summary,
+            `${context}.stance_summary`
+        ),
+        rationale_summary: parseString(
+            record.rationale_summary,
+            `${context}.rationale_summary`
+        ),
+    };
+    if (Array.isArray(record.top_evidence)) {
+        perspective.top_evidence = record.top_evidence.map((item, index) =>
+            parseAnalystPerspectiveEvidenceItem(
+                item,
+                `${context}.top_evidence.${index}`
+            )
+        );
+    }
+    const triggerCondition = parseNullableOptionalString(
+        record.trigger_condition,
+        `${context}.trigger_condition`
+    );
+    const invalidationCondition = parseNullableOptionalString(
+        record.invalidation_condition,
+        `${context}.invalidation_condition`
+    );
+    const invalidationLevel = parseNullableOptionalNumber(
+        record.invalidation_level,
+        `${context}.invalidation_level`
+    );
+    const validationNote = parseNullableOptionalString(
+        record.validation_note,
+        `${context}.validation_note`
+    );
+    const confidenceNote = parseNullableOptionalString(
+        record.confidence_note,
+        `${context}.confidence_note`
+    );
+    const decisionPosture = parseNullableOptionalString(
+        record.decision_posture,
+        `${context}.decision_posture`
+    );
+    if (triggerCondition !== undefined) {
+        perspective.trigger_condition = triggerCondition;
+    }
+    if (invalidationCondition !== undefined) {
+        perspective.invalidation_condition = invalidationCondition;
+    }
+    if (invalidationLevel !== undefined) {
+        perspective.invalidation_level = invalidationLevel;
+    }
+    if (validationNote !== undefined) {
+        perspective.validation_note = validationNote;
+    }
+    if (confidenceNote !== undefined) {
+        perspective.confidence_note = confidenceNote;
+    }
+    if (decisionPosture !== undefined) {
+        perspective.decision_posture = decisionPosture;
+    }
+    return perspective;
 };
 
 const parseForwardSignalDirection = (
@@ -1036,6 +1134,14 @@ const parseTechnicalPatternFrame = (
         : (() => {
               throw new TypeError(`${context}.resistance_levels must be an array.`);
           })();
+    const volumeProfileLevels = Array.isArray(record.volume_profile_levels)
+        ? record.volume_profile_levels.map((entry, idx) =>
+              parseTechnicalPatternLevel(
+                  entry,
+                  `${context}.volume_profile_levels[${idx}]`
+              )
+          )
+        : [];
     const breakouts = Array.isArray(record.breakouts)
         ? record.breakouts.map((entry, idx) =>
               parseTechnicalPatternFlag(entry, `${context}.breakouts[${idx}]`)
@@ -1071,15 +1177,32 @@ const parseTechnicalPatternFrame = (
             );
         }
     }
+    const volumeProfileSummary =
+        record.volume_profile_summary === undefined ||
+        record.volume_profile_summary === null
+            ? undefined
+            : toRecord(record.volume_profile_summary, `${context}.volume_profile_summary`);
+    const confluenceMetadata =
+        record.confluence_metadata === undefined || record.confluence_metadata === null
+            ? undefined
+            : toRecord(record.confluence_metadata, `${context}.confluence_metadata`);
 
-    return {
+    const frame: TechnicalPatternFrame = {
         support_levels: supportLevels,
         resistance_levels: resistanceLevels,
+        volume_profile_levels: volumeProfileLevels,
         breakouts,
         trendlines,
         pattern_flags: patternFlags,
         confidence_scores: confidenceScores,
     };
+    if (volumeProfileSummary) {
+        frame.volume_profile_summary = volumeProfileSummary;
+    }
+    if (confluenceMetadata) {
+        frame.confluence_metadata = confluenceMetadata;
+    }
+    return frame;
 };
 
 export const parseTechnicalPatternPackArtifact = (
@@ -1557,6 +1680,10 @@ const parseTechnicalArtifactRefs = (
         record.pattern_pack_id,
         `${context}.pattern_pack_id`
     );
+    const regimePackId = parseNullableOptionalString(
+        record.regime_pack_id,
+        `${context}.regime_pack_id`
+    );
     const alertsId = parseNullableOptionalString(
         record.alerts_id,
         `${context}.alerts_id`
@@ -1589,6 +1716,9 @@ const parseTechnicalArtifactRefs = (
     }
     if (typeof patternPackId === 'string') {
         refs.pattern_pack_id = patternPackId;
+    }
+    if (typeof regimePackId === 'string') {
+        refs.regime_pack_id = regimePackId;
     }
     if (typeof alertsId === 'string') {
         refs.alerts_id = alertsId;
@@ -1879,13 +2009,33 @@ const parseTechnicalAnalysisReport = (
     if (momentumExtremes) {
         report.momentum_extremes = momentumExtremes;
     }
-
-    const llmInterpretation = parseNullableOptionalString(
-        record.llm_interpretation,
-        `${context}.llm_interpretation`
+    const analystPerspective = parseAnalystPerspective(
+        record.analyst_perspective,
+        `${context}.analyst_perspective`
     );
-    if (typeof llmInterpretation === 'string') {
-        report.llm_interpretation = llmInterpretation;
+    if (analystPerspective) {
+        report.analyst_perspective = analystPerspective;
+    }
+    if (record.regime_summary !== undefined && record.regime_summary !== null) {
+        report.regime_summary = toRecord(record.regime_summary, `${context}.regime_summary`);
+    }
+    if (
+        record.volume_profile_summary !== undefined &&
+        record.volume_profile_summary !== null
+    ) {
+        report.volume_profile_summary = toRecord(
+            record.volume_profile_summary,
+            `${context}.volume_profile_summary`
+        );
+    }
+    if (
+        record.structure_confluence_summary !== undefined &&
+        record.structure_confluence_summary !== null
+    ) {
+        report.structure_confluence_summary = toRecord(
+            record.structure_confluence_summary,
+            `${context}.structure_confluence_summary`
+        );
     }
 
     if (record.diagnostics !== undefined && record.diagnostics !== null) {

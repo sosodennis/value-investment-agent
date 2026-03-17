@@ -13,6 +13,7 @@ from src.agents.technical.application.fracdiff_runtime_contracts import (
     ObvInput,
     StatisticalStrengthInput,
 )
+from src.agents.technical.interface.contracts import AnalystPerspectiveModel
 from src.agents.technical.subdomains.verification import (
     BacktestResults,
     WalkForwardResult,
@@ -26,6 +27,7 @@ from src.interface.artifacts.artifact_data_models import (
     TechnicalFusionReportArtifactData,
     TechnicalIndicatorSeriesArtifactData,
     TechnicalPatternPackArtifactData,
+    TechnicalRegimePackArtifactData,
     TechnicalTimeseriesBundleArtifactData,
     TechnicalVerificationReportArtifactData,
 )
@@ -40,8 +42,23 @@ class TechnicalProviderFailure:
 
 
 @dataclass(frozen=True)
+class TechnicalInterpretationInput:
+    ticker: str
+    direction: str
+    risk_level: str
+    confidence: float | None
+    confidence_calibrated: float | None
+    summary_tags: tuple[str, ...]
+    evidence_items: tuple[str, ...]
+    momentum_extremes: JSONObject | None
+    setup_context: JSONObject | None
+    validation_context: JSONObject | None
+    diagnostics_context: JSONObject | None
+
+
+@dataclass(frozen=True)
 class TechnicalInterpretationResult:
-    content: str
+    perspective: AnalystPerspectiveModel
     is_fallback: bool = False
     failure: TechnicalProviderFailure | None = None
 
@@ -131,6 +148,18 @@ class ITechnicalArtifactRepository(Protocol):
         self, artifact_id: str | None
     ) -> TechnicalPatternPackArtifactData | None: ...
 
+    async def save_regime_pack(
+        self,
+        data: JSONObject,
+        *,
+        produced_by: str,
+        key_prefix: str | None = None,
+    ) -> str: ...
+
+    async def load_regime_pack(
+        self, artifact_id: str | None
+    ) -> TechnicalRegimePackArtifactData | None: ...
+
     async def save_fusion_report(
         self,
         data: JSONObject,
@@ -185,10 +214,7 @@ class ITechnicalArtifactRepository(Protocol):
 class ITechnicalInterpretationProvider(Protocol):
     def generate_interpretation(
         self,
-        tags_dict: JSONObject,
-        ticker: str,
-        backtest_context: str = "",
-        wfa_context: str = "",
+        payload: TechnicalInterpretationInput,
     ) -> Awaitable[TechnicalInterpretationResult]: ...
 
 

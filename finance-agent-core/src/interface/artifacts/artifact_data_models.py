@@ -168,14 +168,29 @@ class TechnicalPatternFlagData(BaseModel):
     notes: str | None = None
 
 
+class TechnicalVolumeProfileSummaryData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    poc: float | None = None
+    vah: float | None = None
+    val: float | None = None
+    profile_method: str | None = None
+    profile_fidelity: str | None = None
+    bucket_count: int | None = None
+    value_area_coverage: float | None = None
+
+
 class TechnicalPatternFrameData(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     support_levels: list[TechnicalPatternLevelData]
     resistance_levels: list[TechnicalPatternLevelData]
+    volume_profile_levels: list[TechnicalPatternLevelData] = []
+    volume_profile_summary: TechnicalVolumeProfileSummaryData | None = None
     breakouts: list[TechnicalPatternFlagData]
     trendlines: list[TechnicalPatternFlagData]
     pattern_flags: list[TechnicalPatternFlagData]
+    confluence_metadata: dict[str, object] | None = None
     confidence_scores: dict[str, float] = {}
 
 
@@ -186,6 +201,31 @@ class TechnicalPatternPackArtifactData(BaseModel):
     as_of: str
     timeframes: dict[str, TechnicalPatternFrameData]
     pattern_summary: dict[str, object] | None = None
+    degraded_reasons: list[str] | None = None
+
+
+class TechnicalRegimeFrameData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    timeframe: str
+    regime: str
+    confidence: float | None = None
+    directional_bias: str
+    adx: float | None = None
+    atr_value: float | None = None
+    atrp_value: float | None = None
+    bollinger_bandwidth: float | None = None
+    evidence: list[str] = []
+    metadata: dict[str, object] | None = None
+
+
+class TechnicalRegimePackArtifactData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ticker: str
+    as_of: str
+    timeframes: dict[str, TechnicalRegimeFrameData]
+    regime_summary: dict[str, object] | None = None
     degraded_reasons: list[str] | None = None
 
 
@@ -203,6 +243,7 @@ class TechnicalFusionReportArtifactData(BaseModel):
     confidence_calibration: dict[str, object] | None = None
     confluence_matrix: dict[str, dict[str, object]] | None = None
     conflict_reasons: list[str] | None = None
+    regime_summary: dict[str, object] | None = None
     alignment_report: dict[str, object] | None = None
     source_artifacts: dict[str, str | None] | None = None
     degraded_reasons: list[str] | None = None
@@ -223,6 +264,7 @@ class TechnicalScorecardFrameData(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     timeframe: str
+    base_total_score: float | None = None
     classic_score: float
     quant_score: float
     pattern_score: float
@@ -230,6 +272,10 @@ class TechnicalScorecardFrameData(BaseModel):
     classic_label: str
     quant_label: str
     pattern_label: str
+    regime: str | None = None
+    regime_directional_bias: str | None = None
+    regime_weight_multiplier: float | None = None
+    regime_notes: list[str] | None = None
     contributions: dict[str, list[TechnicalScorecardContributionData]]
 
 
@@ -245,6 +291,7 @@ class TechnicalDirectionScorecardArtifactData(BaseModel):
     neutral_threshold: float
     overall_score: float
     model_version: str | None = None
+    regime_summary: dict[str, object] | None = None
     timeframes: dict[str, TechnicalScorecardFrameData]
     conflict_reasons: list[str] | None = None
     degraded_reasons: list[str] | None = None

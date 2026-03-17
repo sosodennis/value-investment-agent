@@ -27,6 +27,9 @@ from src.agents.technical.subdomains.signal_fusion import (
     SemanticTagPolicyResult,
 )
 from src.interface.artifacts.artifact_data_models import (
+    TechnicalDirectionScorecardArtifactData,
+    TechnicalFusionReportArtifactData,
+    TechnicalPatternPackArtifactData,
     TechnicalVerificationReportArtifactData,
 )
 from src.shared.kernel.tools.logger import get_logger, log_event
@@ -48,6 +51,21 @@ class _SemanticPort(Protocol):
         self,
         artifact_id: str | None,
     ) -> TechnicalVerificationReportArtifactData | None: ...
+
+    async def load_pattern_pack(
+        self,
+        artifact_id: str | None,
+    ) -> TechnicalPatternPackArtifactData | None: ...
+
+    async def load_fusion_report(
+        self,
+        artifact_id: str | None,
+    ) -> TechnicalFusionReportArtifactData | None: ...
+
+    async def load_direction_scorecard(
+        self,
+        artifact_id: str | None,
+    ) -> TechnicalDirectionScorecardArtifactData | None: ...
 
     async def save_full_report_canonical(
         self,

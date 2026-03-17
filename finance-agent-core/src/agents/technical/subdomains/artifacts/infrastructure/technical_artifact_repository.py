@@ -15,6 +15,7 @@ from src.interface.artifacts.artifact_data_models import (
     TechnicalFusionReportArtifactData,
     TechnicalIndicatorSeriesArtifactData,
     TechnicalPatternPackArtifactData,
+    TechnicalRegimePackArtifactData,
     TechnicalTimeseriesBundleArtifactData,
     TechnicalVerificationReportArtifactData,
 )
@@ -30,6 +31,7 @@ from src.shared.kernel.contracts import (
     ARTIFACT_KIND_TA_FUSION_REPORT,
     ARTIFACT_KIND_TA_INDICATOR_SERIES,
     ARTIFACT_KIND_TA_PATTERN_PACK,
+    ARTIFACT_KIND_TA_REGIME_PACK,
     ARTIFACT_KIND_TA_TIMESERIES_BUNDLE,
     ARTIFACT_KIND_TA_VERIFICATION_REPORT,
 )
@@ -45,6 +47,7 @@ class TechnicalArtifactRepository:
     timeseries_bundle_port: TypedArtifactPort[TechnicalTimeseriesBundleArtifactData]
     feature_pack_port: TypedArtifactPort[TechnicalFeaturePackArtifactData]
     pattern_pack_port: TypedArtifactPort[TechnicalPatternPackArtifactData]
+    regime_pack_port: TypedArtifactPort[TechnicalRegimePackArtifactData]
     fusion_report_port: TypedArtifactPort[TechnicalFusionReportArtifactData]
     direction_scorecard_port: TypedArtifactPort[TechnicalDirectionScorecardArtifactData]
     verification_report_port: TypedArtifactPort[TechnicalVerificationReportArtifactData]
@@ -197,6 +200,27 @@ class TechnicalArtifactRepository:
             context=f"artifact {artifact_id} ta_pattern_pack",
         )
 
+    async def save_regime_pack(
+        self,
+        data: JSONObject,
+        *,
+        produced_by: str,
+        key_prefix: str | None = None,
+    ) -> str:
+        return await self.regime_pack_port.save(
+            data,
+            produced_by=produced_by,
+            key_prefix=key_prefix,
+        )
+
+    async def load_regime_pack(
+        self, artifact_id: str | None
+    ) -> TechnicalRegimePackArtifactData | None:
+        return await self.regime_pack_port.load(
+            artifact_id,
+            context=f"artifact {artifact_id} ta_regime_pack",
+        )
+
     async def save_fusion_report(
         self,
         data: JSONObject,
@@ -333,6 +357,11 @@ def build_default_technical_artifact_repository() -> TechnicalArtifactRepository
             manager=artifact_manager,
             kind=ARTIFACT_KIND_TA_PATTERN_PACK,
             model=TechnicalPatternPackArtifactData,
+        ),
+        regime_pack_port=TypedArtifactPort(
+            manager=artifact_manager,
+            kind=ARTIFACT_KIND_TA_REGIME_PACK,
+            model=TechnicalRegimePackArtifactData,
         ),
         fusion_report_port=TypedArtifactPort(
             manager=artifact_manager,

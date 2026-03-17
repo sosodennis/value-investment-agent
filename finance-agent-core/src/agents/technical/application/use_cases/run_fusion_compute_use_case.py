@@ -30,6 +30,7 @@ from src.agents.technical.subdomains.calibration.domain import (
     calibrate_direction_confidence,
     load_technical_direction_calibration_mapping,
 )
+from src.agents.technical.subdomains.regime.contracts import RegimeFrame, RegimePack
 from src.agents.technical.subdomains.signal_fusion import (
     DirectionScorecard,
     FusionRuntimeRequest,
@@ -40,6 +41,7 @@ from src.interface.artifacts.artifact_data_models import (
     TechnicalFeaturePackArtifactData,
     TechnicalFusionReportArtifactData,
     TechnicalPatternPackArtifactData,
+    TechnicalRegimePackArtifactData,
     TechnicalTimeseriesBundleArtifactData,
 )
 from src.shared.kernel.tools.logger import get_logger, log_event
@@ -62,6 +64,10 @@ class FusionComputeRuntime(Protocol):
     async def load_pattern_pack(
         self, artifact_id: str
     ) -> TechnicalPatternPackArtifactData | None: ...
+
+    async def load_regime_pack(
+        self, artifact_id: str
+    ) -> TechnicalRegimePackArtifactData | None: ...
 
     async def save_fusion_report(
         self,
@@ -136,6 +142,8 @@ async def run_fusion_compute_use_case(
     alignment_report: dict[str, object] | None = None
     alignment = None
     direction_scorecard_id: str | None = None
+    regime_pack_id = technical_context.regime_pack_id
+    regime_pack: RegimePack | None = None
 
     try:
         feature_pack_payload = await runtime.load_feature_pack(feature_pack_id)
@@ -208,6 +216,15 @@ async def run_fusion_compute_use_case(
                 goto="END",
             )
 
+        if regime_pack_id is None:
+            degraded_reasons.append("REGIME_PACK_MISSING")
+        else:
+            regime_pack_payload = await runtime.load_regime_pack(regime_pack_id)
+            if regime_pack_payload is None:
+                degraded_reasons.append("REGIME_PACK_NOT_FOUND")
+            else:
+                regime_pack = _regime_pack_from_payload(regime_pack_payload)
+
         timeseries_bundle_id = technical_context.timeseries_bundle_id
         if timeseries_bundle_id is None:
             degraded_reasons.append("ALIGNMENT_BUNDLE_MISSING")
@@ -252,6 +269,7 @@ async def run_fusion_compute_use_case(
             as_of=feature_pack.as_of,
             feature_pack=feature_pack,
             pattern_pack=pattern_pack,
+            regime_pack=regime_pack,
             alignment_report=alignment,
         )
         fusion_result = await asyncio.to_thread(
@@ -297,6 +315,7 @@ async def run_fusion_compute_use_case(
             alignment_report=alignment_report,
             feature_pack_id=feature_pack_id,
             pattern_pack_id=pattern_pack_id,
+            regime_pack_id=regime_pack_id,
             timeseries_bundle_id=timeseries_bundle_id,
             degraded_reasons=degraded_reasons,
             confidence_raw=confidence_raw,
@@ -317,6 +336,7 @@ async def run_fusion_compute_use_case(
                 source_artifacts={
                     "feature_pack_id": feature_pack_id,
                     "pattern_pack_id": pattern_pack_id,
+                    "regime_pack_id": regime_pack_id,
                     "timeseries_bundle_id": timeseries_bundle_id,
                     "fusion_report_id": fusion_report_id,
                 },
@@ -491,6 +511,15 @@ def _pattern_pack_from_payload(
             )
             for level in frame.resistance_levels
         ]
+        volume_profile_levels = [
+            KeyLevel(
+                price=level.price,
+                strength=level.strength,
+                touches=level.touches,
+                label=level.label,
+            )
+            for level in frame.volume_profile_levels
+        ]
         breakouts = [
             PatternFlag(
                 name=flag.name,
@@ -518,9 +547,11 @@ def _pattern_pack_from_payload(
         frames[timeframe] = PatternFrame(
             support_levels=support,
             resistance_levels=resistance,
+            volume_profile_levels=volume_profile_levels,
             breakouts=breakouts,
             trendlines=trendlines,
             pattern_flags=pattern_flags,
+            confluence_metadata=frame.confluence_metadata or {},
             confidence_scores=frame.confidence_scores or {},
         )
     return PatternPack(
@@ -538,6 +569,29 @@ def _timeframe_count_from_pack(
     return len(timeframes)
 
 
+def _regime_pack_from_payload(payload: TechnicalRegimePackArtifactData) -> RegimePack:
+    frames: dict[str, RegimeFrame] = {}
+    for timeframe, frame in payload.timeframes.items():
+        frames[timeframe] = RegimeFrame(
+            timeframe=frame.timeframe,
+            regime=frame.regime,
+            confidence=frame.confidence,
+            directional_bias=frame.directional_bias,
+            adx=frame.adx,
+            atr_value=frame.atr_value,
+            atrp_value=frame.atrp_value,
+            bollinger_bandwidth=frame.bollinger_bandwidth,
+            evidence=tuple(frame.evidence),
+            metadata=frame.metadata or {},
+        )
+    return RegimePack(
+        ticker=payload.ticker,
+        as_of=payload.as_of,
+        timeframes=frames,
+        regime_summary=payload.regime_summary or {},
+    )
+
+
 def _alignment_report_to_payload(report: object) -> dict[str, object]:
     if hasattr(report, "__dict__"):
         return dict(report.__dict__)
@@ -550,6 +604,7 @@ def _fusion_report_to_payload(
     alignment_report: dict[str, object] | None,
     feature_pack_id: str | None,
     pattern_pack_id: str | None,
+    regime_pack_id: str | None,
     timeseries_bundle_id: str | None,
     degraded_reasons: list[str],
     confidence_raw: float | None,
@@ -577,11 +632,15 @@ def _fusion_report_to_payload(
         "confidence_calibration": confidence_calibration,
         "confluence_matrix": diagnostics.confluence_matrix if diagnostics else {},
         "conflict_reasons": diagnostics.conflict_reasons if diagnostics else [],
+        "regime_summary": (
+            fusion_result.scorecard.regime_summary if fusion_result.scorecard else {}
+        ),
         "alignment_report": alignment_report,
         "source_artifacts": {
             "timeseries_bundle_id": timeseries_bundle_id,
             "feature_pack_id": feature_pack_id,
             "pattern_pack_id": pattern_pack_id,
+            "regime_pack_id": regime_pack_id,
         },
         "degraded_reasons": list(degraded_reasons),
     }
@@ -597,6 +656,7 @@ def _scorecard_to_payload(
     for timeframe, frame in scorecard.timeframes.items():
         frames[timeframe] = {
             "timeframe": frame.timeframe,
+            "base_total_score": frame.base_total_score,
             "classic_score": frame.classic_score,
             "quant_score": frame.quant_score,
             "pattern_score": frame.pattern_score,
@@ -604,6 +664,10 @@ def _scorecard_to_payload(
             "classic_label": frame.classic_label,
             "quant_label": frame.quant_label,
             "pattern_label": frame.pattern_label,
+            "regime": frame.regime,
+            "regime_directional_bias": frame.regime_directional_bias,
+            "regime_weight_multiplier": frame.regime_weight_multiplier,
+            "regime_notes": list(frame.regime_notes),
             "contributions": _scorecard_contributions_payload(frame.contributions),
         }
 
@@ -617,6 +681,7 @@ def _scorecard_to_payload(
         "neutral_threshold": scorecard.neutral_threshold,
         "overall_score": scorecard.overall_score,
         "model_version": scorecard.model_version,
+        "regime_summary": dict(scorecard.regime_summary),
         "timeframes": frames,
         "conflict_reasons": list(scorecard.conflict_reasons),
         "degraded_reasons": list(degraded_reasons),

@@ -27,6 +27,8 @@ class IIndicatorEngine(Protocol):
         self,
         *,
         price_series: pd.Series,
+        high_series: pd.Series,
+        low_series: pd.Series,
         volume_series: pd.Series,
         latest_price: float | None,
     ) -> IndicatorEngineResult: ...

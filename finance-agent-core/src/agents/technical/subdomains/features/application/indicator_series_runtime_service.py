@@ -9,8 +9,11 @@ from src.agents.technical.domain.shared import PriceSeries, TimeframeCode
 from src.agents.technical.subdomains.features.domain import (
     calculate_rolling_fracdiff,
     calculate_rolling_z_score,
+    compute_adx,
     compute_atr,
+    compute_atrp,
     compute_bollinger,
+    compute_bollinger_bandwidth,
     compute_ema,
     compute_macd,
     compute_mfi,
@@ -140,11 +143,33 @@ def _compute_frame(
         atr_series = compute_atr(high_series, low_series, close_series, window=14)
         if atr_series is None:
             indicator_series["ATR_14"] = _empty_series_like(close_series)
+            indicator_series["ADX_14"] = _empty_series_like(close_series)
+            indicator_series["ATRP_14"] = _empty_series_like(close_series)
         else:
             indicator_series["ATR_14"] = atr_series
+            adx_series = compute_adx(high_series, low_series, close_series, window=14)
+            atrp_series = compute_atrp(high_series, low_series, close_series, window=14)
+            indicator_series["ADX_14"] = (
+                adx_series
+                if adx_series is not None
+                else _empty_series_like(close_series)
+            )
+            indicator_series["ATRP_14"] = (
+                atrp_series
+                if atrp_series is not None
+                else _empty_series_like(close_series)
+            )
     else:
         degraded.append("OHLC_MISSING")
         indicator_series["ATR_14"] = _empty_series_like(close_series)
+        indicator_series["ADX_14"] = _empty_series_like(close_series)
+        indicator_series["ATRP_14"] = _empty_series_like(close_series)
+
+    indicator_series["BB_BANDWIDTH_20"] = compute_bollinger_bandwidth(
+        close_series,
+        window=20,
+        num_std=2.0,
+    )
 
     if include_quant and _series_has_min_points(close_series, min_quant_points):
         try:

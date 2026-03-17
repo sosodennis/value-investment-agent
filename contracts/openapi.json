@@ -156,6 +156,149 @@
         "title": "AgentStatusesResponse",
         "type": "object"
       },
+      "AnalystPerspectiveEvidenceItemModel": {
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "timeframe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeframe"
+          },
+          "value_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Text"
+          }
+        },
+        "required": [
+          "label",
+          "rationale"
+        ],
+        "title": "AnalystPerspectiveEvidenceItemModel",
+        "type": "object"
+      },
+      "AnalystPerspectiveModel": {
+        "properties": {
+          "confidence_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence Note"
+          },
+          "decision_posture": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Posture"
+          },
+          "invalidation_condition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invalidation Condition"
+          },
+          "invalidation_level": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invalidation Level"
+          },
+          "rationale_summary": {
+            "title": "Rationale Summary",
+            "type": "string"
+          },
+          "stance": {
+            "title": "Stance",
+            "type": "string"
+          },
+          "stance_summary": {
+            "title": "Stance Summary",
+            "type": "string"
+          },
+          "top_evidence": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AnalystPerspectiveEvidenceItemModel"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top Evidence"
+          },
+          "trigger_condition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Condition"
+          },
+          "validation_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Validation Note"
+          }
+        },
+        "required": [
+          "stance",
+          "stance_summary",
+          "rationale_summary"
+        ],
+        "title": "AnalystPerspectiveModel",
+        "type": "object"
+      },
       "ArtifactReference": {
         "description": "L3 冷數據指針 (Cold Data Pointer)\n\nPoints to large artifacts stored in the Artifact Store.\nFrontend can fetch these asynchronously via the download_url.",
         "properties": {
@@ -183,32 +326,170 @@
         "title": "ArtifactReference",
         "type": "object"
       },
-      "ConfluenceEvidenceModel": {
+      "ArtifactRefsModel": {
         "properties": {
-          "bollinger_state": {
-            "title": "Bollinger State",
-            "type": "string"
+          "alerts_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alerts Id"
           },
-          "macd_momentum": {
-            "title": "Macd Momentum",
-            "type": "string"
+          "chart_data_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chart Data Id"
           },
-          "obv_state": {
-            "title": "Obv State",
-            "type": "string"
+          "direction_scorecard_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direction Scorecard Id"
           },
-          "statistical_strength": {
-            "title": "Statistical Strength",
-            "type": "number"
+          "feature_pack_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feature Pack Id"
+          },
+          "fusion_report_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fusion Report Id"
+          },
+          "indicator_series_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Indicator Series Id"
+          },
+          "pattern_pack_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pattern Pack Id"
+          },
+          "timeseries_bundle_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeseries Bundle Id"
+          },
+          "verification_report_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Report Id"
           }
         },
-        "required": [
-          "bollinger_state",
-          "macd_momentum",
-          "obv_state",
-          "statistical_strength"
-        ],
-        "title": "ConfluenceEvidenceModel",
+        "title": "ArtifactRefsModel",
+        "type": "object"
+      },
+      "ConfidenceCalibrationModel": {
+        "properties": {
+          "calibration_applied": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calibration Applied"
+          },
+          "degraded_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Degraded Reason"
+          },
+          "mapping_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mapping Path"
+          },
+          "mapping_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mapping Source"
+          },
+          "mapping_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mapping Version"
+          }
+        },
+        "title": "ConfidenceCalibrationModel",
         "type": "object"
       },
       "DebateArtifactModel": {
@@ -557,6 +838,37 @@
         "title": "DebateHistoryMessageModel",
         "type": "object"
       },
+      "DiagnosticsModel": {
+        "properties": {
+          "degraded_reasons": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Degraded Reasons"
+          },
+          "is_degraded": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Degraded"
+          }
+        },
+        "title": "DiagnosticsModel",
+        "type": "object"
+      },
       "EvidenceFactModel": {
         "properties": {
           "fact_id": {
@@ -590,7 +902,8 @@
             "enum": [
               "financials",
               "news",
-              "technicals"
+              "technicals",
+              "valuation"
             ],
             "title": "Source Type",
             "type": "string"
@@ -644,6 +957,100 @@
           "summary"
         ],
         "title": "EvidenceFactModel",
+        "type": "object"
+      },
+      "FilingMetadataModel": {
+        "properties": {
+          "accepted_datetime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted Datetime"
+          },
+          "accession_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accession Number"
+          },
+          "filing_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filing Date"
+          },
+          "form": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Form"
+          },
+          "matched_fiscal_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Fiscal Year"
+          },
+          "period_of_report": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Of Report"
+          },
+          "requested_fiscal_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Fiscal Year"
+          },
+          "selection_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selection Mode"
+          }
+        },
+        "title": "FilingMetadataModel",
         "type": "object"
       },
       "FinancialEntityModel": {
@@ -816,6 +1223,16 @@
             ],
             "title": "Extension Type"
           },
+          "filing_metadata": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FilingMetadataModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "industry_type": {
             "title": "Industry Type",
             "type": "string"
@@ -842,12 +1259,39 @@
             ],
             "title": "Company Name"
           },
+          "diagnostics": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diagnostics"
+          },
           "financial_reports": {
             "items": {
               "$ref": "#/components/schemas/FinancialReportModel"
             },
             "title": "Financial Reports",
             "type": "array"
+          },
+          "forward_signals": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forward Signals"
           },
           "industry": {
             "anyOf": [
@@ -871,6 +1315,18 @@
             ],
             "title": "Model Type"
           },
+          "quality_gates": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Gates"
+          },
           "reasoning": {
             "anyOf": [
               {
@@ -881,6 +1337,90 @@
               }
             ],
             "title": "Reasoning"
+          },
+          "replay_assumptions": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replay Assumptions"
+          },
+          "replay_build_metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replay Build Metadata"
+          },
+          "replay_calculation_metrics": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replay Calculation Metrics"
+          },
+          "replay_market_snapshot": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replay Market Snapshot"
+          },
+          "replay_params_dump": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replay Params Dump"
+          },
+          "replay_schema_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replay Schema Version"
+          },
+          "replay_source_reports_artifact_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replay Source Reports Artifact Id"
           },
           "sector": {
             "anyOf": [
@@ -915,6 +1455,18 @@
               }
             ],
             "title": "Ticker"
+          },
+          "valuation_diagnostics": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valuation Diagnostics"
           }
         },
         "required": [
@@ -1022,44 +1574,6 @@
           }
         },
         "title": "FinancialServicesExtensionModel",
-        "type": "object"
-      },
-      "FracDiffMetricsModel": {
-        "properties": {
-          "adf_pvalue": {
-            "title": "Adf Pvalue",
-            "type": "number"
-          },
-          "adf_statistic": {
-            "title": "Adf Statistic",
-            "type": "number"
-          },
-          "memory_strength": {
-            "enum": [
-              "structurally_stable",
-              "balanced",
-              "fragile"
-            ],
-            "title": "Memory Strength",
-            "type": "string"
-          },
-          "optimal_d": {
-            "title": "Optimal D",
-            "type": "number"
-          },
-          "window_length": {
-            "title": "Window Length",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "optimal_d",
-          "window_length",
-          "adf_statistic",
-          "adf_pvalue",
-          "memory_strength"
-        ],
-        "title": "FracDiffMetricsModel",
         "type": "object"
       },
       "FundamentalBaseModel": {
@@ -1224,6 +1738,26 @@
                 "type": "null"
               }
             ]
+          },
+          "weighted_average_shares_basic": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "weighted_average_shares_diluted": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "title": "FundamentalBaseModel",
@@ -1310,6 +1844,16 @@
               }
             ]
           },
+          "ga_expense": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "inventory": {
             "anyOf": [
               {
@@ -1321,6 +1865,16 @@
             ]
           },
           "rd_expense": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "selling_expense": {
             "anyOf": [
               {
                 "$ref": "#/components/schemas/TraceableFieldModel"
@@ -1517,6 +2071,100 @@
           "content"
         ],
         "title": "MessageResponse",
+        "type": "object"
+      },
+      "MomentumExtremesModel": {
+        "properties": {
+          "fd_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fd Label"
+          },
+          "fd_polarity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fd Polarity"
+          },
+          "fd_risk_hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fd Risk Hint"
+          },
+          "fd_z_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fd Z Score"
+          },
+          "rsi_bias": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rsi Bias"
+          },
+          "rsi_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rsi Value"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "timeframe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeframe"
+          }
+        },
+        "title": "MomentumExtremesModel",
         "type": "object"
       },
       "NewsAnalysisReportEnvelope": {
@@ -1899,54 +2547,6 @@
         "title": "PriceSeriesEnvelope",
         "type": "object"
       },
-      "RawDataModel": {
-        "properties": {
-          "fracdiff_series": {
-            "anyOf": [
-              {
-                "additionalProperties": {
-                  "type": "number"
-                },
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Fracdiff Series"
-          },
-          "price_series": {
-            "anyOf": [
-              {
-                "additionalProperties": {
-                  "type": "number"
-                },
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Price Series"
-          },
-          "z_score_series": {
-            "anyOf": [
-              {
-                "additionalProperties": {
-                  "type": "number"
-                },
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Z Score Series"
-          }
-        },
-        "title": "RawDataModel",
-        "type": "object"
-      },
       "RealEstateExtensionModel": {
         "additionalProperties": true,
         "properties": {
@@ -1971,6 +2571,16 @@
             ]
           },
           "ffo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceableFieldModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "gain_on_sale": {
             "anyOf": [
               {
                 "$ref": "#/components/schemas/TraceableFieldModel"
@@ -2114,48 +2724,6 @@
         "title": "SearchResultsEnvelope",
         "type": "object"
       },
-      "SignalStateModel": {
-        "properties": {
-          "confluence": {
-            "$ref": "#/components/schemas/ConfluenceEvidenceModel"
-          },
-          "direction": {
-            "title": "Direction",
-            "type": "string"
-          },
-          "risk_level": {
-            "enum": [
-              "low",
-              "medium",
-              "critical"
-            ],
-            "title": "Risk Level",
-            "type": "string"
-          },
-          "statistical_state": {
-            "enum": [
-              "equilibrium",
-              "deviating",
-              "anomaly"
-            ],
-            "title": "Statistical State",
-            "type": "string"
-          },
-          "z_score": {
-            "title": "Z Score",
-            "type": "number"
-          }
-        },
-        "required": [
-          "z_score",
-          "statistical_state",
-          "direction",
-          "risk_level",
-          "confluence"
-        ],
-        "title": "SignalStateModel",
-        "type": "object"
-      },
       "SourceInfoModel": {
         "properties": {
           "author": {
@@ -2212,6 +2780,40 @@
         "title": "StreamStartResponse",
         "type": "object"
       },
+      "TaAlertsEnvelope": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/TechnicalAlertsArtifactData"
+          },
+          "kind": {
+            "const": "ta_alerts",
+            "title": "Kind",
+            "type": "string"
+          },
+          "produced_by": {
+            "title": "Produced By",
+            "type": "string"
+          },
+          "version": {
+            "const": "v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "produced_by",
+          "created_at",
+          "kind",
+          "data"
+        ],
+        "title": "TaAlertsEnvelope",
+        "type": "object"
+      },
       "TaChartDataEnvelope": {
         "properties": {
           "created_at": {
@@ -2244,6 +2846,74 @@
           "data"
         ],
         "title": "TaChartDataEnvelope",
+        "type": "object"
+      },
+      "TaDirectionScorecardEnvelope": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/TechnicalDirectionScorecardArtifactData"
+          },
+          "kind": {
+            "const": "ta_direction_scorecard",
+            "title": "Kind",
+            "type": "string"
+          },
+          "produced_by": {
+            "title": "Produced By",
+            "type": "string"
+          },
+          "version": {
+            "const": "v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "produced_by",
+          "created_at",
+          "kind",
+          "data"
+        ],
+        "title": "TaDirectionScorecardEnvelope",
+        "type": "object"
+      },
+      "TaFeaturePackEnvelope": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/TechnicalFeaturePackArtifactData"
+          },
+          "kind": {
+            "const": "ta_feature_pack",
+            "title": "Kind",
+            "type": "string"
+          },
+          "produced_by": {
+            "title": "Produced By",
+            "type": "string"
+          },
+          "version": {
+            "const": "v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "produced_by",
+          "created_at",
+          "kind",
+          "data"
+        ],
+        "title": "TaFeaturePackEnvelope",
         "type": "object"
       },
       "TaFullReportEnvelope": {
@@ -2280,12 +2950,184 @@
         "title": "TaFullReportEnvelope",
         "type": "object"
       },
-      "TechnicalArtifactModel": {
+      "TaFusionReportEnvelope": {
         "properties": {
-          "frac_diff_metrics": {
-            "$ref": "#/components/schemas/FracDiffMetricsModel"
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
           },
-          "llm_interpretation": {
+          "data": {
+            "$ref": "#/components/schemas/TechnicalFusionReportArtifactData"
+          },
+          "kind": {
+            "const": "ta_fusion_report",
+            "title": "Kind",
+            "type": "string"
+          },
+          "produced_by": {
+            "title": "Produced By",
+            "type": "string"
+          },
+          "version": {
+            "const": "v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "produced_by",
+          "created_at",
+          "kind",
+          "data"
+        ],
+        "title": "TaFusionReportEnvelope",
+        "type": "object"
+      },
+      "TaIndicatorSeriesEnvelope": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/TechnicalIndicatorSeriesArtifactData"
+          },
+          "kind": {
+            "const": "ta_indicator_series",
+            "title": "Kind",
+            "type": "string"
+          },
+          "produced_by": {
+            "title": "Produced By",
+            "type": "string"
+          },
+          "version": {
+            "const": "v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "produced_by",
+          "created_at",
+          "kind",
+          "data"
+        ],
+        "title": "TaIndicatorSeriesEnvelope",
+        "type": "object"
+      },
+      "TaPatternPackEnvelope": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/TechnicalPatternPackArtifactData"
+          },
+          "kind": {
+            "const": "ta_pattern_pack",
+            "title": "Kind",
+            "type": "string"
+          },
+          "produced_by": {
+            "title": "Produced By",
+            "type": "string"
+          },
+          "version": {
+            "const": "v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "produced_by",
+          "created_at",
+          "kind",
+          "data"
+        ],
+        "title": "TaPatternPackEnvelope",
+        "type": "object"
+      },
+      "TaTimeseriesBundleEnvelope": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/TechnicalTimeseriesBundleArtifactData"
+          },
+          "kind": {
+            "const": "ta_timeseries_bundle",
+            "title": "Kind",
+            "type": "string"
+          },
+          "produced_by": {
+            "title": "Produced By",
+            "type": "string"
+          },
+          "version": {
+            "const": "v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "produced_by",
+          "created_at",
+          "kind",
+          "data"
+        ],
+        "title": "TaTimeseriesBundleEnvelope",
+        "type": "object"
+      },
+      "TaVerificationReportEnvelope": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/TechnicalVerificationReportArtifactData"
+          },
+          "kind": {
+            "const": "ta_verification_report",
+            "title": "Kind",
+            "type": "string"
+          },
+          "produced_by": {
+            "title": "Produced By",
+            "type": "string"
+          },
+          "version": {
+            "const": "v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "produced_by",
+          "created_at",
+          "kind",
+          "data"
+        ],
+        "title": "TaVerificationReportEnvelope",
+        "type": "object"
+      },
+      "TechnicalAlertSignalData": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "direction": {
             "anyOf": [
               {
                 "type": "string"
@@ -2294,45 +3136,370 @@
                 "type": "null"
               }
             ],
-            "title": "Llm Interpretation"
+            "title": "Direction"
           },
-          "raw_data": {
+          "message": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/RawDataModel"
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "severity": {
+            "enum": [
+              "info",
+              "warning",
+              "critical"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "threshold": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Threshold"
+          },
+          "timeframe": {
+            "title": "Timeframe",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "triggered_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Triggered At"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "code",
+          "severity",
+          "timeframe",
+          "title"
+        ],
+        "title": "TechnicalAlertSignalData",
+        "type": "object"
+      },
+      "TechnicalAlertsArtifactData": {
+        "additionalProperties": false,
+        "properties": {
+          "alerts": {
+            "items": {
+              "$ref": "#/components/schemas/TechnicalAlertSignalData"
+            },
+            "title": "Alerts",
+            "type": "array"
+          },
+          "as_of": {
+            "title": "As Of",
+            "type": "string"
+          },
+          "degraded_reasons": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Degraded Reasons"
+          },
+          "source_artifacts": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Artifacts"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticker",
+          "as_of",
+          "alerts"
+        ],
+        "title": "TechnicalAlertsArtifactData",
+        "type": "object"
+      },
+      "TechnicalArtifactModel": {
+        "properties": {
+          "analyst_perspective": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnalystPerspectiveModel"
               },
               {
                 "type": "null"
               }
             ]
           },
-          "semantic_tags": {
+          "artifact_refs": {
+            "$ref": "#/components/schemas/ArtifactRefsModel"
+          },
+          "as_of": {
+            "title": "As Of",
+            "type": "string"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "confidence_calibrated": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence Calibrated"
+          },
+          "confidence_calibration": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConfidenceCalibrationModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "confidence_raw": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence Raw"
+          },
+          "diagnostics": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiagnosticsModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "direction": {
+            "title": "Direction",
+            "type": "string"
+          },
+          "momentum_extremes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MomentumExtremesModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "risk_level": {
+            "enum": [
+              "low",
+              "medium",
+              "critical"
+            ],
+            "title": "Risk Level",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "summary_tags": {
             "items": {
               "type": "string"
             },
-            "title": "Semantic Tags",
+            "title": "Summary Tags",
             "type": "array"
-          },
-          "signal_state": {
-            "$ref": "#/components/schemas/SignalStateModel"
           },
           "ticker": {
             "title": "Ticker",
             "type": "string"
-          },
-          "timestamp": {
-            "title": "Timestamp",
-            "type": "string"
           }
         },
         "required": [
+          "schema_version",
           "ticker",
-          "timestamp",
-          "frac_diff_metrics",
-          "signal_state",
-          "semantic_tags"
+          "as_of",
+          "direction",
+          "risk_level",
+          "artifact_refs",
+          "summary_tags"
         ],
         "title": "TechnicalArtifactModel",
+        "type": "object"
+      },
+      "TechnicalBacktestSummaryData": {
+        "additionalProperties": false,
+        "properties": {
+          "max_drawdown": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Drawdown"
+          },
+          "profit_factor": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profit Factor"
+          },
+          "sharpe_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sharpe Ratio"
+          },
+          "strategy_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategy Name"
+          },
+          "total_trades": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Trades"
+          },
+          "win_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Win Rate"
+          }
+        },
+        "title": "TechnicalBacktestSummaryData",
         "type": "object"
       },
       "TechnicalChartArtifactData": {
@@ -2378,6 +3545,1168 @@
           "indicators"
         ],
         "title": "TechnicalChartArtifactData",
+        "type": "object"
+      },
+      "TechnicalDirectionScorecardArtifactData": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "title": "As Of",
+            "type": "string"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "conflict_reasons": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conflict Reasons"
+          },
+          "degraded_reasons": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Degraded Reasons"
+          },
+          "direction": {
+            "title": "Direction",
+            "type": "string"
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          },
+          "neutral_threshold": {
+            "title": "Neutral Threshold",
+            "type": "number"
+          },
+          "overall_score": {
+            "title": "Overall Score",
+            "type": "number"
+          },
+          "risk_level": {
+            "title": "Risk Level",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_artifacts": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Artifacts"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          },
+          "timeframes": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/TechnicalScorecardFrameData"
+            },
+            "title": "Timeframes",
+            "type": "object"
+          }
+        },
+        "required": [
+          "schema_version",
+          "ticker",
+          "as_of",
+          "direction",
+          "risk_level",
+          "neutral_threshold",
+          "overall_score",
+          "timeframes"
+        ],
+        "title": "TechnicalDirectionScorecardArtifactData",
+        "type": "object"
+      },
+      "TechnicalFeatureFrameData": {
+        "additionalProperties": false,
+        "properties": {
+          "classic_indicators": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/TechnicalFeatureIndicatorData"
+            },
+            "title": "Classic Indicators",
+            "type": "object"
+          },
+          "quant_features": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/TechnicalFeatureIndicatorData"
+            },
+            "title": "Quant Features",
+            "type": "object"
+          }
+        },
+        "required": [
+          "classic_indicators",
+          "quant_features"
+        ],
+        "title": "TechnicalFeatureFrameData",
+        "type": "object"
+      },
+      "TechnicalFeatureIndicatorData": {
+        "additionalProperties": false,
+        "properties": {
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "name",
+          "value"
+        ],
+        "title": "TechnicalFeatureIndicatorData",
+        "type": "object"
+      },
+      "TechnicalFeaturePackArtifactData": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "title": "As Of",
+            "type": "string"
+          },
+          "degraded_reasons": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Degraded Reasons"
+          },
+          "feature_summary": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feature Summary"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          },
+          "timeframes": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/TechnicalFeatureFrameData"
+            },
+            "title": "Timeframes",
+            "type": "object"
+          }
+        },
+        "required": [
+          "ticker",
+          "as_of",
+          "timeframes"
+        ],
+        "title": "TechnicalFeaturePackArtifactData",
+        "type": "object"
+      },
+      "TechnicalFusionReportArtifactData": {
+        "additionalProperties": false,
+        "properties": {
+          "alignment_report": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alignment Report"
+          },
+          "as_of": {
+            "title": "As Of",
+            "type": "string"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "confidence_calibrated": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence Calibrated"
+          },
+          "confidence_calibration": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence Calibration"
+          },
+          "confidence_raw": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence Raw"
+          },
+          "conflict_reasons": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conflict Reasons"
+          },
+          "confluence_matrix": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confluence Matrix"
+          },
+          "degraded_reasons": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Degraded Reasons"
+          },
+          "direction": {
+            "title": "Direction",
+            "type": "string"
+          },
+          "risk_level": {
+            "title": "Risk Level",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_artifacts": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Artifacts"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "ticker",
+          "as_of",
+          "direction",
+          "risk_level"
+        ],
+        "title": "TechnicalFusionReportArtifactData",
+        "type": "object"
+      },
+      "TechnicalIndicatorSeriesArtifactData": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "title": "As Of",
+            "type": "string"
+          },
+          "degraded_reasons": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Degraded Reasons"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          },
+          "timeframes": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/TechnicalIndicatorSeriesFrameData"
+            },
+            "title": "Timeframes",
+            "type": "object"
+          }
+        },
+        "required": [
+          "ticker",
+          "as_of",
+          "timeframes"
+        ],
+        "title": "TechnicalIndicatorSeriesArtifactData",
+        "type": "object"
+      },
+      "TechnicalIndicatorSeriesFrameData": {
+        "additionalProperties": false,
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "string"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "series": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            "title": "Series",
+            "type": "object"
+          },
+          "start": {
+            "title": "Start",
+            "type": "string"
+          },
+          "timeframe": {
+            "title": "Timeframe",
+            "type": "string"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          }
+        },
+        "required": [
+          "timeframe",
+          "start",
+          "end",
+          "series"
+        ],
+        "title": "TechnicalIndicatorSeriesFrameData",
+        "type": "object"
+      },
+      "TechnicalPatternFlagData": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "TechnicalPatternFlagData",
+        "type": "object"
+      },
+      "TechnicalPatternFrameData": {
+        "additionalProperties": false,
+        "properties": {
+          "breakouts": {
+            "items": {
+              "$ref": "#/components/schemas/TechnicalPatternFlagData"
+            },
+            "title": "Breakouts",
+            "type": "array"
+          },
+          "confidence_scores": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "default": {},
+            "title": "Confidence Scores",
+            "type": "object"
+          },
+          "pattern_flags": {
+            "items": {
+              "$ref": "#/components/schemas/TechnicalPatternFlagData"
+            },
+            "title": "Pattern Flags",
+            "type": "array"
+          },
+          "resistance_levels": {
+            "items": {
+              "$ref": "#/components/schemas/TechnicalPatternLevelData"
+            },
+            "title": "Resistance Levels",
+            "type": "array"
+          },
+          "support_levels": {
+            "items": {
+              "$ref": "#/components/schemas/TechnicalPatternLevelData"
+            },
+            "title": "Support Levels",
+            "type": "array"
+          },
+          "trendlines": {
+            "items": {
+              "$ref": "#/components/schemas/TechnicalPatternFlagData"
+            },
+            "title": "Trendlines",
+            "type": "array"
+          }
+        },
+        "required": [
+          "support_levels",
+          "resistance_levels",
+          "breakouts",
+          "trendlines",
+          "pattern_flags"
+        ],
+        "title": "TechnicalPatternFrameData",
+        "type": "object"
+      },
+      "TechnicalPatternLevelData": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "price": {
+            "title": "Price",
+            "type": "number"
+          },
+          "strength": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strength"
+          },
+          "touches": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Touches"
+          }
+        },
+        "required": [
+          "price"
+        ],
+        "title": "TechnicalPatternLevelData",
+        "type": "object"
+      },
+      "TechnicalPatternPackArtifactData": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "title": "As Of",
+            "type": "string"
+          },
+          "degraded_reasons": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Degraded Reasons"
+          },
+          "pattern_summary": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pattern Summary"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          },
+          "timeframes": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/TechnicalPatternFrameData"
+            },
+            "title": "Timeframes",
+            "type": "object"
+          }
+        },
+        "required": [
+          "ticker",
+          "as_of",
+          "timeframes"
+        ],
+        "title": "TechnicalPatternPackArtifactData",
+        "type": "object"
+      },
+      "TechnicalScorecardContributionData": {
+        "additionalProperties": false,
+        "properties": {
+          "contribution": {
+            "title": "Contribution",
+            "type": "number"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "weight": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight"
+          }
+        },
+        "required": [
+          "name",
+          "value",
+          "contribution"
+        ],
+        "title": "TechnicalScorecardContributionData",
+        "type": "object"
+      },
+      "TechnicalScorecardFrameData": {
+        "additionalProperties": false,
+        "properties": {
+          "classic_label": {
+            "title": "Classic Label",
+            "type": "string"
+          },
+          "classic_score": {
+            "title": "Classic Score",
+            "type": "number"
+          },
+          "contributions": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/TechnicalScorecardContributionData"
+              },
+              "type": "array"
+            },
+            "title": "Contributions",
+            "type": "object"
+          },
+          "pattern_label": {
+            "title": "Pattern Label",
+            "type": "string"
+          },
+          "pattern_score": {
+            "title": "Pattern Score",
+            "type": "number"
+          },
+          "quant_label": {
+            "title": "Quant Label",
+            "type": "string"
+          },
+          "quant_score": {
+            "title": "Quant Score",
+            "type": "number"
+          },
+          "timeframe": {
+            "title": "Timeframe",
+            "type": "string"
+          },
+          "total_score": {
+            "title": "Total Score",
+            "type": "number"
+          }
+        },
+        "required": [
+          "timeframe",
+          "classic_score",
+          "quant_score",
+          "pattern_score",
+          "total_score",
+          "classic_label",
+          "quant_label",
+          "pattern_label",
+          "contributions"
+        ],
+        "title": "TechnicalScorecardFrameData",
+        "type": "object"
+      },
+      "TechnicalTimeseriesBundleArtifactData": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "title": "As Of",
+            "type": "string"
+          },
+          "degraded_reasons": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Degraded Reasons"
+          },
+          "frames": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/TechnicalTimeseriesFrameData"
+            },
+            "title": "Frames",
+            "type": "object"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticker",
+          "as_of",
+          "frames"
+        ],
+        "title": "TechnicalTimeseriesBundleArtifactData",
+        "type": "object"
+      },
+      "TechnicalTimeseriesFrameData": {
+        "additionalProperties": false,
+        "properties": {
+          "close_series": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Close Series",
+            "type": "object"
+          },
+          "end": {
+            "title": "End",
+            "type": "string"
+          },
+          "high_series": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "High Series",
+            "type": "object"
+          },
+          "low_series": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Low Series",
+            "type": "object"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "open_series": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Open Series",
+            "type": "object"
+          },
+          "price_series": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Price Series",
+            "type": "object"
+          },
+          "start": {
+            "title": "Start",
+            "type": "string"
+          },
+          "timeframe": {
+            "title": "Timeframe",
+            "type": "string"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          },
+          "volume_series": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Volume Series",
+            "type": "object"
+          }
+        },
+        "required": [
+          "timeframe",
+          "start",
+          "end",
+          "open_series",
+          "high_series",
+          "low_series",
+          "close_series",
+          "price_series",
+          "volume_series"
+        ],
+        "title": "TechnicalTimeseriesFrameData",
+        "type": "object"
+      },
+      "TechnicalVerificationReportArtifactData": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "title": "As Of",
+            "type": "string"
+          },
+          "backtest_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TechnicalBacktestSummaryData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "baseline_gates": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Gates"
+          },
+          "degraded_reasons": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Degraded Reasons"
+          },
+          "robustness_flags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Robustness Flags"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_artifacts": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Artifacts"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          },
+          "wfa_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TechnicalWfaSummaryData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "schema_version",
+          "ticker",
+          "as_of"
+        ],
+        "title": "TechnicalVerificationReportArtifactData",
+        "type": "object"
+      },
+      "TechnicalWfaSummaryData": {
+        "additionalProperties": false,
+        "properties": {
+          "period_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Count"
+          },
+          "wfa_max_drawdown": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wfa Max Drawdown"
+          },
+          "wfa_sharpe": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wfa Sharpe"
+          },
+          "wfe_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wfe Ratio"
+          }
+        },
+        "title": "TechnicalWfaSummaryData",
         "type": "object"
       },
       "ThreadStateResponse": {
@@ -2598,8 +4927,16 @@
                       "news_selection": "#/components/schemas/NewsSelectionEnvelope",
                       "price_series": "#/components/schemas/PriceSeriesEnvelope",
                       "search_results": "#/components/schemas/SearchResultsEnvelope",
+                      "ta_alerts": "#/components/schemas/TaAlertsEnvelope",
                       "ta_chart_data": "#/components/schemas/TaChartDataEnvelope",
-                      "ta_full_report": "#/components/schemas/TaFullReportEnvelope"
+                      "ta_direction_scorecard": "#/components/schemas/TaDirectionScorecardEnvelope",
+                      "ta_feature_pack": "#/components/schemas/TaFeaturePackEnvelope",
+                      "ta_full_report": "#/components/schemas/TaFullReportEnvelope",
+                      "ta_fusion_report": "#/components/schemas/TaFusionReportEnvelope",
+                      "ta_indicator_series": "#/components/schemas/TaIndicatorSeriesEnvelope",
+                      "ta_pattern_pack": "#/components/schemas/TaPatternPackEnvelope",
+                      "ta_timeseries_bundle": "#/components/schemas/TaTimeseriesBundleEnvelope",
+                      "ta_verification_report": "#/components/schemas/TaVerificationReportEnvelope"
                     },
                     "propertyName": "kind"
                   },
@@ -2612,6 +4949,30 @@
                     },
                     {
                       "$ref": "#/components/schemas/TaChartDataEnvelope"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TaIndicatorSeriesEnvelope"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TaAlertsEnvelope"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TaTimeseriesBundleEnvelope"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TaFeaturePackEnvelope"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TaPatternPackEnvelope"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TaFusionReportEnvelope"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TaDirectionScorecardEnvelope"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TaVerificationReportEnvelope"
                     },
                     {
                       "$ref": "#/components/schemas/TaFullReportEnvelope"

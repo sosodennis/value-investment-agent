@@ -347,13 +347,46 @@ describe('artifact parsers', () => {
                 fd_polarity: 'NEGATIVE',
                 fd_risk_hint: 'MEAN_REVERSION_RISK',
             },
-            llm_interpretation: 'Signal aligns across timeframes.',
+            analyst_perspective: {
+                stance: 'BEARISH_WATCH',
+                stance_summary: 'Bearish watch with low risk.',
+                rationale_summary:
+                    'Signals align toward downside continuation, but confirmation is still needed.',
+                top_evidence: [
+                    {
+                        label: 'MACD',
+                        value_text: '-2.61',
+                        timeframe: '1d',
+                        rationale: 'Momentum remains negative.'
+                    }
+                ],
+                trigger_condition: 'Break below support near 180',
+                invalidation_condition:
+                    'Recovery back above resistance near 190 invalidates the watch.',
+                invalidation_level: 190,
+                validation_note: 'Verification is stable.',
+                confidence_note: 'Calibrated confidence is 78%.',
+                decision_posture: 'CONFIRMATION_NEEDED'
+            },
             artifact_refs: {
                 feature_pack_id: 'feature-123',
+                regime_pack_id: 'regime-123',
                 alerts_id: 'alerts-789',
                 fusion_report_id: 'fusion-456',
             },
             summary_tags: ['momentum', 'trend'],
+            regime_summary: {
+                dominant_regime: 'BULL_TREND',
+                timeframe_count: 1,
+            },
+            volume_profile_summary: {
+                timeframe: '1d',
+                level_count: 2,
+            },
+            structure_confluence_summary: {
+                confluence_state: 'strong',
+                confluence_score: 0.74,
+            },
             diagnostics: {
                 is_degraded: true,
                 degraded_reasons: ['HOURLY_DATA_MISSING'],
@@ -367,17 +400,23 @@ describe('artifact parsers', () => {
         }
         expect(parsed.risk_level).toBe('low');
         expect(parsed.artifact_refs.feature_pack_id).toBe('feature-123');
+        expect(parsed.artifact_refs.regime_pack_id).toBe('regime-123');
         expect(parsed.artifact_refs.alerts_id).toBe('alerts-789');
         expect(parsed.confidence_raw).toBe(0.62);
         expect(parsed.confidence_calibrated).toBe(0.78);
         expect(parsed.confidence_calibration?.mapping_source).toBe('default_artifact');
         expect(parsed.momentum_extremes?.fd_label).toBe('EXTREME');
         expect(parsed.momentum_extremes?.rsi_bias).toBe('BEARISH_BIAS');
+        expect(parsed.analyst_perspective?.stance).toBe('BEARISH_WATCH');
+        expect(parsed.analyst_perspective?.top_evidence?.[0]?.label).toBe('MACD');
+        expect(parsed.regime_summary?.dominant_regime).toBe('BULL_TREND');
+        expect(parsed.volume_profile_summary?.timeframe).toBe('1d');
+        expect(parsed.structure_confluence_summary?.confluence_state).toBe('strong');
         expect(parsed.diagnostics?.is_degraded).toBe(true);
         expect(parsed.summary_tags).toContain('momentum');
     });
 
-    it('accepts nullable llm_interpretation in technical artifact', () => {
+    it('accepts nullable analyst_perspective in technical artifact', () => {
         const parsed = parseTechnicalArtifact({
             schema_version: 'v2',
             ticker: 'AAPL',
@@ -388,10 +427,10 @@ describe('artifact parsers', () => {
                 feature_pack_id: 'feature-123',
             },
             summary_tags: ['momentum'],
-            llm_interpretation: null,
+            analyst_perspective: null,
         });
 
-        expect(parsed.llm_interpretation).toBeUndefined();
+        expect(parsed.analyst_perspective).toBeUndefined();
     });
 
     it('parses technical chart data artifact', () => {
@@ -529,9 +568,20 @@ describe('artifact parsers', () => {
                     resistance_levels: [
                         { price: 135.2, strength: 0.6, touches: 2, label: 'r1' },
                     ],
+                    volume_profile_levels: [
+                        { price: 128.0, strength: 0.9, touches: 5, label: 'HVN' },
+                    ],
+                    volume_profile_summary: {
+                        poc: 128.0,
+                        vah: 130.0,
+                        val: 126.0,
+                        profile_method: 'daily_bar_approx',
+                        profile_fidelity: 'low',
+                    },
                     breakouts: [{ name: 'breakout_up', confidence: 0.7 }],
                     trendlines: [{ name: 'uptrend', confidence: 0.65 }],
                     pattern_flags: [{ name: 'higher_lows', confidence: 0.55 }],
+                    confluence_metadata: { confluence_state: 'strong' },
                     confidence_scores: { support_confidence: 0.7 },
                 },
             },
@@ -540,6 +590,11 @@ describe('artifact parsers', () => {
 
         expect(parsed.ticker).toBe('AAPL');
         expect(parsed.timeframes.daily.support_levels[0]?.price).toBe(120.5);
+        expect(parsed.timeframes.daily.volume_profile_levels[0]?.label).toBe('HVN');
+        expect(parsed.timeframes.daily.volume_profile_summary?.poc).toBe(128.0);
+        expect(parsed.timeframes.daily.confluence_metadata?.confluence_state).toBe(
+            'strong'
+        );
         expect(parsed.timeframes.daily.breakouts[0]?.name).toBe('breakout_up');
         expect(parsed.degraded_reasons).toContain('WEEKLY_DATA_MISSING');
     });

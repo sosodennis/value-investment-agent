@@ -142,6 +142,10 @@ async def run_pattern_compute_use_case(
                 end=frame.end,
                 price_series=frame.price_series,
                 volume_series=frame.volume_series,
+                open_series=frame.open_series,
+                high_series=frame.high_series,
+                low_series=frame.low_series,
+                close_series=frame.close_series,
                 timezone=frame.timezone,
                 metadata=frame.metadata or {},
             )
@@ -282,9 +286,14 @@ def _serialize_pattern_frame(frame: PatternFrame) -> dict[str, object]:
     return {
         "support_levels": _serialize_levels(frame.support_levels),
         "resistance_levels": _serialize_levels(frame.resistance_levels),
+        "volume_profile_levels": _serialize_levels(frame.volume_profile_levels),
+        "volume_profile_summary": _serialize_volume_profile_summary(
+            frame.volume_profile_summary
+        ),
         "breakouts": _serialize_flags(frame.breakouts),
         "trendlines": _serialize_flags(frame.trendlines),
         "pattern_flags": _serialize_flags(frame.pattern_flags),
+        "confluence_metadata": frame.confluence_metadata,
         "confidence_scores": frame.confidence_scores,
     }
 
@@ -310,3 +319,11 @@ def _serialize_flags(flags: list[PatternFlag]) -> list[dict[str, object]]:
         }
         for flag in flags
     ]
+
+
+def _serialize_volume_profile_summary(summary: object) -> dict[str, object] | None:
+    if summary is None:
+        return None
+    if hasattr(summary, "__dict__"):
+        return dict(summary.__dict__)
+    raise TypeError("volume_profile_summary must be serializable")

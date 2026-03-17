@@ -33,6 +33,12 @@ async def alerts_compute_node(state: TechnicalAnalysisState) -> Command:
     return command_from_result(result, end_node=END)
 
 
+async def regime_compute_node(state: TechnicalAnalysisState) -> Command:
+    technical_workflow_runner = get_technical_workflow_runner()
+    result = await technical_workflow_runner.run_regime_compute(state)
+    return command_from_result(result, end_node=END)
+
+
 async def fusion_compute_node(state: TechnicalAnalysisState) -> Command:
     technical_workflow_runner = get_technical_workflow_runner()
     result = await technical_workflow_runner.run_fusion_compute(state)

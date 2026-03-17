@@ -1,6 +1,9 @@
 from .indicator_service import (
+    compute_adx,
     compute_atr,
+    compute_atrp,
     compute_bollinger,
+    compute_bollinger_bandwidth,
     compute_ema,
     compute_macd,
     compute_mfi,
@@ -10,8 +13,11 @@ from .indicator_service import (
 )
 
 __all__ = [
+    "compute_adx",
     "compute_atr",
+    "compute_atrp",
     "compute_bollinger",
+    "compute_bollinger_bandwidth",
     "compute_ema",
     "compute_macd",
     "compute_mfi",

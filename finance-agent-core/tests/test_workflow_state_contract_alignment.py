@@ -54,6 +54,7 @@ def test_technical_context_contract_is_canonical() -> None:
         "alerts_id",
         "feature_pack_id",
         "pattern_pack_id",
+        "regime_pack_id",
         "fusion_report_id",
         "verification_report_id",
         "artifact",

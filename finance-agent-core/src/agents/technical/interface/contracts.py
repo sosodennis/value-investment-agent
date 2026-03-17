@@ -25,6 +25,7 @@ class ArtifactRefsModel(BaseModel):
     alerts_id: OptionalTechnicalText = None
     feature_pack_id: OptionalTechnicalText = None
     pattern_pack_id: OptionalTechnicalText = None
+    regime_pack_id: OptionalTechnicalText = None
     fusion_report_id: OptionalTechnicalText = None
     direction_scorecard_id: OptionalTechnicalText = None
     verification_report_id: OptionalTechnicalText = None
@@ -60,6 +61,30 @@ class MomentumExtremesModel(BaseModel):
     fd_risk_hint: OptionalTechnicalText = None
 
 
+class AnalystPerspectiveEvidenceItemModel(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    label: TechnicalText
+    value_text: OptionalTechnicalText = None
+    timeframe: OptionalTechnicalText = None
+    rationale: TechnicalText
+
+
+class AnalystPerspectiveModel(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    stance: TechnicalText
+    stance_summary: TechnicalText
+    rationale_summary: TechnicalText
+    top_evidence: list[AnalystPerspectiveEvidenceItemModel] | None = None
+    trigger_condition: OptionalTechnicalText = None
+    invalidation_condition: OptionalTechnicalText = None
+    invalidation_level: OptionalConfidenceScore = None
+    validation_note: OptionalTechnicalText = None
+    confidence_note: OptionalTechnicalText = None
+    decision_posture: OptionalTechnicalText = None
+
+
 class TechnicalArtifactModel(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -73,7 +98,10 @@ class TechnicalArtifactModel(BaseModel):
     confidence_calibrated: OptionalConfidenceScore = None
     confidence_calibration: ConfidenceCalibrationModel | None = None
     momentum_extremes: MomentumExtremesModel | None = None
-    llm_interpretation: OptionalTechnicalText = None
+    regime_summary: dict[str, object] | None = None
+    volume_profile_summary: dict[str, object] | None = None
+    structure_confluence_summary: dict[str, object] | None = None
+    analyst_perspective: AnalystPerspectiveModel | None = None
     artifact_refs: ArtifactRefsModel
     summary_tags: TechnicalStringList
     diagnostics: DiagnosticsModel | None = None

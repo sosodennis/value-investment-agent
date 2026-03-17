@@ -28,13 +28,13 @@ class _TechnicalReportPort(Protocol):
 
 
 def _fallback_ta_update(
-    *, tags_dict: JSONObject, llm_interpretation: str
+    *, tags_dict: JSONObject, analyst_perspective: JSONObject
 ) -> JSONObject:
     return {
         "signal": tags_dict["direction"],
         "statistical_strength": tags_dict["statistical_state"],
         "risk_level": tags_dict["risk_level"],
-        "llm_interpretation": llm_interpretation,
+        "analyst_perspective": analyst_perspective,
         "semantic_tags": tags_dict["tags"],
         "memory_strength": tags_dict["memory_strength"],
     }
@@ -81,5 +81,7 @@ async def build_semantic_report_update(
         tags_dict = semantic_tags_to_dict(pipeline_result.tags_result)
         return _fallback_ta_update(
             tags_dict=tags_dict,
-            llm_interpretation=pipeline_result.llm_interpretation,
+            analyst_perspective=pipeline_result.analyst_perspective.model_dump(
+                mode="json"
+            ),
         )

@@ -10,6 +10,7 @@ export interface TechnicalArtifactRefs {
     indicator_series_id?: string;
     feature_pack_id?: string;
     pattern_pack_id?: string;
+    regime_pack_id?: string;
     alerts_id?: string;
     fusion_report_id?: string;
     direction_scorecard_id?: string;
@@ -38,6 +39,26 @@ export interface TechnicalMomentumExtremes {
     fd_label?: string | null;
     fd_polarity?: string | null;
     fd_risk_hint?: string | null;
+}
+
+export interface TechnicalAnalystPerspectiveEvidenceItem {
+    label: string;
+    value_text?: string | null;
+    timeframe?: string | null;
+    rationale: string;
+}
+
+export interface TechnicalAnalystPerspective {
+    stance: string;
+    stance_summary: string;
+    rationale_summary: string;
+    top_evidence?: TechnicalAnalystPerspectiveEvidenceItem[];
+    trigger_condition?: string | null;
+    invalidation_condition?: string | null;
+    invalidation_level?: number | null;
+    validation_note?: string | null;
+    confidence_note?: string | null;
+    decision_posture?: string | null;
 }
 
 export interface TechnicalChartData {
@@ -119,9 +140,12 @@ export interface TechnicalPatternFlag {
 export interface TechnicalPatternFrame {
     support_levels: TechnicalPatternLevel[];
     resistance_levels: TechnicalPatternLevel[];
+    volume_profile_levels: TechnicalPatternLevel[];
+    volume_profile_summary?: Record<string, unknown>;
     breakouts: TechnicalPatternFlag[];
     trendlines: TechnicalPatternFlag[];
     pattern_flags: TechnicalPatternFlag[];
+    confluence_metadata?: Record<string, unknown>;
     confidence_scores: Record<string, number>;
 }
 
@@ -257,7 +281,10 @@ export interface TechnicalAnalysisReport {
     confidence_calibrated?: number | null;
     confidence_calibration?: TechnicalConfidenceCalibration;
     momentum_extremes?: TechnicalMomentumExtremes;
-    llm_interpretation?: string;
+    regime_summary?: Record<string, unknown>;
+    volume_profile_summary?: Record<string, unknown>;
+    structure_confluence_summary?: Record<string, unknown>;
+    analyst_perspective?: TechnicalAnalystPerspective;
     artifact_refs: TechnicalArtifactRefs;
     summary_tags: string[];
     diagnostics?: TechnicalDiagnostics;

@@ -22,6 +22,7 @@ from src.agents.technical.subdomains.interpretation import (
 )
 from src.agents.technical.subdomains.market_data import YahooMarketDataProvider
 from src.agents.technical.subdomains.patterns import PatternRuntimeService
+from src.agents.technical.subdomains.regime import RegimeRuntimeService
 from src.agents.technical.subdomains.signal_fusion import (
     FusionRuntimeService,
     assemble_semantic_tags,
@@ -45,6 +46,7 @@ def build_default_technical_workflow_runner() -> TechnicalWorkflowRunner:
     indicator_series_runtime = IndicatorSeriesRuntimeService()
     alert_runtime = AlertRuntimeService()
     pattern_runtime = PatternRuntimeService()
+    regime_runtime = RegimeRuntimeService()
     fusion_runtime = FusionRuntimeService()
     verification_runtime = VerificationRuntimeService()
     return build_technical_workflow_runner(
@@ -56,6 +58,7 @@ def build_default_technical_workflow_runner() -> TechnicalWorkflowRunner:
             indicator_series_runtime=indicator_series_runtime,
             alert_runtime=alert_runtime,
             pattern_runtime=pattern_runtime,
+            regime_runtime=regime_runtime,
             fusion_runtime=fusion_runtime,
             verification_runtime=verification_runtime,
             assemble_semantic_tags_fn=_assemble_semantic_tags_default,

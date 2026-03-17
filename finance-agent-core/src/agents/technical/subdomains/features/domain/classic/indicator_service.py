@@ -88,6 +88,54 @@ def compute_atr(
     return atr
 
 
+def compute_atrp(
+    high: pd.Series | None,
+    low: pd.Series | None,
+    close: pd.Series,
+    window: int = 14,
+) -> pd.Series | None:
+    atr = compute_atr(high, low, close, window=window)
+    if atr is None:
+        return None
+    denominator = close.abs().replace(0.0, np.nan)
+    return atr / denominator
+
+
+def compute_adx(
+    high: pd.Series | None,
+    low: pd.Series | None,
+    close: pd.Series,
+    window: int = 14,
+) -> pd.Series | None:
+    if high is None or low is None:
+        return None
+
+    up_move = high.diff()
+    down_move = -low.diff()
+    plus_dm = up_move.where((up_move > down_move) & (up_move > 0.0), 0.0)
+    minus_dm = down_move.where((down_move > up_move) & (down_move > 0.0), 0.0)
+
+    atr = compute_atr(high, low, close, window=window)
+    if atr is None:
+        return None
+
+    atr = atr.replace(0.0, np.nan)
+    plus_di = (
+        100.0
+        * plus_dm.ewm(alpha=1 / window, adjust=False, min_periods=window).mean()
+        / atr
+    )
+    minus_di = (
+        100.0
+        * minus_dm.ewm(alpha=1 / window, adjust=False, min_periods=window).mean()
+        / atr
+    )
+    dx = (
+        (plus_di - minus_di).abs() / (plus_di + minus_di).replace(0.0, np.nan)
+    ) * 100.0
+    return dx.ewm(alpha=1 / window, adjust=False, min_periods=window).mean()
+
+
 def compute_bollinger(
     prices: pd.Series,
     window: int = 20,
@@ -98,3 +146,17 @@ def compute_bollinger(
     upper = middle + (std * num_std)
     lower = middle - (std * num_std)
     return upper, middle, lower
+
+
+def compute_bollinger_bandwidth(
+    prices: pd.Series,
+    window: int = 20,
+    num_std: float = 2.0,
+) -> pd.Series:
+    upper, middle, lower = compute_bollinger(
+        prices,
+        window=window,
+        num_std=num_std,
+    )
+    denominator = middle.abs().replace(0.0, np.nan)
+    return (upper - lower) / denominator

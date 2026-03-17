@@ -204,6 +204,40 @@ export interface components {
                 [key: string]: string;
             };
         };
+        /** AnalystPerspectiveEvidenceItemModel */
+        AnalystPerspectiveEvidenceItemModel: {
+            /** Label */
+            label: string;
+            /** Rationale */
+            rationale: string;
+            /** Timeframe */
+            timeframe?: string | null;
+            /** Value Text */
+            value_text?: string | null;
+        };
+        /** AnalystPerspectiveModel */
+        AnalystPerspectiveModel: {
+            /** Confidence Note */
+            confidence_note?: string | null;
+            /** Decision Posture */
+            decision_posture?: string | null;
+            /** Invalidation Condition */
+            invalidation_condition?: string | null;
+            /** Invalidation Level */
+            invalidation_level?: number | null;
+            /** Rationale Summary */
+            rationale_summary: string;
+            /** Stance */
+            stance: string;
+            /** Stance Summary */
+            stance_summary: string;
+            /** Top Evidence */
+            top_evidence?: components["schemas"]["AnalystPerspectiveEvidenceItemModel"][] | null;
+            /** Trigger Condition */
+            trigger_condition?: string | null;
+            /** Validation Note */
+            validation_note?: string | null;
+        };
         /**
          * ArtifactReference
          * @description L3 冷數據指針 (Cold Data Pointer)
@@ -228,16 +262,39 @@ export interface components {
              */
             type: string;
         };
-        /** ConfluenceEvidenceModel */
-        ConfluenceEvidenceModel: {
-            /** Bollinger State */
-            bollinger_state: string;
-            /** Macd Momentum */
-            macd_momentum: string;
-            /** Obv State */
-            obv_state: string;
-            /** Statistical Strength */
-            statistical_strength: number;
+        /** ArtifactRefsModel */
+        ArtifactRefsModel: {
+            /** Alerts Id */
+            alerts_id?: string | null;
+            /** Chart Data Id */
+            chart_data_id?: string | null;
+            /** Direction Scorecard Id */
+            direction_scorecard_id?: string | null;
+            /** Feature Pack Id */
+            feature_pack_id?: string | null;
+            /** Fusion Report Id */
+            fusion_report_id?: string | null;
+            /** Indicator Series Id */
+            indicator_series_id?: string | null;
+            /** Pattern Pack Id */
+            pattern_pack_id?: string | null;
+            /** Timeseries Bundle Id */
+            timeseries_bundle_id?: string | null;
+            /** Verification Report Id */
+            verification_report_id?: string | null;
+        };
+        /** ConfidenceCalibrationModel */
+        ConfidenceCalibrationModel: {
+            /** Calibration Applied */
+            calibration_applied?: boolean | null;
+            /** Degraded Reason */
+            degraded_reason?: string | null;
+            /** Mapping Path */
+            mapping_path?: string | null;
+            /** Mapping Source */
+            mapping_source?: string | null;
+            /** Mapping Version */
+            mapping_version?: string | null;
         };
         /** DebateArtifactModel */
         DebateArtifactModel: {
@@ -342,6 +399,13 @@ export interface components {
             /** Role */
             role?: string | null;
         };
+        /** DiagnosticsModel */
+        DiagnosticsModel: {
+            /** Degraded Reasons */
+            degraded_reasons?: string[] | null;
+            /** Is Degraded */
+            is_degraded?: boolean | null;
+        };
         /** EvidenceFactModel */
         EvidenceFactModel: {
             /** Fact Id */
@@ -356,7 +420,7 @@ export interface components {
              * Source Type
              * @enum {string}
              */
-            source_type: "financials" | "news" | "technicals";
+            source_type: "financials" | "news" | "technicals" | "valuation";
             /**
              * Source Weight
              * @enum {string}
@@ -368,6 +432,25 @@ export interface components {
             units?: string | null;
             /** Value */
             value?: string | number | null;
+        };
+        /** FilingMetadataModel */
+        FilingMetadataModel: {
+            /** Accepted Datetime */
+            accepted_datetime?: string | null;
+            /** Accession Number */
+            accession_number?: string | null;
+            /** Filing Date */
+            filing_date?: string | null;
+            /** Form */
+            form?: string | null;
+            /** Matched Fiscal Year */
+            matched_fiscal_year?: number | null;
+            /** Period Of Report */
+            period_of_report?: string | null;
+            /** Requested Fiscal Year */
+            requested_fiscal_year?: number | null;
+            /** Selection Mode */
+            selection_mode?: string | null;
         };
         /** FinancialEntityModel */
         FinancialEntityModel: {
@@ -412,6 +495,7 @@ export interface components {
             extension?: components["schemas"]["IndustrialExtensionModel"] | components["schemas"]["FinancialServicesExtensionModel"] | components["schemas"]["RealEstateExtensionModel"] | null;
             /** Extension Type */
             extension_type?: ("Industrial" | "FinancialServices" | "RealEstate") | null;
+            filing_metadata?: components["schemas"]["FilingMetadataModel"] | null;
             /** Industry Type */
             industry_type: string;
         };
@@ -419,20 +503,58 @@ export interface components {
         FinancialReportsArtifactData: {
             /** Company Name */
             company_name?: string | null;
+            /** Diagnostics */
+            diagnostics?: {
+                [key: string]: unknown;
+            } | null;
             /** Financial Reports */
             financial_reports: components["schemas"]["FinancialReportModel"][];
+            /** Forward Signals */
+            forward_signals?: {
+                [key: string]: unknown;
+            }[] | null;
             /** Industry */
             industry?: string | null;
             /** Model Type */
             model_type?: string | null;
+            /** Quality Gates */
+            quality_gates?: {
+                [key: string]: unknown;
+            } | null;
             /** Reasoning */
             reasoning?: string | null;
+            /** Replay Assumptions */
+            replay_assumptions?: string[] | null;
+            /** Replay Build Metadata */
+            replay_build_metadata?: {
+                [key: string]: unknown;
+            } | null;
+            /** Replay Calculation Metrics */
+            replay_calculation_metrics?: {
+                [key: string]: unknown;
+            } | null;
+            /** Replay Market Snapshot */
+            replay_market_snapshot?: {
+                [key: string]: unknown;
+            } | null;
+            /** Replay Params Dump */
+            replay_params_dump?: {
+                [key: string]: unknown;
+            } | null;
+            /** Replay Schema Version */
+            replay_schema_version?: string | null;
+            /** Replay Source Reports Artifact Id */
+            replay_source_reports_artifact_id?: string | null;
             /** Sector */
             sector?: string | null;
             /** Status */
             status?: "done" | null;
             /** Ticker */
             ticker?: string | null;
+            /** Valuation Diagnostics */
+            valuation_diagnostics?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** FinancialReportsEnvelope */
         FinancialReportsEnvelope: {
@@ -463,22 +585,6 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /** FracDiffMetricsModel */
-        FracDiffMetricsModel: {
-            /** Adf Pvalue */
-            adf_pvalue: number;
-            /** Adf Statistic */
-            adf_statistic: number;
-            /**
-             * Memory Strength
-             * @enum {string}
-             */
-            memory_strength: "structurally_stable" | "balanced" | "fragile";
-            /** Optimal D */
-            optimal_d: number;
-            /** Window Length */
-            window_length: number;
-        };
         /** FundamentalBaseModel */
         FundamentalBaseModel: {
             cash_and_equivalents?: components["schemas"]["TraceableFieldModel"] | null;
@@ -497,6 +603,8 @@ export interface components {
             total_equity?: components["schemas"]["TraceableFieldModel"] | null;
             total_liabilities?: components["schemas"]["TraceableFieldModel"] | null;
             total_revenue?: components["schemas"]["TraceableFieldModel"] | null;
+            weighted_average_shares_basic?: components["schemas"]["TraceableFieldModel"] | null;
+            weighted_average_shares_diluted?: components["schemas"]["TraceableFieldModel"] | null;
         } & {
             [key: string]: unknown;
         };
@@ -530,8 +638,10 @@ export interface components {
             accounts_receivable?: components["schemas"]["TraceableFieldModel"] | null;
             capex?: components["schemas"]["TraceableFieldModel"] | null;
             cogs?: components["schemas"]["TraceableFieldModel"] | null;
+            ga_expense?: components["schemas"]["TraceableFieldModel"] | null;
             inventory?: components["schemas"]["TraceableFieldModel"] | null;
             rd_expense?: components["schemas"]["TraceableFieldModel"] | null;
+            selling_expense?: components["schemas"]["TraceableFieldModel"] | null;
             sga_expense?: components["schemas"]["TraceableFieldModel"] | null;
         } & {
             [key: string]: unknown;
@@ -606,6 +716,25 @@ export interface components {
              * @default text
              */
             type: string;
+        };
+        /** MomentumExtremesModel */
+        MomentumExtremesModel: {
+            /** Fd Label */
+            fd_label?: string | null;
+            /** Fd Polarity */
+            fd_polarity?: string | null;
+            /** Fd Risk Hint */
+            fd_risk_hint?: string | null;
+            /** Fd Z Score */
+            fd_z_score?: number | null;
+            /** Rsi Bias */
+            rsi_bias?: string | null;
+            /** Rsi Value */
+            rsi_value?: number | null;
+            /** Source */
+            source?: string | null;
+            /** Timeframe */
+            timeframe?: string | null;
         };
         /** NewsAnalysisReportEnvelope */
         NewsAnalysisReportEnvelope: {
@@ -760,26 +889,12 @@ export interface components {
              */
             version: "v1";
         };
-        /** RawDataModel */
-        RawDataModel: {
-            /** Fracdiff Series */
-            fracdiff_series?: {
-                [key: string]: number;
-            } | null;
-            /** Price Series */
-            price_series?: {
-                [key: string]: number;
-            } | null;
-            /** Z Score Series */
-            z_score_series?: {
-                [key: string]: number;
-            } | null;
-        };
         /** RealEstateExtensionModel */
         RealEstateExtensionModel: {
             accumulated_depreciation?: components["schemas"]["TraceableFieldModel"] | null;
             depreciation_and_amortization?: components["schemas"]["TraceableFieldModel"] | null;
             ffo?: components["schemas"]["TraceableFieldModel"] | null;
+            gain_on_sale?: components["schemas"]["TraceableFieldModel"] | null;
             real_estate_assets?: components["schemas"]["TraceableFieldModel"] | null;
         } & {
             [key: string]: unknown;
@@ -829,24 +944,6 @@ export interface components {
              */
             version: "v1";
         };
-        /** SignalStateModel */
-        SignalStateModel: {
-            confluence: components["schemas"]["ConfluenceEvidenceModel"];
-            /** Direction */
-            direction: string;
-            /**
-             * Risk Level
-             * @enum {string}
-             */
-            risk_level: "low" | "medium" | "critical";
-            /**
-             * Statistical State
-             * @enum {string}
-             */
-            statistical_state: "equilibrium" | "deviating" | "anomaly";
-            /** Z Score */
-            z_score: number;
-        };
         /** SourceInfoModel */
         SourceInfoModel: {
             /** Author */
@@ -868,6 +965,24 @@ export interface components {
             /** Thread Id */
             thread_id: string;
         };
+        /** TaAlertsEnvelope */
+        TaAlertsEnvelope: {
+            /** Created At */
+            created_at: string;
+            data: components["schemas"]["TechnicalAlertsArtifactData"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "ta_alerts";
+            /** Produced By */
+            produced_by: string;
+            /**
+             * Version
+             * @constant
+             */
+            version: "v1";
+        };
         /** TaChartDataEnvelope */
         TaChartDataEnvelope: {
             /** Created At */
@@ -878,6 +993,42 @@ export interface components {
              * @enum {string}
              */
             kind: "ta_chart_data";
+            /** Produced By */
+            produced_by: string;
+            /**
+             * Version
+             * @constant
+             */
+            version: "v1";
+        };
+        /** TaDirectionScorecardEnvelope */
+        TaDirectionScorecardEnvelope: {
+            /** Created At */
+            created_at: string;
+            data: components["schemas"]["TechnicalDirectionScorecardArtifactData"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "ta_direction_scorecard";
+            /** Produced By */
+            produced_by: string;
+            /**
+             * Version
+             * @constant
+             */
+            version: "v1";
+        };
+        /** TaFeaturePackEnvelope */
+        TaFeaturePackEnvelope: {
+            /** Created At */
+            created_at: string;
+            data: components["schemas"]["TechnicalFeaturePackArtifactData"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "ta_feature_pack";
             /** Produced By */
             produced_by: string;
             /**
@@ -904,19 +1055,188 @@ export interface components {
              */
             version: "v1";
         };
-        /** TechnicalArtifactModel */
-        TechnicalArtifactModel: {
-            frac_diff_metrics: components["schemas"]["FracDiffMetricsModel"];
-            /** Llm Interpretation */
-            llm_interpretation?: string | null;
-            raw_data?: components["schemas"]["RawDataModel"] | null;
-            /** Semantic Tags */
-            semantic_tags: string[];
-            signal_state: components["schemas"]["SignalStateModel"];
+        /** TaFusionReportEnvelope */
+        TaFusionReportEnvelope: {
+            /** Created At */
+            created_at: string;
+            data: components["schemas"]["TechnicalFusionReportArtifactData"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "ta_fusion_report";
+            /** Produced By */
+            produced_by: string;
+            /**
+             * Version
+             * @constant
+             */
+            version: "v1";
+        };
+        /** TaIndicatorSeriesEnvelope */
+        TaIndicatorSeriesEnvelope: {
+            /** Created At */
+            created_at: string;
+            data: components["schemas"]["TechnicalIndicatorSeriesArtifactData"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "ta_indicator_series";
+            /** Produced By */
+            produced_by: string;
+            /**
+             * Version
+             * @constant
+             */
+            version: "v1";
+        };
+        /** TaPatternPackEnvelope */
+        TaPatternPackEnvelope: {
+            /** Created At */
+            created_at: string;
+            data: components["schemas"]["TechnicalPatternPackArtifactData"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "ta_pattern_pack";
+            /** Produced By */
+            produced_by: string;
+            /**
+             * Version
+             * @constant
+             */
+            version: "v1";
+        };
+        /** TaTimeseriesBundleEnvelope */
+        TaTimeseriesBundleEnvelope: {
+            /** Created At */
+            created_at: string;
+            data: components["schemas"]["TechnicalTimeseriesBundleArtifactData"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "ta_timeseries_bundle";
+            /** Produced By */
+            produced_by: string;
+            /**
+             * Version
+             * @constant
+             */
+            version: "v1";
+        };
+        /** TaVerificationReportEnvelope */
+        TaVerificationReportEnvelope: {
+            /** Created At */
+            created_at: string;
+            data: components["schemas"]["TechnicalVerificationReportArtifactData"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "ta_verification_report";
+            /** Produced By */
+            produced_by: string;
+            /**
+             * Version
+             * @constant
+             */
+            version: "v1";
+        };
+        /** TechnicalAlertSignalData */
+        TechnicalAlertSignalData: {
+            /** Code */
+            code: string;
+            /** Direction */
+            direction?: string | null;
+            /** Message */
+            message?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "info" | "warning" | "critical";
+            /** Source */
+            source?: string | null;
+            /** Threshold */
+            threshold?: number | null;
+            /** Timeframe */
+            timeframe: string;
+            /** Title */
+            title: string;
+            /** Triggered At */
+            triggered_at?: string | null;
+            /** Value */
+            value?: number | null;
+        };
+        /** TechnicalAlertsArtifactData */
+        TechnicalAlertsArtifactData: {
+            /** Alerts */
+            alerts: components["schemas"]["TechnicalAlertSignalData"][];
+            /** As Of */
+            as_of: string;
+            /** Degraded Reasons */
+            degraded_reasons?: string[] | null;
+            /** Source Artifacts */
+            source_artifacts?: {
+                [key: string]: string | null;
+            } | null;
+            /** Summary */
+            summary?: {
+                [key: string]: unknown;
+            } | null;
             /** Ticker */
             ticker: string;
-            /** Timestamp */
-            timestamp: string;
+        };
+        /** TechnicalArtifactModel */
+        TechnicalArtifactModel: {
+            analyst_perspective?: components["schemas"]["AnalystPerspectiveModel"] | null;
+            artifact_refs: components["schemas"]["ArtifactRefsModel"];
+            /** As Of */
+            as_of: string;
+            /** Confidence */
+            confidence?: number | null;
+            /** Confidence Calibrated */
+            confidence_calibrated?: number | null;
+            confidence_calibration?: components["schemas"]["ConfidenceCalibrationModel"] | null;
+            /** Confidence Raw */
+            confidence_raw?: number | null;
+            diagnostics?: components["schemas"]["DiagnosticsModel"] | null;
+            /** Direction */
+            direction: string;
+            momentum_extremes?: components["schemas"]["MomentumExtremesModel"] | null;
+            /**
+             * Risk Level
+             * @enum {string}
+             */
+            risk_level: "low" | "medium" | "critical";
+            /** Schema Version */
+            schema_version: string;
+            /** Summary Tags */
+            summary_tags: string[];
+            /** Ticker */
+            ticker: string;
+        };
+        /** TechnicalBacktestSummaryData */
+        TechnicalBacktestSummaryData: {
+            /** Max Drawdown */
+            max_drawdown?: number | null;
+            /** Profit Factor */
+            profit_factor?: number | null;
+            /** Sharpe Ratio */
+            sharpe_ratio?: number | null;
+            /** Strategy Name */
+            strategy_name?: string | null;
+            /** Total Trades */
+            total_trades?: number | null;
+            /** Win Rate */
+            win_rate?: number | null;
         };
         /** TechnicalChartArtifactData */
         TechnicalChartArtifactData: {
@@ -932,6 +1252,336 @@ export interface components {
             z_score_series: {
                 [key: string]: number | null;
             };
+        };
+        /** TechnicalDirectionScorecardArtifactData */
+        TechnicalDirectionScorecardArtifactData: {
+            /** As Of */
+            as_of: string;
+            /** Confidence */
+            confidence?: number | null;
+            /** Conflict Reasons */
+            conflict_reasons?: string[] | null;
+            /** Degraded Reasons */
+            degraded_reasons?: string[] | null;
+            /** Direction */
+            direction: string;
+            /** Model Version */
+            model_version?: string | null;
+            /** Neutral Threshold */
+            neutral_threshold: number;
+            /** Overall Score */
+            overall_score: number;
+            /** Risk Level */
+            risk_level: string;
+            /** Schema Version */
+            schema_version: string;
+            /** Source Artifacts */
+            source_artifacts?: {
+                [key: string]: string | null;
+            } | null;
+            /** Ticker */
+            ticker: string;
+            /** Timeframes */
+            timeframes: {
+                [key: string]: components["schemas"]["TechnicalScorecardFrameData"];
+            };
+        };
+        /** TechnicalFeatureFrameData */
+        TechnicalFeatureFrameData: {
+            /** Classic Indicators */
+            classic_indicators: {
+                [key: string]: components["schemas"]["TechnicalFeatureIndicatorData"];
+            };
+            /** Quant Features */
+            quant_features: {
+                [key: string]: components["schemas"]["TechnicalFeatureIndicatorData"];
+            };
+        };
+        /** TechnicalFeatureIndicatorData */
+        TechnicalFeatureIndicatorData: {
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+            /** Name */
+            name: string;
+            /** State */
+            state?: string | null;
+            /** Value */
+            value: number | null;
+        };
+        /** TechnicalFeaturePackArtifactData */
+        TechnicalFeaturePackArtifactData: {
+            /** As Of */
+            as_of: string;
+            /** Degraded Reasons */
+            degraded_reasons?: string[] | null;
+            /** Feature Summary */
+            feature_summary?: {
+                [key: string]: unknown;
+            } | null;
+            /** Ticker */
+            ticker: string;
+            /** Timeframes */
+            timeframes: {
+                [key: string]: components["schemas"]["TechnicalFeatureFrameData"];
+            };
+        };
+        /** TechnicalFusionReportArtifactData */
+        TechnicalFusionReportArtifactData: {
+            /** Alignment Report */
+            alignment_report?: {
+                [key: string]: unknown;
+            } | null;
+            /** As Of */
+            as_of: string;
+            /** Confidence */
+            confidence?: number | null;
+            /** Confidence Calibrated */
+            confidence_calibrated?: number | null;
+            /** Confidence Calibration */
+            confidence_calibration?: {
+                [key: string]: unknown;
+            } | null;
+            /** Confidence Raw */
+            confidence_raw?: number | null;
+            /** Conflict Reasons */
+            conflict_reasons?: string[] | null;
+            /** Confluence Matrix */
+            confluence_matrix?: {
+                [key: string]: {
+                    [key: string]: unknown;
+                };
+            } | null;
+            /** Degraded Reasons */
+            degraded_reasons?: string[] | null;
+            /** Direction */
+            direction: string;
+            /** Risk Level */
+            risk_level: string;
+            /** Schema Version */
+            schema_version: string;
+            /** Source Artifacts */
+            source_artifacts?: {
+                [key: string]: string | null;
+            } | null;
+            /** Ticker */
+            ticker: string;
+        };
+        /** TechnicalIndicatorSeriesArtifactData */
+        TechnicalIndicatorSeriesArtifactData: {
+            /** As Of */
+            as_of: string;
+            /** Degraded Reasons */
+            degraded_reasons?: string[] | null;
+            /** Ticker */
+            ticker: string;
+            /** Timeframes */
+            timeframes: {
+                [key: string]: components["schemas"]["TechnicalIndicatorSeriesFrameData"];
+            };
+        };
+        /** TechnicalIndicatorSeriesFrameData */
+        TechnicalIndicatorSeriesFrameData: {
+            /** End */
+            end: string;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+            /** Series */
+            series: {
+                [key: string]: {
+                    [key: string]: number | null;
+                };
+            };
+            /** Start */
+            start: string;
+            /** Timeframe */
+            timeframe: string;
+            /** Timezone */
+            timezone?: string | null;
+        };
+        /** TechnicalPatternFlagData */
+        TechnicalPatternFlagData: {
+            /** Confidence */
+            confidence?: number | null;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes?: string | null;
+        };
+        /** TechnicalPatternFrameData */
+        TechnicalPatternFrameData: {
+            /** Breakouts */
+            breakouts: components["schemas"]["TechnicalPatternFlagData"][];
+            /**
+             * Confidence Scores
+             * @default {}
+             */
+            confidence_scores: {
+                [key: string]: number;
+            };
+            /** Pattern Flags */
+            pattern_flags: components["schemas"]["TechnicalPatternFlagData"][];
+            /** Resistance Levels */
+            resistance_levels: components["schemas"]["TechnicalPatternLevelData"][];
+            /** Support Levels */
+            support_levels: components["schemas"]["TechnicalPatternLevelData"][];
+            /** Trendlines */
+            trendlines: components["schemas"]["TechnicalPatternFlagData"][];
+        };
+        /** TechnicalPatternLevelData */
+        TechnicalPatternLevelData: {
+            /** Label */
+            label?: string | null;
+            /** Price */
+            price: number;
+            /** Strength */
+            strength?: number | null;
+            /** Touches */
+            touches?: number | null;
+        };
+        /** TechnicalPatternPackArtifactData */
+        TechnicalPatternPackArtifactData: {
+            /** As Of */
+            as_of: string;
+            /** Degraded Reasons */
+            degraded_reasons?: string[] | null;
+            /** Pattern Summary */
+            pattern_summary?: {
+                [key: string]: unknown;
+            } | null;
+            /** Ticker */
+            ticker: string;
+            /** Timeframes */
+            timeframes: {
+                [key: string]: components["schemas"]["TechnicalPatternFrameData"];
+            };
+        };
+        /** TechnicalScorecardContributionData */
+        TechnicalScorecardContributionData: {
+            /** Contribution */
+            contribution: number;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes?: string | null;
+            /** State */
+            state?: string | null;
+            /** Value */
+            value: number | null;
+            /** Weight */
+            weight?: number | null;
+        };
+        /** TechnicalScorecardFrameData */
+        TechnicalScorecardFrameData: {
+            /** Classic Label */
+            classic_label: string;
+            /** Classic Score */
+            classic_score: number;
+            /** Contributions */
+            contributions: {
+                [key: string]: components["schemas"]["TechnicalScorecardContributionData"][];
+            };
+            /** Pattern Label */
+            pattern_label: string;
+            /** Pattern Score */
+            pattern_score: number;
+            /** Quant Label */
+            quant_label: string;
+            /** Quant Score */
+            quant_score: number;
+            /** Timeframe */
+            timeframe: string;
+            /** Total Score */
+            total_score: number;
+        };
+        /** TechnicalTimeseriesBundleArtifactData */
+        TechnicalTimeseriesBundleArtifactData: {
+            /** As Of */
+            as_of: string;
+            /** Degraded Reasons */
+            degraded_reasons?: string[] | null;
+            /** Frames */
+            frames: {
+                [key: string]: components["schemas"]["TechnicalTimeseriesFrameData"];
+            };
+            /** Ticker */
+            ticker: string;
+        };
+        /** TechnicalTimeseriesFrameData */
+        TechnicalTimeseriesFrameData: {
+            /** Close Series */
+            close_series: {
+                [key: string]: number | null;
+            };
+            /** End */
+            end: string;
+            /** High Series */
+            high_series: {
+                [key: string]: number | null;
+            };
+            /** Low Series */
+            low_series: {
+                [key: string]: number | null;
+            };
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+            /** Open Series */
+            open_series: {
+                [key: string]: number | null;
+            };
+            /** Price Series */
+            price_series: {
+                [key: string]: number | null;
+            };
+            /** Start */
+            start: string;
+            /** Timeframe */
+            timeframe: string;
+            /** Timezone */
+            timezone?: string | null;
+            /** Volume Series */
+            volume_series: {
+                [key: string]: number | null;
+            };
+        };
+        /** TechnicalVerificationReportArtifactData */
+        TechnicalVerificationReportArtifactData: {
+            /** As Of */
+            as_of: string;
+            backtest_summary?: components["schemas"]["TechnicalBacktestSummaryData"] | null;
+            /** Baseline Gates */
+            baseline_gates?: {
+                [key: string]: unknown;
+            } | null;
+            /** Degraded Reasons */
+            degraded_reasons?: string[] | null;
+            /** Robustness Flags */
+            robustness_flags?: string[] | null;
+            /** Schema Version */
+            schema_version: string;
+            /** Source Artifacts */
+            source_artifacts?: {
+                [key: string]: string | null;
+            } | null;
+            /** Ticker */
+            ticker: string;
+            wfa_summary?: components["schemas"]["TechnicalWfaSummaryData"] | null;
+        };
+        /** TechnicalWfaSummaryData */
+        TechnicalWfaSummaryData: {
+            /** Period Count */
+            period_count?: number | null;
+            /** Wfa Max Drawdown */
+            wfa_max_drawdown?: number | null;
+            /** Wfa Sharpe */
+            wfa_sharpe?: number | null;
+            /** Wfe Ratio */
+            wfe_ratio?: number | null;
         };
         /** ThreadStateResponse */
         ThreadStateResponse: {
@@ -1027,7 +1677,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["FinancialReportsEnvelope"] | components["schemas"]["PriceSeriesEnvelope"] | components["schemas"]["TaChartDataEnvelope"] | components["schemas"]["TaFullReportEnvelope"] | components["schemas"]["SearchResultsEnvelope"] | components["schemas"]["NewsSelectionEnvelope"] | components["schemas"]["NewsArticleEnvelope"] | components["schemas"]["NewsItemsListEnvelope"] | components["schemas"]["NewsAnalysisReportEnvelope"] | components["schemas"]["DebateFactsEnvelope"] | components["schemas"]["DebateFinalReportEnvelope"];
+                    "application/json": components["schemas"]["FinancialReportsEnvelope"] | components["schemas"]["PriceSeriesEnvelope"] | components["schemas"]["TaChartDataEnvelope"] | components["schemas"]["TaIndicatorSeriesEnvelope"] | components["schemas"]["TaAlertsEnvelope"] | components["schemas"]["TaTimeseriesBundleEnvelope"] | components["schemas"]["TaFeaturePackEnvelope"] | components["schemas"]["TaPatternPackEnvelope"] | components["schemas"]["TaFusionReportEnvelope"] | components["schemas"]["TaDirectionScorecardEnvelope"] | components["schemas"]["TaVerificationReportEnvelope"] | components["schemas"]["TaFullReportEnvelope"] | components["schemas"]["SearchResultsEnvelope"] | components["schemas"]["NewsSelectionEnvelope"] | components["schemas"]["NewsArticleEnvelope"] | components["schemas"]["NewsItemsListEnvelope"] | components["schemas"]["NewsAnalysisReportEnvelope"] | components["schemas"]["DebateFactsEnvelope"] | components["schemas"]["DebateFinalReportEnvelope"];
                 };
             };
             /** @description Validation Error */

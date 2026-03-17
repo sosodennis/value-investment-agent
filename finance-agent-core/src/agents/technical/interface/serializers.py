@@ -110,6 +110,26 @@ def build_fusion_compute_preview(
     }
 
 
+def build_regime_compute_preview(
+    *,
+    ticker: str,
+    dominant_regime: object,
+    timeframe_count: object,
+    degraded_count: object,
+) -> JSONObject:
+    regime_text = str(dominant_regime or "N/A").upper()
+    timeframe_num = safe_float(timeframe_count) or 0.0
+    degraded_num = safe_float(degraded_count) or 0.0
+    return {
+        "ticker": ticker,
+        "latest_price_display": "N/A",
+        "signal_display": "🌦️ REGIME READY",
+        "z_score_display": f"Regime: {regime_text}",
+        "optimal_d_display": f"Frames: {timeframe_num:.0f}",
+        "strength_display": f"Degraded: {degraded_num:.0f}",
+    }
+
+
 def build_verification_compute_preview(
     *,
     ticker: str,
@@ -233,7 +253,7 @@ def build_full_report_payload(
     ticker: str,
     technical_context: JSONObject,
     tags_dict: JSONObject,
-    llm_interpretation: str,
+    analyst_perspective: JSONObject,
     raw_data: JSONObject,
 ) -> JSONObject:
     confidence = technical_context.get("confidence")
@@ -258,6 +278,24 @@ def build_full_report_payload(
     momentum_extremes = (
         momentum_extremes_raw if isinstance(momentum_extremes_raw, dict) else None
     )
+    regime_summary_raw = technical_context.get("regime_summary")
+    regime_summary = (
+        regime_summary_raw if isinstance(regime_summary_raw, dict) else None
+    )
+    volume_profile_summary_raw = technical_context.get("volume_profile_summary")
+    volume_profile_summary = (
+        volume_profile_summary_raw
+        if isinstance(volume_profile_summary_raw, dict)
+        else None
+    )
+    structure_confluence_summary_raw = technical_context.get(
+        "structure_confluence_summary"
+    )
+    structure_confluence_summary = (
+        structure_confluence_summary_raw
+        if isinstance(structure_confluence_summary_raw, dict)
+        else None
+    )
     return {
         "schema_version": "2.0",
         "ticker": ticker,
@@ -269,7 +307,10 @@ def build_full_report_payload(
         "confidence_calibrated": confidence_calibrated_val,
         "confidence_calibration": confidence_calibration,
         "momentum_extremes": momentum_extremes,
-        "llm_interpretation": llm_interpretation,
+        "regime_summary": regime_summary,
+        "volume_profile_summary": volume_profile_summary,
+        "structure_confluence_summary": structure_confluence_summary,
+        "analyst_perspective": analyst_perspective,
         "artifact_refs": {
             "chart_data_id": technical_context.get("chart_data_id"),
             "timeseries_bundle_id": technical_context.get("timeseries_bundle_id"),
@@ -277,6 +318,7 @@ def build_full_report_payload(
             "alerts_id": technical_context.get("alerts_id"),
             "feature_pack_id": technical_context.get("feature_pack_id"),
             "pattern_pack_id": technical_context.get("pattern_pack_id"),
+            "regime_pack_id": technical_context.get("regime_pack_id"),
             "fusion_report_id": technical_context.get("fusion_report_id"),
             "direction_scorecard_id": technical_context.get("direction_scorecard_id"),
             "verification_report_id": technical_context.get("verification_report_id"),

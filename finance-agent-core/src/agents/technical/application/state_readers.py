@@ -13,6 +13,7 @@ class TechnicalStateContext:
     alerts_id: str | None
     feature_pack_id: str | None
     pattern_pack_id: str | None
+    regime_pack_id: str | None
     fusion_report_id: str | None
     direction_scorecard_id: str | None
     verification_report_id: str | None
@@ -58,6 +59,7 @@ def technical_state_from_state(state: Mapping[str, object]) -> TechnicalStateCon
         alerts_id=_read_non_empty_string(technical_ctx.get("alerts_id")),
         feature_pack_id=_read_non_empty_string(technical_ctx.get("feature_pack_id")),
         pattern_pack_id=_read_non_empty_string(technical_ctx.get("pattern_pack_id")),
+        regime_pack_id=_read_non_empty_string(technical_ctx.get("regime_pack_id")),
         fusion_report_id=_read_non_empty_string(technical_ctx.get("fusion_report_id")),
         direction_scorecard_id=_read_non_empty_string(
             technical_ctx.get("direction_scorecard_id")

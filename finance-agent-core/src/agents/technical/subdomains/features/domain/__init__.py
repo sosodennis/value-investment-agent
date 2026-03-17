@@ -1,8 +1,11 @@
 """features.domain package."""
 
 from .classic import (
+    compute_adx,
     compute_atr,
+    compute_atrp,
     compute_bollinger,
+    compute_bollinger_bandwidth,
     compute_ema,
     compute_macd,
     compute_mfi,
@@ -56,8 +59,11 @@ __all__ = [
     "calculate_fd_macd",
     "calculate_fd_obv",
     "serialize_fracdiff_outputs",
+    "compute_adx",
     "compute_atr",
+    "compute_atrp",
     "compute_bollinger",
+    "compute_bollinger_bandwidth",
     "compute_ema",
     "compute_macd",
     "compute_mfi",

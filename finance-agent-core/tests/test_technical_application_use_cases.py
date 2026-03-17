@@ -13,6 +13,9 @@ from src.agents.technical.application.fracdiff_runtime_contracts import (
 from src.agents.technical.application.semantic_finalize_service import (
     assemble_semantic_finalize,
 )
+from src.agents.technical.application.semantic_interpretation_input_service import (
+    build_interpretation_input,
+)
 from src.agents.technical.application.semantic_pipeline_contracts import (
     BacktestContextResult,
     SemanticFinalizeResult,
@@ -44,10 +47,14 @@ from src.agents.technical.application.use_cases.run_fracdiff_compute_use_case im
 from src.agents.technical.application.use_cases.run_fusion_compute_use_case import (
     run_fusion_compute_use_case,
 )
+from src.agents.technical.application.use_cases.run_regime_compute_use_case import (
+    run_regime_compute_use_case,
+)
 from src.agents.technical.application.use_cases.run_semantic_translate_use_case import (
     run_semantic_translate_use_case,
 )
 from src.agents.technical.domain.shared import FeatureFrame, FeaturePack
+from src.agents.technical.interface.contracts import AnalystPerspectiveModel
 from src.agents.technical.interface.serializers import build_full_report_payload
 from src.agents.technical.subdomains.alerts import AlertRuntimeService
 from src.agents.technical.subdomains.features import (
@@ -62,6 +69,10 @@ from src.agents.technical.subdomains.market_data.application.ports import (
     MarketDataOhlcvFetchResult,
     MarketDataProviderFailure,
 )
+from src.agents.technical.subdomains.regime.application.regime_runtime_service import (
+    RegimeRuntimeResult,
+)
+from src.agents.technical.subdomains.regime.contracts import RegimeFrame, RegimePack
 from src.agents.technical.subdomains.signal_fusion import (
     FusionRuntimeService,
     SemanticConfluenceResult,
@@ -76,10 +87,15 @@ from src.interface.artifacts.artifact_data_models import (
     TechnicalFeatureFrameData,
     TechnicalFeatureIndicatorData,
     TechnicalFeaturePackArtifactData,
+    TechnicalFusionReportArtifactData,
     TechnicalIndicatorSeriesArtifactData,
+    TechnicalIndicatorSeriesFrameData,
     TechnicalPatternFlagData,
     TechnicalPatternFrameData,
+    TechnicalPatternLevelData,
     TechnicalPatternPackArtifactData,
+    TechnicalRegimeFrameData,
+    TechnicalRegimePackArtifactData,
     TechnicalTimeseriesBundleArtifactData,
     TechnicalTimeseriesFrameData,
 )
@@ -139,17 +155,172 @@ def test_build_full_report_payload_derives_states() -> None:
             "macd": {"momentum_state": "UP"},
             "obv": {"state": "BULLISH"},
             "statistical_strength_val": 79.3,
+            "regime_summary": {"dominant_regime": "BULL_TREND", "timeframe_count": 1},
+            "volume_profile_summary": {
+                "timeframe": "1d",
+                "level_count": 2,
+                "dominant_level": {"price": 101.5},
+            },
+            "structure_confluence_summary": {
+                "timeframe": "1d",
+                "confluence_score": 0.7,
+                "confluence_state": "strong",
+            },
+            "regime_pack_id": "regime-1",
         },
         tags_dict={"direction": "bullish", "risk_level": "MEDIUM", "tags": ["A", "B"]},
-        llm_interpretation="Interpretation",
+        analyst_perspective={
+            "stance": "BULLISH_WATCH",
+            "stance_summary": "Bullish watch with medium risk.",
+            "rationale_summary": "Signals point higher but confirmation is still needed.",
+        },
         raw_data={"price_series": {"2025-01-01": 1.0}},
     )
 
     assert payload["direction"] == "BULLISH"
     assert payload["risk_level"] == "medium"
     assert payload["summary_tags"] == ["A", "B"]
+    assert payload["regime_summary"]["dominant_regime"] == "BULL_TREND"
+    assert payload["volume_profile_summary"]["dominant_level"]["price"] == 101.5
+    assert payload["structure_confluence_summary"]["confluence_state"] == "strong"
+    assert payload["artifact_refs"]["regime_pack_id"] == "regime-1"
     assert derive_memory_strength(0.2) == "structurally_stable"
     assert derive_statistical_state(0.2) == "equilibrium"
+
+
+@dataclass
+class _SemanticProjectionPortStub:
+    async def load_price_and_chart_data(
+        self,
+        price_artifact_id: str | None,
+        chart_artifact_id: str | None,
+    ) -> tuple[PriceSeriesArtifactData | None, TechnicalChartArtifactData | None]:
+        _ = (price_artifact_id, chart_artifact_id)
+        return None, None
+
+    async def load_verification_report(self, artifact_id: str | None) -> object | None:
+        _ = artifact_id
+        return None
+
+    async def load_pattern_pack(
+        self,
+        artifact_id: str | None,
+    ) -> TechnicalPatternPackArtifactData | None:
+        _ = artifact_id
+        frame = TechnicalPatternFrameData(
+            support_levels=[],
+            resistance_levels=[],
+            volume_profile_levels=[
+                TechnicalPatternLevelData(
+                    price=101.5,
+                    strength=0.9,
+                    touches=4,
+                    label="HVN",
+                )
+            ],
+            breakouts=[TechnicalPatternFlagData(name="BREAKOUT_UP", confidence=0.7)],
+            trendlines=[TechnicalPatternFlagData(name="UPTREND", confidence=0.8)],
+            pattern_flags=[],
+            confluence_metadata={
+                "confluence_score": 0.75,
+                "confluence_state": "strong",
+                "near_volume_node": True,
+            },
+            confidence_scores={},
+        )
+        return TechnicalPatternPackArtifactData(
+            ticker="AAPL",
+            as_of="2026-02-12T00:00:00Z",
+            timeframes={"1d": frame},
+        )
+
+    async def load_regime_pack(
+        self,
+        artifact_id: str | None,
+    ) -> TechnicalRegimePackArtifactData | None:
+        _ = artifact_id
+        frame = TechnicalRegimeFrameData(
+            timeframe="1d",
+            regime="BULL_TREND",
+            confidence=0.81,
+            directional_bias="bullish",
+            evidence=["adx=32.1", "atrp=0.018"],
+        )
+        return TechnicalRegimePackArtifactData(
+            ticker="AAPL",
+            as_of="2026-02-12T00:00:00Z",
+            timeframes={"1d": frame},
+            regime_summary={"dominant_regime": "BULL_TREND", "timeframe_count": 1},
+        )
+
+    async def load_fusion_report(
+        self,
+        artifact_id: str | None,
+    ) -> TechnicalFusionReportArtifactData | None:
+        _ = artifact_id
+        return TechnicalFusionReportArtifactData(
+            schema_version="1.0",
+            ticker="AAPL",
+            as_of="2026-02-12T00:00:00Z",
+            direction="BULLISH_EXTENSION",
+            risk_level="low",
+            conflict_reasons=["1d:quant_neutral"],
+            regime_summary={"dominant_regime": "BULL_TREND", "timeframe_count": 1},
+        )
+
+    async def load_direction_scorecard(
+        self,
+        artifact_id: str | None,
+    ) -> object | None:
+        _ = artifact_id
+        return None
+
+
+@pytest.mark.asyncio
+async def test_build_interpretation_input_projects_regime_and_structure_summaries() -> (
+    None
+):
+    result = await build_interpretation_input(
+        ticker="AAPL",
+        technical_context={
+            "pattern_pack_id": "pattern-1",
+            "regime_pack_id": "regime-1",
+            "fusion_report_id": "fusion-1",
+        },
+        tags_result=SemanticTagPolicyResult(
+            tags=["TREND_ACTIVE"],
+            direction="BULLISH_EXTENSION",
+            risk_level="low",
+            memory_strength="balanced",
+            statistical_state="deviating",
+            z_score=1.4,
+            confluence=SemanticConfluenceResult(
+                bollinger_state="INSIDE",
+                statistical_strength=72.0,
+                macd_momentum="BULLISH",
+                obv_state="BULLISH",
+            ),
+            evidence_list=["bullish_breakout"],
+        ),
+        backtest_context_result=BacktestContextResult(
+            backtest_context="",
+            wfa_context="",
+            price_data=None,
+            chart_data=None,
+        ),
+        technical_port=_SemanticProjectionPortStub(),
+    )
+
+    assert result.setup_context is not None
+    assert result.setup_context["regime_summary"]["dominant_regime"] == "BULL_TREND"
+    assert (
+        result.setup_context["volume_profile_summary"]["dominant_level"]["label"]
+        == "HVN"
+    )
+    assert (
+        result.setup_context["structure_confluence_summary"]["confluence_state"]
+        == "strong"
+    )
 
 
 def test_assemble_semantic_finalize_builds_update_and_raw_data() -> None:
@@ -191,7 +362,11 @@ def test_assemble_semantic_finalize_builds_update_and_raw_data() -> None:
             ),
             evidence_list=[],
         ),
-        llm_interpretation="Some interpretation",
+        analyst_perspective=AnalystPerspectiveModel(
+            stance="BULLISH_WATCH",
+            stance_summary="Bullish watch with medium risk.",
+            rationale_summary="Signals point higher but confirmation is still needed.",
+        ),
         price_data=price_data,
         chart_data=chart_data,
         build_full_report_payload_fn=build_full_report_payload,
@@ -562,6 +737,25 @@ class _FusionComputeRuntimeStub:
             timeframes={"1d": frame},
         )
 
+    async def load_regime_pack(
+        self, artifact_id: str
+    ) -> TechnicalRegimePackArtifactData | None:
+        _ = artifact_id
+        frame = TechnicalRegimeFrameData(
+            timeframe="1d",
+            regime="BULL_TREND",
+            confidence=0.74,
+            directional_bias="bullish",
+            evidence=["bias=bullish", "adx=31.2"],
+            metadata={"bias_score": 3},
+        )
+        return TechnicalRegimePackArtifactData(
+            ticker="AAPL",
+            as_of="2026-02-12T00:00:00Z",
+            timeframes={"1d": frame},
+            regime_summary={"dominant_regime": "BULL_TREND", "timeframe_count": 1},
+        )
+
     async def save_fusion_report(
         self,
         data: JSONObject,
@@ -582,6 +776,108 @@ class _FusionComputeRuntimeStub:
             "summary": summary,
             "preview": preview,
         }
+
+
+@dataclass
+class _RegimeRuntimeStub:
+    def compute(self, request: object) -> RegimeRuntimeResult:
+        ticker = getattr(request, "ticker", "AAPL")
+        as_of = getattr(request, "as_of", "2026-02-12T00:00:00Z")
+        return RegimeRuntimeResult(
+            regime_pack=RegimePack(
+                ticker=ticker,
+                as_of=as_of,
+                timeframes={
+                    "1d": RegimeFrame(
+                        timeframe="1d",
+                        regime="HIGH_VOL_CHOP",
+                        confidence=0.68,
+                        directional_bias="neutral",
+                        evidence=("atrp=0.0400",),
+                        metadata={"bias_score": 0},
+                    )
+                },
+                regime_summary={
+                    "dominant_regime": "HIGH_VOL_CHOP",
+                    "timeframe_count": 1,
+                },
+            ),
+            degraded_reasons=[],
+        )
+
+
+@dataclass
+class _RegimeComputeRuntimeStub:
+    saved_regime_pack: JSONObject | None = None
+    feature_pack: TechnicalFeaturePackArtifactData | None = None
+    indicator_series: TechnicalIndicatorSeriesArtifactData | None = None
+
+    async def load_timeseries_bundle(
+        self, artifact_id: str
+    ) -> TechnicalTimeseriesBundleArtifactData | None:
+        _ = artifact_id
+        frame = TechnicalTimeseriesFrameData(
+            timeframe="1d",
+            start="2026-02-01T00:00:00Z",
+            end="2026-02-12T00:00:00Z",
+            open_series={"2026-02-10": 100.0},
+            high_series={"2026-02-10": 101.0},
+            low_series={"2026-02-10": 99.0},
+            close_series={"2026-02-10": 100.5},
+            price_series={"2026-02-10": 100.5},
+            volume_series={"2026-02-10": 1500.0},
+            timezone="UTC",
+            metadata=None,
+        )
+        return TechnicalTimeseriesBundleArtifactData(
+            ticker="AAPL",
+            as_of="2026-02-12T00:00:00Z",
+            frames={"1d": frame},
+        )
+
+    async def load_feature_pack(
+        self, artifact_id: str | None
+    ) -> TechnicalFeaturePackArtifactData | None:
+        _ = artifact_id
+        return self.feature_pack
+
+    async def load_indicator_series(
+        self, artifact_id: str | None
+    ) -> TechnicalIndicatorSeriesArtifactData | None:
+        _ = artifact_id
+        return self.indicator_series
+
+    async def save_regime_pack(
+        self,
+        data: JSONObject,
+        *,
+        produced_by: str,
+        key_prefix: str | None = None,
+    ) -> str:
+        _ = (produced_by, key_prefix)
+        self.saved_regime_pack = data
+        return "regime-1"
+
+    def build_progress_artifact(
+        self, summary: str, preview: JSONObject
+    ) -> dict[str, object]:
+        _ = (summary, preview)
+        return {
+            "kind": "technical_analysis.output",
+            "summary": summary,
+            "preview": preview,
+        }
+
+
+@dataclass
+class _RegimeRuntimeSpy:
+    captured_metadata: dict[str, object] | None = None
+
+    def compute(self, request: object) -> RegimeRuntimeResult:
+        series_by_timeframe = getattr(request, "series_by_timeframe", {})
+        series = series_by_timeframe.get("1d")
+        self.captured_metadata = getattr(series, "metadata", None)
+        return _RegimeRuntimeStub().compute(request)
 
 
 @pytest.mark.asyncio
@@ -658,10 +954,213 @@ async def test_run_alerts_compute_writes_alerts_id() -> None:
         alert_runtime=AlertRuntimeService(),
     )
 
-    assert result.goto == "fusion_compute"
+    assert result.goto == "regime_compute"
     assert runtime.saved_alerts is not None
     technical_state = result.update["technical_analysis"]
     assert technical_state["alerts_id"] == "alerts-1"
+
+
+@pytest.mark.asyncio
+async def test_run_regime_compute_writes_regime_pack_id() -> None:
+    runtime = _RegimeComputeRuntimeStub()
+    state: dict[str, object] = {
+        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "technical_analysis": {"timeseries_bundle_id": "bundle-1"},
+    }
+
+    result = await run_regime_compute_use_case(
+        runtime,
+        state,
+        regime_runtime=_RegimeRuntimeStub(),
+    )
+
+    assert result.goto == "fusion_compute"
+    assert runtime.saved_regime_pack is not None
+    technical_state = result.update["technical_analysis"]
+    assert technical_state["regime_pack_id"] == "regime-1"
+
+
+@pytest.mark.asyncio
+async def test_run_regime_compute_prefers_canonical_feature_and_series_inputs() -> None:
+    runtime = _RegimeComputeRuntimeStub(
+        feature_pack=TechnicalFeaturePackArtifactData(
+            ticker="AAPL",
+            as_of="2026-02-12T00:00:00Z",
+            timeframes={
+                "1d": TechnicalFeatureFrameData(
+                    classic_indicators={
+                        "ATRP_14": TechnicalFeatureIndicatorData(
+                            name="ATRP_14",
+                            value=0.018,
+                        ),
+                        "ADX_14": TechnicalFeatureIndicatorData(
+                            name="ADX_14",
+                            value=29.4,
+                        ),
+                    },
+                    quant_features={},
+                )
+            },
+        ),
+        indicator_series=TechnicalIndicatorSeriesArtifactData(
+            ticker="AAPL",
+            as_of="2026-02-12T00:00:00Z",
+            timeframes={
+                "1d": TechnicalIndicatorSeriesFrameData(
+                    timeframe="1d",
+                    start="2026-02-01T00:00:00Z",
+                    end="2026-02-12T00:00:00Z",
+                    series={
+                        "ATR_14": {"2026-02-10T00:00:00Z": 1.82},
+                        "BB_BANDWIDTH_20": {"2026-02-10T00:00:00Z": 0.071},
+                    },
+                    timezone="UTC",
+                    metadata=None,
+                )
+            },
+        ),
+    )
+    regime_runtime = _RegimeRuntimeSpy()
+    state: dict[str, object] = {
+        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "technical_analysis": {
+            "timeseries_bundle_id": "bundle-1",
+            "feature_pack_id": "feature-1",
+            "indicator_series_id": "series-1",
+        },
+    }
+
+    await run_regime_compute_use_case(
+        runtime,
+        state,
+        regime_runtime=regime_runtime,
+    )
+
+    assert regime_runtime.captured_metadata is not None
+    assert (
+        regime_runtime.captured_metadata["regime_input_source_atrp_14"]
+        == "feature_pack"
+    )
+    assert (
+        regime_runtime.captured_metadata["regime_input_source_adx_14"] == "feature_pack"
+    )
+    assert (
+        regime_runtime.captured_metadata["regime_input_source_atr_14"]
+        == "indicator_series"
+    )
+    assert (
+        regime_runtime.captured_metadata["regime_input_source_bb_bandwidth_20"]
+        == "indicator_series"
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_regime_compute_records_timeseries_fallback_reasons_when_inputs_missing() -> (
+    None
+):
+    runtime = _RegimeComputeRuntimeStub()
+    state: dict[str, object] = {
+        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "technical_analysis": {"timeseries_bundle_id": "bundle-1"},
+    }
+
+    await run_regime_compute_use_case(
+        runtime,
+        state,
+        regime_runtime=_RegimeRuntimeStub(),
+    )
+
+    assert runtime.saved_regime_pack is not None
+    assert runtime.saved_regime_pack["degraded_reasons"] == [
+        "1d_REGIME_INPUT_ATR_14_TIMESERIES_COMPUTE",
+        "1d_REGIME_INPUT_ATRP_14_TIMESERIES_COMPUTE",
+        "1d_REGIME_INPUT_ADX_14_TIMESERIES_COMPUTE",
+        "1d_REGIME_INPUT_BB_BANDWIDTH_20_TIMESERIES_COMPUTE",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_run_regime_compute_rejects_mismatched_canonical_artifacts() -> None:
+    runtime = _RegimeComputeRuntimeStub(
+        feature_pack=TechnicalFeaturePackArtifactData(
+            ticker="MSFT",
+            as_of="2026-02-12T00:00:00Z",
+            timeframes={
+                "1d": TechnicalFeatureFrameData(
+                    classic_indicators={
+                        "ATRP_14": TechnicalFeatureIndicatorData(
+                            name="ATRP_14",
+                            value=0.55,
+                        ),
+                        "ADX_14": TechnicalFeatureIndicatorData(
+                            name="ADX_14",
+                            value=99.0,
+                        ),
+                    },
+                    quant_features={},
+                )
+            },
+        ),
+        indicator_series=TechnicalIndicatorSeriesArtifactData(
+            ticker="AAPL",
+            as_of="2026-02-11T00:00:00Z",
+            timeframes={
+                "1d": TechnicalIndicatorSeriesFrameData(
+                    timeframe="1d",
+                    start="2026-02-01T00:00:00Z",
+                    end="2026-02-12T00:00:00Z",
+                    series={
+                        "ATR_14": {"2026-02-10T00:00:00Z": 88.0},
+                        "BB_BANDWIDTH_20": {"2026-02-10T00:00:00Z": 0.99},
+                    },
+                    timezone="UTC",
+                    metadata=None,
+                )
+            },
+        ),
+    )
+    regime_runtime = _RegimeRuntimeSpy()
+    state: dict[str, object] = {
+        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "technical_analysis": {
+            "timeseries_bundle_id": "bundle-1",
+            "feature_pack_id": "feature-1",
+            "indicator_series_id": "series-1",
+        },
+    }
+
+    await run_regime_compute_use_case(
+        runtime,
+        state,
+        regime_runtime=regime_runtime,
+    )
+
+    assert regime_runtime.captured_metadata is not None
+    assert (
+        regime_runtime.captured_metadata["regime_input_source_atrp_14"]
+        == "timeseries_compute"
+    )
+    assert (
+        regime_runtime.captured_metadata["regime_input_source_adx_14"]
+        == "timeseries_compute"
+    )
+    assert (
+        regime_runtime.captured_metadata["regime_input_source_atr_14"]
+        == "timeseries_compute"
+    )
+    assert (
+        regime_runtime.captured_metadata["regime_input_source_bb_bandwidth_20"]
+        == "timeseries_compute"
+    )
+    assert runtime.saved_regime_pack is not None
+    assert runtime.saved_regime_pack["degraded_reasons"] == [
+        "REGIME_FEATURE_PACK_CONTEXT_MISMATCH",
+        "REGIME_INDICATOR_SERIES_CONTEXT_MISMATCH",
+        "1d_REGIME_INPUT_ATR_14_TIMESERIES_COMPUTE",
+        "1d_REGIME_INPUT_ATRP_14_TIMESERIES_COMPUTE",
+        "1d_REGIME_INPUT_ADX_14_TIMESERIES_COMPUTE",
+        "1d_REGIME_INPUT_BB_BANDWIDTH_20_TIMESERIES_COMPUTE",
+    ]
 
 
 @pytest.mark.asyncio
@@ -672,6 +1171,7 @@ async def test_run_fusion_compute_handles_pydantic_payloads() -> None:
         "technical_analysis": {
             "feature_pack_id": "feature-1",
             "pattern_pack_id": "pattern-1",
+            "regime_pack_id": "regime-1",
         },
     }
 
@@ -683,6 +1183,9 @@ async def test_run_fusion_compute_handles_pydantic_payloads() -> None:
 
     assert result.goto == "verification_compute"
     assert runtime.saved_fusion_report is not None
+    assert (
+        runtime.saved_fusion_report["source_artifacts"]["regime_pack_id"] == "regime-1"
+    )
 
 
 @dataclass
@@ -725,12 +1228,17 @@ async def test_run_semantic_translate_marks_degraded_when_pipeline_degraded() ->
             ),
             evidence_list=[],
         ),
-        llm_interpretation="fallback interpretation",
+        analyst_perspective=AnalystPerspectiveModel(
+            stance="BULLISH_WATCH",
+            stance_summary="Bullish watch with medium risk.",
+            rationale_summary="Fallback interpretation.",
+        ),
         backtest_context_result=BacktestContextResult(
             backtest_context="",
             wfa_context="",
             price_data=None,
             chart_data=None,
+            verification_report=None,
             is_degraded=True,
             failure_code="TECHNICAL_VERIFICATION_CONTEXT_FAILED",
         ),

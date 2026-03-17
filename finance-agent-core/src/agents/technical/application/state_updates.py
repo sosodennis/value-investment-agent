@@ -174,6 +174,46 @@ def build_alerts_compute_success_update(
             "current_node": "alerts_compute",
             "internal_progress": {
                 "alerts_compute": "done",
+                "regime_compute": "running",
+            },
+            "node_statuses": {"technical_analysis": "running"},
+        },
+    )
+
+
+def build_regime_compute_error_update(error_message: str) -> JSONObject:
+    return _guard_state_update(
+        "regime_compute",
+        {
+            "current_node": "regime_compute",
+            "internal_progress": {"regime_compute": "error"},
+            "node_statuses": {"technical_analysis": "error"},
+            "error_logs": [
+                {
+                    "node": "regime_compute",
+                    "error": error_message,
+                    "severity": "error",
+                }
+            ],
+        },
+    )
+
+
+def build_regime_compute_success_update(
+    *,
+    regime_pack_id: str,
+    artifact: AgentOutputArtifactPayload,
+) -> JSONObject:
+    return _guard_state_update(
+        "regime_compute",
+        {
+            "technical_analysis": {
+                "regime_pack_id": regime_pack_id,
+                "artifact": artifact,
+            },
+            "current_node": "regime_compute",
+            "internal_progress": {
+                "regime_compute": "done",
                 "fusion_compute": "running",
             },
             "node_statuses": {"technical_analysis": "running"},

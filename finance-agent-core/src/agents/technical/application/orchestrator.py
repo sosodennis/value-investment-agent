@@ -13,6 +13,7 @@ from src.agents.technical.application.use_cases import (
     run_feature_compute_use_case,
     run_fusion_compute_use_case,
     run_pattern_compute_use_case,
+    run_regime_compute_use_case,
     run_semantic_translate_use_case,
     run_verification_compute_use_case,
 )
@@ -25,6 +26,7 @@ from src.agents.technical.subdomains.market_data.application.ports import (
     IMarketDataProvider,
 )
 from src.agents.technical.subdomains.patterns import PatternRuntimeService
+from src.agents.technical.subdomains.regime import RegimeRuntimeService
 from src.agents.technical.subdomains.signal_fusion import (
     FusionRuntimeService,
     SemanticTagPolicyInput,
@@ -35,6 +37,7 @@ from src.interface.artifacts.artifact_data_models import (
     TechnicalFeaturePackArtifactData,
     TechnicalIndicatorSeriesArtifactData,
     TechnicalPatternPackArtifactData,
+    TechnicalRegimePackArtifactData,
     TechnicalTimeseriesBundleArtifactData,
 )
 from src.shared.kernel.types import JSONObject
@@ -230,6 +233,12 @@ class _FusionComputeRuntimeAdapter:
     ) -> TechnicalPatternPackArtifactData | None:
         return await self.port.load_pattern_pack(artifact_id)
 
+    async def load_regime_pack(
+        self,
+        artifact_id: str,
+    ) -> TechnicalRegimePackArtifactData | None:
+        return await self.port.load_regime_pack(artifact_id)
+
     async def save_fusion_report(
         self,
         *,
@@ -251,6 +260,43 @@ class _FusionComputeRuntimeAdapter:
         key_prefix: str | None = None,
     ) -> str:
         return await self.port.save_direction_scorecard(
+            data=data,
+            produced_by=produced_by,
+            key_prefix=key_prefix,
+        )
+
+
+@dataclass(frozen=True)
+class _RegimeComputeRuntimeAdapter:
+    port: ITechnicalArtifactRepository
+    build_progress_artifact: Callable[[str, JSONObject], dict[str, object]]
+
+    async def load_timeseries_bundle(
+        self,
+        artifact_id: str,
+    ) -> TechnicalTimeseriesBundleArtifactData | None:
+        return await self.port.load_timeseries_bundle(artifact_id)
+
+    async def load_feature_pack(
+        self,
+        artifact_id: str | None,
+    ) -> TechnicalFeaturePackArtifactData | None:
+        return await self.port.load_feature_pack(artifact_id)
+
+    async def load_indicator_series(
+        self,
+        artifact_id: str | None,
+    ) -> TechnicalIndicatorSeriesArtifactData | None:
+        return await self.port.load_indicator_series(artifact_id)
+
+    async def save_regime_pack(
+        self,
+        *,
+        data: JSONObject,
+        produced_by: str,
+        key_prefix: str | None = None,
+    ) -> str:
+        return await self.port.save_regime_pack(
             data=data,
             produced_by=produced_by,
             key_prefix=key_prefix,
@@ -339,6 +385,21 @@ class TechnicalOrchestrator:
             ),
             state,
             fusion_runtime=fusion_runtime,
+        )
+
+    async def run_regime_compute(
+        self,
+        state: Mapping[str, object],
+        *,
+        regime_runtime: RegimeRuntimeService,
+    ) -> TechnicalNodeResult:
+        return await run_regime_compute_use_case(
+            _RegimeComputeRuntimeAdapter(
+                port=self.port,
+                build_progress_artifact=self.build_progress_artifact,
+            ),
+            state,
+            regime_runtime=regime_runtime,
         )
 
     async def run_verification_compute(

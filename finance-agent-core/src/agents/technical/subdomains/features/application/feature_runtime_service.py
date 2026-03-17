@@ -25,7 +25,10 @@ from src.agents.technical.subdomains.features.domain import (
     calculate_rolling_fracdiff,
     calculate_rolling_z_score,
     calculate_statistical_strength,
+    compute_adx,
     compute_atr,
+    compute_atrp,
+    compute_bollinger_bandwidth,
     compute_ema,
     compute_macd,
     compute_mfi,
@@ -163,6 +166,13 @@ def _build_tasks(
                 FeatureTask(name="VWAP", stage=CLASSIC_STAGE, run=_task_vwap),
                 FeatureTask(name="MFI_14", stage=CLASSIC_STAGE, run=_task_mfi_14),
                 FeatureTask(name="ATR_14", stage=CLASSIC_STAGE, run=_task_atr_14),
+                FeatureTask(name="ADX_14", stage=CLASSIC_STAGE, run=_task_adx_14),
+                FeatureTask(name="ATRP_14", stage=CLASSIC_STAGE, run=_task_atrp_14),
+                FeatureTask(
+                    name="BB_BANDWIDTH_20",
+                    stage=CLASSIC_STAGE,
+                    run=_task_bb_bandwidth_20,
+                ),
             ]
         )
     else:
@@ -200,6 +210,8 @@ def _make_classic_engine_task(engine: IIndicatorEngine):
     def _task(ctx: FeatureExecutionContext) -> None:
         result = engine.compute_classic_indicators(
             price_series=ctx.price_series,
+            high_series=ctx.high_series,
+            low_series=ctx.low_series,
             volume_series=ctx.volume_series,
             latest_price=ctx.latest_price,
         )
@@ -342,6 +354,80 @@ def _task_atr_14(ctx: FeatureExecutionContext) -> None:
             "ATR_14",
             atr_val,
             state="UNAVAILABLE" if atr_series is None else None,
+        ),
+        CLASSIC_STAGE,
+    )
+
+
+def _task_adx_14(ctx: FeatureExecutionContext) -> None:
+    if ctx.high_series.empty or ctx.low_series.empty:
+        ctx.add_output(
+            "ADX_14",
+            _snapshot(
+                "ADX_14",
+                None,
+                state="UNAVAILABLE",
+                metadata={"reason": "missing_high_low"},
+            ),
+            CLASSIC_STAGE,
+        )
+        return
+
+    adx_series = compute_adx(
+        ctx.high_series,
+        ctx.low_series,
+        ctx.price_series,
+        window=14,
+    )
+    adx_val = _latest_value(adx_series)
+    ctx.add_output(
+        "ADX_14",
+        _snapshot("ADX_14", adx_val, state=_adx_state(adx_val)),
+        CLASSIC_STAGE,
+    )
+
+
+def _task_atrp_14(ctx: FeatureExecutionContext) -> None:
+    if ctx.high_series.empty or ctx.low_series.empty:
+        ctx.add_output(
+            "ATRP_14",
+            _snapshot(
+                "ATRP_14",
+                None,
+                state="UNAVAILABLE",
+                metadata={"reason": "missing_high_low"},
+            ),
+            CLASSIC_STAGE,
+        )
+        return
+
+    atrp_series = compute_atrp(
+        ctx.high_series,
+        ctx.low_series,
+        ctx.price_series,
+        window=14,
+    )
+    atrp_val = _latest_value(atrp_series)
+    ctx.add_output(
+        "ATRP_14",
+        _snapshot("ATRP_14", atrp_val, state=_atrp_state(atrp_val)),
+        CLASSIC_STAGE,
+    )
+
+
+def _task_bb_bandwidth_20(ctx: FeatureExecutionContext) -> None:
+    bandwidth_series = compute_bollinger_bandwidth(
+        ctx.price_series,
+        window=20,
+        num_std=2.0,
+    )
+    bandwidth_val = _latest_value(bandwidth_series)
+    ctx.add_output(
+        "BB_BANDWIDTH_20",
+        _snapshot(
+            "BB_BANDWIDTH_20",
+            bandwidth_val,
+            state=_bandwidth_state(bandwidth_val),
         ),
         CLASSIC_STAGE,
     )
@@ -502,6 +588,36 @@ def _macd_state(macd_val: float | None, signal_val: float | None) -> str | None:
         return "BULLISH"
     if macd_val < signal_val:
         return "BEARISH"
+    return "NEUTRAL"
+
+
+def _adx_state(value: float | None) -> str | None:
+    if value is None:
+        return "UNAVAILABLE"
+    if value >= 25.0:
+        return "TRENDING"
+    if value <= 15.0:
+        return "RANGING"
+    return "NEUTRAL"
+
+
+def _atrp_state(value: float | None) -> str | None:
+    if value is None:
+        return "UNAVAILABLE"
+    if value >= 0.035:
+        return "EXPANDING"
+    if value <= 0.015:
+        return "COMPRESSED"
+    return "NEUTRAL"
+
+
+def _bandwidth_state(value: float | None) -> str | None:
+    if value is None:
+        return "UNAVAILABLE"
+    if value >= 0.12:
+        return "EXPANDING"
+    if value <= 0.08:
+        return "COMPRESSED"
     return "NEUTRAL"
 
 

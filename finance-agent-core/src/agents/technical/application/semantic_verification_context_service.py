@@ -39,6 +39,7 @@ async def assemble_verification_context(
             wfa_context="",
             price_data=None,
             chart_data=None,
+            verification_report=None,
             is_degraded=True,
             failure_code="TECHNICAL_VERIFICATION_REPORT_MISSING",
         )
@@ -56,6 +57,7 @@ async def assemble_verification_context(
             wfa_context=wfa_context,
             price_data=None,
             chart_data=None,
+            verification_report=report,
             is_degraded=False,
             failure_code=None,
         )
@@ -81,6 +83,7 @@ async def assemble_verification_context(
             wfa_context="",
             price_data=None,
             chart_data=None,
+            verification_report=None,
             is_degraded=True,
             failure_code=failure_code,
         )

@@ -33,33 +33,21 @@ def test_build_fracdiff_progress_preview_formats_metrics() -> None:
 def test_parse_technical_artifact_model_returns_json_dto() -> None:
     parsed = parse_technical_artifact_model(
         {
+            "schema_version": "2.0",
             "ticker": "GME",
-            "timestamp": "2026-02-16T00:00:00Z",
-            "frac_diff_metrics": {
-                "optimal_d": 0.42,
-                "window_length": 120,
-                "adf_statistic": -3.2,
-                "adf_pvalue": 0.03,
-                "memory_strength": "balanced",
-            },
-            "signal_state": {
-                "z_score": 1.2,
-                "statistical_state": "deviating",
-                "direction": "bullish",
-                "risk_level": "medium",
-                "confluence": {
-                    "bollinger_state": "upper",
-                    "macd_momentum": "up",
-                    "obv_state": "accumulation",
-                    "statistical_strength": 0.7,
-                },
-            },
-            "semantic_tags": ["mean-reversion"],
-            "llm_interpretation": "test",
+            "as_of": "2026-02-16T00:00:00Z",
+            "direction": "BULLISH_EXTENSION",
+            "risk_level": "medium",
+            "artifact_refs": {},
+            "summary_tags": ["mean-reversion"],
+            "regime_summary": {"dominant_regime": "BULL_TREND"},
+            "volume_profile_summary": {"level_count": 2},
+            "structure_confluence_summary": {"confluence_state": "strong"},
         }
     )
     assert isinstance(parsed, dict)
     assert parsed["ticker"] == "GME"
+    assert parsed["regime_summary"]["dominant_regime"] == "BULL_TREND"
 
 
 def test_parse_technical_artifact_model_rejects_non_object() -> None:

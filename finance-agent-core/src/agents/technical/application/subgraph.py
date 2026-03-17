@@ -12,6 +12,7 @@ from src.workflow.nodes.technical_analysis.nodes import (
     feature_compute_node,
     fusion_compute_node,
     pattern_compute_node,
+    regime_compute_node,
     semantic_translate_node,
     verification_compute_node,
 )
@@ -50,6 +51,11 @@ def build_technical_subgraph():
         metadata={"agent_id": "technical_analysis"},
     )
     builder.add_node(
+        "regime_compute",
+        RunnableLambda(regime_compute_node).with_config(tags=["hide_stream"]),
+        metadata={"agent_id": "technical_analysis"},
+    )
+    builder.add_node(
         "fusion_compute",
         RunnableLambda(fusion_compute_node).with_config(tags=["hide_stream"]),
         metadata={"agent_id": "technical_analysis"},
@@ -70,7 +76,8 @@ def build_technical_subgraph():
     builder.add_edge("data_fetch", "feature_compute")
     builder.add_edge("feature_compute", "pattern_compute")
     builder.add_edge("pattern_compute", "alerts_compute")
-    builder.add_edge("alerts_compute", "fusion_compute")
+    builder.add_edge("alerts_compute", "regime_compute")
+    builder.add_edge("regime_compute", "fusion_compute")
     builder.add_edge("fusion_compute", "verification_compute")
     builder.add_edge("verification_compute", "semantic_translate")
     return builder.compile()

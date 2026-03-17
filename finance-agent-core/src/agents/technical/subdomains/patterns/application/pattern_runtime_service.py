@@ -52,7 +52,7 @@ class PatternRuntimeService:
                 frames[timeframe] = PatternFrame()
                 continue
 
-            detection = detect_pattern_frame(price_series, timeframe=timeframe)
+            detection = detect_pattern_frame(series, timeframe=timeframe)
             frames[timeframe] = detection.frame
             degraded.extend(
                 [f"{timeframe}_{reason}" for reason in detection.degraded_reasons]

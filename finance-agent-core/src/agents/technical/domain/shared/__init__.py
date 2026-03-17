@@ -3,7 +3,13 @@
 from .feature_pack import FeatureFrame, FeaturePack
 from .fusion_signal import FusionDiagnostics, FusionSignal
 from .indicator_snapshot import IndicatorSnapshot
-from .pattern_pack import KeyLevel, PatternFlag, PatternFrame, PatternPack
+from .pattern_pack import (
+    KeyLevel,
+    PatternFlag,
+    PatternFrame,
+    PatternPack,
+    VolumeProfileSummary,
+)
 from .price_bar import PriceBar, PriceSeries
 from .time_alignment_guard import AlignmentReport, TimeAlignmentGuard
 from .time_alignment_guard_service import TimeAlignmentGuardService
@@ -21,6 +27,7 @@ __all__ = [
     "PatternFlag",
     "PatternFrame",
     "PatternPack",
+    "VolumeProfileSummary",
     "PriceBar",
     "PriceSeries",
     "TimeAlignmentGuard",

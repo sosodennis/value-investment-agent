@@ -12,6 +12,7 @@ from src.agents.technical.domain.shared import (
     PatternPack,
     TimeframeCode,
 )
+from src.agents.technical.subdomains.regime.contracts import RegimeFrame, RegimePack
 
 Scalar = float | int | str | bool | None
 
@@ -32,6 +33,7 @@ class IndicatorContribution:
 @dataclass(frozen=True)
 class ScorecardFrame:
     timeframe: TimeframeCode
+    base_total_score: float
     classic_score: float
     quant_score: float
     pattern_score: float
@@ -39,6 +41,10 @@ class ScorecardFrame:
     classic_label: str
     quant_label: str
     pattern_label: str
+    regime: str | None = None
+    regime_directional_bias: str | None = None
+    regime_weight_multiplier: float | None = None
+    regime_notes: list[str] = field(default_factory=list)
     contributions: dict[str, list[IndicatorContribution]] = field(default_factory=dict)
 
 
@@ -53,6 +59,7 @@ class DirectionScorecard:
     overall_score: float
     model_version: str
     timeframes: dict[TimeframeCode, ScorecardFrame]
+    regime_summary: dict[str, Scalar] = field(default_factory=dict)
     conflict_reasons: list[str] = field(default_factory=list)
 
 
@@ -62,6 +69,7 @@ class FusionRuntimeRequest:
     as_of: str
     feature_pack: FeaturePack
     pattern_pack: PatternPack
+    regime_pack: RegimePack | None = None
     alignment_report: AlignmentReport | None = None
 
 
@@ -90,17 +98,25 @@ class FusionRuntimeService:
         timeframe_scores: list[float] = []
         stat_strengths: list[float] = []
         extreme_detected = False
+        regime_risk_levels: list[str] = []
 
         scorecard_frames: dict[TimeframeCode, ScorecardFrame] = {}
         for timeframe in timeframes:
             feature_frame = feature_pack.timeframes.get(timeframe)
             pattern_frame = pattern_pack.timeframes.get(timeframe)
+            regime_frame = (
+                request.regime_pack.timeframes.get(timeframe)
+                if request.regime_pack is not None
+                else None
+            )
             if feature_frame is None:
                 degraded.append(f"{timeframe}_FEATURE_FRAME_MISSING")
                 continue
             if pattern_frame is None:
                 degraded.append(f"{timeframe}_PATTERN_FRAME_MISSING")
                 pattern_frame = PatternFrame()
+            if request.regime_pack is not None and regime_frame is None:
+                degraded.append(f"{timeframe}_REGIME_FRAME_MISSING")
 
             classic_score, classic_contribs = _score_classic(
                 feature_frame.classic_indicators
@@ -109,6 +125,24 @@ class FusionRuntimeService:
                 feature_frame.quant_features
             )
             pattern_score, pattern_contribs = _score_pattern(pattern_frame)
+            base_total_score = classic_score + quant_score + pattern_score
+
+            base_classic_label = _label_score(classic_score, self.neutral_threshold)
+            base_quant_label = _label_score(quant_score, self.neutral_threshold)
+            base_pattern_label = _label_score(pattern_score, self.neutral_threshold)
+            regime_adjustment = _apply_regime_adjustment(
+                timeframe=timeframe,
+                classic_score=classic_score,
+                quant_score=quant_score,
+                pattern_score=pattern_score,
+                classic_label=base_classic_label,
+                quant_label=base_quant_label,
+                pattern_label=base_pattern_label,
+                regime_frame=regime_frame,
+            )
+            classic_score = regime_adjustment.classic_score
+            quant_score = regime_adjustment.quant_score
+            pattern_score = regime_adjustment.pattern_score
 
             extreme_detected = extreme_detected or quant_extreme
             if stat_strength is not None:
@@ -125,6 +159,9 @@ class FusionRuntimeService:
                 quant_label=quant_label,
                 pattern_label=pattern_label,
             )
+            conflict_reasons.extend(regime_adjustment.conflict_reasons)
+            if regime_adjustment.risk_level is not None:
+                regime_risk_levels.append(regime_adjustment.risk_level)
 
             confluence_matrix[timeframe] = {
                 "classic": classic_label,
@@ -133,12 +170,19 @@ class FusionRuntimeService:
                 "classic_score": round(classic_score, 3),
                 "quant_score": round(quant_score, 3),
                 "pattern_score": round(pattern_score, 3),
+                "regime": regime_frame.regime if regime_frame is not None else None,
+                "regime_bias": (
+                    regime_frame.directional_bias if regime_frame is not None else None
+                ),
+                "regime_multiplier": regime_adjustment.weight_multiplier,
+                "regime_notes": list(regime_adjustment.notes),
             }
             total_score = classic_score + quant_score + pattern_score
             timeframe_scores.append(total_score)
 
             scorecard_frames[timeframe] = ScorecardFrame(
                 timeframe=timeframe,
+                base_total_score=round(base_total_score, 3),
                 classic_score=round(classic_score, 3),
                 quant_score=round(quant_score, 3),
                 pattern_score=round(pattern_score, 3),
@@ -146,6 +190,12 @@ class FusionRuntimeService:
                 classic_label=classic_label,
                 quant_label=quant_label,
                 pattern_label=pattern_label,
+                regime=regime_frame.regime if regime_frame is not None else None,
+                regime_directional_bias=(
+                    regime_frame.directional_bias if regime_frame is not None else None
+                ),
+                regime_weight_multiplier=regime_adjustment.weight_multiplier,
+                regime_notes=list(regime_adjustment.notes),
                 contributions={
                     "classic": classic_contribs,
                     "quant": quant_contribs,
@@ -162,6 +212,7 @@ class FusionRuntimeService:
         risk_level = _risk_level(
             extreme_detected=extreme_detected,
             conflict_reasons=conflict_reasons,
+            regime_risk_levels=regime_risk_levels,
         )
 
         diagnostics = FusionDiagnostics(
@@ -199,6 +250,11 @@ class FusionRuntimeService:
             neutral_threshold=self.neutral_threshold,
             overall_score=round(overall_score, 3),
             model_version=FUSION_SCORECARD_MODEL_VERSION,
+            regime_summary=(
+                dict(request.regime_pack.regime_summary)
+                if request.regime_pack is not None
+                else {}
+            ),
             timeframes=scorecard_frames,
             conflict_reasons=conflict_reasons,
         )
@@ -210,8 +266,137 @@ class FusionRuntimeService:
         )
 
 
+@dataclass(frozen=True)
+class RegimeAdjustment:
+    classic_score: float
+    quant_score: float
+    pattern_score: float
+    weight_multiplier: float | None = None
+    notes: tuple[str, ...] = ()
+    conflict_reasons: tuple[str, ...] = ()
+    risk_level: str | None = None
+
+
 def _sorted_timeframes(timeframes: set[TimeframeCode]) -> list[TimeframeCode]:
     return sorted(timeframes, key=lambda tf: _TIMEFRAME_PRIORITY.get(tf, 99))
+
+
+def _apply_regime_adjustment(
+    *,
+    timeframe: TimeframeCode,
+    classic_score: float,
+    quant_score: float,
+    pattern_score: float,
+    classic_label: str,
+    quant_label: str,
+    pattern_label: str,
+    regime_frame: RegimeFrame | None,
+) -> RegimeAdjustment:
+    if regime_frame is None:
+        return RegimeAdjustment(
+            classic_score=classic_score,
+            quant_score=quant_score,
+            pattern_score=pattern_score,
+        )
+
+    notes = [
+        f"regime={regime_frame.regime}",
+        f"bias={regime_frame.directional_bias}",
+    ]
+    conflict_reasons: list[str] = []
+    classic_multiplier = 1.0
+    quant_multiplier = 1.0
+    pattern_multiplier = 1.0
+    risk_level: str | None = None
+
+    if regime_frame.regime == "BULL_TREND":
+        classic_multiplier = _trend_multiplier(classic_label, expected="bullish")
+        quant_multiplier = _trend_multiplier(quant_label, expected="bullish")
+        pattern_multiplier = _trend_multiplier(pattern_label, expected="bullish")
+        conflict_reasons.extend(
+            _regime_label_conflicts(
+                timeframe=timeframe,
+                expected="bullish",
+                classic_label=classic_label,
+                quant_label=quant_label,
+                pattern_label=pattern_label,
+            )
+        )
+        notes.append("trend_following_bias")
+    elif regime_frame.regime == "BEAR_TREND":
+        classic_multiplier = _trend_multiplier(classic_label, expected="bearish")
+        quant_multiplier = _trend_multiplier(quant_label, expected="bearish")
+        pattern_multiplier = _trend_multiplier(pattern_label, expected="bearish")
+        conflict_reasons.extend(
+            _regime_label_conflicts(
+                timeframe=timeframe,
+                expected="bearish",
+                classic_label=classic_label,
+                quant_label=quant_label,
+                pattern_label=pattern_label,
+            )
+        )
+        notes.append("trend_following_bias")
+    elif regime_frame.regime == "HIGH_VOL_CHOP":
+        classic_multiplier = 0.85
+        quant_multiplier = 0.8
+        pattern_multiplier = 0.7
+        risk_level = "medium"
+        notes.append("volatility_penalty")
+        if any(
+            label != "neutral" for label in (classic_label, quant_label, pattern_label)
+        ):
+            conflict_reasons.append(f"{timeframe}:REGIME_HIGH_VOL_CHOP_DAMPENS_SIGNALS")
+    elif regime_frame.regime == "QUIET_MEAN_REVERSION":
+        classic_multiplier = 0.9
+        quant_multiplier = 0.95
+        pattern_multiplier = 1.1
+        notes.append("quiet_mean_reversion_bias")
+
+    adjusted_classic = classic_score * classic_multiplier
+    adjusted_quant = quant_score * quant_multiplier
+    adjusted_pattern = pattern_score * pattern_multiplier
+    average_multiplier = round(
+        (classic_multiplier + quant_multiplier + pattern_multiplier) / 3.0, 3
+    )
+    return RegimeAdjustment(
+        classic_score=adjusted_classic,
+        quant_score=adjusted_quant,
+        pattern_score=adjusted_pattern,
+        weight_multiplier=average_multiplier,
+        notes=tuple(notes),
+        conflict_reasons=tuple(conflict_reasons),
+        risk_level=risk_level,
+    )
+
+
+def _trend_multiplier(label: str, *, expected: str) -> float:
+    if label == expected:
+        return 1.2
+    if label == "neutral":
+        return 1.0
+    return 0.75
+
+
+def _regime_label_conflicts(
+    *,
+    timeframe: TimeframeCode,
+    expected: str,
+    classic_label: str,
+    quant_label: str,
+    pattern_label: str,
+) -> list[str]:
+    conflicts: list[str] = []
+    for category, label in (
+        ("CLASSIC", classic_label),
+        ("QUANT", quant_label),
+        ("PATTERN", pattern_label),
+    ):
+        if label != "neutral" and label != expected:
+            conflicts.append(
+                f"{timeframe}:REGIME_{expected.upper()}_VS_{category}_{label.upper()}"
+            )
+    return conflicts
 
 
 def _score_classic(
@@ -448,9 +633,25 @@ def _estimate_confidence(
     return round(magnitude, 2)
 
 
-def _risk_level(*, extreme_detected: bool, conflict_reasons: list[str]) -> str:
+def _risk_level(
+    *,
+    extreme_detected: bool,
+    conflict_reasons: list[str],
+    regime_risk_levels: list[str],
+) -> str:
     if extreme_detected:
         return "critical"
+
+    risk_level = "low"
     if conflict_reasons:
-        return "medium"
-    return "low"
+        risk_level = "medium"
+
+    for level in regime_risk_levels:
+        if _risk_rank(level) > _risk_rank(risk_level):
+            risk_level = level
+    return risk_level
+
+
+def _risk_rank(level: str) -> int:
+    mapping = {"low": 0, "medium": 1, "critical": 2}
+    return mapping.get(level, 0)

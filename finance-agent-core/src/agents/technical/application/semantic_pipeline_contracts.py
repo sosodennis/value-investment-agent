@@ -3,8 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
+from src.agents.technical.interface.contracts import AnalystPerspectiveModel
 from src.agents.technical.subdomains.signal_fusion import SemanticTagPolicyResult
 from src.interface.artifacts.artifact_data_models import (
+    TechnicalDirectionScorecardArtifactData,
+    TechnicalFusionReportArtifactData,
+    TechnicalPatternPackArtifactData,
+    TechnicalRegimePackArtifactData,
     TechnicalVerificationReportArtifactData,
 )
 from src.shared.kernel.types import JSONObject
@@ -26,6 +31,7 @@ class BacktestContextResult:
     wfa_context: str
     price_data: PriceSeriesDataLike | None
     chart_data: TechnicalChartDataLike | None
+    verification_report: TechnicalVerificationReportArtifactData | None = None
     is_degraded: bool = False
     failure_code: str | None = None
 
@@ -42,13 +48,21 @@ class SemanticFinalizeResult:
 @dataclass(frozen=True)
 class SemanticPipelineResult:
     tags_result: SemanticTagPolicyResult
-    llm_interpretation: str
+    analyst_perspective: AnalystPerspectiveModel
     backtest_context_result: BacktestContextResult
     semantic_finalize_result: SemanticFinalizeResult
     llm_is_fallback: bool = False
     llm_failure_code: str | None = None
     is_degraded: bool = False
     degraded_reasons: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class TechnicalProjectionArtifacts:
+    pattern_pack: TechnicalPatternPackArtifactData | None = None
+    regime_pack: TechnicalRegimePackArtifactData | None = None
+    fusion_report: TechnicalFusionReportArtifactData | None = None
+    direction_scorecard: TechnicalDirectionScorecardArtifactData | None = None
 
 
 class TechnicalPortLike(Protocol):
@@ -62,3 +76,23 @@ class TechnicalPortLike(Protocol):
         self,
         artifact_id: str | None,
     ) -> TechnicalVerificationReportArtifactData | None: ...
+
+    async def load_pattern_pack(
+        self,
+        artifact_id: str | None,
+    ) -> TechnicalPatternPackArtifactData | None: ...
+
+    async def load_regime_pack(
+        self,
+        artifact_id: str | None,
+    ) -> TechnicalRegimePackArtifactData | None: ...
+
+    async def load_fusion_report(
+        self,
+        artifact_id: str | None,
+    ) -> TechnicalFusionReportArtifactData | None: ...
+
+    async def load_direction_scorecard(
+        self,
+        artifact_id: str | None,
+    ) -> TechnicalDirectionScorecardArtifactData | None: ...

@@ -201,7 +201,7 @@ async def run_alerts_compute_use_case(
             alerts_id=alerts_id,
             artifact=artifact,
         ),
-        goto="fusion_compute",
+        goto="regime_compute",
     )
 
 

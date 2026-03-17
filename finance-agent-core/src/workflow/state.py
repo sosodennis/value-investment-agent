@@ -169,6 +169,7 @@ class TechnicalAnalysisContext(TypedDict):
     alerts_id: NotRequired[str | None]
     feature_pack_id: NotRequired[str | None]
     pattern_pack_id: NotRequired[str | None]
+    regime_pack_id: NotRequired[str | None]
     fusion_report_id: NotRequired[str | None]
     verification_report_id: NotRequired[str | None]
     artifact: NotRequired[AgentOutputArtifactPayload | None]

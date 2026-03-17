@@ -24,6 +24,7 @@ from src.agents.technical.subdomains.market_data.application.ports import (
     IMarketDataProvider,
 )
 from src.agents.technical.subdomains.patterns import PatternRuntimeService
+from src.agents.technical.subdomains.regime import RegimeRuntimeService
 from src.agents.technical.subdomains.signal_fusion import (
     FusionRuntimeService,
     SemanticTagPolicyInput,
@@ -83,6 +84,7 @@ class TechnicalWorkflowDependencies:
     indicator_series_runtime: IndicatorSeriesRuntimeService
     alert_runtime: AlertRuntimeService
     pattern_runtime: PatternRuntimeService
+    regime_runtime: RegimeRuntimeService
     fusion_runtime: FusionRuntimeService
     verification_runtime: VerificationRuntimeService
     assemble_semantic_tags_fn: Callable[
@@ -133,6 +135,14 @@ class TechnicalWorkflowRunner:
         return await self.orchestrator.run_fusion_compute(
             state,
             fusion_runtime=self.deps.fusion_runtime,
+        )
+
+    async def run_regime_compute(
+        self, state: Mapping[str, object]
+    ) -> TechnicalNodeResult:
+        return await self.orchestrator.run_regime_compute(
+            state,
+            regime_runtime=self.deps.regime_runtime,
         )
 
     async def run_verification_compute(

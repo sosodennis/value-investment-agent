@@ -1,5 +1,4 @@
 import React, { useState, useMemo, memo, useEffect, useRef } from 'react';
-import ReactMarkdown from 'react-markdown';
 import { AgentStatus, ArtifactReference } from '@/types/agents';
 import {
     Activity,
@@ -1612,6 +1611,12 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
             : null;
     const degradedReasons = reportData.diagnostics?.degraded_reasons ?? [];
     const isDegraded = reportData.diagnostics?.is_degraded === true;
+    const analystPerspective = reportData.analyst_perspective;
+    const analystEvidence = analystPerspective?.top_evidence ?? [];
+    const analystInvalidationLevel =
+        typeof analystPerspective?.invalidation_level === 'number'
+            ? analystPerspective.invalidation_level.toFixed(2)
+            : null;
     const artifactEntries = Object.entries(reportData.artifact_refs).filter(
         (entry): entry is [string, string] =>
             typeof entry[1] === 'string' && entry[1].length > 0
@@ -1690,24 +1695,101 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                     <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
                         <BrainCircuit size={80} className="text-indigo-400" />
                     </div>
-                    <div className="flex items-center gap-2 mb-4">
-                        <BrainCircuit size={18} className="text-indigo-400" />
-                        <span className="text-xs font-black text-indigo-200 uppercase tracking-[0.2em]">Analyst Perspective</span>
-                    </div>
-                    <div className="text-base text-slate-200 leading-relaxed font-light italic">
-                        {reportData.llm_interpretation ? (
-                            <ReactMarkdown
-                                components={{
-                                    strong: (props) => <span className="font-bold text-indigo-300 not-italic" {...props} />,
-                                    p: (props) => <p className="mb-2 last:mb-0" {...props} />
-                                }}
-                            >
-                                {reportData.llm_interpretation}
-                            </ReactMarkdown>
-                        ) : (
-                            "Summarizing multi-timeframe signals into actionable insight..."
+                    <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+                        <div className="flex items-center gap-2">
+                            <BrainCircuit size={18} className="text-indigo-400" />
+                            <span className="text-xs font-black text-indigo-200 uppercase tracking-[0.2em]">Analyst Perspective</span>
+                        </div>
+                        {analystPerspective?.decision_posture && (
+                            <span className="px-3 py-1 rounded-full border border-indigo-400/25 bg-indigo-500/10 text-[10px] font-black uppercase tracking-[0.18em] text-indigo-200">
+                                {formatLabel(analystPerspective.decision_posture)}
+                            </span>
                         )}
                     </div>
+                    {analystPerspective ? (
+                        <div className="space-y-5">
+                            <div className="flex flex-wrap items-start justify-between gap-4">
+                                <div className="space-y-2">
+                                    <div className="text-xl font-black text-white">
+                                        {analystPerspective.stance_summary}
+                                    </div>
+                                    <p className="max-w-3xl text-sm leading-7 text-slate-300">
+                                        {analystPerspective.rationale_summary}
+                                    </p>
+                                </div>
+                                <div className="px-3 py-2 rounded-2xl border border-indigo-400/20 bg-slate-950/50 min-w-[180px]">
+                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">Stance</div>
+                                    <div className="mt-1 text-sm font-black text-indigo-100">
+                                        {formatLabel(analystPerspective.stance)}
+                                    </div>
+                                </div>
+                            </div>
+                            {analystEvidence.length > 0 && (
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    {analystEvidence.map((item) => (
+                                        <div
+                                            key={`${item.label}-${item.timeframe ?? 'na'}`}
+                                            className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4"
+                                        >
+                                            <div className="flex items-center justify-between gap-3">
+                                                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                                    {item.label}
+                                                </span>
+                                                {item.timeframe && (
+                                                    <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-600">
+                                                        {item.timeframe}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {item.value_text && (
+                                                <div className="mt-2 text-lg font-mono font-bold text-indigo-200">
+                                                    {item.value_text}
+                                                </div>
+                                            )}
+                                            <p className="mt-2 text-xs leading-6 text-slate-400">
+                                                {item.rationale}
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">Trigger</div>
+                                    <div className="mt-2 text-sm leading-6 text-slate-300">
+                                        {analystPerspective.trigger_condition ?? 'No explicit trigger detected.'}
+                                    </div>
+                                </div>
+                                <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">Invalidation</div>
+                                    <div className="mt-2 text-sm leading-6 text-slate-300">
+                                        {analystPerspective.invalidation_condition ?? 'No explicit invalidation level available.'}
+                                    </div>
+                                    {analystInvalidationLevel && (
+                                        <div className="mt-2 text-[10px] font-black uppercase tracking-[0.16em] text-rose-300">
+                                            Level {analystInvalidationLevel}
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">Validation Note</div>
+                                    <div className="mt-2 text-sm leading-6 text-slate-300">
+                                        {analystPerspective.validation_note ?? 'No validation warning was supplied.'}
+                                    </div>
+                                </div>
+                                <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">Confidence Note</div>
+                                    <div className="mt-2 text-sm leading-6 text-slate-300">
+                                        {analystPerspective.confidence_note ?? 'Confidence follows the deterministic calibration output.'}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="text-base text-slate-400 leading-relaxed">
+                            Structured analyst perspective is not available yet.
+                        </div>
+                    )}
                     <div className="flex flex-wrap gap-2 mt-6">
                         {reportData.summary_tags.length > 0 ? (
                             reportData.summary_tags.map((tag) => (
