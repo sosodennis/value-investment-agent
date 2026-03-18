@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+from src.agents.technical.application.use_cases.run_fusion_compute_use_case import (
+    _resolve_confidence_eligibility,
+    _resolve_effective_signal_strength,
+)
 from src.agents.technical.domain.shared import (
     FeatureFrame,
     FeaturePack,
@@ -227,6 +231,34 @@ def test_fusion_runtime_dampens_signals_in_high_vol_chop_regime() -> None:
     assert any(
         "HIGH_VOL_CHOP" in reason for reason in result.scorecard.conflict_reasons
     )
+
+
+def test_effective_signal_strength_applies_penalties() -> None:
+    effective = _resolve_effective_signal_strength(
+        raw_strength=0.99,
+        degraded_reasons=["1h_UNAVAILABLE", "1wk_QUANT_SKIPPED"],
+        conflict_reasons=["1wk:REGIME_HIGH_VOL_CHOP_DAMPENS_SIGNALS"],
+        calibration_applied=False,
+    )
+
+    assert effective == 0.78
+
+
+def test_confidence_eligibility_marks_neutral_uncalibrated_path_ineligible() -> None:
+    eligibility = _resolve_confidence_eligibility(
+        direction="NEUTRAL_CONSOLIDATION",
+        calibration_applied=False,
+        degraded_reasons=["1h_UNAVAILABLE"],
+        conflict_reasons=[],
+    )
+
+    assert eligibility["eligible"] is False
+    assert eligibility["normalized_direction"] == "neutral"
+    assert eligibility["reason_codes"] == [
+        "NEUTRAL_DIRECTION",
+        "CALIBRATION_NOT_APPLIED",
+        "DEGRADED_INPUTS_PRESENT",
+    ]
 
 
 def _build_fusion_request(*, regime_frame: RegimeFrame) -> FusionRuntimeRequest:

@@ -40,6 +40,7 @@ import {
     TechnicalAlertReadoutItem,
     TechnicalChartData,
     TechnicalConfidenceCalibration,
+    TechnicalConfidenceEligibility,
     TechnicalDiagnostics,
     TechnicalEvidenceBundle,
     TechnicalFeatureFrame,
@@ -60,6 +61,8 @@ import {
     TechnicalIndicatorSeriesArtifact,
     TechnicalIndicatorSeriesFrame,
     TechnicalRegimeSummary,
+    TechnicalSetupReliabilitySummary,
+    TechnicalSignalStrengthSummary,
     TechnicalStructureConfluenceSummary,
     TechnicalTimeseriesBundle,
     TechnicalTimeseriesFrame,
@@ -166,6 +169,41 @@ const parseConfidenceCalibration = (
         return undefined;
     }
     return calibration;
+};
+
+const parseConfidenceEligibility = (
+    value: unknown,
+    context: string
+): TechnicalConfidenceEligibility | undefined => {
+    if (value === undefined || value === null) return undefined;
+    const record = toRecord(value, context);
+    const eligible = parseNullableOptionalBoolean(
+        record.eligible,
+        `${context}.eligible`
+    );
+    const normalizedDirection = parseNullableOptionalString(
+        record.normalized_direction,
+        `${context}.normalized_direction`
+    );
+    const reasonCodes =
+        record.reason_codes === undefined || record.reason_codes === null
+            ? undefined
+            : parseStringArray(record.reason_codes, `${context}.reason_codes`);
+
+    const eligibility: TechnicalConfidenceEligibility = {};
+    if (eligible !== undefined) {
+        eligibility.eligible = eligible;
+    }
+    if (normalizedDirection !== undefined) {
+        eligibility.normalized_direction = normalizedDirection ?? null;
+    }
+    if (reasonCodes !== undefined) {
+        eligibility.reason_codes = reasonCodes;
+    }
+    if (Object.keys(eligibility).length === 0) {
+        return undefined;
+    }
+    return eligibility;
 };
 
 const parseRegimeSummary = (
@@ -394,6 +432,79 @@ const parseEvidenceBundle = (
         bundle.conflict_reasons = conflictReasons;
     }
     return Object.keys(bundle).length > 0 ? bundle : undefined;
+};
+
+const parseSignalStrengthSummary = (
+    value: unknown,
+    context: string
+): TechnicalSignalStrengthSummary | undefined => {
+    if (value === undefined || value === null) return undefined;
+    const record = toRecord(value, context);
+    const summary: TechnicalSignalStrengthSummary = {};
+    const rawValue = parseNullableOptionalNumber(record.raw_value, `${context}.raw_value`);
+    const effectiveValue = parseNullableOptionalNumber(
+        record.effective_value,
+        `${context}.effective_value`
+    );
+    const displayPercent = parseNullableOptionalNumber(
+        record.display_percent,
+        `${context}.display_percent`
+    );
+    const strengthLevel = parseNullableOptionalString(
+        record.strength_level,
+        `${context}.strength_level`
+    );
+    const calibrationStatus = parseNullableOptionalString(
+        record.calibration_status,
+        `${context}.calibration_status`
+    );
+    const source = parseNullableOptionalString(record.source, `${context}.source`);
+    const probabilityEligible = parseNullableOptionalBoolean(
+        record.probability_eligible,
+        `${context}.probability_eligible`
+    );
+    if (rawValue !== undefined) summary.raw_value = rawValue;
+    if (effectiveValue !== undefined) summary.effective_value = effectiveValue;
+    if (displayPercent !== undefined) summary.display_percent = displayPercent;
+    if (strengthLevel !== undefined) summary.strength_level = strengthLevel ?? null;
+    if (calibrationStatus !== undefined) {
+        summary.calibration_status = calibrationStatus ?? null;
+    }
+    if (source !== undefined) summary.source = source ?? null;
+    if (probabilityEligible !== undefined) {
+        summary.probability_eligible = probabilityEligible;
+    }
+    return Object.keys(summary).length > 0 ? summary : undefined;
+};
+
+const parseSetupReliabilitySummary = (
+    value: unknown,
+    context: string
+): TechnicalSetupReliabilitySummary | undefined => {
+    if (value === undefined || value === null) return undefined;
+    const record = toRecord(value, context);
+    const summary: TechnicalSetupReliabilitySummary = {};
+    const stringFields = [
+        'level',
+        'calibration_status',
+        'coverage_status',
+        'conflict_level',
+        'recommended_reliance',
+    ] as const;
+    for (const field of stringFields) {
+        const parsed = parseNullableOptionalString(record[field], `${context}.${field}`);
+        if (parsed !== undefined) {
+            summary[field] = parsed ?? null;
+        }
+    }
+    const reasons =
+        record.reasons === undefined || record.reasons === null
+            ? undefined
+            : parseStringArray(record.reasons, `${context}.reasons`);
+    if (reasons !== undefined) {
+        summary.reasons = reasons;
+    }
+    return Object.keys(summary).length > 0 ? summary : undefined;
 };
 
 const parseNumberMap = (
@@ -2141,9 +2252,21 @@ export const parseTechnicalFusionReportArtifact = (
         record.confidence_calibrated,
         `${context}.confidence_calibrated`
     );
+    const signalStrengthRaw = parseNullableOptionalNumber(
+        record.signal_strength_raw,
+        `${context}.signal_strength_raw`
+    );
+    const signalStrengthEffective = parseNullableOptionalNumber(
+        record.signal_strength_effective,
+        `${context}.signal_strength_effective`
+    );
     const confidenceCalibration = parseConfidenceCalibration(
         record.confidence_calibration,
         `${context}.confidence_calibration`
+    );
+    const confidenceEligibility = parseConfidenceEligibility(
+        record.confidence_eligibility,
+        `${context}.confidence_eligibility`
     );
     const confluenceMatrixRecord =
         record.confluence_matrix === undefined || record.confluence_matrix === null
@@ -2214,8 +2337,17 @@ export const parseTechnicalFusionReportArtifact = (
     if (confidenceCalibrated !== undefined) {
         report.confidence_calibrated = confidenceCalibrated;
     }
+    if (signalStrengthRaw !== undefined) {
+        report.signal_strength_raw = signalStrengthRaw;
+    }
+    if (signalStrengthEffective !== undefined) {
+        report.signal_strength_effective = signalStrengthEffective;
+    }
     if (confidenceCalibration) {
         report.confidence_calibration = confidenceCalibration;
+    }
+    if (confidenceEligibility) {
+        report.confidence_eligibility = confidenceEligibility;
     }
     if (regimeSummary) {
         report.regime_summary = regimeSummary;
@@ -2941,12 +3073,33 @@ const parseTechnicalAnalysisReport = (
     if (typeof confidenceCalibrated === 'number') {
         report.confidence_calibrated = confidenceCalibrated;
     }
+    const signalStrengthRaw = parseNullableOptionalNumber(
+        record.signal_strength_raw,
+        `${context}.signal_strength_raw`
+    );
+    if (typeof signalStrengthRaw === 'number') {
+        report.signal_strength_raw = signalStrengthRaw;
+    }
+    const signalStrengthEffective = parseNullableOptionalNumber(
+        record.signal_strength_effective,
+        `${context}.signal_strength_effective`
+    );
+    if (typeof signalStrengthEffective === 'number') {
+        report.signal_strength_effective = signalStrengthEffective;
+    }
     const confidenceCalibration = parseConfidenceCalibration(
         record.confidence_calibration,
         `${context}.confidence_calibration`
     );
     if (confidenceCalibration) {
         report.confidence_calibration = confidenceCalibration;
+    }
+    const confidenceEligibility = parseConfidenceEligibility(
+        record.confidence_eligibility,
+        `${context}.confidence_eligibility`
+    );
+    if (confidenceEligibility) {
+        report.confidence_eligibility = confidenceEligibility;
     }
     const momentumExtremes = parseMomentumExtremes(
         record.momentum_extremes,
@@ -2991,6 +3144,20 @@ const parseTechnicalAnalysisReport = (
     );
     if (evidenceBundle) {
         report.evidence_bundle = evidenceBundle;
+    }
+    const signalStrengthSummary = parseSignalStrengthSummary(
+        record.signal_strength_summary,
+        `${context}.signal_strength_summary`
+    );
+    if (signalStrengthSummary) {
+        report.signal_strength_summary = signalStrengthSummary;
+    }
+    const setupReliabilitySummary = parseSetupReliabilitySummary(
+        record.setup_reliability_summary,
+        `${context}.setup_reliability_summary`
+    );
+    if (setupReliabilitySummary) {
+        report.setup_reliability_summary = setupReliabilitySummary;
     }
     const qualitySummary = parseQualitySummary(
         record.quality_summary,

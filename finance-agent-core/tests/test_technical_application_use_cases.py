@@ -207,6 +207,28 @@ def test_build_full_report_payload_derives_states() -> None:
                 },
                 "conflict_reasons": ["1d:quant_neutral"],
             },
+            "signal_strength_summary": {
+                "raw_value": 0.62,
+                "effective_value": 0.43,
+                "display_percent": 43.0,
+                "strength_level": "weak",
+                "calibration_status": "ineligible",
+                "source": "fusion_runtime",
+                "probability_eligible": False,
+            },
+            "setup_reliability_summary": {
+                "level": "low",
+                "calibration_status": "ineligible",
+                "coverage_status": "partial",
+                "conflict_level": "present",
+                "reasons": [
+                    "UNCALIBRATED",
+                    "DEGRADED_INPUTS",
+                    "CONFLICT_PRESENT",
+                    "PARTIAL_COVERAGE",
+                ],
+                "recommended_reliance": "cautious",
+            },
             "quality_summary": {
                 "is_degraded": True,
                 "degraded_reasons": ["1wk_QUANT_SKIPPED"],
@@ -273,6 +295,8 @@ def test_build_full_report_payload_derives_states() -> None:
     assert payload["evidence_bundle"]["primary_timeframe"] == "1d"
     assert payload["evidence_bundle"]["support_levels"] == [98.5, 96.0]
     assert payload["evidence_bundle"]["scorecard_summary"]["overall_score"] == 0.61
+    assert payload["signal_strength_summary"]["effective_value"] == 0.43
+    assert payload["setup_reliability_summary"]["level"] == "low"
     assert payload["quality_summary"]["overall_quality"] == "medium"
     assert payload["quality_summary"]["degraded_reasons"] == ["1wk_QUANT_SKIPPED"]
     assert payload["alert_readout"]["highest_severity"] == "warning"
@@ -425,6 +449,18 @@ class _SemanticProjectionPortStub:
             as_of="2026-02-12T00:00:00Z",
             direction="BULLISH_EXTENSION",
             risk_level="low",
+            signal_strength_raw=0.74,
+            signal_strength_effective=0.58,
+            confidence_calibration={
+                "mapping_source": "default_artifact",
+                "mapping_version": "technical_direction_calibration_v1_2026_03_16",
+                "calibration_applied": False,
+            },
+            confidence_eligibility={
+                "eligible": False,
+                "normalized_direction": "bullish",
+                "reason_codes": ["DEGRADED_INPUTS_PRESENT", "CONFLICTS_PRESENT"],
+            },
             conflict_reasons=["1d:quant_neutral"],
             regime_summary={"dominant_regime": "BULL_TREND", "timeframe_count": 1},
             degraded_reasons=["1wk_QUANT_SKIPPED"],
@@ -565,6 +601,13 @@ async def test_load_projection_artifacts_builds_reusable_evidence_bundle() -> No
     assert (
         projection_context["structure_confluence_summary"]["confluence_state"]
         == "strong"
+    )
+    assert projection_context["signal_strength_summary"]["effective_value"] == 0.58
+    assert projection_context["signal_strength_summary"]["strength_level"] == "moderate"
+    assert projection_context["setup_reliability_summary"]["level"] == "low"
+    assert (
+        projection_context["setup_reliability_summary"]["recommended_reliance"]
+        == "cautious"
     )
     assert projection_context["quality_summary"]["is_degraded"] is True
     assert projection_context["quality_summary"]["overall_quality"] == "medium"

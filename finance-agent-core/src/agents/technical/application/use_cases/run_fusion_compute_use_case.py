@@ -34,6 +34,7 @@ from src.agents.technical.interface.serializers import build_fusion_compute_prev
 from src.agents.technical.subdomains.calibration.domain import (
     calibrate_direction_confidence,
     load_technical_direction_calibration_mapping,
+    resolve_direction_family,
 )
 from src.agents.technical.subdomains.regime.contracts import RegimeFrame, RegimePack
 from src.agents.technical.subdomains.signal_fusion import (
@@ -335,6 +336,24 @@ async def run_fusion_compute_use_case(
             "mapping_version": mapping_version,
             "calibration_applied": calibration_applied,
         }
+        conflict_reasons = list(
+            fusion_result.fusion_signal.diagnostics.conflict_reasons
+            if fusion_result.fusion_signal.diagnostics is not None
+            else []
+        )
+        signal_strength_raw = confidence_raw
+        signal_strength_effective = _resolve_effective_signal_strength(
+            raw_strength=signal_strength_raw,
+            degraded_reasons=degraded_reasons,
+            conflict_reasons=conflict_reasons,
+            calibration_applied=calibration_applied,
+        )
+        confidence_eligibility = _resolve_confidence_eligibility(
+            direction=fusion_result.fusion_signal.direction,
+            calibration_applied=calibration_applied,
+            degraded_reasons=degraded_reasons,
+            conflict_reasons=conflict_reasons,
+        )
 
         fusion_report_payload = _fusion_report_to_payload(
             fusion_result,
@@ -346,7 +365,10 @@ async def run_fusion_compute_use_case(
             degraded_reasons=degraded_reasons,
             confidence_raw=confidence_raw,
             confidence_calibrated=confidence_calibrated,
+            signal_strength_raw=signal_strength_raw,
+            signal_strength_effective=signal_strength_effective,
             confidence_calibration=confidence_calibration,
+            confidence_eligibility=confidence_eligibility,
         )
 
         fusion_report_id = await runtime.save_fusion_report(
@@ -472,7 +494,10 @@ async def run_fusion_compute_use_case(
             confidence=confidence_calibrated,
             confidence_raw=confidence_raw,
             confidence_calibrated=confidence_calibrated,
+            signal_strength_raw=signal_strength_raw,
+            signal_strength_effective=signal_strength_effective,
             confidence_calibration=confidence_calibration,
+            confidence_eligibility=confidence_eligibility,
             is_degraded=bool(degraded_reasons),
             degraded_reasons=degraded_reasons,
             artifact=artifact,
@@ -693,7 +718,10 @@ def _fusion_report_to_payload(
     degraded_reasons: list[str],
     confidence_raw: float | None,
     confidence_calibrated: float | None,
+    signal_strength_raw: float | None,
+    signal_strength_effective: float | None,
     confidence_calibration: dict[str, object] | None,
+    confidence_eligibility: dict[str, object] | None,
 ) -> JSONObject:
     if isinstance(result, TechnicalFusionReportArtifactData):
         payload = result.model_dump(mode="json")
@@ -713,7 +741,10 @@ def _fusion_report_to_payload(
         "confidence": confidence_calibrated,
         "confidence_raw": confidence_raw,
         "confidence_calibrated": confidence_calibrated,
+        "signal_strength_raw": signal_strength_raw,
+        "signal_strength_effective": signal_strength_effective,
         "confidence_calibration": confidence_calibration,
+        "confidence_eligibility": confidence_eligibility,
         "confluence_matrix": diagnostics.confluence_matrix if diagnostics else {},
         "conflict_reasons": diagnostics.conflict_reasons if diagnostics else [],
         "regime_summary": (
@@ -727,6 +758,50 @@ def _fusion_report_to_payload(
             "regime_pack_id": regime_pack_id,
         },
         "degraded_reasons": list(degraded_reasons),
+    }
+
+
+def _resolve_effective_signal_strength(
+    *,
+    raw_strength: float | None,
+    degraded_reasons: list[str],
+    conflict_reasons: list[str],
+    calibration_applied: bool,
+) -> float | None:
+    if raw_strength is None:
+        return None
+    unique_degraded = len(set(degraded_reasons))
+    unique_conflicts = len(set(conflict_reasons))
+    penalty = min(0.18, 0.06 * unique_degraded)
+    penalty += min(0.10, 0.05 * unique_conflicts)
+    if not calibration_applied:
+        penalty += 0.04
+    return round(min(max(raw_strength - penalty, 0.0), 1.0), 2)
+
+
+def _resolve_confidence_eligibility(
+    *,
+    direction: str,
+    calibration_applied: bool,
+    degraded_reasons: list[str],
+    conflict_reasons: list[str],
+) -> dict[str, object]:
+    normalized_direction = resolve_direction_family(direction)
+    reason_codes: list[str] = []
+    if normalized_direction is None:
+        reason_codes.append("UNSUPPORTED_DIRECTION")
+    elif normalized_direction == "neutral":
+        reason_codes.append("NEUTRAL_DIRECTION")
+    if not calibration_applied:
+        reason_codes.append("CALIBRATION_NOT_APPLIED")
+    if degraded_reasons:
+        reason_codes.append("DEGRADED_INPUTS_PRESENT")
+    if conflict_reasons:
+        reason_codes.append("CONFLICTS_PRESENT")
+    return {
+        "eligible": len(reason_codes) == 0,
+        "normalized_direction": normalized_direction,
+        "reason_codes": reason_codes or None,
     }
 
 

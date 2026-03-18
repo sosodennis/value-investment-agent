@@ -38,6 +38,13 @@ def test_parse_technical_artifact_model_returns_json_dto() -> None:
             "as_of": "2026-02-16T00:00:00Z",
             "direction": "BULLISH_EXTENSION",
             "risk_level": "medium",
+            "signal_strength_raw": 0.78,
+            "signal_strength_effective": 0.56,
+            "confidence_eligibility": {
+                "eligible": False,
+                "normalized_direction": "bullish",
+                "reason_codes": ["DEGRADED_INPUTS_PRESENT"],
+            },
             "artifact_refs": {},
             "summary_tags": ["mean-reversion"],
             "regime_summary": {
@@ -63,6 +70,23 @@ def test_parse_technical_artifact_model_returns_json_dto() -> None:
                     "overall_score": 0.64,
                 },
                 "conflict_reasons": ["1d:quant_neutral"],
+            },
+            "signal_strength_summary": {
+                "raw_value": 0.78,
+                "effective_value": 0.56,
+                "display_percent": 56.0,
+                "strength_level": "moderate",
+                "calibration_status": "ineligible",
+                "source": "fusion_runtime",
+                "probability_eligible": False,
+            },
+            "setup_reliability_summary": {
+                "level": "low",
+                "calibration_status": "ineligible",
+                "coverage_status": "partial",
+                "conflict_level": "present",
+                "reasons": ["UNCALIBRATED", "DEGRADED_INPUTS"],
+                "recommended_reliance": "cautious",
             },
             "quality_summary": {
                 "is_degraded": True,
@@ -114,6 +138,11 @@ def test_parse_technical_artifact_model_returns_json_dto() -> None:
     )
     assert isinstance(parsed, dict)
     assert parsed["ticker"] == "GME"
+    assert parsed["signal_strength_raw"] == 0.78
+    assert parsed["signal_strength_effective"] == 0.56
+    assert parsed["confidence_eligibility"]["eligible"] is False
+    assert parsed["signal_strength_summary"]["strength_level"] == "moderate"
+    assert parsed["setup_reliability_summary"]["recommended_reliance"] == "cautious"
     assert parsed["regime_summary"]["dominant_regime"] == "BULL_TREND"
     assert parsed["structure_confluence_summary"]["confluence_score"] == 0.74
     assert parsed["evidence_bundle"]["primary_timeframe"] == "1d"

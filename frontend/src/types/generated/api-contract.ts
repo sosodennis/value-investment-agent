@@ -353,6 +353,15 @@ export interface components {
             /** Mapping Version */
             mapping_version?: string | null;
         };
+        /** ConfidenceEligibilityModel */
+        ConfidenceEligibilityModel: {
+            /** Eligible */
+            eligible?: boolean | null;
+            /** Normalized Direction */
+            normalized_direction?: string | null;
+            /** Reason Codes */
+            reason_codes?: string[] | null;
+        };
         /** DebateArtifactModel */
         DebateArtifactModel: {
             /** Alpha */
@@ -1076,6 +1085,38 @@ export interface components {
              */
             version: "v1";
         };
+        /** SetupReliabilitySummaryModel */
+        SetupReliabilitySummaryModel: {
+            /** Calibration Status */
+            calibration_status?: string | null;
+            /** Conflict Level */
+            conflict_level?: string | null;
+            /** Coverage Status */
+            coverage_status?: string | null;
+            /** Level */
+            level?: string | null;
+            /** Reasons */
+            reasons?: string[] | null;
+            /** Recommended Reliance */
+            recommended_reliance?: string | null;
+        };
+        /** SignalStrengthSummaryModel */
+        SignalStrengthSummaryModel: {
+            /** Calibration Status */
+            calibration_status?: string | null;
+            /** Display Percent */
+            display_percent?: number | null;
+            /** Effective Value */
+            effective_value?: number | null;
+            /** Probability Eligible */
+            probability_eligible?: boolean | null;
+            /** Raw Value */
+            raw_value?: number | null;
+            /** Source */
+            source?: string | null;
+            /** Strength Level */
+            strength_level?: string | null;
+        };
         /** SourceInfoModel */
         SourceInfoModel: {
             /** Author */
@@ -1469,6 +1510,7 @@ export interface components {
             /** Confidence Calibrated */
             confidence_calibrated?: number | null;
             confidence_calibration?: components["schemas"]["ConfidenceCalibrationModel"] | null;
+            confidence_eligibility?: components["schemas"]["ConfidenceEligibilityModel"] | null;
             /** Confidence Raw */
             confidence_raw?: number | null;
             diagnostics?: components["schemas"]["DiagnosticsModel"] | null;
@@ -1486,6 +1528,12 @@ export interface components {
             risk_level: "low" | "medium" | "critical";
             /** Schema Version */
             schema_version: string;
+            setup_reliability_summary?: components["schemas"]["SetupReliabilitySummaryModel"] | null;
+            /** Signal Strength Effective */
+            signal_strength_effective?: number | null;
+            /** Signal Strength Raw */
+            signal_strength_raw?: number | null;
+            signal_strength_summary?: components["schemas"]["SignalStrengthSummaryModel"] | null;
             structure_confluence_summary?: components["schemas"]["StructureConfluenceSummaryModel"] | null;
             /** Summary Tags */
             summary_tags: string[];
@@ -1538,6 +1586,15 @@ export interface components {
             mapping_source?: string | null;
             /** Mapping Version */
             mapping_version?: string | null;
+        };
+        /** TechnicalConfidenceEligibilityData */
+        TechnicalConfidenceEligibilityData: {
+            /** Eligible */
+            eligible: boolean;
+            /** Normalized Direction */
+            normalized_direction?: string | null;
+            /** Reason Codes */
+            reason_codes?: string[] | null;
         };
         /** TechnicalDirectionScorecardArtifactData */
         TechnicalDirectionScorecardArtifactData: {
@@ -1677,6 +1734,7 @@ export interface components {
             /** Confidence Calibrated */
             confidence_calibrated?: number | null;
             confidence_calibration?: components["schemas"]["TechnicalConfidenceCalibrationData"] | null;
+            confidence_eligibility?: components["schemas"]["TechnicalConfidenceEligibilityData"] | null;
             /** Confidence Raw */
             confidence_raw?: number | null;
             /** Conflict Reasons */
@@ -1696,6 +1754,10 @@ export interface components {
             risk_level: string;
             /** Schema Version */
             schema_version: string;
+            /** Signal Strength Effective */
+            signal_strength_effective?: number | null;
+            /** Signal Strength Raw */
+            signal_strength_raw?: number | null;
             /** Source Artifacts */
             source_artifacts?: {
                 [key: string]: string | null;

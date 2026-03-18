@@ -15,6 +15,7 @@ from .policies.technical_direction_calibration_service import (
     TechnicalDirectionCalibrationConfig,
     calibrate_direction_confidence,
     parse_technical_direction_calibration_config,
+    resolve_direction_family,
 )
 from .technical_direction_calibration_mapping_service import (
     TECHNICAL_DIRECTION_CALIBRATION_MAPPING_PATH_ENV,
@@ -34,6 +35,7 @@ __all__ = [
     "TECHNICAL_DIRECTION_CALIBRATION_METHOD",
     "calibrate_direction_confidence",
     "parse_technical_direction_calibration_config",
+    "resolve_direction_family",
     "TECHNICAL_DIRECTION_CALIBRATION_MAPPING_PATH_ENV",
     "TechnicalDirectionCalibrationLoadResult",
     "load_technical_direction_calibration_mapping",

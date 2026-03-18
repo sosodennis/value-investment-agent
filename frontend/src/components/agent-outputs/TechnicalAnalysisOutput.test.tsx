@@ -67,6 +67,23 @@ describe('TechnicalAnalysisOutput', () => {
                             },
                             conflict_reasons: ['1d:quant_neutral'],
                         },
+                        signal_strength_summary: {
+                            raw_value: 0.74,
+                            effective_value: 0.58,
+                            display_percent: 58.0,
+                            strength_level: 'moderate',
+                            calibration_status: 'ineligible',
+                            source: 'fusion_runtime',
+                            probability_eligible: false,
+                        },
+                        setup_reliability_summary: {
+                            level: 'low',
+                            calibration_status: 'ineligible',
+                            coverage_status: 'partial',
+                            conflict_level: 'present',
+                            reasons: ['UNCALIBRATED', 'DEGRADED_INPUTS', 'CONFLICT_PRESENT', 'PARTIAL_COVERAGE'],
+                            recommended_reliance: 'cautious',
+                        },
                         quality_summary: {
                             is_degraded: true,
                             degraded_reasons: ['1wk_QUANT_SKIPPED'],
@@ -149,6 +166,12 @@ describe('TechnicalAnalysisOutput', () => {
             />
         );
 
+        expect(screen.getByText('Signal Strength')).not.toBeNull();
+        expect(screen.getByText('Setup Reliability')).not.toBeNull();
+        expect(screen.getByText('Moderate')).not.toBeNull();
+        expect(screen.getByText('Low Reliability')).not.toBeNull();
+        expect(screen.queryByText(/^Confidence$/i)).toBeNull();
+        expect(screen.getByText(/Not a probability forecast/i)).not.toBeNull();
         expect(screen.getByText('Key Evidence')).not.toBeNull();
         expect(screen.getByText('Bull Trend')).not.toBeNull();
         expect(screen.getByText('Structure Map')).not.toBeNull();

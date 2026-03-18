@@ -35,6 +35,8 @@ import {
     TechnicalFeaturePack,
     TechnicalFusionReport,
     TechnicalDirectionScorecard,
+    TechnicalSetupReliabilitySummary,
+    TechnicalSignalStrengthSummary,
     TechnicalScorecardContribution,
     TechnicalVerificationReport,
     TechnicalPatternPack,
@@ -64,6 +66,8 @@ import {
     formatAlertQualityGateLabel,
     getMarketStatusDescriptor,
     getQualityStatusDescriptor,
+    getSetupReliabilityDescriptor,
+    getSignalStrengthDescriptor,
     resolveFdDescriptor,
     resolveMacdTone,
     resolveRsiDescriptor,
@@ -188,6 +192,39 @@ const getQualityGateTone = (gate?: string | null) => {
     return 'bg-slate-500/15 border-slate-500/35 text-slate-300';
 };
 
+const getIndicatorToneClasses = (tone: IndicatorTone) => {
+    if (tone === 'positive') {
+        return {
+            border: 'border-emerald-500/30',
+            bg: 'bg-emerald-500/10',
+            value: 'text-emerald-200',
+            detail: 'text-emerald-100/80',
+        };
+    }
+    if (tone === 'warning') {
+        return {
+            border: 'border-amber-500/30',
+            bg: 'bg-amber-500/10',
+            value: 'text-amber-200',
+            detail: 'text-amber-100/80',
+        };
+    }
+    if (tone === 'danger') {
+        return {
+            border: 'border-rose-500/30',
+            bg: 'bg-rose-500/10',
+            value: 'text-rose-200',
+            detail: 'text-rose-100/80',
+        };
+    }
+    return {
+        border: 'border-slate-700/80',
+        bg: 'bg-slate-900/40',
+        value: 'text-slate-100',
+        detail: 'text-slate-400',
+    };
+};
+
 const formatConfidence = (value?: number) => {
     if (value === undefined || Number.isNaN(value)) return 'N/A';
     const normalized = value <= 1 ? value * 100 : value;
@@ -228,6 +265,48 @@ const buildCalibrationLabel = (calibration?: TechnicalConfidenceCalibration) => 
         return `Uncalibrated · ${sourceLabel}`;
     }
     return `Calibrated · ${sourceLabel}`;
+};
+
+const buildFallbackSignalStrengthSummary = (
+    payload?: ConfidencePayload | null
+): TechnicalSignalStrengthSummary | undefined => {
+    const value = resolveConfidenceValue(payload);
+    if (typeof value !== 'number') return undefined;
+    const normalized = value <= 1 ? value : value / 100;
+    const calibrationApplied = payload?.confidence_calibration?.calibration_applied;
+    return {
+        raw_value: normalized,
+        effective_value: normalized,
+        display_percent: Number((normalized * 100).toFixed(1)),
+        strength_level:
+            normalized >= 0.85
+                ? 'very_strong'
+                : normalized >= 0.65
+                    ? 'strong'
+                    : normalized >= 0.45
+                        ? 'moderate'
+                        : 'weak',
+        calibration_status: calibrationApplied ? 'calibrated' : 'uncalibrated',
+        source: 'legacy_confidence_fallback',
+        probability_eligible: calibrationApplied ?? null,
+    };
+};
+
+const buildFallbackReliabilitySummary = (
+    isDegraded: boolean,
+    calibration?: TechnicalConfidenceCalibration | null
+): TechnicalSetupReliabilitySummary | undefined => {
+    if (!isDegraded && calibration?.calibration_applied === undefined) {
+        return undefined;
+    }
+    return {
+        level: isDegraded ? 'low' : calibration?.calibration_applied ? 'high' : 'medium',
+        calibration_status: calibration?.calibration_applied ? 'calibrated' : 'uncalibrated',
+        coverage_status: isDegraded ? 'partial' : 'full',
+        conflict_level: 'none',
+        reasons: isDegraded ? ['DEGRADED_INPUTS'] : ['UNCALIBRATED'],
+        recommended_reliance: isDegraded ? 'cautious' : 'supporting',
+    };
 };
 
 const formatArtifactLabel = (value: string) =>
@@ -1617,9 +1696,6 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
 
     const DirectionIcon = getDirectionIcon(reportData.direction);
     const riskTone = getRiskTone(reportData.risk_level);
-    const confidenceValue = resolveConfidenceValue(reportData);
-    const confidenceDisplay = formatConfidence(confidenceValue);
-    const confidenceLabel = buildCalibrationLabel(reportData.confidence_calibration);
     const fusionConfidenceValue = resolveConfidenceValue(fusionReportData);
     const fusionConfidenceDisplay = formatConfidence(fusionConfidenceValue);
     const fusionConfidenceLabel = buildCalibrationLabel(
@@ -1636,6 +1712,20 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
     const qualitySummary = reportData.quality_summary;
     const alertReadout = reportData.alert_readout;
     const observabilitySummary = reportData.observability_summary;
+    const signalStrengthSummary =
+        reportData.signal_strength_summary ??
+        buildFallbackSignalStrengthSummary(reportData);
+    const setupReliabilitySummary =
+        reportData.setup_reliability_summary ??
+        buildFallbackReliabilitySummary(
+            reportData.diagnostics?.is_degraded === true,
+            reportData.confidence_calibration
+        );
+    const signalStrengthDescriptor = getSignalStrengthDescriptor(signalStrengthSummary);
+    const setupReliabilityDescriptor =
+        getSetupReliabilityDescriptor(setupReliabilitySummary);
+    const signalStrengthTone = getIndicatorToneClasses(signalStrengthDescriptor.tone);
+    const setupReliabilityTone = getIndicatorToneClasses(setupReliabilityDescriptor.tone);
     const evidenceRegimeSummary = evidenceBundle?.regime_summary ?? reportData.regime_summary;
     const evidenceStructureSummary =
         evidenceBundle?.structure_confluence_summary ??
@@ -1705,31 +1795,72 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Overview</span>
                 </div>
 
-                <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="tech-card p-4 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div className="p-2 rounded-lg bg-white/5 backdrop-blur-md">
-                                <DirectionIcon size={20} className="text-cyan-400" />
+                <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="tech-card p-4 flex flex-col border border-slate-700/50 bg-slate-900/20">
+                        <div className="flex-1">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Direction</div>
+                                    <div className="text-lg font-black text-white mt-1 leading-tight">{formatLabel(reportData.direction)}</div>
+                                </div>
+                                <div className="p-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/20 shrink-0">
+                                    <DirectionIcon size={16} className="text-cyan-400" />
+                                </div>
                             </div>
-                            <div>
-                                <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Direction</div>
-                                <div className="text-lg font-black text-white">{formatLabel(reportData.direction)}</div>
+                        </div>
+                        <div className="mt-auto pt-4 border-t border-slate-800/50">
+                            <div className="text-[10px] leading-snug text-slate-500">
+                                Primary trend vector based on momentum consensus.
                             </div>
                         </div>
                     </div>
-                    <div className={`tech-card p-4 border ${riskTone.border} ${riskTone.bg}`}>
-                        <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Risk Level</div>
-                        <div className={`text-lg font-black ${riskTone.color}`}>{riskTone.label}</div>
-                        {isDegraded && (
-                            <div className="text-[9px] font-bold uppercase tracking-widest text-rose-300 mt-1">
-                                Degraded Data Path
+                    <div className={`tech-card p-4 flex flex-col border ${riskTone.border} ${riskTone.bg}`}>
+                        <div className="flex-1">
+                            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Risk Level</div>
+                            <div className={`text-lg font-black mt-1 leading-tight ${riskTone.color}`}>{riskTone.label}</div>
+                            {isDegraded && (
+                                <div className="text-[9px] uppercase tracking-widest text-rose-300 mt-2 font-bold">
+                                    System Warning
+                                </div>
+                            )}
+                        </div>
+                        <div className={`mt-auto pt-4 border-t ${isDegraded ? 'border-rose-500/20' : 'border-slate-800/50'}`}>
+                            <div className={`text-[10px] leading-snug ${isDegraded ? 'text-rose-400' : 'text-slate-500'}`}>
+                                {isDegraded ? 'Degraded Data Path - Use Caution' : 'Composite risk assessment from volatility inputs.'}
                             </div>
-                        )}
+                        </div>
                     </div>
-                    <div className="tech-card p-4">
-                        <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Confidence</div>
-                        <div className="text-lg font-black text-white">{confidenceDisplay}</div>
-                        <div className="text-[9px] text-slate-500 uppercase tracking-widest mt-1">{confidenceLabel}</div>
+                    <div className={`tech-card p-4 flex flex-col border ${setupReliabilityTone.border} ${setupReliabilityTone.bg}`}>
+                        <div className="flex-1">
+                            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Setup Reliability</div>
+                            <div className={`text-lg font-black mt-1 leading-tight ${setupReliabilityTone.value}`}>
+                                {setupReliabilityDescriptor.label}
+                            </div>
+                            <div className={`text-[9px] uppercase tracking-widest mt-2 ${setupReliabilityTone.detail}`}>
+                                {setupReliabilityDescriptor.detail}
+                            </div>
+                        </div>
+                        <div className="mt-auto pt-4 border-t border-slate-800/50">
+                            <div className="text-[10px] leading-snug text-slate-400/80">
+                                {setupReliabilityDescriptor.helper}
+                            </div>
+                        </div>
+                    </div>
+                    <div className={`tech-card p-4 flex flex-col border ${signalStrengthTone.border} ${signalStrengthTone.bg}`}>
+                        <div className="flex-1">
+                            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Signal Strength</div>
+                            <div className={`text-lg font-black mt-1 leading-tight ${signalStrengthTone.value}`}>
+                                {signalStrengthDescriptor.label}
+                            </div>
+                            <div className={`text-[9px] uppercase tracking-widest mt-2 ${signalStrengthTone.detail}`}>
+                                {signalStrengthDescriptor.detail}
+                            </div>
+                        </div>
+                        <div className="mt-auto pt-4 border-t border-slate-800/50">
+                            <div className="text-[10px] leading-snug text-slate-400/80">
+                                {signalStrengthDescriptor.helper}
+                            </div>
+                        </div>
                     </div>
                 </section>
 
@@ -1812,13 +1943,13 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                     )}
                                     {(typeof evidenceVolumeProfile?.poc === 'number' ||
                                         typeof evidenceStructureSummary?.poc === 'number') && (
-                                        <div>
-                                            POC: {formatPrice(
-                                                (evidenceVolumeProfile?.poc as number | undefined) ??
+                                            <div>
+                                                POC: {formatPrice(
+                                                    (evidenceVolumeProfile?.poc as number | undefined) ??
                                                     (evidenceStructureSummary?.poc as number)
-                                            )}
-                                        </div>
-                                    )}
+                                                )}
+                                            </div>
+                                        )}
                                     {(typeof evidenceVolumeProfile?.vah === 'number' ||
                                         typeof evidenceStructureSummary?.vah === 'number') &&
                                         (typeof evidenceVolumeProfile?.val === 'number' ||
@@ -1826,12 +1957,12 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                             <div>
                                                 Value area: {formatPrice(
                                                     (evidenceVolumeProfile?.val as number | undefined) ??
-                                                        (evidenceStructureSummary?.val as number)
+                                                    (evidenceStructureSummary?.val as number)
                                                 )}{' '}
                                                 -{' '}
                                                 {formatPrice(
                                                     (evidenceVolumeProfile?.vah as number | undefined) ??
-                                                        (evidenceStructureSummary?.vah as number)
+                                                    (evidenceStructureSummary?.vah as number)
                                                 )}
                                             </div>
                                         )}
@@ -2756,8 +2887,8 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 Timeframes:{' '}
                                 {observabilitySummary.observed_timeframes?.length
                                     ? observabilitySummary.observed_timeframes
-                                          .map((frame) => frame.toUpperCase())
-                                          .join(' · ')
+                                        .map((frame) => frame.toUpperCase())
+                                        .join(' · ')
                                     : 'n/a'}
                             </div>
                         </div>
@@ -3330,9 +3461,19 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                                 <div className="text-lg font-black text-white">{fusionReportData.conflict_reasons?.length ?? 0}</div>
                                             </div>
                                             <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
-                                                <div className="text-[9px] font-black text-slate-500 uppercase mb-1">Confidence</div>
-                                                <div className="text-lg font-black text-white">{fusionConfidenceDisplay}</div>
+                                                <div className="text-[9px] font-black text-slate-500 uppercase mb-1">Signal Strength</div>
+                                                <div className="text-lg font-black text-white">
+                                                    {fusionReportData.signal_strength_effective !== undefined &&
+                                                        fusionReportData.signal_strength_effective !== null
+                                                        ? formatConfidence(fusionReportData.signal_strength_effective)
+                                                        : fusionConfidenceDisplay}
+                                                </div>
                                                 <div className="text-[9px] text-slate-500 uppercase tracking-widest mt-1">{fusionConfidenceLabel}</div>
+                                                {fusionReportData.confidence_eligibility?.eligible === false && (
+                                                    <div className="text-[9px] text-slate-600 uppercase tracking-widest mt-1">
+                                                        Not Probability-Rated
+                                                    </div>
+                                                )}
                                                 {fusionRawDisplay && (
                                                     <div className="text-[9px] text-slate-600 uppercase tracking-widest mt-1">
                                                         Raw {fusionRawDisplay}

@@ -7,6 +7,8 @@ import {
     formatAlertQualityGateLabel,
     getMarketStatusDescriptor,
     getQualityStatusDescriptor,
+    getSetupReliabilityDescriptor,
+    getSignalStrengthDescriptor,
     resolveFdDescriptor,
     resolveMacdTone,
     resolveRsiDescriptor,
@@ -73,6 +75,34 @@ describe('technical wording', () => {
                 'Some upstream inputs were missing or downgraded, so read the setup with extra caution.',
         });
         expect(getQualityStatusDescriptor(false, 'medium').label).toBe('Usable Coverage');
+    });
+
+    it('describes signal strength without presenting it as probability', () => {
+        const descriptor = getSignalStrengthDescriptor({
+            display_percent: 58.0,
+            strength_level: 'moderate',
+            calibration_status: 'ineligible',
+        });
+
+        expect(descriptor.label).toBe('Moderate');
+        expect(descriptor.detail).toContain('58.0%');
+        expect(descriptor.detail).toContain('Not Probability-Rated');
+        expect(descriptor.helper.toLowerCase()).toContain('not a probability forecast');
+    });
+
+    it('describes low setup reliability as cautious context', () => {
+        const descriptor = getSetupReliabilityDescriptor({
+            level: 'low',
+            calibration_status: 'ineligible',
+            coverage_status: 'partial',
+            conflict_level: 'present',
+            recommended_reliance: 'cautious',
+        });
+
+        expect(descriptor.label).toBe('Low Reliability');
+        expect(descriptor.detail).toContain('Partial Coverage');
+        expect(descriptor.detail).toContain('Conflict Present');
+        expect(descriptor.helper).toContain('cautious context');
     });
 
     it('formats alert lifecycle and gate labels for UI badges', () => {

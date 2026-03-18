@@ -728,6 +728,48 @@
         "title": "ConfidenceCalibrationModel",
         "type": "object"
       },
+      "ConfidenceEligibilityModel": {
+        "properties": {
+          "eligible": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eligible"
+          },
+          "normalized_direction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Normalized Direction"
+          },
+          "reason_codes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Codes"
+          }
+        },
+        "title": "ConfidenceEligibilityModel",
+        "type": "object"
+      },
       "DebateArtifactModel": {
         "properties": {
           "alpha": {
@@ -3332,6 +3374,164 @@
         "title": "SearchResultsEnvelope",
         "type": "object"
       },
+      "SetupReliabilitySummaryModel": {
+        "properties": {
+          "calibration_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calibration Status"
+          },
+          "conflict_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conflict Level"
+          },
+          "coverage_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage Status"
+          },
+          "level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level"
+          },
+          "reasons": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasons"
+          },
+          "recommended_reliance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommended Reliance"
+          }
+        },
+        "title": "SetupReliabilitySummaryModel",
+        "type": "object"
+      },
+      "SignalStrengthSummaryModel": {
+        "properties": {
+          "calibration_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calibration Status"
+          },
+          "display_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Percent"
+          },
+          "effective_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Value"
+          },
+          "probability_eligible": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Probability Eligible"
+          },
+          "raw_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Value"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "strength_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strength Level"
+          }
+        },
+        "title": "SignalStrengthSummaryModel",
+        "type": "object"
+      },
       "SourceInfoModel": {
         "properties": {
           "author": {
@@ -4520,6 +4720,16 @@
               }
             ]
           },
+          "confidence_eligibility": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConfidenceEligibilityModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "confidence_raw": {
             "anyOf": [
               {
@@ -4607,6 +4817,48 @@
           "schema_version": {
             "title": "Schema Version",
             "type": "string"
+          },
+          "setup_reliability_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SetupReliabilitySummaryModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "signal_strength_effective": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signal Strength Effective"
+          },
+          "signal_strength_raw": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signal Strength Raw"
+          },
+          "signal_strength_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SignalStrengthSummaryModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "structure_confluence_summary": {
             "anyOf": [
@@ -4832,6 +5084,45 @@
           }
         },
         "title": "TechnicalConfidenceCalibrationData",
+        "type": "object"
+      },
+      "TechnicalConfidenceEligibilityData": {
+        "additionalProperties": false,
+        "properties": {
+          "eligible": {
+            "title": "Eligible",
+            "type": "boolean"
+          },
+          "normalized_direction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Normalized Direction"
+          },
+          "reason_codes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Codes"
+          }
+        },
+        "required": [
+          "eligible"
+        ],
+        "title": "TechnicalConfidenceEligibilityData",
         "type": "object"
       },
       "TechnicalDirectionScorecardArtifactData": {
@@ -5358,6 +5649,16 @@
               }
             ]
           },
+          "confidence_eligibility": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TechnicalConfidenceEligibilityData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "confidence_raw": {
             "anyOf": [
               {
@@ -5433,6 +5734,28 @@
           "schema_version": {
             "title": "Schema Version",
             "type": "string"
+          },
+          "signal_strength_effective": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signal Strength Effective"
+          },
+          "signal_strength_raw": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signal Strength Raw"
           },
           "source_artifacts": {
             "anyOf": [

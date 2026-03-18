@@ -377,6 +377,14 @@ class TechnicalConfidenceCalibrationData(BaseModel):
     calibration_applied: bool | None = None
 
 
+class TechnicalConfidenceEligibilityData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    eligible: bool
+    normalized_direction: str | None = None
+    reason_codes: list[str] | None = None
+
+
 class TechnicalAlignmentReportData(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -405,7 +413,10 @@ class TechnicalFusionReportArtifactData(BaseModel):
     confidence: float | None = None
     confidence_raw: float | None = None
     confidence_calibrated: float | None = None
+    signal_strength_raw: float | None = None
+    signal_strength_effective: float | None = None
     confidence_calibration: TechnicalConfidenceCalibrationData | None = None
+    confidence_eligibility: TechnicalConfidenceEligibilityData | None = None
     confluence_matrix: dict[str, dict[str, object]] | None = None
     conflict_reasons: list[str] | None = None
     regime_summary: TechnicalRegimeSummaryData | None = None

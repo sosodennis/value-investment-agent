@@ -48,6 +48,14 @@ class ConfidenceCalibrationModel(BaseModel):
     calibration_applied: bool | None = None
 
 
+class ConfidenceEligibilityModel(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    eligible: bool | None = None
+    normalized_direction: OptionalTechnicalText = None
+    reason_codes: list[str] | None = None
+
+
 class RegimeSummaryModel(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -124,6 +132,29 @@ class QualitySummaryModel(BaseModel):
     unavailable_indicator_count: int | None = None
     alert_quality_gate_counts: dict[str, int] | None = None
     primary_timeframe: OptionalTechnicalText = None
+
+
+class SignalStrengthSummaryModel(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    raw_value: OptionalConfidenceScore = None
+    effective_value: OptionalConfidenceScore = None
+    display_percent: OptionalConfidenceScore = None
+    strength_level: OptionalTechnicalText = None
+    calibration_status: OptionalTechnicalText = None
+    source: OptionalTechnicalText = None
+    probability_eligible: bool | None = None
+
+
+class SetupReliabilitySummaryModel(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    level: OptionalTechnicalText = None
+    calibration_status: OptionalTechnicalText = None
+    coverage_status: OptionalTechnicalText = None
+    conflict_level: OptionalTechnicalText = None
+    reasons: list[str] | None = None
+    recommended_reliance: OptionalTechnicalText = None
 
 
 class AlertReadoutItemModel(BaseModel):
@@ -224,12 +255,17 @@ class TechnicalArtifactModel(BaseModel):
     confidence: OptionalConfidenceScore = None
     confidence_raw: OptionalConfidenceScore = None
     confidence_calibrated: OptionalConfidenceScore = None
+    signal_strength_raw: OptionalConfidenceScore = None
+    signal_strength_effective: OptionalConfidenceScore = None
     confidence_calibration: ConfidenceCalibrationModel | None = None
+    confidence_eligibility: ConfidenceEligibilityModel | None = None
     momentum_extremes: MomentumExtremesModel | None = None
     regime_summary: RegimeSummaryModel | None = None
     volume_profile_summary: dict[str, object] | None = None
     structure_confluence_summary: StructureConfluenceSummaryModel | None = None
     evidence_bundle: TechnicalEvidenceBundleModel | None = None
+    signal_strength_summary: SignalStrengthSummaryModel | None = None
+    setup_reliability_summary: SetupReliabilitySummaryModel | None = None
     quality_summary: QualitySummaryModel | None = None
     alert_readout: AlertReadoutModel | None = None
     observability_summary: ObservabilitySummaryModel | None = None

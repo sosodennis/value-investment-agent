@@ -9,6 +9,11 @@ DEFAULT_TECHNICAL_DIRECTION_CALIBRATION_MAPPING_VERSION = (
 TECHNICAL_DIRECTION_CALIBRATION_METHOD = "piecewise_v1"
 
 _SUPPORTED_DIRECTIONS = {"bullish", "bearish"}
+_DIRECTION_FAMILY_ALIASES = {
+    "bullish_extension": "bullish",
+    "bearish_extension": "bearish",
+    "neutral_consolidation": "neutral",
+}
 
 _DEFAULT_TIMEFRAME_MULTIPLIER: dict[str, float] = {
     "1d": 1.0,
@@ -74,6 +79,15 @@ def calibrate_direction_confidence(
     return calibrated, True, config.mapping_version
 
 
+def resolve_direction_family(direction: str) -> str | None:
+    if not isinstance(direction, str):
+        return None
+    normalized = direction.strip().lower()
+    if normalized in _SUPPORTED_DIRECTIONS:
+        return normalized
+    return _DIRECTION_FAMILY_ALIASES.get(normalized)
+
+
 def parse_technical_direction_calibration_config(
     payload: Mapping[str, object],
 ) -> TechnicalDirectionCalibrationConfig:
@@ -100,11 +114,9 @@ def parse_technical_direction_calibration_config(
 
 
 def _normalize_direction(direction: str) -> str | None:
-    if not isinstance(direction, str):
-        return None
-    normalized = direction.strip().lower()
-    if normalized in _SUPPORTED_DIRECTIONS:
-        return normalized
+    direction_family = resolve_direction_family(direction)
+    if direction_family in _SUPPORTED_DIRECTIONS:
+        return direction_family
     return None
 
 

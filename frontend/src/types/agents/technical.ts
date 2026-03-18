@@ -30,6 +30,12 @@ export interface TechnicalConfidenceCalibration {
     calibration_applied?: boolean | null;
 }
 
+export interface TechnicalConfidenceEligibility {
+    eligible?: boolean | null;
+    normalized_direction?: string | null;
+    reason_codes?: string[];
+}
+
 export interface TechnicalMomentumExtremes {
     timeframe?: string | null;
     source?: string | null;
@@ -97,6 +103,25 @@ export interface TechnicalEvidenceBundle {
     volume_profile_summary?: Record<string, unknown>;
     structure_confluence_summary?: TechnicalStructureConfluenceSummary;
     conflict_reasons?: string[];
+}
+
+export interface TechnicalSignalStrengthSummary {
+    raw_value?: number | null;
+    effective_value?: number | null;
+    display_percent?: number | null;
+    strength_level?: string | null;
+    calibration_status?: string | null;
+    source?: string | null;
+    probability_eligible?: boolean | null;
+}
+
+export interface TechnicalSetupReliabilitySummary {
+    level?: string | null;
+    calibration_status?: string | null;
+    coverage_status?: string | null;
+    conflict_level?: string | null;
+    reasons?: string[];
+    recommended_reliance?: string | null;
 }
 
 export interface TechnicalQualitySummary {
@@ -381,7 +406,10 @@ export interface TechnicalFusionReport {
     confidence?: number | null;
     confidence_raw?: number | null;
     confidence_calibrated?: number | null;
+    signal_strength_raw?: number | null;
+    signal_strength_effective?: number | null;
     confidence_calibration?: TechnicalConfidenceCalibration;
+    confidence_eligibility?: TechnicalConfidenceEligibility;
     regime_summary?: TechnicalRegimeSummary;
     confluence_matrix?: Record<string, Record<string, unknown>>;
     conflict_reasons?: string[];
@@ -477,12 +505,17 @@ export interface TechnicalAnalysisReport {
     confidence?: number;
     confidence_raw?: number | null;
     confidence_calibrated?: number | null;
+    signal_strength_raw?: number | null;
+    signal_strength_effective?: number | null;
     confidence_calibration?: TechnicalConfidenceCalibration;
+    confidence_eligibility?: TechnicalConfidenceEligibility;
     momentum_extremes?: TechnicalMomentumExtremes;
     regime_summary?: TechnicalRegimeSummary;
     volume_profile_summary?: Record<string, unknown>;
     structure_confluence_summary?: TechnicalStructureConfluenceSummary;
     evidence_bundle?: TechnicalEvidenceBundle;
+    signal_strength_summary?: TechnicalSignalStrengthSummary;
+    setup_reliability_summary?: TechnicalSetupReliabilitySummary;
     quality_summary?: TechnicalQualitySummary;
     alert_readout?: TechnicalAlertReadout;
     observability_summary?: TechnicalObservabilitySummary;

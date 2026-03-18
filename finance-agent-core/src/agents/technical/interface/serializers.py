@@ -273,8 +273,23 @@ def build_full_report_payload(
     )
     if confidence_val is None and confidence_calibrated_val is not None:
         confidence_val = confidence_calibrated_val
+    signal_strength_raw = technical_context.get("signal_strength_raw")
+    signal_strength_raw_val = (
+        float(signal_strength_raw)
+        if isinstance(signal_strength_raw, int | float)
+        else None
+    )
+    signal_strength_effective = technical_context.get("signal_strength_effective")
+    signal_strength_effective_val = (
+        float(signal_strength_effective)
+        if isinstance(signal_strength_effective, int | float)
+        else None
+    )
     confidence_calibration = _optional_object_payload(
         technical_context.get("confidence_calibration")
+    )
+    confidence_eligibility = _optional_object_payload(
+        technical_context.get("confidence_eligibility")
     )
     momentum_extremes = _optional_object_payload(
         technical_context.get("momentum_extremes")
@@ -287,6 +302,12 @@ def build_full_report_payload(
         technical_context.get("structure_confluence_summary")
     )
     evidence_bundle = _optional_object_payload(technical_context.get("evidence_bundle"))
+    signal_strength_summary = _optional_object_payload(
+        technical_context.get("signal_strength_summary")
+    )
+    setup_reliability_summary = _optional_object_payload(
+        technical_context.get("setup_reliability_summary")
+    )
     quality_summary = _optional_object_payload(technical_context.get("quality_summary"))
     alert_readout = _optional_object_payload(technical_context.get("alert_readout"))
     observability_summary = _optional_object_payload(
@@ -301,12 +322,17 @@ def build_full_report_payload(
         "confidence": confidence_val,
         "confidence_raw": confidence_raw_val,
         "confidence_calibrated": confidence_calibrated_val,
+        "signal_strength_raw": signal_strength_raw_val,
+        "signal_strength_effective": signal_strength_effective_val,
         "confidence_calibration": confidence_calibration,
+        "confidence_eligibility": confidence_eligibility,
         "momentum_extremes": momentum_extremes,
         "regime_summary": regime_summary,
         "volume_profile_summary": volume_profile_summary,
         "structure_confluence_summary": structure_confluence_summary,
         "evidence_bundle": evidence_bundle,
+        "signal_strength_summary": signal_strength_summary,
+        "setup_reliability_summary": setup_reliability_summary,
         "quality_summary": quality_summary,
         "alert_readout": alert_readout,
         "observability_summary": observability_summary,

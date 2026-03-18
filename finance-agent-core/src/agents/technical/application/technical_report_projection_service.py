@@ -14,6 +14,12 @@ def build_report_projection_context(
     artifacts: TechnicalProjectionArtifacts,
 ) -> JSONObject:
     context = build_projection_context_from_evidence(artifacts.evidence_bundle)
+    signal_strength_summary = _build_signal_strength_summary(artifacts=artifacts)
+    if signal_strength_summary is not None:
+        context["signal_strength_summary"] = signal_strength_summary
+    setup_reliability_summary = _build_setup_reliability_summary(artifacts=artifacts)
+    if setup_reliability_summary is not None:
+        context["setup_reliability_summary"] = setup_reliability_summary
     quality_summary = _build_quality_summary(artifacts=artifacts)
     if quality_summary is not None:
         context["quality_summary"] = quality_summary
@@ -24,6 +30,132 @@ def build_report_projection_context(
     if observability_summary is not None:
         context["observability_summary"] = observability_summary
     return context
+
+
+def _build_signal_strength_summary(
+    *,
+    artifacts: TechnicalProjectionArtifacts,
+) -> JSONObject | None:
+    fusion_report = artifacts.fusion_report
+    if fusion_report is None:
+        return None
+    raw_value = fusion_report.signal_strength_raw
+    if raw_value is None:
+        raw_value = fusion_report.confidence_raw
+    effective_value = fusion_report.signal_strength_effective
+    if effective_value is None:
+        effective_value = raw_value
+    display_value = effective_value if effective_value is not None else raw_value
+    calibration_applied = (
+        fusion_report.confidence_calibration.calibration_applied
+        if fusion_report.confidence_calibration is not None
+        else None
+    )
+    probability_eligible = (
+        fusion_report.confidence_eligibility.eligible
+        if fusion_report.confidence_eligibility is not None
+        else None
+    )
+    if (
+        raw_value is None
+        and effective_value is None
+        and calibration_applied is None
+        and probability_eligible is None
+    ):
+        return None
+    return {
+        "raw_value": raw_value,
+        "effective_value": effective_value,
+        "display_percent": round(display_value * 100.0, 1)
+        if isinstance(display_value, int | float)
+        else None,
+        "strength_level": _resolve_strength_level(display_value),
+        "calibration_status": _resolve_calibration_status(
+            calibration_applied=calibration_applied,
+            probability_eligible=probability_eligible,
+        ),
+        "source": "fusion_runtime",
+        "probability_eligible": probability_eligible,
+    }
+
+
+def _build_setup_reliability_summary(
+    *,
+    artifacts: TechnicalProjectionArtifacts,
+) -> JSONObject | None:
+    fusion_report = artifacts.fusion_report
+    feature_pack = artifacts.feature_pack
+    if fusion_report is None and feature_pack is None:
+        return None
+
+    degraded_reasons = _merge_unique(
+        list(feature_pack.degraded_reasons or []) if feature_pack is not None else [],
+        list(fusion_report.degraded_reasons or []) if fusion_report is not None else [],
+        list(artifacts.alerts.degraded_reasons or [])
+        if artifacts.alerts is not None
+        else [],
+    )
+    conflict_reasons = (
+        list(fusion_report.conflict_reasons or []) if fusion_report else []
+    )
+    calibration_applied = (
+        fusion_report.confidence_calibration.calibration_applied
+        if fusion_report is not None
+        and fusion_report.confidence_calibration is not None
+        else None
+    )
+    critical_artifact_missing = any(
+        artifact is None
+        for artifact in (
+            artifacts.feature_pack,
+            artifacts.pattern_pack,
+            artifacts.regime_pack,
+            artifacts.fusion_report,
+        )
+    )
+    optional_artifact_missing = any(
+        artifact is None
+        for artifact in (artifacts.alerts, artifacts.direction_scorecard)
+    )
+    coverage_status = _resolve_coverage_status(
+        critical_artifact_missing=critical_artifact_missing,
+        optional_artifact_missing=optional_artifact_missing,
+        degraded_reasons=degraded_reasons,
+    )
+    conflict_level = _resolve_conflict_level(conflict_reasons)
+    reasons: list[str] = []
+    if calibration_applied is not True:
+        reasons.append("UNCALIBRATED")
+    if degraded_reasons:
+        reasons.append("DEGRADED_INPUTS")
+    if conflict_reasons:
+        reasons.append("CONFLICT_PRESENT")
+    if coverage_status == "partial":
+        reasons.append("PARTIAL_COVERAGE")
+    if coverage_status == "limited":
+        reasons.append("LIMITED_COVERAGE")
+    level = _resolve_reliability_level(
+        calibration_applied=calibration_applied,
+        coverage_status=coverage_status,
+        degraded_reason_count=len(degraded_reasons),
+        conflict_count=len(conflict_reasons),
+    )
+    return {
+        "level": level,
+        "calibration_status": _resolve_calibration_status(
+            calibration_applied=calibration_applied,
+            probability_eligible=(
+                fusion_report.confidence_eligibility.eligible
+                if fusion_report is not None
+                and fusion_report.confidence_eligibility is not None
+                else None
+            ),
+        ),
+        "coverage_status": coverage_status,
+        "conflict_level": conflict_level,
+        "reasons": reasons,
+        "recommended_reliance": _resolve_recommended_reliance(level),
+    }
 
 
 def _build_quality_summary(
@@ -221,3 +353,80 @@ def _lifecycle_count(alerts: list[object], state: str) -> int:
         if lifecycle_state == state:
             total += 1
     return total
+
+
+def _resolve_strength_level(value: float | None) -> str | None:
+    if value is None:
+        return None
+    if value >= 0.85:
+        return "very_strong"
+    if value >= 0.65:
+        return "strong"
+    if value >= 0.45:
+        return "moderate"
+    return "weak"
+
+
+def _resolve_calibration_status(
+    *,
+    calibration_applied: bool | None,
+    probability_eligible: bool | None,
+) -> str:
+    if calibration_applied is True:
+        return "calibrated"
+    if probability_eligible is False:
+        return "ineligible"
+    return "uncalibrated"
+
+
+def _resolve_coverage_status(
+    *,
+    critical_artifact_missing: bool,
+    optional_artifact_missing: bool,
+    degraded_reasons: list[str],
+) -> str:
+    if critical_artifact_missing:
+        return "limited"
+    if degraded_reasons or optional_artifact_missing:
+        return "partial"
+    return "full"
+
+
+def _resolve_conflict_level(conflict_reasons: list[str]) -> str:
+    if not conflict_reasons:
+        return "none"
+    if len(conflict_reasons) == 1:
+        return "present"
+    return "elevated"
+
+
+def _resolve_reliability_level(
+    *,
+    calibration_applied: bool | None,
+    coverage_status: str,
+    degraded_reason_count: int,
+    conflict_count: int,
+) -> str:
+    if (
+        calibration_applied is True
+        and coverage_status == "full"
+        and degraded_reason_count == 0
+        and conflict_count == 0
+    ):
+        return "high"
+    if (
+        coverage_status == "limited"
+        or degraded_reason_count >= 2
+        or conflict_count >= 2
+        or (calibration_applied is not True and degraded_reason_count > 0)
+    ):
+        return "low"
+    return "medium"
+
+
+def _resolve_recommended_reliance(level: str) -> str:
+    return {
+        "high": "primary",
+        "medium": "supporting",
+        "low": "cautious",
+    }.get(level, "supporting")

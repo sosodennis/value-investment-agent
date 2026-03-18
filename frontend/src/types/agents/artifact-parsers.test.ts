@@ -330,12 +330,19 @@ describe('artifact parsers', () => {
             confidence: 0.78,
             confidence_raw: 0.62,
             confidence_calibrated: 0.78,
+            signal_strength_raw: 0.62,
+            signal_strength_effective: 0.43,
             confidence_calibration: {
                 mapping_source: 'default_artifact',
                 mapping_path: '/tmp/technical_direction_calibration.json',
                 degraded_reason: null,
                 mapping_version: 'technical_direction_calibration_v1_2026_03_16',
                 calibration_applied: true,
+            },
+            confidence_eligibility: {
+                eligible: false,
+                normalized_direction: 'bullish',
+                reason_codes: ['DEGRADED_INPUTS_PRESENT'],
             },
             momentum_extremes: {
                 timeframe: '1d',
@@ -430,6 +437,23 @@ describe('artifact parsers', () => {
                 },
                 conflict_reasons: ['1d:quant_neutral']
             },
+            signal_strength_summary: {
+                raw_value: 0.62,
+                effective_value: 0.43,
+                display_percent: 43.0,
+                strength_level: 'weak',
+                calibration_status: 'ineligible',
+                source: 'fusion_runtime',
+                probability_eligible: false,
+            },
+            setup_reliability_summary: {
+                level: 'low',
+                calibration_status: 'ineligible',
+                coverage_status: 'partial',
+                conflict_level: 'present',
+                reasons: ['UNCALIBRATED', 'DEGRADED_INPUTS', 'CONFLICT_PRESENT', 'PARTIAL_COVERAGE'],
+                recommended_reliance: 'cautious',
+            },
             quality_summary: {
                 is_degraded: true,
                 degraded_reasons: ['1wk_QUANT_SKIPPED'],
@@ -498,7 +522,11 @@ describe('artifact parsers', () => {
         expect(parsed.artifact_refs.alerts_id).toBe('alerts-789');
         expect(parsed.confidence_raw).toBe(0.62);
         expect(parsed.confidence_calibrated).toBe(0.78);
+        expect(parsed.signal_strength_raw).toBe(0.62);
+        expect(parsed.signal_strength_effective).toBe(0.43);
         expect(parsed.confidence_calibration?.mapping_source).toBe('default_artifact');
+        expect(parsed.confidence_eligibility?.eligible).toBe(false);
+        expect(parsed.confidence_eligibility?.normalized_direction).toBe('bullish');
         expect(parsed.momentum_extremes?.fd_label).toBe('EXTREME');
         expect(parsed.momentum_extremes?.rsi_bias).toBe('BEARISH_BIAS');
         expect(parsed.analyst_perspective?.stance).toBe('BEARISH_WATCH');
@@ -513,6 +541,10 @@ describe('artifact parsers', () => {
         expect(parsed.evidence_bundle?.support_levels).toEqual([180.5, 176.2]);
         expect(parsed.evidence_bundle?.breakout_signals?.[0]?.name).toBe('BREAKOUT_UP');
         expect(parsed.evidence_bundle?.scorecard_summary?.overall_score).toBe(0.68);
+        expect(parsed.signal_strength_summary?.effective_value).toBe(0.43);
+        expect(parsed.signal_strength_summary?.strength_level).toBe('weak');
+        expect(parsed.setup_reliability_summary?.level).toBe('low');
+        expect(parsed.setup_reliability_summary?.recommended_reliance).toBe('cautious');
         expect(parsed.quality_summary?.overall_quality).toBe('medium');
         expect(parsed.quality_summary?.alert_quality_gate_counts?.passed).toBe(1);
         expect(parsed.alert_readout?.highest_severity).toBe('warning');
@@ -841,12 +873,19 @@ describe('artifact parsers', () => {
             confidence: 0.62,
             confidence_raw: 0.48,
             confidence_calibrated: 0.62,
+            signal_strength_raw: 0.48,
+            signal_strength_effective: 0.29,
             confidence_calibration: {
                 mapping_source: 'default_artifact',
                 mapping_path: '/tmp/technical_direction_calibration.json',
                 degraded_reason: null,
                 mapping_version: 'technical_direction_calibration_v1_2026_03_16',
                 calibration_applied: true,
+            },
+            confidence_eligibility: {
+                eligible: false,
+                normalized_direction: 'bullish',
+                reason_codes: ['DEGRADED_INPUTS_PRESENT', 'CONFLICTS_PRESENT'],
             },
             confluence_matrix: {
                 daily: {
@@ -889,6 +928,12 @@ describe('artifact parsers', () => {
         expect(parsed.degraded_reasons).toContain('DAILY_PATTERN_FRAME_MISSING');
         expect(parsed.confidence_calibrated).toBe(0.62);
         expect(parsed.confidence_raw).toBe(0.48);
+        expect(parsed.signal_strength_raw).toBe(0.48);
+        expect(parsed.signal_strength_effective).toBe(0.29);
+        expect(parsed.confidence_eligibility?.reason_codes).toEqual([
+            'DEGRADED_INPUTS_PRESENT',
+            'CONFLICTS_PRESENT',
+        ]);
         expect(parsed.regime_summary?.average_confidence).toBe(0.81);
         expect(parsed.alignment_report?.gap_count).toBe(1);
         expect(parsed.confidence_calibration?.mapping_version).toBe(

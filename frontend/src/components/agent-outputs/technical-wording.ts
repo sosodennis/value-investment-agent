@@ -30,6 +30,20 @@ export type QualityStatusDescriptor = {
     meaning: string;
 };
 
+export type SignalStrengthOverviewDescriptor = {
+    tone: IndicatorTone;
+    label: string;
+    detail: string;
+    helper: string;
+};
+
+export type SetupReliabilityDescriptor = {
+    tone: IndicatorTone;
+    label: string;
+    detail: string;
+    helper: string;
+};
+
 export type IndicatorHighlightDescriptor = {
     displayName: string;
     stateLabel: string | null;
@@ -344,6 +358,140 @@ export const formatAlertQualityGateLabel = (gate?: string | null): string => {
     if (normalized === 'DEGRADED') return 'Degraded';
     if (normalized === 'FAILED') return 'Failed';
     return _humanizeSignalName(normalized);
+};
+
+export const getSignalStrengthDescriptor = (input?: {
+    display_percent?: number | null;
+    strength_level?: string | null;
+    calibration_status?: string | null;
+} | null): SignalStrengthOverviewDescriptor => {
+    const strengthLevel = _normalizeState(input?.strength_level);
+    const calibrationStatus = _normalizeState(input?.calibration_status);
+    const detailParts: string[] = [];
+    if (typeof input?.display_percent === 'number') {
+        detailParts.push(`${input.display_percent.toFixed(1)}%`);
+    }
+    if (calibrationStatus === 'CALIBRATED') {
+        detailParts.push('Calibrated');
+    } else if (calibrationStatus === 'INELIGIBLE') {
+        detailParts.push('Not Probability-Rated');
+    } else if (calibrationStatus) {
+        detailParts.push('Uncalibrated');
+    }
+
+    if (strengthLevel === 'VERY_STRONG') {
+        return {
+            tone: 'positive',
+            label: 'Very Strong',
+            detail: detailParts.join(' · ') || 'High-magnitude fusion read',
+            helper: 'Internal fusion score, not a probability forecast.',
+        };
+    }
+    if (strengthLevel === 'STRONG') {
+        return {
+            tone: 'positive',
+            label: 'Strong',
+            detail: detailParts.join(' · ') || 'Firm fusion read',
+            helper: 'Internal fusion score, not a probability forecast.',
+        };
+    }
+    if (strengthLevel === 'MODERATE') {
+        return {
+            tone: 'warning',
+            label: 'Moderate',
+            detail: detailParts.join(' · ') || 'Balanced fusion read',
+            helper: 'Use with reliability and coverage context. Not a probability forecast.',
+        };
+    }
+    if (strengthLevel === 'WEAK') {
+        return {
+            tone: 'neutral',
+            label: 'Weak',
+            detail: detailParts.join(' · ') || 'Light fusion read',
+            helper: 'Not a probability forecast.',
+        };
+    }
+    return {
+        tone: 'neutral',
+        label: 'Unavailable',
+        detail: 'No strength summary',
+        helper: 'Signal strength summary is not available for this run.',
+    };
+};
+
+export const getSetupReliabilityDescriptor = (input?: {
+    level?: string | null;
+    calibration_status?: string | null;
+    coverage_status?: string | null;
+    conflict_level?: string | null;
+    recommended_reliance?: string | null;
+} | null): SetupReliabilityDescriptor => {
+    const level = _normalizeState(input?.level);
+    const calibrationStatus = _normalizeState(input?.calibration_status);
+    const coverageStatus = _normalizeState(input?.coverage_status);
+    const conflictLevel = _normalizeState(input?.conflict_level);
+    const reliance = _normalizeState(input?.recommended_reliance);
+    const detailParts: string[] = [];
+
+    if (calibrationStatus === 'CALIBRATED') {
+        detailParts.push('Calibrated');
+    } else if (calibrationStatus === 'INELIGIBLE') {
+        detailParts.push('Not Probability-Rated');
+    } else if (calibrationStatus) {
+        detailParts.push('Uncalibrated');
+    }
+    if (coverageStatus === 'FULL') {
+        detailParts.push('Full Coverage');
+    } else if (coverageStatus === 'PARTIAL') {
+        detailParts.push('Partial Coverage');
+    } else if (coverageStatus === 'LIMITED') {
+        detailParts.push('Limited Coverage');
+    }
+    if (conflictLevel === 'PRESENT') {
+        detailParts.push('Conflict Present');
+    } else if (conflictLevel === 'ELEVATED') {
+        detailParts.push('Conflicts Elevated');
+    }
+
+    if (level === 'HIGH') {
+        return {
+            tone: 'positive',
+            label: 'High Reliability',
+            detail: detailParts.join(' · ') || 'Calibrated and well-covered',
+            helper:
+                reliance === 'PRIMARY'
+                    ? 'Strong enough to use as a primary technical read.'
+                    : 'Use confidently, while still checking context.',
+        };
+    }
+    if (level === 'MEDIUM') {
+        return {
+            tone: 'warning',
+            label: 'Medium Reliability',
+            detail: detailParts.join(' · ') || 'Usable but not pristine',
+            helper:
+                reliance === 'SUPPORTING'
+                    ? 'Best used as supporting context, not standalone conviction.'
+                    : 'Usable, but confirmation still matters.',
+        };
+    }
+    if (level === 'LOW') {
+        return {
+            tone: 'danger',
+            label: 'Low Reliability',
+            detail: detailParts.join(' · ') || 'Coverage and calibration are thin',
+            helper:
+                reliance === 'CAUTIOUS'
+                    ? 'Treat this as cautious context until coverage improves.'
+                    : 'Do not lean on this setup too heavily yet.',
+        };
+    }
+    return {
+        tone: 'neutral',
+        label: 'Reliability Unrated',
+        detail: 'No reliability summary',
+        helper: 'Reliability metadata is not available for this run.',
+    };
 };
 
 const _INDICATOR_DISPLAY_NAMES: Record<string, string> = {
