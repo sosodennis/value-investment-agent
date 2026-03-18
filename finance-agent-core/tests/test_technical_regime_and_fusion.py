@@ -64,6 +64,23 @@ def test_feature_runtime_exposes_canonical_regime_snapshots() -> None:
     assert frame.classic_indicators["BB_BANDWIDTH_20"].value is not None
 
 
+def test_feature_runtime_marks_non_intraday_vwap_unavailable() -> None:
+    runtime = FeatureRuntimeService(quant_timeframes=())
+
+    result = runtime.compute(
+        FeatureRuntimeRequest(
+            ticker="AAPL",
+            as_of="2026-03-17T00:00:00Z",
+            series_by_timeframe={"1d": _build_price_series(base=100.0, drift=1.4)},
+        )
+    )
+
+    vwap = result.feature_pack.timeframes["1d"].classic_indicators["VWAP"]
+    assert vwap.value is None
+    assert vwap.state == "UNAVAILABLE"
+    assert vwap.metadata["reason"] == "requires_intraday_session_bars"
+
+
 def test_indicator_series_runtime_exposes_canonical_regime_series() -> None:
     runtime = IndicatorSeriesRuntimeService(quant_timeframes=())
 
@@ -80,6 +97,37 @@ def test_indicator_series_runtime_exposes_canonical_regime_series() -> None:
     assert _latest_series_value(frame.series["ATRP_14"]) is not None
     assert _latest_series_value(frame.series["ADX_14"]) is not None
     assert _latest_series_value(frame.series["BB_BANDWIDTH_20"]) is not None
+
+
+def test_indicator_series_runtime_omits_non_intraday_vwap_series() -> None:
+    runtime = IndicatorSeriesRuntimeService(quant_timeframes=())
+
+    result = runtime.compute(
+        IndicatorSeriesRuntimeRequest(
+            ticker="AAPL",
+            as_of="2026-03-17T00:00:00Z",
+            series_by_timeframe={"1d": _build_price_series(base=100.0, drift=1.1)},
+        )
+    )
+
+    frame = result.timeframes["1d"]
+    assert _latest_series_value(frame.series["VWAP"]) is None
+
+
+def test_feature_runtime_computes_session_vwap_for_intraday_series() -> None:
+    runtime = FeatureRuntimeService(quant_timeframes=())
+
+    result = runtime.compute(
+        FeatureRuntimeRequest(
+            ticker="AAPL",
+            as_of="2026-03-17T00:00:00Z",
+            series_by_timeframe={"1h": _build_intraday_price_series(base=100.0)},
+        )
+    )
+
+    vwap = result.feature_pack.timeframes["1h"].classic_indicators["VWAP"]
+    assert vwap.value is not None
+    assert vwap.state in {"ABOVE", "BELOW", "AT"}
 
 
 def test_regime_runtime_prefers_canonical_inputs_without_ohlc_recompute() -> None:
@@ -289,3 +337,46 @@ def _build_price_series(*, base: float, drift: float) -> PriceSeries:
 def _latest_series_value(series: dict[str, float | None]) -> float | None:
     values = [value for value in series.values() if value is not None]
     return values[-1] if values else None
+
+
+def _build_intraday_price_series(*, base: float) -> PriceSeries:
+    start = datetime(2026, 3, 16, 14, 30, tzinfo=UTC)
+    open_series: dict[str, float] = {}
+    high_series: dict[str, float] = {}
+    low_series: dict[str, float] = {}
+    close_series: dict[str, float] = {}
+    volume_series: dict[str, float] = {}
+    price_series: dict[str, float] = {}
+    previous_close = base
+    for idx in range(14):
+        if idx < 7:
+            day_start = start
+            day_offset = idx
+        else:
+            day_start = start + timedelta(days=1)
+            day_offset = idx - 7
+        timestamp = (day_start + timedelta(hours=day_offset)).isoformat()
+        close = base + (idx * 0.7) + ((idx % 3) - 1) * 0.2
+        open_price = previous_close + ((idx % 2) - 0.5) * 0.3
+        high = max(open_price, close) + 0.8
+        low = min(open_price, close) - 0.6
+        open_series[timestamp] = round(open_price, 4)
+        high_series[timestamp] = round(high, 4)
+        low_series[timestamp] = round(low, 4)
+        close_series[timestamp] = round(close, 4)
+        price_series[timestamp] = round(close, 4)
+        volume_series[timestamp] = float(250_000 + idx * 8_000)
+        previous_close = close
+    return PriceSeries(
+        timeframe="1h",
+        start=min(price_series),
+        end=max(price_series),
+        price_series=price_series,
+        volume_series=volume_series,
+        open_series=open_series,
+        high_series=high_series,
+        low_series=low_series,
+        close_series=close_series,
+        timezone="UTC",
+        metadata={},
+    )

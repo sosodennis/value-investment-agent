@@ -17,6 +17,8 @@ class TechnicalStateContext:
     fusion_report_id: str | None
     direction_scorecard_id: str | None
     verification_report_id: str | None
+    is_degraded: bool
+    degraded_reasons: list[str]
     optimal_d: float | None
     z_score_latest: float | None
 
@@ -34,6 +36,16 @@ def _read_optional_number(value: object) -> float | None:
     if isinstance(value, int | float):
         return float(value)
     return None
+
+
+def _read_optional_bool(value: object) -> bool:
+    return value is True
+
+
+def _read_string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str)]
 
 
 def resolved_ticker_from_state(state: Mapping[str, object]) -> str | None:
@@ -67,6 +79,8 @@ def technical_state_from_state(state: Mapping[str, object]) -> TechnicalStateCon
         verification_report_id=_read_non_empty_string(
             technical_ctx.get("verification_report_id")
         ),
+        is_degraded=_read_optional_bool(technical_ctx.get("is_degraded")),
+        degraded_reasons=_read_string_list(technical_ctx.get("degraded_reasons")),
         optimal_d=_read_optional_number(technical_ctx.get("optimal_d")),
         z_score_latest=_read_optional_number(technical_ctx.get("z_score_latest")),
     )

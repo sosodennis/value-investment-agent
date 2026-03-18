@@ -60,7 +60,10 @@ import { useCrosshairSync } from '@/components/charts/useCrosshairSync';
 import {
     buildMomentumSummaryLine,
     describeIndicatorHighlight,
+    formatAlertLifecycleLabel,
+    formatAlertQualityGateLabel,
     getMarketStatusDescriptor,
+    getQualityStatusDescriptor,
     resolveFdDescriptor,
     resolveMacdTone,
     resolveRsiDescriptor,
@@ -155,6 +158,34 @@ const getAlertSeverityTone = (severity: AlertSeverity) => {
                 text: 'text-slate-200',
             };
     }
+};
+
+const getLifecycleTone = (state?: string | null) => {
+    const normalized = (state ?? '').toLowerCase();
+    if (normalized === 'active') {
+        return 'bg-emerald-500/15 border-emerald-500/35 text-emerald-200';
+    }
+    if (normalized === 'monitoring') {
+        return 'bg-amber-500/15 border-amber-500/35 text-amber-200';
+    }
+    if (normalized === 'suppressed') {
+        return 'bg-slate-500/15 border-slate-500/35 text-slate-300';
+    }
+    return 'bg-slate-500/15 border-slate-500/35 text-slate-300';
+};
+
+const getQualityGateTone = (gate?: string | null) => {
+    const normalized = (gate ?? '').toLowerCase();
+    if (normalized === 'passed') {
+        return 'bg-emerald-500/15 border-emerald-500/35 text-emerald-200';
+    }
+    if (normalized === 'degraded') {
+        return 'bg-amber-500/15 border-amber-500/35 text-amber-200';
+    }
+    if (normalized === 'failed') {
+        return 'bg-rose-500/15 border-rose-500/35 text-rose-200';
+    }
+    return 'bg-slate-500/15 border-slate-500/35 text-slate-300';
 };
 
 const formatConfidence = (value?: number) => {
@@ -1272,9 +1303,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                 : 0;
             const indicatorMeta = indicatorFrame?.metadata;
             const sourcePoints =
-                indicatorMeta &&
-                    isRecord(indicatorMeta) &&
-                    typeof indicatorMeta.source_points === 'number'
+                typeof indicatorMeta?.source_points === 'number'
                     ? indicatorMeta.source_points
                     : null;
             return {
@@ -1504,8 +1533,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         );
         const maxPoints = frames.reduce((acc, frame) => {
             const meta = frame.metadata;
-            const points =
-                meta && typeof meta.source_points === 'number' ? meta.source_points : 0;
+            const points = typeof meta?.source_points === 'number' ? meta.source_points : 0;
             return Math.max(acc, points);
         }, 0);
         return {
@@ -1604,6 +1632,42 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
     const degradedReasons = reportData.diagnostics?.degraded_reasons ?? [];
     const isDegraded = reportData.diagnostics?.is_degraded === true;
     const analystPerspective = reportData.analyst_perspective;
+    const evidenceBundle = reportData.evidence_bundle;
+    const qualitySummary = reportData.quality_summary;
+    const alertReadout = reportData.alert_readout;
+    const observabilitySummary = reportData.observability_summary;
+    const evidenceRegimeSummary = evidenceBundle?.regime_summary ?? reportData.regime_summary;
+    const evidenceStructureSummary =
+        evidenceBundle?.structure_confluence_summary ??
+        reportData.structure_confluence_summary;
+    const evidenceVolumeProfile =
+        evidenceBundle?.volume_profile_summary ?? reportData.volume_profile_summary;
+    const evidencePrimaryTimeframe =
+        evidenceBundle?.primary_timeframe ??
+        qualitySummary?.primary_timeframe ??
+        momentumTimeframe ??
+        null;
+    const evidenceSupportLevels = evidenceBundle?.support_levels?.slice(0, 2) ?? [];
+    const evidenceResistanceLevels =
+        evidenceBundle?.resistance_levels?.slice(0, 2) ?? [];
+    const evidenceBreakoutSignals = evidenceBundle?.breakout_signals ?? [];
+    const evidenceConflictReasons = evidenceBundle?.conflict_reasons ?? [];
+    const evidenceScorecard = evidenceBundle?.scorecard_summary;
+    const qualityDescriptor = getQualityStatusDescriptor(
+        qualitySummary?.is_degraded ?? isDegraded,
+        qualitySummary?.overall_quality
+    );
+    const qualityReadyTimeframes = qualitySummary?.ready_timeframes ?? [];
+    const qualityDegradedTimeframes = qualitySummary?.degraded_timeframes ?? [];
+    const qualityRegimeReadyTimeframes =
+        qualitySummary?.regime_inputs_ready_timeframes ?? [];
+    const qualityAlertGateEntries = Object.entries(
+        qualitySummary?.alert_quality_gate_counts ?? {}
+    );
+    const alertTopItems = alertReadout?.top_alerts ?? [];
+    const alertReadoutGateEntries = Object.entries(
+        alertReadout?.quality_gate_counts ?? {}
+    );
     const analystEvidence = analystPerspective?.top_evidence ?? [];
     const analystSignalExplainers = analystPerspective?.signal_explainers ?? [];
     const analystInvalidationLevel =
@@ -1682,6 +1746,375 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                         )}
                         <span className="text-slate-300">{momentumSummary}</span>
                     </div>
+                )}
+
+                {(evidenceBundle || reportData.regime_summary || reportData.structure_confluence_summary) && (
+                    <section className="space-y-4">
+                        <div className="flex items-center gap-2">
+                            <Sparkles size={14} className="text-cyan-300 opacity-70" />
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                Key Evidence
+                            </span>
+                            {evidencePrimaryTimeframe && (
+                                <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-600">
+                                    {evidencePrimaryTimeframe.toUpperCase()}
+                                </span>
+                            )}
+                        </div>
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                            <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-5 space-y-3">
+                                <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                    Regime & Score
+                                </div>
+                                <div className="text-lg font-black text-white">
+                                    {evidenceRegimeSummary?.dominant_regime
+                                        ? formatLabel(evidenceRegimeSummary.dominant_regime)
+                                        : 'No regime readout'}
+                                </div>
+                                <div className="space-y-1 text-[11px] text-slate-300">
+                                    {typeof evidenceRegimeSummary?.average_confidence === 'number' && (
+                                        <div>
+                                            Regime confidence: {formatConfidence(evidenceRegimeSummary.average_confidence)}
+                                        </div>
+                                    )}
+                                    {typeof evidenceScorecard?.overall_score === 'number' && (
+                                        <div>
+                                            Overall evidence score: {formatConfidence(evidenceScorecard.overall_score)}
+                                        </div>
+                                    )}
+                                    {evidenceScorecard?.classic_label && (
+                                        <div>
+                                            Classic readout: {formatLabel(evidenceScorecard.classic_label)}
+                                        </div>
+                                    )}
+                                    {evidenceScorecard?.quant_label && (
+                                        <div>
+                                            Quant readout: {formatLabel(evidenceScorecard.quant_label)}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-5 space-y-3">
+                                <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                    Structure Map
+                                </div>
+                                <div className="text-lg font-black text-white">
+                                    {evidenceStructureSummary?.confluence_state
+                                        ? formatLabel(evidenceStructureSummary.confluence_state)
+                                        : 'Structure readout pending'}
+                                </div>
+                                <div className="space-y-2 text-[11px] text-slate-300">
+                                    {typeof evidenceStructureSummary?.confluence_score === 'number' && (
+                                        <div>
+                                            Confluence score: {formatConfidence(evidenceStructureSummary.confluence_score)}
+                                        </div>
+                                    )}
+                                    {(typeof evidenceVolumeProfile?.poc === 'number' ||
+                                        typeof evidenceStructureSummary?.poc === 'number') && (
+                                        <div>
+                                            POC: {formatPrice(
+                                                (evidenceVolumeProfile?.poc as number | undefined) ??
+                                                    (evidenceStructureSummary?.poc as number)
+                                            )}
+                                        </div>
+                                    )}
+                                    {(typeof evidenceVolumeProfile?.vah === 'number' ||
+                                        typeof evidenceStructureSummary?.vah === 'number') &&
+                                        (typeof evidenceVolumeProfile?.val === 'number' ||
+                                            typeof evidenceStructureSummary?.val === 'number') && (
+                                            <div>
+                                                Value area: {formatPrice(
+                                                    (evidenceVolumeProfile?.val as number | undefined) ??
+                                                        (evidenceStructureSummary?.val as number)
+                                                )}{' '}
+                                                -{' '}
+                                                {formatPrice(
+                                                    (evidenceVolumeProfile?.vah as number | undefined) ??
+                                                        (evidenceStructureSummary?.vah as number)
+                                                )}
+                                            </div>
+                                        )}
+                                    {evidenceSupportLevels.length > 0 && (
+                                        <div>
+                                            Support: {evidenceSupportLevels.map((level) => formatPrice(level)).join(' / ')}
+                                        </div>
+                                    )}
+                                    {evidenceResistanceLevels.length > 0 && (
+                                        <div>
+                                            Resistance: {evidenceResistanceLevels.map((level) => formatPrice(level)).join(' / ')}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-5 space-y-3">
+                                <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                    Breakouts & Tensions
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    {evidenceBreakoutSignals.length > 0 ? (
+                                        evidenceBreakoutSignals.slice(0, 3).map((signal) => (
+                                            <span
+                                                key={`${signal.name}-${signal.confidence ?? 'na'}`}
+                                                className="px-2.5 py-1 rounded-full border border-cyan-500/25 bg-cyan-500/10 text-[10px] font-bold uppercase tracking-wide text-cyan-200"
+                                            >
+                                                {formatLabel(signal.name)}
+                                            </span>
+                                        ))
+                                    ) : (
+                                        <span className="text-xs text-slate-500">
+                                            No breakout signal in the primary bundle.
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="space-y-2 text-[11px] text-slate-300">
+                                    {evidenceConflictReasons.length > 0 ? (
+                                        <>
+                                            <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                                Conflict Reasons
+                                            </div>
+                                            <div className="flex flex-wrap gap-2">
+                                                {evidenceConflictReasons.slice(0, 3).map((reason) => (
+                                                    <span
+                                                        key={reason}
+                                                        className="px-2.5 py-1 rounded-full border border-amber-500/20 bg-amber-500/10 text-[10px] font-bold uppercase tracking-wide text-amber-200"
+                                                    >
+                                                        {formatLabel(reason)}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div>No major evidence conflict is flagged in the report bundle.</div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                )}
+
+                {(qualitySummary || isDegraded || degradedReasons.length > 0) && (
+                    <section className="space-y-4">
+                        <div className="flex items-center gap-2">
+                            <AlertTriangle size={14} className="text-amber-300 opacity-70" />
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                Quality & Coverage
+                            </span>
+                        </div>
+                        <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-5 space-y-4">
+                            <div className="flex flex-wrap items-start justify-between gap-4">
+                                <div>
+                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                        Coverage Status
+                                    </div>
+                                    <div className="mt-2 text-lg font-black text-white">
+                                        {qualityDescriptor.label}
+                                    </div>
+                                    <p className="mt-2 max-w-2xl text-[12px] leading-6 text-slate-400">
+                                        {qualityDescriptor.meaning}
+                                    </p>
+                                </div>
+                                <span
+                                    className={`inline-flex px-3 py-1 rounded-full border text-[10px] font-black uppercase tracking-[0.18em] ${tonePalette[qualityDescriptor.tone].badge}`}
+                                >
+                                    {qualitySummary?.overall_quality
+                                        ? formatLabel(qualitySummary.overall_quality)
+                                        : 'Unrated'}
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                        Ready Frames
+                                    </div>
+                                    <div className="mt-2 text-lg font-black text-white">
+                                        {qualityReadyTimeframes.length}
+                                    </div>
+                                    <div className="mt-2 text-[10px] text-slate-400">
+                                        {qualityReadyTimeframes.length > 0
+                                            ? qualityReadyTimeframes.map((frame) => frame.toUpperCase()).join(' · ')
+                                            : 'None reported'}
+                                    </div>
+                                </div>
+                                <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                        Degraded Frames
+                                    </div>
+                                    <div className="mt-2 text-lg font-black text-white">
+                                        {qualityDegradedTimeframes.length}
+                                    </div>
+                                    <div className="mt-2 text-[10px] text-slate-400">
+                                        {qualityDegradedTimeframes.length > 0
+                                            ? qualityDegradedTimeframes.map((frame) => frame.toUpperCase()).join(' · ')
+                                            : 'No degraded frame listed'}
+                                    </div>
+                                </div>
+                                <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                        Regime Inputs Ready
+                                    </div>
+                                    <div className="mt-2 text-lg font-black text-white">
+                                        {qualityRegimeReadyTimeframes.length}
+                                    </div>
+                                    <div className="mt-2 text-[10px] text-slate-400">
+                                        {qualityRegimeReadyTimeframes.length > 0
+                                            ? qualityRegimeReadyTimeframes.map((frame) => frame.toUpperCase()).join(' · ')
+                                            : 'No regime-ready frame listed'}
+                                    </div>
+                                </div>
+                                <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                        Unavailable Indicators
+                                    </div>
+                                    <div className="mt-2 text-lg font-black text-white">
+                                        {qualitySummary?.unavailable_indicator_count ?? 0}
+                                    </div>
+                                    <div className="mt-2 text-[10px] text-slate-400">
+                                        Count reflects missing or intentionally skipped inputs.
+                                    </div>
+                                </div>
+                            </div>
+                            {(qualityAlertGateEntries.length > 0 || degradedReasons.length > 0) && (
+                                <div className="space-y-2">
+                                    {qualityAlertGateEntries.length > 0 && (
+                                        <div className="flex flex-wrap gap-2">
+                                            {qualityAlertGateEntries.map(([gate, count]) => (
+                                                <span
+                                                    key={gate}
+                                                    className={`px-2.5 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wide ${getQualityGateTone(gate)}`}
+                                                >
+                                                    {formatAlertQualityGateLabel(gate)} · {count}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+                                    {degradedReasons.length > 0 && (
+                                        <div className="flex flex-wrap gap-2">
+                                            {degradedReasons.slice(0, 4).map((reason) => (
+                                                <span
+                                                    key={reason}
+                                                    className="px-2.5 py-1 rounded-full border border-rose-500/20 bg-rose-500/10 text-[10px] font-bold uppercase tracking-wide text-rose-200"
+                                                >
+                                                    {formatLabel(reason)}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </section>
+                )}
+
+                {alertReadout && (
+                    <section className="space-y-4">
+                        <div className="flex items-center gap-2">
+                            <Bell size={14} className="text-rose-300 opacity-70" />
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                Policy Alerts
+                            </span>
+                        </div>
+                        <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-5 space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                        Total Alerts
+                                    </div>
+                                    <div className="mt-2 text-lg font-black text-white">
+                                        {alertReadout.total_alerts ?? 0}
+                                    </div>
+                                </div>
+                                <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                        Highest Severity
+                                    </div>
+                                    <div className="mt-2 text-lg font-black text-white">
+                                        {alertReadout.highest_severity
+                                            ? formatLabel(alertReadout.highest_severity)
+                                            : 'None'}
+                                    </div>
+                                </div>
+                                <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                        Active / Monitoring
+                                    </div>
+                                    <div className="mt-2 text-lg font-black text-white">
+                                        {alertReadout.active_alert_count ?? 0} / {alertReadout.monitoring_alert_count ?? 0}
+                                    </div>
+                                </div>
+                                <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                        Suppressed
+                                    </div>
+                                    <div className="mt-2 text-lg font-black text-white">
+                                        {alertReadout.suppressed_alert_count ?? 0}
+                                    </div>
+                                </div>
+                            </div>
+                            {alertTopItems.length > 0 ? (
+                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                                    {alertTopItems.map((alert) => {
+                                        const tone = getAlertSeverityTone(
+                                            alert.severity as AlertSeverity
+                                        );
+                                        return (
+                                            <div
+                                                key={`${alert.code}-${alert.policy_code ?? 'na'}`}
+                                                className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 space-y-3"
+                                            >
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div>
+                                                        <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                                            {alert.timeframe.toUpperCase()} · {formatLabel(alert.code)}
+                                                        </div>
+                                                        <div className="mt-2 text-sm font-black text-white">
+                                                            {alert.title}
+                                                        </div>
+                                                    </div>
+                                                    <span
+                                                        className={`px-2.5 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest ${tone.badge}`}
+                                                    >
+                                                        {tone.label}
+                                                    </span>
+                                                </div>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {alert.lifecycle_state && (
+                                                        <span
+                                                            className={`px-2.5 py-1 rounded-full border text-[9px] font-bold uppercase tracking-wide ${getLifecycleTone(alert.lifecycle_state)}`}
+                                                        >
+                                                            {formatAlertLifecycleLabel(alert.lifecycle_state)}
+                                                        </span>
+                                                    )}
+                                                    {alert.policy_code && (
+                                                        <span className="px-2.5 py-1 rounded-full border border-cyan-500/20 bg-cyan-500/10 text-[9px] font-bold uppercase tracking-wide text-cyan-200">
+                                                            {formatLabel(alert.policy_code)}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                                <div className="text-xs text-slate-500">
+                                    No policy alert summary is available for this report.
+                                </div>
+                            )}
+                            {alertReadoutGateEntries.length > 0 && (
+                                <div className="flex flex-wrap gap-2">
+                                    {alertReadoutGateEntries.map(([gate, count]) => (
+                                        <span
+                                            key={gate}
+                                            className={`px-2.5 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wide ${getQualityGateTone(gate)}`}
+                                        >
+                                            {formatAlertQualityGateLabel(gate)} · {count}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </section>
                 )}
 
                 <section className="tech-card p-6 relative overflow-hidden group shadow-2xl bg-indigo-500/[0.03] border-indigo-500/20">
@@ -2301,6 +2734,75 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                             </div>
                         )}
                     </section>
+                )}
+
+                {observabilitySummary && (
+                    <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
+                        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                            <div className="text-[9px] font-black text-slate-500 uppercase tracking-[0.18em]">
+                                Observability Summary
+                            </div>
+                            {observabilitySummary.primary_timeframe && (
+                                <div className="text-[10px] font-bold uppercase text-slate-500">
+                                    Primary {observabilitySummary.primary_timeframe.toUpperCase()}
+                                </div>
+                            )}
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs text-slate-200">
+                            <div>Loaded Artifacts: {observabilitySummary.loaded_artifact_count ?? 0}</div>
+                            <div>Missing Artifacts: {observabilitySummary.missing_artifact_count ?? 0}</div>
+                            <div>Degraded Reasons: {observabilitySummary.degraded_reason_count ?? 0}</div>
+                            <div>
+                                Timeframes:{' '}
+                                {observabilitySummary.observed_timeframes?.length
+                                    ? observabilitySummary.observed_timeframes
+                                          .map((frame) => frame.toUpperCase())
+                                          .join(' · ')
+                                    : 'n/a'}
+                            </div>
+                        </div>
+                        <div className="mt-3 space-y-2">
+                            {observabilitySummary.loaded_artifacts &&
+                                observabilitySummary.loaded_artifacts.length > 0 && (
+                                    <div className="flex flex-wrap gap-2">
+                                        {observabilitySummary.loaded_artifacts.map((artifact) => (
+                                            <span
+                                                key={`loaded-${artifact}`}
+                                                className="px-2.5 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-[10px] font-bold text-emerald-200 uppercase tracking-wide"
+                                            >
+                                                Loaded · {formatLabel(artifact)}
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+                            {observabilitySummary.missing_artifacts &&
+                                observabilitySummary.missing_artifacts.length > 0 && (
+                                    <div className="flex flex-wrap gap-2">
+                                        {observabilitySummary.missing_artifacts.map((artifact) => (
+                                            <span
+                                                key={`missing-${artifact}`}
+                                                className="px-2.5 py-1 bg-slate-500/10 border border-slate-500/20 rounded-full text-[10px] font-bold text-slate-300 uppercase tracking-wide"
+                                            >
+                                                Missing · {formatLabel(artifact)}
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+                            {observabilitySummary.degraded_artifacts &&
+                                observabilitySummary.degraded_artifacts.length > 0 && (
+                                    <div className="flex flex-wrap gap-2">
+                                        {observabilitySummary.degraded_artifacts.map((artifact) => (
+                                            <span
+                                                key={`degraded-${artifact}`}
+                                                className="px-2.5 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full text-[10px] font-bold text-amber-200 uppercase tracking-wide"
+                                            >
+                                                Degraded · {formatLabel(artifact)}
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+                        </div>
+                    </div>
                 )}
 
                 {timeseriesSummary && (

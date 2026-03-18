@@ -204,6 +204,42 @@ export interface components {
                 [key: string]: string;
             };
         };
+        /** AlertReadoutItemModel */
+        AlertReadoutItemModel: {
+            /** Code */
+            code: string;
+            /** Lifecycle State */
+            lifecycle_state?: string | null;
+            /** Policy Code */
+            policy_code?: string | null;
+            /** Severity */
+            severity: string;
+            /** Timeframe */
+            timeframe: string;
+            /** Title */
+            title: string;
+        };
+        /** AlertReadoutModel */
+        AlertReadoutModel: {
+            /** Active Alert Count */
+            active_alert_count?: number | null;
+            /** Highest Severity */
+            highest_severity?: string | null;
+            /** Monitoring Alert Count */
+            monitoring_alert_count?: number | null;
+            /** Policy Count */
+            policy_count?: number | null;
+            /** Quality Gate Counts */
+            quality_gate_counts?: {
+                [key: string]: number;
+            } | null;
+            /** Suppressed Alert Count */
+            suppressed_alert_count?: number | null;
+            /** Top Alerts */
+            top_alerts?: components["schemas"]["AlertReadoutItemModel"][] | null;
+            /** Total Alerts */
+            total_alerts?: number | null;
+        };
         /** AnalystPerspectiveEvidenceItemModel */
         AnalystPerspectiveEvidenceItemModel: {
             /** Label */
@@ -427,6 +463,15 @@ export interface components {
             /** Is Degraded */
             is_degraded?: boolean | null;
         };
+        /** EvidenceBreakoutSignalModel */
+        EvidenceBreakoutSignalModel: {
+            /** Confidence */
+            confidence?: number | null;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes?: string | null;
+        };
         /** EvidenceFactModel */
         EvidenceFactModel: {
             /** Fact Id */
@@ -453,6 +498,21 @@ export interface components {
             units?: string | null;
             /** Value */
             value?: string | number | null;
+        };
+        /** EvidenceScorecardSummaryModel */
+        EvidenceScorecardSummaryModel: {
+            /** Classic Label */
+            classic_label?: string | null;
+            /** Overall Score */
+            overall_score?: number | null;
+            /** Pattern Label */
+            pattern_label?: string | null;
+            /** Quant Label */
+            quant_label?: string | null;
+            /** Timeframe */
+            timeframe?: string | null;
+            /** Total Score */
+            total_score?: number | null;
         };
         /** FilingMetadataModel */
         FilingMetadataModel: {
@@ -881,6 +941,25 @@ export interface components {
              */
             version: "v1";
         };
+        /** ObservabilitySummaryModel */
+        ObservabilitySummaryModel: {
+            /** Degraded Artifacts */
+            degraded_artifacts?: string[] | null;
+            /** Degraded Reason Count */
+            degraded_reason_count?: number | null;
+            /** Loaded Artifact Count */
+            loaded_artifact_count?: number | null;
+            /** Loaded Artifacts */
+            loaded_artifacts?: string[] | null;
+            /** Missing Artifact Count */
+            missing_artifact_count?: number | null;
+            /** Missing Artifacts */
+            missing_artifacts?: string[] | null;
+            /** Observed Timeframes */
+            observed_timeframes?: string[] | null;
+            /** Primary Timeframe */
+            primary_timeframe?: string | null;
+        };
         /** PriceSeriesArtifactData */
         PriceSeriesArtifactData: {
             /** Price Series */
@@ -910,6 +989,29 @@ export interface components {
              */
             version: "v1";
         };
+        /** QualitySummaryModel */
+        QualitySummaryModel: {
+            /** Alert Quality Gate Counts */
+            alert_quality_gate_counts?: {
+                [key: string]: number;
+            } | null;
+            /** Degraded Reasons */
+            degraded_reasons?: string[] | null;
+            /** Degraded Timeframes */
+            degraded_timeframes?: string[] | null;
+            /** Is Degraded */
+            is_degraded?: boolean | null;
+            /** Overall Quality */
+            overall_quality?: string | null;
+            /** Primary Timeframe */
+            primary_timeframe?: string | null;
+            /** Ready Timeframes */
+            ready_timeframes?: string[] | null;
+            /** Regime Inputs Ready Timeframes */
+            regime_inputs_ready_timeframes?: string[] | null;
+            /** Unavailable Indicator Count */
+            unavailable_indicator_count?: number | null;
+        };
         /** RealEstateExtensionModel */
         RealEstateExtensionModel: {
             accumulated_depreciation?: components["schemas"]["TraceableFieldModel"] | null;
@@ -919,6 +1021,15 @@ export interface components {
             real_estate_assets?: components["schemas"]["TraceableFieldModel"] | null;
         } & {
             [key: string]: unknown;
+        };
+        /** RegimeSummaryModel */
+        RegimeSummaryModel: {
+            /** Average Confidence */
+            average_confidence?: number | null;
+            /** Dominant Regime */
+            dominant_regime?: string | null;
+            /** Timeframe Count */
+            timeframe_count?: number | null;
         };
         /** RequestSchema */
         RequestSchema: {
@@ -985,6 +1096,45 @@ export interface components {
             status: "started" | "running";
             /** Thread Id */
             thread_id: string;
+        };
+        /** StructureConfluenceSummaryModel */
+        StructureConfluenceSummaryModel: {
+            /** Breakout Bias */
+            breakout_bias?: string | null;
+            /** Confluence Score */
+            confluence_score?: number | null;
+            /** Confluence State */
+            confluence_state?: string | null;
+            /** Near Resistance */
+            near_resistance?: boolean | null;
+            /** Near Support */
+            near_support?: boolean | null;
+            /** Near Volume Node */
+            near_volume_node?: boolean | null;
+            /** Nearest Resistance */
+            nearest_resistance?: number | null;
+            /** Nearest Support */
+            nearest_support?: number | null;
+            /** Nearest Volume Node */
+            nearest_volume_node?: number | null;
+            /** Poc */
+            poc?: number | null;
+            /** Profile Fidelity */
+            profile_fidelity?: string | null;
+            /** Profile Method */
+            profile_method?: string | null;
+            /** Reasons */
+            reasons?: string[] | null;
+            /** Timeframe */
+            timeframe?: string | null;
+            /** Trend Bias */
+            trend_bias?: string | null;
+            /** Vah */
+            vah?: number | null;
+            /** Val */
+            val?: number | null;
+            /** Volume Node Count */
+            volume_node_count?: number | null;
         };
         /** TaAlertsEnvelope */
         TaAlertsEnvelope: {
@@ -1184,6 +1334,34 @@ export interface components {
              */
             version: "v1";
         };
+        /** TechnicalAlertEvidenceRefData */
+        TechnicalAlertEvidenceRefData: {
+            /** Artifact Id */
+            artifact_id?: string | null;
+            /** Artifact Kind */
+            artifact_kind: string;
+            /** Signal Key */
+            signal_key?: string | null;
+            /** Timeframe */
+            timeframe?: string | null;
+        };
+        /** TechnicalAlertPolicyMetadataData */
+        TechnicalAlertPolicyMetadataData: {
+            /** Evidence Refs */
+            evidence_refs?: components["schemas"]["TechnicalAlertEvidenceRefData"][] | null;
+            /** Lifecycle State */
+            lifecycle_state: string;
+            /** Policy Code */
+            policy_code: string;
+            /** Policy Version */
+            policy_version: string;
+            /** Quality Gate */
+            quality_gate?: string | null;
+            /** Suppression Reason */
+            suppression_reason?: string | null;
+            /** Trigger Reason */
+            trigger_reason?: string | null;
+        };
         /** TechnicalAlertSignalData */
         TechnicalAlertSignalData: {
             /** Code */
@@ -1196,6 +1374,7 @@ export interface components {
             metadata?: {
                 [key: string]: unknown;
             } | null;
+            policy?: components["schemas"]["TechnicalAlertPolicyMetadataData"] | null;
             /**
              * Severity
              * @enum {string}
@@ -1214,6 +1393,27 @@ export interface components {
             /** Value */
             value?: number | null;
         };
+        /** TechnicalAlertSummaryData */
+        TechnicalAlertSummaryData: {
+            /** Generated At */
+            generated_at?: string | null;
+            /** Lifecycle Counts */
+            lifecycle_counts?: {
+                [key: string]: number;
+            } | null;
+            /** Policy Count */
+            policy_count?: number | null;
+            /** Quality Gate Counts */
+            quality_gate_counts?: {
+                [key: string]: number;
+            } | null;
+            /** Severity Counts */
+            severity_counts?: {
+                [key: string]: number;
+            } | null;
+            /** Total */
+            total?: number | null;
+        };
         /** TechnicalAlertsArtifactData */
         TechnicalAlertsArtifactData: {
             /** Alerts */
@@ -1226,15 +1426,40 @@ export interface components {
             source_artifacts?: {
                 [key: string]: string | null;
             } | null;
-            /** Summary */
-            summary?: {
-                [key: string]: unknown;
-            } | null;
+            summary?: components["schemas"]["TechnicalAlertSummaryData"] | null;
             /** Ticker */
             ticker: string;
         };
+        /** TechnicalAlignmentReportData */
+        TechnicalAlignmentReportData: {
+            /** Alignment Window End */
+            alignment_window_end: string;
+            /** Alignment Window Start */
+            alignment_window_start: string;
+            /** Anchor Timeframe */
+            anchor_timeframe: string;
+            /** Dropped Rows */
+            dropped_rows: number;
+            /** Gap Count */
+            gap_count: number;
+            /** Gap Samples */
+            gap_samples?: string[] | null;
+            /** Input Timeframes */
+            input_timeframes: string[];
+            /** Look Ahead Detected */
+            look_ahead_detected?: boolean | null;
+            /** Notes */
+            notes?: string[] | null;
+            /** Rows After */
+            rows_after: number;
+            /** Rows Before */
+            rows_before: number;
+            /** Schema Version */
+            schema_version: string;
+        };
         /** TechnicalArtifactModel */
         TechnicalArtifactModel: {
+            alert_readout?: components["schemas"]["AlertReadoutModel"] | null;
             analyst_perspective?: components["schemas"]["AnalystPerspectiveModel"] | null;
             artifact_refs: components["schemas"]["ArtifactRefsModel"];
             /** As Of */
@@ -1249,11 +1474,11 @@ export interface components {
             diagnostics?: components["schemas"]["DiagnosticsModel"] | null;
             /** Direction */
             direction: string;
+            evidence_bundle?: components["schemas"]["TechnicalEvidenceBundleModel"] | null;
             momentum_extremes?: components["schemas"]["MomentumExtremesModel"] | null;
-            /** Regime Summary */
-            regime_summary?: {
-                [key: string]: unknown;
-            } | null;
+            observability_summary?: components["schemas"]["ObservabilitySummaryModel"] | null;
+            quality_summary?: components["schemas"]["QualitySummaryModel"] | null;
+            regime_summary?: components["schemas"]["RegimeSummaryModel"] | null;
             /**
              * Risk Level
              * @enum {string}
@@ -1261,10 +1486,7 @@ export interface components {
             risk_level: "low" | "medium" | "critical";
             /** Schema Version */
             schema_version: string;
-            /** Structure Confluence Summary */
-            structure_confluence_summary?: {
-                [key: string]: unknown;
-            } | null;
+            structure_confluence_summary?: components["schemas"]["StructureConfluenceSummaryModel"] | null;
             /** Summary Tags */
             summary_tags: string[];
             /** Ticker */
@@ -1304,6 +1526,19 @@ export interface components {
                 [key: string]: number | null;
             };
         };
+        /** TechnicalConfidenceCalibrationData */
+        TechnicalConfidenceCalibrationData: {
+            /** Calibration Applied */
+            calibration_applied?: boolean | null;
+            /** Degraded Reason */
+            degraded_reason?: string | null;
+            /** Mapping Path */
+            mapping_path?: string | null;
+            /** Mapping Source */
+            mapping_source?: string | null;
+            /** Mapping Version */
+            mapping_version?: string | null;
+        };
         /** TechnicalDirectionScorecardArtifactData */
         TechnicalDirectionScorecardArtifactData: {
             /** As Of */
@@ -1341,6 +1576,26 @@ export interface components {
                 [key: string]: components["schemas"]["TechnicalScorecardFrameData"];
             };
         };
+        /** TechnicalEvidenceBundleModel */
+        TechnicalEvidenceBundleModel: {
+            /** Breakout Signals */
+            breakout_signals?: components["schemas"]["EvidenceBreakoutSignalModel"][] | null;
+            /** Conflict Reasons */
+            conflict_reasons?: string[] | null;
+            /** Primary Timeframe */
+            primary_timeframe?: string | null;
+            regime_summary?: components["schemas"]["RegimeSummaryModel"] | null;
+            /** Resistance Levels */
+            resistance_levels?: number[] | null;
+            scorecard_summary?: components["schemas"]["EvidenceScorecardSummaryModel"] | null;
+            structure_confluence_summary?: components["schemas"]["StructureConfluenceSummaryModel"] | null;
+            /** Support Levels */
+            support_levels?: number[] | null;
+            /** Volume Profile Summary */
+            volume_profile_summary?: {
+                [key: string]: unknown;
+            } | null;
+        };
         /** TechnicalFeatureFrameData */
         TechnicalFeatureFrameData: {
             /** Classic Indicators */
@@ -1360,6 +1615,8 @@ export interface components {
             } | null;
             /** Name */
             name: string;
+            provenance?: components["schemas"]["TechnicalIndicatorProvenanceData"] | null;
+            quality?: components["schemas"]["TechnicalIndicatorQualityData"] | null;
             /** State */
             state?: string | null;
             /** Value */
@@ -1371,10 +1628,7 @@ export interface components {
             as_of: string;
             /** Degraded Reasons */
             degraded_reasons?: string[] | null;
-            /** Feature Summary */
-            feature_summary?: {
-                [key: string]: unknown;
-            } | null;
+            feature_summary?: components["schemas"]["TechnicalFeatureSummaryData"] | null;
             /** Ticker */
             ticker: string;
             /** Timeframes */
@@ -1382,22 +1636,47 @@ export interface components {
                 [key: string]: components["schemas"]["TechnicalFeatureFrameData"];
             };
         };
+        /** TechnicalFeatureSummaryData */
+        TechnicalFeatureSummaryData: {
+            /**
+             * Classic Count
+             * @default 0
+             */
+            classic_count: number;
+            /** Degraded Timeframes */
+            degraded_timeframes?: string[] | null;
+            /** Overall Quality */
+            overall_quality?: string | null;
+            /**
+             * Quant Count
+             * @default 0
+             */
+            quant_count: number;
+            /** Ready Timeframes */
+            ready_timeframes?: string[] | null;
+            /** Regime Inputs Ready Timeframes */
+            regime_inputs_ready_timeframes?: string[] | null;
+            /**
+             * Timeframe Count
+             * @default 0
+             */
+            timeframe_count: number;
+            /**
+             * Unavailable Indicator Count
+             * @default 0
+             */
+            unavailable_indicator_count: number;
+        };
         /** TechnicalFusionReportArtifactData */
         TechnicalFusionReportArtifactData: {
-            /** Alignment Report */
-            alignment_report?: {
-                [key: string]: unknown;
-            } | null;
+            alignment_report?: components["schemas"]["TechnicalAlignmentReportData"] | null;
             /** As Of */
             as_of: string;
             /** Confidence */
             confidence?: number | null;
             /** Confidence Calibrated */
             confidence_calibrated?: number | null;
-            /** Confidence Calibration */
-            confidence_calibration?: {
-                [key: string]: unknown;
-            } | null;
+            confidence_calibration?: components["schemas"]["TechnicalConfidenceCalibrationData"] | null;
             /** Confidence Raw */
             confidence_raw?: number | null;
             /** Conflict Reasons */
@@ -1412,10 +1691,7 @@ export interface components {
             degraded_reasons?: string[] | null;
             /** Direction */
             direction: string;
-            /** Regime Summary */
-            regime_summary?: {
-                [key: string]: unknown;
-            } | null;
+            regime_summary?: components["schemas"]["TechnicalRegimeSummaryData"] | null;
             /** Risk Level */
             risk_level: string;
             /** Schema Version */
@@ -1426,6 +1702,30 @@ export interface components {
             } | null;
             /** Ticker */
             ticker: string;
+        };
+        /** TechnicalIndicatorProvenanceData */
+        TechnicalIndicatorProvenanceData: {
+            /** Calculation Version */
+            calculation_version?: string | null;
+            /** Input Basis */
+            input_basis?: string | null;
+            /** Method */
+            method?: string | null;
+            /** Source Timeframe */
+            source_timeframe?: string | null;
+        };
+        /** TechnicalIndicatorQualityData */
+        TechnicalIndicatorQualityData: {
+            /** Effective Sample Count */
+            effective_sample_count?: number | null;
+            /** Fidelity */
+            fidelity?: string | null;
+            /** Minimum Samples */
+            minimum_samples?: number | null;
+            /** Quality Flags */
+            quality_flags?: string[] | null;
+            /** Warmup Status */
+            warmup_status?: string | null;
         };
         /** TechnicalIndicatorSeriesArtifactData */
         TechnicalIndicatorSeriesArtifactData: {
@@ -1444,10 +1744,7 @@ export interface components {
         TechnicalIndicatorSeriesFrameData: {
             /** End */
             end: string;
-            /** Metadata */
-            metadata?: {
-                [key: string]: unknown;
-            } | null;
+            metadata?: components["schemas"]["TechnicalIndicatorSeriesFrameMetadataData"] | null;
             /** Series */
             series: {
                 [key: string]: {
@@ -1460,6 +1757,29 @@ export interface components {
             timeframe: string;
             /** Timezone */
             timezone?: string | null;
+        };
+        /** TechnicalIndicatorSeriesFrameMetadataData */
+        TechnicalIndicatorSeriesFrameMetadataData: {
+            /** Downsample Step */
+            downsample_step: number;
+            /** Effective Sample Count */
+            effective_sample_count?: number | null;
+            /** Fidelity */
+            fidelity?: string | null;
+            /** Max Points */
+            max_points: number;
+            /** Minimum Sample Count */
+            minimum_sample_count?: number | null;
+            /** Quality Flags */
+            quality_flags?: string[] | null;
+            /** Sample Readiness */
+            sample_readiness?: string | null;
+            /** Source Points */
+            source_points: number;
+            /** Source Price Basis */
+            source_price_basis?: string | null;
+            /** Source Timeframe */
+            source_timeframe?: string | null;
         };
         /** TechnicalPatternFlagData */
         TechnicalPatternFlagData: {
@@ -1481,10 +1801,7 @@ export interface components {
             confidence_scores: {
                 [key: string]: number;
             };
-            /** Confluence Metadata */
-            confluence_metadata?: {
-                [key: string]: unknown;
-            } | null;
+            confluence_metadata?: components["schemas"]["TechnicalStructureConfluenceSummaryData"] | null;
             /** Pattern Flags */
             pattern_flags: components["schemas"]["TechnicalPatternFlagData"][];
             /** Resistance Levels */
@@ -1517,16 +1834,51 @@ export interface components {
             as_of: string;
             /** Degraded Reasons */
             degraded_reasons?: string[] | null;
-            /** Pattern Summary */
-            pattern_summary?: {
-                [key: string]: unknown;
-            } | null;
+            pattern_summary?: components["schemas"]["TechnicalPatternSummaryData"] | null;
             /** Ticker */
             ticker: string;
             /** Timeframes */
             timeframes: {
                 [key: string]: components["schemas"]["TechnicalPatternFrameData"];
             };
+        };
+        /** TechnicalPatternSummaryData */
+        TechnicalPatternSummaryData: {
+            /**
+             * Breakout Count
+             * @default 0
+             */
+            breakout_count: number;
+            /**
+             * Resistance Level Count
+             * @default 0
+             */
+            resistance_level_count: number;
+            /**
+             * Strong Confluence Count
+             * @default 0
+             */
+            strong_confluence_count: number;
+            /**
+             * Support Level Count
+             * @default 0
+             */
+            support_level_count: number;
+            /**
+             * Timeframe Count
+             * @default 0
+             */
+            timeframe_count: number;
+            /**
+             * Trendline Count
+             * @default 0
+             */
+            trendline_count: number;
+            /**
+             * Volume Profile Level Count
+             * @default 0
+             */
+            volume_profile_level_count: number;
         };
         /** TechnicalRegimeFrameData */
         TechnicalRegimeFrameData: {
@@ -1562,16 +1914,25 @@ export interface components {
             as_of: string;
             /** Degraded Reasons */
             degraded_reasons?: string[] | null;
-            /** Regime Summary */
-            regime_summary?: {
-                [key: string]: unknown;
-            } | null;
+            regime_summary?: components["schemas"]["TechnicalRegimeSummaryData"] | null;
             /** Ticker */
             ticker: string;
             /** Timeframes */
             timeframes: {
                 [key: string]: components["schemas"]["TechnicalRegimeFrameData"];
             };
+        };
+        /** TechnicalRegimeSummaryData */
+        TechnicalRegimeSummaryData: {
+            /** Average Confidence */
+            average_confidence?: number | null;
+            /** Dominant Regime */
+            dominant_regime?: string | null;
+            /**
+             * Timeframe Count
+             * @default 0
+             */
+            timeframe_count: number;
         };
         /** TechnicalScorecardContributionData */
         TechnicalScorecardContributionData: {
@@ -1621,6 +1982,43 @@ export interface components {
             /** Total Score */
             total_score: number;
         };
+        /** TechnicalStructureConfluenceSummaryData */
+        TechnicalStructureConfluenceSummaryData: {
+            /** Breakout Bias */
+            breakout_bias?: string | null;
+            /** Confluence Score */
+            confluence_score?: number | null;
+            /** Confluence State */
+            confluence_state?: string | null;
+            /** Near Resistance */
+            near_resistance?: boolean | null;
+            /** Near Support */
+            near_support?: boolean | null;
+            /** Near Volume Node */
+            near_volume_node?: boolean | null;
+            /** Nearest Resistance */
+            nearest_resistance?: number | null;
+            /** Nearest Support */
+            nearest_support?: number | null;
+            /** Nearest Volume Node */
+            nearest_volume_node?: number | null;
+            /** Poc */
+            poc?: number | null;
+            /** Profile Fidelity */
+            profile_fidelity?: string | null;
+            /** Profile Method */
+            profile_method?: string | null;
+            /** Reasons */
+            reasons?: string[] | null;
+            /** Trend Bias */
+            trend_bias?: string | null;
+            /** Vah */
+            vah?: number | null;
+            /** Val */
+            val?: number | null;
+            /** Volume Node Count */
+            volume_node_count?: number | null;
+        };
         /** TechnicalTimeseriesBundleArtifactData */
         TechnicalTimeseriesBundleArtifactData: {
             /** As Of */
@@ -1650,10 +2048,7 @@ export interface components {
             low_series: {
                 [key: string]: number | null;
             };
-            /** Metadata */
-            metadata?: {
-                [key: string]: unknown;
-            } | null;
+            metadata?: components["schemas"]["TechnicalTimeseriesFrameMetadataData"] | null;
             /** Open Series */
             open_series: {
                 [key: string]: number | null;
@@ -1672,6 +2067,27 @@ export interface components {
             volume_series: {
                 [key: string]: number | null;
             };
+        };
+        /** TechnicalTimeseriesFrameMetadataData */
+        TechnicalTimeseriesFrameMetadataData: {
+            /** Cache Age Seconds */
+            cache_age_seconds?: number | null;
+            /** Cache Bucket */
+            cache_bucket?: string | null;
+            /** Cache Hit */
+            cache_hit?: boolean | null;
+            /** Price Basis */
+            price_basis?: string | null;
+            /** Quality Flags */
+            quality_flags?: string[] | null;
+            /** Row Count */
+            row_count: number;
+            /** Source */
+            source?: string | null;
+            /** Source Timeframe */
+            source_timeframe?: string | null;
+            /** Timezone Normalized */
+            timezone_normalized?: boolean | null;
         };
         /** TechnicalVerificationReportArtifactData */
         TechnicalVerificationReportArtifactData: {

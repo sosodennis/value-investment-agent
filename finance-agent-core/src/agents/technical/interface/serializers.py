@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
+
+from pydantic import BaseModel
 
 from src.agents.technical.subdomains.signal_fusion import safe_float
 from src.agents.technical.subdomains.verification.domain import (
@@ -270,31 +273,24 @@ def build_full_report_payload(
     )
     if confidence_val is None and confidence_calibrated_val is not None:
         confidence_val = confidence_calibrated_val
-    calibration_raw = technical_context.get("confidence_calibration")
-    confidence_calibration = (
-        calibration_raw if isinstance(calibration_raw, dict) else None
+    confidence_calibration = _optional_object_payload(
+        technical_context.get("confidence_calibration")
     )
-    momentum_extremes_raw = technical_context.get("momentum_extremes")
-    momentum_extremes = (
-        momentum_extremes_raw if isinstance(momentum_extremes_raw, dict) else None
+    momentum_extremes = _optional_object_payload(
+        technical_context.get("momentum_extremes")
     )
-    regime_summary_raw = technical_context.get("regime_summary")
-    regime_summary = (
-        regime_summary_raw if isinstance(regime_summary_raw, dict) else None
+    regime_summary = _optional_object_payload(technical_context.get("regime_summary"))
+    volume_profile_summary = _optional_object_payload(
+        technical_context.get("volume_profile_summary")
     )
-    volume_profile_summary_raw = technical_context.get("volume_profile_summary")
-    volume_profile_summary = (
-        volume_profile_summary_raw
-        if isinstance(volume_profile_summary_raw, dict)
-        else None
+    structure_confluence_summary = _optional_object_payload(
+        technical_context.get("structure_confluence_summary")
     )
-    structure_confluence_summary_raw = technical_context.get(
-        "structure_confluence_summary"
-    )
-    structure_confluence_summary = (
-        structure_confluence_summary_raw
-        if isinstance(structure_confluence_summary_raw, dict)
-        else None
+    evidence_bundle = _optional_object_payload(technical_context.get("evidence_bundle"))
+    quality_summary = _optional_object_payload(technical_context.get("quality_summary"))
+    alert_readout = _optional_object_payload(technical_context.get("alert_readout"))
+    observability_summary = _optional_object_payload(
+        technical_context.get("observability_summary")
     )
     return {
         "schema_version": "2.0",
@@ -310,6 +306,10 @@ def build_full_report_payload(
         "regime_summary": regime_summary,
         "volume_profile_summary": volume_profile_summary,
         "structure_confluence_summary": structure_confluence_summary,
+        "evidence_bundle": evidence_bundle,
+        "quality_summary": quality_summary,
+        "alert_readout": alert_readout,
+        "observability_summary": observability_summary,
         "analyst_perspective": analyst_perspective,
         "artifact_refs": {
             "chart_data_id": technical_context.get("chart_data_id"),
@@ -329,3 +329,12 @@ def build_full_report_payload(
             "degraded_reasons": technical_context.get("degraded_reasons"),
         },
     }
+
+
+def _optional_object_payload(value: object) -> JSONObject | None:
+    if isinstance(value, BaseModel):
+        dumped = value.model_dump(mode="json", exclude_none=True)
+        return dumped if isinstance(dumped, dict) else None
+    if isinstance(value, Mapping):
+        return dict(value)
+    return None

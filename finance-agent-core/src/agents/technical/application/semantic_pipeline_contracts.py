@@ -6,6 +6,7 @@ from typing import Protocol
 from src.agents.technical.interface.contracts import AnalystPerspectiveModel
 from src.agents.technical.subdomains.signal_fusion import SemanticTagPolicyResult
 from src.interface.artifacts.artifact_data_models import (
+    TechnicalAlertsArtifactData,
     TechnicalDirectionScorecardArtifactData,
     TechnicalFeaturePackArtifactData,
     TechnicalFusionReportArtifactData,
@@ -59,12 +60,27 @@ class SemanticPipelineResult:
 
 
 @dataclass(frozen=True)
+class TechnicalEvidenceBundle:
+    primary_timeframe: str | None = None
+    support_levels: tuple[float, ...] = ()
+    resistance_levels: tuple[float, ...] = ()
+    breakout_signals: tuple[JSONObject, ...] = ()
+    scorecard_summary: JSONObject | None = None
+    regime_summary: JSONObject | None = None
+    volume_profile_summary: JSONObject | None = None
+    structure_confluence_summary: JSONObject | None = None
+    conflict_reasons: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class TechnicalProjectionArtifacts:
     feature_pack: TechnicalFeaturePackArtifactData | None = None
     pattern_pack: TechnicalPatternPackArtifactData | None = None
     regime_pack: TechnicalRegimePackArtifactData | None = None
     fusion_report: TechnicalFusionReportArtifactData | None = None
+    alerts: TechnicalAlertsArtifactData | None = None
     direction_scorecard: TechnicalDirectionScorecardArtifactData | None = None
+    evidence_bundle: TechnicalEvidenceBundle | None = None
 
 
 class TechnicalPortLike(Protocol):
@@ -98,6 +114,11 @@ class TechnicalPortLike(Protocol):
         self,
         artifact_id: str | None,
     ) -> TechnicalFusionReportArtifactData | None: ...
+
+    async def load_alerts(
+        self,
+        artifact_id: str | None,
+    ) -> TechnicalAlertsArtifactData | None: ...
 
     async def load_direction_scorecard(
         self,

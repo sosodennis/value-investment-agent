@@ -5,7 +5,7 @@ from typing import Protocol
 
 import pandas as pd
 
-from src.agents.technical.domain.shared import IndicatorSnapshot
+from src.agents.technical.domain.shared import IndicatorSnapshot, TimeframeCode
 
 
 @dataclass(frozen=True)
@@ -26,6 +26,7 @@ class IIndicatorEngine(Protocol):
     def compute_classic_indicators(
         self,
         *,
+        timeframe: TimeframeCode,
         price_series: pd.Series,
         high_series: pd.Series,
         low_series: pd.Series,

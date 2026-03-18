@@ -48,6 +48,121 @@ class ConfidenceCalibrationModel(BaseModel):
     calibration_applied: bool | None = None
 
 
+class RegimeSummaryModel(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    timeframe_count: int | None = None
+    dominant_regime: OptionalTechnicalText = None
+    average_confidence: OptionalConfidenceScore = None
+
+
+class StructureConfluenceSummaryModel(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    timeframe: OptionalTechnicalText = None
+    confluence_score: OptionalConfidenceScore = None
+    confluence_state: OptionalTechnicalText = None
+    volume_node_count: int | None = None
+    near_volume_node: bool | None = None
+    near_support: bool | None = None
+    near_resistance: bool | None = None
+    nearest_volume_node: OptionalConfidenceScore = None
+    nearest_support: OptionalConfidenceScore = None
+    nearest_resistance: OptionalConfidenceScore = None
+    poc: OptionalConfidenceScore = None
+    vah: OptionalConfidenceScore = None
+    val: OptionalConfidenceScore = None
+    profile_method: OptionalTechnicalText = None
+    profile_fidelity: OptionalTechnicalText = None
+    breakout_bias: OptionalTechnicalText = None
+    trend_bias: OptionalTechnicalText = None
+    reasons: list[str] | None = None
+
+
+class EvidenceScorecardSummaryModel(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    timeframe: OptionalTechnicalText = None
+    overall_score: OptionalConfidenceScore = None
+    total_score: OptionalConfidenceScore = None
+    classic_label: OptionalTechnicalText = None
+    quant_label: OptionalTechnicalText = None
+    pattern_label: OptionalTechnicalText = None
+
+
+class EvidenceBreakoutSignalModel(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    name: TechnicalText
+    confidence: OptionalConfidenceScore = None
+    notes: OptionalTechnicalText = None
+
+
+class TechnicalEvidenceBundleModel(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    primary_timeframe: OptionalTechnicalText = None
+    support_levels: list[float] | None = None
+    resistance_levels: list[float] | None = None
+    breakout_signals: list[EvidenceBreakoutSignalModel] | None = None
+    scorecard_summary: EvidenceScorecardSummaryModel | None = None
+    regime_summary: RegimeSummaryModel | None = None
+    volume_profile_summary: dict[str, object] | None = None
+    structure_confluence_summary: StructureConfluenceSummaryModel | None = None
+    conflict_reasons: list[str] | None = None
+
+
+class QualitySummaryModel(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    is_degraded: bool | None = None
+    degraded_reasons: list[str] | None = None
+    overall_quality: OptionalTechnicalText = None
+    ready_timeframes: list[str] | None = None
+    degraded_timeframes: list[str] | None = None
+    regime_inputs_ready_timeframes: list[str] | None = None
+    unavailable_indicator_count: int | None = None
+    alert_quality_gate_counts: dict[str, int] | None = None
+    primary_timeframe: OptionalTechnicalText = None
+
+
+class AlertReadoutItemModel(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    code: TechnicalText
+    title: TechnicalText
+    severity: TechnicalText
+    timeframe: TechnicalText
+    policy_code: OptionalTechnicalText = None
+    lifecycle_state: OptionalTechnicalText = None
+
+
+class AlertReadoutModel(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    total_alerts: int | None = None
+    policy_count: int | None = None
+    highest_severity: OptionalTechnicalText = None
+    active_alert_count: int | None = None
+    monitoring_alert_count: int | None = None
+    suppressed_alert_count: int | None = None
+    quality_gate_counts: dict[str, int] | None = None
+    top_alerts: list[AlertReadoutItemModel] | None = None
+
+
+class ObservabilitySummaryModel(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    primary_timeframe: OptionalTechnicalText = None
+    observed_timeframes: list[str] | None = None
+    loaded_artifacts: list[str] | None = None
+    missing_artifacts: list[str] | None = None
+    degraded_artifacts: list[str] | None = None
+    loaded_artifact_count: int | None = None
+    missing_artifact_count: int | None = None
+    degraded_reason_count: int | None = None
+
+
 class MomentumExtremesModel(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -111,9 +226,13 @@ class TechnicalArtifactModel(BaseModel):
     confidence_calibrated: OptionalConfidenceScore = None
     confidence_calibration: ConfidenceCalibrationModel | None = None
     momentum_extremes: MomentumExtremesModel | None = None
-    regime_summary: dict[str, object] | None = None
+    regime_summary: RegimeSummaryModel | None = None
     volume_profile_summary: dict[str, object] | None = None
-    structure_confluence_summary: dict[str, object] | None = None
+    structure_confluence_summary: StructureConfluenceSummaryModel | None = None
+    evidence_bundle: TechnicalEvidenceBundleModel | None = None
+    quality_summary: QualitySummaryModel | None = None
+    alert_readout: AlertReadoutModel | None = None
+    observability_summary: ObservabilitySummaryModel | None = None
     analyst_perspective: AnalystPerspectiveModel | None = None
     artifact_refs: ArtifactRefsModel
     summary_tags: TechnicalStringList

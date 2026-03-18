@@ -3,7 +3,10 @@ import { describe, expect, it } from 'vitest';
 import {
     buildMomentumSummaryLine,
     describeIndicatorHighlight,
+    formatAlertLifecycleLabel,
+    formatAlertQualityGateLabel,
     getMarketStatusDescriptor,
+    getQualityStatusDescriptor,
     resolveFdDescriptor,
     resolveMacdTone,
     resolveRsiDescriptor,
@@ -60,5 +63,22 @@ describe('technical wording', () => {
         expect(summary).toBe(
             'MACD is above signal · FD Z-score is near normal (-0.127) · RSI is in bearish bias (42.100)'
         );
+    });
+
+    it('describes quality coverage with degraded context first', () => {
+        expect(getQualityStatusDescriptor(true, 'high')).toEqual({
+            tone: 'warning',
+            label: 'Partial Coverage',
+            meaning:
+                'Some upstream inputs were missing or downgraded, so read the setup with extra caution.',
+        });
+        expect(getQualityStatusDescriptor(false, 'medium').label).toBe('Usable Coverage');
+    });
+
+    it('formats alert lifecycle and gate labels for UI badges', () => {
+        expect(formatAlertLifecycleLabel('monitoring')).toBe('Monitoring');
+        expect(formatAlertLifecycleLabel('SUPPRESSED')).toBe('Suppressed');
+        expect(formatAlertQualityGateLabel('passed')).toBe('Passed');
+        expect(formatAlertQualityGateLabel('degraded')).toBe('Degraded');
     });
 });

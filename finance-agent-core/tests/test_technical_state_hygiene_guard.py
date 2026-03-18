@@ -10,6 +10,8 @@ from src.agents.technical.application.state_updates import (
 def test_state_update_guard_rejects_pandas_payload() -> None:
     update = build_feature_compute_success_update(
         feature_pack_id="feature-1",
+        is_degraded=False,
+        degraded_reasons=[],
         artifact={
             "kind": "technical_analysis.output",
             "summary": "bad",
@@ -27,6 +29,8 @@ def test_state_update_guard_rejects_pandas_payload() -> None:
 def test_state_update_guard_allows_plain_payload() -> None:
     update = build_feature_compute_success_update(
         feature_pack_id="feature-1",
+        is_degraded=False,
+        degraded_reasons=[],
         artifact={
             "kind": "technical_analysis.output",
             "summary": "ok",

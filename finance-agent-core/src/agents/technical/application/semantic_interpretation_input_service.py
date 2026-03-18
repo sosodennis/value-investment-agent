@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Mapping
 
+from pydantic import BaseModel
+
 from src.agents.technical.application.ports import TechnicalInterpretationInput
 from src.agents.technical.application.semantic_pipeline_contracts import (
     BacktestContextResult,
@@ -12,14 +14,16 @@ from src.agents.technical.application.semantic_pipeline_contracts import (
 from src.agents.technical.application.signal_explainer_context_service import (
     build_signal_explainer_context,
 )
+from src.agents.technical.application.technical_evidence_bundle_service import (
+    build_setup_context_from_evidence,
+    build_technical_evidence_bundle,
+)
+from src.agents.technical.application.technical_report_projection_service import (
+    build_report_projection_context,
+)
 from src.agents.technical.subdomains.signal_fusion import SemanticTagPolicyResult
 from src.interface.artifacts.artifact_data_models import (
-    TechnicalDirectionScorecardArtifactData,
     TechnicalFusionReportArtifactData,
-    TechnicalPatternFrameData,
-    TechnicalPatternLevelData,
-    TechnicalPatternPackArtifactData,
-    TechnicalRegimePackArtifactData,
 )
 from src.shared.kernel.types import JSONObject
 
@@ -37,7 +41,6 @@ async def build_interpretation_input(
         technical_context=technical_context,
         technical_port=technical_port,
     )
-    projection_context = build_projection_context(artifacts=artifacts)
 
     confidence_raw = technical_context.get("confidence_calibrated")
     confidence = (
@@ -54,12 +57,7 @@ async def build_interpretation_input(
         momentum_extremes=_read_optional_object(
             technical_context.get("momentum_extremes")
         ),
-        setup_context=_build_setup_context(
-            pattern_pack=artifacts.pattern_pack,
-            scorecard=artifacts.direction_scorecard,
-            fusion_report=artifacts.fusion_report,
-            projection_context=projection_context,
-        ),
+        setup_context=build_setup_context_from_evidence(artifacts.evidence_bundle),
         validation_context=_build_validation_context(backtest_context_result),
         diagnostics_context=_build_diagnostics_context(
             technical_context=technical_context,
@@ -78,6 +76,7 @@ async def load_projection_artifacts(
     pattern_pack_id = _read_optional_text(technical_context.get("pattern_pack_id"))
     regime_pack_id = _read_optional_text(technical_context.get("regime_pack_id"))
     fusion_report_id = _read_optional_text(technical_context.get("fusion_report_id"))
+    alerts_id = _read_optional_text(technical_context.get("alerts_id"))
     direction_scorecard_id = _read_optional_text(
         technical_context.get("direction_scorecard_id")
     )
@@ -86,12 +85,14 @@ async def load_projection_artifacts(
         pattern_pack,
         regime_pack,
         fusion_report,
+        alerts,
         direction_scorecard,
     ) = await asyncio.gather(
         technical_port.load_feature_pack(feature_pack_id),
         technical_port.load_pattern_pack(pattern_pack_id),
         technical_port.load_regime_pack(regime_pack_id),
         technical_port.load_fusion_report(fusion_report_id),
+        technical_port.load_alerts(alerts_id),
         technical_port.load_direction_scorecard(direction_scorecard_id),
     )
     return TechnicalProjectionArtifacts(
@@ -99,7 +100,18 @@ async def load_projection_artifacts(
         pattern_pack=pattern_pack,
         regime_pack=regime_pack,
         fusion_report=fusion_report,
+        alerts=alerts,
         direction_scorecard=direction_scorecard,
+        evidence_bundle=build_technical_evidence_bundle(
+            artifacts=TechnicalProjectionArtifacts(
+                feature_pack=feature_pack,
+                pattern_pack=pattern_pack,
+                regime_pack=regime_pack,
+                fusion_report=fusion_report,
+                alerts=alerts,
+                direction_scorecard=direction_scorecard,
+            )
+        ),
     )
 
 
@@ -107,120 +119,7 @@ def build_projection_context(
     *,
     artifacts: TechnicalProjectionArtifacts,
 ) -> JSONObject:
-    timeframe = _select_preferred_timeframe(
-        artifacts.pattern_pack.timeframes
-        if artifacts.pattern_pack is not None
-        else None,
-        (
-            artifacts.direction_scorecard.timeframes
-            if artifacts.direction_scorecard is not None
-            else None
-        ),
-    )
-    projection_context: JSONObject = {}
-    regime_summary = _build_regime_summary(
-        regime_pack=artifacts.regime_pack,
-        fusion_report=artifacts.fusion_report,
-    )
-    if regime_summary is not None:
-        projection_context["regime_summary"] = regime_summary
-
-    volume_profile_summary = _build_volume_profile_summary(
-        pattern_pack=artifacts.pattern_pack,
-        timeframe=timeframe,
-    )
-    if volume_profile_summary is not None:
-        projection_context["volume_profile_summary"] = volume_profile_summary
-
-    structure_confluence_summary = _build_structure_confluence_summary(
-        pattern_pack=artifacts.pattern_pack,
-        timeframe=timeframe,
-    )
-    if structure_confluence_summary is not None:
-        projection_context["structure_confluence_summary"] = (
-            structure_confluence_summary
-        )
-    return projection_context
-
-
-def _build_setup_context(
-    *,
-    pattern_pack: TechnicalPatternPackArtifactData | None,
-    scorecard: TechnicalDirectionScorecardArtifactData | None,
-    fusion_report: TechnicalFusionReportArtifactData | None,
-    projection_context: JSONObject,
-) -> JSONObject | None:
-    timeframe = _select_preferred_timeframe(
-        pattern_pack.timeframes if pattern_pack is not None else None,
-        scorecard.timeframes if scorecard is not None else None,
-    )
-
-    support_levels: list[float] = []
-    resistance_levels: list[float] = []
-    breakout_signals: list[dict[str, object]] = []
-    if (
-        pattern_pack is not None
-        and timeframe is not None
-        and timeframe in pattern_pack.timeframes
-    ):
-        frame = pattern_pack.timeframes[timeframe]
-        support_levels = [round(level.price, 2) for level in frame.support_levels[:2]]
-        resistance_levels = [
-            round(level.price, 2) for level in frame.resistance_levels[:2]
-        ]
-        breakout_signals = [
-            {
-                "name": flag.name,
-                "confidence": flag.confidence,
-                "notes": flag.notes,
-            }
-            for flag in frame.breakouts[:2]
-        ]
-
-    scorecard_summary: JSONObject | None = None
-    if scorecard is not None:
-        scorecard_timeframe = timeframe
-        if (
-            scorecard_timeframe is None
-            or scorecard_timeframe not in scorecard.timeframes
-        ):
-            scorecard_timeframe = next(iter(scorecard.timeframes), None)
-        if scorecard_timeframe is not None:
-            frame = scorecard.timeframes[scorecard_timeframe]
-            scorecard_summary = {
-                "timeframe": scorecard_timeframe,
-                "overall_score": round(scorecard.overall_score, 2),
-                "total_score": round(frame.total_score, 2),
-                "classic_label": frame.classic_label,
-                "quant_label": frame.quant_label,
-                "pattern_label": frame.pattern_label,
-            }
-
-    conflict_reasons = []
-    if fusion_report is not None and fusion_report.conflict_reasons:
-        conflict_reasons = list(fusion_report.conflict_reasons)
-
-    if (
-        timeframe is None
-        and not support_levels
-        and not resistance_levels
-        and not breakout_signals
-        and scorecard_summary is None
-        and not conflict_reasons
-        and not projection_context
-    ):
-        return None
-
-    setup_context: JSONObject = {
-        "primary_timeframe": timeframe,
-        "support_levels": support_levels,
-        "resistance_levels": resistance_levels,
-        "breakout_signals": breakout_signals,
-        "scorecard_summary": scorecard_summary,
-        "conflict_reasons": conflict_reasons,
-    }
-    setup_context.update(projection_context)
-    return setup_context
+    return build_report_projection_context(artifacts=artifacts)
 
 
 def _build_validation_context(
@@ -268,6 +167,8 @@ def _build_diagnostics_context(
     diagnostics_reasons = (
         list(degraded_reasons) if isinstance(degraded_reasons, list) else []
     )
+    if not diagnostics_reasons and fusion_report is not None:
+        diagnostics_reasons = list(fusion_report.degraded_reasons or [])
     calibration = _read_optional_object(technical_context.get("confidence_calibration"))
     fusion_conflicts = (
         list(fusion_report.conflict_reasons)
@@ -283,103 +184,6 @@ def _build_diagnostics_context(
     }
 
 
-def _select_preferred_timeframe(
-    pattern_timeframes: Mapping[str, object] | None,
-    scorecard_timeframes: Mapping[str, object] | None,
-) -> str | None:
-    preferred = ("1d", "1wk", "1h")
-    for timeframe in preferred:
-        if pattern_timeframes is not None and timeframe in pattern_timeframes:
-            return timeframe
-        if scorecard_timeframes is not None and timeframe in scorecard_timeframes:
-            return timeframe
-    if pattern_timeframes:
-        return next(iter(pattern_timeframes))
-    if scorecard_timeframes:
-        return next(iter(scorecard_timeframes))
-    return None
-
-
-def _build_regime_summary(
-    *,
-    regime_pack: TechnicalRegimePackArtifactData | None,
-    fusion_report: TechnicalFusionReportArtifactData | None,
-) -> JSONObject | None:
-    if regime_pack is not None and regime_pack.regime_summary:
-        return dict(regime_pack.regime_summary)
-    if fusion_report is not None and fusion_report.regime_summary:
-        return dict(fusion_report.regime_summary)
-    return None
-
-
-def _build_volume_profile_summary(
-    *,
-    pattern_pack: TechnicalPatternPackArtifactData | None,
-    timeframe: str | None,
-) -> JSONObject | None:
-    resolved_timeframe, frame = _select_pattern_frame(
-        pattern_pack=pattern_pack,
-        timeframe=timeframe,
-    )
-    if frame is None:
-        return None
-    if frame.volume_profile_summary is not None:
-        return frame.volume_profile_summary.model_dump(mode="json")
-    if not frame.volume_profile_levels:
-        return None
-    return {
-        "timeframe": resolved_timeframe,
-        "level_count": len(frame.volume_profile_levels),
-        "dominant_level": _serialize_pattern_level(frame.volume_profile_levels[0]),
-        "levels": [
-            _serialize_pattern_level(level) for level in frame.volume_profile_levels[:3]
-        ],
-    }
-
-
-def _build_structure_confluence_summary(
-    *,
-    pattern_pack: TechnicalPatternPackArtifactData | None,
-    timeframe: str | None,
-) -> JSONObject | None:
-    resolved_timeframe, frame = _select_pattern_frame(
-        pattern_pack=pattern_pack,
-        timeframe=timeframe,
-    )
-    if frame is None or frame.confluence_metadata is None:
-        return None
-    summary: JSONObject = {"timeframe": resolved_timeframe}
-    for key, value in frame.confluence_metadata.items():
-        summary[str(key)] = value
-    return summary
-
-
-def _select_pattern_frame(
-    *,
-    pattern_pack: TechnicalPatternPackArtifactData | None,
-    timeframe: str | None,
-) -> tuple[str | None, TechnicalPatternFrameData | None]:
-    if pattern_pack is None or not pattern_pack.timeframes:
-        return None, None
-    if timeframe is not None and timeframe in pattern_pack.timeframes:
-        return timeframe, pattern_pack.timeframes[timeframe]
-    fallback_timeframe = next(iter(pattern_pack.timeframes), None)
-    if fallback_timeframe is None:
-        return None, None
-    return fallback_timeframe, pattern_pack.timeframes[fallback_timeframe]
-
-
-def _serialize_pattern_level(level: TechnicalPatternLevelData) -> JSONObject:
-    payload: JSONObject = {"price": level.price}
-    if level.strength is not None:
-        payload["strength"] = level.strength
-    if level.touches is not None:
-        payload["touches"] = level.touches
-    if level.label is not None:
-        payload["label"] = level.label
-    return payload
-
-
 def _read_optional_text(value: object) -> str | None:
     if not isinstance(value, str):
         return None
@@ -388,6 +192,9 @@ def _read_optional_text(value: object) -> str | None:
 
 
 def _read_optional_object(value: object) -> JSONObject | None:
+    if isinstance(value, BaseModel):
+        dumped = value.model_dump(mode="json", exclude_none=True)
+        return dumped if isinstance(dumped, dict) else None
     if not isinstance(value, Mapping):
         return None
     return dict(value)

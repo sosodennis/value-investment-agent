@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from src.agents.technical.domain.shared import IndicatorSnapshot
+from src.agents.technical.domain.shared import IndicatorSnapshot, TimeframeCode
 from src.agents.technical.subdomains.features.application.ports import (
     IIndicatorEngine,
     IndicatorEngineAvailability,
@@ -17,6 +17,8 @@ from src.agents.technical.subdomains.features.domain import (
     compute_atr,
     compute_atrp,
     compute_bollinger_bandwidth,
+    compute_vwap,
+    supports_session_vwap_timeframe,
 )
 from src.shared.kernel.tools.logger import bounded_text, get_logger, log_event
 
@@ -41,6 +43,7 @@ class PandasTaIndicatorEngine(IIndicatorEngine):
     def compute_classic_indicators(
         self,
         *,
+        timeframe: TimeframeCode,
         price_series: pd.Series,
         high_series: pd.Series,
         low_series: pd.Series,
@@ -63,6 +66,7 @@ class PandasTaIndicatorEngine(IIndicatorEngine):
 
         try:
             return _compute_classic_indicators(
+                timeframe=timeframe,
                 price_series=price_series,
                 high_series=high_series,
                 low_series=low_series,
@@ -86,6 +90,7 @@ class PandasTaIndicatorEngine(IIndicatorEngine):
 
 def _compute_classic_indicators(
     *,
+    timeframe: TimeframeCode,
     price_series: pd.Series,
     high_series: pd.Series,
     low_series: pd.Series,
@@ -134,10 +139,34 @@ def _compute_classic_indicators(
         },
     )
 
-    if volume_series.empty:
+    if not supports_session_vwap_timeframe(timeframe):
+        indicators["VWAP"] = _snapshot(
+            "VWAP",
+            None,
+            state="UNAVAILABLE",
+            metadata={"reason": "requires_intraday_session_bars"},
+        )
+    elif volume_series.empty:
         indicators["VWAP"] = _snapshot(
             "VWAP", None, state="UNAVAILABLE", metadata={"reason": "missing_volume"}
         )
+    elif high_series.empty or low_series.empty:
+        indicators["VWAP"] = _snapshot(
+            "VWAP", None, state="UNAVAILABLE", metadata={"reason": "missing_high_low"}
+        )
+    else:
+        vwap_series = compute_vwap(
+            high_series,
+            low_series,
+            price_series,
+            volume_series,
+        )
+        vwap_val = _latest_value(vwap_series)
+        indicators["VWAP"] = _snapshot(
+            "VWAP", vwap_val, state=_compare_state(latest_price, vwap_val)
+        )
+
+    if volume_series.empty:
         indicators["MFI_14"] = _snapshot(
             "MFI_14",
             None,
@@ -145,17 +174,6 @@ def _compute_classic_indicators(
             metadata={"reason": "missing_volume"},
         )
     else:
-        vwap_series = ta.vwap(
-            high=price_series,
-            low=price_series,
-            close=price_series,
-            volume=volume_series,
-        )
-        vwap_val = _latest_value(vwap_series)
-        indicators["VWAP"] = _snapshot(
-            "VWAP", vwap_val, state=_compare_state(latest_price, vwap_val)
-        )
-
         mfi_series = ta.mfi(
             high=price_series,
             low=price_series,

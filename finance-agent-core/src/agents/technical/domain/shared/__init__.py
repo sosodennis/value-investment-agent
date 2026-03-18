@@ -1,8 +1,12 @@
 """Shared domain contracts for the technical analysis agent."""
 
-from .feature_pack import FeatureFrame, FeaturePack
+from .feature_pack import FeatureFrame, FeaturePack, FeatureSummary
 from .fusion_signal import FusionDiagnostics, FusionSignal
-from .indicator_snapshot import IndicatorSnapshot
+from .indicator_snapshot import (
+    IndicatorProvenance,
+    IndicatorQuality,
+    IndicatorSnapshot,
+)
 from .pattern_pack import (
     KeyLevel,
     PatternFlag,
@@ -20,8 +24,11 @@ __all__ = [
     "TimeAlignmentGuardService",
     "FeatureFrame",
     "FeaturePack",
+    "FeatureSummary",
     "FusionDiagnostics",
     "FusionSignal",
+    "IndicatorProvenance",
+    "IndicatorQuality",
     "IndicatorSnapshot",
     "KeyLevel",
     "PatternFlag",

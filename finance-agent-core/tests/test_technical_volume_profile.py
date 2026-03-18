@@ -40,7 +40,7 @@ def test_volume_profile_contract_payload_includes_vp_lite_fields() -> None:
     assert frame.volume_profile_summary.profile_method == "daily_bar_approx"
     assert frame.volume_profile_summary.profile_fidelity == "low"
     assert frame.confluence_metadata is not None
-    assert frame.confluence_metadata["volume_node_count"] == len(
+    assert frame.confluence_metadata.volume_node_count == len(
         frame.volume_profile_levels
     )
 

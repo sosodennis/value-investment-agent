@@ -156,6 +156,156 @@
         "title": "AgentStatusesResponse",
         "type": "object"
       },
+      "AlertReadoutItemModel": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "lifecycle_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lifecycle State"
+          },
+          "policy_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Code"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "timeframe": {
+            "title": "Timeframe",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "title",
+          "severity",
+          "timeframe"
+        ],
+        "title": "AlertReadoutItemModel",
+        "type": "object"
+      },
+      "AlertReadoutModel": {
+        "properties": {
+          "active_alert_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Alert Count"
+          },
+          "highest_severity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Highest Severity"
+          },
+          "monitoring_alert_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monitoring Alert Count"
+          },
+          "policy_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Count"
+          },
+          "quality_gate_counts": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Gate Counts"
+          },
+          "suppressed_alert_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suppressed Alert Count"
+          },
+          "top_alerts": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AlertReadoutItemModel"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top Alerts"
+          },
+          "total_alerts": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Alerts"
+          }
+        },
+        "title": "AlertReadoutModel",
+        "type": "object"
+      },
       "AnalystPerspectiveEvidenceItemModel": {
         "properties": {
           "label": {
@@ -955,6 +1105,41 @@
         "title": "DiagnosticsModel",
         "type": "object"
       },
+      "EvidenceBreakoutSignalModel": {
+        "properties": {
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "EvidenceBreakoutSignalModel",
+        "type": "object"
+      },
       "EvidenceFactModel": {
         "properties": {
           "fact_id": {
@@ -1043,6 +1228,78 @@
           "summary"
         ],
         "title": "EvidenceFactModel",
+        "type": "object"
+      },
+      "EvidenceScorecardSummaryModel": {
+        "properties": {
+          "classic_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classic Label"
+          },
+          "overall_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Score"
+          },
+          "pattern_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pattern Label"
+          },
+          "quant_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quant Label"
+          },
+          "timeframe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeframe"
+          },
+          "total_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Score"
+          }
+        },
+        "title": "EvidenceScorecardSummaryModel",
         "type": "object"
       },
       "FilingMetadataModel": {
@@ -2560,6 +2817,112 @@
         "title": "NewsSelectionEnvelope",
         "type": "object"
       },
+      "ObservabilitySummaryModel": {
+        "properties": {
+          "degraded_artifacts": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Degraded Artifacts"
+          },
+          "degraded_reason_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Degraded Reason Count"
+          },
+          "loaded_artifact_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Loaded Artifact Count"
+          },
+          "loaded_artifacts": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Loaded Artifacts"
+          },
+          "missing_artifact_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missing Artifact Count"
+          },
+          "missing_artifacts": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missing Artifacts"
+          },
+          "observed_timeframes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed Timeframes"
+          },
+          "primary_timeframe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Timeframe"
+          }
+        },
+        "title": "ObservabilitySummaryModel",
+        "type": "object"
+      },
       "PriceSeriesArtifactData": {
         "additionalProperties": false,
         "properties": {
@@ -2633,6 +2996,126 @@
         "title": "PriceSeriesEnvelope",
         "type": "object"
       },
+      "QualitySummaryModel": {
+        "properties": {
+          "alert_quality_gate_counts": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alert Quality Gate Counts"
+          },
+          "degraded_reasons": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Degraded Reasons"
+          },
+          "degraded_timeframes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Degraded Timeframes"
+          },
+          "is_degraded": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Degraded"
+          },
+          "overall_quality": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Quality"
+          },
+          "primary_timeframe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Timeframe"
+          },
+          "ready_timeframes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ready Timeframes"
+          },
+          "regime_inputs_ready_timeframes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regime Inputs Ready Timeframes"
+          },
+          "unavailable_indicator_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unavailable Indicator Count"
+          }
+        },
+        "title": "QualitySummaryModel",
+        "type": "object"
+      },
       "RealEstateExtensionModel": {
         "additionalProperties": true,
         "properties": {
@@ -2688,6 +3171,45 @@
           }
         },
         "title": "RealEstateExtensionModel",
+        "type": "object"
+      },
+      "RegimeSummaryModel": {
+        "properties": {
+          "average_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Confidence"
+          },
+          "dominant_regime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dominant Regime"
+          },
+          "timeframe_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeframe Count"
+          }
+        },
+        "title": "RegimeSummaryModel",
         "type": "object"
       },
       "RequestSchema": {
@@ -2864,6 +3386,213 @@
           "thread_id"
         ],
         "title": "StreamStartResponse",
+        "type": "object"
+      },
+      "StructureConfluenceSummaryModel": {
+        "properties": {
+          "breakout_bias": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Breakout Bias"
+          },
+          "confluence_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confluence Score"
+          },
+          "confluence_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confluence State"
+          },
+          "near_resistance": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Near Resistance"
+          },
+          "near_support": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Near Support"
+          },
+          "near_volume_node": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Near Volume Node"
+          },
+          "nearest_resistance": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nearest Resistance"
+          },
+          "nearest_support": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nearest Support"
+          },
+          "nearest_volume_node": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nearest Volume Node"
+          },
+          "poc": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poc"
+          },
+          "profile_fidelity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Fidelity"
+          },
+          "profile_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Method"
+          },
+          "reasons": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasons"
+          },
+          "timeframe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeframe"
+          },
+          "trend_bias": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trend Bias"
+          },
+          "vah": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vah"
+          },
+          "val": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Val"
+          },
+          "volume_node_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Volume Node Count"
+          }
+        },
+        "title": "StructureConfluenceSummaryModel",
         "type": "object"
       },
       "TaAlertsEnvelope": {
@@ -3240,6 +3969,124 @@
         "title": "TaVerificationReportEnvelope",
         "type": "object"
       },
+      "TechnicalAlertEvidenceRefData": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Id"
+          },
+          "artifact_kind": {
+            "title": "Artifact Kind",
+            "type": "string"
+          },
+          "signal_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signal Key"
+          },
+          "timeframe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeframe"
+          }
+        },
+        "required": [
+          "artifact_kind"
+        ],
+        "title": "TechnicalAlertEvidenceRefData",
+        "type": "object"
+      },
+      "TechnicalAlertPolicyMetadataData": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence_refs": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/TechnicalAlertEvidenceRefData"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Refs"
+          },
+          "lifecycle_state": {
+            "title": "Lifecycle State",
+            "type": "string"
+          },
+          "policy_code": {
+            "title": "Policy Code",
+            "type": "string"
+          },
+          "policy_version": {
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "quality_gate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Gate"
+          },
+          "suppression_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suppression Reason"
+          },
+          "trigger_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Reason"
+          }
+        },
+        "required": [
+          "policy_code",
+          "policy_version",
+          "lifecycle_state"
+        ],
+        "title": "TechnicalAlertPolicyMetadataData",
+        "type": "object"
+      },
       "TechnicalAlertSignalData": {
         "additionalProperties": false,
         "properties": {
@@ -3280,6 +4127,16 @@
               }
             ],
             "title": "Metadata"
+          },
+          "policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TechnicalAlertPolicyMetadataData"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "severity": {
             "enum": [
@@ -3352,6 +4209,88 @@
         "title": "TechnicalAlertSignalData",
         "type": "object"
       },
+      "TechnicalAlertSummaryData": {
+        "additionalProperties": false,
+        "properties": {
+          "generated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated At"
+          },
+          "lifecycle_counts": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lifecycle Counts"
+          },
+          "policy_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Count"
+          },
+          "quality_gate_counts": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Gate Counts"
+          },
+          "severity_counts": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Severity Counts"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total"
+          }
+        },
+        "title": "TechnicalAlertSummaryData",
+        "type": "object"
+      },
       "TechnicalAlertsArtifactData": {
         "additionalProperties": false,
         "properties": {
@@ -3404,14 +4343,12 @@
           "summary": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/TechnicalAlertSummaryData"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Summary"
+            ]
           },
           "ticker": {
             "title": "Ticker",
@@ -3426,8 +4363,114 @@
         "title": "TechnicalAlertsArtifactData",
         "type": "object"
       },
+      "TechnicalAlignmentReportData": {
+        "additionalProperties": false,
+        "properties": {
+          "alignment_window_end": {
+            "title": "Alignment Window End",
+            "type": "string"
+          },
+          "alignment_window_start": {
+            "title": "Alignment Window Start",
+            "type": "string"
+          },
+          "anchor_timeframe": {
+            "title": "Anchor Timeframe",
+            "type": "string"
+          },
+          "dropped_rows": {
+            "title": "Dropped Rows",
+            "type": "integer"
+          },
+          "gap_count": {
+            "title": "Gap Count",
+            "type": "integer"
+          },
+          "gap_samples": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gap Samples"
+          },
+          "input_timeframes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Input Timeframes",
+            "type": "array"
+          },
+          "look_ahead_detected": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Look Ahead Detected"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "rows_after": {
+            "title": "Rows After",
+            "type": "integer"
+          },
+          "rows_before": {
+            "title": "Rows Before",
+            "type": "integer"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "anchor_timeframe",
+          "input_timeframes",
+          "alignment_window_start",
+          "alignment_window_end",
+          "rows_before",
+          "rows_after",
+          "dropped_rows",
+          "gap_count"
+        ],
+        "title": "TechnicalAlignmentReportData",
+        "type": "object"
+      },
       "TechnicalArtifactModel": {
         "properties": {
+          "alert_readout": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AlertReadoutModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "analyst_perspective": {
             "anyOf": [
               {
@@ -3502,6 +4545,16 @@
             "title": "Direction",
             "type": "string"
           },
+          "evidence_bundle": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TechnicalEvidenceBundleModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "momentum_extremes": {
             "anyOf": [
               {
@@ -3512,17 +4565,35 @@
               }
             ]
           },
-          "regime_summary": {
+          "observability_summary": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/ObservabilitySummaryModel"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Regime Summary"
+            ]
+          },
+          "quality_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QualitySummaryModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "regime_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RegimeSummaryModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "risk_level": {
             "enum": [
@@ -3540,14 +4611,12 @@
           "structure_confluence_summary": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/StructureConfluenceSummaryModel"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Structure Confluence Summary"
+            ]
           },
           "summary_tags": {
             "items": {
@@ -3703,6 +4772,68 @@
         "title": "TechnicalChartArtifactData",
         "type": "object"
       },
+      "TechnicalConfidenceCalibrationData": {
+        "additionalProperties": false,
+        "properties": {
+          "calibration_applied": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calibration Applied"
+          },
+          "degraded_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Degraded Reason"
+          },
+          "mapping_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mapping Path"
+          },
+          "mapping_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mapping Source"
+          },
+          "mapping_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mapping Version"
+          }
+        },
+        "title": "TechnicalConfidenceCalibrationData",
+        "type": "object"
+      },
       "TechnicalDirectionScorecardArtifactData": {
         "additionalProperties": false,
         "properties": {
@@ -3838,6 +4969,121 @@
         "title": "TechnicalDirectionScorecardArtifactData",
         "type": "object"
       },
+      "TechnicalEvidenceBundleModel": {
+        "properties": {
+          "breakout_signals": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/EvidenceBreakoutSignalModel"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Breakout Signals"
+          },
+          "conflict_reasons": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conflict Reasons"
+          },
+          "primary_timeframe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Timeframe"
+          },
+          "regime_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RegimeSummaryModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resistance_levels": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resistance Levels"
+          },
+          "scorecard_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EvidenceScorecardSummaryModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "structure_confluence_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StructureConfluenceSummaryModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "support_levels": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Support Levels"
+          },
+          "volume_profile_summary": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Volume Profile Summary"
+          }
+        },
+        "title": "TechnicalEvidenceBundleModel",
+        "type": "object"
+      },
       "TechnicalFeatureFrameData": {
         "additionalProperties": false,
         "properties": {
@@ -3881,6 +5127,26 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "provenance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TechnicalIndicatorProvenanceData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quality": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TechnicalIndicatorQualityData"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "state": {
             "anyOf": [
@@ -3936,14 +5202,12 @@
           "feature_summary": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/TechnicalFeatureSummaryData"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Feature Summary"
+            ]
           },
           "ticker": {
             "title": "Ticker",
@@ -3965,20 +5229,98 @@
         "title": "TechnicalFeaturePackArtifactData",
         "type": "object"
       },
+      "TechnicalFeatureSummaryData": {
+        "additionalProperties": false,
+        "properties": {
+          "classic_count": {
+            "default": 0,
+            "title": "Classic Count",
+            "type": "integer"
+          },
+          "degraded_timeframes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Degraded Timeframes"
+          },
+          "overall_quality": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Quality"
+          },
+          "quant_count": {
+            "default": 0,
+            "title": "Quant Count",
+            "type": "integer"
+          },
+          "ready_timeframes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ready Timeframes"
+          },
+          "regime_inputs_ready_timeframes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regime Inputs Ready Timeframes"
+          },
+          "timeframe_count": {
+            "default": 0,
+            "title": "Timeframe Count",
+            "type": "integer"
+          },
+          "unavailable_indicator_count": {
+            "default": 0,
+            "title": "Unavailable Indicator Count",
+            "type": "integer"
+          }
+        },
+        "title": "TechnicalFeatureSummaryData",
+        "type": "object"
+      },
       "TechnicalFusionReportArtifactData": {
         "additionalProperties": false,
         "properties": {
           "alignment_report": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/TechnicalAlignmentReportData"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Alignment Report"
+            ]
           },
           "as_of": {
             "title": "As Of",
@@ -4009,14 +5351,12 @@
           "confidence_calibration": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/TechnicalConfidenceCalibrationData"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Confidence Calibration"
+            ]
           },
           "confidence_raw": {
             "anyOf": [
@@ -4079,14 +5419,12 @@
           "regime_summary": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/TechnicalRegimeSummaryData"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Regime Summary"
+            ]
           },
           "risk_level": {
             "title": "Risk Level",
@@ -4130,6 +5468,122 @@
           "risk_level"
         ],
         "title": "TechnicalFusionReportArtifactData",
+        "type": "object"
+      },
+      "TechnicalIndicatorProvenanceData": {
+        "additionalProperties": false,
+        "properties": {
+          "calculation_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calculation Version"
+          },
+          "input_basis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Basis"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method"
+          },
+          "source_timeframe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Timeframe"
+          }
+        },
+        "title": "TechnicalIndicatorProvenanceData",
+        "type": "object"
+      },
+      "TechnicalIndicatorQualityData": {
+        "additionalProperties": false,
+        "properties": {
+          "effective_sample_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Sample Count"
+          },
+          "fidelity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fidelity"
+          },
+          "minimum_samples": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum Samples"
+          },
+          "quality_flags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Flags"
+          },
+          "warmup_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warmup Status"
+          }
+        },
+        "title": "TechnicalIndicatorQualityData",
         "type": "object"
       },
       "TechnicalIndicatorSeriesArtifactData": {
@@ -4183,14 +5637,12 @@
           "metadata": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/TechnicalIndicatorSeriesFrameMetadataData"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Metadata"
+            ]
           },
           "series": {
             "additionalProperties": {
@@ -4236,6 +5688,110 @@
           "series"
         ],
         "title": "TechnicalIndicatorSeriesFrameData",
+        "type": "object"
+      },
+      "TechnicalIndicatorSeriesFrameMetadataData": {
+        "additionalProperties": false,
+        "properties": {
+          "downsample_step": {
+            "title": "Downsample Step",
+            "type": "integer"
+          },
+          "effective_sample_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Sample Count"
+          },
+          "fidelity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fidelity"
+          },
+          "max_points": {
+            "title": "Max Points",
+            "type": "integer"
+          },
+          "minimum_sample_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum Sample Count"
+          },
+          "quality_flags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Flags"
+          },
+          "sample_readiness": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Readiness"
+          },
+          "source_points": {
+            "title": "Source Points",
+            "type": "integer"
+          },
+          "source_price_basis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Price Basis"
+          },
+          "source_timeframe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Timeframe"
+          }
+        },
+        "required": [
+          "source_points",
+          "max_points",
+          "downsample_step"
+        ],
+        "title": "TechnicalIndicatorSeriesFrameMetadataData",
         "type": "object"
       },
       "TechnicalPatternFlagData": {
@@ -4295,14 +5851,12 @@
           "confluence_metadata": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/TechnicalStructureConfluenceSummaryData"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Confluence Metadata"
+            ]
           },
           "pattern_flags": {
             "items": {
@@ -4432,14 +5986,12 @@
           "pattern_summary": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/TechnicalPatternSummaryData"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Pattern Summary"
+            ]
           },
           "ticker": {
             "title": "Ticker",
@@ -4459,6 +6011,48 @@
           "timeframes"
         ],
         "title": "TechnicalPatternPackArtifactData",
+        "type": "object"
+      },
+      "TechnicalPatternSummaryData": {
+        "additionalProperties": false,
+        "properties": {
+          "breakout_count": {
+            "default": 0,
+            "title": "Breakout Count",
+            "type": "integer"
+          },
+          "resistance_level_count": {
+            "default": 0,
+            "title": "Resistance Level Count",
+            "type": "integer"
+          },
+          "strong_confluence_count": {
+            "default": 0,
+            "title": "Strong Confluence Count",
+            "type": "integer"
+          },
+          "support_level_count": {
+            "default": 0,
+            "title": "Support Level Count",
+            "type": "integer"
+          },
+          "timeframe_count": {
+            "default": 0,
+            "title": "Timeframe Count",
+            "type": "integer"
+          },
+          "trendline_count": {
+            "default": 0,
+            "title": "Trendline Count",
+            "type": "integer"
+          },
+          "volume_profile_level_count": {
+            "default": 0,
+            "title": "Volume Profile Level Count",
+            "type": "integer"
+          }
+        },
+        "title": "TechnicalPatternSummaryData",
         "type": "object"
       },
       "TechnicalRegimeFrameData": {
@@ -4584,14 +6178,12 @@
           "regime_summary": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/TechnicalRegimeSummaryData"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Regime Summary"
+            ]
           },
           "ticker": {
             "title": "Ticker",
@@ -4611,6 +6203,40 @@
           "timeframes"
         ],
         "title": "TechnicalRegimePackArtifactData",
+        "type": "object"
+      },
+      "TechnicalRegimeSummaryData": {
+        "additionalProperties": false,
+        "properties": {
+          "average_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Confidence"
+          },
+          "dominant_regime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dominant Regime"
+          },
+          "timeframe_count": {
+            "default": 0,
+            "title": "Timeframe Count",
+            "type": "integer"
+          }
+        },
+        "title": "TechnicalRegimeSummaryData",
         "type": "object"
       },
       "TechnicalScorecardContributionData": {
@@ -4795,6 +6421,203 @@
         "title": "TechnicalScorecardFrameData",
         "type": "object"
       },
+      "TechnicalStructureConfluenceSummaryData": {
+        "additionalProperties": false,
+        "properties": {
+          "breakout_bias": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Breakout Bias"
+          },
+          "confluence_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confluence Score"
+          },
+          "confluence_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confluence State"
+          },
+          "near_resistance": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Near Resistance"
+          },
+          "near_support": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Near Support"
+          },
+          "near_volume_node": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Near Volume Node"
+          },
+          "nearest_resistance": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nearest Resistance"
+          },
+          "nearest_support": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nearest Support"
+          },
+          "nearest_volume_node": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nearest Volume Node"
+          },
+          "poc": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poc"
+          },
+          "profile_fidelity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Fidelity"
+          },
+          "profile_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Method"
+          },
+          "reasons": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasons"
+          },
+          "trend_bias": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trend Bias"
+          },
+          "vah": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vah"
+          },
+          "val": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Val"
+          },
+          "volume_node_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Volume Node Count"
+          }
+        },
+        "title": "TechnicalStructureConfluenceSummaryData",
+        "type": "object"
+      },
       "TechnicalTimeseriesBundleArtifactData": {
         "additionalProperties": false,
         "properties": {
@@ -4888,14 +6711,12 @@
           "metadata": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/TechnicalTimeseriesFrameMetadataData"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Metadata"
+            ]
           },
           "open_series": {
             "additionalProperties": {
@@ -4971,6 +6792,111 @@
           "volume_series"
         ],
         "title": "TechnicalTimeseriesFrameData",
+        "type": "object"
+      },
+      "TechnicalTimeseriesFrameMetadataData": {
+        "additionalProperties": false,
+        "properties": {
+          "cache_age_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cache Age Seconds"
+          },
+          "cache_bucket": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cache Bucket"
+          },
+          "cache_hit": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cache Hit"
+          },
+          "price_basis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Basis"
+          },
+          "quality_flags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Flags"
+          },
+          "row_count": {
+            "title": "Row Count",
+            "type": "integer"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "source_timeframe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Timeframe"
+          },
+          "timezone_normalized": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone Normalized"
+          }
+        },
+        "required": [
+          "row_count"
+        ],
+        "title": "TechnicalTimeseriesFrameMetadataData",
         "type": "object"
       },
       "TechnicalVerificationReportArtifactData": {

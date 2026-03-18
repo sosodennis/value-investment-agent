@@ -4,6 +4,10 @@ import numpy as np
 import pandas as pd
 
 
+def supports_session_vwap_timeframe(timeframe: str) -> bool:
+    return timeframe == "1h"
+
+
 def compute_sma(prices: pd.Series, window: int = 20) -> pd.Series:
     return prices.rolling(window=window, min_periods=window).mean()
 
@@ -38,9 +42,19 @@ def compute_macd(
     return macd_line, signal_line, histogram
 
 
-def compute_vwap(prices: pd.Series, volumes: pd.Series) -> pd.Series:
-    cumulative_volume = volumes.cumsum()
-    cumulative_price_volume = (prices * volumes).cumsum()
+def compute_vwap(
+    high: pd.Series,
+    low: pd.Series,
+    close: pd.Series,
+    volumes: pd.Series,
+) -> pd.Series:
+    if high.empty or low.empty or close.empty or volumes.empty:
+        return pd.Series(dtype=float)
+
+    typical_price = (high + low + close) / 3.0
+    session_key = close.index.normalize()
+    cumulative_volume = volumes.groupby(session_key).cumsum()
+    cumulative_price_volume = (typical_price * volumes).groupby(session_key).cumsum()
     vwap = cumulative_price_volume / cumulative_volume.replace(0.0, np.nan)
     return vwap
 

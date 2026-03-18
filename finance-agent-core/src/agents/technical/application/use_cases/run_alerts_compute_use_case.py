@@ -212,6 +212,26 @@ def _alerts_to_payload(
 ) -> JSONObject:
     alerts = []
     for alert in result.alerts:
+        policy = None
+        if alert.policy is not None:
+            policy = {
+                "policy_code": alert.policy.policy_code,
+                "policy_version": alert.policy.policy_version,
+                "lifecycle_state": alert.policy.lifecycle_state,
+                "evidence_refs": [
+                    {
+                        "artifact_kind": ref.artifact_kind,
+                        "artifact_id": ref.artifact_id,
+                        "timeframe": ref.timeframe,
+                        "signal_key": ref.signal_key,
+                    }
+                    for ref in alert.policy.evidence_refs
+                ]
+                or None,
+                "quality_gate": alert.policy.quality_gate,
+                "trigger_reason": alert.policy.trigger_reason,
+                "suppression_reason": alert.policy.suppression_reason,
+            }
         alerts.append(
             {
                 "code": alert.code,
@@ -225,6 +245,7 @@ def _alerts_to_payload(
                 "triggered_at": alert.triggered_at,
                 "source": alert.source,
                 "metadata": alert.metadata,
+                "policy": policy,
             }
         )
 
@@ -232,7 +253,14 @@ def _alerts_to_payload(
         "ticker": result.ticker,
         "as_of": result.as_of,
         "alerts": alerts,
-        "summary": result.summary,
+        "summary": {
+            "total": result.summary.total,
+            "severity_counts": result.summary.severity_counts,
+            "generated_at": result.summary.generated_at,
+            "policy_count": result.summary.policy_count,
+            "lifecycle_counts": result.summary.lifecycle_counts,
+            "quality_gate_counts": result.summary.quality_gate_counts,
+        },
         "degraded_reasons": degraded_reasons or None,
         "source_artifacts": source_artifacts or None,
     }

@@ -392,6 +392,7 @@ describe('artifact parsers', () => {
             regime_summary: {
                 dominant_regime: 'BULL_TREND',
                 timeframe_count: 1,
+                average_confidence: 0.74,
             },
             volume_profile_summary: {
                 timeframe: '1d',
@@ -400,6 +401,85 @@ describe('artifact parsers', () => {
             structure_confluence_summary: {
                 confluence_state: 'strong',
                 confluence_score: 0.74,
+            },
+            evidence_bundle: {
+                primary_timeframe: '1d',
+                support_levels: [180.5, 176.2],
+                resistance_levels: [189.0],
+                breakout_signals: [
+                    {
+                        name: 'BREAKOUT_UP',
+                        confidence: 0.72,
+                        notes: 'Daily continuation signal'
+                    }
+                ],
+                scorecard_summary: {
+                    timeframe: '1d',
+                    overall_score: 0.68,
+                    total_score: 0.64,
+                    classic_label: 'constructive'
+                },
+                regime_summary: {
+                    dominant_regime: 'BULL_TREND',
+                    timeframe_count: 1,
+                    average_confidence: 0.74
+                },
+                structure_confluence_summary: {
+                    confluence_state: 'strong',
+                    confluence_score: 0.74
+                },
+                conflict_reasons: ['1d:quant_neutral']
+            },
+            quality_summary: {
+                is_degraded: true,
+                degraded_reasons: ['1wk_QUANT_SKIPPED'],
+                overall_quality: 'medium',
+                ready_timeframes: ['1d'],
+                degraded_timeframes: ['1wk'],
+                regime_inputs_ready_timeframes: ['1d'],
+                unavailable_indicator_count: 1,
+                alert_quality_gate_counts: {
+                    passed: 1,
+                },
+                primary_timeframe: '1d',
+            },
+            alert_readout: {
+                total_alerts: 2,
+                policy_count: 2,
+                highest_severity: 'warning',
+                active_alert_count: 1,
+                monitoring_alert_count: 1,
+                suppressed_alert_count: 0,
+                quality_gate_counts: {
+                    passed: 1,
+                    degraded: 1,
+                },
+                top_alerts: [
+                    {
+                        code: 'RSI_OVERSOLD',
+                        title: 'RSI oversold near support',
+                        severity: 'warning',
+                        timeframe: '1d',
+                        policy_code: 'TA_RSI_SUPPORT_REBOUND',
+                        lifecycle_state: 'active',
+                    }
+                ],
+            },
+            observability_summary: {
+                primary_timeframe: '1d',
+                observed_timeframes: ['1d'],
+                loaded_artifacts: [
+                    'feature_pack',
+                    'pattern_pack',
+                    'regime_pack',
+                    'fusion_report',
+                    'alerts',
+                ],
+                missing_artifacts: ['direction_scorecard'],
+                degraded_artifacts: ['feature_pack', 'fusion_report', 'alerts'],
+                loaded_artifact_count: 5,
+                missing_artifact_count: 1,
+                degraded_reason_count: 2,
             },
             diagnostics: {
                 is_degraded: true,
@@ -426,8 +506,20 @@ describe('artifact parsers', () => {
         expect(parsed.analyst_perspective?.signal_explainers?.[0]?.signal).toBe('FD_OPTIMAL_D');
         expect(parsed.analyst_perspective?.top_evidence?.[0]?.label).toBe('MACD');
         expect(parsed.regime_summary?.dominant_regime).toBe('BULL_TREND');
+        expect(parsed.regime_summary?.average_confidence).toBe(0.74);
         expect(parsed.volume_profile_summary?.timeframe).toBe('1d');
         expect(parsed.structure_confluence_summary?.confluence_state).toBe('strong');
+        expect(parsed.evidence_bundle?.primary_timeframe).toBe('1d');
+        expect(parsed.evidence_bundle?.support_levels).toEqual([180.5, 176.2]);
+        expect(parsed.evidence_bundle?.breakout_signals?.[0]?.name).toBe('BREAKOUT_UP');
+        expect(parsed.evidence_bundle?.scorecard_summary?.overall_score).toBe(0.68);
+        expect(parsed.quality_summary?.overall_quality).toBe('medium');
+        expect(parsed.quality_summary?.alert_quality_gate_counts?.passed).toBe(1);
+        expect(parsed.alert_readout?.highest_severity).toBe('warning');
+        expect(parsed.alert_readout?.top_alerts?.[0]?.policy_code).toBe('TA_RSI_SUPPORT_REBOUND');
+        expect(parsed.observability_summary?.loaded_artifact_count).toBe(5);
+        expect(parsed.observability_summary?.missing_artifacts).toEqual(['direction_scorecard']);
+        expect(parsed.observability_summary?.degraded_reason_count).toBe(2);
         expect(parsed.diagnostics?.is_degraded).toBe(true);
         expect(parsed.summary_tags).toContain('momentum');
     });
@@ -505,7 +597,12 @@ describe('artifact parsers', () => {
                     },
                     timezone: 'UTC',
                     metadata: {
-                        source: 'yfinance',
+                        row_count: 2,
+                        source: 'market_data_provider',
+                        source_timeframe: '1d',
+                        price_basis: 'close',
+                        timezone_normalized: true,
+                        cache_hit: false,
                     },
                 },
             },
@@ -516,6 +613,8 @@ describe('artifact parsers', () => {
         expect(parsed.frames.daily.open_series['2026-02-10']).toBe(180.5);
         expect(parsed.frames.daily.open_series['2026-02-11']).toBeNull();
         expect(parsed.frames.daily.timezone).toBe('UTC');
+        expect(parsed.frames.daily.metadata?.row_count).toBe(2);
+        expect(parsed.frames.daily.metadata?.price_basis).toBe('close');
         expect(parsed.degraded_reasons).toContain('HOURLY_DATA_MISSING');
     });
 
@@ -538,7 +637,18 @@ describe('artifact parsers', () => {
                         },
                     },
                     timezone: 'UTC',
-                    metadata: { source_points: 2, downsample_step: 1 },
+                    metadata: {
+                        source_points: 2,
+                        max_points: 1500,
+                        downsample_step: 1,
+                        source_timeframe: '1d',
+                        source_price_basis: 'close',
+                        effective_sample_count: 2,
+                        minimum_sample_count: 300,
+                        sample_readiness: 'partial',
+                        fidelity: 'high',
+                        quality_flags: ['QUANT_SKIPPED'],
+                    },
                 },
             },
             degraded_reasons: ['QUANT_SKIPPED'],
@@ -547,6 +657,8 @@ describe('artifact parsers', () => {
         expect(parsed.ticker).toBe('AAPL');
         expect(parsed.timeframes.daily.series.RSI_14['2026-02-11']).toBeNull();
         expect(parsed.timeframes.daily.timezone).toBe('UTC');
+        expect(parsed.timeframes.daily.metadata?.sample_readiness).toBe('partial');
+        expect(parsed.timeframes.daily.metadata?.quality_flags).toEqual(['QUANT_SKIPPED']);
         expect(parsed.degraded_reasons).toContain('QUANT_SKIPPED');
     });
 
@@ -557,18 +669,48 @@ describe('artifact parsers', () => {
             timeframes: {
                 daily: {
                     classic_indicators: {
-                        rsi: { name: 'RSI', value: 45.2, state: 'neutral' },
+                        rsi: {
+                            name: 'RSI',
+                            value: 45.2,
+                            state: 'neutral',
+                            provenance: {
+                                method: 'rsi_14',
+                                input_basis: 'close',
+                                source_timeframe: '1d',
+                                calculation_version: 'technical_feature_contract_v1',
+                            },
+                            quality: {
+                                effective_sample_count: 120,
+                                minimum_samples: 14,
+                                warmup_status: 'READY',
+                                fidelity: 'high',
+                                quality_flags: [],
+                            },
+                        },
                     },
                     quant_features: {
                         fracdiff_rsi: { name: 'FracDiff RSI', value: 0.12 },
                     },
                 },
             },
+            feature_summary: {
+                classic_count: 1,
+                quant_count: 1,
+                timeframe_count: 1,
+                ready_timeframes: ['daily'],
+                degraded_timeframes: [],
+                regime_inputs_ready_timeframes: [],
+                unavailable_indicator_count: 0,
+                overall_quality: 'high',
+            },
             degraded_reasons: ['HOURLY_DATA_MISSING'],
         });
 
         expect(parsed.ticker).toBe('AAPL');
         expect(parsed.timeframes.daily.classic_indicators.rsi.name).toBe('RSI');
+        expect(parsed.timeframes.daily.classic_indicators.rsi.provenance?.method).toBe('rsi_14');
+        expect(parsed.timeframes.daily.classic_indicators.rsi.quality?.warmup_status).toBe('READY');
+        expect(parsed.feature_summary?.overall_quality).toBe('high');
         expect(parsed.degraded_reasons).toContain('HOURLY_DATA_MISSING');
     });
 
@@ -597,9 +739,23 @@ describe('artifact parsers', () => {
                     breakouts: [{ name: 'breakout_up', confidence: 0.7 }],
                     trendlines: [{ name: 'uptrend', confidence: 0.65 }],
                     pattern_flags: [{ name: 'higher_lows', confidence: 0.55 }],
-                    confluence_metadata: { confluence_state: 'strong' },
+                    confluence_metadata: {
+                        confluence_state: 'strong',
+                        confluence_score: 0.74,
+                        near_volume_node: true,
+                        reasons: ['near_volume_node'],
+                    },
                     confidence_scores: { support_confidence: 0.7 },
                 },
+            },
+            pattern_summary: {
+                timeframe_count: 1,
+                support_level_count: 1,
+                resistance_level_count: 1,
+                volume_profile_level_count: 1,
+                breakout_count: 1,
+                trendline_count: 1,
+                strong_confluence_count: 1,
             },
             degraded_reasons: ['WEEKLY_DATA_MISSING'],
         });
@@ -611,6 +767,10 @@ describe('artifact parsers', () => {
         expect(parsed.timeframes.daily.confluence_metadata?.confluence_state).toBe(
             'strong'
         );
+        expect(parsed.timeframes.daily.confluence_metadata?.reasons).toEqual([
+            'near_volume_node',
+        ]);
+        expect(parsed.pattern_summary?.strong_confluence_count).toBe(1);
         expect(parsed.timeframes.daily.breakouts[0]?.name).toBe('breakout_up');
         expect(parsed.degraded_reasons).toContain('WEEKLY_DATA_MISSING');
     });
@@ -631,12 +791,29 @@ describe('artifact parsers', () => {
                     direction: 'above',
                     triggered_at: '2026-02-12T00:00:00Z',
                     source: 'indicator_series',
+                    policy: {
+                        policy_code: 'TA_RSI_14_EXTREME',
+                        policy_version: '1.0',
+                        lifecycle_state: 'active',
+                        evidence_refs: [
+                            {
+                                artifact_kind: 'ta_indicator_series',
+                                timeframe: '1d',
+                                signal_key: 'RSI_14'
+                            }
+                        ],
+                        quality_gate: 'pass',
+                        trigger_reason: 'RSI_14 >= 70 (actual=72.40)'
+                    }
                 },
             ],
             summary: {
                 total: 1,
                 severity_counts: { warning: 1, critical: 0, info: 0 },
                 generated_at: '2026-02-12T00:00:00Z',
+                policy_count: 1,
+                lifecycle_counts: { active: 1 },
+                quality_gate_counts: { pass: 1 }
             },
             degraded_reasons: ['PATTERN_PACK_MISSING'],
             source_artifacts: { indicator_series_id: 'series-1' },
@@ -645,7 +822,11 @@ describe('artifact parsers', () => {
         expect(parsed.ticker).toBe('AAPL');
         expect(parsed.alerts).toHaveLength(1);
         expect(parsed.alerts[0]?.severity).toBe('warning');
+        expect(parsed.alerts[0]?.policy?.policy_code).toBe('TA_RSI_14_EXTREME');
+        expect(parsed.alerts[0]?.policy?.evidence_refs?.[0]?.signal_key).toBe('RSI_14');
         expect(parsed.summary?.total).toBe(1);
+        expect(parsed.summary?.policy_count).toBe(1);
+        expect(parsed.summary?.lifecycle_counts?.active).toBe(1);
         expect(parsed.degraded_reasons).toContain('PATTERN_PACK_MISSING');
         expect(parsed.source_artifacts?.indicator_series_id).toBe('series-1');
     });
@@ -678,7 +859,25 @@ describe('artifact parsers', () => {
                 },
             },
             conflict_reasons: ['daily:CLASSIC_BULLISH_VS_QUANT_NEUTRAL'],
-            alignment_report: { anchor_timeframe: 'daily' },
+            regime_summary: {
+                dominant_regime: 'BULL_TREND',
+                timeframe_count: 1,
+                average_confidence: 0.81,
+            },
+            alignment_report: {
+                schema_version: '1.0',
+                anchor_timeframe: 'daily',
+                input_timeframes: ['1d'],
+                alignment_window_start: '2026-02-01T00:00:00Z',
+                alignment_window_end: '2026-02-12T00:00:00Z',
+                rows_before: 40,
+                rows_after: 36,
+                dropped_rows: 4,
+                gap_count: 1,
+                gap_samples: ['2026-02-05T00:00:00Z'],
+                look_ahead_detected: false,
+                notes: ['aligned_to_daily'],
+            },
             source_artifacts: { feature_pack_id: 'feature-123' },
             degraded_reasons: ['DAILY_PATTERN_FRAME_MISSING'],
         });
@@ -690,6 +889,8 @@ describe('artifact parsers', () => {
         expect(parsed.degraded_reasons).toContain('DAILY_PATTERN_FRAME_MISSING');
         expect(parsed.confidence_calibrated).toBe(0.62);
         expect(parsed.confidence_raw).toBe(0.48);
+        expect(parsed.regime_summary?.average_confidence).toBe(0.81);
+        expect(parsed.alignment_report?.gap_count).toBe(1);
         expect(parsed.confidence_calibration?.mapping_version).toBe(
             'technical_direction_calibration_v1_2026_03_16'
         );

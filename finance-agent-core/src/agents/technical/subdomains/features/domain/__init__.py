@@ -12,6 +12,7 @@ from .classic import (
     compute_rsi,
     compute_sma,
     compute_vwap,
+    supports_session_vwap_timeframe,
 )
 from .fracdiff import (
     BollingerIndicator,
@@ -70,4 +71,5 @@ __all__ = [
     "compute_rsi",
     "compute_sma",
     "compute_vwap",
+    "supports_session_vwap_timeframe",
 ]

@@ -5,6 +5,8 @@ import logging
 from collections.abc import Callable, Mapping
 from typing import Protocol
 
+from pydantic import BaseModel
+
 from src.agents.technical.application.state_readers import (
     resolved_ticker_from_state,
     technical_state_from_state,
@@ -17,6 +19,9 @@ from src.agents.technical.domain.shared import (
     AlignmentReport,
     FeatureFrame,
     FeaturePack,
+    FeatureSummary,
+    IndicatorProvenance,
+    IndicatorQuality,
     IndicatorSnapshot,
     KeyLevel,
     PatternFlag,
@@ -138,7 +143,9 @@ async def run_fusion_compute_use_case(
             goto="END",
         )
 
-    degraded_reasons: list[str] = []
+    degraded_reasons: list[str] = _merge_degraded_reasons(
+        list(technical_context.degraded_reasons)
+    )
     alignment_report: dict[str, object] | None = None
     alignment = None
     direction_scorecard_id: str | None = None
@@ -180,6 +187,10 @@ async def run_fusion_compute_use_case(
                 ),
                 goto="END",
             )
+        degraded_reasons = _merge_degraded_reasons(
+            degraded_reasons,
+            list(feature_pack_payload.degraded_reasons or []),
+        )
 
         pattern_pack_payload = await runtime.load_pattern_pack(pattern_pack_id)
         if pattern_pack_payload is None:
@@ -215,6 +226,10 @@ async def run_fusion_compute_use_case(
                 ),
                 goto="END",
             )
+        degraded_reasons = _merge_degraded_reasons(
+            degraded_reasons,
+            list(pattern_pack_payload.degraded_reasons or []),
+        )
 
         if regime_pack_id is None:
             degraded_reasons.append("REGIME_PACK_MISSING")
@@ -223,6 +238,10 @@ async def run_fusion_compute_use_case(
             if regime_pack_payload is None:
                 degraded_reasons.append("REGIME_PACK_NOT_FOUND")
             else:
+                degraded_reasons = _merge_degraded_reasons(
+                    degraded_reasons,
+                    list(regime_pack_payload.degraded_reasons or []),
+                )
                 regime_pack = _regime_pack_from_payload(regime_pack_payload)
 
         timeseries_bundle_id = technical_context.timeseries_bundle_id
@@ -233,6 +252,10 @@ async def run_fusion_compute_use_case(
             if bundle is None:
                 degraded_reasons.append("ALIGNMENT_BUNDLE_NOT_FOUND")
             else:
+                degraded_reasons = _merge_degraded_reasons(
+                    degraded_reasons,
+                    list(bundle.degraded_reasons or []),
+                )
                 series_by_timeframe: dict[str, PriceSeries] = {}
                 for timeframe, frame in bundle.frames.items():
                     series_by_timeframe[timeframe] = PriceSeries(
@@ -277,7 +300,10 @@ async def run_fusion_compute_use_case(
             fusion_request,
         )
 
-        degraded_reasons.extend(fusion_result.degraded_reasons)
+        degraded_reasons = _merge_degraded_reasons(
+            degraded_reasons,
+            fusion_result.degraded_reasons,
+        )
 
         confidence_raw = fusion_result.fusion_signal.confidence
         overall_score = (
@@ -447,6 +473,8 @@ async def run_fusion_compute_use_case(
             confidence_raw=confidence_raw,
             confidence_calibrated=confidence_calibrated,
             confidence_calibration=confidence_calibration,
+            is_degraded=bool(degraded_reasons),
+            degraded_reasons=degraded_reasons,
             artifact=artifact,
         ),
         goto="verification_compute",
@@ -463,6 +491,22 @@ def _feature_pack_from_payload(
                 name=indicator.name,
                 value=indicator.value,
                 state=indicator.state,
+                provenance=(
+                    IndicatorProvenance(**indicator.provenance.model_dump(mode="json"))
+                    if indicator.provenance is not None
+                    else None
+                ),
+                quality=(
+                    IndicatorQuality(
+                        effective_sample_count=indicator.quality.effective_sample_count,
+                        minimum_samples=indicator.quality.minimum_samples,
+                        warmup_status=indicator.quality.warmup_status,
+                        fidelity=indicator.quality.fidelity,
+                        quality_flags=tuple(indicator.quality.quality_flags or []),
+                    )
+                    if indicator.quality is not None
+                    else None
+                ),
                 metadata=indicator.metadata or {},
             )
             for name, indicator in frame.classic_indicators.items()
@@ -472,6 +516,22 @@ def _feature_pack_from_payload(
                 name=indicator.name,
                 value=indicator.value,
                 state=indicator.state,
+                provenance=(
+                    IndicatorProvenance(**indicator.provenance.model_dump(mode="json"))
+                    if indicator.provenance is not None
+                    else None
+                ),
+                quality=(
+                    IndicatorQuality(
+                        effective_sample_count=indicator.quality.effective_sample_count,
+                        minimum_samples=indicator.quality.minimum_samples,
+                        warmup_status=indicator.quality.warmup_status,
+                        fidelity=indicator.quality.fidelity,
+                        quality_flags=tuple(indicator.quality.quality_flags or []),
+                    )
+                    if indicator.quality is not None
+                    else None
+                ),
                 metadata=indicator.metadata or {},
             )
             for name, indicator in frame.quant_features.items()
@@ -484,7 +544,22 @@ def _feature_pack_from_payload(
         ticker=payload.ticker,
         as_of=payload.as_of,
         timeframes=frames,
-        feature_summary=payload.feature_summary or {},
+        feature_summary=FeatureSummary(
+            classic_count=payload.feature_summary.classic_count,
+            quant_count=payload.feature_summary.quant_count,
+            timeframe_count=payload.feature_summary.timeframe_count,
+            ready_timeframes=tuple(payload.feature_summary.ready_timeframes or []),
+            degraded_timeframes=tuple(
+                payload.feature_summary.degraded_timeframes or []
+            ),
+            regime_inputs_ready_timeframes=tuple(
+                payload.feature_summary.regime_inputs_ready_timeframes or []
+            ),
+            unavailable_indicator_count=payload.feature_summary.unavailable_indicator_count,
+            overall_quality=payload.feature_summary.overall_quality,
+        )
+        if payload.feature_summary is not None
+        else FeatureSummary(),
     )
 
 
@@ -551,14 +626,14 @@ def _pattern_pack_from_payload(
             breakouts=breakouts,
             trendlines=trendlines,
             pattern_flags=pattern_flags,
-            confluence_metadata=frame.confluence_metadata or {},
+            confluence_metadata=_mapping_from_model(frame.confluence_metadata),
             confidence_scores=frame.confidence_scores or {},
         )
     return PatternPack(
         ticker=payload.ticker,
         as_of=payload.as_of,
         timeframes=frames,
-        pattern_summary=payload.pattern_summary or {},
+        pattern_summary=_mapping_from_model(payload.pattern_summary),
     )
 
 
@@ -588,13 +663,22 @@ def _regime_pack_from_payload(payload: TechnicalRegimePackArtifactData) -> Regim
         ticker=payload.ticker,
         as_of=payload.as_of,
         timeframes=frames,
-        regime_summary=payload.regime_summary or {},
+        regime_summary=_mapping_from_model(payload.regime_summary),
     )
 
 
 def _alignment_report_to_payload(report: object) -> dict[str, object]:
     if hasattr(report, "__dict__"):
         return dict(report.__dict__)
+    return {}
+
+
+def _mapping_from_model(value: object) -> dict[str, object]:
+    if isinstance(value, BaseModel):
+        dumped = value.model_dump(mode="json", exclude_none=True)
+        return dumped if isinstance(dumped, dict) else {}
+    if isinstance(value, Mapping):
+        return dict(value)
     return {}
 
 
@@ -728,3 +812,18 @@ def _scorecard_contribution_payload(
         "weight": item.weight,
         "notes": item.notes,
     }
+
+
+def _read_degraded_reasons(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if isinstance(item, str)]
+
+
+def _merge_degraded_reasons(*groups: list[str]) -> list[str]:
+    merged: list[str] = []
+    for group in groups:
+        for reason in group:
+            if reason not in merged:
+                merged.append(reason)
+    return merged

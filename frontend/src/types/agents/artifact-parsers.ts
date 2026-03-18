@@ -36,9 +36,12 @@ import {
     TechnicalAnalysisReport,
     TechnicalAnalysisSuccess,
     TechnicalArtifactRefs,
+    TechnicalAlertReadout,
+    TechnicalAlertReadoutItem,
     TechnicalChartData,
     TechnicalConfidenceCalibration,
     TechnicalDiagnostics,
+    TechnicalEvidenceBundle,
     TechnicalFeatureFrame,
     TechnicalFeatureIndicator,
     TechnicalFeaturePack,
@@ -51,8 +54,13 @@ import {
     TechnicalPatternFrame,
     TechnicalPatternLevel,
     TechnicalPatternPack,
+    TechnicalPatternSummary,
+    TechnicalObservabilitySummary,
+    TechnicalQualitySummary,
     TechnicalIndicatorSeriesArtifact,
     TechnicalIndicatorSeriesFrame,
+    TechnicalRegimeSummary,
+    TechnicalStructureConfluenceSummary,
     TechnicalTimeseriesBundle,
     TechnicalTimeseriesFrame,
     TechnicalMomentumExtremes,
@@ -158,6 +166,545 @@ const parseConfidenceCalibration = (
         return undefined;
     }
     return calibration;
+};
+
+const parseRegimeSummary = (
+    value: unknown,
+    context: string
+): TechnicalRegimeSummary | undefined => {
+    if (value === undefined || value === null) return undefined;
+    const record = toRecord(value, context);
+    const timeframeCount = parseNullableOptionalNumber(
+        record.timeframe_count,
+        `${context}.timeframe_count`
+    );
+    const dominantRegime = parseNullableOptionalString(
+        record.dominant_regime,
+        `${context}.dominant_regime`
+    );
+    const averageConfidence = parseNullableOptionalNumber(
+        record.average_confidence,
+        `${context}.average_confidence`
+    );
+    const summary: TechnicalRegimeSummary = {};
+    if (timeframeCount !== undefined) summary.timeframe_count = timeframeCount;
+    if (dominantRegime !== undefined) {
+        summary.dominant_regime = dominantRegime ?? null;
+    }
+    if (averageConfidence !== undefined) {
+        summary.average_confidence = averageConfidence;
+    }
+    return Object.keys(summary).length > 0 ? summary : undefined;
+};
+
+const parseStructureConfluenceSummary = (
+    value: unknown,
+    context: string
+): TechnicalStructureConfluenceSummary | undefined => {
+    if (value === undefined || value === null) return undefined;
+    const record = toRecord(value, context);
+    const summary: TechnicalStructureConfluenceSummary = {};
+    const stringFields = [
+        'timeframe',
+        'confluence_state',
+        'profile_method',
+        'profile_fidelity',
+        'breakout_bias',
+        'trend_bias',
+    ] as const;
+    const numericFields = [
+        'confluence_score',
+        'volume_node_count',
+        'nearest_volume_node',
+        'nearest_support',
+        'nearest_resistance',
+        'poc',
+        'vah',
+        'val',
+    ] as const;
+    const booleanFields = [
+        'near_volume_node',
+        'near_support',
+        'near_resistance',
+    ] as const;
+
+    for (const field of stringFields) {
+        const parsed = parseNullableOptionalString(record[field], `${context}.${field}`);
+        if (parsed !== undefined) {
+            summary[field] = parsed ?? null;
+        }
+    }
+    for (const field of numericFields) {
+        const parsed = parseNullableOptionalNumber(record[field], `${context}.${field}`);
+        if (parsed !== undefined) {
+            summary[field] = parsed;
+        }
+    }
+    for (const field of booleanFields) {
+        const parsed = parseNullableOptionalBoolean(record[field], `${context}.${field}`);
+        if (parsed !== undefined) {
+            summary[field] = parsed;
+        }
+    }
+
+    const reasons =
+        record.reasons === undefined || record.reasons === null
+            ? undefined
+            : parseStringArray(record.reasons, `${context}.reasons`);
+    if (reasons !== undefined) {
+        summary.reasons = reasons;
+    }
+
+    return Object.keys(summary).length > 0 ? summary : undefined;
+};
+
+const parseEvidenceBreakoutSignal = (
+    value: unknown,
+    context: string
+): NonNullable<TechnicalEvidenceBundle['breakout_signals']>[number] => {
+    const record = toRecord(value, context);
+    const signal: NonNullable<TechnicalEvidenceBundle['breakout_signals']>[number] = {
+        name: parseString(record.name, `${context}.name`),
+    };
+    const confidence = parseNullableOptionalNumber(
+        record.confidence,
+        `${context}.confidence`
+    );
+    const notes = parseNullableOptionalString(record.notes, `${context}.notes`);
+    if (confidence !== undefined) {
+        signal.confidence = confidence;
+    }
+    if (notes !== undefined) {
+        signal.notes = notes ?? null;
+    }
+    return signal;
+};
+
+const parseEvidenceScorecardSummary = (
+    value: unknown,
+    context: string
+): TechnicalEvidenceBundle['scorecard_summary'] | undefined => {
+    if (value === undefined || value === null) return undefined;
+    const record = toRecord(value, context);
+    const summary: NonNullable<TechnicalEvidenceBundle['scorecard_summary']> = {};
+    const timeframe = parseNullableOptionalString(
+        record.timeframe,
+        `${context}.timeframe`
+    );
+    const overallScore = parseNullableOptionalNumber(
+        record.overall_score,
+        `${context}.overall_score`
+    );
+    const totalScore = parseNullableOptionalNumber(
+        record.total_score,
+        `${context}.total_score`
+    );
+    const classicLabel = parseNullableOptionalString(
+        record.classic_label,
+        `${context}.classic_label`
+    );
+    const quantLabel = parseNullableOptionalString(
+        record.quant_label,
+        `${context}.quant_label`
+    );
+    const patternLabel = parseNullableOptionalString(
+        record.pattern_label,
+        `${context}.pattern_label`
+    );
+    if (timeframe !== undefined) summary.timeframe = timeframe ?? null;
+    if (overallScore !== undefined) summary.overall_score = overallScore;
+    if (totalScore !== undefined) summary.total_score = totalScore;
+    if (classicLabel !== undefined) summary.classic_label = classicLabel ?? null;
+    if (quantLabel !== undefined) summary.quant_label = quantLabel ?? null;
+    if (patternLabel !== undefined) summary.pattern_label = patternLabel ?? null;
+    return Object.keys(summary).length > 0 ? summary : undefined;
+};
+
+const parseEvidenceBundle = (
+    value: unknown,
+    context: string
+): TechnicalEvidenceBundle | undefined => {
+    if (value === undefined || value === null) return undefined;
+    const record = toRecord(value, context);
+    const bundle: TechnicalEvidenceBundle = {};
+
+    const primaryTimeframe = parseNullableOptionalString(
+        record.primary_timeframe,
+        `${context}.primary_timeframe`
+    );
+    if (primaryTimeframe !== undefined) {
+        bundle.primary_timeframe = primaryTimeframe ?? null;
+    }
+    if (record.support_levels !== undefined && record.support_levels !== null) {
+        bundle.support_levels = parseNumberArray(
+            record.support_levels,
+            `${context}.support_levels`
+        );
+    }
+    if (record.resistance_levels !== undefined && record.resistance_levels !== null) {
+        bundle.resistance_levels = parseNumberArray(
+            record.resistance_levels,
+            `${context}.resistance_levels`
+        );
+    }
+    if (record.breakout_signals !== undefined && record.breakout_signals !== null) {
+        const signals = record.breakout_signals;
+        if (!Array.isArray(signals)) {
+            throw new TypeError(`${context}.breakout_signals must be an array.`);
+        }
+        bundle.breakout_signals = signals.map((item, index) =>
+            parseEvidenceBreakoutSignal(
+                item,
+                `${context}.breakout_signals[${index}]`
+            )
+        );
+    }
+    const scorecardSummary = parseEvidenceScorecardSummary(
+        record.scorecard_summary,
+        `${context}.scorecard_summary`
+    );
+    if (scorecardSummary) {
+        bundle.scorecard_summary = scorecardSummary;
+    }
+    const regimeSummary = parseRegimeSummary(
+        record.regime_summary,
+        `${context}.regime_summary`
+    );
+    if (regimeSummary) {
+        bundle.regime_summary = regimeSummary;
+    }
+    if (record.volume_profile_summary !== undefined && record.volume_profile_summary !== null) {
+        bundle.volume_profile_summary = toRecord(
+            record.volume_profile_summary,
+            `${context}.volume_profile_summary`
+        );
+    }
+    const structureConfluenceSummary = parseStructureConfluenceSummary(
+        record.structure_confluence_summary,
+        `${context}.structure_confluence_summary`
+    );
+    if (structureConfluenceSummary) {
+        bundle.structure_confluence_summary = structureConfluenceSummary;
+    }
+    const conflictReasons =
+        record.conflict_reasons === undefined || record.conflict_reasons === null
+            ? undefined
+            : parseStringArray(record.conflict_reasons, `${context}.conflict_reasons`);
+    if (conflictReasons !== undefined) {
+        bundle.conflict_reasons = conflictReasons;
+    }
+    return Object.keys(bundle).length > 0 ? bundle : undefined;
+};
+
+const parseNumberMap = (
+    value: unknown,
+    context: string
+): Record<string, number> | undefined => {
+    if (value === undefined || value === null) return undefined;
+    const record = toRecord(value, context);
+    const parsed: Record<string, number> = {};
+    for (const [key, entry] of Object.entries(record)) {
+        parsed[key] = parseNumber(entry, `${context}.${key}`);
+    }
+    return Object.keys(parsed).length > 0 ? parsed : undefined;
+};
+
+const parseQualitySummary = (
+    value: unknown,
+    context: string
+): TechnicalQualitySummary | undefined => {
+    if (value === undefined || value === null) return undefined;
+    const record = toRecord(value, context);
+    const summary: TechnicalQualitySummary = {};
+    const isDegraded = parseNullableOptionalBoolean(
+        record.is_degraded,
+        `${context}.is_degraded`
+    );
+    const overallQuality = parseNullableOptionalString(
+        record.overall_quality,
+        `${context}.overall_quality`
+    );
+    const unavailableIndicatorCount = parseNullableOptionalNumber(
+        record.unavailable_indicator_count,
+        `${context}.unavailable_indicator_count`
+    );
+    const primaryTimeframe = parseNullableOptionalString(
+        record.primary_timeframe,
+        `${context}.primary_timeframe`
+    );
+    const degradedReasons =
+        record.degraded_reasons === undefined || record.degraded_reasons === null
+            ? undefined
+            : parseStringArray(record.degraded_reasons, `${context}.degraded_reasons`);
+    const readyTimeframes =
+        record.ready_timeframes === undefined || record.ready_timeframes === null
+            ? undefined
+            : parseStringArray(record.ready_timeframes, `${context}.ready_timeframes`);
+    const degradedTimeframes =
+        record.degraded_timeframes === undefined || record.degraded_timeframes === null
+            ? undefined
+            : parseStringArray(
+                  record.degraded_timeframes,
+                  `${context}.degraded_timeframes`
+              );
+    const regimeInputsReadyTimeframes =
+        record.regime_inputs_ready_timeframes === undefined ||
+        record.regime_inputs_ready_timeframes === null
+            ? undefined
+            : parseStringArray(
+                  record.regime_inputs_ready_timeframes,
+                  `${context}.regime_inputs_ready_timeframes`
+              );
+    const alertQualityGateCounts = parseNumberMap(
+        record.alert_quality_gate_counts,
+        `${context}.alert_quality_gate_counts`
+    );
+
+    if (isDegraded !== undefined) summary.is_degraded = isDegraded;
+    if (degradedReasons !== undefined) summary.degraded_reasons = degradedReasons;
+    if (overallQuality !== undefined) summary.overall_quality = overallQuality ?? null;
+    if (readyTimeframes !== undefined) summary.ready_timeframes = readyTimeframes;
+    if (degradedTimeframes !== undefined) {
+        summary.degraded_timeframes = degradedTimeframes;
+    }
+    if (regimeInputsReadyTimeframes !== undefined) {
+        summary.regime_inputs_ready_timeframes = regimeInputsReadyTimeframes;
+    }
+    if (unavailableIndicatorCount !== undefined) {
+        summary.unavailable_indicator_count = unavailableIndicatorCount;
+    }
+    if (alertQualityGateCounts !== undefined) {
+        summary.alert_quality_gate_counts = alertQualityGateCounts;
+    }
+    if (primaryTimeframe !== undefined) {
+        summary.primary_timeframe = primaryTimeframe ?? null;
+    }
+    return Object.keys(summary).length > 0 ? summary : undefined;
+};
+
+const parseAlertReadoutItem = (
+    value: unknown,
+    context: string
+): TechnicalAlertReadoutItem => {
+    const record = toRecord(value, context);
+    const item: TechnicalAlertReadoutItem = {
+        code: parseString(record.code, `${context}.code`),
+        title: parseString(record.title, `${context}.title`),
+        severity: parseString(record.severity, `${context}.severity`),
+        timeframe: parseString(record.timeframe, `${context}.timeframe`),
+    };
+    const policyCode = parseNullableOptionalString(
+        record.policy_code,
+        `${context}.policy_code`
+    );
+    const lifecycleState = parseNullableOptionalString(
+        record.lifecycle_state,
+        `${context}.lifecycle_state`
+    );
+    if (policyCode !== undefined) item.policy_code = policyCode ?? null;
+    if (lifecycleState !== undefined) {
+        item.lifecycle_state = lifecycleState ?? null;
+    }
+    return item;
+};
+
+const parseAlertReadout = (
+    value: unknown,
+    context: string
+): TechnicalAlertReadout | undefined => {
+    if (value === undefined || value === null) return undefined;
+    const record = toRecord(value, context);
+    const readout: TechnicalAlertReadout = {};
+    const totalAlerts = parseNullableOptionalNumber(
+        record.total_alerts,
+        `${context}.total_alerts`
+    );
+    const policyCount = parseNullableOptionalNumber(
+        record.policy_count,
+        `${context}.policy_count`
+    );
+    const highestSeverity = parseNullableOptionalString(
+        record.highest_severity,
+        `${context}.highest_severity`
+    );
+    const activeAlertCount = parseNullableOptionalNumber(
+        record.active_alert_count,
+        `${context}.active_alert_count`
+    );
+    const monitoringAlertCount = parseNullableOptionalNumber(
+        record.monitoring_alert_count,
+        `${context}.monitoring_alert_count`
+    );
+    const suppressedAlertCount = parseNullableOptionalNumber(
+        record.suppressed_alert_count,
+        `${context}.suppressed_alert_count`
+    );
+    const qualityGateCounts = parseNumberMap(
+        record.quality_gate_counts,
+        `${context}.quality_gate_counts`
+    );
+    if (record.top_alerts !== undefined && record.top_alerts !== null) {
+        if (!Array.isArray(record.top_alerts)) {
+            throw new TypeError(`${context}.top_alerts must be an array.`);
+        }
+        readout.top_alerts = record.top_alerts.map((item, index) =>
+            parseAlertReadoutItem(item, `${context}.top_alerts[${index}]`)
+        );
+    }
+    if (totalAlerts !== undefined) readout.total_alerts = totalAlerts;
+    if (policyCount !== undefined) readout.policy_count = policyCount;
+    if (highestSeverity !== undefined) {
+        readout.highest_severity = highestSeverity ?? null;
+    }
+    if (activeAlertCount !== undefined) {
+        readout.active_alert_count = activeAlertCount;
+    }
+    if (monitoringAlertCount !== undefined) {
+        readout.monitoring_alert_count = monitoringAlertCount;
+    }
+    if (suppressedAlertCount !== undefined) {
+        readout.suppressed_alert_count = suppressedAlertCount;
+    }
+    if (qualityGateCounts !== undefined) {
+        readout.quality_gate_counts = qualityGateCounts;
+    }
+    return Object.keys(readout).length > 0 ? readout : undefined;
+};
+
+const parseObservabilitySummary = (
+    value: unknown,
+    context: string
+): TechnicalObservabilitySummary | undefined => {
+    if (value === undefined || value === null) return undefined;
+    const record = toRecord(value, context);
+    const summary: TechnicalObservabilitySummary = {};
+    const primaryTimeframe = parseNullableOptionalString(
+        record.primary_timeframe,
+        `${context}.primary_timeframe`
+    );
+    const observedTimeframes =
+        record.observed_timeframes === undefined || record.observed_timeframes === null
+            ? undefined
+            : parseStringArray(record.observed_timeframes, `${context}.observed_timeframes`);
+    const loadedArtifacts =
+        record.loaded_artifacts === undefined || record.loaded_artifacts === null
+            ? undefined
+            : parseStringArray(record.loaded_artifacts, `${context}.loaded_artifacts`);
+    const missingArtifacts =
+        record.missing_artifacts === undefined || record.missing_artifacts === null
+            ? undefined
+            : parseStringArray(record.missing_artifacts, `${context}.missing_artifacts`);
+    const degradedArtifacts =
+        record.degraded_artifacts === undefined || record.degraded_artifacts === null
+            ? undefined
+            : parseStringArray(record.degraded_artifacts, `${context}.degraded_artifacts`);
+    const loadedArtifactCount = parseNullableOptionalNumber(
+        record.loaded_artifact_count,
+        `${context}.loaded_artifact_count`
+    );
+    const missingArtifactCount = parseNullableOptionalNumber(
+        record.missing_artifact_count,
+        `${context}.missing_artifact_count`
+    );
+    const degradedReasonCount = parseNullableOptionalNumber(
+        record.degraded_reason_count,
+        `${context}.degraded_reason_count`
+    );
+    if (primaryTimeframe !== undefined) {
+        summary.primary_timeframe = primaryTimeframe ?? null;
+    }
+    if (observedTimeframes !== undefined) summary.observed_timeframes = observedTimeframes;
+    if (loadedArtifacts !== undefined) summary.loaded_artifacts = loadedArtifacts;
+    if (missingArtifacts !== undefined) summary.missing_artifacts = missingArtifacts;
+    if (degradedArtifacts !== undefined) summary.degraded_artifacts = degradedArtifacts;
+    if (loadedArtifactCount !== undefined) {
+        summary.loaded_artifact_count = loadedArtifactCount;
+    }
+    if (missingArtifactCount !== undefined) {
+        summary.missing_artifact_count = missingArtifactCount;
+    }
+    if (degradedReasonCount !== undefined) {
+        summary.degraded_reason_count = degradedReasonCount;
+    }
+    return Object.keys(summary).length > 0 ? summary : undefined;
+};
+
+const parsePatternSummary = (
+    value: unknown,
+    context: string
+): TechnicalPatternSummary | undefined => {
+    if (value === undefined || value === null) return undefined;
+    const record = toRecord(value, context);
+    return {
+        timeframe_count: parseNumber(record.timeframe_count, `${context}.timeframe_count`),
+        support_level_count: parseNumber(
+            record.support_level_count,
+            `${context}.support_level_count`
+        ),
+        resistance_level_count: parseNumber(
+            record.resistance_level_count,
+            `${context}.resistance_level_count`
+        ),
+        volume_profile_level_count: parseNumber(
+            record.volume_profile_level_count,
+            `${context}.volume_profile_level_count`
+        ),
+        breakout_count: parseNumber(record.breakout_count, `${context}.breakout_count`),
+        trendline_count: parseNumber(record.trendline_count, `${context}.trendline_count`),
+        strong_confluence_count: parseNumber(
+            record.strong_confluence_count,
+            `${context}.strong_confluence_count`
+        ),
+    };
+};
+
+const parseAlignmentReport = (
+    value: unknown,
+    context: string
+): TechnicalFusionReport['alignment_report'] | undefined => {
+    if (value === undefined || value === null) return undefined;
+    const record = toRecord(value, context);
+    const report: NonNullable<TechnicalFusionReport['alignment_report']> = {
+        schema_version: parseString(record.schema_version, `${context}.schema_version`),
+        anchor_timeframe: parseString(
+            record.anchor_timeframe,
+            `${context}.anchor_timeframe`
+        ),
+        input_timeframes: parseStringArray(
+            record.input_timeframes,
+            `${context}.input_timeframes`
+        ),
+        alignment_window_start: parseString(
+            record.alignment_window_start,
+            `${context}.alignment_window_start`
+        ),
+        alignment_window_end: parseString(
+            record.alignment_window_end,
+            `${context}.alignment_window_end`
+        ),
+        rows_before: parseNumber(record.rows_before, `${context}.rows_before`),
+        rows_after: parseNumber(record.rows_after, `${context}.rows_after`),
+        dropped_rows: parseNumber(record.dropped_rows, `${context}.dropped_rows`),
+        gap_count: parseNumber(record.gap_count, `${context}.gap_count`),
+    };
+    const gapSamples =
+        record.gap_samples === undefined || record.gap_samples === null
+            ? undefined
+            : parseStringArray(record.gap_samples, `${context}.gap_samples`);
+    const lookAheadDetected = parseNullableOptionalBoolean(
+        record.look_ahead_detected,
+        `${context}.look_ahead_detected`
+    );
+    const notes =
+        record.notes === undefined || record.notes === null
+            ? undefined
+            : parseStringArray(record.notes, `${context}.notes`);
+    if (gapSamples !== undefined) report.gap_samples = gapSamples;
+    if (lookAheadDetected !== undefined) {
+        report.look_ahead_detected = lookAheadDetected;
+    }
+    if (notes !== undefined) report.notes = notes;
+    return report;
 };
 
 const parseMomentumExtremes = (
@@ -499,6 +1046,13 @@ const parseForwardSignal = (value: unknown, context: string): ForwardSignal => {
 const parseStringArray = (value: unknown, context: string): string[] => {
     if (!Array.isArray(value) || !value.every((entry) => typeof entry === 'string')) {
         throw new TypeError(`${context} must be an array of strings.`);
+    }
+    return value;
+};
+
+const parseNumberArray = (value: unknown, context: string): number[] => {
+    if (!Array.isArray(value) || !value.every((entry) => typeof entry === 'number')) {
+        throw new TypeError(`${context} must be an array of numbers.`);
     }
     return value;
 };
@@ -967,6 +1521,10 @@ const parseTechnicalAlertSignal = (
         record.threshold,
         `${context}.threshold`
     );
+    const policy =
+        record.policy === undefined || record.policy === null
+            ? undefined
+            : parseTechnicalAlertPolicy(record.policy, `${context}.policy`);
 
     const signal: TechnicalAlertSignal = {
         code: parseString(record.code, `${context}.code`),
@@ -982,8 +1540,77 @@ const parseTechnicalAlertSignal = (
     if (triggeredAt !== undefined) signal.triggered_at = triggeredAt;
     if (source !== undefined) signal.source = source;
     if (metadata !== undefined) signal.metadata = metadata;
+    if (policy !== undefined) signal.policy = policy;
 
     return signal;
+};
+
+const parseTechnicalAlertPolicy = (
+    value: unknown,
+    context: string
+): NonNullable<TechnicalAlertSignal['policy']> => {
+    const record = toRecord(value, context);
+    const policy: NonNullable<TechnicalAlertSignal['policy']> = {
+        policy_code: parseString(record.policy_code, `${context}.policy_code`),
+        policy_version: parseString(
+            record.policy_version,
+            `${context}.policy_version`
+        ),
+        lifecycle_state: parseString(
+            record.lifecycle_state,
+            `${context}.lifecycle_state`
+        ),
+    };
+    const qualityGate = parseNullableOptionalString(
+        record.quality_gate,
+        `${context}.quality_gate`
+    );
+    const triggerReason = parseNullableOptionalString(
+        record.trigger_reason,
+        `${context}.trigger_reason`
+    );
+    const suppressionReason = parseNullableOptionalString(
+        record.suppression_reason,
+        `${context}.suppression_reason`
+    );
+    if (qualityGate !== undefined) policy.quality_gate = qualityGate ?? null;
+    if (triggerReason !== undefined) policy.trigger_reason = triggerReason ?? null;
+    if (suppressionReason !== undefined) {
+        policy.suppression_reason = suppressionReason ?? null;
+    }
+    if (record.evidence_refs !== undefined && record.evidence_refs !== null) {
+        if (!Array.isArray(record.evidence_refs)) {
+            throw new TypeError(`${context}.evidence_refs must be an array.`);
+        }
+        policy.evidence_refs = record.evidence_refs.map((entry, index) => {
+            const refRecord = toRecord(entry, `${context}.evidence_refs[${index}]`);
+            const ref: NonNullable<
+                NonNullable<TechnicalAlertSignal['policy']>['evidence_refs']
+            >[number] = {
+                artifact_kind: parseString(
+                    refRecord.artifact_kind,
+                    `${context}.evidence_refs[${index}].artifact_kind`
+                ),
+            };
+            const artifactId = parseNullableOptionalString(
+                refRecord.artifact_id,
+                `${context}.evidence_refs[${index}].artifact_id`
+            );
+            const timeframe = parseNullableOptionalString(
+                refRecord.timeframe,
+                `${context}.evidence_refs[${index}].timeframe`
+            );
+            const signalKey = parseNullableOptionalString(
+                refRecord.signal_key,
+                `${context}.evidence_refs[${index}].signal_key`
+            );
+            if (artifactId !== undefined) ref.artifact_id = artifactId ?? null;
+            if (timeframe !== undefined) ref.timeframe = timeframe ?? null;
+            if (signalKey !== undefined) ref.signal_key = signalKey ?? null;
+            return ref;
+        });
+    }
+    return policy;
 };
 
 const parseTechnicalAlertSummary = (
@@ -996,11 +1623,25 @@ const parseTechnicalAlertSummary = (
         record.generated_at,
         `${context}.generated_at`
     );
+    const policyCount = parseNullableOptionalNumber(
+        record.policy_count,
+        `${context}.policy_count`
+    );
     const severityCountsRecord =
         record.severity_counts === undefined || record.severity_counts === null
             ? undefined
             : toRecord(record.severity_counts, `${context}.severity_counts`);
+    const lifecycleCountsRecord =
+        record.lifecycle_counts === undefined || record.lifecycle_counts === null
+            ? undefined
+            : toRecord(record.lifecycle_counts, `${context}.lifecycle_counts`);
+    const qualityGateCountsRecord =
+        record.quality_gate_counts === undefined || record.quality_gate_counts === null
+            ? undefined
+            : toRecord(record.quality_gate_counts, `${context}.quality_gate_counts`);
     const severityCounts: Record<string, number> = {};
+    const lifecycleCounts: Record<string, number> = {};
+    const qualityGateCounts: Record<string, number> = {};
     if (severityCountsRecord) {
         for (const [key, entry] of Object.entries(severityCountsRecord)) {
             severityCounts[key] = parseNumber(
@@ -1009,12 +1650,35 @@ const parseTechnicalAlertSummary = (
             );
         }
     }
+    if (lifecycleCountsRecord) {
+        for (const [key, entry] of Object.entries(lifecycleCountsRecord)) {
+            lifecycleCounts[key] = parseNumber(
+                entry,
+                `${context}.lifecycle_counts.${key}`
+            );
+        }
+    }
+    if (qualityGateCountsRecord) {
+        for (const [key, entry] of Object.entries(qualityGateCountsRecord)) {
+            qualityGateCounts[key] = parseNumber(
+                entry,
+                `${context}.quality_gate_counts.${key}`
+            );
+        }
+    }
 
     const summary: TechnicalAlertSummary = {};
     if (total !== undefined) summary.total = total;
     if (generatedAt !== undefined) summary.generated_at = generatedAt;
+    if (policyCount !== undefined) summary.policy_count = policyCount;
     if (Object.keys(severityCounts).length > 0) {
         summary.severity_counts = severityCounts;
+    }
+    if (Object.keys(lifecycleCounts).length > 0) {
+        summary.lifecycle_counts = lifecycleCounts;
+    }
+    if (Object.keys(qualityGateCounts).length > 0) {
+        summary.quality_gate_counts = qualityGateCounts;
     }
     return summary;
 };
@@ -1043,6 +1707,64 @@ const parseTechnicalFeatureIndicator = (
     };
     if (typeof state === 'string') {
         indicator.state = state;
+    }
+    if (record.provenance !== undefined && record.provenance !== null) {
+        const provenance = toRecord(record.provenance, `${context}.provenance`);
+        indicator.provenance = {
+            method: parseNullableOptionalString(provenance.method, `${context}.provenance.method`) ?? undefined,
+            input_basis:
+                parseNullableOptionalString(
+                    provenance.input_basis,
+                    `${context}.provenance.input_basis`
+                ) ?? undefined,
+            source_timeframe:
+                parseNullableOptionalString(
+                    provenance.source_timeframe,
+                    `${context}.provenance.source_timeframe`
+                ) ?? undefined,
+            calculation_version:
+                parseNullableOptionalString(
+                    provenance.calculation_version,
+                    `${context}.provenance.calculation_version`
+                ) ?? undefined,
+        };
+    }
+    if (record.quality !== undefined && record.quality !== null) {
+        const quality = toRecord(record.quality, `${context}.quality`);
+        indicator.quality = {
+            effective_sample_count:
+                quality.effective_sample_count === undefined ||
+                quality.effective_sample_count === null
+                    ? undefined
+                    : parseNumber(
+                          quality.effective_sample_count,
+                          `${context}.quality.effective_sample_count`
+                      ),
+            minimum_samples:
+                quality.minimum_samples === undefined || quality.minimum_samples === null
+                    ? undefined
+                    : parseNumber(
+                          quality.minimum_samples,
+                          `${context}.quality.minimum_samples`
+                      ),
+            warmup_status:
+                parseNullableOptionalString(
+                    quality.warmup_status,
+                    `${context}.quality.warmup_status`
+                ) ?? undefined,
+            fidelity:
+                parseNullableOptionalString(
+                    quality.fidelity,
+                    `${context}.quality.fidelity`
+                ) ?? undefined,
+            quality_flags:
+                quality.quality_flags === undefined || quality.quality_flags === null
+                    ? undefined
+                    : parseStringArray(
+                          quality.quality_flags,
+                          `${context}.quality.quality_flags`
+                      ),
+        };
     }
     if (metadata) {
         indicator.metadata = metadata;
@@ -1112,7 +1834,57 @@ export const parseTechnicalFeaturePackArtifact = (
         timeframes: parsedTimeframes,
     };
     if (featureSummary) {
-        pack.feature_summary = featureSummary;
+        pack.feature_summary = {
+            classic_count: parseNumber(
+                featureSummary.classic_count ?? 0,
+                `${context}.feature_summary.classic_count`
+            ),
+            quant_count: parseNumber(
+                featureSummary.quant_count ?? 0,
+                `${context}.feature_summary.quant_count`
+            ),
+            timeframe_count: parseNumber(
+                featureSummary.timeframe_count ?? 0,
+                `${context}.feature_summary.timeframe_count`
+            ),
+            ready_timeframes:
+                featureSummary.ready_timeframes === undefined ||
+                featureSummary.ready_timeframes === null
+                    ? undefined
+                    : parseStringArray(
+                          featureSummary.ready_timeframes,
+                          `${context}.feature_summary.ready_timeframes`
+                      ),
+            degraded_timeframes:
+                featureSummary.degraded_timeframes === undefined ||
+                featureSummary.degraded_timeframes === null
+                    ? undefined
+                    : parseStringArray(
+                          featureSummary.degraded_timeframes,
+                          `${context}.feature_summary.degraded_timeframes`
+                      ),
+            regime_inputs_ready_timeframes:
+                featureSummary.regime_inputs_ready_timeframes === undefined ||
+                featureSummary.regime_inputs_ready_timeframes === null
+                    ? undefined
+                    : parseStringArray(
+                          featureSummary.regime_inputs_ready_timeframes,
+                          `${context}.feature_summary.regime_inputs_ready_timeframes`
+                      ),
+            unavailable_indicator_count:
+                featureSummary.unavailable_indicator_count === undefined ||
+                featureSummary.unavailable_indicator_count === null
+                    ? undefined
+                    : parseNumber(
+                          featureSummary.unavailable_indicator_count,
+                          `${context}.feature_summary.unavailable_indicator_count`
+                      ),
+            overall_quality:
+                parseNullableOptionalString(
+                    featureSummary.overall_quality,
+                    `${context}.feature_summary.overall_quality`
+                ) ?? undefined,
+        };
     }
     if (degradedReasons) {
         pack.degraded_reasons = degradedReasons;
@@ -1232,10 +2004,10 @@ const parseTechnicalPatternFrame = (
         record.volume_profile_summary === null
             ? undefined
             : toRecord(record.volume_profile_summary, `${context}.volume_profile_summary`);
-    const confluenceMetadata =
-        record.confluence_metadata === undefined || record.confluence_metadata === null
-            ? undefined
-            : toRecord(record.confluence_metadata, `${context}.confluence_metadata`);
+    const confluenceMetadata = parseStructureConfluenceSummary(
+        record.confluence_metadata,
+        `${context}.confluence_metadata`
+    );
 
     const frame: TechnicalPatternFrame = {
         support_levels: supportLevels,
@@ -1269,10 +2041,10 @@ export const parseTechnicalPatternPackArtifact = (
         );
     }
 
-    const patternSummary =
-        record.pattern_summary === undefined || record.pattern_summary === null
-            ? undefined
-            : toRecord(record.pattern_summary, `${context}.pattern_summary`);
+    const patternSummary = parsePatternSummary(
+        record.pattern_summary,
+        `${context}.pattern_summary`
+    );
     const degradedReasons =
         record.degraded_reasons === undefined || record.degraded_reasons === null
             ? undefined
@@ -1395,10 +2167,14 @@ export const parseTechnicalFusionReportArtifact = (
                   `${context}.conflict_reasons`
               );
 
-    const alignmentReport =
-        record.alignment_report === undefined || record.alignment_report === null
-            ? undefined
-            : toRecord(record.alignment_report, `${context}.alignment_report`);
+    const alignmentReport = parseAlignmentReport(
+        record.alignment_report,
+        `${context}.alignment_report`
+    );
+    const regimeSummary = parseRegimeSummary(
+        record.regime_summary,
+        `${context}.regime_summary`
+    );
 
     const sourceArtifactsRecord =
         record.source_artifacts === undefined || record.source_artifacts === null
@@ -1440,6 +2216,9 @@ export const parseTechnicalFusionReportArtifact = (
     }
     if (confidenceCalibration) {
         report.confidence_calibration = confidenceCalibration;
+    }
+    if (regimeSummary) {
+        report.regime_summary = regimeSummary;
     }
     if (Object.keys(confluenceMatrix).length > 0) {
         report.confluence_matrix = confluenceMatrix;
@@ -1840,10 +2619,10 @@ const parseTechnicalTimeseriesFrame = (
         record.timezone,
         `${context}.timezone`
     );
-    const metadata =
-        record.metadata === undefined || record.metadata === null
-            ? undefined
-            : toRecord(record.metadata, `${context}.metadata`);
+    const metadata = parseTechnicalTimeseriesFrameMetadata(
+        record.metadata,
+        `${context}.metadata`
+    );
 
     const frame: TechnicalTimeseriesFrame = {
         timeframe: parseString(record.timeframe, `${context}.timeframe`),
@@ -1883,6 +2662,60 @@ const parseTechnicalTimeseriesFrame = (
     }
 
     return frame;
+};
+
+const parseTechnicalTimeseriesFrameMetadata = (
+    value: unknown,
+    context: string
+): TechnicalTimeseriesFrame['metadata'] | undefined => {
+    if (value === undefined || value === null) return undefined;
+    const record = toRecord(value, context);
+    const metadata: NonNullable<TechnicalTimeseriesFrame['metadata']> = {
+        row_count: parseNumber(record.row_count, `${context}.row_count`),
+    };
+    const source = parseNullableOptionalString(record.source, `${context}.source`);
+    const sourceTimeframe = parseNullableOptionalString(
+        record.source_timeframe,
+        `${context}.source_timeframe`
+    );
+    const priceBasis = parseNullableOptionalString(
+        record.price_basis,
+        `${context}.price_basis`
+    );
+    const timezoneNormalized = parseNullableOptionalBoolean(
+        record.timezone_normalized,
+        `${context}.timezone_normalized`
+    );
+    const cacheHit = parseNullableOptionalBoolean(
+        record.cache_hit,
+        `${context}.cache_hit`
+    );
+    const cacheAgeSeconds = parseNullableOptionalNumber(
+        record.cache_age_seconds,
+        `${context}.cache_age_seconds`
+    );
+    const cacheBucket = parseNullableOptionalString(
+        record.cache_bucket,
+        `${context}.cache_bucket`
+    );
+    const qualityFlags =
+        record.quality_flags === undefined || record.quality_flags === null
+            ? undefined
+            : parseStringArray(record.quality_flags, `${context}.quality_flags`);
+
+    if (source !== undefined) metadata.source = source ?? undefined;
+    if (sourceTimeframe !== undefined) {
+        metadata.source_timeframe = sourceTimeframe ?? undefined;
+    }
+    if (priceBasis !== undefined) metadata.price_basis = priceBasis ?? undefined;
+    if (timezoneNormalized !== undefined) {
+        metadata.timezone_normalized = timezoneNormalized;
+    }
+    if (cacheHit !== undefined) metadata.cache_hit = cacheHit;
+    if (cacheAgeSeconds !== undefined) metadata.cache_age_seconds = cacheAgeSeconds;
+    if (cacheBucket !== undefined) metadata.cache_bucket = cacheBucket;
+    if (qualityFlags !== undefined) metadata.quality_flags = qualityFlags;
+    return metadata;
 };
 
 export const parseTechnicalTimeseriesBundleArtifact = (
@@ -1927,10 +2760,10 @@ const parseIndicatorSeriesFrame = (
         record.timezone,
         `${context}.timezone`
     );
-    const metadata =
-        record.metadata === undefined || record.metadata === null
-            ? undefined
-            : toRecord(record.metadata, `${context}.metadata`);
+    const metadata = parseTechnicalIndicatorSeriesFrameMetadata(
+        record.metadata,
+        `${context}.metadata`
+    );
 
     const seriesRecord = toRecord(record.series, `${context}.series`);
     const parsedSeries: TechnicalIndicatorSeriesFrame['series'] = {};
@@ -1954,6 +2787,69 @@ const parseIndicatorSeriesFrame = (
         frame.metadata = metadata;
     }
     return frame;
+};
+
+const parseTechnicalIndicatorSeriesFrameMetadata = (
+    value: unknown,
+    context: string
+): TechnicalIndicatorSeriesFrame['metadata'] | undefined => {
+    if (value === undefined || value === null) return undefined;
+    const record = toRecord(value, context);
+    const metadata: NonNullable<TechnicalIndicatorSeriesFrame['metadata']> = {
+        source_points: parseNumber(record.source_points, `${context}.source_points`),
+        max_points: parseNumber(record.max_points, `${context}.max_points`),
+        downsample_step: parseNumber(
+            record.downsample_step,
+            `${context}.downsample_step`
+        ),
+    };
+    const sourceTimeframe = parseNullableOptionalString(
+        record.source_timeframe,
+        `${context}.source_timeframe`
+    );
+    const sourcePriceBasis = parseNullableOptionalString(
+        record.source_price_basis,
+        `${context}.source_price_basis`
+    );
+    const effectiveSampleCount = parseNullableOptionalNumber(
+        record.effective_sample_count,
+        `${context}.effective_sample_count`
+    );
+    const minimumSampleCount = parseNullableOptionalNumber(
+        record.minimum_sample_count,
+        `${context}.minimum_sample_count`
+    );
+    const sampleReadiness = parseNullableOptionalString(
+        record.sample_readiness,
+        `${context}.sample_readiness`
+    );
+    const fidelity = parseNullableOptionalString(
+        record.fidelity,
+        `${context}.fidelity`
+    );
+    const qualityFlags =
+        record.quality_flags === undefined || record.quality_flags === null
+            ? undefined
+            : parseStringArray(record.quality_flags, `${context}.quality_flags`);
+
+    if (sourceTimeframe !== undefined) {
+        metadata.source_timeframe = sourceTimeframe ?? undefined;
+    }
+    if (sourcePriceBasis !== undefined) {
+        metadata.source_price_basis = sourcePriceBasis ?? undefined;
+    }
+    if (effectiveSampleCount !== undefined) {
+        metadata.effective_sample_count = effectiveSampleCount;
+    }
+    if (minimumSampleCount !== undefined) {
+        metadata.minimum_sample_count = minimumSampleCount;
+    }
+    if (sampleReadiness !== undefined) {
+        metadata.sample_readiness = sampleReadiness ?? undefined;
+    }
+    if (fidelity !== undefined) metadata.fidelity = fidelity ?? undefined;
+    if (qualityFlags !== undefined) metadata.quality_flags = qualityFlags;
+    return metadata;
 };
 
 export const parseTechnicalIndicatorSeriesArtifact = (
@@ -2066,8 +2962,12 @@ const parseTechnicalAnalysisReport = (
     if (analystPerspective) {
         report.analyst_perspective = analystPerspective;
     }
-    if (record.regime_summary !== undefined && record.regime_summary !== null) {
-        report.regime_summary = toRecord(record.regime_summary, `${context}.regime_summary`);
+    const regimeSummary = parseRegimeSummary(
+        record.regime_summary,
+        `${context}.regime_summary`
+    );
+    if (regimeSummary) {
+        report.regime_summary = regimeSummary;
     }
     if (
         record.volume_profile_summary !== undefined &&
@@ -2078,14 +2978,40 @@ const parseTechnicalAnalysisReport = (
             `${context}.volume_profile_summary`
         );
     }
-    if (
-        record.structure_confluence_summary !== undefined &&
-        record.structure_confluence_summary !== null
-    ) {
-        report.structure_confluence_summary = toRecord(
-            record.structure_confluence_summary,
-            `${context}.structure_confluence_summary`
-        );
+    const structureConfluenceSummary = parseStructureConfluenceSummary(
+        record.structure_confluence_summary,
+        `${context}.structure_confluence_summary`
+    );
+    if (structureConfluenceSummary) {
+        report.structure_confluence_summary = structureConfluenceSummary;
+    }
+    const evidenceBundle = parseEvidenceBundle(
+        record.evidence_bundle,
+        `${context}.evidence_bundle`
+    );
+    if (evidenceBundle) {
+        report.evidence_bundle = evidenceBundle;
+    }
+    const qualitySummary = parseQualitySummary(
+        record.quality_summary,
+        `${context}.quality_summary`
+    );
+    if (qualitySummary) {
+        report.quality_summary = qualitySummary;
+    }
+    const alertReadout = parseAlertReadout(
+        record.alert_readout,
+        `${context}.alert_readout`
+    );
+    if (alertReadout) {
+        report.alert_readout = alertReadout;
+    }
+    const observabilitySummary = parseObservabilitySummary(
+        record.observability_summary,
+        `${context}.observability_summary`
+    );
+    if (observabilitySummary) {
+        report.observability_summary = observabilitySummary;
     }
 
     if (record.diagnostics !== undefined && record.diagnostics !== null) {

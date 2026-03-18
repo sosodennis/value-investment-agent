@@ -5,11 +5,12 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
-from src.agents.technical.domain.shared import IndicatorSnapshot
+from src.agents.technical.domain.shared import IndicatorSnapshot, TimeframeCode
 
 
 @dataclass
 class FeatureExecutionContext:
+    timeframe: TimeframeCode
     price_series: pd.Series
     volume_series: pd.Series
     high_series: pd.Series

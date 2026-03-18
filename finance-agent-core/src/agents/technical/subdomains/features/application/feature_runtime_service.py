@@ -8,6 +8,9 @@ import pandas as pd
 from src.agents.technical.domain.shared import (
     FeatureFrame,
     FeaturePack,
+    FeatureSummary,
+    IndicatorProvenance,
+    IndicatorQuality,
     IndicatorSnapshot,
     PriceSeries,
     TimeframeCode,
@@ -36,6 +39,7 @@ from src.agents.technical.subdomains.features.domain import (
     compute_sma,
     compute_vwap,
     compute_z_score,
+    supports_session_vwap_timeframe,
 )
 from src.shared.kernel.tools.logger import get_logger, log_event
 
@@ -44,6 +48,8 @@ logger = get_logger(__name__)
 CLASSIC_STAGE = "classic"
 QUANT_STAGE = "quant"
 FEATURE_STAGE_ORDER = (CLASSIC_STAGE, QUANT_STAGE)
+FEATURE_CALCULATION_VERSION = "technical_feature_contract_v1"
+_REGIME_INPUT_SIGNALS = frozenset({"ATR_14", "ATRP_14", "ADX_14", "BB_BANDWIDTH_20"})
 
 
 @dataclass(frozen=True)
@@ -81,6 +87,7 @@ class FeatureRuntimeService:
 
             latest_price = _safe_float(price_series.iloc[-1])
             ctx = FeatureExecutionContext(
+                timeframe=timeframe,
                 price_series=price_series,
                 volume_series=volume_series,
                 high_series=high_series,
@@ -209,6 +216,7 @@ def _build_tasks(
 def _make_classic_engine_task(engine: IIndicatorEngine):
     def _task(ctx: FeatureExecutionContext) -> None:
         result = engine.compute_classic_indicators(
+            timeframe=ctx.timeframe,
             price_series=ctx.price_series,
             high_series=ctx.high_series,
             low_series=ctx.low_series,
@@ -216,7 +224,9 @@ def _make_classic_engine_task(engine: IIndicatorEngine):
             latest_price=ctx.latest_price,
         )
         for name, snapshot in result.indicators.items():
-            ctx.add_output(name, snapshot, CLASSIC_STAGE)
+            ctx.add_output(
+                name, _ensure_snapshot_contract(ctx, snapshot), CLASSIC_STAGE
+            )
         ctx.degraded.extend(result.degraded_reasons)
 
     return _task
@@ -239,7 +249,16 @@ def _task_sma_20(ctx: FeatureExecutionContext) -> None:
     sma_val = _latest_value(sma_20)
     ctx.add_output(
         "SMA_20",
-        _snapshot("SMA_20", sma_val, state=_compare_state(ctx.latest_price, sma_val)),
+        _snapshot(
+            "SMA_20",
+            sma_val,
+            timeframe=ctx.timeframe,
+            state=_compare_state(ctx.latest_price, sma_val),
+            minimum_samples=20,
+            input_basis="close",
+            method="sma_20",
+            metadata={"effective_sample_count": len(ctx.price_series)},
+        ),
         CLASSIC_STAGE,
     )
 
@@ -249,7 +268,16 @@ def _task_ema_20(ctx: FeatureExecutionContext) -> None:
     ema_val = _latest_value(ema_20)
     ctx.add_output(
         "EMA_20",
-        _snapshot("EMA_20", ema_val, state=_compare_state(ctx.latest_price, ema_val)),
+        _snapshot(
+            "EMA_20",
+            ema_val,
+            timeframe=ctx.timeframe,
+            state=_compare_state(ctx.latest_price, ema_val),
+            minimum_samples=20,
+            input_basis="close",
+            method="ema_20",
+            metadata={"effective_sample_count": len(ctx.price_series)},
+        ),
         CLASSIC_STAGE,
     )
 
@@ -259,7 +287,16 @@ def _task_rsi_14(ctx: FeatureExecutionContext) -> None:
     rsi_val = _latest_value(rsi)
     ctx.add_output(
         "RSI_14",
-        _snapshot("RSI_14", rsi_val, state=_momentum_state(rsi_val)),
+        _snapshot(
+            "RSI_14",
+            rsi_val,
+            timeframe=ctx.timeframe,
+            state=_momentum_state(rsi_val),
+            minimum_samples=14,
+            input_basis="close",
+            method="rsi_14",
+            metadata={"effective_sample_count": len(ctx.price_series)},
+        ),
         CLASSIC_STAGE,
     )
 
@@ -274,10 +311,15 @@ def _task_macd(ctx: FeatureExecutionContext) -> None:
         _snapshot(
             "MACD",
             macd_val,
+            timeframe=ctx.timeframe,
             state=_macd_state(macd_val, signal_val),
+            minimum_samples=34,
+            input_basis="close",
+            method="macd",
             metadata={
                 "signal": _safe_float(signal_val),
                 "hist": _safe_float(hist_val),
+                "effective_sample_count": len(ctx.price_series),
             },
         ),
         CLASSIC_STAGE,
@@ -285,21 +327,79 @@ def _task_macd(ctx: FeatureExecutionContext) -> None:
 
 
 def _task_vwap(ctx: FeatureExecutionContext) -> None:
-    if ctx.volume_series.empty:
+    if not supports_session_vwap_timeframe(ctx.timeframe):
         ctx.add_output(
             "VWAP",
             _snapshot(
-                "VWAP", None, state="UNAVAILABLE", metadata={"reason": "missing_volume"}
+                "VWAP",
+                None,
+                timeframe=ctx.timeframe,
+                state="UNAVAILABLE",
+                minimum_samples=1,
+                input_basis="hlc3_volume",
+                method="session_vwap",
+                quality_flags=("REQUIRES_INTRADAY_SESSION_BARS",),
+                metadata={"reason": "requires_intraday_session_bars"},
             ),
             CLASSIC_STAGE,
         )
         return
 
-    vwap_series = compute_vwap(ctx.price_series, ctx.volume_series)
+    if ctx.volume_series.empty:
+        ctx.add_output(
+            "VWAP",
+            _snapshot(
+                "VWAP",
+                None,
+                timeframe=ctx.timeframe,
+                state="UNAVAILABLE",
+                minimum_samples=1,
+                input_basis="hlc3_volume",
+                method="session_vwap",
+                quality_flags=("MISSING_VOLUME",),
+                metadata={"reason": "missing_volume"},
+            ),
+            CLASSIC_STAGE,
+        )
+        return
+
+    if ctx.high_series.empty or ctx.low_series.empty:
+        ctx.add_output(
+            "VWAP",
+            _snapshot(
+                "VWAP",
+                None,
+                timeframe=ctx.timeframe,
+                state="UNAVAILABLE",
+                minimum_samples=1,
+                input_basis="hlc3_volume",
+                method="session_vwap",
+                quality_flags=("MISSING_HIGH_LOW",),
+                metadata={"reason": "missing_high_low"},
+            ),
+            CLASSIC_STAGE,
+        )
+        return
+
+    vwap_series = compute_vwap(
+        ctx.high_series,
+        ctx.low_series,
+        ctx.price_series,
+        ctx.volume_series,
+    )
     vwap_val = _latest_value(vwap_series)
     ctx.add_output(
         "VWAP",
-        _snapshot("VWAP", vwap_val, state=_compare_state(ctx.latest_price, vwap_val)),
+        _snapshot(
+            "VWAP",
+            vwap_val,
+            timeframe=ctx.timeframe,
+            state=_compare_state(ctx.latest_price, vwap_val),
+            minimum_samples=1,
+            input_basis="hlc3_volume",
+            method="session_vwap",
+            metadata={"effective_sample_count": len(vwap_series)},
+        ),
         CLASSIC_STAGE,
     )
 
@@ -311,7 +411,12 @@ def _task_mfi_14(ctx: FeatureExecutionContext) -> None:
             _snapshot(
                 "MFI_14",
                 None,
+                timeframe=ctx.timeframe,
                 state="UNAVAILABLE",
+                minimum_samples=14,
+                input_basis="close_volume",
+                method="mfi_14",
+                quality_flags=("MISSING_VOLUME",),
                 metadata={"reason": "missing_volume"},
             ),
             CLASSIC_STAGE,
@@ -322,7 +427,16 @@ def _task_mfi_14(ctx: FeatureExecutionContext) -> None:
     mfi_val = _latest_value(mfi_series)
     ctx.add_output(
         "MFI_14",
-        _snapshot("MFI_14", mfi_val, state=_momentum_state(mfi_val)),
+        _snapshot(
+            "MFI_14",
+            mfi_val,
+            timeframe=ctx.timeframe,
+            state=_momentum_state(mfi_val),
+            minimum_samples=14,
+            input_basis="close_volume",
+            method="mfi_14",
+            metadata={"effective_sample_count": len(ctx.price_series)},
+        ),
         CLASSIC_STAGE,
     )
 
@@ -334,7 +448,12 @@ def _task_atr_14(ctx: FeatureExecutionContext) -> None:
             _snapshot(
                 "ATR_14",
                 None,
+                timeframe=ctx.timeframe,
                 state="UNAVAILABLE",
+                minimum_samples=14,
+                input_basis="high_low_close",
+                method="atr_14",
+                quality_flags=("MISSING_HIGH_LOW",),
                 metadata={"reason": "missing_high_low"},
             ),
             CLASSIC_STAGE,
@@ -353,7 +472,13 @@ def _task_atr_14(ctx: FeatureExecutionContext) -> None:
         _snapshot(
             "ATR_14",
             atr_val,
+            timeframe=ctx.timeframe,
             state="UNAVAILABLE" if atr_series is None else None,
+            minimum_samples=14,
+            input_basis="high_low_close",
+            method="atr_14",
+            quality_flags=("ATR_EMPTY",) if atr_series is None else (),
+            metadata={"effective_sample_count": len(ctx.price_series)},
         ),
         CLASSIC_STAGE,
     )
@@ -366,7 +491,12 @@ def _task_adx_14(ctx: FeatureExecutionContext) -> None:
             _snapshot(
                 "ADX_14",
                 None,
+                timeframe=ctx.timeframe,
                 state="UNAVAILABLE",
+                minimum_samples=14,
+                input_basis="high_low_close",
+                method="adx_14",
+                quality_flags=("MISSING_HIGH_LOW",),
                 metadata={"reason": "missing_high_low"},
             ),
             CLASSIC_STAGE,
@@ -382,7 +512,16 @@ def _task_adx_14(ctx: FeatureExecutionContext) -> None:
     adx_val = _latest_value(adx_series)
     ctx.add_output(
         "ADX_14",
-        _snapshot("ADX_14", adx_val, state=_adx_state(adx_val)),
+        _snapshot(
+            "ADX_14",
+            adx_val,
+            timeframe=ctx.timeframe,
+            state=_adx_state(adx_val),
+            minimum_samples=14,
+            input_basis="high_low_close",
+            method="adx_14",
+            metadata={"effective_sample_count": len(ctx.price_series)},
+        ),
         CLASSIC_STAGE,
     )
 
@@ -394,7 +533,12 @@ def _task_atrp_14(ctx: FeatureExecutionContext) -> None:
             _snapshot(
                 "ATRP_14",
                 None,
+                timeframe=ctx.timeframe,
                 state="UNAVAILABLE",
+                minimum_samples=14,
+                input_basis="high_low_close",
+                method="atrp_14",
+                quality_flags=("MISSING_HIGH_LOW",),
                 metadata={"reason": "missing_high_low"},
             ),
             CLASSIC_STAGE,
@@ -410,7 +554,16 @@ def _task_atrp_14(ctx: FeatureExecutionContext) -> None:
     atrp_val = _latest_value(atrp_series)
     ctx.add_output(
         "ATRP_14",
-        _snapshot("ATRP_14", atrp_val, state=_atrp_state(atrp_val)),
+        _snapshot(
+            "ATRP_14",
+            atrp_val,
+            timeframe=ctx.timeframe,
+            state=_atrp_state(atrp_val),
+            minimum_samples=14,
+            input_basis="high_low_close",
+            method="atrp_14",
+            metadata={"effective_sample_count": len(ctx.price_series)},
+        ),
         CLASSIC_STAGE,
     )
 
@@ -427,7 +580,12 @@ def _task_bb_bandwidth_20(ctx: FeatureExecutionContext) -> None:
         _snapshot(
             "BB_BANDWIDTH_20",
             bandwidth_val,
+            timeframe=ctx.timeframe,
             state=_bandwidth_state(bandwidth_val),
+            minimum_samples=20,
+            input_basis="close",
+            method="bb_bandwidth_20",
+            metadata={"effective_sample_count": len(ctx.price_series)},
         ),
         CLASSIC_STAGE,
     )
@@ -457,15 +615,68 @@ def _task_fd_base(ctx: FeatureExecutionContext) -> None:
 
     ctx.add_output(
         "FD_Z_SCORE",
-        _snapshot("FD_Z_SCORE", z_score_latest, state=_zscore_state(z_score_latest)),
+        _snapshot(
+            "FD_Z_SCORE",
+            z_score_latest,
+            timeframe=ctx.timeframe,
+            state=_zscore_state(z_score_latest),
+            minimum_samples=300,
+            input_basis="fracdiff_close",
+            method="fd_z_score",
+            metadata={"effective_sample_count": len(fd_series)},
+        ),
         QUANT_STAGE,
     )
-    ctx.add_output("FD_OPTIMAL_D", _snapshot("FD_OPTIMAL_D", optimal_d), QUANT_STAGE)
-    ctx.add_output("FD_ADF_STAT", _snapshot("FD_ADF_STAT", adf_stat), QUANT_STAGE)
-    ctx.add_output("FD_ADF_PVALUE", _snapshot("FD_ADF_PVALUE", adf_pvalue), QUANT_STAGE)
+    ctx.add_output(
+        "FD_OPTIMAL_D",
+        _snapshot(
+            "FD_OPTIMAL_D",
+            optimal_d,
+            timeframe=ctx.timeframe,
+            minimum_samples=300,
+            input_basis="fracdiff_close",
+            method="fd_optimal_d",
+            metadata={"effective_sample_count": len(fd_series)},
+        ),
+        QUANT_STAGE,
+    )
+    ctx.add_output(
+        "FD_ADF_STAT",
+        _snapshot(
+            "FD_ADF_STAT",
+            adf_stat,
+            timeframe=ctx.timeframe,
+            minimum_samples=300,
+            input_basis="fracdiff_close",
+            method="fd_adf_stat",
+            metadata={"effective_sample_count": len(fd_series)},
+        ),
+        QUANT_STAGE,
+    )
+    ctx.add_output(
+        "FD_ADF_PVALUE",
+        _snapshot(
+            "FD_ADF_PVALUE",
+            adf_pvalue,
+            timeframe=ctx.timeframe,
+            minimum_samples=300,
+            input_basis="fracdiff_close",
+            method="fd_adf_pvalue",
+            metadata={"effective_sample_count": len(fd_series)},
+        ),
+        QUANT_STAGE,
+    )
     ctx.add_output(
         "FD_STAT_STRENGTH",
-        _snapshot("FD_STAT_STRENGTH", stat_strength.get("value")),
+        _snapshot(
+            "FD_STAT_STRENGTH",
+            stat_strength.get("value"),
+            timeframe=ctx.timeframe,
+            minimum_samples=300,
+            input_basis="fracdiff_close",
+            method="fd_stat_strength",
+            metadata={"effective_sample_count": len(fd_series)},
+        ),
         QUANT_STAGE,
     )
 
@@ -482,10 +693,15 @@ def _task_fd_bollinger_bw(ctx: FeatureExecutionContext) -> None:
         _snapshot(
             "FD_BOLLINGER_BW",
             bollinger.get("bandwidth"),
+            timeframe=ctx.timeframe,
             state=str(bollinger.get("state") or "INSIDE"),
+            minimum_samples=300,
+            input_basis="fracdiff_close",
+            method="fd_bollinger_bw",
             metadata={
                 "upper": _safe_float(bollinger.get("upper")),
                 "lower": _safe_float(bollinger.get("lower")),
+                "effective_sample_count": len(fd_series),
             },
         ),
         QUANT_STAGE,
@@ -507,8 +723,15 @@ def _task_fd_obv_z(ctx: FeatureExecutionContext) -> None:
         _snapshot(
             "FD_OBV_Z",
             obv_data.get("fd_obv_z"),
+            timeframe=ctx.timeframe,
             state=str(obv_data.get("state") or "NEUTRAL"),
-            metadata={"optimal_d": _safe_float(obv_data.get("optimal_d"))},
+            minimum_samples=300,
+            input_basis="fracdiff_close_volume",
+            method="fd_obv_z",
+            metadata={
+                "optimal_d": _safe_float(obv_data.get("optimal_d")),
+                "effective_sample_count": len(fd_series),
+            },
         ),
         QUANT_STAGE,
     )
@@ -544,14 +767,48 @@ def _snapshot(
     name: str,
     value: float | int | None,
     *,
+    timeframe: TimeframeCode,
     state: str | None = None,
+    minimum_samples: int | None = None,
+    input_basis: str | None = None,
+    method: str | None = None,
+    quality_flags: tuple[str, ...] = (),
     metadata: dict[str, float | int | str | bool | None] | None = None,
 ) -> IndicatorSnapshot:
+    payload = metadata or {}
+    effective_sample_count = payload.get("effective_sample_count")
+    effective_count = (
+        effective_sample_count if isinstance(effective_sample_count, int) else None
+    )
+    value_num = _safe_float(value)
     return IndicatorSnapshot(
         name=name,
-        value=_safe_float(value),
+        value=value_num,
         state=state,
-        metadata=metadata or {},
+        provenance=IndicatorProvenance(
+            method=method or name.lower(),
+            input_basis=input_basis,
+            source_timeframe=timeframe,
+            calculation_version=FEATURE_CALCULATION_VERSION,
+        ),
+        quality=IndicatorQuality(
+            effective_sample_count=effective_count,
+            minimum_samples=minimum_samples,
+            warmup_status=_warmup_status(
+                effective_sample_count=effective_count,
+                minimum_samples=minimum_samples,
+                value=value_num,
+                quality_flags=quality_flags,
+            ),
+            fidelity=_quality_fidelity(
+                effective_sample_count=effective_count,
+                minimum_samples=minimum_samples,
+                value=value_num,
+                quality_flags=quality_flags,
+            ),
+            quality_flags=quality_flags,
+        ),
+        metadata=payload,
     )
 
 
@@ -633,11 +890,161 @@ def _zscore_state(z_score: float | None) -> str | None:
 
 def _build_feature_summary(
     frames: dict[TimeframeCode, FeatureFrame],
-) -> dict[str, float | int | str | bool | None]:
+) -> FeatureSummary:
     classic_total = sum(len(frame.classic_indicators) for frame in frames.values())
     quant_total = sum(len(frame.quant_features) for frame in frames.values())
-    return {
-        "classic_count": classic_total,
-        "quant_count": quant_total,
-        "timeframe_count": len(frames),
-    }
+    ready_timeframes: list[TimeframeCode] = []
+    degraded_timeframes: list[TimeframeCode] = []
+    regime_inputs_ready_timeframes: list[TimeframeCode] = []
+    unavailable_indicator_count = 0
+
+    for timeframe, frame in frames.items():
+        all_indicators = {**frame.classic_indicators, **frame.quant_features}
+        timeframe_degraded = False
+        for indicator in all_indicators.values():
+            if indicator.value is None:
+                unavailable_indicator_count += 1
+                timeframe_degraded = True
+                continue
+            quality = indicator.quality
+            if quality is not None and quality.warmup_status not in {None, "READY"}:
+                timeframe_degraded = True
+        if timeframe_degraded:
+            degraded_timeframes.append(timeframe)
+        else:
+            ready_timeframes.append(timeframe)
+        if all(
+            (
+                signal in frame.classic_indicators
+                and frame.classic_indicators[signal].value is not None
+            )
+            for signal in _REGIME_INPUT_SIGNALS
+        ):
+            regime_inputs_ready_timeframes.append(timeframe)
+
+    overall_quality = "high"
+    if unavailable_indicator_count > 0:
+        overall_quality = "medium" if ready_timeframes else "low"
+    if not frames:
+        overall_quality = "low"
+
+    return FeatureSummary(
+        classic_count=classic_total,
+        quant_count=quant_total,
+        timeframe_count=len(frames),
+        ready_timeframes=tuple(ready_timeframes),
+        degraded_timeframes=tuple(degraded_timeframes),
+        regime_inputs_ready_timeframes=tuple(regime_inputs_ready_timeframes),
+        unavailable_indicator_count=unavailable_indicator_count,
+        overall_quality=overall_quality,
+    )
+
+
+def _ensure_snapshot_contract(
+    ctx: FeatureExecutionContext,
+    snapshot: IndicatorSnapshot,
+) -> IndicatorSnapshot:
+    if snapshot.provenance is not None and snapshot.quality is not None:
+        return snapshot
+    method, input_basis, minimum_samples = _indicator_contract_defaults(snapshot.name)
+    quality_flags = _extract_quality_flags(snapshot.metadata)
+    return IndicatorSnapshot(
+        name=snapshot.name,
+        value=snapshot.value,
+        state=snapshot.state,
+        provenance=snapshot.provenance
+        or IndicatorProvenance(
+            method=method,
+            input_basis=input_basis,
+            source_timeframe=ctx.timeframe,
+            calculation_version=FEATURE_CALCULATION_VERSION,
+        ),
+        quality=snapshot.quality
+        or IndicatorQuality(
+            effective_sample_count=len(ctx.price_series),
+            minimum_samples=minimum_samples,
+            warmup_status=_warmup_status(
+                effective_sample_count=len(ctx.price_series),
+                minimum_samples=minimum_samples,
+                value=snapshot.value,
+                quality_flags=quality_flags,
+            ),
+            fidelity=_quality_fidelity(
+                effective_sample_count=len(ctx.price_series),
+                minimum_samples=minimum_samples,
+                value=snapshot.value,
+                quality_flags=quality_flags,
+            ),
+            quality_flags=quality_flags,
+        ),
+        metadata=snapshot.metadata,
+    )
+
+
+def _indicator_contract_defaults(name: str) -> tuple[str, str | None, int | None]:
+    if name in {"SMA_20", "EMA_20", "BB_BANDWIDTH_20"}:
+        return name.lower(), "close", 20
+    if name in {"RSI_14", "MFI_14", "ATR_14", "ATRP_14", "ADX_14"}:
+        input_basis = "close"
+        if name in {"ATR_14", "ATRP_14", "ADX_14"}:
+            input_basis = "high_low_close"
+        return name.lower(), input_basis, 14
+    if name == "MACD":
+        return "macd", "close", 34
+    if name == "VWAP":
+        return "session_vwap", "hlc3_volume", 1
+    if name.startswith("FD_"):
+        input_basis = "fracdiff_close"
+        if name == "FD_OBV_Z":
+            input_basis = "fracdiff_close_volume"
+        return name.lower(), input_basis, 300
+    return name.lower(), "close", None
+
+
+def _extract_quality_flags(
+    metadata: dict[str, float | int | str | bool | None],
+) -> tuple[str, ...]:
+    reason = metadata.get("reason")
+    if isinstance(reason, str) and reason:
+        return (reason.upper(),)
+    return ()
+
+
+def _warmup_status(
+    *,
+    effective_sample_count: int | None,
+    minimum_samples: int | None,
+    value: float | None,
+    quality_flags: tuple[str, ...],
+) -> str | None:
+    if value is None:
+        return "UNAVAILABLE"
+    if (
+        effective_sample_count is not None
+        and minimum_samples is not None
+        and effective_sample_count < minimum_samples
+    ):
+        return "INSUFFICIENT_HISTORY"
+    if quality_flags:
+        return "DEGRADED"
+    return "READY"
+
+
+def _quality_fidelity(
+    *,
+    effective_sample_count: int | None,
+    minimum_samples: int | None,
+    value: float | None,
+    quality_flags: tuple[str, ...],
+) -> str | None:
+    if value is None:
+        return "low"
+    if (
+        effective_sample_count is not None
+        and minimum_samples is not None
+        and effective_sample_count < minimum_samples
+    ):
+        return "low"
+    if quality_flags:
+        return "medium"
+    return "high"

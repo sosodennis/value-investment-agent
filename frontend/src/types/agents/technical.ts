@@ -72,10 +72,92 @@ export interface TechnicalAnalystPerspective {
     decision_posture?: string | null;
 }
 
+export interface TechnicalEvidenceBreakoutSignal {
+    name: string;
+    confidence?: number | null;
+    notes?: string | null;
+}
+
+export interface TechnicalEvidenceScorecardSummary {
+    timeframe?: string | null;
+    overall_score?: number | null;
+    total_score?: number | null;
+    classic_label?: string | null;
+    quant_label?: string | null;
+    pattern_label?: string | null;
+}
+
+export interface TechnicalEvidenceBundle {
+    primary_timeframe?: string | null;
+    support_levels?: number[];
+    resistance_levels?: number[];
+    breakout_signals?: TechnicalEvidenceBreakoutSignal[];
+    scorecard_summary?: TechnicalEvidenceScorecardSummary;
+    regime_summary?: TechnicalRegimeSummary;
+    volume_profile_summary?: Record<string, unknown>;
+    structure_confluence_summary?: TechnicalStructureConfluenceSummary;
+    conflict_reasons?: string[];
+}
+
+export interface TechnicalQualitySummary {
+    is_degraded?: boolean | null;
+    degraded_reasons?: string[];
+    overall_quality?: string | null;
+    ready_timeframes?: string[];
+    degraded_timeframes?: string[];
+    regime_inputs_ready_timeframes?: string[];
+    unavailable_indicator_count?: number | null;
+    alert_quality_gate_counts?: Record<string, number>;
+    primary_timeframe?: string | null;
+}
+
+export interface TechnicalAlertReadoutItem {
+    code: string;
+    title: string;
+    severity: string;
+    timeframe: string;
+    policy_code?: string | null;
+    lifecycle_state?: string | null;
+}
+
+export interface TechnicalAlertReadout {
+    total_alerts?: number | null;
+    policy_count?: number | null;
+    highest_severity?: string | null;
+    active_alert_count?: number | null;
+    monitoring_alert_count?: number | null;
+    suppressed_alert_count?: number | null;
+    quality_gate_counts?: Record<string, number>;
+    top_alerts?: TechnicalAlertReadoutItem[];
+}
+
+export interface TechnicalObservabilitySummary {
+    primary_timeframe?: string | null;
+    observed_timeframes?: string[];
+    loaded_artifacts?: string[];
+    missing_artifacts?: string[];
+    degraded_artifacts?: string[];
+    loaded_artifact_count?: number | null;
+    missing_artifact_count?: number | null;
+    degraded_reason_count?: number | null;
+}
+
 export interface TechnicalChartData {
     fracdiff_series: Record<string, number | null>;
     z_score_series: Record<string, number | null>;
     indicators: Record<string, unknown>;
+}
+
+export interface TechnicalTimeseriesFrameMetadata {
+    row_count: number;
+    source?: string;
+    source_timeframe?: string;
+    price_basis?: string;
+    timezone_normalized?: boolean;
+    cache_hit?: boolean | null;
+    cache_age_seconds?: number | null;
+    cache_bucket?: string | null;
+    quality_flags?: string[];
 }
 
 export interface TechnicalTimeseriesFrame {
@@ -89,7 +171,7 @@ export interface TechnicalTimeseriesFrame {
     price_series: Record<string, number | null>;
     volume_series: Record<string, number | null>;
     timezone?: string | null;
-    metadata?: Record<string, unknown> | null;
+    metadata?: TechnicalTimeseriesFrameMetadata | null;
 }
 
 export interface TechnicalTimeseriesBundle {
@@ -105,7 +187,18 @@ export interface TechnicalIndicatorSeriesFrame {
     end: string;
     series: Record<string, Record<string, number | null>>;
     timezone?: string | null;
-    metadata?: Record<string, unknown> | null;
+    metadata?: {
+        source_points: number;
+        max_points: number;
+        downsample_step: number;
+        source_timeframe?: string;
+        source_price_basis?: string;
+        effective_sample_count?: number;
+        minimum_sample_count?: number;
+        sample_readiness?: string;
+        fidelity?: string;
+        quality_flags?: string[];
+    } | null;
 }
 
 export interface TechnicalIndicatorSeriesArtifact {
@@ -119,6 +212,19 @@ export interface TechnicalFeatureIndicator {
     name: string;
     value: number | null;
     state?: string;
+    provenance?: {
+        method?: string;
+        input_basis?: string;
+        source_timeframe?: string;
+        calculation_version?: string;
+    };
+    quality?: {
+        effective_sample_count?: number;
+        minimum_samples?: number;
+        warmup_status?: string;
+        fidelity?: string;
+        quality_flags?: string[];
+    };
     metadata?: Record<string, unknown>;
 }
 
@@ -131,8 +237,54 @@ export interface TechnicalFeaturePack {
     ticker: string;
     as_of: string;
     timeframes: Record<string, TechnicalFeatureFrame>;
-    feature_summary?: Record<string, unknown>;
+    feature_summary?: {
+        classic_count: number;
+        quant_count: number;
+        timeframe_count: number;
+        ready_timeframes?: string[];
+        degraded_timeframes?: string[];
+        regime_inputs_ready_timeframes?: string[];
+        unavailable_indicator_count?: number;
+        overall_quality?: string;
+    };
     degraded_reasons?: string[];
+}
+
+export interface TechnicalRegimeSummary {
+    timeframe_count?: number;
+    dominant_regime?: string | null;
+    average_confidence?: number | null;
+}
+
+export interface TechnicalStructureConfluenceSummary {
+    timeframe?: string | null;
+    confluence_score?: number | null;
+    confluence_state?: string | null;
+    volume_node_count?: number | null;
+    near_volume_node?: boolean | null;
+    near_support?: boolean | null;
+    near_resistance?: boolean | null;
+    nearest_volume_node?: number | null;
+    nearest_support?: number | null;
+    nearest_resistance?: number | null;
+    poc?: number | null;
+    vah?: number | null;
+    val?: number | null;
+    profile_method?: string | null;
+    profile_fidelity?: string | null;
+    breakout_bias?: string | null;
+    trend_bias?: string | null;
+    reasons?: string[];
+}
+
+export interface TechnicalPatternSummary {
+    timeframe_count: number;
+    support_level_count: number;
+    resistance_level_count: number;
+    volume_profile_level_count: number;
+    breakout_count: number;
+    trendline_count: number;
+    strong_confluence_count: number;
 }
 
 export interface TechnicalPatternLevel {
@@ -156,7 +308,7 @@ export interface TechnicalPatternFrame {
     breakouts: TechnicalPatternFlag[];
     trendlines: TechnicalPatternFlag[];
     pattern_flags: TechnicalPatternFlag[];
-    confluence_metadata?: Record<string, unknown>;
+    confluence_metadata?: TechnicalStructureConfluenceSummary;
     confidence_scores: Record<string, number>;
 }
 
@@ -164,11 +316,28 @@ export interface TechnicalPatternPack {
     ticker: string;
     as_of: string;
     timeframes: Record<string, TechnicalPatternFrame>;
-    pattern_summary?: Record<string, unknown>;
+    pattern_summary?: TechnicalPatternSummary;
     degraded_reasons?: string[];
 }
 
 export type AlertSeverity = 'info' | 'warning' | 'critical';
+
+export interface TechnicalAlertEvidenceRef {
+    artifact_kind: string;
+    artifact_id?: string | null;
+    timeframe?: string | null;
+    signal_key?: string | null;
+}
+
+export interface TechnicalAlertPolicyMetadata {
+    policy_code: string;
+    policy_version: string;
+    lifecycle_state: string;
+    evidence_refs?: TechnicalAlertEvidenceRef[];
+    quality_gate?: string | null;
+    trigger_reason?: string | null;
+    suppression_reason?: string | null;
+}
 
 export interface TechnicalAlertSignal {
     code: string;
@@ -182,12 +351,16 @@ export interface TechnicalAlertSignal {
     triggered_at?: string | null;
     source?: string | null;
     metadata?: Record<string, unknown> | null;
+    policy?: TechnicalAlertPolicyMetadata;
 }
 
 export interface TechnicalAlertSummary {
     total?: number | null;
     severity_counts?: Record<string, number>;
     generated_at?: string | null;
+    policy_count?: number | null;
+    lifecycle_counts?: Record<string, number>;
+    quality_gate_counts?: Record<string, number>;
 }
 
 export interface TechnicalAlertsArtifact {
@@ -209,9 +382,23 @@ export interface TechnicalFusionReport {
     confidence_raw?: number | null;
     confidence_calibrated?: number | null;
     confidence_calibration?: TechnicalConfidenceCalibration;
+    regime_summary?: TechnicalRegimeSummary;
     confluence_matrix?: Record<string, Record<string, unknown>>;
     conflict_reasons?: string[];
-    alignment_report?: Record<string, unknown>;
+    alignment_report?: {
+        schema_version: string;
+        anchor_timeframe: string;
+        input_timeframes: string[];
+        alignment_window_start: string;
+        alignment_window_end: string;
+        rows_before: number;
+        rows_after: number;
+        dropped_rows: number;
+        gap_count: number;
+        gap_samples?: string[];
+        look_ahead_detected?: boolean | null;
+        notes?: string[];
+    };
     source_artifacts?: Record<string, string | null>;
     degraded_reasons?: string[];
 }
@@ -292,9 +479,13 @@ export interface TechnicalAnalysisReport {
     confidence_calibrated?: number | null;
     confidence_calibration?: TechnicalConfidenceCalibration;
     momentum_extremes?: TechnicalMomentumExtremes;
-    regime_summary?: Record<string, unknown>;
+    regime_summary?: TechnicalRegimeSummary;
     volume_profile_summary?: Record<string, unknown>;
-    structure_confluence_summary?: Record<string, unknown>;
+    structure_confluence_summary?: TechnicalStructureConfluenceSummary;
+    evidence_bundle?: TechnicalEvidenceBundle;
+    quality_summary?: TechnicalQualitySummary;
+    alert_readout?: TechnicalAlertReadout;
+    observability_summary?: TechnicalObservabilitySummary;
     analyst_perspective?: TechnicalAnalystPerspective;
     artifact_refs: TechnicalArtifactRefs;
     summary_tags: string[];

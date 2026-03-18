@@ -24,6 +24,12 @@ export type MarketStatusDescriptor = {
     icon: IconKey;
 };
 
+export type QualityStatusDescriptor = {
+    tone: IndicatorTone;
+    label: string;
+    meaning: string;
+};
+
 export type IndicatorHighlightDescriptor = {
     displayName: string;
     stateLabel: string | null;
@@ -280,6 +286,64 @@ export const describeIndicatorHighlight = (
         displayName,
         stateLabel: normalizedState ? _humanizeSignalName(normalizedState) : null,
     };
+};
+
+export const getQualityStatusDescriptor = (
+    isDegraded?: boolean | null,
+    overallQuality?: string | null
+): QualityStatusDescriptor => {
+    const normalizedQuality = _normalizeState(overallQuality);
+    if (isDegraded) {
+        return {
+            tone: 'warning',
+            label: 'Partial Coverage',
+            meaning: 'Some upstream inputs were missing or downgraded, so read the setup with extra caution.',
+        };
+    }
+    if (normalizedQuality === 'HIGH') {
+        return {
+            tone: 'positive',
+            label: 'High Coverage',
+            meaning: 'Core evidence inputs are present and the technical readout is well-supported.',
+        };
+    }
+    if (normalizedQuality === 'MEDIUM') {
+        return {
+            tone: 'warning',
+            label: 'Usable Coverage',
+            meaning: 'The technical readout is usable, but some secondary evidence is thinner than ideal.',
+        };
+    }
+    if (normalizedQuality === 'LOW') {
+        return {
+            tone: 'danger',
+            label: 'Thin Coverage',
+            meaning: 'Only a limited evidence set is available, so conviction should stay restrained.',
+        };
+    }
+    return {
+        tone: 'neutral',
+        label: 'Coverage Unrated',
+        meaning: 'Coverage metadata is not available for this run.',
+    };
+};
+
+export const formatAlertLifecycleLabel = (state?: string | null): string => {
+    const normalized = _normalizeState(state);
+    if (!normalized) return 'Unknown Lifecycle';
+    if (normalized === 'ACTIVE') return 'Active';
+    if (normalized === 'MONITORING') return 'Monitoring';
+    if (normalized === 'SUPPRESSED') return 'Suppressed';
+    return _humanizeSignalName(normalized);
+};
+
+export const formatAlertQualityGateLabel = (gate?: string | null): string => {
+    const normalized = _normalizeState(gate);
+    if (!normalized) return 'Unknown Gate';
+    if (normalized === 'PASSED') return 'Passed';
+    if (normalized === 'DEGRADED') return 'Degraded';
+    if (normalized === 'FAILED') return 'Failed';
+    return _humanizeSignalName(normalized);
 };
 
 const _INDICATOR_DISPLAY_NAMES: Record<string, string> = {

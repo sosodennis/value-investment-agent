@@ -20,6 +20,7 @@ from src.agents.technical.subdomains.features.domain import (
     compute_rsi,
     compute_sma,
     compute_vwap,
+    supports_session_vwap_timeframe,
 )
 from src.shared.kernel.tools.logger import get_logger, log_event
 
@@ -40,7 +41,23 @@ class IndicatorSeriesFrameResult:
     end: str
     series: dict[str, dict[str, float | None]]
     timezone: str | None = None
-    metadata: dict[str, object] = field(default_factory=dict)
+    metadata: IndicatorSeriesFrameMetadata | dict[str, object] = field(
+        default_factory=dict
+    )
+
+
+@dataclass(frozen=True)
+class IndicatorSeriesFrameMetadata:
+    source_points: int
+    max_points: int
+    downsample_step: int
+    source_timeframe: str
+    source_price_basis: str
+    effective_sample_count: int
+    minimum_sample_count: int
+    sample_readiness: str
+    fidelity: str
+    quality_flags: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -102,7 +119,15 @@ def _compute_frame(
                 end=series.end,
                 series={},
                 timezone=series.timezone,
-                metadata=_frame_metadata(0, max_points, 1),
+                metadata=_frame_metadata(
+                    timeframe=timeframe,
+                    source_points=0,
+                    max_points=max_points,
+                    step=1,
+                    min_quant_points=min_quant_points,
+                    price_basis="close" if series.close_series else "price",
+                    quality_flags=("PRICE_EMPTY",),
+                ),
             ),
             degraded,
         )
@@ -131,13 +156,28 @@ def _compute_frame(
     indicator_series["BB_MIDDLE"] = bb_middle
     indicator_series["BB_LOWER"] = bb_lower
 
-    if _series_has_data(volume_series):
-        indicator_series["VWAP"] = compute_vwap(close_series, volume_series)
+    if (
+        supports_session_vwap_timeframe(timeframe)
+        and _series_has_data(volume_series)
+        and _series_has_data(high_series)
+        and _series_has_data(low_series)
+    ):
+        indicator_series["VWAP"] = compute_vwap(
+            high_series,
+            low_series,
+            close_series,
+            volume_series,
+        )
         indicator_series["MFI_14"] = compute_mfi(close_series, volume_series, window=14)
     else:
-        degraded.append("VOLUME_EMPTY")
         indicator_series["VWAP"] = _empty_series_like(close_series)
-        indicator_series["MFI_14"] = _empty_series_like(close_series)
+        if _series_has_data(volume_series):
+            indicator_series["MFI_14"] = compute_mfi(
+                close_series, volume_series, window=14
+            )
+        else:
+            degraded.append("VOLUME_EMPTY")
+            indicator_series["MFI_14"] = _empty_series_like(close_series)
 
     if _series_has_data(high_series) and _series_has_data(low_series):
         atr_series = compute_atr(high_series, low_series, close_series, window=14)
@@ -194,7 +234,15 @@ def _compute_frame(
         for name, series in indicator_series.items()
     }
 
-    metadata = _frame_metadata(len(base_index), max_points, step)
+    metadata = _frame_metadata(
+        timeframe=timeframe,
+        source_points=len(base_index),
+        max_points=max_points,
+        step=step,
+        min_quant_points=min_quant_points,
+        price_basis="close" if series.close_series else "price",
+        quality_flags=tuple(_frame_quality_flags(step=step, degraded=degraded)),
+    )
 
     return (
         IndicatorSeriesFrameResult(
@@ -210,13 +258,56 @@ def _compute_frame(
 
 
 def _frame_metadata(
-    source_points: int, max_points: int, step: int
-) -> dict[str, object]:
-    return {
-        "source_points": source_points,
-        "max_points": max_points,
-        "downsample_step": step,
-    }
+    *,
+    timeframe: TimeframeCode,
+    source_points: int,
+    max_points: int,
+    step: int,
+    min_quant_points: int,
+    price_basis: str,
+    quality_flags: tuple[str, ...],
+) -> IndicatorSeriesFrameMetadata:
+    return IndicatorSeriesFrameMetadata(
+        source_points=source_points,
+        max_points=max_points,
+        downsample_step=step,
+        source_timeframe=timeframe,
+        source_price_basis=price_basis,
+        effective_sample_count=source_points,
+        minimum_sample_count=min_quant_points,
+        sample_readiness=_sample_readiness(
+            source_points=source_points,
+            min_quant_points=min_quant_points,
+        ),
+        fidelity=_frame_fidelity(source_points=source_points, step=step),
+        quality_flags=quality_flags,
+    )
+
+
+def _frame_quality_flags(*, step: int, degraded: list[str]) -> list[str]:
+    flags: list[str] = []
+    if step > 1:
+        flags.append("DOWNSAMPLED")
+    for reason in degraded:
+        if reason not in flags:
+            flags.append(reason)
+    return flags
+
+
+def _sample_readiness(*, source_points: int, min_quant_points: int) -> str:
+    if source_points <= 0:
+        return "empty"
+    if source_points < min_quant_points:
+        return "partial"
+    return "ready"
+
+
+def _frame_fidelity(*, source_points: int, step: int) -> str:
+    if source_points <= 0:
+        return "low"
+    if step > 1:
+        return "medium"
+    return "high"
 
 
 def _downsample_index(index: pd.Index, max_points: int) -> tuple[pd.Index, int]:

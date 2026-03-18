@@ -20,6 +20,7 @@ from src.agents.technical.subdomains.market_data.application.multi_timeframe_fet
 )
 from src.agents.technical.subdomains.market_data.application.ports import (
     IMarketDataProvider,
+    MarketDataCacheMetadata,
 )
 from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import JSONObject
@@ -178,6 +179,7 @@ async def run_data_fetch_use_case(
             ohlc_missing_reasons.append(f"{timeframe}_OHLC_MISSING")
     if ohlc_missing_reasons:
         degraded_reasons.extend(ohlc_missing_reasons)
+    degraded_reasons = _merge_degraded_reasons(degraded_reasons)
 
     if degraded_reasons:
         log_event(
@@ -192,7 +194,10 @@ async def run_data_fetch_use_case(
             },
         )
 
-    frames_payload = _frames_to_payload(bundle_result.frames)
+    frames_payload = _frames_to_payload(
+        bundle_result.frames,
+        cache_metadata=bundle_result.cache,
+    )
     timeseries_bundle_payload = {
         "ticker": resolved_ticker,
         "as_of": datetime.now().isoformat(),
@@ -229,7 +234,7 @@ async def run_data_fetch_use_case(
         fields={
             "ticker": resolved_ticker,
             "status": "done",
-            "is_degraded": False,
+            "is_degraded": bool(degraded_reasons),
             "rows": len(daily_frame),
             "timeseries_bundle_id": timeseries_bundle_id,
             "input_count": input_count,
@@ -242,10 +247,21 @@ async def run_data_fetch_use_case(
         update=build_data_fetch_success_update(
             price_artifact_id=price_artifact_id,
             timeseries_bundle_id=timeseries_bundle_id,
+            is_degraded=bool(degraded_reasons),
+            degraded_reasons=degraded_reasons,
             artifact=artifact,
         ),
         goto="feature_compute",
     )
+
+
+def _merge_degraded_reasons(*groups: list[str]) -> list[str]:
+    merged: list[str] = []
+    for group in groups:
+        for reason in group:
+            if reason not in merged:
+                merged.append(reason)
+    return merged
 
 
 def _format_index(value: object) -> str:
@@ -273,6 +289,8 @@ def _frame_to_price_payload(frame: pd.DataFrame) -> dict[str, dict[str, float | 
 
 def _frames_to_payload(
     frames: dict[str, pd.DataFrame],
+    *,
+    cache_metadata: dict[str, MarketDataCacheMetadata] | None = None,
 ) -> dict[str, dict[str, object]]:
     payload: dict[str, dict[str, object]] = {}
     for timeframe, frame in frames.items():
@@ -292,6 +310,12 @@ def _frames_to_payload(
         close_series = (
             _series_to_payload(frame["close"]) if "close" in frame.columns else {}
         )
+        metadata = _frame_metadata(
+            timeframe=timeframe,
+            frame=frame,
+            timezone=timezone,
+            cache=(cache_metadata or {}).get(timeframe),
+        )
         payload[timeframe] = {
             "timeframe": timeframe,
             "start": start,
@@ -303,6 +327,38 @@ def _frames_to_payload(
             "price_series": _series_to_payload(frame["price"]),
             "volume_series": _series_to_payload(frame["volume"]),
             "timezone": timezone,
-            "metadata": {"rows": len(frame)},
+            "metadata": metadata,
         }
     return payload
+
+
+def _frame_metadata(
+    *,
+    timeframe: str,
+    frame: pd.DataFrame,
+    timezone: str | None,
+    cache: MarketDataCacheMetadata | None,
+) -> dict[str, object]:
+    quality_flags: list[str] = []
+    if "open" not in frame.columns:
+        quality_flags.append("OPEN_MISSING")
+    if "high" not in frame.columns:
+        quality_flags.append("HIGH_MISSING")
+    if "low" not in frame.columns:
+        quality_flags.append("LOW_MISSING")
+    if "close" not in frame.columns:
+        quality_flags.append("CLOSE_MISSING")
+    if "volume" not in frame.columns:
+        quality_flags.append("VOLUME_MISSING")
+
+    return {
+        "row_count": len(frame),
+        "source": "market_data_provider",
+        "source_timeframe": timeframe,
+        "price_basis": "close",
+        "timezone_normalized": timezone == "UTC",
+        "cache_hit": cache.cache_hit if cache is not None else None,
+        "cache_age_seconds": cache.cache_age_seconds if cache is not None else None,
+        "cache_bucket": cache.cache_bucket if cache is not None else None,
+        "quality_flags": quality_flags or None,
+    }

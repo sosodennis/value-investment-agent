@@ -10,16 +10,27 @@ import pytest
 from src.agents.technical.application.fracdiff_runtime_contracts import (
     FracdiffRuntimeResult,
 )
+from src.agents.technical.application.ports import (
+    TechnicalInterpretationInput,
+    TechnicalInterpretationResult,
+)
 from src.agents.technical.application.semantic_finalize_service import (
     assemble_semantic_finalize,
 )
 from src.agents.technical.application.semantic_interpretation_input_service import (
     build_interpretation_input,
+    build_projection_context,
+    load_projection_artifacts,
 )
 from src.agents.technical.application.semantic_pipeline_contracts import (
     BacktestContextResult,
     SemanticFinalizeResult,
     SemanticPipelineResult,
+    TechnicalEvidenceBundle,
+    TechnicalProjectionArtifacts,
+)
+from src.agents.technical.application.semantic_pipeline_service import (
+    execute_semantic_pipeline,
 )
 from src.agents.technical.application.semantic_translate_context_service import (
     SemanticTranslateContext,
@@ -53,7 +64,7 @@ from src.agents.technical.application.use_cases.run_regime_compute_use_case impo
 from src.agents.technical.application.use_cases.run_semantic_translate_use_case import (
     run_semantic_translate_use_case,
 )
-from src.agents.technical.domain.shared import FeatureFrame, FeaturePack
+from src.agents.technical.domain.shared import FeatureFrame, FeaturePack, FeatureSummary
 from src.agents.technical.interface.contracts import AnalystPerspectiveModel
 from src.agents.technical.interface.serializers import build_full_report_payload
 from src.agents.technical.subdomains.alerts import AlertRuntimeService
@@ -62,10 +73,14 @@ from src.agents.technical.subdomains.features import (
     IndicatorSeriesFrameResult,
     IndicatorSeriesRuntimeResult,
 )
+from src.agents.technical.subdomains.features.application.indicator_series_runtime_service import (
+    IndicatorSeriesFrameMetadata,
+)
 from src.agents.technical.subdomains.features.domain import (
     serialize_fracdiff_outputs,
 )
 from src.agents.technical.subdomains.market_data.application.ports import (
+    MarketDataCacheMetadata,
     MarketDataOhlcvFetchResult,
     MarketDataProviderFailure,
 )
@@ -83,6 +98,10 @@ from src.agents.technical.subdomains.signal_fusion import (
 )
 from src.interface.artifacts.artifact_data_models import (
     PriceSeriesArtifactData,
+    TechnicalAlertPolicyMetadataData,
+    TechnicalAlertsArtifactData,
+    TechnicalAlertSignalData,
+    TechnicalAlertSummaryData,
     TechnicalChartArtifactData,
     TechnicalFeatureFrameData,
     TechnicalFeatureIndicatorData,
@@ -166,6 +185,74 @@ def test_build_full_report_payload_derives_states() -> None:
                 "confluence_score": 0.7,
                 "confluence_state": "strong",
             },
+            "evidence_bundle": {
+                "primary_timeframe": "1d",
+                "support_levels": [98.5, 96.0],
+                "resistance_levels": [104.0],
+                "breakout_signals": [
+                    {"name": "BREAKOUT_UP", "confidence": 0.7},
+                ],
+                "scorecard_summary": {
+                    "timeframe": "1d",
+                    "overall_score": 0.61,
+                    "classic_label": "constructive",
+                },
+                "regime_summary": {
+                    "dominant_regime": "BULL_TREND",
+                    "timeframe_count": 1,
+                },
+                "structure_confluence_summary": {
+                    "timeframe": "1d",
+                    "confluence_state": "strong",
+                },
+                "conflict_reasons": ["1d:quant_neutral"],
+            },
+            "quality_summary": {
+                "is_degraded": True,
+                "degraded_reasons": ["1wk_QUANT_SKIPPED"],
+                "overall_quality": "medium",
+                "ready_timeframes": ["1d"],
+                "degraded_timeframes": ["1wk"],
+                "regime_inputs_ready_timeframes": ["1d"],
+                "unavailable_indicator_count": 1,
+                "alert_quality_gate_counts": {"passed": 1},
+                "primary_timeframe": "1d",
+            },
+            "alert_readout": {
+                "total_alerts": 2,
+                "policy_count": 2,
+                "highest_severity": "warning",
+                "active_alert_count": 1,
+                "monitoring_alert_count": 1,
+                "suppressed_alert_count": 0,
+                "quality_gate_counts": {"passed": 1, "degraded": 1},
+                "top_alerts": [
+                    {
+                        "code": "RSI_OVERSOLD",
+                        "title": "RSI oversold near support",
+                        "severity": "warning",
+                        "timeframe": "1d",
+                        "policy_code": "TA_RSI_SUPPORT_REBOUND",
+                        "lifecycle_state": "active",
+                    }
+                ],
+            },
+            "observability_summary": {
+                "primary_timeframe": "1d",
+                "observed_timeframes": ["1d"],
+                "loaded_artifacts": [
+                    "feature_pack",
+                    "pattern_pack",
+                    "regime_pack",
+                    "fusion_report",
+                    "alerts",
+                ],
+                "missing_artifacts": ["direction_scorecard"],
+                "degraded_artifacts": ["feature_pack", "fusion_report", "alerts"],
+                "loaded_artifact_count": 5,
+                "missing_artifact_count": 1,
+                "degraded_reason_count": 2,
+            },
             "regime_pack_id": "regime-1",
         },
         tags_dict={"direction": "bullish", "risk_level": "MEDIUM", "tags": ["A", "B"]},
@@ -183,6 +270,21 @@ def test_build_full_report_payload_derives_states() -> None:
     assert payload["regime_summary"]["dominant_regime"] == "BULL_TREND"
     assert payload["volume_profile_summary"]["dominant_level"]["price"] == 101.5
     assert payload["structure_confluence_summary"]["confluence_state"] == "strong"
+    assert payload["evidence_bundle"]["primary_timeframe"] == "1d"
+    assert payload["evidence_bundle"]["support_levels"] == [98.5, 96.0]
+    assert payload["evidence_bundle"]["scorecard_summary"]["overall_score"] == 0.61
+    assert payload["quality_summary"]["overall_quality"] == "medium"
+    assert payload["quality_summary"]["degraded_reasons"] == ["1wk_QUANT_SKIPPED"]
+    assert payload["alert_readout"]["highest_severity"] == "warning"
+    assert (
+        payload["alert_readout"]["top_alerts"][0]["policy_code"]
+        == "TA_RSI_SUPPORT_REBOUND"
+    )
+    assert payload["observability_summary"]["primary_timeframe"] == "1d"
+    assert payload["observability_summary"]["loaded_artifact_count"] == 5
+    assert payload["observability_summary"]["missing_artifacts"] == [
+        "direction_scorecard"
+    ]
     assert payload["artifact_refs"]["regime_pack_id"] == "regime-1"
     assert derive_memory_strength(0.2) == "structurally_stable"
     assert derive_statistical_state(0.2) == "equilibrium"
@@ -280,6 +382,17 @@ class _SemanticProjectionPortStub:
                     },
                 )
             },
+            feature_summary={
+                "classic_count": 3,
+                "quant_count": 3,
+                "timeframe_count": 1,
+                "ready_timeframes": ["1d"],
+                "degraded_timeframes": ["1wk"],
+                "regime_inputs_ready_timeframes": ["1d"],
+                "unavailable_indicator_count": 1,
+                "overall_quality": "medium",
+            },
+            degraded_reasons=["1wk_QUANT_SKIPPED"],
         )
 
     async def load_regime_pack(
@@ -314,6 +427,52 @@ class _SemanticProjectionPortStub:
             risk_level="low",
             conflict_reasons=["1d:quant_neutral"],
             regime_summary={"dominant_regime": "BULL_TREND", "timeframe_count": 1},
+            degraded_reasons=["1wk_QUANT_SKIPPED"],
+        )
+
+    async def load_alerts(
+        self,
+        artifact_id: str | None,
+    ) -> TechnicalAlertsArtifactData | None:
+        _ = artifact_id
+        return TechnicalAlertsArtifactData(
+            ticker="AAPL",
+            as_of="2026-02-12T00:00:00Z",
+            alerts=[
+                TechnicalAlertSignalData(
+                    code="RSI_OVERSOLD",
+                    severity="warning",
+                    timeframe="1d",
+                    title="RSI oversold near support",
+                    policy=TechnicalAlertPolicyMetadataData(
+                        policy_code="TA_RSI_SUPPORT_REBOUND",
+                        policy_version="1.0",
+                        lifecycle_state="active",
+                        quality_gate="passed",
+                        trigger_reason="RSI oversold while price is near support",
+                    ),
+                ),
+                TechnicalAlertSignalData(
+                    code="FD_STRETCH",
+                    severity="info",
+                    timeframe="1d",
+                    title="FD stretch worth monitoring",
+                    policy=TechnicalAlertPolicyMetadataData(
+                        policy_code="TA_FD_STRETCH_MONITOR",
+                        policy_version="1.0",
+                        lifecycle_state="monitoring",
+                        quality_gate="degraded",
+                        suppression_reason="Pattern confirmation still weak",
+                    ),
+                ),
+            ],
+            summary=TechnicalAlertSummaryData(
+                total=2,
+                policy_count=2,
+                lifecycle_counts={"active": 1, "monitoring": 1},
+                quality_gate_counts={"passed": 1, "degraded": 1},
+            ),
+            degraded_reasons=["ALERT_POLICY_DEGRADED"],
         )
 
     async def load_direction_scorecard(
@@ -335,6 +494,7 @@ async def test_build_interpretation_input_projects_regime_and_structure_summarie
             "pattern_pack_id": "pattern-1",
             "regime_pack_id": "regime-1",
             "fusion_report_id": "fusion-1",
+            "alerts_id": "alerts-1",
         },
         tags_result=SemanticTagPolicyResult(
             tags=["TREND_ACTIVE"],
@@ -378,6 +538,46 @@ async def test_build_interpretation_input_projects_regime_and_structure_summarie
         result.signal_explainer_context[0].current_reading_hint
         == "The current reading suggests the market still carries noticeable trend memory or persistence."
     )
+    assert result.diagnostics_context is not None
+    assert result.diagnostics_context["degraded_reasons"] == ["1wk_QUANT_SKIPPED"]
+
+
+@pytest.mark.asyncio
+async def test_load_projection_artifacts_builds_reusable_evidence_bundle() -> None:
+    artifacts = await load_projection_artifacts(
+        technical_context={
+            "feature_pack_id": "feature-1",
+            "pattern_pack_id": "pattern-1",
+            "regime_pack_id": "regime-1",
+            "fusion_report_id": "fusion-1",
+            "alerts_id": "alerts-1",
+        },
+        technical_port=_SemanticProjectionPortStub(),
+    )
+
+    assert artifacts.evidence_bundle is not None
+    assert artifacts.evidence_bundle.primary_timeframe == "1d"
+    assert artifacts.evidence_bundle.support_levels == ()
+    assert artifacts.evidence_bundle.regime_summary is not None
+    assert artifacts.evidence_bundle.regime_summary["dominant_regime"] == "BULL_TREND"
+    projection_context = build_projection_context(artifacts=artifacts)
+    assert projection_context["regime_summary"]["dominant_regime"] == "BULL_TREND"
+    assert (
+        projection_context["structure_confluence_summary"]["confluence_state"]
+        == "strong"
+    )
+    assert projection_context["quality_summary"]["is_degraded"] is True
+    assert projection_context["quality_summary"]["overall_quality"] == "medium"
+    assert projection_context["alert_readout"]["total_alerts"] == 2
+    assert (
+        projection_context["alert_readout"]["top_alerts"][0]["policy_code"]
+        == "TA_RSI_SUPPORT_REBOUND"
+    )
+    assert projection_context["observability_summary"]["loaded_artifact_count"] == 5
+    assert projection_context["observability_summary"]["missing_artifacts"] == [
+        "direction_scorecard"
+    ]
+    assert projection_context["observability_summary"]["degraded_reason_count"] == 2
 
 
 def test_assemble_semantic_finalize_builds_update_and_raw_data() -> None:
@@ -434,6 +634,7 @@ def test_assemble_semantic_finalize_builds_update_and_raw_data() -> None:
     assert result.ta_update["memory_strength"] == "balanced"
     assert result.raw_data["price_series"]["2025-01-01"] == 10.0
     assert result.full_report_data_raw["direction"] == "BULLISH"
+    assert result.full_report_data_raw["evidence_bundle"] is None
 
 
 def test_semantic_command_update_builders() -> None:
@@ -456,6 +657,8 @@ def test_data_fetch_update_builders() -> None:
     success = build_data_fetch_success_update(
         price_artifact_id="price-1",
         timeseries_bundle_id="bundle-1",
+        is_degraded=True,
+        degraded_reasons=["1h_UNAVAILABLE"],
         artifact={
             "kind": "technical_analysis.output",
             "version": "v1",
@@ -466,6 +669,8 @@ def test_data_fetch_update_builders() -> None:
     )
     error = build_data_fetch_error_update("no ticker")
     assert success["technical_analysis"]["price_artifact_id"] == "price-1"
+    assert success["technical_analysis"]["is_degraded"] is True
+    assert success["technical_analysis"]["degraded_reasons"] == ["1h_UNAVAILABLE"]
     assert success["node_statuses"]["technical_analysis"] == "running"
     assert error["node_statuses"]["technical_analysis"] == "error"
     assert error["error_logs"][0]["node"] == "data_fetch"
@@ -554,6 +759,45 @@ class _ProviderFailureOnly:
         )
 
 
+class _ProviderPartialCoverage:
+    def fetch_ohlcv(
+        self,
+        ticker_symbol: str,
+        *,
+        period: str = "5y",
+        interval: str = "1d",
+    ) -> MarketDataOhlcvFetchResult:
+        _ = (ticker_symbol, period)
+        if interval == "1h":
+            return MarketDataOhlcvFetchResult(
+                data=None,
+                failure=MarketDataProviderFailure(
+                    failure_code="TECHNICAL_OHLCV_EMPTY",
+                    reason="intraday unavailable",
+                ),
+            )
+        index = pd.to_datetime(["2026-02-10", "2026-02-11", "2026-02-12"], utc=True)
+        frame = pd.DataFrame(
+            {
+                "open": [100.0, 101.0, 102.0],
+                "high": [101.0, 102.0, 103.0],
+                "low": [99.0, 100.0, 101.0],
+                "close": [100.5, 101.5, 102.5],
+                "price": [100.5, 101.5, 102.5],
+                "volume": [1000.0, 1100.0, 1200.0],
+            },
+            index=index,
+        )
+        return MarketDataOhlcvFetchResult(
+            data=frame,
+            cache=MarketDataCacheMetadata(
+                cache_hit=False,
+                cache_age_seconds=12.0,
+                cache_bucket=f"{interval}-bucket",
+            ),
+        )
+
+
 @dataclass
 class _FracdiffUseCaseRuntime:
     captured_key_prefix: str | None = None
@@ -618,11 +862,16 @@ class _FeatureRuntimeStub:
             ticker=getattr(request, "ticker", "AAPL"),
             as_of=getattr(request, "as_of", "2026-02-12T00:00:00Z"),
             timeframes={"1d": FeatureFrame()},
-            feature_summary={
-                "classic_count": 0,
-                "quant_count": 0,
-                "timeframe_count": 1,
-            },
+            feature_summary=FeatureSummary(
+                classic_count=0,
+                quant_count=0,
+                timeframe_count=1,
+                ready_timeframes=("1d",),
+                degraded_timeframes=(),
+                regime_inputs_ready_timeframes=(),
+                unavailable_indicator_count=0,
+                overall_quality="high",
+            ),
         )
         return FeatureRuntimeResult(feature_pack=feature_pack, degraded_reasons=[])
 
@@ -636,13 +885,46 @@ class _IndicatorSeriesRuntimeStub:
             end="2026-02-12T00:00:00Z",
             series={"RSI_14": {"2026-02-10": 45.0}},
             timezone="UTC",
-            metadata={"source_points": 1, "max_points": 1500, "downsample_step": 1},
+            metadata=IndicatorSeriesFrameMetadata(
+                source_points=1,
+                max_points=1500,
+                downsample_step=1,
+                source_timeframe="1d",
+                source_price_basis="close",
+                effective_sample_count=1,
+                minimum_sample_count=300,
+                sample_readiness="partial",
+                fidelity="high",
+                quality_flags=("QUANT_SKIPPED",),
+            ),
         )
         return IndicatorSeriesRuntimeResult(
             ticker=getattr(request, "ticker", "AAPL"),
             as_of=getattr(request, "as_of", "2026-02-12T00:00:00Z"),
             timeframes={"1d": frame},
             degraded_reasons=[],
+        )
+
+
+@dataclass
+class _FeatureRuntimeDegradedStub:
+    def compute(self, request: object) -> FeatureRuntimeResult:
+        feature_pack = _FeatureRuntimeStub().compute(request).feature_pack
+        return FeatureRuntimeResult(
+            feature_pack=feature_pack,
+            degraded_reasons=["1wk_QUANT_SKIPPED"],
+        )
+
+
+@dataclass
+class _IndicatorSeriesRuntimeDegradedStub:
+    def compute(self, request: object) -> IndicatorSeriesRuntimeResult:
+        result = _IndicatorSeriesRuntimeStub().compute(request)
+        return IndicatorSeriesRuntimeResult(
+            ticker=result.ticker,
+            as_of=result.as_of,
+            timeframes=result.timeframes,
+            degraded_reasons=["1wk_QUANT_SKIPPED"],
         )
 
 
@@ -745,15 +1027,150 @@ class _AlertsComputeRuntimeStub:
         }
 
 
+async def _load_alert_indicator_series_ready(
+    artifact_id: str,
+) -> TechnicalIndicatorSeriesArtifactData | None:
+    _ = artifact_id
+    return TechnicalIndicatorSeriesArtifactData(
+        ticker="AAPL",
+        as_of="2026-03-18T00:00:00Z",
+        timeframes={
+            "1d": TechnicalIndicatorSeriesFrameData(
+                timeframe="1d",
+                start="2026-03-01T00:00:00Z",
+                end="2026-03-18T00:00:00Z",
+                series={
+                    "RSI_14": {"2026-03-18T00:00:00Z": 72.4},
+                    "FD_ZSCORE": {"2026-03-18T00:00:00Z": -2.3},
+                },
+                metadata={
+                    "source_points": 120,
+                    "max_points": 120,
+                    "downsample_step": 1,
+                    "source_timeframe": "1d",
+                    "source_price_basis": "close",
+                    "effective_sample_count": 120,
+                    "minimum_sample_count": 30,
+                    "sample_readiness": "ready",
+                    "fidelity": "high",
+                    "quality_flags": [],
+                },
+            )
+        },
+    )
+
+
+async def _load_alert_pattern_pack_ready(
+    artifact_id: str,
+) -> TechnicalPatternPackArtifactData | None:
+    _ = artifact_id
+    return TechnicalPatternPackArtifactData(
+        ticker="AAPL",
+        as_of="2026-03-18T00:00:00Z",
+        timeframes={
+            "1d": TechnicalPatternFrameData(
+                support_levels=[],
+                resistance_levels=[],
+                volume_profile_levels=[],
+                breakouts=[
+                    TechnicalPatternFlagData(
+                        name="BREAKOUT_UP",
+                        confidence=0.82,
+                        notes="Daily continuation breakout",
+                    )
+                ],
+                trendlines=[],
+                pattern_flags=[],
+                confidence_scores={},
+            )
+        },
+    )
+
+
+async def _load_alert_indicator_series_oversold(
+    artifact_id: str,
+) -> TechnicalIndicatorSeriesArtifactData | None:
+    _ = artifact_id
+    return TechnicalIndicatorSeriesArtifactData(
+        ticker="AAPL",
+        as_of="2026-03-18T00:00:00Z",
+        timeframes={
+            "1d": TechnicalIndicatorSeriesFrameData(
+                timeframe="1d",
+                start="2026-03-01T00:00:00Z",
+                end="2026-03-18T00:00:00Z",
+                series={"RSI_14": {"2026-03-18T00:00:00Z": 28.0}},
+                metadata={
+                    "source_points": 120,
+                    "max_points": 120,
+                    "downsample_step": 1,
+                    "source_timeframe": "1d",
+                    "source_price_basis": "close",
+                    "effective_sample_count": 120,
+                    "minimum_sample_count": 30,
+                    "sample_readiness": "ready",
+                    "fidelity": "high",
+                    "quality_flags": [],
+                },
+            )
+        },
+    )
+
+
+async def _load_alert_pattern_pack_support_confirmed(
+    artifact_id: str,
+) -> TechnicalPatternPackArtifactData | None:
+    _ = artifact_id
+    return TechnicalPatternPackArtifactData(
+        ticker="AAPL",
+        as_of="2026-03-18T00:00:00Z",
+        timeframes={
+            "1d": TechnicalPatternFrameData(
+                support_levels=[{"price": 180.5}],
+                resistance_levels=[],
+                volume_profile_levels=[],
+                breakouts=[],
+                trendlines=[],
+                pattern_flags=[],
+                confluence_metadata={
+                    "near_support": True,
+                    "nearest_support": 180.5,
+                    "confluence_state": "strong",
+                },
+                confidence_scores={},
+            )
+        },
+    )
+
+
 @dataclass
 class _FusionComputeRuntimeStub:
     saved_fusion_report: JSONObject | None = None
+    saved_scorecard: JSONObject | None = None
 
     async def load_timeseries_bundle(
         self, artifact_id: str
     ) -> TechnicalTimeseriesBundleArtifactData | None:
         _ = artifact_id
-        return None
+        frame = TechnicalTimeseriesFrameData(
+            timeframe="1d",
+            start="2026-02-01T00:00:00Z",
+            end="2026-02-12T00:00:00Z",
+            open_series={"2026-02-10": 100.0},
+            high_series={"2026-02-10": 101.0},
+            low_series={"2026-02-10": 99.0},
+            close_series={"2026-02-10": 100.5},
+            price_series={"2026-02-10": 100.5},
+            volume_series={"2026-02-10": 1500.0},
+            timezone="UTC",
+            metadata=None,
+        )
+        return TechnicalTimeseriesBundleArtifactData(
+            ticker="AAPL",
+            as_of="2026-02-12T00:00:00Z",
+            frames={"1d": frame},
+            degraded_reasons=["1h_UNAVAILABLE"],
+        )
 
     async def load_feature_pack(
         self, artifact_id: str
@@ -772,6 +1189,7 @@ class _FusionComputeRuntimeStub:
             ticker="AAPL",
             as_of="2026-02-12T00:00:00Z",
             timeframes={"1d": frame},
+            degraded_reasons=["1wk_QUANT_SKIPPED"],
         )
 
     async def load_pattern_pack(
@@ -823,6 +1241,17 @@ class _FusionComputeRuntimeStub:
         _ = (produced_by, key_prefix)
         self.saved_fusion_report = data
         return "fusion-1"
+
+    async def save_direction_scorecard(
+        self,
+        data: JSONObject,
+        *,
+        produced_by: str,
+        key_prefix: str | None = None,
+    ) -> str:
+        _ = (produced_by, key_prefix)
+        self.saved_scorecard = data
+        return "scorecard-1"
 
     def build_progress_artifact(
         self, summary: str, preview: JSONObject
@@ -953,6 +1382,39 @@ async def test_run_data_fetch_handles_typed_provider_failure() -> None:
 
 
 @pytest.mark.asyncio
+async def test_run_data_fetch_marks_partial_bundle_as_degraded() -> None:
+    runtime = _FakeDataFetchRuntime()
+    state: dict[str, object] = {"intent_extraction": {"resolved_ticker": "AAPL"}}
+
+    with patch(
+        "src.agents.technical.application.use_cases.run_data_fetch_use_case.log_event"
+    ) as mock_log:
+        result = await run_data_fetch_use_case(
+            runtime,
+            state,
+            market_data_provider=_ProviderPartialCoverage(),
+        )
+
+    assert result.goto == "feature_compute"
+    technical_state = result.update["technical_analysis"]
+    assert technical_state["is_degraded"] is True
+    assert technical_state["degraded_reasons"] == ["1h_UNAVAILABLE"]
+    assert runtime.saved_bundle is not None
+    assert runtime.saved_bundle["degraded_reasons"] == ["1h_UNAVAILABLE"]
+    daily_metadata = runtime.saved_bundle["frames"]["1d"]["metadata"]
+    assert daily_metadata["row_count"] == 3
+    assert daily_metadata["price_basis"] == "close"
+    assert daily_metadata["timezone_normalized"] is True
+    assert daily_metadata["cache_bucket"] == "1d-bucket"
+    completion_call = next(
+        call
+        for call in mock_log.call_args_list
+        if call.kwargs.get("event") == "technical_data_fetch_completed"
+    )
+    assert completion_call.kwargs["fields"]["is_degraded"] is True
+
+
+@pytest.mark.asyncio
 async def test_run_fracdiff_compute_uses_resolved_ticker_for_artifact_key_prefix() -> (
     None
 ):
@@ -990,13 +1452,100 @@ async def test_run_feature_compute_writes_indicator_series_id() -> None:
 
     assert result.goto == "pattern_compute"
     assert runtime.saved_indicator_series is not None
+    assert runtime.saved_feature_pack is not None
     technical_state = result.update["technical_analysis"]
     assert technical_state["indicator_series_id"] == "series-1"
+    indicator_metadata = runtime.saved_indicator_series["timeframes"]["1d"]["metadata"]
+    assert indicator_metadata["source_timeframe"] == "1d"
+    assert indicator_metadata["sample_readiness"] == "partial"
+    assert indicator_metadata["quality_flags"] == ["QUANT_SKIPPED"]
+    feature_summary = runtime.saved_feature_pack["feature_summary"]
+    assert feature_summary["overall_quality"] == "high"
+    assert feature_summary["ready_timeframes"] == ["1d"]
+
+
+@pytest.mark.asyncio
+async def test_run_feature_compute_dedupes_degraded_reasons() -> None:
+    runtime = _FeatureComputeRuntimeStub()
+    state: dict[str, object] = {
+        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "technical_analysis": {"timeseries_bundle_id": "bundle-1"},
+    }
+
+    with patch(
+        "src.agents.technical.application.use_cases.run_feature_compute_use_case.log_event"
+    ) as mock_log:
+        result = await run_feature_compute_use_case(
+            runtime,
+            state,
+            feature_runtime=_FeatureRuntimeDegradedStub(),
+            indicator_series_runtime=_IndicatorSeriesRuntimeDegradedStub(),
+        )
+
+    assert result.goto == "pattern_compute"
+    technical_state = result.update["technical_analysis"]
+    assert technical_state["is_degraded"] is True
+    assert technical_state["degraded_reasons"] == ["1wk_QUANT_SKIPPED"]
+    degraded_call = next(
+        call
+        for call in mock_log.call_args_list
+        if call.kwargs.get("event") == "technical_feature_compute_degraded"
+    )
+    assert degraded_call.kwargs["fields"]["degraded_reasons"] == ["1wk_QUANT_SKIPPED"]
+
+
+def test_feature_pack_payload_serializes_indicator_provenance_and_quality() -> None:
+    indicator = TechnicalFeatureIndicatorData(
+        name="ADX_14",
+        value=21.5,
+        state="NEUTRAL",
+        provenance={
+            "method": "adx_14",
+            "input_basis": "high_low_close",
+            "source_timeframe": "1d",
+            "calculation_version": "technical_feature_contract_v1",
+        },
+        quality={
+            "effective_sample_count": 120,
+            "minimum_samples": 14,
+            "warmup_status": "READY",
+            "fidelity": "high",
+            "quality_flags": [],
+        },
+        metadata={"effective_sample_count": 120},
+    )
+    payload = TechnicalFeaturePackArtifactData(
+        ticker="AAPL",
+        as_of="2026-02-12T00:00:00Z",
+        timeframes={
+            "1d": TechnicalFeatureFrameData(
+                classic_indicators={"ADX_14": indicator},
+                quant_features={},
+            )
+        },
+        feature_summary={
+            "classic_count": 1,
+            "quant_count": 0,
+            "timeframe_count": 1,
+            "ready_timeframes": ["1d"],
+            "degraded_timeframes": [],
+            "regime_inputs_ready_timeframes": [],
+            "unavailable_indicator_count": 0,
+            "overall_quality": "high",
+        },
+    ).model_dump(mode="json")
+
+    parsed_indicator = payload["timeframes"]["1d"]["classic_indicators"]["ADX_14"]
+    assert parsed_indicator["provenance"]["source_timeframe"] == "1d"
+    assert parsed_indicator["quality"]["warmup_status"] == "READY"
+    assert payload["feature_summary"]["overall_quality"] == "high"
 
 
 @pytest.mark.asyncio
 async def test_run_alerts_compute_writes_alerts_id() -> None:
     runtime = _AlertsComputeRuntimeStub()
+    runtime.load_indicator_series = _load_alert_indicator_series_ready  # type: ignore[method-assign]
+    runtime.load_pattern_pack = _load_alert_pattern_pack_ready  # type: ignore[method-assign]
     state: dict[str, object] = {
         "intent_extraction": {"resolved_ticker": "AAPL"},
         "technical_analysis": {
@@ -1013,8 +1562,46 @@ async def test_run_alerts_compute_writes_alerts_id() -> None:
 
     assert result.goto == "regime_compute"
     assert runtime.saved_alerts is not None
+    assert (
+        runtime.saved_alerts["alerts"][0]["policy"]["policy_code"]
+        == "TA_RSI_14_EXTREME"
+    )
+    assert runtime.saved_alerts["summary"]["policy_count"] == 3
     technical_state = result.update["technical_analysis"]
     assert technical_state["alerts_id"] == "alerts-1"
+
+
+@pytest.mark.asyncio
+async def test_run_alerts_compute_serializes_composite_policy_alert() -> None:
+    runtime = _AlertsComputeRuntimeStub()
+    runtime.load_indicator_series = _load_alert_indicator_series_oversold  # type: ignore[method-assign]
+    runtime.load_pattern_pack = _load_alert_pattern_pack_support_confirmed  # type: ignore[method-assign]
+    state: dict[str, object] = {
+        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "technical_analysis": {
+            "indicator_series_id": "series-1",
+            "pattern_pack_id": "pattern-1",
+        },
+    }
+
+    result = await run_alerts_compute_use_case(
+        runtime,
+        state,
+        alert_runtime=AlertRuntimeService(),
+    )
+
+    assert result.goto == "regime_compute"
+    assert runtime.saved_alerts is not None
+    composite_alert = next(
+        alert
+        for alert in runtime.saved_alerts["alerts"]
+        if alert["code"] == "RSI_SUPPORT_REBOUND_SETUP"
+    )
+    assert composite_alert["policy"]["policy_code"] == "TA_RSI_SUPPORT_REBOUND"
+    assert composite_alert["policy"]["lifecycle_state"] == "active"
+    assert composite_alert["policy"]["suppression_reason"] is None
+    assert len(composite_alert["policy"]["evidence_refs"]) == 2
+    assert runtime.saved_alerts["summary"]["lifecycle_counts"]["active"] == 2
 
 
 @pytest.mark.asyncio
@@ -1229,6 +1816,7 @@ async def test_run_fusion_compute_handles_pydantic_payloads() -> None:
             "feature_pack_id": "feature-1",
             "pattern_pack_id": "pattern-1",
             "regime_pack_id": "regime-1",
+            "timeseries_bundle_id": "bundle-1",
         },
     }
 
@@ -1243,6 +1831,228 @@ async def test_run_fusion_compute_handles_pydantic_payloads() -> None:
     assert (
         runtime.saved_fusion_report["source_artifacts"]["regime_pack_id"] == "regime-1"
     )
+    assert runtime.saved_fusion_report["degraded_reasons"] == [
+        "1wk_QUANT_SKIPPED",
+        "1h_UNAVAILABLE",
+    ]
+    technical_state = result.update["technical_analysis"]
+    assert technical_state["is_degraded"] is True
+    assert technical_state["degraded_reasons"] == [
+        "1wk_QUANT_SKIPPED",
+        "1h_UNAVAILABLE",
+    ]
+
+
+class _InterpretationProviderStub:
+    async def generate_interpretation(
+        self, _input: TechnicalInterpretationInput
+    ) -> TechnicalInterpretationResult:
+        return TechnicalInterpretationResult(
+            perspective=AnalystPerspectiveModel(
+                stance="BULLISH_WATCH",
+                stance_summary="Bullish watch with medium risk.",
+                rationale_summary="Signals are constructive.",
+            ),
+        )
+
+
+@pytest.mark.asyncio
+async def test_execute_semantic_pipeline_marks_fusion_degraded_as_semantic_degraded() -> (
+    None
+):
+    projection_artifacts = TechnicalProjectionArtifacts(
+        fusion_report=TechnicalFusionReportArtifactData(
+            schema_version="1.0",
+            ticker="AAPL",
+            as_of="2026-02-12T00:00:00Z",
+            direction="BULLISH_EXTENSION",
+            risk_level="medium",
+            degraded_reasons=["1h_UNAVAILABLE", "1wk_QUANT_SKIPPED"],
+        )
+    )
+    tags_result = SemanticTagPolicyResult(
+        tags=["TREND_ACTIVE"],
+        direction="BULLISH_EXTENSION",
+        risk_level="medium",
+        memory_strength="balanced",
+        statistical_state="deviating",
+        z_score=1.2,
+        confluence=SemanticConfluenceResult(
+            bollinger_state="INSIDE",
+            statistical_strength=65.0,
+            macd_momentum="BULLISH",
+            obv_state="NEUTRAL",
+        ),
+        evidence_list=[],
+    )
+
+    with (
+        patch(
+            "src.agents.technical.application.semantic_pipeline_service.build_semantic_policy_input",
+            return_value={},
+        ),
+        patch(
+            "src.agents.technical.application.semantic_pipeline_service.assemble_verification_context",
+            return_value=BacktestContextResult(
+                backtest_context="",
+                wfa_context="",
+                price_data=None,
+                chart_data=None,
+            ),
+        ),
+        patch(
+            "src.agents.technical.application.semantic_pipeline_service.load_projection_artifacts",
+            return_value=projection_artifacts,
+        ),
+        patch(
+            "src.agents.technical.application.semantic_pipeline_service.build_interpretation_input",
+            return_value=TechnicalInterpretationInput(
+                ticker="AAPL",
+                direction="BULLISH_EXTENSION",
+                risk_level="medium",
+                confidence=0.6,
+                confidence_calibrated=0.6,
+                summary_tags=("TREND_ACTIVE",),
+                evidence_items=(),
+                momentum_extremes=None,
+                setup_context=None,
+                validation_context=None,
+                diagnostics_context=None,
+            ),
+        ),
+        patch(
+            "src.agents.technical.application.semantic_pipeline_service.apply_interpretation_guardrail",
+            return_value=type("GuardrailOutcome", (), {"is_aligned": True})(),
+        ),
+        patch(
+            "src.agents.technical.application.semantic_pipeline_service.assemble_semantic_finalize",
+            return_value=SemanticFinalizeResult(
+                direction="BULLISH_EXTENSION",
+                opt_d=0.5,
+                raw_data={},
+                full_report_data_raw={"ticker": "AAPL"},
+                ta_update={"signal": "BULLISH_EXTENSION"},
+            ),
+        ),
+    ):
+        result = await execute_semantic_pipeline(
+            ticker="AAPL",
+            technical_context={},
+            assemble_fn=lambda _payload: tags_result,
+            interpretation_provider=_InterpretationProviderStub(),
+            technical_port=object(),
+            verification_report_id=None,
+            build_full_report_payload_fn=lambda **_kwargs: {},
+        )
+
+    assert result.is_degraded is True
+    assert result.degraded_reasons == ("1h_UNAVAILABLE", "1wk_QUANT_SKIPPED")
+
+
+@pytest.mark.asyncio
+async def test_execute_semantic_pipeline_projects_evidence_bundle_into_full_report() -> (
+    None
+):
+    projection_artifacts = TechnicalProjectionArtifacts(
+        evidence_bundle=TechnicalEvidenceBundle(
+            primary_timeframe="1d",
+            support_levels=(180.5, 176.2),
+            resistance_levels=(189.0,),
+            breakout_signals=({"name": "BREAKOUT_UP", "confidence": 0.72},),
+            scorecard_summary={
+                "timeframe": "1d",
+                "overall_score": 0.68,
+                "classic_label": "constructive",
+            },
+            regime_summary={
+                "dominant_regime": "BULL_TREND",
+                "timeframe_count": 1,
+            },
+            structure_confluence_summary={
+                "timeframe": "1d",
+                "confluence_state": "strong",
+            },
+            conflict_reasons=("1d:quant_neutral",),
+        )
+    )
+    tags_result = SemanticTagPolicyResult(
+        tags=["TREND_ACTIVE"],
+        direction="BULLISH_EXTENSION",
+        risk_level="medium",
+        memory_strength="balanced",
+        statistical_state="deviating",
+        z_score=1.2,
+        confluence=SemanticConfluenceResult(
+            bollinger_state="INSIDE",
+            statistical_strength=65.0,
+            macd_momentum="BULLISH",
+            obv_state="NEUTRAL",
+        ),
+        evidence_list=[],
+    )
+
+    with (
+        patch(
+            "src.agents.technical.application.semantic_pipeline_service.build_semantic_policy_input",
+            return_value={},
+        ),
+        patch(
+            "src.agents.technical.application.semantic_pipeline_service.assemble_verification_context",
+            return_value=BacktestContextResult(
+                backtest_context="",
+                wfa_context="",
+                price_data=None,
+                chart_data=None,
+            ),
+        ),
+        patch(
+            "src.agents.technical.application.semantic_pipeline_service.load_projection_artifacts",
+            return_value=projection_artifacts,
+        ),
+        patch(
+            "src.agents.technical.application.semantic_pipeline_service.build_interpretation_input",
+            return_value=TechnicalInterpretationInput(
+                ticker="AAPL",
+                direction="BULLISH_EXTENSION",
+                risk_level="medium",
+                confidence=0.6,
+                confidence_calibrated=0.6,
+                summary_tags=("TREND_ACTIVE",),
+                evidence_items=(),
+                momentum_extremes=None,
+                setup_context=None,
+                validation_context=None,
+                diagnostics_context=None,
+            ),
+        ),
+        patch(
+            "src.agents.technical.application.semantic_pipeline_service.apply_interpretation_guardrail",
+            return_value=type("GuardrailOutcome", (), {"is_aligned": True})(),
+        ),
+    ):
+        result = await execute_semantic_pipeline(
+            ticker="AAPL",
+            technical_context={},
+            assemble_fn=lambda _payload: tags_result,
+            interpretation_provider=_InterpretationProviderStub(),
+            technical_port=object(),
+            verification_report_id=None,
+            build_full_report_payload_fn=build_full_report_payload,
+        )
+
+    assert (
+        result.semantic_finalize_result.full_report_data_raw["evidence_bundle"]
+        is not None
+    )
+    assert (
+        result.semantic_finalize_result.full_report_data_raw["evidence_bundle"][
+            "primary_timeframe"
+        ]
+        == "1d"
+    )
+    assert result.semantic_finalize_result.full_report_data_raw["evidence_bundle"][
+        "support_levels"
+    ] == [180.5, 176.2]
 
 
 @dataclass

@@ -37,6 +37,8 @@ def build_data_fetch_success_update(
     *,
     price_artifact_id: str,
     timeseries_bundle_id: str,
+    is_degraded: bool,
+    degraded_reasons: list[str],
     artifact: AgentOutputArtifactPayload,
 ) -> JSONObject:
     return _guard_state_update(
@@ -45,6 +47,8 @@ def build_data_fetch_success_update(
             "technical_analysis": {
                 "price_artifact_id": price_artifact_id,
                 "timeseries_bundle_id": timeseries_bundle_id,
+                "is_degraded": is_degraded,
+                "degraded_reasons": list(degraded_reasons),
                 "artifact": artifact,
             },
             "current_node": "data_fetch",
@@ -80,6 +84,8 @@ def build_feature_compute_success_update(
     feature_pack_id: str,
     indicator_series_id: str | None = None,
     momentum_extremes: JSONObject | None = None,
+    is_degraded: bool,
+    degraded_reasons: list[str],
     artifact: AgentOutputArtifactPayload,
 ) -> JSONObject:
     return _guard_state_update(
@@ -89,6 +95,8 @@ def build_feature_compute_success_update(
                 "feature_pack_id": feature_pack_id,
                 "indicator_series_id": indicator_series_id,
                 "momentum_extremes": momentum_extremes,
+                "is_degraded": is_degraded,
+                "degraded_reasons": list(degraded_reasons),
                 "artifact": artifact,
             },
             "current_node": "feature_compute",
@@ -247,6 +255,8 @@ def build_fusion_compute_success_update(
     confidence_raw: float | None,
     confidence_calibrated: float | None,
     confidence_calibration: dict[str, object] | None,
+    is_degraded: bool,
+    degraded_reasons: list[str],
     artifact: AgentOutputArtifactPayload,
 ) -> JSONObject:
     return _guard_state_update(
@@ -259,6 +269,8 @@ def build_fusion_compute_success_update(
                 "confidence_raw": confidence_raw,
                 "confidence_calibrated": confidence_calibrated,
                 "confidence_calibration": confidence_calibration,
+                "is_degraded": is_degraded,
+                "degraded_reasons": list(degraded_reasons),
                 "artifact": artifact,
             },
             "current_node": "fusion_compute",

@@ -26,6 +26,9 @@ from src.agents.technical.application.semantic_policy_input_service import (
 from src.agents.technical.application.semantic_verification_context_service import (
     assemble_verification_context,
 )
+from src.agents.technical.application.technical_evidence_bundle_service import (
+    serialize_evidence_bundle,
+)
 from src.agents.technical.subdomains.interpretation.domain import (
     apply_interpretation_guardrail,
 )
@@ -105,6 +108,11 @@ async def execute_semantic_pipeline(
 
     finalize_context = dict(technical_context)
     finalize_context.update(build_projection_context(artifacts=projection_artifacts))
+    evidence_bundle_payload = serialize_evidence_bundle(
+        projection_artifacts.evidence_bundle
+    )
+    if evidence_bundle_payload is not None:
+        finalize_context["evidence_bundle"] = evidence_bundle_payload
 
     semantic_finalize_result = assemble_semantic_finalize(
         ticker=ticker,
@@ -116,7 +124,12 @@ async def execute_semantic_pipeline(
         build_full_report_payload_fn=build_full_report_payload_fn,
     )
 
-    degraded_reasons: list[str] = []
+    degraded_reasons = _merge_degraded_reasons(
+        _read_degraded_reasons(technical_context.get("degraded_reasons")),
+        list(projection_artifacts.fusion_report.degraded_reasons or [])
+        if projection_artifacts.fusion_report is not None
+        else [],
+    )
     if backtest_context_result.is_degraded:
         degraded_reasons.append(
             backtest_context_result.failure_code
@@ -143,3 +156,18 @@ async def execute_semantic_pipeline(
         is_degraded=bool(degraded_reasons),
         degraded_reasons=tuple(degraded_reasons),
     )
+
+
+def _read_degraded_reasons(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if isinstance(item, str)]
+
+
+def _merge_degraded_reasons(*groups: list[str]) -> list[str]:
+    merged: list[str] = []
+    for group in groups:
+        for reason in group:
+            if reason not in merged:
+                merged.append(reason)
+    return merged
