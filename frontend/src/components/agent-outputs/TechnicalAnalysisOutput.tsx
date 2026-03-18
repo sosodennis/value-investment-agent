@@ -1702,23 +1702,28 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                     {analystPerspective ? (
                         <div className="space-y-5">
                             <div className="flex flex-wrap items-start justify-between gap-4">
-                                <div className="space-y-2">
-                                    <div className="text-xl font-black text-white">
-                                        {analystPerspective.stance_summary}
+                                <div className="space-y-4">
+                                    <div className="flex flex-col md:flex-row md:items-start gap-4 mb-2">
+                                        <div className="flex-1 text-xl font-black text-white leading-snug">
+                                            {analystPerspective.stance_summary}
+                                        </div>
+                                        <div className="px-3 py-2 rounded-xl border border-indigo-400/30 bg-indigo-500/10 min-w-[160px] shrink-0">
+                                            <div className="text-[9px] font-black uppercase tracking-[0.18em] text-indigo-300">Stance</div>
+                                            <div className="mt-1 text-sm font-black text-indigo-100">
+                                                {formatLabel(analystPerspective.stance)}
+                                            </div>
+                                        </div>
                                     </div>
-                                    {analystPerspective.plain_language_summary && (
-                                        <p className="max-w-3xl text-base leading-7 text-indigo-100">
-                                            {analystPerspective.plain_language_summary}
+
+                                    <div className="space-y-4 max-w-4xl">
+                                        {analystPerspective.plain_language_summary && (
+                                            <p className="text-[15px] leading-8 text-indigo-100/90">
+                                                {analystPerspective.plain_language_summary}
+                                            </p>
+                                        )}
+                                        <p className="text-[13px] leading-7 text-slate-400">
+                                            {analystPerspective.rationale_summary}
                                         </p>
-                                    )}
-                                    <p className="max-w-3xl text-sm leading-7 text-slate-300">
-                                        {analystPerspective.rationale_summary}
-                                    </p>
-                                </div>
-                                <div className="px-3 py-2 rounded-2xl border border-indigo-400/20 bg-slate-950/50 min-w-[180px]">
-                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">Stance</div>
-                                    <div className="mt-1 text-sm font-black text-indigo-100">
-                                        {formatLabel(analystPerspective.stance)}
                                     </div>
                                 </div>
                             </div>
@@ -1763,36 +1768,45 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                         {analystSignalExplainers.map((item) => (
                                             <div
                                                 key={`${item.signal}-${item.timeframe ?? 'na'}`}
-                                                className="rounded-2xl border border-indigo-500/15 bg-indigo-500/[0.05] p-4"
+                                                className="relative overflow-hidden flex flex-col justify-between h-full rounded-2xl border border-indigo-500/20 bg-indigo-500/[0.03] hover:bg-indigo-500/[0.06] transition-colors p-5"
                                             >
-                                                <div className="flex items-start justify-between gap-3">
-                                                    <div>
-                                                        <div className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-200">
+                                                <div className="flex flex-col gap-1 mb-4">
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-300">
                                                             {item.plain_name}
                                                         </div>
-                                                        <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
-                                                            {item.signal}
-                                                        </div>
-                                                    </div>
-                                                    <div className="text-right">
                                                         {item.timeframe && (
-                                                            <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-600">
+                                                            <div className="text-[9px] font-bold uppercase tracking-[0.14em] px-2 py-0.5 rounded border border-indigo-400/20 bg-indigo-500/10 text-indigo-200">
                                                                 {item.timeframe}
                                                             </div>
                                                         )}
+                                                    </div>
+
+                                                    <div className="flex items-end gap-3 mt-1">
                                                         {item.value_text && (
-                                                            <div className="mt-1 text-sm font-mono font-bold text-indigo-100">
+                                                            <div className="text-xl font-mono font-black text-white">
                                                                 {item.value_text}
                                                             </div>
                                                         )}
+                                                        <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 mb-1">
+                                                            {item.signal}
+                                                        </div>
                                                     </div>
                                                 </div>
-                                                <p className="mt-3 text-xs leading-6 text-slate-300">
-                                                    {item.what_it_means_now}
-                                                </p>
-                                                <p className="mt-2 text-[11px] leading-5 text-slate-400">
-                                                    {item.why_it_matters_now}
-                                                </p>
+
+                                                <div className="flex flex-col flex-1">
+                                                    <p className="text-[13px] leading-6 text-slate-300">
+                                                        {item.what_it_means_now}
+                                                    </p>
+
+                                                    <div className="mt-auto pt-4 relative">
+                                                        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-indigo-500/20 to-transparent"></div>
+                                                        <p className="text-[11px] leading-5 text-slate-400 pt-3">
+                                                            <span className="font-bold text-slate-500 block mb-1 uppercase tracking-widest text-[9px]">Why it matters</span>
+                                                            {item.why_it_matters_now}
+                                                        </p>
+                                                    </div>
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
