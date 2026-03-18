@@ -7,6 +7,7 @@ from src.agents.technical.interface.contracts import AnalystPerspectiveModel
 from src.agents.technical.subdomains.signal_fusion import SemanticTagPolicyResult
 from src.interface.artifacts.artifact_data_models import (
     TechnicalDirectionScorecardArtifactData,
+    TechnicalFeaturePackArtifactData,
     TechnicalFusionReportArtifactData,
     TechnicalPatternPackArtifactData,
     TechnicalRegimePackArtifactData,
@@ -59,6 +60,7 @@ class SemanticPipelineResult:
 
 @dataclass(frozen=True)
 class TechnicalProjectionArtifacts:
+    feature_pack: TechnicalFeaturePackArtifactData | None = None
     pattern_pack: TechnicalPatternPackArtifactData | None = None
     regime_pack: TechnicalRegimePackArtifactData | None = None
     fusion_report: TechnicalFusionReportArtifactData | None = None
@@ -81,6 +83,11 @@ class TechnicalPortLike(Protocol):
         self,
         artifact_id: str | None,
     ) -> TechnicalPatternPackArtifactData | None: ...
+
+    async def load_feature_pack(
+        self,
+        artifact_id: str | None,
+    ) -> TechnicalFeaturePackArtifactData | None: ...
 
     async def load_regime_pack(
         self,

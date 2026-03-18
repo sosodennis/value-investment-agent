@@ -48,10 +48,21 @@ export interface TechnicalAnalystPerspectiveEvidenceItem {
     rationale: string;
 }
 
+export interface TechnicalAnalystPerspectiveSignalExplainer {
+    signal: string;
+    plain_name: string;
+    value_text?: string | null;
+    timeframe?: string | null;
+    what_it_means_now: string;
+    why_it_matters_now: string;
+}
+
 export interface TechnicalAnalystPerspective {
     stance: string;
     stance_summary: string;
     rationale_summary: string;
+    plain_language_summary?: string | null;
+    signal_explainers?: TechnicalAnalystPerspectiveSignalExplainer[];
     top_evidence?: TechnicalAnalystPerspectiveEvidenceItem[];
     trigger_condition?: string | null;
     invalidation_condition?: string | null;

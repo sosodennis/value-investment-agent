@@ -70,12 +70,25 @@ class AnalystPerspectiveEvidenceItemModel(BaseModel):
     rationale: TechnicalText
 
 
+class AnalystPerspectiveSignalExplainerModel(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    signal: TechnicalText
+    plain_name: TechnicalText
+    value_text: OptionalTechnicalText = None
+    timeframe: OptionalTechnicalText = None
+    what_it_means_now: TechnicalText
+    why_it_matters_now: TechnicalText
+
+
 class AnalystPerspectiveModel(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     stance: TechnicalText
     stance_summary: TechnicalText
     rationale_summary: TechnicalText
+    plain_language_summary: OptionalTechnicalText = None
+    signal_explainers: list[AnalystPerspectiveSignalExplainerModel] | None = None
     top_evidence: list[AnalystPerspectiveEvidenceItemModel] | None = None
     trigger_condition: OptionalTechnicalText = None
     invalidation_condition: OptionalTechnicalText = None

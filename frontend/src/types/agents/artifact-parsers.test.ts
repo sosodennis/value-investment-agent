@@ -352,6 +352,20 @@ describe('artifact parsers', () => {
                 stance_summary: 'Bearish watch with low risk.',
                 rationale_summary:
                     'Signals align toward downside continuation, but confirmation is still needed.',
+                plain_language_summary:
+                    'Trend pressure is slightly negative, but this still looks more like a watchlist setup than a decisive breakdown.',
+                signal_explainers: [
+                    {
+                        signal: 'FD_OPTIMAL_D',
+                        plain_name: '分數差分強度',
+                        value_text: '0.600',
+                        timeframe: '1d',
+                        what_it_means_now:
+                            'This shows how much trend memory needs to be removed to make the series more stable.',
+                        why_it_matters_now:
+                            'A moderate-to-high reading suggests the market still carries some persistent structure instead of pure noise.'
+                    }
+                ],
                 top_evidence: [
                     {
                         label: 'MACD',
@@ -408,6 +422,8 @@ describe('artifact parsers', () => {
         expect(parsed.momentum_extremes?.fd_label).toBe('EXTREME');
         expect(parsed.momentum_extremes?.rsi_bias).toBe('BEARISH_BIAS');
         expect(parsed.analyst_perspective?.stance).toBe('BEARISH_WATCH');
+        expect(parsed.analyst_perspective?.plain_language_summary).toContain('watchlist');
+        expect(parsed.analyst_perspective?.signal_explainers?.[0]?.signal).toBe('FD_OPTIMAL_D');
         expect(parsed.analyst_perspective?.top_evidence?.[0]?.label).toBe('MACD');
         expect(parsed.regime_summary?.dominant_regime).toBe('BULL_TREND');
         expect(parsed.volume_profile_summary?.timeframe).toBe('1d');

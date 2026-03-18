@@ -234,6 +234,54 @@ class _SemanticProjectionPortStub:
             timeframes={"1d": frame},
         )
 
+    async def load_feature_pack(
+        self,
+        artifact_id: str | None,
+    ) -> TechnicalFeaturePackArtifactData | None:
+        _ = artifact_id
+        return TechnicalFeaturePackArtifactData(
+            ticker="AAPL",
+            as_of="2026-02-12T00:00:00Z",
+            timeframes={
+                "1d": TechnicalFeatureFrameData(
+                    classic_indicators={
+                        "ADX_14": TechnicalFeatureIndicatorData(
+                            name="ADX_14",
+                            value=19.65,
+                            state="NEUTRAL",
+                        ),
+                        "ATRP_14": TechnicalFeatureIndicatorData(
+                            name="ATRP_14",
+                            value=0.023,
+                            state="NEUTRAL",
+                        ),
+                        "ATR_14": TechnicalFeatureIndicatorData(
+                            name="ATR_14",
+                            value=5.763,
+                            state="NEUTRAL",
+                        ),
+                    },
+                    quant_features={
+                        "FD_OPTIMAL_D": TechnicalFeatureIndicatorData(
+                            name="FD_OPTIMAL_D",
+                            value=0.6,
+                            state="NEUTRAL",
+                        ),
+                        "FD_Z_SCORE": TechnicalFeatureIndicatorData(
+                            name="FD_Z_SCORE",
+                            value=-0.127,
+                            state="NEUTRAL",
+                        ),
+                        "FD_ADF_STAT": TechnicalFeatureIndicatorData(
+                            name="FD_ADF_STAT",
+                            value=-5.559,
+                            state="NEUTRAL",
+                        ),
+                    },
+                )
+            },
+        )
+
     async def load_regime_pack(
         self,
         artifact_id: str | None,
@@ -283,6 +331,7 @@ async def test_build_interpretation_input_projects_regime_and_structure_summarie
     result = await build_interpretation_input(
         ticker="AAPL",
         technical_context={
+            "feature_pack_id": "feature-1",
             "pattern_pack_id": "pattern-1",
             "regime_pack_id": "regime-1",
             "fusion_report_id": "fusion-1",
@@ -320,6 +369,14 @@ async def test_build_interpretation_input_projects_regime_and_structure_summarie
     assert (
         result.setup_context["structure_confluence_summary"]["confluence_state"]
         == "strong"
+    )
+    assert len(result.signal_explainer_context) == 3
+    assert result.signal_explainer_context[0].signal == "FD_OPTIMAL_D"
+    assert result.signal_explainer_context[1].signal == "ADX_14"
+    assert result.signal_explainer_context[2].signal == "FD_Z_SCORE"
+    assert (
+        result.signal_explainer_context[0].current_reading_hint
+        == "The current reading suggests the market still carries noticeable trend memory or persistence."
     )
 
 

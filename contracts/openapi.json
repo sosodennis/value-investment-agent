@@ -242,9 +242,34 @@
             ],
             "title": "Invalidation Level"
           },
+          "plain_language_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plain Language Summary"
+          },
           "rationale_summary": {
             "title": "Rationale Summary",
             "type": "string"
+          },
+          "signal_explainers": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AnalystPerspectiveSignalExplainerModel"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signal Explainers"
           },
           "stance": {
             "title": "Stance",
@@ -297,6 +322,56 @@
           "rationale_summary"
         ],
         "title": "AnalystPerspectiveModel",
+        "type": "object"
+      },
+      "AnalystPerspectiveSignalExplainerModel": {
+        "properties": {
+          "plain_name": {
+            "title": "Plain Name",
+            "type": "string"
+          },
+          "signal": {
+            "title": "Signal",
+            "type": "string"
+          },
+          "timeframe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeframe"
+          },
+          "value_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Text"
+          },
+          "what_it_means_now": {
+            "title": "What It Means Now",
+            "type": "string"
+          },
+          "why_it_matters_now": {
+            "title": "Why It Matters Now",
+            "type": "string"
+          }
+        },
+        "required": [
+          "signal",
+          "plain_name",
+          "what_it_means_now",
+          "why_it_matters_now"
+        ],
+        "title": "AnalystPerspectiveSignalExplainerModel",
         "type": "object"
       },
       "ArtifactReference": {
@@ -404,6 +479,17 @@
               }
             ],
             "title": "Pattern Pack Id"
+          },
+          "regime_pack_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regime Pack Id"
           },
           "timeseries_bundle_id": {
             "anyOf": [
@@ -3052,6 +3138,40 @@
         "title": "TaPatternPackEnvelope",
         "type": "object"
       },
+      "TaRegimePackEnvelope": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/TechnicalRegimePackArtifactData"
+          },
+          "kind": {
+            "const": "ta_regime_pack",
+            "title": "Kind",
+            "type": "string"
+          },
+          "produced_by": {
+            "title": "Produced By",
+            "type": "string"
+          },
+          "version": {
+            "const": "v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "produced_by",
+          "created_at",
+          "kind",
+          "data"
+        ],
+        "title": "TaRegimePackEnvelope",
+        "type": "object"
+      },
       "TaTimeseriesBundleEnvelope": {
         "properties": {
           "created_at": {
@@ -3392,6 +3512,18 @@
               }
             ]
           },
+          "regime_summary": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regime Summary"
+          },
           "risk_level": {
             "enum": [
               "low",
@@ -3405,6 +3537,18 @@
             "title": "Schema Version",
             "type": "string"
           },
+          "structure_confluence_summary": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Structure Confluence Summary"
+          },
           "summary_tags": {
             "items": {
               "type": "string"
@@ -3415,6 +3559,18 @@
           "ticker": {
             "title": "Ticker",
             "type": "string"
+          },
+          "volume_profile_summary": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Volume Profile Summary"
           }
         },
         "required": [
@@ -3615,6 +3771,18 @@
           "overall_score": {
             "title": "Overall Score",
             "type": "number"
+          },
+          "regime_summary": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regime Summary"
           },
           "risk_level": {
             "title": "Risk Level",
@@ -3908,6 +4076,18 @@
             "title": "Direction",
             "type": "string"
           },
+          "regime_summary": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regime Summary"
+          },
           "risk_level": {
             "title": "Risk Level",
             "type": "string"
@@ -4112,6 +4292,18 @@
             "title": "Confidence Scores",
             "type": "object"
           },
+          "confluence_metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confluence Metadata"
+          },
           "pattern_flags": {
             "items": {
               "$ref": "#/components/schemas/TechnicalPatternFlagData"
@@ -4139,6 +4331,24 @@
             },
             "title": "Trendlines",
             "type": "array"
+          },
+          "volume_profile_levels": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TechnicalPatternLevelData"
+            },
+            "title": "Volume Profile Levels",
+            "type": "array"
+          },
+          "volume_profile_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TechnicalVolumeProfileSummaryData"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -4251,6 +4461,158 @@
         "title": "TechnicalPatternPackArtifactData",
         "type": "object"
       },
+      "TechnicalRegimeFrameData": {
+        "additionalProperties": false,
+        "properties": {
+          "adx": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adx"
+          },
+          "atr_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Atr Value"
+          },
+          "atrp_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Atrp Value"
+          },
+          "bollinger_bandwidth": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bollinger Bandwidth"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "directional_bias": {
+            "title": "Directional Bias",
+            "type": "string"
+          },
+          "evidence": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "regime": {
+            "title": "Regime",
+            "type": "string"
+          },
+          "timeframe": {
+            "title": "Timeframe",
+            "type": "string"
+          }
+        },
+        "required": [
+          "timeframe",
+          "regime",
+          "directional_bias"
+        ],
+        "title": "TechnicalRegimeFrameData",
+        "type": "object"
+      },
+      "TechnicalRegimePackArtifactData": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "title": "As Of",
+            "type": "string"
+          },
+          "degraded_reasons": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Degraded Reasons"
+          },
+          "regime_summary": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regime Summary"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          },
+          "timeframes": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/TechnicalRegimeFrameData"
+            },
+            "title": "Timeframes",
+            "type": "object"
+          }
+        },
+        "required": [
+          "ticker",
+          "as_of",
+          "timeframes"
+        ],
+        "title": "TechnicalRegimePackArtifactData",
+        "type": "object"
+      },
       "TechnicalScorecardContributionData": {
         "additionalProperties": false,
         "properties": {
@@ -4318,6 +4680,17 @@
       "TechnicalScorecardFrameData": {
         "additionalProperties": false,
         "properties": {
+          "base_total_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Total Score"
+          },
           "classic_label": {
             "title": "Classic Label",
             "type": "string"
@@ -4351,6 +4724,53 @@
           "quant_score": {
             "title": "Quant Score",
             "type": "number"
+          },
+          "regime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regime"
+          },
+          "regime_directional_bias": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regime Directional Bias"
+          },
+          "regime_notes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regime Notes"
+          },
+          "regime_weight_multiplier": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regime Weight Multiplier"
           },
           "timeframe": {
             "title": "Timeframe",
@@ -4658,6 +5078,90 @@
         "title": "TechnicalVerificationReportArtifactData",
         "type": "object"
       },
+      "TechnicalVolumeProfileSummaryData": {
+        "additionalProperties": false,
+        "properties": {
+          "bucket_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bucket Count"
+          },
+          "poc": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poc"
+          },
+          "profile_fidelity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Fidelity"
+          },
+          "profile_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Method"
+          },
+          "vah": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vah"
+          },
+          "val": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Val"
+          },
+          "value_area_coverage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Area Coverage"
+          }
+        },
+        "title": "TechnicalVolumeProfileSummaryData",
+        "type": "object"
+      },
       "TechnicalWfaSummaryData": {
         "additionalProperties": false,
         "properties": {
@@ -4935,6 +5439,7 @@
                       "ta_fusion_report": "#/components/schemas/TaFusionReportEnvelope",
                       "ta_indicator_series": "#/components/schemas/TaIndicatorSeriesEnvelope",
                       "ta_pattern_pack": "#/components/schemas/TaPatternPackEnvelope",
+                      "ta_regime_pack": "#/components/schemas/TaRegimePackEnvelope",
                       "ta_timeseries_bundle": "#/components/schemas/TaTimeseriesBundleEnvelope",
                       "ta_verification_report": "#/components/schemas/TaVerificationReportEnvelope"
                     },
@@ -4964,6 +5469,9 @@
                     },
                     {
                       "$ref": "#/components/schemas/TaPatternPackEnvelope"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TaRegimePackEnvelope"
                     },
                     {
                       "$ref": "#/components/schemas/TaFusionReportEnvelope"

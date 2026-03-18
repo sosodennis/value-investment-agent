@@ -31,6 +31,7 @@ import {
     TechnicalAlertSummary,
     TechnicalAnalystPerspective,
     TechnicalAnalystPerspectiveEvidenceItem,
+    TechnicalAnalystPerspectiveSignalExplainer,
     TechnicalAlertsArtifact,
     TechnicalAnalysisReport,
     TechnicalAnalysisSuccess,
@@ -237,6 +238,40 @@ const parseAnalystPerspectiveEvidenceItem = (
     return item;
 };
 
+const parseAnalystPerspectiveSignalExplainer = (
+    value: unknown,
+    context: string
+): TechnicalAnalystPerspectiveSignalExplainer => {
+    const record = toRecord(value, context);
+    const item: TechnicalAnalystPerspectiveSignalExplainer = {
+        signal: parseString(record.signal, `${context}.signal`),
+        plain_name: parseString(record.plain_name, `${context}.plain_name`),
+        what_it_means_now: parseString(
+            record.what_it_means_now,
+            `${context}.what_it_means_now`
+        ),
+        why_it_matters_now: parseString(
+            record.why_it_matters_now,
+            `${context}.why_it_matters_now`
+        ),
+    };
+    const valueText = parseNullableOptionalString(
+        record.value_text,
+        `${context}.value_text`
+    );
+    const timeframe = parseNullableOptionalString(
+        record.timeframe,
+        `${context}.timeframe`
+    );
+    if (valueText !== undefined) {
+        item.value_text = valueText;
+    }
+    if (timeframe !== undefined) {
+        item.timeframe = timeframe;
+    }
+    return item;
+};
+
 const parseAnalystPerspective = (
     value: unknown,
     context: string
@@ -254,6 +289,21 @@ const parseAnalystPerspective = (
             `${context}.rationale_summary`
         ),
     };
+    const plainLanguageSummary = parseNullableOptionalString(
+        record.plain_language_summary,
+        `${context}.plain_language_summary`
+    );
+    if (plainLanguageSummary !== undefined) {
+        perspective.plain_language_summary = plainLanguageSummary;
+    }
+    if (Array.isArray(record.signal_explainers)) {
+        perspective.signal_explainers = record.signal_explainers.map((item, index) =>
+            parseAnalystPerspectiveSignalExplainer(
+                item,
+                `${context}.signal_explainers.${index}`
+            )
+        );
+    }
     if (Array.isArray(record.top_evidence)) {
         perspective.top_evidence = record.top_evidence.map((item, index) =>
             parseAnalystPerspectiveEvidenceItem(

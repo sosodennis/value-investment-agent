@@ -19,6 +19,7 @@ from src.agents.technical.application.ports import (
 from src.agents.technical.interface.contracts import (
     AnalystPerspectiveEvidenceItemModel,
     AnalystPerspectiveModel,
+    AnalystPerspectiveSignalExplainerModel,
 )
 from src.agents.technical.interface.interpretation_prompt_spec import (
     build_interpretation_prompt_spec,
@@ -65,11 +66,13 @@ async def generate_interpretation(
                 ),
                 "momentum_extremes": _dump_json(payload.momentum_extremes),
                 "setup_context": _dump_json(payload.setup_context),
+                "signal_explainer_context": _dump_signal_explainer_context(payload),
                 "validation_context": _dump_json(payload.validation_context),
                 "diagnostics_context": _dump_json(payload.diagnostics_context),
                 "evidence": _dump_json(list(payload.evidence_items)),
             }
         )
+        response = _finalize_perspective(response, payload)
 
         interpretation = response.rationale_summary.strip()
         log_event(
@@ -119,6 +122,23 @@ def _dump_json(value: object) -> str:
     return json.dumps(value, ensure_ascii=True, sort_keys=True)
 
 
+def _dump_signal_explainer_context(payload: TechnicalInterpretationInput) -> str:
+    items = [
+        {
+            "signal": item.signal,
+            "plain_name": item.plain_name,
+            "value_text": item.value_text,
+            "timeframe": item.timeframe,
+            "state": item.state,
+            "what_it_measures": item.what_it_measures,
+            "current_reading_hint": item.current_reading_hint,
+            "why_it_matters": item.why_it_matters,
+        }
+        for item in payload.signal_explainer_context
+    ]
+    return _dump_json(items)
+
+
 def _build_fallback_perspective(
     payload: TechnicalInterpretationInput,
 ) -> AnalystPerspectiveModel:
@@ -139,7 +159,7 @@ def _build_fallback_perspective(
         evidence_items=payload.evidence_items,
         validation_note=validation_note,
     )
-    return AnalystPerspectiveModel(
+    perspective = AnalystPerspectiveModel(
         stance=stance,
         stance_summary=_resolve_stance_summary(stance, payload.risk_level),
         rationale_summary=rationale_summary,
@@ -151,6 +171,105 @@ def _build_fallback_perspective(
         confidence_note=_resolve_confidence_note(payload.confidence_calibrated),
         decision_posture=_resolve_decision_posture(stance),
     )
+    return _finalize_perspective(perspective, payload)
+
+
+def _finalize_perspective(
+    perspective: AnalystPerspectiveModel,
+    payload: TechnicalInterpretationInput,
+) -> AnalystPerspectiveModel:
+    plain_language_summary = _normalize_plain_language_summary(
+        perspective.plain_language_summary,
+        payload=payload,
+        perspective=perspective,
+    )
+    signal_explainers = _normalize_signal_explainers(
+        perspective.signal_explainers,
+        payload=payload,
+    )
+    top_evidence = perspective.top_evidence[:3] if perspective.top_evidence else None
+    return perspective.model_copy(
+        update={
+            "plain_language_summary": plain_language_summary,
+            "signal_explainers": signal_explainers,
+            "top_evidence": top_evidence,
+        }
+    )
+
+
+def _normalize_plain_language_summary(
+    raw_summary: str | None,
+    *,
+    payload: TechnicalInterpretationInput,
+    perspective: AnalystPerspectiveModel,
+) -> str:
+    if isinstance(raw_summary, str) and raw_summary.strip():
+        return raw_summary.strip()
+
+    opening = _build_plain_language_opening(perspective.stance)
+    detail_sentences = [
+        item.current_reading_hint for item in payload.signal_explainer_context[:2]
+    ]
+    parts = [opening, *detail_sentences]
+    validation_note = _resolve_validation_note(payload.validation_context)
+    if validation_note is not None:
+        parts.append(validation_note)
+    return " ".join(part.strip() for part in parts if part and part.strip())
+
+
+def _build_plain_language_opening(stance: str) -> str:
+    if stance == "WAIT":
+        return "The setup is not clear enough to support a strong directional view right now."
+    if stance == "BULLISH_WATCH":
+        return "The setup leans bullish, but it still looks more like a watchlist situation than a fully confirmed move."
+    if stance == "BEARISH_WATCH":
+        return "The setup leans bearish, but it still looks more like a watchlist situation than a decisive breakdown."
+    return (
+        "The setup looks mixed, so the market still reads as broadly neutral for now."
+    )
+
+
+def _normalize_signal_explainers(
+    raw_explainers: list[AnalystPerspectiveSignalExplainerModel] | None,
+    *,
+    payload: TechnicalInterpretationInput,
+) -> list[AnalystPerspectiveSignalExplainerModel] | None:
+    fallback_map = {
+        item.signal: AnalystPerspectiveSignalExplainerModel(
+            signal=item.signal,
+            plain_name=item.plain_name,
+            value_text=item.value_text,
+            timeframe=item.timeframe,
+            what_it_means_now=item.current_reading_hint,
+            why_it_matters_now=item.why_it_matters,
+        )
+        for item in payload.signal_explainer_context[:3]
+    }
+    if not raw_explainers:
+        return list(fallback_map.values()) or None
+
+    normalized: list[AnalystPerspectiveSignalExplainerModel] = []
+    for explainer in raw_explainers[:3]:
+        fallback = fallback_map.get(explainer.signal)
+        normalized.append(
+            explainer.model_copy(
+                update={
+                    "plain_name": explainer.plain_name
+                    or (fallback.plain_name if fallback else explainer.signal),
+                    "value_text": explainer.value_text
+                    or (fallback.value_text if fallback else None),
+                    "timeframe": explainer.timeframe
+                    or (fallback.timeframe if fallback else None),
+                    "what_it_means_now": explainer.what_it_means_now.strip()
+                    if explainer.what_it_means_now.strip()
+                    else (fallback.what_it_means_now if fallback else ""),
+                    "why_it_matters_now": explainer.why_it_matters_now.strip()
+                    if explainer.why_it_matters_now.strip()
+                    else (fallback.why_it_matters_now if fallback else ""),
+                }
+            )
+        )
+    return normalized
 
 
 def _resolve_stance(direction: str, validation_context: JSONObject | None) -> str:

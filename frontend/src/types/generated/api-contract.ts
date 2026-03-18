@@ -225,8 +225,12 @@ export interface components {
             invalidation_condition?: string | null;
             /** Invalidation Level */
             invalidation_level?: number | null;
+            /** Plain Language Summary */
+            plain_language_summary?: string | null;
             /** Rationale Summary */
             rationale_summary: string;
+            /** Signal Explainers */
+            signal_explainers?: components["schemas"]["AnalystPerspectiveSignalExplainerModel"][] | null;
             /** Stance */
             stance: string;
             /** Stance Summary */
@@ -237,6 +241,21 @@ export interface components {
             trigger_condition?: string | null;
             /** Validation Note */
             validation_note?: string | null;
+        };
+        /** AnalystPerspectiveSignalExplainerModel */
+        AnalystPerspectiveSignalExplainerModel: {
+            /** Plain Name */
+            plain_name: string;
+            /** Signal */
+            signal: string;
+            /** Timeframe */
+            timeframe?: string | null;
+            /** Value Text */
+            value_text?: string | null;
+            /** What It Means Now */
+            what_it_means_now: string;
+            /** Why It Matters Now */
+            why_it_matters_now: string;
         };
         /**
          * ArtifactReference
@@ -278,6 +297,8 @@ export interface components {
             indicator_series_id?: string | null;
             /** Pattern Pack Id */
             pattern_pack_id?: string | null;
+            /** Regime Pack Id */
+            regime_pack_id?: string | null;
             /** Timeseries Bundle Id */
             timeseries_bundle_id?: string | null;
             /** Verification Report Id */
@@ -1109,6 +1130,24 @@ export interface components {
              */
             version: "v1";
         };
+        /** TaRegimePackEnvelope */
+        TaRegimePackEnvelope: {
+            /** Created At */
+            created_at: string;
+            data: components["schemas"]["TechnicalRegimePackArtifactData"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "ta_regime_pack";
+            /** Produced By */
+            produced_by: string;
+            /**
+             * Version
+             * @constant
+             */
+            version: "v1";
+        };
         /** TaTimeseriesBundleEnvelope */
         TaTimeseriesBundleEnvelope: {
             /** Created At */
@@ -1211,6 +1250,10 @@ export interface components {
             /** Direction */
             direction: string;
             momentum_extremes?: components["schemas"]["MomentumExtremesModel"] | null;
+            /** Regime Summary */
+            regime_summary?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Risk Level
              * @enum {string}
@@ -1218,10 +1261,18 @@ export interface components {
             risk_level: "low" | "medium" | "critical";
             /** Schema Version */
             schema_version: string;
+            /** Structure Confluence Summary */
+            structure_confluence_summary?: {
+                [key: string]: unknown;
+            } | null;
             /** Summary Tags */
             summary_tags: string[];
             /** Ticker */
             ticker: string;
+            /** Volume Profile Summary */
+            volume_profile_summary?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** TechnicalBacktestSummaryData */
         TechnicalBacktestSummaryData: {
@@ -1271,6 +1322,10 @@ export interface components {
             neutral_threshold: number;
             /** Overall Score */
             overall_score: number;
+            /** Regime Summary */
+            regime_summary?: {
+                [key: string]: unknown;
+            } | null;
             /** Risk Level */
             risk_level: string;
             /** Schema Version */
@@ -1357,6 +1412,10 @@ export interface components {
             degraded_reasons?: string[] | null;
             /** Direction */
             direction: string;
+            /** Regime Summary */
+            regime_summary?: {
+                [key: string]: unknown;
+            } | null;
             /** Risk Level */
             risk_level: string;
             /** Schema Version */
@@ -1422,6 +1481,10 @@ export interface components {
             confidence_scores: {
                 [key: string]: number;
             };
+            /** Confluence Metadata */
+            confluence_metadata?: {
+                [key: string]: unknown;
+            } | null;
             /** Pattern Flags */
             pattern_flags: components["schemas"]["TechnicalPatternFlagData"][];
             /** Resistance Levels */
@@ -1430,6 +1493,12 @@ export interface components {
             support_levels: components["schemas"]["TechnicalPatternLevelData"][];
             /** Trendlines */
             trendlines: components["schemas"]["TechnicalPatternFlagData"][];
+            /**
+             * Volume Profile Levels
+             * @default []
+             */
+            volume_profile_levels: components["schemas"]["TechnicalPatternLevelData"][];
+            volume_profile_summary?: components["schemas"]["TechnicalVolumeProfileSummaryData"] | null;
         };
         /** TechnicalPatternLevelData */
         TechnicalPatternLevelData: {
@@ -1459,6 +1528,51 @@ export interface components {
                 [key: string]: components["schemas"]["TechnicalPatternFrameData"];
             };
         };
+        /** TechnicalRegimeFrameData */
+        TechnicalRegimeFrameData: {
+            /** Adx */
+            adx?: number | null;
+            /** Atr Value */
+            atr_value?: number | null;
+            /** Atrp Value */
+            atrp_value?: number | null;
+            /** Bollinger Bandwidth */
+            bollinger_bandwidth?: number | null;
+            /** Confidence */
+            confidence?: number | null;
+            /** Directional Bias */
+            directional_bias: string;
+            /**
+             * Evidence
+             * @default []
+             */
+            evidence: string[];
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+            /** Regime */
+            regime: string;
+            /** Timeframe */
+            timeframe: string;
+        };
+        /** TechnicalRegimePackArtifactData */
+        TechnicalRegimePackArtifactData: {
+            /** As Of */
+            as_of: string;
+            /** Degraded Reasons */
+            degraded_reasons?: string[] | null;
+            /** Regime Summary */
+            regime_summary?: {
+                [key: string]: unknown;
+            } | null;
+            /** Ticker */
+            ticker: string;
+            /** Timeframes */
+            timeframes: {
+                [key: string]: components["schemas"]["TechnicalRegimeFrameData"];
+            };
+        };
         /** TechnicalScorecardContributionData */
         TechnicalScorecardContributionData: {
             /** Contribution */
@@ -1476,6 +1590,8 @@ export interface components {
         };
         /** TechnicalScorecardFrameData */
         TechnicalScorecardFrameData: {
+            /** Base Total Score */
+            base_total_score?: number | null;
             /** Classic Label */
             classic_label: string;
             /** Classic Score */
@@ -1492,6 +1608,14 @@ export interface components {
             quant_label: string;
             /** Quant Score */
             quant_score: number;
+            /** Regime */
+            regime?: string | null;
+            /** Regime Directional Bias */
+            regime_directional_bias?: string | null;
+            /** Regime Notes */
+            regime_notes?: string[] | null;
+            /** Regime Weight Multiplier */
+            regime_weight_multiplier?: number | null;
             /** Timeframe */
             timeframe: string;
             /** Total Score */
@@ -1571,6 +1695,23 @@ export interface components {
             /** Ticker */
             ticker: string;
             wfa_summary?: components["schemas"]["TechnicalWfaSummaryData"] | null;
+        };
+        /** TechnicalVolumeProfileSummaryData */
+        TechnicalVolumeProfileSummaryData: {
+            /** Bucket Count */
+            bucket_count?: number | null;
+            /** Poc */
+            poc?: number | null;
+            /** Profile Fidelity */
+            profile_fidelity?: string | null;
+            /** Profile Method */
+            profile_method?: string | null;
+            /** Vah */
+            vah?: number | null;
+            /** Val */
+            val?: number | null;
+            /** Value Area Coverage */
+            value_area_coverage?: number | null;
         };
         /** TechnicalWfaSummaryData */
         TechnicalWfaSummaryData: {
@@ -1677,7 +1818,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["FinancialReportsEnvelope"] | components["schemas"]["PriceSeriesEnvelope"] | components["schemas"]["TaChartDataEnvelope"] | components["schemas"]["TaIndicatorSeriesEnvelope"] | components["schemas"]["TaAlertsEnvelope"] | components["schemas"]["TaTimeseriesBundleEnvelope"] | components["schemas"]["TaFeaturePackEnvelope"] | components["schemas"]["TaPatternPackEnvelope"] | components["schemas"]["TaFusionReportEnvelope"] | components["schemas"]["TaDirectionScorecardEnvelope"] | components["schemas"]["TaVerificationReportEnvelope"] | components["schemas"]["TaFullReportEnvelope"] | components["schemas"]["SearchResultsEnvelope"] | components["schemas"]["NewsSelectionEnvelope"] | components["schemas"]["NewsArticleEnvelope"] | components["schemas"]["NewsItemsListEnvelope"] | components["schemas"]["NewsAnalysisReportEnvelope"] | components["schemas"]["DebateFactsEnvelope"] | components["schemas"]["DebateFinalReportEnvelope"];
+                    "application/json": components["schemas"]["FinancialReportsEnvelope"] | components["schemas"]["PriceSeriesEnvelope"] | components["schemas"]["TaChartDataEnvelope"] | components["schemas"]["TaIndicatorSeriesEnvelope"] | components["schemas"]["TaAlertsEnvelope"] | components["schemas"]["TaTimeseriesBundleEnvelope"] | components["schemas"]["TaFeaturePackEnvelope"] | components["schemas"]["TaPatternPackEnvelope"] | components["schemas"]["TaRegimePackEnvelope"] | components["schemas"]["TaFusionReportEnvelope"] | components["schemas"]["TaDirectionScorecardEnvelope"] | components["schemas"]["TaVerificationReportEnvelope"] | components["schemas"]["TaFullReportEnvelope"] | components["schemas"]["SearchResultsEnvelope"] | components["schemas"]["NewsSelectionEnvelope"] | components["schemas"]["NewsArticleEnvelope"] | components["schemas"]["NewsItemsListEnvelope"] | components["schemas"]["NewsAnalysisReportEnvelope"] | components["schemas"]["DebateFactsEnvelope"] | components["schemas"]["DebateFinalReportEnvelope"];
                 };
             };
             /** @description Validation Error */

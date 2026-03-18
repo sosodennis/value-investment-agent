@@ -9,6 +9,9 @@ from src.agents.technical.application.semantic_pipeline_contracts import (
     TechnicalPortLike,
     TechnicalProjectionArtifacts,
 )
+from src.agents.technical.application.signal_explainer_context_service import (
+    build_signal_explainer_context,
+)
 from src.agents.technical.subdomains.signal_fusion import SemanticTagPolicyResult
 from src.interface.artifacts.artifact_data_models import (
     TechnicalDirectionScorecardArtifactData,
@@ -62,6 +65,7 @@ async def build_interpretation_input(
             technical_context=technical_context,
             fusion_report=artifacts.fusion_report,
         ),
+        signal_explainer_context=build_signal_explainer_context(artifacts.feature_pack),
     )
 
 
@@ -70,6 +74,7 @@ async def load_projection_artifacts(
     technical_context: JSONObject,
     technical_port: TechnicalPortLike,
 ) -> TechnicalProjectionArtifacts:
+    feature_pack_id = _read_optional_text(technical_context.get("feature_pack_id"))
     pattern_pack_id = _read_optional_text(technical_context.get("pattern_pack_id"))
     regime_pack_id = _read_optional_text(technical_context.get("regime_pack_id"))
     fusion_report_id = _read_optional_text(technical_context.get("fusion_report_id"))
@@ -77,17 +82,20 @@ async def load_projection_artifacts(
         technical_context.get("direction_scorecard_id")
     )
     (
+        feature_pack,
         pattern_pack,
         regime_pack,
         fusion_report,
         direction_scorecard,
     ) = await asyncio.gather(
+        technical_port.load_feature_pack(feature_pack_id),
         technical_port.load_pattern_pack(pattern_pack_id),
         technical_port.load_regime_pack(regime_pack_id),
         technical_port.load_fusion_report(fusion_report_id),
         technical_port.load_direction_scorecard(direction_scorecard_id),
     )
     return TechnicalProjectionArtifacts(
+        feature_pack=feature_pack,
         pattern_pack=pattern_pack,
         regime_pack=regime_pack,
         fusion_report=fusion_report,

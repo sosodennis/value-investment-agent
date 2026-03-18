@@ -11,7 +11,8 @@ import {
     ChevronUp,
     Zap,
     AlertTriangle,
-    Bell
+    Bell,
+    Sparkles
 } from 'lucide-react';
 import {
     parseTechnicalArtifact,
@@ -56,6 +57,15 @@ import {
     IndicatorPriceLine
 } from '@/components/charts/TechnicalIndicatorChart';
 import { useCrosshairSync } from '@/components/charts/useCrosshairSync';
+import {
+    buildMomentumSummaryLine,
+    describeIndicatorHighlight,
+    getMarketStatusDescriptor,
+    resolveFdDescriptor,
+    resolveMacdTone,
+    resolveRsiDescriptor,
+    type IndicatorTone,
+} from './technical-wording';
 
 interface TechnicalAnalysisOutputProps {
     reference: ArtifactReference | null;
@@ -206,8 +216,6 @@ const formatContributionValue = (value: number | null | undefined) => {
     return value > 0 ? `+${rounded}` : rounded;
 };
 
-type IndicatorTone = 'positive' | 'neutral' | 'warning' | 'danger';
-
 const tonePalette: Record<
     IndicatorTone,
     { badge: string; value: string; spark: string; glow: string }
@@ -216,52 +224,26 @@ const tonePalette: Record<
         badge: 'bg-emerald-500/20 border-emerald-500/40 text-emerald-200',
         value: 'text-emerald-200',
         spark: '#22c55e',
-        glow: 'shadow-[0_0_18px_rgba(34,197,94,0.25)]',
+        glow: '[text-shadow:0_0_15px_rgba(34,197,94,0.5)]',
     },
     neutral: {
         badge: 'bg-slate-500/20 border-slate-500/40 text-slate-200',
         value: 'text-slate-100',
         spark: '#94a3b8',
-        glow: 'shadow-[0_0_12px_rgba(148,163,184,0.25)]',
+        glow: '[text-shadow:0_0_15px_rgba(148,163,184,0.5)]',
     },
     warning: {
         badge: 'bg-amber-500/20 border-amber-500/40 text-amber-200',
         value: 'text-amber-200',
         spark: '#f59e0b',
-        glow: 'shadow-[0_0_18px_rgba(245,158,11,0.25)]',
+        glow: '[text-shadow:0_0_15px_rgba(245,158,11,0.5)]',
     },
     danger: {
         badge: 'bg-rose-500/20 border-rose-500/40 text-rose-200',
         value: 'text-rose-200',
         spark: '#f43f5e',
-        glow: 'shadow-[0_0_18px_rgba(244,63,94,0.25)]',
+        glow: '[text-shadow:0_0_15px_rgba(244,63,94,0.5)]',
     },
-};
-
-const resolveRsiTone = (value: number | null) => {
-    if (value === null || Number.isNaN(value)) return { tone: 'neutral' as IndicatorTone, label: 'No Data' };
-    if (value >= 70) return { tone: 'danger' as IndicatorTone, label: 'Overbought' };
-    if (value <= 30) return { tone: 'positive' as IndicatorTone, label: 'Oversold' };
-    if (value >= 55) return { tone: 'warning' as IndicatorTone, label: 'Bullish Bias' };
-    if (value <= 45) return { tone: 'warning' as IndicatorTone, label: 'Bearish Bias' };
-    return { tone: 'neutral' as IndicatorTone, label: 'Neutral' };
-};
-
-const resolveMacdTone = (macd: number | null, signal: number | null) => {
-    if (macd === null || Number.isNaN(macd)) return { tone: 'neutral' as IndicatorTone, label: 'No Data' };
-    if (signal === null || Number.isNaN(signal)) return { tone: 'neutral' as IndicatorTone, label: 'Momentum' };
-    if (macd > signal && macd > 0) return { tone: 'positive' as IndicatorTone, label: 'Bullish' };
-    if (macd < signal && macd < 0) return { tone: 'danger' as IndicatorTone, label: 'Bearish' };
-    if (macd > signal) return { tone: 'warning' as IndicatorTone, label: 'Positive' };
-    if (macd < signal) return { tone: 'warning' as IndicatorTone, label: 'Negative' };
-    return { tone: 'neutral' as IndicatorTone, label: 'Flat' };
-};
-
-const resolveFdTone = (value: number | null) => {
-    if (value === null || Number.isNaN(value)) return { tone: 'neutral' as IndicatorTone, label: 'No Data' };
-    if (value >= 2 || value <= -2) return { tone: 'danger' as IndicatorTone, label: 'Extreme' };
-    if (value >= 1 || value <= -1) return { tone: 'warning' as IndicatorTone, label: 'Elevated' };
-    return { tone: 'neutral' as IndicatorTone, label: 'Balanced' };
 };
 
 const buildSparklinePoints = (values: number[], width = 120, height = 32) => {
@@ -414,15 +396,21 @@ const renderIndicatorHighlights = (indicators: TechnicalFeaturePack['timeframes'
     }
     return (
         <div className="flex flex-wrap gap-2">
-            {indicators.map((indicator) => (
-                <span
-                    key={indicator.name}
-                    className="px-2.5 py-1 bg-slate-900/60 border border-slate-800 rounded-full text-[10px] font-bold text-slate-200 uppercase tracking-wide"
-                >
-                    {indicator.name}: {formatIndicatorValue(indicator.value)}
-                    {indicator.state ? ` (${formatLabel(indicator.state)})` : ''}
-                </span>
-            ))}
+            {indicators.map((indicator) => {
+                const descriptor = describeIndicatorHighlight(
+                    indicator.name,
+                    indicator.state
+                );
+                return (
+                    <span
+                        key={indicator.name}
+                        className="px-2.5 py-1 bg-slate-900/60 border border-slate-800 rounded-full text-[10px] font-bold text-slate-200 uppercase tracking-wide"
+                    >
+                        {descriptor.displayName}: {formatIndicatorValue(indicator.value)}
+                        {descriptor.stateLabel ? ` · ${descriptor.stateLabel}` : ''}
+                    </span>
+                );
+            })}
         </div>
     );
 };
@@ -473,58 +461,63 @@ const renderScorecardContributions = (
 };
 
 const MarketStatusBadge = ({ zScore }: { zScore: number }) => {
-    let status = "Market Equilibrium";
-    let accentText = "text-slate-200";
-    let badge = "bg-slate-900/60 border-slate-800 text-slate-300";
-    let iconTone = "text-slate-400";
-    let advice = "Wait & Observe";
-    let icon = Activity;
-
-    if (zScore > 2.0) {
-        status = "Extreme Overheating";
-        accentText = "text-rose-300";
-        badge = "bg-rose-500/10 border-rose-500/30 text-rose-200";
-        iconTone = "text-rose-300";
-        advice = "High Reversal Risk - Do Not Chase";
-        icon = AlertTriangle;
-    } else if (zScore < -2.0) {
-        status = "Extreme Fear / Panic";
-        accentText = "text-emerald-300";
-        badge = "bg-emerald-500/10 border-emerald-500/30 text-emerald-200";
-        iconTone = "text-emerald-300";
-        advice = "Panic Selling - Potential Rebound Zone";
-        icon = Zap;
-    } else if (Math.abs(zScore) > 1.0) {
-        const isBullish = zScore > 0;
-        status = isBullish ? "Bullish Momentum Building" : "Bearish Undercurrents";
-        accentText = "text-amber-300";
-        badge = "bg-amber-500/10 border-amber-500/30 text-amber-200";
-        iconTone = "text-amber-300";
-        advice = "Trend is Active - Monitor Closely";
-        icon = isBullish ? TrendingUp : TrendingDown;
-    }
-
-    const Icon = icon;
+    const descriptor = getMarketStatusDescriptor(zScore);
+    const toneClassMap: Record<
+        IndicatorTone,
+        { accentText: string; badge: string; iconTone: string }
+    > = {
+        positive: {
+            accentText: 'text-emerald-300',
+            badge: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200',
+            iconTone: 'text-emerald-300',
+        },
+        neutral: {
+            accentText: 'text-slate-200',
+            badge: 'bg-slate-900/60 border-slate-800 text-slate-300',
+            iconTone: 'text-slate-400',
+        },
+        warning: {
+            accentText: 'text-amber-300',
+            badge: 'bg-amber-500/10 border-amber-500/30 text-amber-200',
+            iconTone: 'text-amber-300',
+        },
+        danger: {
+            accentText: 'text-rose-300',
+            badge: 'bg-rose-500/10 border-rose-500/30 text-rose-200',
+            iconTone: 'text-rose-300',
+        },
+    };
+    const iconMap = {
+        activity: Activity,
+        alert: AlertTriangle,
+        zap: Zap,
+        up: TrendingUp,
+        down: TrendingDown,
+    } as const;
+    const toneClasses = toneClassMap[descriptor.tone];
+    const Icon = iconMap[descriptor.icon];
 
     return (
         <div className="bg-slate-950/50 border border-slate-800 rounded-xl p-4 flex items-center justify-between gap-6">
             <div className="flex items-center gap-4">
                 <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800">
-                    <Icon size={18} className={iconTone} />
+                    <Icon size={18} className={toneClasses.iconTone} />
                 </div>
                 <div>
                     <div className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1">
                         Market Sentiment
                     </div>
-                    <div className={`text-sm font-semibold ${accentText}`}>{status}</div>
+                    <div className={`text-sm font-semibold ${toneClasses.accentText}`}>
+                        {descriptor.status}
+                    </div>
                 </div>
             </div>
             <div className="text-right">
                 <div className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1">
-                    Tactical Advice
+                    {descriptor.readoutLabel}
                 </div>
-                <div className="text-xs text-slate-300">{advice}</div>
-                <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full border text-[9px] font-bold uppercase tracking-wide ${badge}`}>
+                <div className="text-xs text-slate-300">{descriptor.readout}</div>
+                <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full border text-[9px] font-bold uppercase tracking-wide ${toneClasses.badge}`}>
                     {Math.abs(zScore).toFixed(2)} z
                 </span>
             </div>
@@ -1034,48 +1027,47 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         [fdSeries]
     );
 
-    const momentumRsiTone = useMemo(
-        () => resolveRsiTone(momentumRsiValue ?? null),
-        [momentumRsiValue]
+    const momentumRsiDescriptor = useMemo(
+        () =>
+            resolveRsiDescriptor(
+                momentumRsiValue ?? null,
+                momentumExtremes?.rsi_bias
+            ),
+        [momentumExtremes?.rsi_bias, momentumRsiValue]
     );
     const macdTone = useMemo(
         () => resolveMacdTone(latestMacd, latestMacdSignal),
         [latestMacd, latestMacdSignal]
     );
-    const momentumFdTone = useMemo(
-        () => resolveFdTone(momentumFdValue ?? null),
-        [momentumFdValue]
+    const momentumFdDescriptor = useMemo(
+        () =>
+            resolveFdDescriptor(
+                momentumFdValue ?? null,
+                momentumExtremes?.fd_label
+            ),
+        [momentumExtremes?.fd_label, momentumFdValue]
     );
-    const momentumRsiLabel =
-        momentumExtremes && momentumExtremes.rsi_bias !== undefined
-            ? formatLabel(momentumExtremes.rsi_bias ?? 'No Data')
-            : momentumRsiTone.label;
-    const momentumFdLabel =
-        momentumExtremes && momentumExtremes.fd_label !== undefined
-            ? formatLabel(momentumExtremes.fd_label ?? 'No Data')
-            : momentumFdTone.label;
     const momentumFdRiskHint =
         momentumExtremes && momentumExtremes.fd_risk_hint !== undefined
             ? formatLabel(momentumExtremes.fd_risk_hint ?? 'No Data')
             : null;
     const momentumSummary = useMemo(() => {
         if (!hasMomentumExtremes) return null;
-        const parts: string[] = [];
-        if (momentumFdValue !== null) {
-            const label = momentumFdLabel === 'No Data' ? 'FD' : momentumFdLabel;
-            parts.push(`FD ${label} (${formatIndicatorValue(momentumFdValue)})`);
-        }
-        if (momentumRsiValue !== null) {
-            const label = momentumRsiLabel === 'No Data' ? 'RSI' : momentumRsiLabel;
-            parts.push(`RSI ${label} (${formatIndicatorValue(momentumRsiValue)})`);
-        }
-        return parts.length > 0 ? parts.join(' · ') : null;
+        return buildMomentumSummaryLine({
+            macd: visibleIndicators.macd ? macdTone : null,
+            rsi: momentumRsiDescriptor,
+            fd: momentumFdDescriptor,
+            rsiValue: momentumRsiValue,
+            fdValue: momentumFdValue,
+        });
     }, [
         hasMomentumExtremes,
-        momentumFdLabel,
+        macdTone,
+        momentumFdDescriptor,
         momentumFdValue,
-        momentumRsiLabel,
+        momentumRsiDescriptor,
         momentumRsiValue,
+        visibleIndicators.macd,
     ]);
 
     const rsiLines = useMemo<IndicatorLineSeries[]>(
@@ -1613,6 +1605,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
     const isDegraded = reportData.diagnostics?.is_degraded === true;
     const analystPerspective = reportData.analyst_perspective;
     const analystEvidence = analystPerspective?.top_evidence ?? [];
+    const analystSignalExplainers = analystPerspective?.signal_explainers ?? [];
     const analystInvalidationLevel =
         typeof analystPerspective?.invalidation_level === 'number'
             ? analystPerspective.invalidation_level.toFixed(2)
@@ -1713,6 +1706,11 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                     <div className="text-xl font-black text-white">
                                         {analystPerspective.stance_summary}
                                     </div>
+                                    {analystPerspective.plain_language_summary && (
+                                        <p className="max-w-3xl text-base leading-7 text-indigo-100">
+                                            {analystPerspective.plain_language_summary}
+                                        </p>
+                                    )}
                                     <p className="max-w-3xl text-sm leading-7 text-slate-300">
                                         {analystPerspective.rationale_summary}
                                     </p>
@@ -1751,6 +1749,53 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                             </p>
                                         </div>
                                     ))}
+                                </div>
+                            )}
+                            {analystSignalExplainers.length > 0 && (
+                                <div className="space-y-3">
+                                    <div className="flex items-center gap-2">
+                                        <Sparkles size={14} className="text-indigo-300 opacity-80" />
+                                        <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                            Simple Signal Guide
+                                        </span>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                        {analystSignalExplainers.map((item) => (
+                                            <div
+                                                key={`${item.signal}-${item.timeframe ?? 'na'}`}
+                                                className="rounded-2xl border border-indigo-500/15 bg-indigo-500/[0.05] p-4"
+                                            >
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div>
+                                                        <div className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-200">
+                                                            {item.plain_name}
+                                                        </div>
+                                                        <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
+                                                            {item.signal}
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        {item.timeframe && (
+                                                            <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-600">
+                                                                {item.timeframe}
+                                                            </div>
+                                                        )}
+                                                        {item.value_text && (
+                                                            <div className="mt-1 text-sm font-mono font-bold text-indigo-100">
+                                                                {item.value_text}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <p className="mt-3 text-xs leading-6 text-slate-300">
+                                                    {item.what_it_means_now}
+                                                </p>
+                                                <p className="mt-2 text-[11px] leading-5 text-slate-400">
+                                                    {item.why_it_matters_now}
+                                                </p>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
                             )}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1836,31 +1881,46 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                                     <div>
                                                         <div className="text-[9px] font-black text-slate-500 uppercase">RSI (14)</div>
                                                         <div
-                                                            className={`text-xl font-mono font-bold ${tonePalette[momentumRsiTone.tone].value} ${tonePalette[momentumRsiTone.tone].glow}`}
+                                                            className={`text-xl font-mono font-bold ${tonePalette[momentumRsiDescriptor.tone].value} ${tonePalette[momentumRsiDescriptor.tone].glow}`}
                                                         >
                                                             {formatIndicatorValue(momentumRsiValue)}
                                                         </div>
+                                                        <div className="text-[10px] text-transparent uppercase select-none pointer-events-none">
+                                                            Spacer
+                                                        </div>
                                                     </div>
                                                     <span
-                                                        className={`px-2 py-1 rounded-full border text-[9px] font-bold uppercase tracking-wide ${tonePalette[momentumRsiTone.tone].badge}`}
+                                                        className={`px-2 py-1 rounded-full border text-[9px] font-bold uppercase tracking-wide ${tonePalette[momentumRsiDescriptor.tone].badge}`}
                                                     >
-                                                        {momentumRsiLabel}
+                                                        {momentumRsiDescriptor.label}
                                                     </span>
                                                 </div>
-                                                <div className="flex items-center justify-between gap-3">
-                                                    <div className="text-[10px] text-slate-500 uppercase">Momentum</div>
-                                                    {rsiSparkline ? (
-                                                        <svg width={120} height={32} viewBox="0 0 120 32" className="flex-none">
-                                                            <polyline
-                                                                points={rsiSparkline}
-                                                                fill="none"
-                                                                stroke={tonePalette[momentumRsiTone.tone].spark}
-                                                                strokeWidth={2}
-                                                            />
-                                                        </svg>
-                                                    ) : (
-                                                        <div className="text-[10px] text-slate-600 uppercase">No trend</div>
-                                                    )}
+                                                <div className="flex items-end justify-between gap-3 flex-1">
+                                                    <div className="flex flex-col h-full space-y-1">
+                                                        <div className="text-[10px] text-slate-500 uppercase">
+                                                            Momentum State
+                                                        </div>
+                                                        <div className="max-w-[150px] text-[11px] leading-5 text-slate-300 flex-1">
+                                                            {momentumRsiDescriptor.meaning}
+                                                        </div>
+                                                        <div className="text-[10px] font-bold uppercase tracking-wide text-amber-200 mt-auto pt-2">
+                                                            {momentumRsiDescriptor.tacticalReadout}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex flex-col justify-end shrink-0">
+                                                        {rsiSparkline ? (
+                                                            <svg width={120} height={32} viewBox="0 0 120 32" className="flex-none">
+                                                                <polyline
+                                                                    points={rsiSparkline}
+                                                                    fill="none"
+                                                                    stroke={tonePalette[momentumRsiDescriptor.tone].spark}
+                                                                    strokeWidth={2}
+                                                                />
+                                                            </svg>
+                                                        ) : (
+                                                            <div className="text-[10px] text-slate-600 uppercase">No trend</div>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
                                         )}
@@ -1870,31 +1930,46 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                                     <div>
                                                         <div className="text-[9px] font-black text-slate-500 uppercase">FD Z-Score</div>
                                                         <div
-                                                            className={`text-xl font-mono font-bold ${tonePalette[momentumFdTone.tone].value} ${tonePalette[momentumFdTone.tone].glow}`}
+                                                            className={`text-xl font-mono font-bold ${tonePalette[momentumFdDescriptor.tone].value} ${tonePalette[momentumFdDescriptor.tone].glow}`}
                                                         >
                                                             {formatIndicatorValue(momentumFdValue)}
                                                         </div>
+                                                        <div className="text-[10px] text-transparent uppercase select-none pointer-events-none">
+                                                            Spacer
+                                                        </div>
                                                     </div>
                                                     <span
-                                                        className={`px-2 py-1 rounded-full border text-[9px] font-bold uppercase tracking-wide ${tonePalette[momentumFdTone.tone].badge}`}
+                                                        className={`px-2 py-1 rounded-full border text-[9px] font-bold uppercase tracking-wide ${tonePalette[momentumFdDescriptor.tone].badge}`}
                                                     >
-                                                        {momentumFdLabel}
+                                                        {momentumFdDescriptor.label}
                                                     </span>
                                                 </div>
-                                                <div className="flex items-center justify-between gap-3">
-                                                    <div className="text-[10px] text-slate-500 uppercase">Stability</div>
-                                                    {fdSparkline ? (
-                                                        <svg width={120} height={32} viewBox="0 0 120 32" className="flex-none">
-                                                            <polyline
-                                                                points={fdSparkline}
-                                                                fill="none"
-                                                                stroke={tonePalette[momentumFdTone.tone].spark}
-                                                                strokeWidth={2}
-                                                            />
-                                                        </svg>
-                                                    ) : (
-                                                        <div className="text-[10px] text-slate-600 uppercase">No trend</div>
-                                                    )}
+                                                <div className="flex items-end justify-between gap-3 flex-1">
+                                                    <div className="flex flex-col h-full space-y-1">
+                                                        <div className="text-[10px] text-slate-500 uppercase">
+                                                            Deviation State
+                                                        </div>
+                                                        <div className="max-w-[150px] text-[11px] leading-5 text-slate-300 flex-1">
+                                                            {momentumFdDescriptor.meaning}
+                                                        </div>
+                                                        <div className="text-[10px] font-bold uppercase tracking-wide text-amber-200 mt-auto pt-2">
+                                                            {momentumFdDescriptor.tacticalReadout}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex flex-col justify-end shrink-0">
+                                                        {fdSparkline ? (
+                                                            <svg width={120} height={32} viewBox="0 0 120 32" className="flex-none">
+                                                                <polyline
+                                                                    points={fdSparkline}
+                                                                    fill="none"
+                                                                    stroke={tonePalette[momentumFdDescriptor.tone].spark}
+                                                                    strokeWidth={2}
+                                                                />
+                                                            </svg>
+                                                        ) : (
+                                                            <div className="text-[10px] text-slate-600 uppercase">No trend</div>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
                                         )}
@@ -1922,7 +1997,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                                         {formatIndicatorValue(latestMacd)}
                                                     </div>
                                                     <div className="text-[10px] text-slate-500 uppercase">
-                                                        Signal: {formatIndicatorValue(latestMacdSignal)}
+                                                        Signal Line: {formatIndicatorValue(latestMacdSignal)}
                                                     </div>
                                                 </div>
                                                 <span
@@ -1931,20 +2006,32 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                                     {macdTone.label}
                                                 </span>
                                             </div>
-                                            <div className="flex items-center justify-between gap-3">
-                                                <div className="text-[10px] text-slate-500 uppercase">Trend</div>
-                                                {macdSparkline ? (
-                                                    <svg width={120} height={32} viewBox="0 0 120 32" className="flex-none">
-                                                        <polyline
-                                                            points={macdSparkline}
-                                                            fill="none"
-                                                            stroke={tonePalette[macdTone.tone].spark}
-                                                            strokeWidth={2}
-                                                        />
-                                                    </svg>
-                                                ) : (
-                                                    <div className="text-[10px] text-slate-600 uppercase">No trend</div>
-                                                )}
+                                            <div className="flex items-end justify-between gap-3 flex-1">
+                                                <div className="flex flex-col h-full space-y-1">
+                                                    <div className="text-[10px] text-slate-500 uppercase">
+                                                        Momentum State
+                                                    </div>
+                                                    <div className="max-w-[150px] text-[11px] leading-5 text-slate-300 flex-1">
+                                                        {macdTone.meaning}
+                                                    </div>
+                                                    <div className="text-[10px] font-bold uppercase tracking-wide text-amber-200 mt-auto pt-2">
+                                                        {macdTone.tacticalReadout}
+                                                    </div>
+                                                </div>
+                                                <div className="flex flex-col justify-end shrink-0">
+                                                    {macdSparkline ? (
+                                                        <svg width={120} height={32} viewBox="0 0 120 32" className="flex-none">
+                                                            <polyline
+                                                                points={macdSparkline}
+                                                                fill="none"
+                                                                stroke={tonePalette[macdTone.tone].spark}
+                                                                strokeWidth={2}
+                                                            />
+                                                        </svg>
+                                                    ) : (
+                                                        <div className="text-[10px] text-slate-600 uppercase">No trend</div>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -2137,11 +2224,11 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                             <span>{formatIndicatorValue(tooltipPayload.macd as number | null)}</span>
                                         </div>
                                         <div className="flex items-center justify-between">
-                                            <span className="text-slate-400">Signal</span>
+                                            <span className="text-slate-400">Signal Line</span>
                                             <span>{formatIndicatorValue(tooltipPayload.macdSignal as number | null)}</span>
                                         </div>
                                         <div className="flex items-center justify-between">
-                                            <span className="text-slate-400">Hist</span>
+                                            <span className="text-slate-400">Histogram</span>
                                             <span>{formatIndicatorValue(tooltipPayload.macdHist as number | null)}</span>
                                         </div>
                                         <div className="flex items-center justify-between">

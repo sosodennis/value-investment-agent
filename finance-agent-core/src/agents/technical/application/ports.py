@@ -42,6 +42,18 @@ class TechnicalProviderFailure:
 
 
 @dataclass(frozen=True)
+class TechnicalSignalExplainerInput:
+    signal: str
+    plain_name: str
+    value_text: str | None
+    timeframe: str | None
+    state: str | None
+    what_it_measures: str
+    current_reading_hint: str
+    why_it_matters: str
+
+
+@dataclass(frozen=True)
 class TechnicalInterpretationInput:
     ticker: str
     direction: str
@@ -54,6 +66,7 @@ class TechnicalInterpretationInput:
     setup_context: JSONObject | None
     validation_context: JSONObject | None
     diagnostics_context: JSONObject | None
+    signal_explainer_context: tuple[TechnicalSignalExplainerInput, ...] = ()
 
 
 @dataclass(frozen=True)
