@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import pandas as pd
@@ -70,6 +71,7 @@ from src.agents.technical.interface.serializers import build_full_report_payload
 from src.agents.technical.subdomains.alerts import AlertRuntimeService
 from src.agents.technical.subdomains.features import (
     FeatureRuntimeResult,
+    FeatureRuntimeService,
     IndicatorSeriesFrameResult,
     IndicatorSeriesRuntimeResult,
 )
@@ -1535,6 +1537,120 @@ async def test_run_feature_compute_dedupes_degraded_reasons() -> None:
         if call.kwargs.get("event") == "technical_feature_compute_degraded"
     )
     assert degraded_call.kwargs["fields"]["degraded_reasons"] == ["1wk_QUANT_SKIPPED"]
+
+
+@dataclass
+class _FeatureComputeLongSeriesRuntimeStub(_FeatureComputeRuntimeStub):
+    async def load_timeseries_bundle(
+        self, artifact_id: str
+    ) -> TechnicalTimeseriesBundleArtifactData | None:
+        _ = artifact_id
+        start = datetime(2025, 1, 1, tzinfo=UTC)
+        open_series: dict[str, float] = {}
+        high_series: dict[str, float] = {}
+        low_series: dict[str, float] = {}
+        close_series: dict[str, float] = {}
+        price_series: dict[str, float] = {}
+        volume_series: dict[str, float] = {}
+        previous_close = 100.0
+        for idx in range(320):
+            timestamp = (start + timedelta(days=idx)).isoformat()
+            close = 100.0 + (idx * 0.35) + ((idx % 5) - 2) * 0.24
+            open_price = previous_close + ((idx % 3) - 1) * 0.18
+            high = max(open_price, close) + 1.1
+            low = min(open_price, close) - 0.9
+            open_series[timestamp] = round(open_price, 4)
+            high_series[timestamp] = round(high, 4)
+            low_series[timestamp] = round(low, 4)
+            close_series[timestamp] = round(close, 4)
+            price_series[timestamp] = round(close, 4)
+            volume_series[timestamp] = float(1_000_000 + idx * 4_500)
+            previous_close = close
+        frame = TechnicalTimeseriesFrameData(
+            timeframe="1d",
+            start=min(price_series),
+            end=max(price_series),
+            open_series=open_series,
+            high_series=high_series,
+            low_series=low_series,
+            close_series=close_series,
+            price_series=price_series,
+            volume_series=volume_series,
+            timezone="UTC",
+            metadata=None,
+        )
+        return TechnicalTimeseriesBundleArtifactData(
+            ticker="AAPL",
+            as_of="2026-02-12T00:00:00Z",
+            frames={"1d": frame},
+        )
+
+
+@pytest.mark.asyncio
+async def test_run_feature_compute_serializes_volatility_regime_quant_features() -> (
+    None
+):
+    runtime = _FeatureComputeLongSeriesRuntimeStub()
+    state: dict[str, object] = {
+        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "technical_analysis": {"timeseries_bundle_id": "bundle-1"},
+    }
+
+    result = await run_feature_compute_use_case(
+        runtime,
+        state,
+        feature_runtime=FeatureRuntimeService(),
+        indicator_series_runtime=_IndicatorSeriesRuntimeStub(),
+    )
+
+    assert result.goto == "pattern_compute"
+    assert runtime.saved_feature_pack is not None
+    quant_features = runtime.saved_feature_pack["timeframes"]["1d"]["quant_features"]
+    assert quant_features["VOL_REALIZED_20"]["value"] is not None
+    assert quant_features["VOL_DOWNSIDE_20"]["value"] is not None
+    assert quant_features["VOL_PERCENTILE_252"]["state"] in {
+        "COMPRESSED",
+        "NORMAL",
+        "ELEVATED",
+    }
+    assert quant_features["VOL_REALIZED_20"]["provenance"]["method"] == (
+        "realized_volatility_20"
+    )
+    assert quant_features["VOL_PERCENTILE_252"]["quality"]["warmup_status"] == "READY"
+
+
+@pytest.mark.asyncio
+async def test_run_feature_compute_serializes_liquidity_proxy_quant_features() -> None:
+    runtime = _FeatureComputeLongSeriesRuntimeStub()
+    state: dict[str, object] = {
+        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "technical_analysis": {"timeseries_bundle_id": "bundle-1"},
+    }
+
+    result = await run_feature_compute_use_case(
+        runtime,
+        state,
+        feature_runtime=FeatureRuntimeService(),
+        indicator_series_runtime=_IndicatorSeriesRuntimeStub(),
+    )
+
+    assert result.goto == "pattern_compute"
+    assert runtime.saved_feature_pack is not None
+    quant_features = runtime.saved_feature_pack["timeframes"]["1d"]["quant_features"]
+    assert quant_features["DOLLAR_VOLUME_20"]["value"] is not None
+    assert quant_features["AMIHUD_ILLIQUIDITY_20"]["value"] is not None
+    assert quant_features["DOLLAR_VOLUME_PERCENTILE_252"]["state"] in {
+        "THIN",
+        "NORMAL",
+        "LIQUID",
+    }
+    assert quant_features["DOLLAR_VOLUME_20"]["provenance"]["method"] == (
+        "average_dollar_volume_20"
+    )
+    assert (
+        quant_features["DOLLAR_VOLUME_PERCENTILE_252"]["quality"]["warmup_status"]
+        == "READY"
+    )
 
 
 def test_feature_pack_payload_serializes_indicator_provenance_and_quality() -> None:

@@ -28,15 +28,23 @@ from src.agents.technical.subdomains.features.domain import (
     calculate_rolling_fracdiff,
     calculate_rolling_z_score,
     calculate_statistical_strength,
+    classify_liquidity_regime,
+    classify_volatility_regime,
     compute_adx,
+    compute_amihud_illiquidity,
     compute_atr,
     compute_atrp,
+    compute_average_dollar_volume,
     compute_bollinger_bandwidth,
+    compute_downside_volatility,
     compute_ema,
+    compute_liquidity_percentile,
     compute_macd,
     compute_mfi,
+    compute_realized_volatility,
     compute_rsi,
     compute_sma,
+    compute_volatility_percentile,
     compute_vwap,
     compute_z_score,
     supports_session_vwap_timeframe,
@@ -194,6 +202,36 @@ def _build_tasks(
     if include_quant:
         tasks.extend(
             [
+                FeatureTask(
+                    name="VOL_REALIZED_20",
+                    stage=QUANT_STAGE,
+                    run=_task_vol_realized_20,
+                ),
+                FeatureTask(
+                    name="VOL_DOWNSIDE_20",
+                    stage=QUANT_STAGE,
+                    run=_task_vol_downside_20,
+                ),
+                FeatureTask(
+                    name="VOL_PERCENTILE_252",
+                    stage=QUANT_STAGE,
+                    run=_task_vol_percentile_252,
+                ),
+                FeatureTask(
+                    name="DOLLAR_VOLUME_20",
+                    stage=QUANT_STAGE,
+                    run=_task_dollar_volume_20,
+                ),
+                FeatureTask(
+                    name="AMIHUD_ILLIQUIDITY_20",
+                    stage=QUANT_STAGE,
+                    run=_task_amihud_illiquidity_20,
+                ),
+                FeatureTask(
+                    name="DOLLAR_VOLUME_PERCENTILE_252",
+                    stage=QUANT_STAGE,
+                    run=_task_dollar_volume_percentile_252,
+                ),
                 FeatureTask(name="FD_BASE", stage=QUANT_STAGE, run=_task_fd_base),
                 FeatureTask(
                     name="FD_BOLLINGER_BW",
@@ -681,6 +719,241 @@ def _task_fd_base(ctx: FeatureExecutionContext) -> None:
     )
 
 
+def _task_vol_realized_20(ctx: FeatureExecutionContext) -> None:
+    realized_vol_series = compute_realized_volatility(
+        ctx.price_series,
+        window=20,
+        annualization_factor=252,
+    )
+    realized_vol = _latest_value(realized_vol_series)
+    percentile_series = compute_volatility_percentile(realized_vol_series, lookback=252)
+    percentile = _latest_value(percentile_series)
+    ctx.add_output(
+        "VOL_REALIZED_20",
+        _snapshot(
+            "VOL_REALIZED_20",
+            realized_vol,
+            timeframe=ctx.timeframe,
+            state=_volatility_regime_state(percentile),
+            minimum_samples=20,
+            input_basis="close_returns",
+            method="realized_volatility_20",
+            metadata={
+                "effective_sample_count": len(ctx.price_series),
+                "window": 20,
+                "annualization_factor": 252,
+                "volatility_percentile_252": percentile,
+            },
+        ),
+        QUANT_STAGE,
+    )
+
+
+def _task_vol_downside_20(ctx: FeatureExecutionContext) -> None:
+    downside_vol_series = compute_downside_volatility(
+        ctx.price_series,
+        window=20,
+        annualization_factor=252,
+    )
+    downside_vol = _latest_value(downside_vol_series)
+    percentile_series = compute_volatility_percentile(downside_vol_series, lookback=252)
+    percentile = _latest_value(percentile_series)
+    ctx.add_output(
+        "VOL_DOWNSIDE_20",
+        _snapshot(
+            "VOL_DOWNSIDE_20",
+            downside_vol,
+            timeframe=ctx.timeframe,
+            state=_volatility_regime_state(percentile),
+            minimum_samples=20,
+            input_basis="downside_close_returns",
+            method="downside_volatility_20",
+            metadata={
+                "effective_sample_count": len(ctx.price_series),
+                "window": 20,
+                "annualization_factor": 252,
+                "volatility_percentile_252": percentile,
+            },
+        ),
+        QUANT_STAGE,
+    )
+
+
+def _task_vol_percentile_252(ctx: FeatureExecutionContext) -> None:
+    realized_vol_series = compute_realized_volatility(
+        ctx.price_series,
+        window=20,
+        annualization_factor=252,
+    )
+    percentile_series = compute_volatility_percentile(realized_vol_series, lookback=252)
+    percentile = _latest_value(percentile_series)
+    ctx.add_output(
+        "VOL_PERCENTILE_252",
+        _snapshot(
+            "VOL_PERCENTILE_252",
+            percentile,
+            timeframe=ctx.timeframe,
+            state=_volatility_regime_state(percentile),
+            minimum_samples=252,
+            input_basis="realized_volatility_20",
+            method="volatility_percentile_252",
+            metadata={
+                "effective_sample_count": len(realized_vol_series.dropna()),
+                "lookback": 252,
+                "window": 20,
+            },
+        ),
+        QUANT_STAGE,
+    )
+
+
+def _task_dollar_volume_20(ctx: FeatureExecutionContext) -> None:
+    if ctx.volume_series.empty:
+        ctx.add_output(
+            "DOLLAR_VOLUME_20",
+            _snapshot(
+                "DOLLAR_VOLUME_20",
+                None,
+                timeframe=ctx.timeframe,
+                state="UNAVAILABLE",
+                minimum_samples=20,
+                input_basis="close_volume",
+                method="average_dollar_volume_20",
+                quality_flags=("MISSING_VOLUME",),
+                metadata={"reason": "missing_volume"},
+            ),
+            QUANT_STAGE,
+        )
+        return
+
+    dollar_volume_series = compute_average_dollar_volume(
+        ctx.price_series,
+        ctx.volume_series,
+        window=20,
+    )
+    dollar_volume = _latest_value(dollar_volume_series)
+    percentile_series = compute_liquidity_percentile(dollar_volume_series, lookback=252)
+    percentile = _latest_value(percentile_series)
+    ctx.add_output(
+        "DOLLAR_VOLUME_20",
+        _snapshot(
+            "DOLLAR_VOLUME_20",
+            dollar_volume,
+            timeframe=ctx.timeframe,
+            state=_liquidity_regime_state(percentile),
+            minimum_samples=20,
+            input_basis="close_volume",
+            method="average_dollar_volume_20",
+            metadata={
+                "effective_sample_count": len(ctx.price_series),
+                "window": 20,
+                "dollar_volume_percentile_252": percentile,
+            },
+        ),
+        QUANT_STAGE,
+    )
+
+
+def _task_amihud_illiquidity_20(ctx: FeatureExecutionContext) -> None:
+    if ctx.volume_series.empty:
+        ctx.add_output(
+            "AMIHUD_ILLIQUIDITY_20",
+            _snapshot(
+                "AMIHUD_ILLIQUIDITY_20",
+                None,
+                timeframe=ctx.timeframe,
+                state="UNAVAILABLE",
+                minimum_samples=20,
+                input_basis="abs_close_returns_dollar_volume",
+                method="amihud_illiquidity_20",
+                quality_flags=("MISSING_VOLUME",),
+                metadata={"reason": "missing_volume"},
+            ),
+            QUANT_STAGE,
+        )
+        return
+
+    dollar_volume_series = compute_average_dollar_volume(
+        ctx.price_series,
+        ctx.volume_series,
+        window=20,
+    )
+    percentile_series = compute_liquidity_percentile(dollar_volume_series, lookback=252)
+    percentile = _latest_value(percentile_series)
+    illiquidity_series = compute_amihud_illiquidity(
+        ctx.price_series,
+        ctx.volume_series,
+        window=20,
+        scale=1_000_000,
+    )
+    illiquidity = _latest_value(illiquidity_series)
+    ctx.add_output(
+        "AMIHUD_ILLIQUIDITY_20",
+        _snapshot(
+            "AMIHUD_ILLIQUIDITY_20",
+            illiquidity,
+            timeframe=ctx.timeframe,
+            state=_liquidity_regime_state(percentile),
+            minimum_samples=20,
+            input_basis="abs_close_returns_dollar_volume",
+            method="amihud_illiquidity_20",
+            metadata={
+                "effective_sample_count": len(ctx.price_series),
+                "window": 20,
+                "scale": 1_000_000,
+                "dollar_volume_percentile_252": percentile,
+            },
+        ),
+        QUANT_STAGE,
+    )
+
+
+def _task_dollar_volume_percentile_252(ctx: FeatureExecutionContext) -> None:
+    if ctx.volume_series.empty:
+        ctx.add_output(
+            "DOLLAR_VOLUME_PERCENTILE_252",
+            _snapshot(
+                "DOLLAR_VOLUME_PERCENTILE_252",
+                None,
+                timeframe=ctx.timeframe,
+                state="UNAVAILABLE",
+                minimum_samples=252,
+                input_basis="average_dollar_volume_20",
+                method="dollar_volume_percentile_252",
+                quality_flags=("MISSING_VOLUME",),
+                metadata={"reason": "missing_volume"},
+            ),
+            QUANT_STAGE,
+        )
+        return
+
+    dollar_volume_series = compute_average_dollar_volume(
+        ctx.price_series,
+        ctx.volume_series,
+        window=20,
+    )
+    percentile_series = compute_liquidity_percentile(dollar_volume_series, lookback=252)
+    percentile = _latest_value(percentile_series)
+    ctx.add_output(
+        "DOLLAR_VOLUME_PERCENTILE_252",
+        _snapshot(
+            "DOLLAR_VOLUME_PERCENTILE_252",
+            percentile,
+            timeframe=ctx.timeframe,
+            state=_liquidity_regime_state(percentile),
+            minimum_samples=252,
+            input_basis="average_dollar_volume_20",
+            method="dollar_volume_percentile_252",
+            metadata={
+                "effective_sample_count": len(dollar_volume_series.dropna()),
+                "lookback": 252,
+                "window": 20,
+            },
+        ),
+        QUANT_STAGE,
+    )
+
+
 def _task_fd_bollinger_bw(ctx: FeatureExecutionContext) -> None:
     fd_series = ctx.cache.get("fd_series")
     if not isinstance(fd_series, pd.Series) or fd_series.empty:
@@ -888,6 +1161,14 @@ def _zscore_state(z_score: float | None) -> str | None:
     return "NEUTRAL"
 
 
+def _volatility_regime_state(percentile: float | None) -> str:
+    return classify_volatility_regime(percentile)
+
+
+def _liquidity_regime_state(percentile: float | None) -> str:
+    return classify_liquidity_regime(percentile)
+
+
 def _build_feature_summary(
     frames: dict[TimeframeCode, FeatureFrame],
 ) -> FeatureSummary:
@@ -998,6 +1279,18 @@ def _indicator_contract_defaults(name: str) -> tuple[str, str | None, int | None
         if name == "FD_OBV_Z":
             input_basis = "fracdiff_close_volume"
         return name.lower(), input_basis, 300
+    if name == "VOL_REALIZED_20":
+        return "realized_volatility_20", "close_returns", 20
+    if name == "VOL_DOWNSIDE_20":
+        return "downside_volatility_20", "downside_close_returns", 20
+    if name == "VOL_PERCENTILE_252":
+        return "volatility_percentile_252", "realized_volatility_20", 252
+    if name == "DOLLAR_VOLUME_20":
+        return "average_dollar_volume_20", "close_volume", 20
+    if name == "AMIHUD_ILLIQUIDITY_20":
+        return "amihud_illiquidity_20", "abs_close_returns_dollar_volume", 20
+    if name == "DOLLAR_VOLUME_PERCENTILE_252":
+        return "dollar_volume_percentile_252", "average_dollar_volume_20", 252
     return name.lower(), "close", None
 
 

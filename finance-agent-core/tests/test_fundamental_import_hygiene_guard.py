@@ -55,6 +55,7 @@ def test_domain_report_semantics_has_no_source_label_normalizer() -> None:
         / "src"
         / "agents"
         / "fundamental"
+        / "subdomains"
         / "financial_statements"
         / "domain"
         / "report_semantics.py"

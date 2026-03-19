@@ -1,15 +1,25 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import asdict, is_dataclass
 from datetime import datetime
 
 from pydantic import BaseModel
 
-from src.agents.technical.subdomains.signal_fusion import safe_float
+from src.agents.technical.domain.shared import FeatureSummary
+from src.agents.technical.subdomains.signal_fusion import (
+    DirectionScorecard,
+    IndicatorContribution,
+    safe_float,
+)
 from src.agents.technical.subdomains.verification.domain import (
     BacktestSummary,
     VerificationGateResult,
     WfaSummary,
+)
+from src.interface.artifacts.artifact_data_models import (
+    TechnicalFeaturePackArtifactData,
+    TechnicalFusionReportArtifactData,
 )
 from src.shared.kernel.types import JSONObject
 
@@ -169,6 +179,166 @@ def build_alerts_compute_preview(
         "z_score_display": f"Alerts: {alert_num:.0f}",
         "optimal_d_display": f"Critical: {critical_num:.0f}",
         "strength_display": "Threshold + Breakout",
+    }
+
+
+def build_feature_pack_artifact_payload(
+    feature_pack: object,
+    *,
+    degraded_reasons: list[str],
+) -> JSONObject:
+    if isinstance(feature_pack, TechnicalFeaturePackArtifactData):
+        payload = feature_pack.model_dump(mode="json")
+        if isinstance(payload, dict):
+            return payload
+    if not hasattr(feature_pack, "__dict__"):
+        raise TypeError("feature_pack must be serializable")
+
+    data = feature_pack.__dict__.copy()
+    timeframes = data.get("timeframes", {})
+    serialized_timeframes: dict[str, object] = {}
+    for key, frame in timeframes.items():
+        serialized_timeframes[str(key)] = {
+            "classic_indicators": _serialize_indicators(
+                getattr(frame, "classic_indicators", {})
+            ),
+            "quant_features": _serialize_indicators(
+                getattr(frame, "quant_features", {})
+            ),
+        }
+
+    return {
+        "ticker": data.get("ticker"),
+        "as_of": data.get("as_of"),
+        "timeframes": serialized_timeframes,
+        "feature_summary": _serialize_feature_summary(data.get("feature_summary")),
+        "degraded_reasons": degraded_reasons or None,
+    }
+
+
+def build_indicator_series_artifact_payload(result: object) -> JSONObject:
+    timeframes = getattr(result, "timeframes", None)
+    if not isinstance(timeframes, Mapping):
+        raise TypeError("indicator series result must expose timeframes")
+    timeframes_payload: dict[str, object] = {}
+    for key, frame in timeframes.items():
+        timeframes_payload[str(key)] = {
+            "timeframe": getattr(frame, "timeframe", None),
+            "start": getattr(frame, "start", None),
+            "end": getattr(frame, "end", None),
+            "series": getattr(frame, "series", None),
+            "timezone": getattr(frame, "timezone", None),
+            "metadata": _serialize_dataclass_like(getattr(frame, "metadata", None))
+            or None,
+        }
+    return {
+        "ticker": getattr(result, "ticker", None),
+        "as_of": getattr(result, "as_of", None),
+        "timeframes": timeframes_payload,
+        "degraded_reasons": getattr(result, "degraded_reasons", None) or None,
+    }
+
+
+def build_alignment_report_payload(report: object) -> dict[str, object]:
+    if hasattr(report, "__dict__"):
+        return dict(report.__dict__)
+    return {}
+
+
+def build_fusion_report_artifact_payload(
+    result: object,
+    *,
+    alignment_report: dict[str, object] | None,
+    feature_pack_id: str | None,
+    pattern_pack_id: str | None,
+    regime_pack_id: str | None,
+    timeseries_bundle_id: str | None,
+    degraded_reasons: list[str],
+    confidence_raw: float | None,
+    confidence_calibrated: float | None,
+    signal_strength_raw: float | None,
+    signal_strength_effective: float | None,
+    confidence_calibration: dict[str, object] | None,
+    confidence_eligibility: dict[str, object] | None,
+) -> JSONObject:
+    if isinstance(result, TechnicalFusionReportArtifactData):
+        payload = result.model_dump(mode="json")
+        if isinstance(payload, dict):
+            return payload
+
+    fusion_result = result
+    fusion_signal = fusion_result.fusion_signal
+    diagnostics = fusion_signal.diagnostics
+
+    return {
+        "schema_version": "1.0",
+        "ticker": fusion_signal.ticker,
+        "as_of": fusion_signal.as_of,
+        "direction": fusion_signal.direction,
+        "risk_level": fusion_signal.risk_level,
+        "confidence": confidence_calibrated,
+        "confidence_raw": confidence_raw,
+        "confidence_calibrated": confidence_calibrated,
+        "signal_strength_raw": signal_strength_raw,
+        "signal_strength_effective": signal_strength_effective,
+        "confidence_calibration": confidence_calibration,
+        "confidence_eligibility": confidence_eligibility,
+        "confluence_matrix": diagnostics.confluence_matrix if diagnostics else {},
+        "conflict_reasons": diagnostics.conflict_reasons if diagnostics else [],
+        "regime_summary": (
+            fusion_result.scorecard.regime_summary if fusion_result.scorecard else {}
+        ),
+        "alignment_report": alignment_report,
+        "source_artifacts": {
+            "timeseries_bundle_id": timeseries_bundle_id,
+            "feature_pack_id": feature_pack_id,
+            "pattern_pack_id": pattern_pack_id,
+            "regime_pack_id": regime_pack_id,
+        },
+        "degraded_reasons": list(degraded_reasons),
+    }
+
+
+def build_direction_scorecard_artifact_payload(
+    scorecard: DirectionScorecard,
+    *,
+    degraded_reasons: list[str],
+    source_artifacts: dict[str, str | None],
+) -> JSONObject:
+    frames: dict[str, dict[str, object]] = {}
+    for timeframe, frame in scorecard.timeframes.items():
+        frames[timeframe] = {
+            "timeframe": frame.timeframe,
+            "base_total_score": frame.base_total_score,
+            "classic_score": frame.classic_score,
+            "quant_score": frame.quant_score,
+            "pattern_score": frame.pattern_score,
+            "total_score": frame.total_score,
+            "classic_label": frame.classic_label,
+            "quant_label": frame.quant_label,
+            "pattern_label": frame.pattern_label,
+            "regime": frame.regime,
+            "regime_directional_bias": frame.regime_directional_bias,
+            "regime_weight_multiplier": frame.regime_weight_multiplier,
+            "regime_notes": list(frame.regime_notes),
+            "contributions": _scorecard_contributions_payload(frame.contributions),
+        }
+
+    return {
+        "schema_version": "1.0",
+        "ticker": scorecard.ticker,
+        "as_of": scorecard.as_of,
+        "direction": scorecard.direction,
+        "risk_level": scorecard.risk_level,
+        "confidence": scorecard.confidence,
+        "neutral_threshold": scorecard.neutral_threshold,
+        "overall_score": scorecard.overall_score,
+        "model_version": scorecard.model_version,
+        "regime_summary": dict(scorecard.regime_summary),
+        "timeframes": frames,
+        "conflict_reasons": list(scorecard.conflict_reasons),
+        "degraded_reasons": list(degraded_reasons),
+        "source_artifacts": dict(source_artifacts),
     }
 
 
@@ -364,3 +534,78 @@ def _optional_object_payload(value: object) -> JSONObject | None:
     if isinstance(value, Mapping):
         return dict(value)
     return None
+
+
+def _serialize_indicators(indicators: Mapping[str, object]) -> dict[str, object]:
+    serialized: dict[str, object] = {}
+    for key, indicator in indicators.items():
+        if hasattr(indicator, "__dict__"):
+            data = indicator.__dict__
+            provenance = data.get("provenance")
+            quality = data.get("quality")
+            serialized[key] = {
+                "name": data.get("name"),
+                "value": data.get("value"),
+                "state": data.get("state"),
+                "provenance": _serialize_dataclass_like(provenance),
+                "quality": _serialize_dataclass_like(quality),
+                "metadata": data.get("metadata") or {},
+            }
+        elif isinstance(indicator, dict):
+            serialized[key] = indicator
+    return serialized
+
+
+def _serialize_dataclass_like(value: object) -> dict[str, object] | None:
+    if value is None:
+        return None
+    if is_dataclass(value):
+        payload = asdict(value)
+        quality_flags = payload.get("quality_flags")
+        if isinstance(quality_flags, tuple):
+            payload["quality_flags"] = list(quality_flags)
+        return payload
+    if isinstance(value, Mapping):
+        return dict(value)
+    return None
+
+
+def _serialize_feature_summary(value: object) -> dict[str, object]:
+    if isinstance(value, FeatureSummary):
+        payload = asdict(value)
+        for key in (
+            "ready_timeframes",
+            "degraded_timeframes",
+            "regime_inputs_ready_timeframes",
+        ):
+            entry = payload.get(key)
+            if isinstance(entry, tuple):
+                payload[key] = list(entry)
+        return payload
+    if is_dataclass(value):
+        return asdict(value)
+    if isinstance(value, Mapping):
+        return dict(value)
+    return {}
+
+
+def _scorecard_contributions_payload(
+    contributions: dict[str, list[IndicatorContribution]],
+) -> dict[str, list[dict[str, object]]]:
+    payload: dict[str, list[dict[str, object]]] = {}
+    for category, items in contributions.items():
+        payload[category] = [_scorecard_contribution_payload(item) for item in items]
+    return payload
+
+
+def _scorecard_contribution_payload(
+    item: IndicatorContribution,
+) -> dict[str, object]:
+    return {
+        "name": item.name,
+        "value": item.value,
+        "state": item.state,
+        "contribution": item.contribution,
+        "weight": item.weight,
+        "notes": item.notes,
+    }

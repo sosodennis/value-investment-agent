@@ -30,7 +30,12 @@ from src.agents.technical.domain.shared import (
     PriceSeries,
     TimeAlignmentGuardService,
 )
-from src.agents.technical.interface.serializers import build_fusion_compute_preview
+from src.agents.technical.interface.serializers import (
+    build_alignment_report_payload,
+    build_direction_scorecard_artifact_payload,
+    build_fusion_compute_preview,
+    build_fusion_report_artifact_payload,
+)
 from src.agents.technical.subdomains.calibration.domain import (
     calibrate_direction_confidence,
     load_technical_direction_calibration_mapping,
@@ -38,14 +43,11 @@ from src.agents.technical.subdomains.calibration.domain import (
 )
 from src.agents.technical.subdomains.regime.contracts import RegimeFrame, RegimePack
 from src.agents.technical.subdomains.signal_fusion import (
-    DirectionScorecard,
     FusionRuntimeRequest,
     FusionRuntimeService,
-    IndicatorContribution,
 )
 from src.interface.artifacts.artifact_data_models import (
     TechnicalFeaturePackArtifactData,
-    TechnicalFusionReportArtifactData,
     TechnicalPatternPackArtifactData,
     TechnicalRegimePackArtifactData,
     TechnicalTimeseriesBundleArtifactData,
@@ -281,7 +283,7 @@ async def run_fusion_compute_use_case(
                         anchor=anchor_timeframe,
                         frames=series_by_timeframe,
                     )
-                    alignment_report = _alignment_report_to_payload(alignment)
+                    alignment_report = build_alignment_report_payload(alignment)
                     if alignment.look_ahead_detected:
                         degraded_reasons.append("ALIGNMENT_LOOK_AHEAD_DETECTED")
 
@@ -355,7 +357,7 @@ async def run_fusion_compute_use_case(
             conflict_reasons=conflict_reasons,
         )
 
-        fusion_report_payload = _fusion_report_to_payload(
+        fusion_report_payload = build_fusion_report_artifact_payload(
             fusion_result,
             alignment_report=alignment_report,
             feature_pack_id=feature_pack_id,
@@ -378,7 +380,7 @@ async def run_fusion_compute_use_case(
         )
 
         if fusion_result.scorecard is not None:
-            scorecard_payload = _scorecard_to_payload(
+            scorecard_payload = build_direction_scorecard_artifact_payload(
                 fusion_result.scorecard,
                 degraded_reasons=degraded_reasons,
                 source_artifacts={
@@ -692,12 +694,6 @@ def _regime_pack_from_payload(payload: TechnicalRegimePackArtifactData) -> Regim
     )
 
 
-def _alignment_report_to_payload(report: object) -> dict[str, object]:
-    if hasattr(report, "__dict__"):
-        return dict(report.__dict__)
-    return {}
-
-
 def _mapping_from_model(value: object) -> dict[str, object]:
     if isinstance(value, BaseModel):
         dumped = value.model_dump(mode="json", exclude_none=True)
@@ -705,60 +701,6 @@ def _mapping_from_model(value: object) -> dict[str, object]:
     if isinstance(value, Mapping):
         return dict(value)
     return {}
-
-
-def _fusion_report_to_payload(
-    result: object,
-    *,
-    alignment_report: dict[str, object] | None,
-    feature_pack_id: str | None,
-    pattern_pack_id: str | None,
-    regime_pack_id: str | None,
-    timeseries_bundle_id: str | None,
-    degraded_reasons: list[str],
-    confidence_raw: float | None,
-    confidence_calibrated: float | None,
-    signal_strength_raw: float | None,
-    signal_strength_effective: float | None,
-    confidence_calibration: dict[str, object] | None,
-    confidence_eligibility: dict[str, object] | None,
-) -> JSONObject:
-    if isinstance(result, TechnicalFusionReportArtifactData):
-        payload = result.model_dump(mode="json")
-        if isinstance(payload, dict):
-            return payload
-
-    fusion_result = result
-    fusion_signal = fusion_result.fusion_signal
-    diagnostics = fusion_signal.diagnostics
-
-    return {
-        "schema_version": "1.0",
-        "ticker": fusion_signal.ticker,
-        "as_of": fusion_signal.as_of,
-        "direction": fusion_signal.direction,
-        "risk_level": fusion_signal.risk_level,
-        "confidence": confidence_calibrated,
-        "confidence_raw": confidence_raw,
-        "confidence_calibrated": confidence_calibrated,
-        "signal_strength_raw": signal_strength_raw,
-        "signal_strength_effective": signal_strength_effective,
-        "confidence_calibration": confidence_calibration,
-        "confidence_eligibility": confidence_eligibility,
-        "confluence_matrix": diagnostics.confluence_matrix if diagnostics else {},
-        "conflict_reasons": diagnostics.conflict_reasons if diagnostics else [],
-        "regime_summary": (
-            fusion_result.scorecard.regime_summary if fusion_result.scorecard else {}
-        ),
-        "alignment_report": alignment_report,
-        "source_artifacts": {
-            "timeseries_bundle_id": timeseries_bundle_id,
-            "feature_pack_id": feature_pack_id,
-            "pattern_pack_id": pattern_pack_id,
-            "regime_pack_id": regime_pack_id,
-        },
-        "degraded_reasons": list(degraded_reasons),
-    }
 
 
 def _resolve_effective_signal_strength(
@@ -805,49 +747,6 @@ def _resolve_confidence_eligibility(
     }
 
 
-def _scorecard_to_payload(
-    scorecard: DirectionScorecard,
-    *,
-    degraded_reasons: list[str],
-    source_artifacts: dict[str, str | None],
-) -> JSONObject:
-    frames: dict[str, dict[str, object]] = {}
-    for timeframe, frame in scorecard.timeframes.items():
-        frames[timeframe] = {
-            "timeframe": frame.timeframe,
-            "base_total_score": frame.base_total_score,
-            "classic_score": frame.classic_score,
-            "quant_score": frame.quant_score,
-            "pattern_score": frame.pattern_score,
-            "total_score": frame.total_score,
-            "classic_label": frame.classic_label,
-            "quant_label": frame.quant_label,
-            "pattern_label": frame.pattern_label,
-            "regime": frame.regime,
-            "regime_directional_bias": frame.regime_directional_bias,
-            "regime_weight_multiplier": frame.regime_weight_multiplier,
-            "regime_notes": list(frame.regime_notes),
-            "contributions": _scorecard_contributions_payload(frame.contributions),
-        }
-
-    return {
-        "schema_version": "1.0",
-        "ticker": scorecard.ticker,
-        "as_of": scorecard.as_of,
-        "direction": scorecard.direction,
-        "risk_level": scorecard.risk_level,
-        "confidence": scorecard.confidence,
-        "neutral_threshold": scorecard.neutral_threshold,
-        "overall_score": scorecard.overall_score,
-        "model_version": scorecard.model_version,
-        "regime_summary": dict(scorecard.regime_summary),
-        "timeframes": frames,
-        "conflict_reasons": list(scorecard.conflict_reasons),
-        "degraded_reasons": list(degraded_reasons),
-        "source_artifacts": dict(source_artifacts),
-    }
-
-
 def _resolve_calibration_timeframe(
     *,
     alignment: AlignmentReport | None,
@@ -865,28 +764,6 @@ def _resolve_calibration_timeframe(
     if pattern_pack.timeframes:
         return next(iter(pattern_pack.timeframes))
     return "1d"
-
-
-def _scorecard_contributions_payload(
-    contributions: dict[str, list[IndicatorContribution]],
-) -> dict[str, list[dict[str, object]]]:
-    payload: dict[str, list[dict[str, object]]] = {}
-    for category, items in contributions.items():
-        payload[category] = [_scorecard_contribution_payload(item) for item in items]
-    return payload
-
-
-def _scorecard_contribution_payload(
-    item: IndicatorContribution,
-) -> dict[str, object]:
-    return {
-        "name": item.name,
-        "value": item.value,
-        "state": item.state,
-        "contribution": item.contribution,
-        "weight": item.weight,
-        "notes": item.notes,
-    }
 
 
 def _read_degraded_reasons(value: object) -> list[str]:

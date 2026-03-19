@@ -85,6 +85,67 @@ def test_feature_runtime_marks_non_intraday_vwap_unavailable() -> None:
     assert vwap.metadata["reason"] == "requires_intraday_session_bars"
 
 
+def test_feature_runtime_computes_volatility_regime_quant_features() -> None:
+    runtime = FeatureRuntimeService()
+
+    result = runtime.compute(
+        FeatureRuntimeRequest(
+            ticker="AAPL",
+            as_of="2026-03-17T00:00:00Z",
+            series_by_timeframe={
+                "1d": _build_price_series(base=100.0, drift=0.45, periods=320)
+            },
+        )
+    )
+
+    frame = result.feature_pack.timeframes["1d"]
+    assert frame.quant_features["VOL_REALIZED_20"].value is not None
+    assert frame.quant_features["VOL_DOWNSIDE_20"].value is not None
+    assert frame.quant_features["VOL_PERCENTILE_252"].value is not None
+    assert frame.quant_features["VOL_PERCENTILE_252"].state in {
+        "COMPRESSED",
+        "NORMAL",
+        "ELEVATED",
+    }
+    assert frame.quant_features["VOL_REALIZED_20"].metadata["window"] == 20
+    assert (
+        frame.quant_features["VOL_REALIZED_20"].metadata["annualization_factor"] == 252
+    )
+    assert frame.quant_features["VOL_PERCENTILE_252"].quality is not None
+    assert frame.quant_features["VOL_PERCENTILE_252"].quality.warmup_status == "READY"
+
+
+def test_feature_runtime_computes_liquidity_proxy_quant_features() -> None:
+    runtime = FeatureRuntimeService()
+
+    result = runtime.compute(
+        FeatureRuntimeRequest(
+            ticker="AAPL",
+            as_of="2026-03-17T00:00:00Z",
+            series_by_timeframe={
+                "1d": _build_price_series(base=100.0, drift=0.45, periods=320)
+            },
+        )
+    )
+
+    frame = result.feature_pack.timeframes["1d"]
+    assert frame.quant_features["DOLLAR_VOLUME_20"].value is not None
+    assert frame.quant_features["AMIHUD_ILLIQUIDITY_20"].value is not None
+    assert frame.quant_features["DOLLAR_VOLUME_PERCENTILE_252"].value is not None
+    assert frame.quant_features["DOLLAR_VOLUME_PERCENTILE_252"].state in {
+        "THIN",
+        "NORMAL",
+        "LIQUID",
+    }
+    assert frame.quant_features["DOLLAR_VOLUME_20"].metadata["window"] == 20
+    assert frame.quant_features["AMIHUD_ILLIQUIDITY_20"].metadata["scale"] == 1_000_000
+    assert frame.quant_features["DOLLAR_VOLUME_PERCENTILE_252"].quality is not None
+    assert (
+        frame.quant_features["DOLLAR_VOLUME_PERCENTILE_252"].quality.warmup_status
+        == "READY"
+    )
+
+
 def test_indicator_series_runtime_exposes_canonical_regime_series() -> None:
     runtime = IndicatorSeriesRuntimeService(quant_timeframes=())
 
@@ -329,7 +390,7 @@ def _build_fusion_request(*, regime_frame: RegimeFrame) -> FusionRuntimeRequest:
     )
 
 
-def _build_price_series(*, base: float, drift: float) -> PriceSeries:
+def _build_price_series(*, base: float, drift: float, periods: int = 90) -> PriceSeries:
     start = datetime(2025, 1, 1, tzinfo=UTC)
     open_series: dict[str, float] = {}
     high_series: dict[str, float] = {}
@@ -338,7 +399,7 @@ def _build_price_series(*, base: float, drift: float) -> PriceSeries:
     volume_series: dict[str, float] = {}
     price_series: dict[str, float] = {}
     previous_close = base
-    for idx in range(90):
+    for idx in range(periods):
         timestamp = (start + timedelta(days=idx)).isoformat()
         close = base + (idx * drift) + ((idx % 4) - 1.5) * 0.18
         open_price = previous_close + ((idx % 3) - 1) * 0.12

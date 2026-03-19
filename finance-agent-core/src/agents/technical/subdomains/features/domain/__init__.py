@@ -37,6 +37,18 @@ from .fracdiff import (
     get_weights_ffd,
     serialize_fracdiff_outputs,
 )
+from .liquidity_service import (
+    classify_liquidity_regime,
+    compute_amihud_illiquidity,
+    compute_average_dollar_volume,
+    compute_liquidity_percentile,
+)
+from .volatility_service import (
+    classify_volatility_regime,
+    compute_downside_volatility,
+    compute_realized_volatility,
+    compute_volatility_percentile,
+)
 
 __all__ = [
     "BollingerSnapshot",
@@ -60,16 +72,24 @@ __all__ = [
     "calculate_fd_macd",
     "calculate_fd_obv",
     "serialize_fracdiff_outputs",
+    "classify_liquidity_regime",
+    "classify_volatility_regime",
     "compute_adx",
+    "compute_amihud_illiquidity",
+    "compute_average_dollar_volume",
     "compute_atr",
     "compute_atrp",
     "compute_bollinger",
     "compute_bollinger_bandwidth",
+    "compute_downside_volatility",
     "compute_ema",
+    "compute_liquidity_percentile",
     "compute_macd",
     "compute_mfi",
+    "compute_realized_volatility",
     "compute_rsi",
     "compute_sma",
+    "compute_volatility_percentile",
     "compute_vwap",
     "supports_session_vwap_timeframe",
 ]

@@ -1,4 +1,0 @@
-id,task,status,notes
-1,Add calibration domain modules + default config,done,calibration domain + default config added
-2,Add offline calibration fit script,done,run_technical_direction_calibration.py added
-3,Run validation gates + update progress docs,done,rg/test checks + docs updated

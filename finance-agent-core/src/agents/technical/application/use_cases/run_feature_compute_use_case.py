@@ -4,7 +4,6 @@ import asyncio
 import logging
 import math
 from collections.abc import Callable, Mapping
-from dataclasses import asdict, is_dataclass
 from typing import Protocol
 
 from src.agents.technical.application.state_readers import (
@@ -15,8 +14,12 @@ from src.agents.technical.application.state_updates import (
     build_feature_compute_error_update,
     build_feature_compute_success_update,
 )
-from src.agents.technical.domain.shared import FeatureSummary, PriceSeries
-from src.agents.technical.interface.serializers import build_feature_compute_preview
+from src.agents.technical.domain.shared import PriceSeries
+from src.agents.technical.interface.serializers import (
+    build_feature_compute_preview,
+    build_feature_pack_artifact_payload,
+    build_indicator_series_artifact_payload,
+)
 from src.agents.technical.subdomains.features import (
     FeatureRuntimeRequest,
     FeatureRuntimeService,
@@ -26,7 +29,6 @@ from src.agents.technical.subdomains.features import (
     IndicatorSeriesRuntimeService,
 )
 from src.interface.artifacts.artifact_data_models import (
-    TechnicalFeaturePackArtifactData,
     TechnicalTimeseriesBundleArtifactData,
 )
 from src.shared.kernel.tools.logger import get_logger, log_event
@@ -180,16 +182,18 @@ async def run_feature_compute_use_case(
             indicator_request,
         )
 
-        feature_pack_payload = _feature_pack_to_payload(
+        feature_pack_payload = build_feature_pack_artifact_payload(
             feature_result.feature_pack,
-            feature_result.degraded_reasons,
+            degraded_reasons=feature_result.degraded_reasons,
         )
         feature_pack_id = await runtime.save_feature_pack(
             data=feature_pack_payload,
             produced_by="technical_analysis.feature_compute",
             key_prefix=ticker_value,
         )
-        indicator_series_payload = _indicator_series_to_payload(indicator_result)
+        indicator_series_payload = build_indicator_series_artifact_payload(
+            indicator_result
+        )
         indicator_series_id = await runtime.save_indicator_series(
             data=indicator_series_payload,
             produced_by="technical_analysis.indicator_series_compute",
@@ -287,81 +291,6 @@ async def run_feature_compute_use_case(
     )
 
 
-def _feature_pack_to_payload(
-    feature_pack: object,
-    degraded_reasons: list[str],
-) -> JSONObject:
-    if isinstance(feature_pack, TechnicalFeaturePackArtifactData):
-        payload = feature_pack.model_dump(mode="json")
-        if isinstance(payload, dict):
-            return payload
-    if hasattr(feature_pack, "__dict__"):
-        data = feature_pack.__dict__.copy()
-    else:
-        raise TypeError("feature_pack must be serializable")
-
-    timeframes = data.get("timeframes", {})
-    serialized_timeframes: dict[str, object] = {}
-    for key, frame in timeframes.items():
-        serialized_timeframes[str(key)] = {
-            "classic_indicators": _serialize_indicators(
-                getattr(frame, "classic_indicators", {})
-            ),
-            "quant_features": _serialize_indicators(
-                getattr(frame, "quant_features", {})
-            ),
-        }
-
-    return {
-        "ticker": data.get("ticker"),
-        "as_of": data.get("as_of"),
-        "timeframes": serialized_timeframes,
-        "feature_summary": _serialize_feature_summary(data.get("feature_summary")),
-        "degraded_reasons": degraded_reasons or None,
-    }
-
-
-def _serialize_indicators(indicators: Mapping[str, object]) -> dict[str, object]:
-    serialized: dict[str, object] = {}
-    for key, indicator in indicators.items():
-        if hasattr(indicator, "__dict__"):
-            data = indicator.__dict__
-            provenance = data.get("provenance")
-            quality = data.get("quality")
-            serialized[key] = {
-                "name": data.get("name"),
-                "value": data.get("value"),
-                "state": data.get("state"),
-                "provenance": _serialize_dataclass_like(provenance),
-                "quality": _serialize_dataclass_like(quality),
-                "metadata": data.get("metadata") or {},
-            }
-        elif isinstance(indicator, dict):
-            serialized[key] = indicator
-    return serialized
-
-
-def _indicator_series_to_payload(
-    result: IndicatorSeriesRuntimeResult,
-) -> JSONObject:
-    timeframes_payload: dict[str, object] = {}
-    for key, frame in result.timeframes.items():
-        timeframes_payload[str(key)] = {
-            "timeframe": frame.timeframe,
-            "start": frame.start,
-            "end": frame.end,
-            "series": frame.series,
-            "timezone": frame.timezone,
-            "metadata": _serialize_dataclass_like(frame.metadata) or None,
-        }
-    return {
-        "ticker": result.ticker,
-        "as_of": result.as_of,
-        "timeframes": timeframes_payload,
-        "degraded_reasons": result.degraded_reasons or None,
-    }
-
-
 def _merge_degraded_reasons(*groups: list[str]) -> list[str]:
     merged: list[str] = []
     for group in groups:
@@ -369,39 +298,6 @@ def _merge_degraded_reasons(*groups: list[str]) -> list[str]:
             if reason not in merged:
                 merged.append(reason)
     return merged
-
-
-def _serialize_dataclass_like(value: object) -> dict[str, object] | None:
-    if value is None:
-        return None
-    if is_dataclass(value):
-        payload = asdict(value)
-        quality_flags = payload.get("quality_flags")
-        if isinstance(quality_flags, tuple):
-            payload["quality_flags"] = list(quality_flags)
-        return payload
-    if isinstance(value, Mapping):
-        return dict(value)
-    return None
-
-
-def _serialize_feature_summary(value: object) -> dict[str, object]:
-    if isinstance(value, FeatureSummary):
-        payload = asdict(value)
-        for key in (
-            "ready_timeframes",
-            "degraded_timeframes",
-            "regime_inputs_ready_timeframes",
-        ):
-            entry = payload.get(key)
-            if isinstance(entry, tuple):
-                payload[key] = list(entry)
-        return payload
-    if is_dataclass(value):
-        return asdict(value)
-    if isinstance(value, Mapping):
-        return dict(value)
-    return {}
 
 
 def _build_momentum_extremes_snapshot(

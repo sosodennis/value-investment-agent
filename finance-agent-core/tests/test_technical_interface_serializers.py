@@ -2,10 +2,23 @@ from __future__ import annotations
 
 import pytest
 
+from src.agents.technical.domain.shared import (
+    FeatureFrame,
+    FeaturePack,
+    FeatureSummary,
+)
 from src.agents.technical.interface.contracts import parse_technical_artifact_model
 from src.agents.technical.interface.serializers import (
     build_data_fetch_preview,
+    build_direction_scorecard_artifact_payload,
+    build_feature_pack_artifact_payload,
     build_fracdiff_progress_preview,
+)
+from src.agents.technical.subdomains.signal_fusion import (
+    FUSION_SCORECARD_MODEL_VERSION,
+    DirectionScorecard,
+    IndicatorContribution,
+    ScorecardFrame,
 )
 
 
@@ -163,3 +176,77 @@ def test_parse_technical_artifact_model_returns_json_dto() -> None:
 def test_parse_technical_artifact_model_rejects_non_object() -> None:
     with pytest.raises(TypeError):
         parse_technical_artifact_model(["bad"])
+
+
+def test_build_feature_pack_artifact_payload_serializes_tuple_fields() -> None:
+    payload = build_feature_pack_artifact_payload(
+        FeaturePack(
+            ticker="AAPL",
+            as_of="2026-03-19T00:00:00Z",
+            timeframes={"1d": FeatureFrame()},
+            feature_summary=FeatureSummary(
+                classic_count=2,
+                quant_count=1,
+                timeframe_count=1,
+                ready_timeframes=("1d",),
+                degraded_timeframes=(),
+                regime_inputs_ready_timeframes=("1d",),
+                unavailable_indicator_count=0,
+                overall_quality="high",
+            ),
+        ),
+        degraded_reasons=["1h_UNAVAILABLE"],
+    )
+
+    assert payload["feature_summary"]["ready_timeframes"] == ["1d"]
+    assert payload["feature_summary"]["regime_inputs_ready_timeframes"] == ["1d"]
+    assert payload["degraded_reasons"] == ["1h_UNAVAILABLE"]
+
+
+def test_build_direction_scorecard_artifact_payload_serializes_contributions() -> None:
+    payload = build_direction_scorecard_artifact_payload(
+        DirectionScorecard(
+            ticker="AAPL",
+            as_of="2026-03-19T00:00:00Z",
+            direction="BULLISH_EXTENSION",
+            risk_level="low",
+            confidence=0.74,
+            neutral_threshold=0.5,
+            overall_score=1.1,
+            model_version=FUSION_SCORECARD_MODEL_VERSION,
+            regime_summary={"dominant_regime": "BULL_TREND"},
+            conflict_reasons=["1d:quant_neutral"],
+            timeframes={
+                "1d": ScorecardFrame(
+                    timeframe="1d",
+                    base_total_score=0.8,
+                    classic_score=0.4,
+                    quant_score=0.2,
+                    pattern_score=0.5,
+                    total_score=1.1,
+                    classic_label="bullish",
+                    quant_label="supportive",
+                    pattern_label="breakout",
+                    contributions={
+                        "classic": [
+                            IndicatorContribution(
+                                name="RSI_14",
+                                value=62.0,
+                                state="bullish",
+                                contribution=0.25,
+                                weight=1.0,
+                                notes="momentum improving",
+                            )
+                        ]
+                    },
+                )
+            },
+        ),
+        degraded_reasons=["1h_UNAVAILABLE"],
+        source_artifacts={"feature_pack_id": "feature-1"},
+    )
+
+    frame = payload["timeframes"]["1d"]
+    assert frame["contributions"]["classic"][0]["name"] == "RSI_14"
+    assert payload["degraded_reasons"] == ["1h_UNAVAILABLE"]
+    assert payload["source_artifacts"]["feature_pack_id"] == "feature-1"
