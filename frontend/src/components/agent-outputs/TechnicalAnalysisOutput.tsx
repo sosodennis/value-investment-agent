@@ -1743,6 +1743,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
     const evidenceBreakoutSignals = evidenceBundle?.breakout_signals ?? [];
     const evidenceConflictReasons = evidenceBundle?.conflict_reasons ?? [];
     const evidenceScorecard = evidenceBundle?.scorecard_summary;
+    const evidenceQuantContext = evidenceBundle?.quant_context_summary;
     const qualityDescriptor = getQualityStatusDescriptor(
         qualitySummary?.is_degraded ?? isDegraded,
         qualitySummary?.overall_quality
@@ -1892,7 +1893,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 </span>
                             )}
                         </div>
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                             <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-5 space-y-3">
                                 <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
                                     Regime & Score
@@ -2021,6 +2022,49 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                     )}
                                 </div>
                             </div>
+
+                            {evidenceQuantContext && (
+                                <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-5 space-y-3">
+                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                        Quant Context
+                                    </div>
+                                    <div className="text-lg font-black text-white">
+                                        {evidenceQuantContext.alignment_state
+                                            ? formatLabel(evidenceQuantContext.alignment_state)
+                                            : evidenceQuantContext.stretch_state
+                                                ? formatLabel(evidenceQuantContext.stretch_state)
+                                                : 'Quant context pending'}
+                                    </div>
+                                    <div className="space-y-1 text-[11px] text-slate-300">
+                                        {evidenceQuantContext.volatility_regime && (
+                                            <div>
+                                                Volatility: {formatLabel(evidenceQuantContext.volatility_regime)}
+                                            </div>
+                                        )}
+                                        {evidenceQuantContext.liquidity_regime && (
+                                            <div>
+                                                Liquidity: {formatLabel(evidenceQuantContext.liquidity_regime)}
+                                            </div>
+                                        )}
+                                        {evidenceQuantContext.stretch_state && (
+                                            <div>
+                                                Stretch: {formatLabel(evidenceQuantContext.stretch_state)}
+                                            </div>
+                                        )}
+                                        {typeof evidenceQuantContext.price_vs_sma20_z === 'number' && (
+                                            <div>
+                                                Price/SMA Z:{' '}
+                                                {`${evidenceQuantContext.price_vs_sma20_z >= 0 ? '+' : ''}${evidenceQuantContext.price_vs_sma20_z.toFixed(2)}`}
+                                            </div>
+                                        )}
+                                        {typeof evidenceQuantContext.alignment_ratio === 'number' && (
+                                            <div>
+                                                Alignment ratio: {formatConfidence(evidenceQuantContext.alignment_ratio)}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </section>
                 )}

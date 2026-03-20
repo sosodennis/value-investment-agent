@@ -17,7 +17,9 @@ from src.agents.technical.domain.shared import (
     KeyLevel,
     PatternFlag,
     PatternFrame,
+    PatternPack,
     PriceSeries,
+    VolumeProfileSummary,
 )
 from src.agents.technical.interface.serializers import build_pattern_compute_preview
 from src.agents.technical.subdomains.patterns import (
@@ -25,7 +27,6 @@ from src.agents.technical.subdomains.patterns import (
     PatternRuntimeService,
 )
 from src.interface.artifacts.artifact_data_models import (
-    TechnicalPatternPackArtifactData,
     TechnicalTimeseriesBundleArtifactData,
 )
 from src.shared.kernel.tools.logger import get_logger, log_event
@@ -256,33 +257,22 @@ async def run_pattern_compute_use_case(
 
 
 def _pattern_pack_to_payload(
-    pattern_pack: object,
+    pattern_pack: PatternPack,
     degraded_reasons: list[str],
 ) -> JSONObject:
-    if isinstance(pattern_pack, TechnicalPatternPackArtifactData):
-        payload = pattern_pack.model_dump(mode="json")
-        if isinstance(payload, dict):
-            return payload
-    if hasattr(pattern_pack, "__dict__"):
-        data = pattern_pack.__dict__.copy()
-    else:
-        raise TypeError("pattern_pack must be serializable")
-
-    timeframes = data.get("timeframes", {})
-    serialized_timeframes: dict[str, object] = {}
-    for key, frame in timeframes.items():
-        serialized_timeframes[str(key)] = _serialize_pattern_frame(frame)
-
     return {
-        "ticker": data.get("ticker"),
-        "as_of": data.get("as_of"),
-        "timeframes": serialized_timeframes,
-        "pattern_summary": data.get("pattern_summary"),
+        "ticker": pattern_pack.ticker,
+        "as_of": pattern_pack.as_of,
+        "timeframes": {
+            str(timeframe): _serialize_pattern_frame(frame)
+            for timeframe, frame in pattern_pack.timeframes.items()
+        },
+        "pattern_summary": dict(pattern_pack.pattern_summary),
         "degraded_reasons": degraded_reasons,
     }
 
 
-def _serialize_pattern_frame(frame: PatternFrame) -> dict[str, object]:
+def _serialize_pattern_frame(frame: PatternFrame) -> JSONObject:
     return {
         "support_levels": _serialize_levels(frame.support_levels),
         "resistance_levels": _serialize_levels(frame.resistance_levels),
@@ -298,7 +288,7 @@ def _serialize_pattern_frame(frame: PatternFrame) -> dict[str, object]:
     }
 
 
-def _serialize_levels(levels: list[KeyLevel]) -> list[dict[str, object]]:
+def _serialize_levels(levels: list[KeyLevel]) -> list[JSONObject]:
     return [
         {
             "price": level.price,
@@ -310,7 +300,7 @@ def _serialize_levels(levels: list[KeyLevel]) -> list[dict[str, object]]:
     ]
 
 
-def _serialize_flags(flags: list[PatternFlag]) -> list[dict[str, object]]:
+def _serialize_flags(flags: list[PatternFlag]) -> list[JSONObject]:
     return [
         {
             "name": flag.name,
@@ -321,9 +311,17 @@ def _serialize_flags(flags: list[PatternFlag]) -> list[dict[str, object]]:
     ]
 
 
-def _serialize_volume_profile_summary(summary: object) -> dict[str, object] | None:
+def _serialize_volume_profile_summary(
+    summary: VolumeProfileSummary | None,
+) -> JSONObject | None:
     if summary is None:
         return None
-    if hasattr(summary, "__dict__"):
-        return dict(summary.__dict__)
-    raise TypeError("volume_profile_summary must be serializable")
+    return {
+        "poc": summary.poc,
+        "vah": summary.vah,
+        "val": summary.val,
+        "profile_method": summary.profile_method,
+        "profile_fidelity": summary.profile_fidelity,
+        "bucket_count": summary.bucket_count,
+        "value_area_coverage": summary.value_area_coverage,
+    }

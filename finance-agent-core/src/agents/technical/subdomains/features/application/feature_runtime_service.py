@@ -23,6 +23,7 @@ from src.agents.technical.subdomains.features.application.feature_dependency_dag
 )
 from src.agents.technical.subdomains.features.application.ports import IIndicatorEngine
 from src.agents.technical.subdomains.features.domain import (
+    CrossTimeframeAlignmentResult,
     calculate_fd_bollinger,
     calculate_fd_obv,
     calculate_rolling_fracdiff,
@@ -33,15 +34,19 @@ from src.agents.technical.subdomains.features.domain import (
     compute_adx,
     compute_amihud_illiquidity,
     compute_atr,
+    compute_atr_normalized_distance,
     compute_atrp,
     compute_average_dollar_volume,
     compute_bollinger_bandwidth,
+    compute_cross_timeframe_alignment,
     compute_downside_volatility,
     compute_ema,
     compute_liquidity_percentile,
     compute_macd,
     compute_mfi,
+    compute_price_vs_sma_zscore,
     compute_realized_volatility,
+    compute_return_zscore,
     compute_rsi,
     compute_sma,
     compute_volatility_percentile,
@@ -132,6 +137,7 @@ class FeatureRuntimeService:
             frames[timeframe] = _build_feature_frame(ctx)
             degraded.extend([f"{timeframe}_{reason}" for reason in ctx.degraded])
 
+        frames = _apply_cross_timeframe_alignment_features(frames)
         feature_pack = FeaturePack(
             ticker=request.ticker,
             as_of=request.as_of,
@@ -232,6 +238,21 @@ def _build_tasks(
                     stage=QUANT_STAGE,
                     run=_task_dollar_volume_percentile_252,
                 ),
+                FeatureTask(
+                    name="PRICE_VS_SMA20_Z",
+                    stage=QUANT_STAGE,
+                    run=_task_price_vs_sma20_z,
+                ),
+                FeatureTask(
+                    name="RETURN_ZSCORE_20",
+                    stage=QUANT_STAGE,
+                    run=_task_return_zscore_20,
+                ),
+                FeatureTask(
+                    name="PRICE_DISTANCE_ATR_14",
+                    stage=QUANT_STAGE,
+                    run=_task_price_distance_atr_14,
+                ),
                 FeatureTask(name="FD_BASE", stage=QUANT_STAGE, run=_task_fd_base),
                 FeatureTask(
                     name="FD_BOLLINGER_BW",
@@ -280,6 +301,91 @@ def _build_feature_frame(ctx: FeatureExecutionContext) -> FeatureFrame:
         elif stage == QUANT_STAGE:
             quant[name] = snapshot
     return FeatureFrame(classic_indicators=classic, quant_features=quant)
+
+
+def _apply_cross_timeframe_alignment_features(
+    frames: dict[TimeframeCode, FeatureFrame],
+) -> dict[TimeframeCode, FeatureFrame]:
+    alignment = compute_cross_timeframe_alignment(frames)
+    if alignment is None or alignment.primary_timeframe is None:
+        return frames
+    primary_frame = frames.get(alignment.primary_timeframe)
+    if primary_frame is None:
+        return frames
+
+    quant_features = dict(primary_frame.quant_features)
+    quant_features["MTF_ALIGNMENT_RATIO"] = _snapshot(
+        "MTF_ALIGNMENT_RATIO",
+        alignment.alignment_ratio,
+        timeframe=alignment.primary_timeframe,
+        state=alignment.overall_state,
+        minimum_samples=2,
+        input_basis="classic_multi_timeframe_bias",
+        method="mtf_alignment_ratio",
+        metadata=_alignment_metadata(alignment),
+    )
+    quant_features["HTF_CONFIRMATION"] = _snapshot(
+        "HTF_CONFIRMATION",
+        alignment.higher_confirmation,
+        timeframe=alignment.primary_timeframe,
+        state=alignment.higher_state,
+        minimum_samples=2,
+        input_basis="classic_bias_pair",
+        method="higher_timeframe_confirmation",
+        metadata={
+            "effective_sample_count": 2
+            if alignment.higher_timeframe is not None
+            else 1,
+            "primary_timeframe": alignment.primary_timeframe,
+            "comparison_timeframe": alignment.higher_timeframe,
+            "primary_bias": alignment.primary_bias,
+            "comparison_bias": alignment.higher_bias
+            if alignment.higher_timeframe is not None
+            else None,
+        },
+    )
+    quant_features["LTF_CONFIRMATION"] = _snapshot(
+        "LTF_CONFIRMATION",
+        alignment.lower_confirmation,
+        timeframe=alignment.primary_timeframe,
+        state=alignment.lower_state,
+        minimum_samples=2,
+        input_basis="classic_bias_pair",
+        method="lower_timeframe_confirmation",
+        metadata={
+            "effective_sample_count": 2 if alignment.lower_timeframe is not None else 1,
+            "primary_timeframe": alignment.primary_timeframe,
+            "comparison_timeframe": alignment.lower_timeframe,
+            "primary_bias": alignment.primary_bias,
+            "comparison_bias": alignment.lower_bias
+            if alignment.lower_timeframe is not None
+            else None,
+        },
+    )
+    updated = dict(frames)
+    updated[alignment.primary_timeframe] = FeatureFrame(
+        classic_indicators=primary_frame.classic_indicators,
+        quant_features=quant_features,
+    )
+    return updated
+
+
+def _alignment_metadata(
+    alignment: CrossTimeframeAlignmentResult,
+) -> dict[str, float | int | str | bool | None]:
+    compared_count = (
+        len(alignment.aligned_timeframes)
+        + len(alignment.disagreeing_timeframes)
+        + len(alignment.neutral_timeframes)
+    )
+    return {
+        "effective_sample_count": compared_count,
+        "primary_timeframe": alignment.primary_timeframe,
+        "dominant_bias": alignment.dominant_bias,
+        "aligned_timeframes": ",".join(alignment.aligned_timeframes),
+        "disagreeing_timeframes": ",".join(alignment.disagreeing_timeframes),
+        "neutral_timeframes": ",".join(alignment.neutral_timeframes),
+    }
 
 
 def _task_sma_20(ctx: FeatureExecutionContext) -> None:
@@ -954,6 +1060,97 @@ def _task_dollar_volume_percentile_252(ctx: FeatureExecutionContext) -> None:
     )
 
 
+def _task_price_vs_sma20_z(ctx: FeatureExecutionContext) -> None:
+    zscore_series = compute_price_vs_sma_zscore(ctx.price_series, window=20)
+    zscore = _latest_value(zscore_series)
+    ctx.add_output(
+        "PRICE_VS_SMA20_Z",
+        _snapshot(
+            "PRICE_VS_SMA20_Z",
+            zscore,
+            timeframe=ctx.timeframe,
+            state=_zscore_state(zscore),
+            minimum_samples=20,
+            input_basis="close_vs_sma20",
+            method="price_vs_sma20_zscore",
+            metadata={
+                "effective_sample_count": len(ctx.price_series),
+                "window": 20,
+            },
+        ),
+        QUANT_STAGE,
+    )
+
+
+def _task_return_zscore_20(ctx: FeatureExecutionContext) -> None:
+    zscore_series = compute_return_zscore(ctx.price_series, window=20)
+    zscore = _latest_value(zscore_series)
+    ctx.add_output(
+        "RETURN_ZSCORE_20",
+        _snapshot(
+            "RETURN_ZSCORE_20",
+            zscore,
+            timeframe=ctx.timeframe,
+            state=_zscore_state(zscore),
+            minimum_samples=20,
+            input_basis="close_returns",
+            method="return_zscore_20",
+            metadata={
+                "effective_sample_count": len(ctx.price_series),
+                "window": 20,
+            },
+        ),
+        QUANT_STAGE,
+    )
+
+
+def _task_price_distance_atr_14(ctx: FeatureExecutionContext) -> None:
+    if ctx.high_series.empty or ctx.low_series.empty:
+        ctx.add_output(
+            "PRICE_DISTANCE_ATR_14",
+            _snapshot(
+                "PRICE_DISTANCE_ATR_14",
+                None,
+                timeframe=ctx.timeframe,
+                state="UNAVAILABLE",
+                minimum_samples=20,
+                input_basis="close_vs_sma20_atr14",
+                method="price_distance_atr_14",
+                quality_flags=("MISSING_HIGH_LOW",),
+                metadata={"reason": "missing_high_low"},
+            ),
+            QUANT_STAGE,
+        )
+        return
+
+    distance_series = compute_atr_normalized_distance(
+        ctx.price_series,
+        ctx.high_series,
+        ctx.low_series,
+        atr_window=14,
+        anchor_window=20,
+    )
+    distance = _latest_value(distance_series)
+    ctx.add_output(
+        "PRICE_DISTANCE_ATR_14",
+        _snapshot(
+            "PRICE_DISTANCE_ATR_14",
+            distance,
+            timeframe=ctx.timeframe,
+            state=_zscore_state(distance),
+            minimum_samples=20,
+            input_basis="close_vs_sma20_atr14",
+            method="price_distance_atr_14",
+            metadata={
+                "effective_sample_count": len(ctx.price_series),
+                "atr_window": 14,
+                "anchor_window": 20,
+            },
+        ),
+        QUANT_STAGE,
+    )
+
+
 def _task_fd_bollinger_bw(ctx: FeatureExecutionContext) -> None:
     fd_series = ctx.cache.get("fd_series")
     if not isinstance(fd_series, pd.Series) or fd_series.empty:
@@ -1291,6 +1488,18 @@ def _indicator_contract_defaults(name: str) -> tuple[str, str | None, int | None
         return "amihud_illiquidity_20", "abs_close_returns_dollar_volume", 20
     if name == "DOLLAR_VOLUME_PERCENTILE_252":
         return "dollar_volume_percentile_252", "average_dollar_volume_20", 252
+    if name == "PRICE_VS_SMA20_Z":
+        return "price_vs_sma20_zscore", "close_vs_sma20", 20
+    if name == "RETURN_ZSCORE_20":
+        return "return_zscore_20", "close_returns", 20
+    if name == "PRICE_DISTANCE_ATR_14":
+        return "price_distance_atr_14", "close_vs_sma20_atr14", 20
+    if name == "MTF_ALIGNMENT_RATIO":
+        return "mtf_alignment_ratio", "classic_multi_timeframe_bias", 2
+    if name == "HTF_CONFIRMATION":
+        return "higher_timeframe_confirmation", "classic_bias_pair", 2
+    if name == "LTF_CONFIRMATION":
+        return "lower_timeframe_confirmation", "classic_bias_pair", 2
     return name.lower(), "close", None
 
 

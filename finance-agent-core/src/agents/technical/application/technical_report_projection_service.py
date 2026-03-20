@@ -3,7 +3,7 @@ from __future__ import annotations
 from src.agents.technical.application.semantic_pipeline_contracts import (
     TechnicalProjectionArtifacts,
 )
-from src.agents.technical.application.technical_evidence_bundle_service import (
+from src.agents.technical.interface.evidence_bundle_projection_service import (
     build_projection_context_from_evidence,
 )
 from src.shared.kernel.types import JSONObject

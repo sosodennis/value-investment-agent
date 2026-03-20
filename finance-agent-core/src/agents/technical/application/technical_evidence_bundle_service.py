@@ -2,17 +2,29 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from pydantic import BaseModel
-
 from src.agents.technical.application.semantic_pipeline_contracts import (
     TechnicalEvidenceBundle,
     TechnicalProjectionArtifacts,
 )
+from src.agents.technical.interface.contracts import (
+    EvidenceBreakoutSignalModel,
+    EvidenceScorecardSummaryModel,
+    QuantContextSummaryModel,
+    RegimeSummaryModel,
+    StructureConfluenceSummaryModel,
+    VolumeProfileLevelModel,
+    VolumeProfileSummaryModel,
+)
 from src.interface.artifacts.artifact_data_models import (
+    TechnicalDirectionScorecardArtifactData,
+    TechnicalFeatureIndicatorData,
+    TechnicalFeaturePackArtifactData,
+    TechnicalFusionReportArtifactData,
     TechnicalPatternFrameData,
     TechnicalPatternLevelData,
+    TechnicalPatternPackArtifactData,
+    TechnicalRegimePackArtifactData,
 )
-from src.shared.kernel.types import JSONObject
 
 
 def build_technical_evidence_bundle(
@@ -32,9 +44,9 @@ def build_technical_evidence_bundle(
 
     support_levels: tuple[float, ...] = ()
     resistance_levels: tuple[float, ...] = ()
-    breakout_signals: tuple[JSONObject, ...] = ()
-    volume_profile_summary: JSONObject | None = None
-    structure_confluence_summary: JSONObject | None = None
+    breakout_signals: tuple[EvidenceBreakoutSignalModel, ...] = ()
+    volume_profile_summary: VolumeProfileSummaryModel | None = None
+    structure_confluence_summary: StructureConfluenceSummaryModel | None = None
 
     resolved_timeframe, pattern_frame = _select_pattern_frame(
         pattern_pack=artifacts.pattern_pack,
@@ -48,11 +60,11 @@ def build_technical_evidence_bundle(
             round(level.price, 2) for level in pattern_frame.resistance_levels[:2]
         )
         breakout_signals = tuple(
-            {
-                "name": flag.name,
-                "confidence": flag.confidence,
-                "notes": flag.notes,
-            }
+            EvidenceBreakoutSignalModel(
+                name=flag.name,
+                confidence=flag.confidence,
+                notes=flag.notes,
+            )
             for flag in pattern_frame.breakouts[:2]
         )
         volume_profile_summary = _build_volume_profile_summary(
@@ -73,6 +85,10 @@ def build_technical_evidence_bundle(
             scorecard=artifacts.direction_scorecard,
             timeframe=timeframe,
         ),
+        quant_context_summary=_build_quant_context_summary(
+            feature_pack=artifacts.feature_pack,
+            timeframe=timeframe,
+        ),
         regime_summary=_build_regime_summary(
             regime_pack=artifacts.regime_pack,
             fusion_report=artifacts.fusion_report,
@@ -88,185 +104,142 @@ def build_technical_evidence_bundle(
     )
 
 
-def build_projection_context_from_evidence(
-    evidence_bundle: TechnicalEvidenceBundle | None,
-) -> JSONObject:
-    if evidence_bundle is None:
-        return {}
-    projection_context: JSONObject = {}
-    if evidence_bundle.regime_summary is not None:
-        projection_context["regime_summary"] = dict(evidence_bundle.regime_summary)
-    if evidence_bundle.volume_profile_summary is not None:
-        projection_context["volume_profile_summary"] = dict(
-            evidence_bundle.volume_profile_summary
-        )
-    if evidence_bundle.structure_confluence_summary is not None:
-        projection_context["structure_confluence_summary"] = dict(
-            evidence_bundle.structure_confluence_summary
-        )
-    return projection_context
-
-
-def serialize_evidence_bundle(
-    evidence_bundle: TechnicalEvidenceBundle | None,
-) -> JSONObject | None:
-    if evidence_bundle is None:
-        return None
-    if (
-        evidence_bundle.primary_timeframe is None
-        and not evidence_bundle.support_levels
-        and not evidence_bundle.resistance_levels
-        and not evidence_bundle.breakout_signals
-        and evidence_bundle.scorecard_summary is None
-        and not evidence_bundle.conflict_reasons
-        and evidence_bundle.regime_summary is None
-        and evidence_bundle.volume_profile_summary is None
-        and evidence_bundle.structure_confluence_summary is None
-    ):
-        return None
-
-    payload: JSONObject = {
-        "primary_timeframe": evidence_bundle.primary_timeframe,
-        "support_levels": list(evidence_bundle.support_levels),
-        "resistance_levels": list(evidence_bundle.resistance_levels),
-        "breakout_signals": [
-            dict(signal) for signal in evidence_bundle.breakout_signals
-        ],
-        "conflict_reasons": list(evidence_bundle.conflict_reasons),
-    }
-    if evidence_bundle.scorecard_summary is not None:
-        payload["scorecard_summary"] = dict(evidence_bundle.scorecard_summary)
-    if evidence_bundle.regime_summary is not None:
-        payload["regime_summary"] = dict(evidence_bundle.regime_summary)
-    if evidence_bundle.volume_profile_summary is not None:
-        payload["volume_profile_summary"] = dict(evidence_bundle.volume_profile_summary)
-    if evidence_bundle.structure_confluence_summary is not None:
-        payload["structure_confluence_summary"] = dict(
-            evidence_bundle.structure_confluence_summary
-        )
-    return payload
-
-
-def build_setup_context_from_evidence(
-    evidence_bundle: TechnicalEvidenceBundle | None,
-) -> JSONObject | None:
-    if evidence_bundle is None:
-        return None
-    if (
-        evidence_bundle.primary_timeframe is None
-        and not evidence_bundle.support_levels
-        and not evidence_bundle.resistance_levels
-        and not evidence_bundle.breakout_signals
-        and evidence_bundle.scorecard_summary is None
-        and not evidence_bundle.conflict_reasons
-        and evidence_bundle.regime_summary is None
-        and evidence_bundle.volume_profile_summary is None
-        and evidence_bundle.structure_confluence_summary is None
-    ):
-        return None
-
-    setup_context: JSONObject = {
-        "primary_timeframe": evidence_bundle.primary_timeframe,
-        "support_levels": list(evidence_bundle.support_levels),
-        "resistance_levels": list(evidence_bundle.resistance_levels),
-        "breakout_signals": [
-            dict(signal) for signal in evidence_bundle.breakout_signals
-        ],
-        "scorecard_summary": (
-            dict(evidence_bundle.scorecard_summary)
-            if evidence_bundle.scorecard_summary is not None
-            else None
-        ),
-        "conflict_reasons": list(evidence_bundle.conflict_reasons),
-    }
-    setup_context.update(build_projection_context_from_evidence(evidence_bundle))
-    return setup_context
-
-
 def _build_regime_summary(
     *,
-    regime_pack: object,
-    fusion_report: object,
-) -> JSONObject | None:
-    if regime_pack is not None:
-        summary = getattr(regime_pack, "regime_summary", None)
-        parsed = _read_optional_object(summary)
-        if parsed is not None:
-            return parsed
-    if fusion_report is not None:
-        summary = getattr(fusion_report, "regime_summary", None)
-        parsed = _read_optional_object(summary)
-        if parsed is not None:
-            return parsed
+    regime_pack: TechnicalRegimePackArtifactData | None,
+    fusion_report: TechnicalFusionReportArtifactData | None,
+) -> RegimeSummaryModel | None:
+    if regime_pack is not None and regime_pack.regime_summary is not None:
+        return RegimeSummaryModel(
+            timeframe_count=regime_pack.regime_summary.timeframe_count,
+            dominant_regime=regime_pack.regime_summary.dominant_regime,
+            average_confidence=regime_pack.regime_summary.average_confidence,
+        )
+    if fusion_report is not None and fusion_report.regime_summary is not None:
+        return RegimeSummaryModel(
+            timeframe_count=fusion_report.regime_summary.timeframe_count,
+            dominant_regime=fusion_report.regime_summary.dominant_regime,
+            average_confidence=fusion_report.regime_summary.average_confidence,
+        )
     return None
 
 
 def _build_scorecard_summary(
     *,
-    scorecard: object,
+    scorecard: TechnicalDirectionScorecardArtifactData | None,
     timeframe: str | None,
-) -> JSONObject | None:
-    if scorecard is None:
-        return None
-    scorecard_timeframes = getattr(scorecard, "timeframes", None)
-    if not isinstance(scorecard_timeframes, Mapping) or not scorecard_timeframes:
+) -> EvidenceScorecardSummaryModel | None:
+    if scorecard is None or not scorecard.timeframes:
         return None
     scorecard_timeframe = timeframe
-    if scorecard_timeframe is None or scorecard_timeframe not in scorecard_timeframes:
-        scorecard_timeframe = next(iter(scorecard_timeframes), None)
+    if scorecard_timeframe is None or scorecard_timeframe not in scorecard.timeframes:
+        scorecard_timeframe = next(iter(scorecard.timeframes), None)
     if scorecard_timeframe is None:
         return None
-    frame = scorecard_timeframes[scorecard_timeframe]
-    overall_score = getattr(scorecard, "overall_score", None)
-    total_score = getattr(frame, "total_score", None)
-    return {
-        "timeframe": scorecard_timeframe,
-        "overall_score": round(float(overall_score), 2)
+    frame = scorecard.timeframes[scorecard_timeframe]
+    overall_score = scorecard.overall_score
+    total_score = frame.total_score
+    return EvidenceScorecardSummaryModel(
+        timeframe=scorecard_timeframe,
+        overall_score=round(float(overall_score), 2)
         if isinstance(overall_score, int | float)
         else None,
-        "total_score": round(float(total_score), 2)
+        total_score=round(float(total_score), 2)
         if isinstance(total_score, int | float)
         else None,
-        "classic_label": getattr(frame, "classic_label", None),
-        "quant_label": getattr(frame, "quant_label", None),
-        "pattern_label": getattr(frame, "pattern_label", None),
-    }
+        classic_label=frame.classic_label,
+        quant_label=frame.quant_label,
+        pattern_label=frame.pattern_label,
+    )
+
+
+def _build_quant_context_summary(
+    *,
+    feature_pack: TechnicalFeaturePackArtifactData | None,
+    timeframe: str | None,
+) -> QuantContextSummaryModel | None:
+    if feature_pack is None or not feature_pack.timeframes:
+        return None
+    feature_timeframe = timeframe
+    if feature_timeframe is None or feature_timeframe not in feature_pack.timeframes:
+        feature_timeframe = _select_preferred_timeframe(feature_pack.timeframes, None)
+    if feature_timeframe is None:
+        return None
+    frame = feature_pack.timeframes.get(feature_timeframe)
+    if frame is None or not frame.quant_features:
+        return None
+
+    payload = QuantContextSummaryModel(
+        timeframe=feature_timeframe,
+        volatility_regime=_indicator_state(frame.quant_features, "VOL_PERCENTILE_252"),
+        liquidity_regime=_indicator_state(
+            frame.quant_features, "DOLLAR_VOLUME_PERCENTILE_252"
+        ),
+        stretch_state=_indicator_state(frame.quant_features, "PRICE_VS_SMA20_Z"),
+        alignment_state=_indicator_state(frame.quant_features, "MTF_ALIGNMENT_RATIO"),
+        higher_confirmation_state=_indicator_state(
+            frame.quant_features, "HTF_CONFIRMATION"
+        ),
+        lower_confirmation_state=_indicator_state(
+            frame.quant_features, "LTF_CONFIRMATION"
+        ),
+        volatility_percentile=_indicator_value(
+            frame.quant_features, "VOL_PERCENTILE_252"
+        ),
+        liquidity_percentile=_indicator_value(
+            frame.quant_features, "DOLLAR_VOLUME_PERCENTILE_252"
+        ),
+        price_vs_sma20_z=_indicator_value(frame.quant_features, "PRICE_VS_SMA20_Z"),
+        price_distance_atr=_indicator_value(
+            frame.quant_features, "PRICE_DISTANCE_ATR_14"
+        ),
+        alignment_ratio=_indicator_value(frame.quant_features, "MTF_ALIGNMENT_RATIO"),
+    )
+    payload_dict = payload.model_dump(mode="json", exclude_none=True)
+    return (
+        payload if any(value is not None for value in payload_dict.values()) else None
+    )
 
 
 def _build_volume_profile_summary(
     *,
     frame: TechnicalPatternFrameData,
     timeframe: str | None,
-) -> JSONObject | None:
+) -> VolumeProfileSummaryModel | None:
     if frame.volume_profile_summary is not None:
-        summary = _read_optional_object(frame.volume_profile_summary)
-        if summary is not None:
-            if timeframe is not None and "timeframe" not in summary:
-                summary["timeframe"] = timeframe
-            return summary
+        return VolumeProfileSummaryModel(
+            timeframe=timeframe,
+            poc=frame.volume_profile_summary.poc,
+            vah=frame.volume_profile_summary.vah,
+            val=frame.volume_profile_summary.val,
+            profile_method=frame.volume_profile_summary.profile_method,
+            profile_fidelity=frame.volume_profile_summary.profile_fidelity,
+            bucket_count=frame.volume_profile_summary.bucket_count,
+            value_area_coverage=frame.volume_profile_summary.value_area_coverage,
+        )
     if not frame.volume_profile_levels:
         return None
-    return {
-        "timeframe": timeframe,
-        "level_count": len(frame.volume_profile_levels),
-        "dominant_level": _serialize_pattern_level(frame.volume_profile_levels[0]),
-        "levels": [
+    return VolumeProfileSummaryModel(
+        timeframe=timeframe,
+        level_count=len(frame.volume_profile_levels),
+        dominant_level=_serialize_pattern_level(frame.volume_profile_levels[0]),
+        levels=[
             _serialize_pattern_level(level) for level in frame.volume_profile_levels[:3]
         ],
-    }
+    )
 
 
 def _build_structure_confluence_summary(
     *,
     frame: TechnicalPatternFrameData,
     timeframe: str | None,
-) -> JSONObject | None:
+) -> StructureConfluenceSummaryModel | None:
     if frame.confluence_metadata is None:
         return None
-    summary = _read_optional_object(frame.confluence_metadata) or {}
+    payload = frame.confluence_metadata.model_dump(mode="json", exclude_none=True)
     if timeframe is not None:
-        summary["timeframe"] = timeframe
-    return summary
+        payload["timeframe"] = timeframe
+    return StructureConfluenceSummaryModel.model_validate(payload)
 
 
 def _select_preferred_timeframe(
@@ -288,13 +261,13 @@ def _select_preferred_timeframe(
 
 def _select_pattern_frame(
     *,
-    pattern_pack: object,
+    pattern_pack: TechnicalPatternPackArtifactData | None,
     timeframe: str | None,
 ) -> tuple[str | None, TechnicalPatternFrameData | None]:
     if pattern_pack is None:
         return None, None
-    timeframes = getattr(pattern_pack, "timeframes", None)
-    if not isinstance(timeframes, Mapping) or not timeframes:
+    timeframes = pattern_pack.timeframes
+    if not timeframes:
         return None, None
     if timeframe is not None and timeframe in timeframes:
         frame = timeframes[timeframe]
@@ -309,21 +282,32 @@ def _select_pattern_frame(
     return fallback_timeframe, frame
 
 
-def _serialize_pattern_level(level: TechnicalPatternLevelData) -> JSONObject:
-    payload: JSONObject = {"price": level.price}
-    if level.strength is not None:
-        payload["strength"] = level.strength
-    if level.touches is not None:
-        payload["touches"] = level.touches
-    if level.label is not None:
-        payload["label"] = level.label
-    return payload
+def _serialize_pattern_level(
+    level: TechnicalPatternLevelData,
+) -> VolumeProfileLevelModel:
+    return VolumeProfileLevelModel(
+        price=level.price,
+        strength=level.strength,
+        touches=level.touches,
+        label=level.label,
+    )
 
 
-def _read_optional_object(value: object) -> JSONObject | None:
-    if isinstance(value, BaseModel):
-        dumped = value.model_dump(mode="json", exclude_none=True)
-        return dumped if isinstance(dumped, dict) else None
-    if isinstance(value, Mapping):
-        return dict(value)
+def _indicator_state(
+    indicators: Mapping[str, TechnicalFeatureIndicatorData],
+    name: str,
+) -> str | None:
+    indicator = indicators.get(name)
+    state = indicator.state if indicator is not None else None
+    return state if isinstance(state, str) else None
+
+
+def _indicator_value(
+    indicators: Mapping[str, TechnicalFeatureIndicatorData],
+    name: str,
+) -> float | None:
+    indicator = indicators.get(name)
+    value = indicator.value if indicator is not None else None
+    if isinstance(value, int | float):
+        return round(float(value), 3)
     return None

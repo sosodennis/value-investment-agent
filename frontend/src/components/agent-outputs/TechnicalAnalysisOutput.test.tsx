@@ -52,6 +52,15 @@ describe('TechnicalAnalysisOutput', () => {
                                 classic_label: 'constructive',
                                 quant_label: 'balanced',
                             },
+                            quant_context_summary: {
+                                timeframe: '1d',
+                                volatility_regime: 'ELEVATED',
+                                liquidity_regime: 'LIQUID',
+                                stretch_state: 'HIGH',
+                                alignment_state: 'FULL_BULLISH_ALIGNMENT',
+                                alignment_ratio: 1.0,
+                                price_vs_sma20_z: 1.34,
+                            },
                             regime_summary: {
                                 dominant_regime: 'BULL_TREND',
                                 timeframe_count: 1,
@@ -176,6 +185,8 @@ describe('TechnicalAnalysisOutput', () => {
         expect(screen.getByText('Bull Trend')).not.toBeNull();
         expect(screen.getByText('Structure Map')).not.toBeNull();
         expect(screen.getByText('Breakout Up')).not.toBeNull();
+        expect(screen.getByText('Quant Context')).not.toBeNull();
+        expect(screen.getByText('Full Bullish Alignment')).not.toBeNull();
         expect(screen.getByText('Quality & Coverage')).not.toBeNull();
         expect(screen.getByText('Partial Coverage')).not.toBeNull();
         expect(screen.getByText('Policy Alerts')).not.toBeNull();

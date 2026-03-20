@@ -66,7 +66,13 @@ from src.agents.technical.application.use_cases.run_semantic_translate_use_case 
     run_semantic_translate_use_case,
 )
 from src.agents.technical.domain.shared import FeatureFrame, FeaturePack, FeatureSummary
-from src.agents.technical.interface.contracts import AnalystPerspectiveModel
+from src.agents.technical.interface.contracts import (
+    AnalystPerspectiveModel,
+    EvidenceBreakoutSignalModel,
+    EvidenceScorecardSummaryModel,
+    RegimeSummaryModel,
+    StructureConfluenceSummaryModel,
+)
 from src.agents.technical.interface.serializers import build_full_report_payload
 from src.agents.technical.subdomains.alerts import AlertRuntimeService
 from src.agents.technical.subdomains.features import (
@@ -199,6 +205,14 @@ def test_build_full_report_payload_derives_states() -> None:
                     "overall_score": 0.61,
                     "classic_label": "constructive",
                 },
+                "quant_context_summary": {
+                    "timeframe": "1d",
+                    "volatility_regime": "ELEVATED",
+                    "liquidity_regime": "LIQUID",
+                    "stretch_state": "HIGH",
+                    "alignment_state": "FULL_BULLISH_ALIGNMENT",
+                    "alignment_ratio": 1.0,
+                },
                 "regime_summary": {
                     "dominant_regime": "BULL_TREND",
                     "timeframe_count": 1,
@@ -297,6 +311,10 @@ def test_build_full_report_payload_derives_states() -> None:
     assert payload["evidence_bundle"]["primary_timeframe"] == "1d"
     assert payload["evidence_bundle"]["support_levels"] == [98.5, 96.0]
     assert payload["evidence_bundle"]["scorecard_summary"]["overall_score"] == 0.61
+    assert (
+        payload["evidence_bundle"]["quant_context_summary"]["alignment_state"]
+        == "FULL_BULLISH_ALIGNMENT"
+    )
     assert payload["signal_strength_summary"]["effective_value"] == 0.43
     assert payload["setup_reliability_summary"]["level"] == "low"
     assert payload["quality_summary"]["overall_quality"] == "medium"
@@ -597,7 +615,7 @@ async def test_load_projection_artifacts_builds_reusable_evidence_bundle() -> No
     assert artifacts.evidence_bundle.primary_timeframe == "1d"
     assert artifacts.evidence_bundle.support_levels == ()
     assert artifacts.evidence_bundle.regime_summary is not None
-    assert artifacts.evidence_bundle.regime_summary["dominant_regime"] == "BULL_TREND"
+    assert artifacts.evidence_bundle.regime_summary.dominant_regime == "BULL_TREND"
     projection_context = build_projection_context(artifacts=artifacts)
     assert projection_context["regime_summary"]["dominant_regime"] == "BULL_TREND"
     assert (
@@ -1545,45 +1563,107 @@ class _FeatureComputeLongSeriesRuntimeStub(_FeatureComputeRuntimeStub):
         self, artifact_id: str
     ) -> TechnicalTimeseriesBundleArtifactData | None:
         _ = artifact_id
-        start = datetime(2025, 1, 1, tzinfo=UTC)
-        open_series: dict[str, float] = {}
-        high_series: dict[str, float] = {}
-        low_series: dict[str, float] = {}
-        close_series: dict[str, float] = {}
-        price_series: dict[str, float] = {}
-        volume_series: dict[str, float] = {}
-        previous_close = 100.0
-        for idx in range(320):
-            timestamp = (start + timedelta(days=idx)).isoformat()
-            close = 100.0 + (idx * 0.35) + ((idx % 5) - 2) * 0.24
-            open_price = previous_close + ((idx % 3) - 1) * 0.18
-            high = max(open_price, close) + 1.1
-            low = min(open_price, close) - 0.9
-            open_series[timestamp] = round(open_price, 4)
-            high_series[timestamp] = round(high, 4)
-            low_series[timestamp] = round(low, 4)
-            close_series[timestamp] = round(close, 4)
-            price_series[timestamp] = round(close, 4)
-            volume_series[timestamp] = float(1_000_000 + idx * 4_500)
-            previous_close = close
-        frame = TechnicalTimeseriesFrameData(
-            timeframe="1d",
-            start=min(price_series),
-            end=max(price_series),
-            open_series=open_series,
-            high_series=high_series,
-            low_series=low_series,
-            close_series=close_series,
-            price_series=price_series,
-            volume_series=volume_series,
-            timezone="UTC",
-            metadata=None,
-        )
         return TechnicalTimeseriesBundleArtifactData(
             ticker="AAPL",
             as_of="2026-02-12T00:00:00Z",
-            frames={"1d": frame},
+            frames={
+                "1d": _build_timeseries_frame_data(
+                    timeframe="1d",
+                    start=datetime(2025, 1, 1, tzinfo=UTC),
+                    periods=320,
+                    base=100.0,
+                    drift=0.35,
+                    volume_base=1_000_000,
+                    volume_step=4_500,
+                )
+            },
         )
+
+
+@dataclass
+class _FeatureComputeMultiTimeframeLongSeriesRuntimeStub(_FeatureComputeRuntimeStub):
+    async def load_timeseries_bundle(
+        self, artifact_id: str
+    ) -> TechnicalTimeseriesBundleArtifactData | None:
+        _ = artifact_id
+        return TechnicalTimeseriesBundleArtifactData(
+            ticker="AAPL",
+            as_of="2026-02-12T00:00:00Z",
+            frames={
+                "1d": _build_timeseries_frame_data(
+                    timeframe="1d",
+                    start=datetime(2025, 1, 1, tzinfo=UTC),
+                    periods=320,
+                    base=100.0,
+                    drift=0.35,
+                    volume_base=1_000_000,
+                    volume_step=4_500,
+                ),
+                "1wk": _build_timeseries_frame_data(
+                    timeframe="1wk",
+                    start=datetime(2024, 1, 1, tzinfo=UTC),
+                    periods=90,
+                    base=90.0,
+                    drift=0.8,
+                    volume_base=1_500_000,
+                    volume_step=6_000,
+                ),
+                "1h": _build_timeseries_frame_data(
+                    timeframe="1h",
+                    start=datetime(2026, 1, 1, tzinfo=UTC),
+                    periods=120,
+                    base=101.0,
+                    drift=0.08,
+                    volume_base=300_000,
+                    volume_step=2_000,
+                ),
+            },
+        )
+
+
+def _build_timeseries_frame_data(
+    *,
+    timeframe: str,
+    start: datetime,
+    periods: int,
+    base: float,
+    drift: float,
+    volume_base: int,
+    volume_step: int,
+) -> TechnicalTimeseriesFrameData:
+    open_series: dict[str, float] = {}
+    high_series: dict[str, float] = {}
+    low_series: dict[str, float] = {}
+    close_series: dict[str, float] = {}
+    price_series: dict[str, float] = {}
+    volume_series: dict[str, float] = {}
+    previous_close = base
+    for idx in range(periods):
+        timestamp = (start + timedelta(days=idx)).isoformat()
+        close = base + (idx * drift) + ((idx % 5) - 2) * 0.24
+        open_price = previous_close + ((idx % 3) - 1) * 0.18
+        high = max(open_price, close) + 1.1
+        low = min(open_price, close) - 0.9
+        open_series[timestamp] = round(open_price, 4)
+        high_series[timestamp] = round(high, 4)
+        low_series[timestamp] = round(low, 4)
+        close_series[timestamp] = round(close, 4)
+        price_series[timestamp] = round(close, 4)
+        volume_series[timestamp] = float(volume_base + idx * volume_step)
+        previous_close = close
+    return TechnicalTimeseriesFrameData(
+        timeframe=timeframe,
+        start=min(price_series),
+        end=max(price_series),
+        open_series=open_series,
+        high_series=high_series,
+        low_series=low_series,
+        close_series=close_series,
+        price_series=price_series,
+        volume_series=volume_series,
+        timezone="UTC",
+        metadata=None,
+    )
 
 
 @pytest.mark.asyncio
@@ -1650,6 +1730,69 @@ async def test_run_feature_compute_serializes_liquidity_proxy_quant_features() -
     assert (
         quant_features["DOLLAR_VOLUME_PERCENTILE_252"]["quality"]["warmup_status"]
         == "READY"
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_feature_compute_serializes_normalized_distance_quant_features() -> (
+    None
+):
+    runtime = _FeatureComputeLongSeriesRuntimeStub()
+    state: dict[str, object] = {
+        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "technical_analysis": {"timeseries_bundle_id": "bundle-1"},
+    }
+
+    result = await run_feature_compute_use_case(
+        runtime,
+        state,
+        feature_runtime=FeatureRuntimeService(),
+        indicator_series_runtime=_IndicatorSeriesRuntimeStub(),
+    )
+
+    assert result.goto == "pattern_compute"
+    assert runtime.saved_feature_pack is not None
+    quant_features = runtime.saved_feature_pack["timeframes"]["1d"]["quant_features"]
+    assert quant_features["PRICE_VS_SMA20_Z"]["value"] is not None
+    assert quant_features["RETURN_ZSCORE_20"]["value"] is not None
+    assert quant_features["PRICE_DISTANCE_ATR_14"]["value"] is not None
+    assert quant_features["PRICE_VS_SMA20_Z"]["provenance"]["method"] == (
+        "price_vs_sma20_zscore"
+    )
+    assert quant_features["RETURN_ZSCORE_20"]["quality"]["warmup_status"] == "READY"
+
+
+@pytest.mark.asyncio
+async def test_run_feature_compute_serializes_cross_timeframe_alignment_quant_features() -> (
+    None
+):
+    runtime = _FeatureComputeMultiTimeframeLongSeriesRuntimeStub()
+    state: dict[str, object] = {
+        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "technical_analysis": {"timeseries_bundle_id": "bundle-1"},
+    }
+
+    result = await run_feature_compute_use_case(
+        runtime,
+        state,
+        feature_runtime=FeatureRuntimeService(),
+        indicator_series_runtime=_IndicatorSeriesRuntimeStub(),
+    )
+
+    assert result.goto == "pattern_compute"
+    assert runtime.saved_feature_pack is not None
+    quant_features = runtime.saved_feature_pack["timeframes"]["1d"]["quant_features"]
+    assert quant_features["MTF_ALIGNMENT_RATIO"]["value"] is not None
+    assert quant_features["HTF_CONFIRMATION"]["value"] is not None
+    assert quant_features["LTF_CONFIRMATION"]["value"] is not None
+    assert quant_features["MTF_ALIGNMENT_RATIO"]["provenance"]["method"] == (
+        "mtf_alignment_ratio"
+    )
+    assert (
+        quant_features["HTF_CONFIRMATION"]["metadata"]["comparison_timeframe"] == "1wk"
+    )
+    assert (
+        quant_features["LTF_CONFIRMATION"]["metadata"]["comparison_timeframe"] == "1h"
     )
 
 
@@ -2117,20 +2260,22 @@ async def test_execute_semantic_pipeline_projects_evidence_bundle_into_full_repo
             primary_timeframe="1d",
             support_levels=(180.5, 176.2),
             resistance_levels=(189.0,),
-            breakout_signals=({"name": "BREAKOUT_UP", "confidence": 0.72},),
-            scorecard_summary={
-                "timeframe": "1d",
-                "overall_score": 0.68,
-                "classic_label": "constructive",
-            },
-            regime_summary={
-                "dominant_regime": "BULL_TREND",
-                "timeframe_count": 1,
-            },
-            structure_confluence_summary={
-                "timeframe": "1d",
-                "confluence_state": "strong",
-            },
+            breakout_signals=(
+                EvidenceBreakoutSignalModel(name="BREAKOUT_UP", confidence=0.72),
+            ),
+            scorecard_summary=EvidenceScorecardSummaryModel(
+                timeframe="1d",
+                overall_score=0.68,
+                classic_label="constructive",
+            ),
+            regime_summary=RegimeSummaryModel(
+                dominant_regime="BULL_TREND",
+                timeframe_count=1,
+            ),
+            structure_confluence_summary=StructureConfluenceSummaryModel(
+                timeframe="1d",
+                confluence_state="strong",
+            ),
             conflict_reasons=("1d:quant_neutral",),
         )
     )

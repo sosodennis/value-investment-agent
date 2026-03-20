@@ -98,12 +98,54 @@ class EvidenceScorecardSummaryModel(BaseModel):
     pattern_label: OptionalTechnicalText = None
 
 
+class QuantContextSummaryModel(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    timeframe: OptionalTechnicalText = None
+    volatility_regime: OptionalTechnicalText = None
+    liquidity_regime: OptionalTechnicalText = None
+    stretch_state: OptionalTechnicalText = None
+    alignment_state: OptionalTechnicalText = None
+    higher_confirmation_state: OptionalTechnicalText = None
+    lower_confirmation_state: OptionalTechnicalText = None
+    volatility_percentile: OptionalConfidenceScore = None
+    liquidity_percentile: OptionalConfidenceScore = None
+    price_vs_sma20_z: OptionalConfidenceScore = None
+    price_distance_atr: OptionalConfidenceScore = None
+    alignment_ratio: OptionalConfidenceScore = None
+
+
 class EvidenceBreakoutSignalModel(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     name: TechnicalText
     confidence: OptionalConfidenceScore = None
     notes: OptionalTechnicalText = None
+
+
+class VolumeProfileLevelModel(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    price: float
+    strength: OptionalConfidenceScore = None
+    touches: int | None = None
+    label: OptionalTechnicalText = None
+
+
+class VolumeProfileSummaryModel(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    timeframe: OptionalTechnicalText = None
+    level_count: int | None = None
+    dominant_level: VolumeProfileLevelModel | None = None
+    levels: list[VolumeProfileLevelModel] | None = None
+    poc: OptionalConfidenceScore = None
+    vah: OptionalConfidenceScore = None
+    val: OptionalConfidenceScore = None
+    profile_method: OptionalTechnicalText = None
+    profile_fidelity: OptionalTechnicalText = None
+    bucket_count: int | None = None
+    value_area_coverage: OptionalConfidenceScore = None
 
 
 class TechnicalEvidenceBundleModel(BaseModel):
@@ -114,8 +156,9 @@ class TechnicalEvidenceBundleModel(BaseModel):
     resistance_levels: list[float] | None = None
     breakout_signals: list[EvidenceBreakoutSignalModel] | None = None
     scorecard_summary: EvidenceScorecardSummaryModel | None = None
+    quant_context_summary: QuantContextSummaryModel | None = None
     regime_summary: RegimeSummaryModel | None = None
-    volume_profile_summary: dict[str, object] | None = None
+    volume_profile_summary: VolumeProfileSummaryModel | None = None
     structure_confluence_summary: StructureConfluenceSummaryModel | None = None
     conflict_reasons: list[str] | None = None
 
@@ -261,7 +304,7 @@ class TechnicalArtifactModel(BaseModel):
     confidence_eligibility: ConfidenceEligibilityModel | None = None
     momentum_extremes: MomentumExtremesModel | None = None
     regime_summary: RegimeSummaryModel | None = None
-    volume_profile_summary: dict[str, object] | None = None
+    volume_profile_summary: VolumeProfileSummaryModel | None = None
     structure_confluence_summary: StructureConfluenceSummaryModel | None = None
     evidence_bundle: TechnicalEvidenceBundleModel | None = None
     signal_strength_summary: SignalStrengthSummaryModel | None = None

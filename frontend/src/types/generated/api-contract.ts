@@ -1021,6 +1021,33 @@ export interface components {
             /** Unavailable Indicator Count */
             unavailable_indicator_count?: number | null;
         };
+        /** QuantContextSummaryModel */
+        QuantContextSummaryModel: {
+            /** Alignment Ratio */
+            alignment_ratio?: number | null;
+            /** Alignment State */
+            alignment_state?: string | null;
+            /** Higher Confirmation State */
+            higher_confirmation_state?: string | null;
+            /** Liquidity Percentile */
+            liquidity_percentile?: number | null;
+            /** Liquidity Regime */
+            liquidity_regime?: string | null;
+            /** Lower Confirmation State */
+            lower_confirmation_state?: string | null;
+            /** Price Distance Atr */
+            price_distance_atr?: number | null;
+            /** Price Vs Sma20 Z */
+            price_vs_sma20_z?: number | null;
+            /** Stretch State */
+            stretch_state?: string | null;
+            /** Timeframe */
+            timeframe?: string | null;
+            /** Volatility Percentile */
+            volatility_percentile?: number | null;
+            /** Volatility Regime */
+            volatility_regime?: string | null;
+        };
         /** RealEstateExtensionModel */
         RealEstateExtensionModel: {
             accumulated_depreciation?: components["schemas"]["TraceableFieldModel"] | null;
@@ -1176,6 +1203,40 @@ export interface components {
             val?: number | null;
             /** Volume Node Count */
             volume_node_count?: number | null;
+        };
+        /** VolumeProfileLevelModel */
+        VolumeProfileLevelModel: {
+            /** Label */
+            label?: string | null;
+            /** Price */
+            price: number;
+            /** Strength */
+            strength?: number | null;
+            /** Touches */
+            touches?: number | null;
+        };
+        /** VolumeProfileSummaryModel */
+        VolumeProfileSummaryModel: {
+            /** Bucket Count */
+            bucket_count?: number | null;
+            dominant_level?: components["schemas"]["VolumeProfileLevelModel"] | null;
+            /** Level Count */
+            level_count?: number | null;
+            levels?: components["schemas"]["VolumeProfileLevelModel"][] | null;
+            /** Poc */
+            poc?: number | null;
+            /** Profile Fidelity */
+            profile_fidelity?: string | null;
+            /** Profile Method */
+            profile_method?: string | null;
+            /** Timeframe */
+            timeframe?: string | null;
+            /** Value Area Coverage */
+            value_area_coverage?: number | null;
+            /** Vah */
+            vah?: number | null;
+            /** Val */
+            val?: number | null;
         };
         /** TaAlertsEnvelope */
         TaAlertsEnvelope: {
@@ -1540,9 +1601,7 @@ export interface components {
             /** Ticker */
             ticker: string;
             /** Volume Profile Summary */
-            volume_profile_summary?: {
-                [key: string]: unknown;
-            } | null;
+            volume_profile_summary?: components["schemas"]["VolumeProfileSummaryModel"] | null;
         };
         /** TechnicalBacktestSummaryData */
         TechnicalBacktestSummaryData: {
@@ -1641,6 +1700,7 @@ export interface components {
             conflict_reasons?: string[] | null;
             /** Primary Timeframe */
             primary_timeframe?: string | null;
+            quant_context_summary?: components["schemas"]["QuantContextSummaryModel"] | null;
             regime_summary?: components["schemas"]["RegimeSummaryModel"] | null;
             /** Resistance Levels */
             resistance_levels?: number[] | null;
@@ -1649,9 +1709,7 @@ export interface components {
             /** Support Levels */
             support_levels?: number[] | null;
             /** Volume Profile Summary */
-            volume_profile_summary?: {
-                [key: string]: unknown;
-            } | null;
+            volume_profile_summary?: components["schemas"]["VolumeProfileSummaryModel"] | null;
         };
         /** TechnicalFeatureFrameData */
         TechnicalFeatureFrameData: {

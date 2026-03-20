@@ -146,6 +146,73 @@ def test_feature_runtime_computes_liquidity_proxy_quant_features() -> None:
     )
 
 
+def test_feature_runtime_computes_normalized_distance_quant_features() -> None:
+    runtime = FeatureRuntimeService()
+
+    result = runtime.compute(
+        FeatureRuntimeRequest(
+            ticker="AAPL",
+            as_of="2026-03-17T00:00:00Z",
+            series_by_timeframe={
+                "1d": _build_price_series(base=100.0, drift=0.45, periods=320)
+            },
+        )
+    )
+
+    frame = result.feature_pack.timeframes["1d"]
+    assert frame.quant_features["PRICE_VS_SMA20_Z"].value is not None
+    assert frame.quant_features["RETURN_ZSCORE_20"].value is not None
+    assert frame.quant_features["PRICE_DISTANCE_ATR_14"].value is not None
+    assert frame.quant_features["PRICE_VS_SMA20_Z"].state in {
+        "EXTREME_HIGH",
+        "HIGH",
+        "NEUTRAL",
+        "LOW",
+        "EXTREME_LOW",
+    }
+    assert frame.quant_features["PRICE_VS_SMA20_Z"].metadata["window"] == 20
+    assert frame.quant_features["PRICE_DISTANCE_ATR_14"].metadata["atr_window"] == 14
+    assert frame.quant_features["RETURN_ZSCORE_20"].quality is not None
+    assert frame.quant_features["RETURN_ZSCORE_20"].quality.warmup_status == "READY"
+
+
+def test_feature_runtime_computes_cross_timeframe_alignment_quant_features() -> None:
+    runtime = FeatureRuntimeService()
+
+    result = runtime.compute(
+        FeatureRuntimeRequest(
+            ticker="AAPL",
+            as_of="2026-03-17T00:00:00Z",
+            series_by_timeframe={
+                "1d": _build_price_series(base=100.0, drift=0.45, periods=320),
+                "1wk": _build_price_series(base=90.0, drift=0.9, periods=90),
+                "1h": _build_price_series(base=101.0, drift=0.12, periods=120),
+            },
+        )
+    )
+
+    frame = result.feature_pack.timeframes["1d"]
+    assert frame.quant_features["MTF_ALIGNMENT_RATIO"].value is not None
+    assert frame.quant_features["HTF_CONFIRMATION"].value is not None
+    assert frame.quant_features["LTF_CONFIRMATION"].value is not None
+    assert frame.quant_features["MTF_ALIGNMENT_RATIO"].state in {
+        "FULL_BULLISH_ALIGNMENT",
+        "PARTIAL_BULLISH_ALIGNMENT",
+        "MIXED",
+        "NEUTRAL",
+    }
+    assert (
+        frame.quant_features["HTF_CONFIRMATION"].metadata["comparison_timeframe"]
+        == "1wk"
+    )
+    assert (
+        frame.quant_features["LTF_CONFIRMATION"].metadata["comparison_timeframe"]
+        == "1h"
+    )
+    assert frame.quant_features["MTF_ALIGNMENT_RATIO"].quality is not None
+    assert frame.quant_features["MTF_ALIGNMENT_RATIO"].quality.warmup_status == "READY"
+
+
 def test_indicator_series_runtime_exposes_canonical_regime_series() -> None:
     runtime = IndicatorSeriesRuntimeService(quant_timeframes=())
 

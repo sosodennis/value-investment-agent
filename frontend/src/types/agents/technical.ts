@@ -84,6 +84,27 @@ export interface TechnicalEvidenceBreakoutSignal {
     notes?: string | null;
 }
 
+export interface TechnicalVolumeProfileLevel {
+    price: number;
+    strength?: number | null;
+    touches?: number | null;
+    label?: string | null;
+}
+
+export interface TechnicalVolumeProfileSummary {
+    timeframe?: string | null;
+    level_count?: number | null;
+    dominant_level?: TechnicalVolumeProfileLevel;
+    levels?: TechnicalVolumeProfileLevel[];
+    poc?: number | null;
+    vah?: number | null;
+    val?: number | null;
+    profile_method?: string | null;
+    profile_fidelity?: string | null;
+    bucket_count?: number | null;
+    value_area_coverage?: number | null;
+}
+
 export interface TechnicalEvidenceScorecardSummary {
     timeframe?: string | null;
     overall_score?: number | null;
@@ -93,14 +114,30 @@ export interface TechnicalEvidenceScorecardSummary {
     pattern_label?: string | null;
 }
 
+export interface TechnicalQuantContextSummary {
+    timeframe?: string | null;
+    volatility_regime?: string | null;
+    liquidity_regime?: string | null;
+    stretch_state?: string | null;
+    alignment_state?: string | null;
+    higher_confirmation_state?: string | null;
+    lower_confirmation_state?: string | null;
+    volatility_percentile?: number | null;
+    liquidity_percentile?: number | null;
+    price_vs_sma20_z?: number | null;
+    price_distance_atr?: number | null;
+    alignment_ratio?: number | null;
+}
+
 export interface TechnicalEvidenceBundle {
     primary_timeframe?: string | null;
     support_levels?: number[];
     resistance_levels?: number[];
     breakout_signals?: TechnicalEvidenceBreakoutSignal[];
     scorecard_summary?: TechnicalEvidenceScorecardSummary;
+    quant_context_summary?: TechnicalQuantContextSummary;
     regime_summary?: TechnicalRegimeSummary;
-    volume_profile_summary?: Record<string, unknown>;
+    volume_profile_summary?: TechnicalVolumeProfileSummary;
     structure_confluence_summary?: TechnicalStructureConfluenceSummary;
     conflict_reasons?: string[];
 }
@@ -329,7 +366,7 @@ export interface TechnicalPatternFrame {
     support_levels: TechnicalPatternLevel[];
     resistance_levels: TechnicalPatternLevel[];
     volume_profile_levels: TechnicalPatternLevel[];
-    volume_profile_summary?: Record<string, unknown>;
+    volume_profile_summary?: TechnicalVolumeProfileSummary;
     breakouts: TechnicalPatternFlag[];
     trendlines: TechnicalPatternFlag[];
     pattern_flags: TechnicalPatternFlag[];
@@ -511,7 +548,7 @@ export interface TechnicalAnalysisReport {
     confidence_eligibility?: TechnicalConfidenceEligibility;
     momentum_extremes?: TechnicalMomentumExtremes;
     regime_summary?: TechnicalRegimeSummary;
-    volume_profile_summary?: Record<string, unknown>;
+    volume_profile_summary?: TechnicalVolumeProfileSummary;
     structure_confluence_summary?: TechnicalStructureConfluenceSummary;
     evidence_bundle?: TechnicalEvidenceBundle;
     signal_strength_summary?: TechnicalSignalStrengthSummary;

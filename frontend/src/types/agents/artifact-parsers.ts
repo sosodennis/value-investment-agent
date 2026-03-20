@@ -60,9 +60,12 @@ import {
     TechnicalQualitySummary,
     TechnicalIndicatorSeriesArtifact,
     TechnicalIndicatorSeriesFrame,
+    TechnicalQuantContextSummary,
     TechnicalRegimeSummary,
     TechnicalSetupReliabilitySummary,
     TechnicalSignalStrengthSummary,
+    TechnicalVolumeProfileLevel,
+    TechnicalVolumeProfileSummary,
     TechnicalStructureConfluenceSummary,
     TechnicalTimeseriesBundle,
     TechnicalTimeseriesFrame,
@@ -75,6 +78,13 @@ const toRecord = (value: unknown, context: string): Record<string, unknown> => {
         throw new TypeError(`${context} must be an object.`);
     }
     return value;
+};
+
+const toRecordArray = (value: unknown, context: string): Record<string, unknown>[] => {
+    if (!Array.isArray(value)) {
+        throw new TypeError(`${context} must be an array.`);
+    }
+    return value.map((entry, index) => toRecord(entry, `${context}.${index}`));
 };
 
 const parseString = (value: unknown, context: string): string => {
@@ -318,6 +328,82 @@ const parseEvidenceBreakoutSignal = (
     return signal;
 };
 
+const parseVolumeProfileLevel = (
+    value: unknown,
+    context: string
+): TechnicalVolumeProfileLevel => {
+    const record = toRecord(value, context);
+    const level: TechnicalVolumeProfileLevel = {
+        price: parseNumber(record.price, `${context}.price`),
+    };
+    const strength = parseNullableOptionalNumber(record.strength, `${context}.strength`);
+    const touches = parseNullableOptionalNumber(record.touches, `${context}.touches`);
+    const label = parseNullableOptionalString(record.label, `${context}.label`);
+    if (strength !== undefined) level.strength = strength;
+    if (touches !== undefined) level.touches = touches;
+    if (label !== undefined) level.label = label ?? null;
+    return level;
+};
+
+const parseVolumeProfileSummary = (
+    value: unknown,
+    context: string
+): TechnicalVolumeProfileSummary | undefined => {
+    if (value === undefined || value === null) return undefined;
+    const record = toRecord(value, context);
+    const summary: TechnicalVolumeProfileSummary = {};
+    const timeframe = parseNullableOptionalString(record.timeframe, `${context}.timeframe`);
+    const levelCount = parseNullableOptionalNumber(
+        record.level_count,
+        `${context}.level_count`
+    );
+    const dominantLevel =
+        record.dominant_level === undefined || record.dominant_level === null
+            ? undefined
+            : parseVolumeProfileLevel(record.dominant_level, `${context}.dominant_level`);
+    const levels =
+        record.levels === undefined || record.levels === null
+            ? undefined
+            : toRecordArray(record.levels, `${context}.levels`).map((entry, index) =>
+                  parseVolumeProfileLevel(entry, `${context}.levels.${index}`)
+              );
+    const poc = parseNullableOptionalNumber(record.poc, `${context}.poc`);
+    const vah = parseNullableOptionalNumber(record.vah, `${context}.vah`);
+    const val = parseNullableOptionalNumber(record.val, `${context}.val`);
+    const profileMethod = parseNullableOptionalString(
+        record.profile_method,
+        `${context}.profile_method`
+    );
+    const profileFidelity = parseNullableOptionalString(
+        record.profile_fidelity,
+        `${context}.profile_fidelity`
+    );
+    const bucketCount = parseNullableOptionalNumber(
+        record.bucket_count,
+        `${context}.bucket_count`
+    );
+    const valueAreaCoverage = parseNullableOptionalNumber(
+        record.value_area_coverage,
+        `${context}.value_area_coverage`
+    );
+    if (timeframe !== undefined) summary.timeframe = timeframe ?? null;
+    if (levelCount !== undefined) summary.level_count = levelCount;
+    if (dominantLevel !== undefined) summary.dominant_level = dominantLevel;
+    if (levels !== undefined) summary.levels = levels;
+    if (poc !== undefined) summary.poc = poc;
+    if (vah !== undefined) summary.vah = vah;
+    if (val !== undefined) summary.val = val;
+    if (profileMethod !== undefined) summary.profile_method = profileMethod ?? null;
+    if (profileFidelity !== undefined) {
+        summary.profile_fidelity = profileFidelity ?? null;
+    }
+    if (bucketCount !== undefined) summary.bucket_count = bucketCount;
+    if (valueAreaCoverage !== undefined) {
+        summary.value_area_coverage = valueAreaCoverage;
+    }
+    return Object.keys(summary).length > 0 ? summary : undefined;
+};
+
 const parseEvidenceScorecardSummary = (
     value: unknown,
     context: string
@@ -355,6 +441,85 @@ const parseEvidenceScorecardSummary = (
     if (classicLabel !== undefined) summary.classic_label = classicLabel ?? null;
     if (quantLabel !== undefined) summary.quant_label = quantLabel ?? null;
     if (patternLabel !== undefined) summary.pattern_label = patternLabel ?? null;
+    return Object.keys(summary).length > 0 ? summary : undefined;
+};
+
+const parseQuantContextSummary = (
+    value: unknown,
+    context: string
+): TechnicalQuantContextSummary | undefined => {
+    if (value === undefined || value === null) return undefined;
+    const record = toRecord(value, context);
+    const summary: TechnicalQuantContextSummary = {};
+    const timeframe = parseNullableOptionalString(record.timeframe, `${context}.timeframe`);
+    const volatilityRegime = parseNullableOptionalString(
+        record.volatility_regime,
+        `${context}.volatility_regime`
+    );
+    const liquidityRegime = parseNullableOptionalString(
+        record.liquidity_regime,
+        `${context}.liquidity_regime`
+    );
+    const stretchState = parseNullableOptionalString(
+        record.stretch_state,
+        `${context}.stretch_state`
+    );
+    const alignmentState = parseNullableOptionalString(
+        record.alignment_state,
+        `${context}.alignment_state`
+    );
+    const higherConfirmationState = parseNullableOptionalString(
+        record.higher_confirmation_state,
+        `${context}.higher_confirmation_state`
+    );
+    const lowerConfirmationState = parseNullableOptionalString(
+        record.lower_confirmation_state,
+        `${context}.lower_confirmation_state`
+    );
+    const volatilityPercentile = parseNullableOptionalNumber(
+        record.volatility_percentile,
+        `${context}.volatility_percentile`
+    );
+    const liquidityPercentile = parseNullableOptionalNumber(
+        record.liquidity_percentile,
+        `${context}.liquidity_percentile`
+    );
+    const priceVsSma20Z = parseNullableOptionalNumber(
+        record.price_vs_sma20_z,
+        `${context}.price_vs_sma20_z`
+    );
+    const priceDistanceAtr = parseNullableOptionalNumber(
+        record.price_distance_atr,
+        `${context}.price_distance_atr`
+    );
+    const alignmentRatio = parseNullableOptionalNumber(
+        record.alignment_ratio,
+        `${context}.alignment_ratio`
+    );
+    if (timeframe !== undefined) summary.timeframe = timeframe ?? null;
+    if (volatilityRegime !== undefined) {
+        summary.volatility_regime = volatilityRegime ?? null;
+    }
+    if (liquidityRegime !== undefined) {
+        summary.liquidity_regime = liquidityRegime ?? null;
+    }
+    if (stretchState !== undefined) summary.stretch_state = stretchState ?? null;
+    if (alignmentState !== undefined) summary.alignment_state = alignmentState ?? null;
+    if (higherConfirmationState !== undefined) {
+        summary.higher_confirmation_state = higherConfirmationState ?? null;
+    }
+    if (lowerConfirmationState !== undefined) {
+        summary.lower_confirmation_state = lowerConfirmationState ?? null;
+    }
+    if (volatilityPercentile !== undefined) {
+        summary.volatility_percentile = volatilityPercentile;
+    }
+    if (liquidityPercentile !== undefined) {
+        summary.liquidity_percentile = liquidityPercentile;
+    }
+    if (priceVsSma20Z !== undefined) summary.price_vs_sma20_z = priceVsSma20Z;
+    if (priceDistanceAtr !== undefined) summary.price_distance_atr = priceDistanceAtr;
+    if (alignmentRatio !== undefined) summary.alignment_ratio = alignmentRatio;
     return Object.keys(summary).length > 0 ? summary : undefined;
 };
 
@@ -404,6 +569,13 @@ const parseEvidenceBundle = (
     if (scorecardSummary) {
         bundle.scorecard_summary = scorecardSummary;
     }
+    const quantContextSummary = parseQuantContextSummary(
+        record.quant_context_summary,
+        `${context}.quant_context_summary`
+    );
+    if (quantContextSummary) {
+        bundle.quant_context_summary = quantContextSummary;
+    }
     const regimeSummary = parseRegimeSummary(
         record.regime_summary,
         `${context}.regime_summary`
@@ -411,11 +583,12 @@ const parseEvidenceBundle = (
     if (regimeSummary) {
         bundle.regime_summary = regimeSummary;
     }
-    if (record.volume_profile_summary !== undefined && record.volume_profile_summary !== null) {
-        bundle.volume_profile_summary = toRecord(
-            record.volume_profile_summary,
-            `${context}.volume_profile_summary`
-        );
+    const volumeProfileSummary = parseVolumeProfileSummary(
+        record.volume_profile_summary,
+        `${context}.volume_profile_summary`
+    );
+    if (volumeProfileSummary) {
+        bundle.volume_profile_summary = volumeProfileSummary;
     }
     const structureConfluenceSummary = parseStructureConfluenceSummary(
         record.structure_confluence_summary,
@@ -2114,7 +2287,10 @@ const parseTechnicalPatternFrame = (
         record.volume_profile_summary === undefined ||
         record.volume_profile_summary === null
             ? undefined
-            : toRecord(record.volume_profile_summary, `${context}.volume_profile_summary`);
+            : parseVolumeProfileSummary(
+                  record.volume_profile_summary,
+                  `${context}.volume_profile_summary`
+              );
     const confluenceMetadata = parseStructureConfluenceSummary(
         record.confluence_metadata,
         `${context}.confluence_metadata`
@@ -3122,14 +3298,12 @@ const parseTechnicalAnalysisReport = (
     if (regimeSummary) {
         report.regime_summary = regimeSummary;
     }
-    if (
-        record.volume_profile_summary !== undefined &&
-        record.volume_profile_summary !== null
-    ) {
-        report.volume_profile_summary = toRecord(
-            record.volume_profile_summary,
-            `${context}.volume_profile_summary`
-        );
+    const volumeProfileSummary = parseVolumeProfileSummary(
+        record.volume_profile_summary,
+        `${context}.volume_profile_summary`
+    );
+    if (volumeProfileSummary) {
+        report.volume_profile_summary = volumeProfileSummary;
     }
     const structureConfluenceSummary = parseStructureConfluenceSummary(
         record.structure_confluence_summary,

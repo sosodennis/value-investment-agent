@@ -14,6 +14,10 @@ from .classic import (
     compute_vwap,
     supports_session_vwap_timeframe,
 )
+from .cross_timeframe_alignment_service import (
+    CrossTimeframeAlignmentResult,
+    compute_cross_timeframe_alignment,
+)
 from .fracdiff import (
     BollingerIndicator,
     BollingerSnapshot,
@@ -43,6 +47,11 @@ from .liquidity_service import (
     compute_average_dollar_volume,
     compute_liquidity_percentile,
 )
+from .normalized_distance_service import (
+    compute_atr_normalized_distance,
+    compute_price_vs_sma_zscore,
+    compute_return_zscore,
+)
 from .volatility_service import (
     classify_volatility_regime,
     compute_downside_volatility,
@@ -53,6 +62,7 @@ from .volatility_service import (
 __all__ = [
     "BollingerSnapshot",
     "BollingerIndicator",
+    "CrossTimeframeAlignmentResult",
     "FracdiffSerializationResult",
     "MacdIndicator",
     "ObvSnapshot",
@@ -76,6 +86,7 @@ __all__ = [
     "classify_volatility_regime",
     "compute_adx",
     "compute_amihud_illiquidity",
+    "compute_atr_normalized_distance",
     "compute_average_dollar_volume",
     "compute_atr",
     "compute_atrp",
@@ -86,10 +97,13 @@ __all__ = [
     "compute_liquidity_percentile",
     "compute_macd",
     "compute_mfi",
+    "compute_price_vs_sma_zscore",
     "compute_realized_volatility",
+    "compute_return_zscore",
     "compute_rsi",
     "compute_sma",
     "compute_volatility_percentile",
     "compute_vwap",
+    "compute_cross_timeframe_alignment",
     "supports_session_vwap_timeframe",
 ]

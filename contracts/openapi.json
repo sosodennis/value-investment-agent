@@ -3158,6 +3158,144 @@
         "title": "QualitySummaryModel",
         "type": "object"
       },
+      "QuantContextSummaryModel": {
+        "properties": {
+          "alignment_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alignment Ratio"
+          },
+          "alignment_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alignment State"
+          },
+          "higher_confirmation_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Higher Confirmation State"
+          },
+          "liquidity_percentile": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Liquidity Percentile"
+          },
+          "liquidity_regime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Liquidity Regime"
+          },
+          "lower_confirmation_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lower Confirmation State"
+          },
+          "price_distance_atr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Distance Atr"
+          },
+          "price_vs_sma20_z": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Vs Sma20 Z"
+          },
+          "stretch_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stretch State"
+          },
+          "timeframe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeframe"
+          },
+          "volatility_percentile": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Volatility Percentile"
+          },
+          "volatility_regime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Volatility Regime"
+          }
+        },
+        "title": "QuantContextSummaryModel",
+        "type": "object"
+      },
       "RealEstateExtensionModel": {
         "additionalProperties": true,
         "properties": {
@@ -3793,6 +3931,181 @@
           }
         },
         "title": "StructureConfluenceSummaryModel",
+        "type": "object"
+      },
+      "VolumeProfileLevelModel": {
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "price": {
+            "title": "Price",
+            "type": "number"
+          },
+          "strength": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strength"
+          },
+          "touches": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Touches"
+          }
+        },
+        "required": [
+          "price"
+        ],
+        "title": "VolumeProfileLevelModel",
+        "type": "object"
+      },
+      "VolumeProfileSummaryModel": {
+        "properties": {
+          "bucket_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bucket Count"
+          },
+          "dominant_level": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VolumeProfileLevelModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "level_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level Count"
+          },
+          "levels": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/VolumeProfileLevelModel"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Levels"
+          },
+          "poc": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poc"
+          },
+          "profile_fidelity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Fidelity"
+          },
+          "profile_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Method"
+          },
+          "timeframe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeframe"
+          },
+          "value_area_coverage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Area Coverage"
+          },
+          "vah": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vah"
+          },
+          "val": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Val"
+          }
+        },
+        "title": "VolumeProfileSummaryModel",
         "type": "object"
       },
       "TaAlertsEnvelope": {
@@ -4884,8 +5197,7 @@
           "volume_profile_summary": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/VolumeProfileSummaryModel"
               },
               {
                 "type": "null"
@@ -5301,6 +5613,16 @@
             ],
             "title": "Primary Timeframe"
           },
+          "quant_context_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QuantContextSummaryModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "regime_summary": {
             "anyOf": [
               {
@@ -5362,8 +5684,7 @@
           "volume_profile_summary": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/VolumeProfileSummaryModel"
               },
               {
                 "type": "null"

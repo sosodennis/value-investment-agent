@@ -15,11 +15,13 @@ from src.agents.technical.application.signal_explainer_context_service import (
     build_signal_explainer_context,
 )
 from src.agents.technical.application.technical_evidence_bundle_service import (
-    build_setup_context_from_evidence,
     build_technical_evidence_bundle,
 )
 from src.agents.technical.application.technical_report_projection_service import (
     build_report_projection_context,
+)
+from src.agents.technical.interface.evidence_bundle_projection_service import (
+    build_setup_context_from_evidence,
 )
 from src.agents.technical.subdomains.signal_fusion import SemanticTagPolicyResult
 from src.interface.artifacts.artifact_data_models import (

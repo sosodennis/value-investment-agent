@@ -82,6 +82,14 @@ def test_parse_technical_artifact_model_returns_json_dto() -> None:
                     "timeframe": "1d",
                     "overall_score": 0.64,
                 },
+                "quant_context_summary": {
+                    "timeframe": "1d",
+                    "volatility_regime": "ELEVATED",
+                    "liquidity_regime": "LIQUID",
+                    "stretch_state": "HIGH",
+                    "alignment_state": "FULL_BULLISH_ALIGNMENT",
+                    "alignment_ratio": 1.0,
+                },
                 "conflict_reasons": ["1d:quant_neutral"],
             },
             "signal_strength_summary": {
@@ -160,6 +168,10 @@ def test_parse_technical_artifact_model_returns_json_dto() -> None:
     assert parsed["structure_confluence_summary"]["confluence_score"] == 0.74
     assert parsed["evidence_bundle"]["primary_timeframe"] == "1d"
     assert parsed["evidence_bundle"]["breakout_signals"][0]["name"] == "BREAKOUT_UP"
+    assert (
+        parsed["evidence_bundle"]["quant_context_summary"]["alignment_state"]
+        == "FULL_BULLISH_ALIGNMENT"
+    )
     assert parsed["quality_summary"]["overall_quality"] == "medium"
     assert (
         parsed["alert_readout"]["top_alerts"][0]["policy_code"]

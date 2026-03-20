@@ -3,7 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from src.agents.technical.interface.contracts import AnalystPerspectiveModel
+from src.agents.technical.interface.contracts import (
+    AnalystPerspectiveModel,
+    EvidenceBreakoutSignalModel,
+    EvidenceScorecardSummaryModel,
+    QuantContextSummaryModel,
+    RegimeSummaryModel,
+    StructureConfluenceSummaryModel,
+    VolumeProfileSummaryModel,
+)
 from src.agents.technical.subdomains.signal_fusion import SemanticTagPolicyResult
 from src.interface.artifacts.artifact_data_models import (
     TechnicalAlertsArtifactData,
@@ -64,11 +72,12 @@ class TechnicalEvidenceBundle:
     primary_timeframe: str | None = None
     support_levels: tuple[float, ...] = ()
     resistance_levels: tuple[float, ...] = ()
-    breakout_signals: tuple[JSONObject, ...] = ()
-    scorecard_summary: JSONObject | None = None
-    regime_summary: JSONObject | None = None
-    volume_profile_summary: JSONObject | None = None
-    structure_confluence_summary: JSONObject | None = None
+    breakout_signals: tuple[EvidenceBreakoutSignalModel, ...] = ()
+    scorecard_summary: EvidenceScorecardSummaryModel | None = None
+    quant_context_summary: QuantContextSummaryModel | None = None
+    regime_summary: RegimeSummaryModel | None = None
+    volume_profile_summary: VolumeProfileSummaryModel | None = None
+    structure_confluence_summary: StructureConfluenceSummaryModel | None = None
     conflict_reasons: tuple[str, ...] = ()
 
 

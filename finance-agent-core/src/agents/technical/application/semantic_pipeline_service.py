@@ -26,7 +26,7 @@ from src.agents.technical.application.semantic_policy_input_service import (
 from src.agents.technical.application.semantic_verification_context_service import (
     assemble_verification_context,
 )
-from src.agents.technical.application.technical_evidence_bundle_service import (
+from src.agents.technical.interface.evidence_bundle_projection_service import (
     serialize_evidence_bundle,
 )
 from src.agents.technical.subdomains.interpretation.domain import (

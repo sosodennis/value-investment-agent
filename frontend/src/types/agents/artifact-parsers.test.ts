@@ -426,6 +426,14 @@ describe('artifact parsers', () => {
                     total_score: 0.64,
                     classic_label: 'constructive'
                 },
+                quant_context_summary: {
+                    timeframe: '1d',
+                    volatility_regime: 'ELEVATED',
+                    liquidity_regime: 'LIQUID',
+                    stretch_state: 'HIGH',
+                    alignment_state: 'FULL_BULLISH_ALIGNMENT',
+                    alignment_ratio: 1.0,
+                },
                 regime_summary: {
                     dominant_regime: 'BULL_TREND',
                     timeframe_count: 1,
@@ -541,6 +549,9 @@ describe('artifact parsers', () => {
         expect(parsed.evidence_bundle?.support_levels).toEqual([180.5, 176.2]);
         expect(parsed.evidence_bundle?.breakout_signals?.[0]?.name).toBe('BREAKOUT_UP');
         expect(parsed.evidence_bundle?.scorecard_summary?.overall_score).toBe(0.68);
+        expect(parsed.evidence_bundle?.quant_context_summary?.alignment_state).toBe(
+            'FULL_BULLISH_ALIGNMENT'
+        );
         expect(parsed.signal_strength_summary?.effective_value).toBe(0.43);
         expect(parsed.signal_strength_summary?.strength_level).toBe('weak');
         expect(parsed.setup_reliability_summary?.level).toBe('low');
