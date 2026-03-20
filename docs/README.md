@@ -18,6 +18,7 @@ This folder keeps active rules, architecture decisions, and one pending backlog 
 ## 2. Architecture Decisions
 
 1. `/Users/denniswong/Desktop/Project/value-investment-agent/docs/agent-centric-subgraph-shared-kernel-adr-2026-02-19.md`
+2. `/Users/denniswong/Desktop/Project/value-investment-agent/docs/technical-decision-observability-backbone-adr-2026-03-21.md`
 
 ## 3. Pending Backlog
 
