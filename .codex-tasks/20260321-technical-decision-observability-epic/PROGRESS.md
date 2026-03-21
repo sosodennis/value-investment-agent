@@ -15,13 +15,13 @@
 
 ## Context Recovery Block
 
-- **Current milestone**: Child #1 — Phase 1 registry backbone and schema
-- **Current status**: WAITING_SUBTASK
-- **Last completed**: Epic scaffold creation
+- **Current milestone**: COMPLETE
+- **Current status**: DONE
+- **Last completed**: Child #4 — Phase 4 calibration observation builder integration
 - **Current artifact**: `.codex-tasks/20260321-technical-decision-observability-epic/SUBTASKS.csv`
-- **Key context**: This epic was created from the accepted technical decision observability ADR. Child tasks map directly to the four rollout phases defined by the ADR.
-- **Known issues**: No implementation work has started yet; validation commands are intentionally broad until task-local tests exist.
-- **Next action**: Start child task #1 and update its `TODO.csv` before making code changes.
+- **Key context**: All four ADR rollout phases are complete under focused changed-path validation. Decision observability now covers registry, delayed labeling, monitoring read models, and calibration observation building.
+- **Known issues**: Repo-wide pytest still contains unrelated baseline failures outside this epic slice, so epic completion is based on focused changed-path gates.
+- **Next action**: No pending child task. Open a new follow-up only if we decide to add recalibration automation, monitoring consumers, or external productization.
 
 ---
 
@@ -54,12 +54,12 @@
 ## Final Summary
 
 - **Total milestones**: 1
-- **Completed**: 1
+- **Completed**: 4
 - **Failed + recovered**: 0
 - **External unblock events**: 0
 - **Total retries**: 0
 - **Files created**: 3
-- **Files modified**: 0
+- **Files modified**: 4
 - **Key learnings**:
   - ADR rollout maps naturally to an epic with one child task per implementation phase.
 - **Recommendations for future tasks**:

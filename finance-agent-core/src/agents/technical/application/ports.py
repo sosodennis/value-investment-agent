@@ -231,6 +231,18 @@ class ITechnicalInterpretationProvider(Protocol):
     ) -> Awaitable[TechnicalInterpretationResult]: ...
 
 
+class ITechnicalDecisionObservabilityPort(Protocol):
+    async def register_prediction_event(
+        self,
+        *,
+        ticker: str,
+        technical_context: JSONObject,
+        full_report_payload: JSONObject,
+        report_artifact_id: str,
+        run_type: str = "workflow",
+    ) -> str: ...
+
+
 class ITechnicalBacktester(Protocol):
     def run(self, transaction_cost: float = 0.0005) -> BacktestResults: ...
 

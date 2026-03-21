@@ -59,9 +59,15 @@ if [ -n "$REDIS_HOST" ]; then
 fi
 
 # Run the application
-echo "Starting backend..."
 cd /app
 # Use the isolated virtualenv
 export PATH="/opt/venv/bin:$PATH"
 export PYTHONPATH="/app:/app/src:$PYTHONPATH"
+
+if [ "$#" -gt 0 ]; then
+    echo "Starting custom command: $*"
+    exec "$@"
+fi
+
+echo "Starting backend..."
 exec python -m uvicorn api.server:app --host 0.0.0.0 --port 8000

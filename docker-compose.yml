@@ -72,6 +72,26 @@ services:
         condition: service_healthy
     restart: always
 
+  technical-labeling-scheduler:
+    build:
+      context: ./finance-agent-core
+      dockerfile: Dockerfile
+    platform: linux/arm64
+    profiles:
+      - scheduler
+    command: ["supercronic", "/app/scripts/technical_outcome_labeling.crontab"]
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-langgraph}
+      - TZ=UTC
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: always
+
   # ==========================================
   # Frontend Service
   # ==========================================

@@ -9,6 +9,7 @@ from src.agents.technical.application.orchestrator import (
 )
 from src.agents.technical.application.ports import (
     ITechnicalArtifactRepository,
+    ITechnicalDecisionObservabilityPort,
     ITechnicalInterpretationProvider,
 )
 from src.agents.technical.interface.preview_projection_service import (
@@ -66,10 +67,13 @@ def _build_semantic_output_artifact(
 
 
 def build_technical_orchestrator(
-    *, port: ITechnicalArtifactRepository
+    *,
+    port: ITechnicalArtifactRepository,
+    decision_observability: ITechnicalDecisionObservabilityPort,
 ) -> TechnicalOrchestrator:
     return TechnicalOrchestrator(
         port=port,
+        decision_observability=decision_observability,
         summarize_preview=summarize_ta_for_preview,
         build_progress_artifact=_build_progress_artifact,
         build_semantic_output_artifact=_build_semantic_output_artifact,

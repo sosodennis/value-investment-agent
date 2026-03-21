@@ -2360,8 +2360,43 @@ async def test_execute_semantic_pipeline_projects_evidence_bundle_into_full_repo
 
 
 @dataclass
+class _DecisionObservabilityStub:
+    event_id: str = "event-1"
+    failure: Exception | None = None
+    calls: list[dict[str, object]] | None = None
+
+    def __post_init__(self) -> None:
+        if self.calls is None:
+            self.calls = []
+
+    async def register_prediction_event(
+        self,
+        *,
+        ticker: str,
+        technical_context: JSONObject,
+        full_report_payload: JSONObject,
+        report_artifact_id: str,
+        run_type: str = "workflow",
+    ) -> str:
+        assert self.calls is not None
+        self.calls.append(
+            {
+                "ticker": ticker,
+                "technical_context": technical_context,
+                "full_report_payload": full_report_payload,
+                "report_artifact_id": report_artifact_id,
+                "run_type": run_type,
+            }
+        )
+        if self.failure is not None:
+            raise self.failure
+        return self.event_id
+
+
+@dataclass
 class _FakeSemanticRuntime:
     port: object
+    decision_observability: _DecisionObservabilityStub
 
     def summarize_preview(self, ctx: JSONObject) -> JSONObject:
         return ctx
@@ -2429,7 +2464,10 @@ async def test_run_semantic_translate_marks_degraded_when_pipeline_degraded() ->
         ),
     )
 
-    runtime = _FakeSemanticRuntime(port=object())
+    runtime = _FakeSemanticRuntime(
+        port=object(),
+        decision_observability=_DecisionObservabilityStub(),
+    )
 
     with (
         patch(
@@ -2482,3 +2520,219 @@ async def test_run_semantic_translate_marks_degraded_when_pipeline_degraded() ->
         "TECHNICAL_VERIFICATION_CONTEXT_FAILED",
         "TECHNICAL_LLM_INTERPRETATION_FAILED",
     ]
+
+
+@pytest.mark.asyncio
+async def test_run_semantic_translate_registers_prediction_event_after_report_artifact() -> (
+    None
+):
+    runtime = _FakeSemanticRuntime(
+        port=object(),
+        decision_observability=_DecisionObservabilityStub(event_id="event-42"),
+    )
+    pipeline_result = SemanticPipelineResult(
+        tags_result=SemanticTagPolicyResult(
+            tags=["TREND_ACTIVE"],
+            direction="BULLISH_EXTENSION",
+            risk_level="medium",
+            memory_strength="balanced",
+            statistical_state="deviating",
+            z_score=1.2,
+            confluence=SemanticConfluenceResult(
+                bollinger_state="INSIDE",
+                statistical_strength=65.0,
+                macd_momentum="BULLISH",
+                obv_state="NEUTRAL",
+            ),
+            evidence_list=[],
+        ),
+        analyst_perspective=AnalystPerspectiveModel(
+            stance="BULLISH_WATCH",
+            stance_summary="Bullish watch with medium risk.",
+            rationale_summary="Fallback interpretation.",
+        ),
+        backtest_context_result=BacktestContextResult(
+            backtest_context="",
+            wfa_context="",
+            price_data=None,
+            chart_data=None,
+            verification_report=None,
+        ),
+        semantic_finalize_result=SemanticFinalizeResult(
+            direction="BULLISH_EXTENSION",
+            opt_d=0.5,
+            raw_data={},
+            full_report_data_raw={
+                "schema_version": "2.0",
+                "direction": "BULLISH_EXTENSION",
+            },
+            ta_update={"signal": "BULLISH_EXTENSION"},
+        ),
+    )
+
+    with (
+        patch(
+            "src.agents.technical.application.use_cases.run_semantic_translate_use_case.resolve_semantic_translate_context",
+            return_value=(
+                SemanticTranslateContext(
+                    ticker="AAPL",
+                    technical_context={"confidence_calibrated": 0.71},
+                    verification_report_id="vr1",
+                ),
+                None,
+            ),
+        ),
+        patch(
+            "src.agents.technical.application.use_cases.run_semantic_translate_use_case.execute_semantic_pipeline",
+            return_value=pipeline_result,
+        ),
+        patch(
+            "src.agents.technical.application.use_cases.run_semantic_translate_use_case.build_semantic_report_update",
+            return_value={
+                "signal": "BULLISH_EXTENSION",
+                "artifact": {"reference": {"artifact_id": "report-1"}},
+            },
+        ),
+        patch(
+            "src.agents.technical.application.use_cases.run_semantic_translate_use_case.log_event"
+        ) as mock_log,
+    ):
+        result = await run_semantic_translate_use_case(
+            runtime,
+            {
+                "intent_extraction": {"resolved_ticker": "AAPL"},
+                "technical_analysis": {"confidence_calibrated": 0.71},
+            },
+            assemble_fn=lambda _payload: pipeline_result.tags_result,
+            build_full_report_payload_fn=lambda **_kwargs: {},
+            interpretation_provider=object(),
+        )
+
+    assert result.goto == "END"
+    assert runtime.decision_observability.calls == [
+        {
+            "ticker": "AAPL",
+            "technical_context": {"confidence_calibrated": 0.71},
+            "full_report_payload": {
+                "schema_version": "2.0",
+                "direction": "BULLISH_EXTENSION",
+            },
+            "report_artifact_id": "report-1",
+            "run_type": "workflow",
+        }
+    ]
+    assert any(
+        call.kwargs.get("event") == "technical_prediction_event_written"
+        and call.kwargs["fields"]["event_id"] == "event-42"
+        for call in mock_log.call_args_list
+    )
+    assert result.update["technical_analysis"]["is_degraded"] is False
+
+
+@pytest.mark.asyncio
+async def test_run_semantic_translate_degrades_when_prediction_event_write_fails() -> (
+    None
+):
+    runtime = _FakeSemanticRuntime(
+        port=object(),
+        decision_observability=_DecisionObservabilityStub(
+            failure=RuntimeError("db write failed")
+        ),
+    )
+    pipeline_result = SemanticPipelineResult(
+        tags_result=SemanticTagPolicyResult(
+            tags=["TREND_ACTIVE"],
+            direction="BULLISH_EXTENSION",
+            risk_level="medium",
+            memory_strength="balanced",
+            statistical_state="deviating",
+            z_score=1.2,
+            confluence=SemanticConfluenceResult(
+                bollinger_state="INSIDE",
+                statistical_strength=65.0,
+                macd_momentum="BULLISH",
+                obv_state="NEUTRAL",
+            ),
+            evidence_list=[],
+        ),
+        analyst_perspective=AnalystPerspectiveModel(
+            stance="BULLISH_WATCH",
+            stance_summary="Bullish watch with medium risk.",
+            rationale_summary="Fallback interpretation.",
+        ),
+        backtest_context_result=BacktestContextResult(
+            backtest_context="",
+            wfa_context="",
+            price_data=None,
+            chart_data=None,
+            verification_report=None,
+        ),
+        semantic_finalize_result=SemanticFinalizeResult(
+            direction="BULLISH_EXTENSION",
+            opt_d=0.5,
+            raw_data={},
+            full_report_data_raw={
+                "schema_version": "2.0",
+                "direction": "BULLISH_EXTENSION",
+            },
+            ta_update={"signal": "BULLISH_EXTENSION"},
+        ),
+    )
+
+    with (
+        patch(
+            "src.agents.technical.application.use_cases.run_semantic_translate_use_case.resolve_semantic_translate_context",
+            return_value=(
+                SemanticTranslateContext(
+                    ticker="AAPL",
+                    technical_context={"confidence_calibrated": 0.71},
+                    verification_report_id="vr1",
+                ),
+                None,
+            ),
+        ),
+        patch(
+            "src.agents.technical.application.use_cases.run_semantic_translate_use_case.execute_semantic_pipeline",
+            return_value=pipeline_result,
+        ),
+        patch(
+            "src.agents.technical.application.use_cases.run_semantic_translate_use_case.build_semantic_report_update",
+            return_value={
+                "signal": "BULLISH_EXTENSION",
+                "artifact": {"reference": {"artifact_id": "report-1"}},
+            },
+        ),
+        patch(
+            "src.agents.technical.application.use_cases.run_semantic_translate_use_case.log_event"
+        ) as mock_log,
+    ):
+        result = await run_semantic_translate_use_case(
+            runtime,
+            {
+                "intent_extraction": {"resolved_ticker": "AAPL"},
+                "technical_analysis": {"confidence_calibrated": 0.71},
+            },
+            assemble_fn=lambda _payload: pipeline_result.tags_result,
+            build_full_report_payload_fn=lambda **_kwargs: {},
+            interpretation_provider=object(),
+        )
+
+    assert result.goto == "END"
+    technical_state = result.update["technical_analysis"]
+    assert technical_state["is_degraded"] is True
+    assert technical_state["degraded_reasons"] == [
+        "TECHNICAL_DECISION_EVENT_WRITE_FAILED"
+    ]
+    completion_call = next(
+        call
+        for call in mock_log.call_args_list
+        if call.kwargs.get("event") == "technical_semantic_translate_completed"
+    )
+    assert completion_call.kwargs["fields"]["degraded_reasons"] == [
+        "TECHNICAL_DECISION_EVENT_WRITE_FAILED"
+    ]
+    assert any(
+        call.kwargs.get("event") == "technical_prediction_event_write_failed"
+        and call.kwargs.get("error_code") == "TECHNICAL_DECISION_EVENT_WRITE_FAILED"
+        for call in mock_log.call_args_list
+    )

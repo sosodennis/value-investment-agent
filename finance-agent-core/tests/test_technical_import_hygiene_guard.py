@@ -299,6 +299,52 @@ def test_artifact_repository_port_has_no_object_typed_boundaries() -> None:
     )
 
 
+def test_decision_observability_port_has_no_object_typed_boundaries() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    target = (
+        repo_root
+        / "finance-agent-core"
+        / "src"
+        / "agents"
+        / "technical"
+        / "application"
+        / "ports.py"
+    )
+    tree = ast.parse(target.read_text(encoding="utf-8"))
+    observability_port_class = None
+    for node in tree.body:
+        if (
+            isinstance(node, ast.ClassDef)
+            and node.name == "ITechnicalDecisionObservabilityPort"
+        ):
+            observability_port_class = node
+            break
+
+    assert (
+        observability_port_class is not None
+    ), "ITechnicalDecisionObservabilityPort not found"
+
+    violations: list[str] = []
+    for node in observability_port_class.body:
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        if _annotation_contains_object(node.returns):
+            violations.append(f"{node.name}: return annotation contains object")
+
+        for arg in [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]:
+            if arg.arg in {"self", "cls"}:
+                continue
+            if _annotation_contains_object(arg.annotation):
+                violations.append(
+                    f"{node.name}: parameter '{arg.arg}' annotation contains object"
+                )
+
+    assert not violations, (
+        "ITechnicalDecisionObservabilityPort should not use object-typed boundaries:\n"
+        + "\n".join(sorted(violations))
+    )
+
+
 def test_fracdiff_runtime_service_has_no_object_typed_callables() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     target = (

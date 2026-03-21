@@ -1,5 +1,10 @@
 """technical calibration domain package."""
 
+from src.agents.technical.subdomains.decision_observability.domain import (
+    TechnicalCalibrationObservationBuildResult,
+    build_technical_direction_calibration_observations,
+)
+
 from .contracts import (
     TechnicalDirectionCalibrationFitReport,
     TechnicalDirectionCalibrationFitResult,
@@ -27,7 +32,9 @@ from .technical_direction_calibration_mapping_service import (
 __all__ = [
     "TechnicalDirectionCalibrationFitReport",
     "TechnicalDirectionCalibrationFitResult",
+    "TechnicalCalibrationObservationBuildResult",
     "TechnicalDirectionCalibrationObservation",
+    "build_technical_direction_calibration_observations",
     "fit_technical_direction_calibration_config",
     "load_technical_direction_calibration_observations",
     "write_technical_direction_calibration_artifact",

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 from src.agents.technical.application.ports import (
     ITechnicalArtifactRepository,
+    ITechnicalDecisionObservabilityPort,
     ITechnicalInterpretationProvider,
 )
 from src.agents.technical.application.use_cases import (
@@ -306,6 +307,7 @@ class _RegimeComputeRuntimeAdapter:
 @dataclass(frozen=True)
 class TechnicalOrchestrator:
     port: ITechnicalArtifactRepository
+    decision_observability: ITechnicalDecisionObservabilityPort
     summarize_preview: Callable[[JSONObject], JSONObject]
     build_progress_artifact: Callable[[str, JSONObject], dict[str, object]]
     build_semantic_output_artifact: Callable[[str, JSONObject, str], dict[str, object]]

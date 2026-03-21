@@ -1,0 +1,1 @@
+0 2 * * * cd /app && python scripts/run_technical_outcome_labeling.py --limit 100 --labeling-method-version technical_outcome_labeling.v1

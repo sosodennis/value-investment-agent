@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     build-essential \
     libpq-dev \
+    tzdata \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv for faster dependency installation
@@ -54,6 +55,20 @@ for repo_id in model_repos:
     print(f"Pre-downloading Hugging Face repo: {repo_id}", flush=True)
     snapshot_download(repo_id=repo_id)
 PY
+
+RUN set -eux; \
+    arch="$(dpkg --print-architecture)"; \
+    case "${arch}" in \
+        amd64) supercronic="supercronic-linux-amd64"; supercronic_sha1="bc072eba2ae083849d5f86c6bd1f345f6ed902d0" ;; \
+        arm64) supercronic="supercronic-linux-arm64"; supercronic_sha1="37842646e4c95b193c469afae400966565c383d3" ;; \
+        *) echo "unsupported architecture: ${arch}" >&2; exit 1 ;; \
+    esac; \
+    supercronic_url="https://github.com/aptible/supercronic/releases/download/v0.2.38/${supercronic}"; \
+    curl -fsSLo "/tmp/${supercronic}" "${supercronic_url}"; \
+    echo "${supercronic_sha1}  /tmp/${supercronic}" | sha1sum -c -; \
+    chmod +x "/tmp/${supercronic}"; \
+    mv "/tmp/${supercronic}" "/usr/local/bin/${supercronic}"; \
+    ln -sf "/usr/local/bin/${supercronic}" /usr/local/bin/supercronic
 
 # Copy entrypoint separately to avoid being overwritten by bind mount
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh

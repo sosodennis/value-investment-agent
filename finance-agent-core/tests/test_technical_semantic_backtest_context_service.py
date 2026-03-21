@@ -9,9 +9,11 @@ import pytest
 from src.agents.technical.application.fracdiff_runtime_contracts import (
     FracdiffBacktestInputs,
 )
-from src.agents.technical.application.ports import TechnicalRiskFreeRateFetchResult
 from src.agents.technical.application.semantic_backtest_context_service import (
     assemble_backtest_context,
+)
+from src.agents.technical.subdomains.market_data.application.ports import (
+    MarketDataRiskFreeRateFetchResult,
 )
 from src.interface.artifacts.artifact_data_models import (
     PriceSeriesArtifactData,
@@ -83,9 +85,9 @@ class _FakeFracdiffRuntime:
 class _FakeMarketDataProvider:
     def fetch_risk_free_series(
         self, period: str = "5y"
-    ) -> TechnicalRiskFreeRateFetchResult:
+    ) -> MarketDataRiskFreeRateFetchResult:
         _ = period
-        return TechnicalRiskFreeRateFetchResult(
+        return MarketDataRiskFreeRateFetchResult(
             data=pd.Series(
                 [0.02, 0.021],
                 index=pd.to_datetime(["2025-01-01", "2025-01-02"]),

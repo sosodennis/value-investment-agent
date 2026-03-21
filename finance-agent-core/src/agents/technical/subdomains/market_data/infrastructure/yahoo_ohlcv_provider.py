@@ -1,4 +1,5 @@
 import logging
+import time
 import warnings
 from datetime import datetime, timezone
 
@@ -75,17 +76,25 @@ def _normalize_series_index_utc(series: pd.Series) -> pd.Series:
 
 
 def fetch_ohlcv(
-    ticker_symbol: str, *, period: str = "5y", interval: str = "1d"
+    ticker_symbol: str,
+    *,
+    period: str = "5y",
+    interval: str = "1d",
+    cache_base_dir: str | None = None,
+    cache_key_prefix: str = "",
+    max_retries: int = 0,
+    retry_delay_seconds: float = 0.0,
 ) -> MarketDataOhlcvFetchResult:
     """Fetch OHLCV data and apply split adjustment to close prices."""
     try:
         now = datetime.now(timezone.utc)
         bucket = _bucket_for_interval(interval, now)
         ttl = _CACHE_TTLS.get(interval, 0.0)
-        cache = MarketDataCache()
+        cache = MarketDataCache(base_dir=cache_base_dir)
         cache_result = None
+        cache_prefix = f"{cache_key_prefix}_" if cache_key_prefix else ""
         if ttl > 0:
-            cache_key = f"ohlcv_{ticker_symbol}_{interval}_{bucket}"
+            cache_key = f"{cache_prefix}ohlcv_{ticker_symbol}_{interval}_{bucket}"
             cache_result = cache.get(
                 key=cache_key,
                 max_age_seconds=ttl,
@@ -122,10 +131,14 @@ def fetch_ohlcv(
                 "cache_bucket": bucket,
             },
         )
-        ticker = yf.Ticker(ticker_symbol)
-
-        df = ticker.history(period=period, interval=interval, auto_adjust=False)
-        splits = ticker.splits
+        df = _fetch_history_with_retry(
+            ticker_symbol=ticker_symbol,
+            period=period,
+            interval=interval,
+            max_retries=max_retries,
+            retry_delay_seconds=retry_delay_seconds,
+        )
+        splits = yf.Ticker(ticker_symbol).splits
 
         if df.empty:
             log_event(
@@ -200,7 +213,7 @@ def fetch_ohlcv(
             },
         )
         if ttl > 0:
-            cache_key = f"ohlcv_{ticker_symbol}_{interval}_{bucket}"
+            cache_key = f"{cache_prefix}ohlcv_{ticker_symbol}_{interval}_{bucket}"
             cache.set(key=cache_key, data=final_df)
         return MarketDataOhlcvFetchResult(
             data=final_df,
@@ -234,3 +247,24 @@ def fetch_daily_ohlcv(
     ticker_symbol: str, period: str = "5y"
 ) -> MarketDataOhlcvFetchResult:
     return fetch_ohlcv(ticker_symbol, period=period, interval="1d")
+
+
+def _fetch_history_with_retry(
+    *,
+    ticker_symbol: str,
+    period: str,
+    interval: str,
+    max_retries: int,
+    retry_delay_seconds: float,
+) -> pd.DataFrame:
+    ticker = yf.Ticker(ticker_symbol)
+    attempt = 0
+    while True:
+        try:
+            return ticker.history(period=period, interval=interval, auto_adjust=False)
+        except Exception:
+            if attempt >= max_retries:
+                raise
+            attempt += 1
+            if retry_delay_seconds > 0:
+                time.sleep(retry_delay_seconds)

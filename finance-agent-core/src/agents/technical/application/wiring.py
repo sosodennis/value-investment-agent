@@ -10,6 +10,9 @@ from src.agents.technical.subdomains.alerts import AlertRuntimeService
 from src.agents.technical.subdomains.artifacts import (
     build_default_technical_artifact_repository,
 )
+from src.agents.technical.subdomains.decision_observability import (
+    build_default_technical_decision_observability_runtime_service,
+)
 from src.agents.technical.subdomains.features import (
     FeatureRuntimeService,
     IndicatorSeriesRuntimeService,
@@ -36,7 +39,13 @@ def _assemble_semantic_tags_default(*args, **kwargs):
 
 def build_default_technical_workflow_runner() -> TechnicalWorkflowRunner:
     repository = build_default_technical_artifact_repository()
-    orchestrator = build_technical_orchestrator(port=repository)
+    decision_observability = (
+        build_default_technical_decision_observability_runtime_service()
+    )
+    orchestrator = build_technical_orchestrator(
+        port=repository,
+        decision_observability=decision_observability,
+    )
     market_data_provider = YahooMarketDataProvider()
     interpretation_provider = TechnicalInterpretationProvider()
     indicator_engine = PandasTaIndicatorEngine()

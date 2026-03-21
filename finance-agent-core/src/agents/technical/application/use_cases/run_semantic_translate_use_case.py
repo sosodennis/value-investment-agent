@@ -5,6 +5,7 @@ from collections.abc import Callable, Mapping
 from typing import Protocol
 
 from src.agents.technical.application.ports import (
+    ITechnicalDecisionObservabilityPort,
     ITechnicalInterpretationProvider,
 )
 from src.agents.technical.application.report_service import (
@@ -44,6 +45,7 @@ class SemanticTranslateRuntime(Protocol):
     summarize_preview: Callable[[JSONObject], JSONObject]
     build_semantic_output_artifact: Callable[[str, JSONObject, str], dict[str, object]]
     port: _SemanticPort
+    decision_observability: ITechnicalDecisionObservabilityPort
 
 
 class _SemanticPort(Protocol):
@@ -138,6 +140,15 @@ async def run_semantic_translate_use_case(
         )
         degraded_reasons = list(pipeline_result.degraded_reasons)
         artifact_written = "artifact" in ta_update
+        if artifact_written:
+            degraded_reasons = await _register_prediction_event(
+                runtime=runtime,
+                ticker=context.ticker,
+                technical_context=context.technical_context,
+                full_report_payload=pipeline_result.semantic_finalize_result.full_report_data_raw,
+                ta_update=ta_update,
+                degraded_reasons=degraded_reasons,
+            )
         if not artifact_written:
             degraded_reasons.append("TECHNICAL_SEMANTIC_ARTIFACT_FAILED")
         is_degraded = bool(degraded_reasons)
@@ -208,3 +219,87 @@ async def run_semantic_translate_use_case(
             f"Semantic translation failed: {str(exc)}"
         )
         return TechnicalNodeResult(update=error_update.update, goto="END")
+
+
+async def _register_prediction_event(
+    *,
+    runtime: SemanticTranslateRuntime,
+    ticker: str,
+    technical_context: JSONObject,
+    full_report_payload: JSONObject,
+    ta_update: JSONObject,
+    degraded_reasons: list[str],
+) -> list[str]:
+    report_artifact_id = _extract_report_artifact_id(ta_update)
+    if report_artifact_id is None:
+        return _append_prediction_event_failure(
+            degraded_reasons=degraded_reasons,
+            ticker=ticker,
+            failure_detail="missing_report_artifact_reference",
+            report_artifact_id=None,
+        )
+
+    try:
+        event_id = await runtime.decision_observability.register_prediction_event(
+            ticker=ticker,
+            technical_context=technical_context,
+            full_report_payload=full_report_payload,
+            report_artifact_id=report_artifact_id,
+            run_type="workflow",
+        )
+    except Exception as exc:
+        return _append_prediction_event_failure(
+            degraded_reasons=degraded_reasons,
+            ticker=ticker,
+            failure_detail=str(exc),
+            report_artifact_id=report_artifact_id,
+        )
+
+    log_event(
+        logger,
+        event="technical_prediction_event_written",
+        message="technical prediction event written",
+        fields={
+            "ticker": ticker,
+            "event_id": event_id,
+            "artifact_id": report_artifact_id,
+        },
+    )
+    return degraded_reasons
+
+
+def _append_prediction_event_failure(
+    *,
+    degraded_reasons: list[str],
+    ticker: str,
+    failure_detail: str,
+    report_artifact_id: str | None,
+) -> list[str]:
+    if "TECHNICAL_DECISION_EVENT_WRITE_FAILED" not in degraded_reasons:
+        degraded_reasons.append("TECHNICAL_DECISION_EVENT_WRITE_FAILED")
+    log_event(
+        logger,
+        event="technical_prediction_event_write_failed",
+        message="technical prediction event write failed",
+        level=logging.WARNING,
+        error_code="TECHNICAL_DECISION_EVENT_WRITE_FAILED",
+        fields={
+            "ticker": ticker,
+            "artifact_id": report_artifact_id,
+            "failure_detail": failure_detail,
+        },
+    )
+    return degraded_reasons
+
+
+def _extract_report_artifact_id(ta_update: JSONObject) -> str | None:
+    artifact = ta_update.get("artifact")
+    if not isinstance(artifact, Mapping):
+        return None
+    reference = artifact.get("reference")
+    if not isinstance(reference, Mapping):
+        return None
+    artifact_id = reference.get("artifact_id")
+    if isinstance(artifact_id, str) and artifact_id:
+        return artifact_id
+    return None

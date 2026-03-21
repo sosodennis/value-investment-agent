@@ -1,4 +1,6 @@
-from src.agents.technical.interface.formatters import format_ta_preview
+from src.agents.technical.interface.preview_formatter_service import (
+    format_ta_preview,
+)
 from src.agents.technical.interface.preview_projection_service import project_ta_preview
 
 
