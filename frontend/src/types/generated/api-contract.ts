@@ -24,6 +24,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/observability/calibration/direction-readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Direction Calibration Readiness */
+        get: operations["get_direction_calibration_readiness_api_observability_calibration_direction_readiness_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/observability/monitoring/aggregates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Monitoring Aggregates */
+        get: operations["get_monitoring_aggregates_api_observability_monitoring_aggregates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/observability/monitoring/events/{event_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Monitoring Event Detail */
+        get: operations["get_monitoring_event_detail_api_observability_monitoring_events__event_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/observability/monitoring/rows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Monitoring Rows */
+        get: operations["get_monitoring_rows_api_observability_monitoring_rows_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/history/{thread_id}": {
         parameters: {
             query?: never;
@@ -786,6 +854,8 @@ export interface components {
         };
         /** MessageResponse */
         MessageResponse: {
+            /** Agentid */
+            agentId?: string | null;
             /** Content */
             content: string;
             /** Created At */
@@ -1155,6 +1225,22 @@ export interface components {
             /** Reliability Score */
             reliability_score: number;
         };
+        /** StatusHistoryEntryResponse */
+        StatusHistoryEntryResponse: {
+            /** Agentid */
+            agentId: string;
+            /** Id */
+            id: string;
+            /** Node */
+            node: string;
+            /** Status */
+            status: string;
+            /**
+             * Timestamp
+             * Format: date-time
+             */
+            timestamp: string;
+        };
         /** StreamStartResponse */
         StreamStartResponse: {
             /**
@@ -1203,40 +1289,6 @@ export interface components {
             val?: number | null;
             /** Volume Node Count */
             volume_node_count?: number | null;
-        };
-        /** VolumeProfileLevelModel */
-        VolumeProfileLevelModel: {
-            /** Label */
-            label?: string | null;
-            /** Price */
-            price: number;
-            /** Strength */
-            strength?: number | null;
-            /** Touches */
-            touches?: number | null;
-        };
-        /** VolumeProfileSummaryModel */
-        VolumeProfileSummaryModel: {
-            /** Bucket Count */
-            bucket_count?: number | null;
-            dominant_level?: components["schemas"]["VolumeProfileLevelModel"] | null;
-            /** Level Count */
-            level_count?: number | null;
-            levels?: components["schemas"]["VolumeProfileLevelModel"][] | null;
-            /** Poc */
-            poc?: number | null;
-            /** Profile Fidelity */
-            profile_fidelity?: string | null;
-            /** Profile Method */
-            profile_method?: string | null;
-            /** Timeframe */
-            timeframe?: string | null;
-            /** Value Area Coverage */
-            value_area_coverage?: number | null;
-            /** Vah */
-            vah?: number | null;
-            /** Val */
-            val?: number | null;
         };
         /** TaAlertsEnvelope */
         TaAlertsEnvelope: {
@@ -1600,7 +1652,6 @@ export interface components {
             summary_tags: string[];
             /** Ticker */
             ticker: string;
-            /** Volume Profile Summary */
             volume_profile_summary?: components["schemas"]["VolumeProfileSummaryModel"] | null;
         };
         /** TechnicalBacktestSummaryData */
@@ -1617,6 +1668,21 @@ export interface components {
             total_trades?: number | null;
             /** Win Rate */
             win_rate?: number | null;
+        };
+        /** TechnicalCalibrationObservationBuildResultModel */
+        TechnicalCalibrationObservationBuildResultModel: {
+            /** Dropped Reasons */
+            dropped_reasons: {
+                [key: string]: number;
+            };
+            /** Dropped Row Count */
+            dropped_row_count: number;
+            /** Observations */
+            observations?: components["schemas"]["TechnicalDirectionCalibrationObservationModel"][] | null;
+            /** Row Count */
+            row_count: number;
+            /** Usable Row Count */
+            usable_row_count: number;
         };
         /** TechnicalChartArtifactData */
         TechnicalChartArtifactData: {
@@ -1654,6 +1720,19 @@ export interface components {
             normalized_direction?: string | null;
             /** Reason Codes */
             reason_codes?: string[] | null;
+        };
+        /** TechnicalDirectionCalibrationObservationModel */
+        TechnicalDirectionCalibrationObservationModel: {
+            /** Direction */
+            direction: string;
+            /** Horizon */
+            horizon: string;
+            /** Raw Score */
+            raw_score: number;
+            /** Target Outcome */
+            target_outcome: number;
+            /** Timeframe */
+            timeframe: string;
         };
         /** TechnicalDirectionScorecardArtifactData */
         TechnicalDirectionScorecardArtifactData: {
@@ -1708,7 +1787,6 @@ export interface components {
             structure_confluence_summary?: components["schemas"]["StructureConfluenceSummaryModel"] | null;
             /** Support Levels */
             support_levels?: number[] | null;
-            /** Volume Profile Summary */
             volume_profile_summary?: components["schemas"]["VolumeProfileSummaryModel"] | null;
         };
         /** TechnicalFeatureFrameData */
@@ -1900,6 +1978,141 @@ export interface components {
             source_price_basis?: string | null;
             /** Source Timeframe */
             source_timeframe?: string | null;
+        };
+        /** TechnicalMonitoringAggregateModel */
+        TechnicalMonitoringAggregateModel: {
+            /** Avg Confidence */
+            avg_confidence?: number | null;
+            /** Avg Forward Return */
+            avg_forward_return?: number | null;
+            /** Avg Mae */
+            avg_mae?: number | null;
+            /** Avg Mfe */
+            avg_mfe?: number | null;
+            /** Avg Raw Score */
+            avg_raw_score?: number | null;
+            /** Avg Realized Volatility */
+            avg_realized_volatility?: number | null;
+            /** Event Count */
+            event_count: number;
+            /** First Event Time */
+            first_event_time?: string | null;
+            /** Horizon */
+            horizon: string;
+            /** Labeled Event Count */
+            labeled_event_count: number;
+            /** Last Event Time */
+            last_event_time?: string | null;
+            /** Logic Version */
+            logic_version: string;
+            /** Timeframe */
+            timeframe: string;
+            /** Unresolved Event Count */
+            unresolved_event_count: number;
+        };
+        /** TechnicalMonitoringEventDetailModel */
+        TechnicalMonitoringEventDetailModel: {
+            /** Agent Source */
+            agent_source: string;
+            /** Confidence */
+            confidence?: number | null;
+            /** Context Payload */
+            context_payload: {
+                [key: string]: unknown;
+            };
+            /** Data Quality Flags */
+            data_quality_flags: string[];
+            /** Direction */
+            direction: string;
+            /** Event Id */
+            event_id: string;
+            /**
+             * Event Time
+             * Format: date-time
+             */
+            event_time: string;
+            /** Feature Contract Version */
+            feature_contract_version: string;
+            /** Forward Return */
+            forward_return?: number | null;
+            /** Full Report Artifact Id */
+            full_report_artifact_id: string;
+            /** Horizon */
+            horizon: string;
+            /** Labeling Method Version */
+            labeling_method_version?: string | null;
+            /** Logic Version */
+            logic_version: string;
+            /** Mae */
+            mae?: number | null;
+            /** Mfe */
+            mfe?: number | null;
+            /** Outcome Path Id */
+            outcome_path_id?: string | null;
+            /** Raw Score */
+            raw_score?: number | null;
+            /** Realized Volatility */
+            realized_volatility?: number | null;
+            /** Reliability Level */
+            reliability_level?: string | null;
+            /** Resolved At */
+            resolved_at?: string | null;
+            /** Run Type */
+            run_type: string;
+            /** Source Artifact Refs */
+            source_artifact_refs: {
+                [key: string]: unknown;
+            };
+            /** Ticker */
+            ticker: string;
+            /** Timeframe */
+            timeframe: string;
+        };
+        /** TechnicalMonitoringRowModel */
+        TechnicalMonitoringRowModel: {
+            /** Agent Source */
+            agent_source: string;
+            /** Confidence */
+            confidence?: number | null;
+            /** Data Quality Flags */
+            data_quality_flags: string[];
+            /** Direction */
+            direction: string;
+            /** Event Id */
+            event_id: string;
+            /**
+             * Event Time
+             * Format: date-time
+             */
+            event_time: string;
+            /** Forward Return */
+            forward_return?: number | null;
+            /** Horizon */
+            horizon: string;
+            /** Labeling Method Version */
+            labeling_method_version?: string | null;
+            /** Logic Version */
+            logic_version: string;
+            /** Mae */
+            mae?: number | null;
+            /** Mfe */
+            mfe?: number | null;
+            /** Outcome Path Id */
+            outcome_path_id?: string | null;
+            /** Raw Score */
+            raw_score?: number | null;
+            /** Realized Volatility */
+            realized_volatility?: number | null;
+            /** Reliability Level */
+            reliability_level?: string | null;
+            /** Resolved At */
+            resolved_at?: string | null;
+            /** Run Type */
+            run_type: string;
+            /** Ticker */
+            ticker: string;
+            /** Timeframe */
+            timeframe: string;
         };
         /** TechnicalPatternFlagData */
         TechnicalPatternFlagData: {
@@ -2266,6 +2479,10 @@ export interface components {
             agent_outputs: {
                 [key: string]: components["schemas"]["AgentOutputArtifact"];
             };
+            /** Current Node */
+            current_node?: string | null;
+            /** Current Status */
+            current_status?: string | null;
             /** Interrupts */
             interrupts: components["schemas"]["HumanTickerSelection"][];
             /** Is Running */
@@ -2284,6 +2501,11 @@ export interface components {
             resolved_ticker?: string | null;
             /** Status */
             status?: string | null;
+            /**
+             * Status History
+             * @default []
+             */
+            status_history: components["schemas"]["StatusHistoryEntryResponse"][];
             /** Thread Id */
             thread_id: string;
         };
@@ -2328,6 +2550,41 @@ export interface components {
             /** Error Type */
             type: string;
         };
+        /** VolumeProfileLevelModel */
+        VolumeProfileLevelModel: {
+            /** Label */
+            label?: string | null;
+            /** Price */
+            price: number;
+            /** Strength */
+            strength?: number | null;
+            /** Touches */
+            touches?: number | null;
+        };
+        /** VolumeProfileSummaryModel */
+        VolumeProfileSummaryModel: {
+            /** Bucket Count */
+            bucket_count?: number | null;
+            dominant_level?: components["schemas"]["VolumeProfileLevelModel"] | null;
+            /** Level Count */
+            level_count?: number | null;
+            /** Levels */
+            levels?: components["schemas"]["VolumeProfileLevelModel"][] | null;
+            /** Poc */
+            poc?: number | null;
+            /** Profile Fidelity */
+            profile_fidelity?: string | null;
+            /** Profile Method */
+            profile_method?: string | null;
+            /** Timeframe */
+            timeframe?: string | null;
+            /** Vah */
+            vah?: number | null;
+            /** Val */
+            val?: number | null;
+            /** Value Area Coverage */
+            value_area_coverage?: number | null;
+        };
     };
     responses: never;
     parameters: never;
@@ -2355,6 +2612,172 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FinancialReportsEnvelope"] | components["schemas"]["PriceSeriesEnvelope"] | components["schemas"]["TaChartDataEnvelope"] | components["schemas"]["TaIndicatorSeriesEnvelope"] | components["schemas"]["TaAlertsEnvelope"] | components["schemas"]["TaTimeseriesBundleEnvelope"] | components["schemas"]["TaFeaturePackEnvelope"] | components["schemas"]["TaPatternPackEnvelope"] | components["schemas"]["TaRegimePackEnvelope"] | components["schemas"]["TaFusionReportEnvelope"] | components["schemas"]["TaDirectionScorecardEnvelope"] | components["schemas"]["TaVerificationReportEnvelope"] | components["schemas"]["TaFullReportEnvelope"] | components["schemas"]["SearchResultsEnvelope"] | components["schemas"]["NewsSelectionEnvelope"] | components["schemas"]["NewsArticleEnvelope"] | components["schemas"]["NewsItemsListEnvelope"] | components["schemas"]["NewsAnalysisReportEnvelope"] | components["schemas"]["DebateFactsEnvelope"] | components["schemas"]["DebateFinalReportEnvelope"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_direction_calibration_readiness_api_observability_calibration_direction_readiness_get: {
+        parameters: {
+            query?: {
+                tickers?: string[];
+                agent_sources?: string[];
+                timeframes?: string[];
+                horizons?: string[];
+                logic_versions?: string[];
+                directions?: string[];
+                run_types?: string[];
+                reliability_levels?: string[];
+                event_time_start?: string | null;
+                event_time_end?: string | null;
+                resolved_time_start?: string | null;
+                resolved_time_end?: string | null;
+                labeling_method_version?: string;
+                limit?: number;
+                include_observations?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TechnicalCalibrationObservationBuildResultModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_monitoring_aggregates_api_observability_monitoring_aggregates_get: {
+        parameters: {
+            query?: {
+                tickers?: string[];
+                agent_sources?: string[];
+                timeframes?: string[];
+                horizons?: string[];
+                logic_versions?: string[];
+                directions?: string[];
+                run_types?: string[];
+                reliability_levels?: string[];
+                event_time_start?: string | null;
+                event_time_end?: string | null;
+                resolved_time_start?: string | null;
+                resolved_time_end?: string | null;
+                labeling_method_version?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TechnicalMonitoringAggregateModel"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_monitoring_event_detail_api_observability_monitoring_events__event_id__get: {
+        parameters: {
+            query?: {
+                labeling_method_version?: string;
+            };
+            header?: never;
+            path: {
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TechnicalMonitoringEventDetailModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_monitoring_rows_api_observability_monitoring_rows_get: {
+        parameters: {
+            query?: {
+                tickers?: string[];
+                agent_sources?: string[];
+                timeframes?: string[];
+                horizons?: string[];
+                logic_versions?: string[];
+                directions?: string[];
+                run_types?: string[];
+                reliability_levels?: string[];
+                event_time_start?: string | null;
+                event_time_end?: string | null;
+                resolved_time_start?: string | null;
+                resolved_time_end?: string | null;
+                labeling_method_version?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TechnicalMonitoringRowModel"][];
                 };
             };
             /** @description Validation Error */

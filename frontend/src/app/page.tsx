@@ -21,11 +21,13 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
     currentNode,
     currentStatus: globalStatus,
     activityFeed,
-    agentOutputs
+    agentOutputs,
+    activeAgentId,
   } = useAgent(assistantId);
 
   const [ticker, setTicker] = useState('');
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const syncedSelectionThreadIdRef = useRef<string | null>(null);
 
   // Hook 1: Extract Ticker & Financial Logic
   // We use 'intent_extraction' as the primary source for the ticker.
@@ -52,6 +54,10 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
     // Explicitly safe access to localStorage inside useEffect
     if (typeof window !== 'undefined') {
       const savedThreadId = localStorage.getItem('agent_thread_id');
+      const savedSelectedAgentId = localStorage.getItem('agent_selected_agent_id');
+      if (savedSelectedAgentId) {
+        setSelectedAgentId(savedSelectedAgentId);
+      }
       if (savedThreadId) {
         loadHistory(savedThreadId);
       }
@@ -65,6 +71,23 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
       localStorage.setItem('agent_thread_id', threadId);
     }
   }, [threadId]);
+
+  useEffect(() => {
+    if (selectedAgentId && typeof window !== 'undefined') {
+      localStorage.setItem('agent_selected_agent_id', selectedAgentId);
+    }
+  }, [selectedAgentId]);
+
+  useEffect(() => {
+    if (!threadId || !activeAgentId) {
+      return;
+    }
+    if (syncedSelectionThreadIdRef.current === threadId) {
+      return;
+    }
+    setSelectedAgentId(activeAgentId);
+    syncedSelectionThreadIdRef.current = threadId;
+  }, [threadId, activeAgentId]);
 
   // Define Agents Roster Data (Linking to current workflow nodes)
   // Derive 'attention' status from active interrupts
@@ -88,6 +111,18 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
     });
   }, [agentStatuses, hasTickerInterrupt]);
 
+  useEffect(() => {
+    if (selectedAgentId) {
+      return;
+    }
+    const preferredAgent =
+      agents.find((agent) => agent.status === 'running' || agent.status === 'attention') ||
+      agents.find((agent) => agent.status !== 'idle');
+    if (preferredAgent) {
+      setSelectedAgentId(preferredAgent.id);
+    }
+  }, [agents, selectedAgentId]);
+
   const handleStartAnalysis = () => {
     if (!ticker || isLoading) return;
     sendMessage(`Valuate ${ticker}`, true);
@@ -107,6 +142,7 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
         onStartAnalysis={handleStartAnalysis}
         onShowHistory={() => { }}
         isLoading={isLoading}
+        currentView="workspace"
       />
 
       <div className="flex flex-1 overflow-hidden">

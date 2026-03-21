@@ -221,12 +221,26 @@ describe('REST boundary parsers', () => {
                 },
             },
             last_seq_id: 12,
+            current_node: 'intent_extraction',
+            current_status: 'running',
+            status_history: [
+                {
+                    id: 'status_1',
+                    node: 'intent_extraction',
+                    agentId: 'intent_extraction',
+                    status: 'running',
+                    timestamp: '2026-03-21T08:00:00Z',
+                },
+            ],
         });
 
         expect(parsed.thread_id).toBe('thread_1');
         expect(parsed.node_statuses.intent_extraction).toBe('done');
         expect(parsed.node_statuses.fundamental_analysis).toBe('running');
         expect(parsed.agent_outputs.intent_extraction?.summary).toBe('Ticker resolved');
+        expect(parsed.current_node).toBe('intent_extraction');
+        expect(parsed.current_status).toBe('running');
+        expect(parsed.status_history[0]?.agentId).toBe('intent_extraction');
     });
 
     it('rejects unknown node status values', () => {

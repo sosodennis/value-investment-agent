@@ -11,6 +11,7 @@ import {
     StreamRequest,
 } from '../types/protocol';
 import { useAgentReducer } from './useAgentReducer';
+import { deriveActiveAgentId } from '@/lib/agent-session-state';
 
 const API_URL = process.env.NEXT_PUBLIC_LANGGRAPH_URL || 'http://localhost:8000';
 
@@ -44,6 +45,15 @@ export function useAgent(assistantId: string = 'agent') {
 
     const [isLoading, setIsLoading] = useState(false);
     const [hasMore, setHasMore] = useState(true);
+    const activeAgentId = deriveActiveAgentId({
+        current_node: state.currentNode,
+        current_status: state.currentStatus,
+        status_history: state.statusHistory,
+        node_statuses: Object.fromEntries(
+            Object.entries(state.agents).map(([id, data]) => [id, data.status])
+        ),
+        is_running: state.status === 'running' || state.status === 'paused',
+    });
 
     const parseStream = useCallback(
         async (threadId: string) => {
@@ -226,7 +236,7 @@ export function useAgent(assistantId: string = 'agent') {
                 if (stateResponse.ok) {
                     const stateRaw: unknown = await stateResponse.json();
                     const stateData = parseThreadStateResponse(stateRaw);
-                    dispatchLoadHistory(historyData, id, stateData);
+                    dispatchLoadHistory(before ? historyData : stateData.messages, id, stateData);
                     if (stateData.is_running && !before) {
                         await parseStream(id);
                     }
@@ -263,5 +273,6 @@ export function useAgent(assistantId: string = 'agent') {
         currentNode: state.currentNode,
         currentStatus: state.currentStatus,
         activityFeed: state.statusHistory,
+        activeAgentId,
     };
 }

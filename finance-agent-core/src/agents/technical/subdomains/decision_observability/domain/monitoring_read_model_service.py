@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 
 from .contracts import (
     MonitoringQueryScope,
@@ -39,10 +39,10 @@ def build_monitoring_query_scope(
         directions=_normalize_filter_values(directions),
         run_types=_normalize_filter_values(run_types),
         reliability_levels=_normalize_filter_values(reliability_levels),
-        event_time_start=event_time_start,
-        event_time_end=event_time_end,
-        resolved_time_start=resolved_time_start,
-        resolved_time_end=resolved_time_end,
+        event_time_start=_normalize_query_datetime(event_time_start),
+        event_time_end=_normalize_query_datetime(event_time_end),
+        resolved_time_start=_normalize_query_datetime(resolved_time_start),
+        resolved_time_end=_normalize_query_datetime(resolved_time_end),
         labeling_method_version=labeling_method_version.strip()
         or "technical_outcome_labeling.v1",
         limit=_normalize_limit(limit),
@@ -94,6 +94,14 @@ def _normalize_limit(limit: int) -> int:
     if limit <= 0:
         return _DEFAULT_MONITORING_LIMIT
     return min(limit, _MAX_MONITORING_LIMIT)
+
+
+def _normalize_query_datetime(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(UTC).replace(tzinfo=None)
 
 
 @dataclass

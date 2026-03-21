@@ -5,11 +5,13 @@ from datetime import datetime
 
 from src.agents.technical.subdomains.calibration import (
     TechnicalDirectionCalibrationObservation,
-    build_technical_direction_calibration_observations,
 )
 from src.agents.technical.subdomains.decision_observability import (
     TechnicalDecisionObservabilityRuntimeService,
     build_monitoring_query_scope,
+)
+from src.agents.technical.subdomains.decision_observability.domain import (
+    build_technical_direction_calibration_observations,
 )
 from src.agents.technical.subdomains.decision_observability.domain.contracts import (
     MonitoringQueryScope,
@@ -149,9 +151,3 @@ async def test_runtime_load_direction_calibration_observations_from_monitoring_r
     assert result.row_count == 1
     assert result.usable_row_count == 1
     assert result.observations[0].direction == "bullish"
-
-
-def test_calibration_facade_exports_builder() -> None:
-    builder = build_technical_direction_calibration_observations
-
-    assert callable(builder)

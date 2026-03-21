@@ -121,6 +121,34 @@ class TechnicalMonitoringReadModelRow:
 
 
 @dataclass(frozen=True)
+class TechnicalMonitoringEventDetail:
+    event_id: str
+    event_time: datetime
+    ticker: str
+    agent_source: str
+    timeframe: str
+    horizon: str
+    direction: str
+    logic_version: str
+    feature_contract_version: str
+    run_type: str
+    reliability_level: str | None
+    raw_score: float | None
+    confidence: float | None
+    full_report_artifact_id: str
+    source_artifact_refs: JSONObject
+    context_payload: JSONObject
+    outcome_path_id: str | None
+    resolved_at: datetime | None
+    labeling_method_version: str | None
+    forward_return: float | None
+    mfe: float | None
+    mae: float | None
+    realized_volatility: float | None
+    data_quality_flags: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class TechnicalMonitoringAggregate:
     timeframe: str
     horizon: str

@@ -2387,6 +2387,17 @@
       },
       "MessageResponse": {
         "properties": {
+          "agentId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agentid"
+          },
           "content": {
             "title": "Content",
             "type": "string"
@@ -3704,6 +3715,40 @@
         "title": "SourceInfoModel",
         "type": "object"
       },
+      "StatusHistoryEntryResponse": {
+        "properties": {
+          "agentId": {
+            "title": "Agentid",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "node": {
+            "title": "Node",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "timestamp": {
+            "format": "date-time",
+            "title": "Timestamp",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "node",
+          "agentId",
+          "status",
+          "timestamp"
+        ],
+        "title": "StatusHistoryEntryResponse",
+        "type": "object"
+      },
       "StreamStartResponse": {
         "properties": {
           "status": {
@@ -3931,181 +3976,6 @@
           }
         },
         "title": "StructureConfluenceSummaryModel",
-        "type": "object"
-      },
-      "VolumeProfileLevelModel": {
-        "properties": {
-          "label": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Label"
-          },
-          "price": {
-            "title": "Price",
-            "type": "number"
-          },
-          "strength": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Strength"
-          },
-          "touches": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Touches"
-          }
-        },
-        "required": [
-          "price"
-        ],
-        "title": "VolumeProfileLevelModel",
-        "type": "object"
-      },
-      "VolumeProfileSummaryModel": {
-        "properties": {
-          "bucket_count": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Bucket Count"
-          },
-          "dominant_level": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/VolumeProfileLevelModel"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "level_count": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Level Count"
-          },
-          "levels": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/VolumeProfileLevelModel"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Levels"
-          },
-          "poc": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Poc"
-          },
-          "profile_fidelity": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Profile Fidelity"
-          },
-          "profile_method": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Profile Method"
-          },
-          "timeframe": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Timeframe"
-          },
-          "value_area_coverage": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Value Area Coverage"
-          },
-          "vah": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Vah"
-          },
-          "val": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Val"
-          }
-        },
-        "title": "VolumeProfileSummaryModel",
         "type": "object"
       },
       "TaAlertsEnvelope": {
@@ -5202,8 +5072,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Volume Profile Summary"
+            ]
           }
         },
         "required": [
@@ -5289,6 +5158,52 @@
           }
         },
         "title": "TechnicalBacktestSummaryData",
+        "type": "object"
+      },
+      "TechnicalCalibrationObservationBuildResultModel": {
+        "additionalProperties": false,
+        "properties": {
+          "dropped_reasons": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Dropped Reasons",
+            "type": "object"
+          },
+          "dropped_row_count": {
+            "title": "Dropped Row Count",
+            "type": "integer"
+          },
+          "observations": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/TechnicalDirectionCalibrationObservationModel"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observations"
+          },
+          "row_count": {
+            "title": "Row Count",
+            "type": "integer"
+          },
+          "usable_row_count": {
+            "title": "Usable Row Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "row_count",
+          "usable_row_count",
+          "dropped_row_count",
+          "dropped_reasons"
+        ],
+        "title": "TechnicalCalibrationObservationBuildResultModel",
         "type": "object"
       },
       "TechnicalChartArtifactData": {
@@ -5435,6 +5350,40 @@
           "eligible"
         ],
         "title": "TechnicalConfidenceEligibilityData",
+        "type": "object"
+      },
+      "TechnicalDirectionCalibrationObservationModel": {
+        "additionalProperties": false,
+        "properties": {
+          "direction": {
+            "title": "Direction",
+            "type": "string"
+          },
+          "horizon": {
+            "title": "Horizon",
+            "type": "string"
+          },
+          "raw_score": {
+            "title": "Raw Score",
+            "type": "number"
+          },
+          "target_outcome": {
+            "title": "Target Outcome",
+            "type": "number"
+          },
+          "timeframe": {
+            "title": "Timeframe",
+            "type": "string"
+          }
+        },
+        "required": [
+          "timeframe",
+          "horizon",
+          "raw_score",
+          "direction",
+          "target_outcome"
+        ],
+        "title": "TechnicalDirectionCalibrationObservationModel",
         "type": "object"
       },
       "TechnicalDirectionScorecardArtifactData": {
@@ -5689,8 +5638,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Volume Profile Summary"
+            ]
           }
         },
         "title": "TechnicalEvidenceBundleModel",
@@ -6436,6 +6384,505 @@
           "downsample_step"
         ],
         "title": "TechnicalIndicatorSeriesFrameMetadataData",
+        "type": "object"
+      },
+      "TechnicalMonitoringAggregateModel": {
+        "additionalProperties": false,
+        "properties": {
+          "avg_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Confidence"
+          },
+          "avg_forward_return": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Forward Return"
+          },
+          "avg_mae": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Mae"
+          },
+          "avg_mfe": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Mfe"
+          },
+          "avg_raw_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Raw Score"
+          },
+          "avg_realized_volatility": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Realized Volatility"
+          },
+          "event_count": {
+            "title": "Event Count",
+            "type": "integer"
+          },
+          "first_event_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Event Time"
+          },
+          "horizon": {
+            "title": "Horizon",
+            "type": "string"
+          },
+          "labeled_event_count": {
+            "title": "Labeled Event Count",
+            "type": "integer"
+          },
+          "last_event_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Event Time"
+          },
+          "logic_version": {
+            "title": "Logic Version",
+            "type": "string"
+          },
+          "timeframe": {
+            "title": "Timeframe",
+            "type": "string"
+          },
+          "unresolved_event_count": {
+            "title": "Unresolved Event Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "timeframe",
+          "horizon",
+          "logic_version",
+          "event_count",
+          "labeled_event_count",
+          "unresolved_event_count"
+        ],
+        "title": "TechnicalMonitoringAggregateModel",
+        "type": "object"
+      },
+      "TechnicalMonitoringEventDetailModel": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_source": {
+            "title": "Agent Source",
+            "type": "string"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "context_payload": {
+            "additionalProperties": true,
+            "title": "Context Payload",
+            "type": "object"
+          },
+          "data_quality_flags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Data Quality Flags",
+            "type": "array"
+          },
+          "direction": {
+            "title": "Direction",
+            "type": "string"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_time": {
+            "format": "date-time",
+            "title": "Event Time",
+            "type": "string"
+          },
+          "feature_contract_version": {
+            "title": "Feature Contract Version",
+            "type": "string"
+          },
+          "forward_return": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forward Return"
+          },
+          "full_report_artifact_id": {
+            "title": "Full Report Artifact Id",
+            "type": "string"
+          },
+          "horizon": {
+            "title": "Horizon",
+            "type": "string"
+          },
+          "labeling_method_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Labeling Method Version"
+          },
+          "logic_version": {
+            "title": "Logic Version",
+            "type": "string"
+          },
+          "mae": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mae"
+          },
+          "mfe": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mfe"
+          },
+          "outcome_path_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome Path Id"
+          },
+          "raw_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Score"
+          },
+          "realized_volatility": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Realized Volatility"
+          },
+          "reliability_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reliability Level"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "run_type": {
+            "title": "Run Type",
+            "type": "string"
+          },
+          "source_artifact_refs": {
+            "additionalProperties": true,
+            "title": "Source Artifact Refs",
+            "type": "object"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          },
+          "timeframe": {
+            "title": "Timeframe",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "event_time",
+          "ticker",
+          "agent_source",
+          "timeframe",
+          "horizon",
+          "direction",
+          "logic_version",
+          "feature_contract_version",
+          "run_type",
+          "full_report_artifact_id",
+          "source_artifact_refs",
+          "context_payload",
+          "data_quality_flags"
+        ],
+        "title": "TechnicalMonitoringEventDetailModel",
+        "type": "object"
+      },
+      "TechnicalMonitoringRowModel": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_source": {
+            "title": "Agent Source",
+            "type": "string"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "data_quality_flags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Data Quality Flags",
+            "type": "array"
+          },
+          "direction": {
+            "title": "Direction",
+            "type": "string"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_time": {
+            "format": "date-time",
+            "title": "Event Time",
+            "type": "string"
+          },
+          "forward_return": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forward Return"
+          },
+          "horizon": {
+            "title": "Horizon",
+            "type": "string"
+          },
+          "labeling_method_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Labeling Method Version"
+          },
+          "logic_version": {
+            "title": "Logic Version",
+            "type": "string"
+          },
+          "mae": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mae"
+          },
+          "mfe": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mfe"
+          },
+          "outcome_path_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome Path Id"
+          },
+          "raw_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Score"
+          },
+          "realized_volatility": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Realized Volatility"
+          },
+          "reliability_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reliability Level"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "run_type": {
+            "title": "Run Type",
+            "type": "string"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          },
+          "timeframe": {
+            "title": "Timeframe",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "event_time",
+          "ticker",
+          "agent_source",
+          "timeframe",
+          "horizon",
+          "direction",
+          "logic_version",
+          "run_type",
+          "data_quality_flags"
+        ],
+        "title": "TechnicalMonitoringRowModel",
         "type": "object"
       },
       "TechnicalPatternFlagData": {
@@ -7792,6 +8239,28 @@
             "title": "Agent Outputs",
             "type": "object"
           },
+          "current_node": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Node"
+          },
+          "current_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Status"
+          },
           "interrupts": {
             "items": {
               "$ref": "#/components/schemas/HumanTickerSelection"
@@ -7856,6 +8325,14 @@
               }
             ],
             "title": "Status"
+          },
+          "status_history": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/StatusHistoryEntryResponse"
+            },
+            "title": "Status History",
+            "type": "array"
           },
           "thread_id": {
             "title": "Thread Id",
@@ -7959,6 +8436,181 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "VolumeProfileLevelModel": {
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "price": {
+            "title": "Price",
+            "type": "number"
+          },
+          "strength": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strength"
+          },
+          "touches": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Touches"
+          }
+        },
+        "required": [
+          "price"
+        ],
+        "title": "VolumeProfileLevelModel",
+        "type": "object"
+      },
+      "VolumeProfileSummaryModel": {
+        "properties": {
+          "bucket_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bucket Count"
+          },
+          "dominant_level": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VolumeProfileLevelModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "level_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level Count"
+          },
+          "levels": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/VolumeProfileLevelModel"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Levels"
+          },
+          "poc": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poc"
+          },
+          "profile_fidelity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Fidelity"
+          },
+          "profile_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Method"
+          },
+          "timeframe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeframe"
+          },
+          "vah": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vah"
+          },
+          "val": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Val"
+          },
+          "value_area_coverage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Area Coverage"
+          }
+        },
+        "title": "VolumeProfileSummaryModel",
         "type": "object"
       }
     }
@@ -8095,6 +8747,751 @@
           }
         },
         "summary": "Get Artifact"
+      }
+    },
+    "/api/observability/calibration/direction-readiness": {
+      "get": {
+        "operationId": "get_direction_calibration_readiness_api_observability_calibration_direction_readiness_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tickers",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Tickers",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_sources",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Agent Sources",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "timeframes",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Timeframes",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "horizons",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Horizons",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "logic_versions",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Logic Versions",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "directions",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Directions",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "run_types",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Run Types",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "reliability_levels",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Reliability Levels",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "event_time_start",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Event Time Start"
+            }
+          },
+          {
+            "in": "query",
+            "name": "event_time_end",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Event Time End"
+            }
+          },
+          {
+            "in": "query",
+            "name": "resolved_time_start",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Resolved Time Start"
+            }
+          },
+          {
+            "in": "query",
+            "name": "resolved_time_end",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Resolved Time End"
+            }
+          },
+          {
+            "in": "query",
+            "name": "labeling_method_version",
+            "required": false,
+            "schema": {
+              "default": "technical_outcome_labeling.v1",
+              "title": "Labeling Method Version",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_observations",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Observations",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TechnicalCalibrationObservationBuildResultModel"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Direction Calibration Readiness",
+        "tags": [
+          "Observability"
+        ]
+      }
+    },
+    "/api/observability/monitoring/aggregates": {
+      "get": {
+        "operationId": "get_monitoring_aggregates_api_observability_monitoring_aggregates_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tickers",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Tickers",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_sources",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Agent Sources",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "timeframes",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Timeframes",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "horizons",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Horizons",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "logic_versions",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Logic Versions",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "directions",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Directions",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "run_types",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Run Types",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "reliability_levels",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Reliability Levels",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "event_time_start",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Event Time Start"
+            }
+          },
+          {
+            "in": "query",
+            "name": "event_time_end",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Event Time End"
+            }
+          },
+          {
+            "in": "query",
+            "name": "resolved_time_start",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Resolved Time Start"
+            }
+          },
+          {
+            "in": "query",
+            "name": "resolved_time_end",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Resolved Time End"
+            }
+          },
+          {
+            "in": "query",
+            "name": "labeling_method_version",
+            "required": false,
+            "schema": {
+              "default": "technical_outcome_labeling.v1",
+              "title": "Labeling Method Version",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TechnicalMonitoringAggregateModel"
+                  },
+                  "title": "Response Get Monitoring Aggregates Api Observability Monitoring Aggregates Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Monitoring Aggregates",
+        "tags": [
+          "Observability"
+        ]
+      }
+    },
+    "/api/observability/monitoring/events/{event_id}": {
+      "get": {
+        "operationId": "get_monitoring_event_detail_api_observability_monitoring_events__event_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "title": "Event Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "labeling_method_version",
+            "required": false,
+            "schema": {
+              "default": "technical_outcome_labeling.v1",
+              "title": "Labeling Method Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TechnicalMonitoringEventDetailModel"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Monitoring Event Detail",
+        "tags": [
+          "Observability"
+        ]
+      }
+    },
+    "/api/observability/monitoring/rows": {
+      "get": {
+        "operationId": "get_monitoring_rows_api_observability_monitoring_rows_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tickers",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Tickers",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_sources",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Agent Sources",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "timeframes",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Timeframes",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "horizons",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Horizons",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "logic_versions",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Logic Versions",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "directions",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Directions",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "run_types",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Run Types",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "reliability_levels",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Reliability Levels",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "event_time_start",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Event Time Start"
+            }
+          },
+          {
+            "in": "query",
+            "name": "event_time_end",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Event Time End"
+            }
+          },
+          {
+            "in": "query",
+            "name": "resolved_time_start",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Resolved Time Start"
+            }
+          },
+          {
+            "in": "query",
+            "name": "resolved_time_end",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Resolved Time End"
+            }
+          },
+          {
+            "in": "query",
+            "name": "labeling_method_version",
+            "required": false,
+            "schema": {
+              "default": "technical_outcome_labeling.v1",
+              "title": "Labeling Method Version",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TechnicalMonitoringRowModel"
+                  },
+                  "title": "Response Get Monitoring Rows Api Observability Monitoring Rows Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Monitoring Rows",
+        "tags": [
+          "Observability"
+        ]
       }
     },
     "/history/{thread_id}": {

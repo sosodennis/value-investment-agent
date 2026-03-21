@@ -38,6 +38,11 @@ class ChatMessage(Base):
             "type": self.metadata_.get("type", "text") if self.metadata_ else "text",
             "data": self.metadata_.get("data") if self.metadata_ else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            "agentId": (
+                self.metadata_.get("agentId") or self.metadata_.get("agent_id")
+                if self.metadata_
+                else None
+            ),
         }
 
 

@@ -6,10 +6,12 @@ import uuid
 from collections import defaultdict
 from collections.abc import Mapping
 from contextlib import asynccontextmanager
+from datetime import datetime
+from functools import lru_cache
 from typing import Literal
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -27,6 +29,19 @@ from src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl i
 )
 from src.agents.news.infrastructure.content_fetch import close_shared_async_client
 from src.agents.news.infrastructure.sentiment import get_finbert_analyzer
+from src.agents.technical.subdomains.decision_observability import (
+    TechnicalCalibrationObservationBuildResultModel,
+    TechnicalDecisionObservabilityRuntimeService,
+    TechnicalMonitoringAggregateModel,
+    TechnicalMonitoringEventDetailModel,
+    TechnicalMonitoringRowModel,
+    build_default_technical_decision_observability_runtime_service,
+    build_monitoring_query_scope,
+    build_technical_calibration_observation_build_result_model,
+    build_technical_monitoring_aggregate_model,
+    build_technical_monitoring_event_detail_model,
+    build_technical_monitoring_row_model,
+)
 from src.infrastructure.database import init_db
 from src.interface.artifacts.artifact_api_models import (
     ArtifactApiResponse,
@@ -167,6 +182,202 @@ app.add_middleware(
 )
 
 
+@lru_cache
+def get_observability_runtime() -> TechnicalDecisionObservabilityRuntimeService:
+    return build_default_technical_decision_observability_runtime_service()
+
+
+observability_router = APIRouter(prefix="/api/observability", tags=["Observability"])
+
+
+def _build_observability_scope(
+    *,
+    tickers: list[str],
+    agent_sources: list[str],
+    timeframes: list[str],
+    horizons: list[str],
+    logic_versions: list[str],
+    directions: list[str],
+    run_types: list[str],
+    reliability_levels: list[str],
+    event_time_start: datetime | None,
+    event_time_end: datetime | None,
+    resolved_time_start: datetime | None,
+    resolved_time_end: datetime | None,
+    labeling_method_version: str,
+    limit: int,
+):
+    return build_monitoring_query_scope(
+        tickers=tickers,
+        agent_sources=agent_sources,
+        timeframes=timeframes,
+        horizons=horizons,
+        logic_versions=logic_versions,
+        directions=directions,
+        run_types=run_types,
+        reliability_levels=reliability_levels,
+        event_time_start=event_time_start,
+        event_time_end=event_time_end,
+        resolved_time_start=resolved_time_start,
+        resolved_time_end=resolved_time_end,
+        labeling_method_version=labeling_method_version,
+        limit=limit,
+    )
+
+
+@observability_router.get(
+    "/monitoring/aggregates", response_model=list[TechnicalMonitoringAggregateModel]
+)
+async def get_monitoring_aggregates(
+    tickers: list[str] = Query(default=[]),
+    agent_sources: list[str] = Query(default=[]),
+    timeframes: list[str] = Query(default=[]),
+    horizons: list[str] = Query(default=[]),
+    logic_versions: list[str] = Query(default=[]),
+    directions: list[str] = Query(default=[]),
+    run_types: list[str] = Query(default=[]),
+    reliability_levels: list[str] = Query(default=[]),
+    event_time_start: datetime | None = Query(default=None),
+    event_time_end: datetime | None = Query(default=None),
+    resolved_time_start: datetime | None = Query(default=None),
+    resolved_time_end: datetime | None = Query(default=None),
+    labeling_method_version: str = Query(default="technical_outcome_labeling.v1"),
+    limit: int = Query(default=200),
+    runtime: TechnicalDecisionObservabilityRuntimeService = Depends(
+        get_observability_runtime
+    ),
+):
+    scope = _build_observability_scope(
+        tickers=tickers,
+        agent_sources=agent_sources,
+        timeframes=timeframes,
+        horizons=horizons,
+        logic_versions=logic_versions,
+        directions=directions,
+        run_types=run_types,
+        reliability_levels=reliability_levels,
+        event_time_start=event_time_start,
+        event_time_end=event_time_end,
+        resolved_time_start=resolved_time_start,
+        resolved_time_end=resolved_time_end,
+        labeling_method_version=labeling_method_version,
+        limit=limit,
+    )
+    aggregates = await runtime.load_monitoring_aggregates(scope=scope)
+    return [build_technical_monitoring_aggregate_model(agg) for agg in aggregates]
+
+
+@observability_router.get(
+    "/monitoring/rows", response_model=list[TechnicalMonitoringRowModel]
+)
+async def get_monitoring_rows(
+    tickers: list[str] = Query(default=[]),
+    agent_sources: list[str] = Query(default=[]),
+    timeframes: list[str] = Query(default=[]),
+    horizons: list[str] = Query(default=[]),
+    logic_versions: list[str] = Query(default=[]),
+    directions: list[str] = Query(default=[]),
+    run_types: list[str] = Query(default=[]),
+    reliability_levels: list[str] = Query(default=[]),
+    event_time_start: datetime | None = Query(default=None),
+    event_time_end: datetime | None = Query(default=None),
+    resolved_time_start: datetime | None = Query(default=None),
+    resolved_time_end: datetime | None = Query(default=None),
+    labeling_method_version: str = Query(default="technical_outcome_labeling.v1"),
+    limit: int = Query(default=200),
+    runtime: TechnicalDecisionObservabilityRuntimeService = Depends(
+        get_observability_runtime
+    ),
+):
+    scope = _build_observability_scope(
+        tickers=tickers,
+        agent_sources=agent_sources,
+        timeframes=timeframes,
+        horizons=horizons,
+        logic_versions=logic_versions,
+        directions=directions,
+        run_types=run_types,
+        reliability_levels=reliability_levels,
+        event_time_start=event_time_start,
+        event_time_end=event_time_end,
+        resolved_time_start=resolved_time_start,
+        resolved_time_end=resolved_time_end,
+        labeling_method_version=labeling_method_version,
+        limit=limit,
+    )
+    rows = await runtime.load_monitoring_rows(scope=scope)
+    return [build_technical_monitoring_row_model(row) for row in rows]
+
+
+@observability_router.get(
+    "/monitoring/events/{event_id}",
+    response_model=TechnicalMonitoringEventDetailModel,
+)
+async def get_monitoring_event_detail(
+    event_id: str,
+    labeling_method_version: str = Query(default="technical_outcome_labeling.v1"),
+    runtime: TechnicalDecisionObservabilityRuntimeService = Depends(
+        get_observability_runtime
+    ),
+):
+    detail = await runtime.load_monitoring_event_detail(
+        event_id=event_id,
+        labeling_method_version=labeling_method_version,
+    )
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Observability event not found")
+    return build_technical_monitoring_event_detail_model(detail)
+
+
+@observability_router.get(
+    "/calibration/direction-readiness",
+    response_model=TechnicalCalibrationObservationBuildResultModel,
+)
+async def get_direction_calibration_readiness(
+    tickers: list[str] = Query(default=[]),
+    agent_sources: list[str] = Query(default=[]),
+    timeframes: list[str] = Query(default=[]),
+    horizons: list[str] = Query(default=[]),
+    logic_versions: list[str] = Query(default=[]),
+    directions: list[str] = Query(default=[]),
+    run_types: list[str] = Query(default=[]),
+    reliability_levels: list[str] = Query(default=[]),
+    event_time_start: datetime | None = Query(default=None),
+    event_time_end: datetime | None = Query(default=None),
+    resolved_time_start: datetime | None = Query(default=None),
+    resolved_time_end: datetime | None = Query(default=None),
+    labeling_method_version: str = Query(default="technical_outcome_labeling.v1"),
+    limit: int = Query(default=200),
+    include_observations: bool = Query(default=False),
+    runtime: TechnicalDecisionObservabilityRuntimeService = Depends(
+        get_observability_runtime
+    ),
+):
+    scope = _build_observability_scope(
+        tickers=tickers,
+        agent_sources=agent_sources,
+        timeframes=timeframes,
+        horizons=horizons,
+        logic_versions=logic_versions,
+        directions=directions,
+        run_types=run_types,
+        reliability_levels=reliability_levels,
+        event_time_start=event_time_start,
+        event_time_end=event_time_end,
+        resolved_time_start=resolved_time_start,
+        resolved_time_end=resolved_time_end,
+        labeling_method_version=labeling_method_version,
+        limit=limit,
+    )
+    result = await runtime.load_direction_calibration_observations(scope=scope)
+    return build_technical_calibration_observation_build_result_model(
+        result, include_observations=include_observations
+    )
+
+
+app.include_router(observability_router)
+
+
 class RequestSchema(BaseModel):
     thread_id: str
     message: str | None = None
@@ -180,6 +391,15 @@ class MessageResponse(BaseModel):
     type: str = "text"
     data: dict[str, object] | list[object] | str | int | float | bool | None = None
     created_at: str | None = None
+    agentId: str | None = None
+
+
+class StatusHistoryEntryResponse(BaseModel):
+    id: str
+    node: str
+    agentId: str
+    status: str
+    timestamp: datetime
 
 
 class ThreadStateResponse(BaseModel):
@@ -193,6 +413,9 @@ class ThreadStateResponse(BaseModel):
     node_statuses: dict[str, str]
     agent_outputs: dict[str, AgentOutputArtifact]
     last_seq_id: int
+    current_node: str | None = None
+    current_status: str | None = None
+    status_history: list[StatusHistoryEntryResponse] = []
 
 
 class AgentStatusesResponse(BaseModel):
@@ -263,6 +486,64 @@ def _normalize_statuses(value: object) -> dict[str, str]:
             raise TypeError("node_statuses must be a mapping[str, str]")
         normalized[key] = status
     return normalized
+
+
+def _message_agent_id(value: object) -> str | None:
+    if not isinstance(value, AIMessage | HumanMessage):
+        return None
+    direct_agent_id = value.additional_kwargs.get("agentId")
+    if isinstance(direct_agent_id, str):
+        return direct_agent_id
+    snake_agent_id = value.additional_kwargs.get("agent_id")
+    if isinstance(snake_agent_id, str):
+        return snake_agent_id
+    return None
+
+
+def _build_status_history(thread_id: str) -> list[StatusHistoryEntryResponse]:
+    history: list[StatusHistoryEntryResponse] = []
+    for raw_message in event_replay_buffers.get(thread_id, []):
+        line = raw_message.strip()
+        if not line.startswith("data: "):
+            continue
+        payload = line[6:].strip()
+        if payload == "null":
+            continue
+        try:
+            event = AgentEvent.model_validate_json(payload)
+        except Exception:
+            continue
+        if event.type != "agent.status":
+            continue
+        status = event.data.get("status")
+        if not isinstance(status, str):
+            continue
+        node = event.data.get("node")
+        history.append(
+            StatusHistoryEntryResponse(
+                id=f"status_{event.id}",
+                node=node if isinstance(node, str) and node else event.source,
+                agentId=event.source,
+                status=status,
+                timestamp=event.timestamp,
+            )
+        )
+    return history[-20:]
+
+
+def _derive_current_status(
+    *,
+    is_running: bool,
+    status_history: list[StatusHistoryEntryResponse],
+    has_interrupts: bool,
+) -> str | None:
+    if status_history:
+        return status_history[-1].status
+    if has_interrupts:
+        return "attention"
+    if is_running:
+        return "running"
+    return None
 
 
 async def event_generator(
@@ -508,11 +789,12 @@ async def get_thread_history(request: Request, thread_id: str):
             msg_type = msg_type_raw if isinstance(msg_type_raw, str) else "text"
             messages.append(
                 MessageResponse(
-                    id=getattr(m, "id", f"msg_{id(m)}"),
+                    id=getattr(m, "id", None) or f"msg_{id(m)}",
                     role=role,
                     content=str(m.content),
                     type=msg_type,
                     data=m.additional_kwargs.get("data"),
+                    agentId=_message_agent_id(m),
                 )
             )
 
@@ -549,6 +831,18 @@ async def get_thread_history(request: Request, thread_id: str):
         agent_outputs = NodeOutputMapper.map_all_outputs(snapshot.values)
         node_statuses = _normalize_statuses(snapshot.values.get("node_statuses"))
         last_seq_id = max(thread_sequences.get(thread_id, 1) - 1, 0)
+        current_node_raw = snapshot.values.get("current_node")
+        if current_node_raw is not None and not isinstance(current_node_raw, str):
+            raise TypeError(
+                f"Invalid current_node type, expected str|None got {type(current_node_raw)!r}"
+            )
+        status_history = _build_status_history(thread_id)
+        is_running = thread_id in active_tasks
+        current_status = _derive_current_status(
+            is_running=is_running,
+            status_history=status_history,
+            has_interrupts=bool(current_interrupts),
+        )
 
         return ThreadStateResponse(
             thread_id=thread_id,
@@ -557,10 +851,13 @@ async def get_thread_history(request: Request, thread_id: str):
             resolved_ticker=fundamental.get("resolved_ticker"),
             status=fundamental.get("status"),
             next=snapshot.next,
-            is_running=thread_id in active_tasks,
+            is_running=is_running,
             node_statuses=node_statuses,
             agent_outputs=agent_outputs,
             last_seq_id=last_seq_id,
+            current_node=current_node_raw,
+            current_status=current_status,
+            status_history=status_history,
         )
     except Exception as e:
         logger.error(f"❌ [Server] get_thread_history failed: {e}")

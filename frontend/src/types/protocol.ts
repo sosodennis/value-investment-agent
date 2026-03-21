@@ -33,6 +33,14 @@ export interface Message {
     agentId?: string;
 }
 
+export interface StatusHistoryEntry {
+    id: string;
+    node: string;
+    agentId: string;
+    status: AgentStatus;
+    timestamp: number;
+}
+
 const AGENT_STATUS_VALUES: AgentStatus[] = [
     'idle',
     'running',
@@ -351,6 +359,50 @@ export const parseHistoryResponse = (value: unknown): Message[] => {
     return value.map((entry, idx) => parseMessage(entry, `history[${idx}]`));
 };
 
+const parseStatusHistoryEntries = (
+    value: unknown,
+    context: string
+): StatusHistoryEntry[] => {
+    if (value === undefined) {
+        return [];
+    }
+    if (!Array.isArray(value)) {
+        throw new TypeError(`${context} must be an array.`);
+    }
+    return value.map((entry, idx) => {
+        const record = toRecord(entry, `${context}[${idx}]`);
+        const id = record.id;
+        const node = record.node;
+        const agentId = record.agentId;
+        const status = record.status;
+        const timestamp = record.timestamp;
+        if (typeof id !== 'string') {
+            throw new TypeError(`${context}[${idx}].id must be a string.`);
+        }
+        if (typeof node !== 'string') {
+            throw new TypeError(`${context}[${idx}].node must be a string.`);
+        }
+        if (typeof agentId !== 'string') {
+            throw new TypeError(`${context}[${idx}].agentId must be a string.`);
+        }
+        const parsedStatus = parseAgentStatus(status, `${context}[${idx}].status`);
+        if (typeof timestamp !== 'string') {
+            throw new TypeError(`${context}[${idx}].timestamp must be a string.`);
+        }
+        const parsedTimestamp = new Date(timestamp).getTime();
+        if (Number.isNaN(parsedTimestamp)) {
+            throw new TypeError(`${context}[${idx}].timestamp must be an ISO datetime.`);
+        }
+        return {
+            id,
+            node,
+            agentId,
+            status: parsedStatus,
+            timestamp: parsedTimestamp,
+        };
+    });
+};
+
 export const parseThreadStateResponse = (
     value: unknown
 ): ThreadStateResponse => {
@@ -430,9 +482,30 @@ export const parseThreadStateResponse = (
         node_statuses,
         agent_outputs,
         next,
+        status_history: [],
     };
+    const current_node = parseNullableOptionalString(
+        record.current_node,
+        'thread response.current_node'
+    );
+    let current_status: AgentStatus | null | undefined;
+    if (record.current_status === undefined || record.current_status === null) {
+        current_status = record.current_status;
+    } else {
+        current_status = parseAgentStatus(
+            record.current_status,
+            'thread response.current_status'
+        );
+    }
+    const status_history = parseStatusHistoryEntries(
+        record.status_history,
+        'thread response.status_history'
+    );
     if (resolved_ticker !== undefined) response.resolved_ticker = resolved_ticker;
     if (status !== undefined) response.status = status;
+    if (current_node !== undefined) response.current_node = current_node;
+    if (current_status !== undefined) response.current_status = current_status;
+    response.status_history = status_history;
     return response;
 };
 
@@ -540,12 +613,15 @@ export type AgentEvent =
 
 export type ThreadStateResponse = Omit<
     ApiThreadStateResponse,
-    'node_statuses' | 'agent_outputs' | 'interrupts' | 'messages'
+    'node_statuses' | 'agent_outputs' | 'interrupts' | 'messages' | 'status_history'
 > & {
     messages: Message[];
     interrupts: HumanTickerSelection[];
     node_statuses: Record<string, AgentStatus>;
     agent_outputs: Record<string, StandardAgentOutput>;
+    current_node?: string | null;
+    current_status?: AgentStatus | null;
+    status_history: StatusHistoryEntry[];
 };
 
 export type AgentStatusesResponse = Omit<

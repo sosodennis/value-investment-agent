@@ -1,19 +1,17 @@
 import { useCallback, useReducer } from 'react';
 import { AgentStatus, StandardAgentOutput } from '../types/agents';
 import { HumanTickerSelection, InterruptRequestData } from '../types/interrupts';
-import { AgentEvent, Message, ThreadStateResponse } from '../types/protocol';
+import {
+    AgentEvent,
+    Message,
+    StatusHistoryEntry,
+    ThreadStateResponse,
+} from '../types/protocol';
+import { deriveHydratedAgentStatuses } from '@/lib/agent-session-state';
 
 export interface AgentData {
     status: AgentStatus;
     output: StandardAgentOutput | null;
-}
-
-export interface StatusHistoryEntry {
-    id: string;
-    node: string;
-    agentId: string;
-    status: string;
-    timestamp: number;
 }
 
 export interface AgentState {
@@ -24,7 +22,7 @@ export interface AgentState {
     lastSeqId: number;
     error: string | null;
     currentNode: string | null;
-    currentStatus: string | null;
+    currentStatus: AgentStatus | null;
     statusHistory: StatusHistoryEntry[];
 }
 
@@ -101,6 +99,9 @@ function agentReducer(state: AgentState, action: AgentAction): AgentState {
                 messages,
                 status: stateData?.is_running ? 'running' : 'idle',
                 lastSeqId: stateData?.last_seq_id ?? state.lastSeqId,
+                currentNode: stateData?.current_node ?? state.currentNode,
+                currentStatus: stateData?.current_status ?? state.currentStatus,
+                statusHistory: stateData?.status_history ?? state.statusHistory,
             };
 
             if (stateData?.interrupts.length) {
@@ -121,8 +122,9 @@ function agentReducer(state: AgentState, action: AgentAction): AgentState {
 
             if (stateData) {
                 const agents: Record<string, AgentData> = { ...state.agents };
+                const hydratedStatuses = deriveHydratedAgentStatuses(stateData);
 
-                Object.entries(stateData.node_statuses).forEach(([id, status]) => {
+                Object.entries(hydratedStatuses).forEach(([id, status]) => {
                     agents[id] = { ...agents[id], status };
                 });
 

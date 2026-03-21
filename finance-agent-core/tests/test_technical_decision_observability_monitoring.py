@@ -67,6 +67,8 @@ def test_build_monitoring_query_scope_normalizes_filters_and_limit() -> None:
         tickers=["AAPL", "AAPL", " "],
         timeframes=["1d", "1d", "4h"],
         logic_versions=["logic.v2", ""],
+        event_time_start=datetime(2026, 1, 1, 8, 0, tzinfo=UTC),
+        resolved_time_end=datetime(2026, 1, 31, 5, 0, tzinfo=UTC),
         limit=5000,
     )
 
@@ -79,13 +81,25 @@ def test_build_monitoring_query_scope_normalizes_filters_and_limit() -> None:
         directions=(),
         run_types=(),
         reliability_levels=(),
-        event_time_start=None,
+        event_time_start=datetime(2026, 1, 1, 8, 0),
         event_time_end=None,
         resolved_time_start=None,
-        resolved_time_end=None,
+        resolved_time_end=datetime(2026, 1, 31, 5, 0),
         labeling_method_version="technical_outcome_labeling.v1",
         limit=1000,
     )
+
+
+def test_build_monitoring_query_scope_converts_aware_datetimes_to_naive_utc() -> None:
+    scope = build_monitoring_query_scope(
+        event_time_start=datetime.fromisoformat("2026-02-19T08:00:37.854000+00:00"),
+        resolved_time_start=datetime.fromisoformat("2026-02-20T09:30:00+08:00"),
+    )
+
+    assert scope.event_time_start == datetime(2026, 2, 19, 8, 0, 37, 854000)
+    assert scope.event_time_start.tzinfo is None
+    assert scope.resolved_time_start == datetime(2026, 2, 20, 1, 30)
+    assert scope.resolved_time_start.tzinfo is None
 
 
 def test_compute_monitoring_aggregates_groups_rows_by_required_dimensions() -> None:

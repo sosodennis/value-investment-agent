@@ -5,6 +5,7 @@ from typing import Protocol
 from src.agents.technical.subdomains.decision_observability.domain.contracts import (
     MonitoringQueryScope,
     OutcomeLabelingRequest,
+    TechnicalMonitoringEventDetail,
     TechnicalMonitoringReadModelRow,
     TechnicalOutcomePathRecord,
     TechnicalPredictionEventRecord,
@@ -38,6 +39,13 @@ class TechnicalDecisionObservabilityRepository(Protocol):
         *,
         scope: MonitoringQueryScope,
     ) -> list[TechnicalMonitoringReadModelRow]: ...
+
+    async def fetch_monitoring_event_detail(
+        self,
+        *,
+        event_id: str,
+        labeling_method_version: str,
+    ) -> TechnicalMonitoringEventDetail | None: ...
 
 
 class OutcomeLabelingMarketDataReader(Protocol):

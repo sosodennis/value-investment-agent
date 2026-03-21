@@ -11,6 +11,7 @@ from src.agents.technical.subdomains.decision_observability.domain import (
     MonitoringQueryScope,
     TechnicalCalibrationObservationBuildResult,
     TechnicalMonitoringAggregate,
+    TechnicalMonitoringEventDetail,
     TechnicalMonitoringReadModelRow,
     build_prediction_event_record,
     build_technical_direction_calibration_observations,
@@ -123,6 +124,17 @@ class TechnicalDecisionObservabilityRuntimeService:
     ) -> tuple[TechnicalMonitoringReadModelRow, ...]:
         rows = await self.repository.fetch_monitoring_rows(scope=scope)
         return tuple(rows)
+
+    async def load_monitoring_event_detail(
+        self,
+        *,
+        event_id: str,
+        labeling_method_version: str = "technical_outcome_labeling.v1",
+    ) -> TechnicalMonitoringEventDetail | None:
+        return await self.repository.fetch_monitoring_event_detail(
+            event_id=event_id,
+            labeling_method_version=labeling_method_version,
+        )
 
     async def load_monitoring_aggregates(
         self,

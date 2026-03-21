@@ -7,6 +7,7 @@ from sqlalchemy import Select, and_, select
 from src.agents.technical.subdomains.decision_observability.domain.contracts import (
     MonitoringQueryScope,
     OutcomeLabelingRequest,
+    TechnicalMonitoringEventDetail,
     TechnicalMonitoringReadModelRow,
     TechnicalOutcomePathRecord,
     TechnicalPredictionEventRecord,
@@ -105,6 +106,27 @@ class SqlAlchemyTechnicalDecisionObservabilityRepository:
             for prediction_event, outcome_path in rows
         ]
 
+    async def fetch_monitoring_event_detail(
+        self,
+        *,
+        event_id: str,
+        labeling_method_version: str,
+    ) -> TechnicalMonitoringEventDetail | None:
+        async with AsyncSessionLocal() as session:
+            query = self._build_monitoring_event_detail_query(
+                event_id=event_id,
+                labeling_method_version=labeling_method_version,
+            )
+            result = await session.execute(query)
+            row = result.first()
+        if row is None:
+            return None
+        prediction_event, outcome_path = row
+        return self._monitoring_event_detail_from_models(
+            prediction_event=prediction_event,
+            outcome_path=outcome_path,
+        )
+
     def _build_unlabeled_prediction_events_query(
         self,
         *,
@@ -187,6 +209,22 @@ class SqlAlchemyTechnicalDecisionObservabilityRepository:
             scope.limit
         )
 
+    def _build_monitoring_event_detail_query(
+        self,
+        *,
+        event_id: str,
+        labeling_method_version: str,
+    ) -> Select[tuple[TechnicalPredictionEvent, TechnicalOutcomePath | None]]:
+        join_condition = and_(
+            TechnicalOutcomePath.event_id == TechnicalPredictionEvent.event_id,
+            TechnicalOutcomePath.labeling_method_version == labeling_method_version,
+        )
+        return (
+            select(TechnicalPredictionEvent, TechnicalOutcomePath)
+            .outerjoin(TechnicalOutcomePath, join_condition)
+            .where(TechnicalPredictionEvent.event_id == event_id)
+        )
+
     def _prediction_event_record_from_model(
         self, model: TechnicalPredictionEvent
     ) -> TechnicalPredictionEventRecord:
@@ -228,6 +266,49 @@ class SqlAlchemyTechnicalDecisionObservabilityRepository:
             reliability_level=prediction_event.reliability_level,
             raw_score=prediction_event.raw_score,
             confidence=prediction_event.confidence,
+            outcome_path_id=None
+            if outcome_path is None
+            else outcome_path.outcome_path_id,
+            resolved_at=None if outcome_path is None else outcome_path.resolved_at,
+            labeling_method_version=(
+                None if outcome_path is None else outcome_path.labeling_method_version
+            ),
+            forward_return=None
+            if outcome_path is None
+            else outcome_path.forward_return,
+            mfe=None if outcome_path is None else outcome_path.mfe,
+            mae=None if outcome_path is None else outcome_path.mae,
+            realized_volatility=(
+                None if outcome_path is None else outcome_path.realized_volatility
+            ),
+            data_quality_flags=tuple(
+                [] if outcome_path is None else outcome_path.data_quality_flags or []
+            ),
+        )
+
+    def _monitoring_event_detail_from_models(
+        self,
+        *,
+        prediction_event: TechnicalPredictionEvent,
+        outcome_path: TechnicalOutcomePath | None,
+    ) -> TechnicalMonitoringEventDetail:
+        return TechnicalMonitoringEventDetail(
+            event_id=prediction_event.event_id,
+            event_time=prediction_event.event_time,
+            ticker=prediction_event.ticker,
+            agent_source=prediction_event.agent_source,
+            timeframe=prediction_event.timeframe,
+            horizon=prediction_event.horizon,
+            direction=prediction_event.direction,
+            logic_version=prediction_event.logic_version,
+            feature_contract_version=prediction_event.feature_contract_version,
+            run_type=prediction_event.run_type,
+            reliability_level=prediction_event.reliability_level,
+            raw_score=prediction_event.raw_score,
+            confidence=prediction_event.confidence,
+            full_report_artifact_id=prediction_event.full_report_artifact_id,
+            source_artifact_refs=dict(prediction_event.source_artifact_refs or {}),
+            context_payload=dict(prediction_event.context_payload or {}),
             outcome_path_id=None
             if outcome_path is None
             else outcome_path.outcome_path_id,

@@ -5,7 +5,9 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 from src.agents.technical.subdomains.decision_observability.domain import (
+    TechnicalCalibrationObservationBuildResult,
     TechnicalMonitoringAggregate,
+    TechnicalMonitoringEventDetail,
     TechnicalMonitoringReadModelRow,
 )
 
@@ -54,6 +56,55 @@ class TechnicalMonitoringAggregateModel(BaseModel):
     last_event_time: datetime | None = None
 
 
+class TechnicalDirectionCalibrationObservationModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    timeframe: str
+    horizon: str
+    raw_score: float
+    direction: str
+    target_outcome: float
+
+
+class TechnicalCalibrationObservationBuildResultModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    row_count: int
+    usable_row_count: int
+    dropped_row_count: int
+    dropped_reasons: dict[str, int]
+    observations: list[TechnicalDirectionCalibrationObservationModel] | None = None
+
+
+class TechnicalMonitoringEventDetailModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    event_id: str
+    event_time: datetime
+    ticker: str
+    agent_source: str
+    timeframe: str
+    horizon: str
+    direction: str
+    logic_version: str
+    feature_contract_version: str
+    run_type: str
+    reliability_level: str | None = None
+    raw_score: float | None = None
+    confidence: float | None = None
+    full_report_artifact_id: str
+    source_artifact_refs: dict[str, object]
+    context_payload: dict[str, object]
+    outcome_path_id: str | None = None
+    resolved_at: datetime | None = None
+    labeling_method_version: str | None = None
+    forward_return: float | None = None
+    mfe: float | None = None
+    mae: float | None = None
+    realized_volatility: float | None = None
+    data_quality_flags: list[str]
+
+
 def build_technical_monitoring_row_model(
     record: TechnicalMonitoringReadModelRow,
 ) -> TechnicalMonitoringRowModel:
@@ -99,4 +150,61 @@ def build_technical_monitoring_aggregate_model(
         avg_realized_volatility=record.avg_realized_volatility,
         first_event_time=record.first_event_time,
         last_event_time=record.last_event_time,
+    )
+
+
+def build_technical_monitoring_event_detail_model(
+    record: TechnicalMonitoringEventDetail,
+) -> TechnicalMonitoringEventDetailModel:
+    return TechnicalMonitoringEventDetailModel(
+        event_id=record.event_id,
+        event_time=record.event_time,
+        ticker=record.ticker,
+        agent_source=record.agent_source,
+        timeframe=record.timeframe,
+        horizon=record.horizon,
+        direction=record.direction,
+        logic_version=record.logic_version,
+        feature_contract_version=record.feature_contract_version,
+        run_type=record.run_type,
+        reliability_level=record.reliability_level,
+        raw_score=record.raw_score,
+        confidence=record.confidence,
+        full_report_artifact_id=record.full_report_artifact_id,
+        source_artifact_refs=dict(record.source_artifact_refs),
+        context_payload=dict(record.context_payload),
+        outcome_path_id=record.outcome_path_id,
+        resolved_at=record.resolved_at,
+        labeling_method_version=record.labeling_method_version,
+        forward_return=record.forward_return,
+        mfe=record.mfe,
+        mae=record.mae,
+        realized_volatility=record.realized_volatility,
+        data_quality_flags=list(record.data_quality_flags),
+    )
+
+
+def build_technical_calibration_observation_build_result_model(
+    record: TechnicalCalibrationObservationBuildResult,
+    include_observations: bool = False,
+) -> TechnicalCalibrationObservationBuildResultModel:
+    observations_api = None
+    if include_observations and record.observations:
+        observations_api = [
+            TechnicalDirectionCalibrationObservationModel(
+                timeframe=obs.timeframe,
+                horizon=obs.horizon,
+                raw_score=obs.raw_score,
+                direction=obs.direction,
+                target_outcome=obs.target_outcome,
+            )
+            for obs in record.observations
+        ]
+
+    return TechnicalCalibrationObservationBuildResultModel(
+        row_count=record.row_count,
+        usable_row_count=record.usable_row_count,
+        dropped_row_count=record.dropped_row_count,
+        dropped_reasons=dict(record.dropped_reasons),
+        observations=observations_api,
     )

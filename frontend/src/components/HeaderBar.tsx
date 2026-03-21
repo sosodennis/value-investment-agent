@@ -1,6 +1,8 @@
 import React from 'react';
 import { Zap, ChevronDown, Play, Clock } from 'lucide-react';
 
+import { PrimaryViewNav } from './PrimaryViewNav';
+
 interface HeaderBarProps {
     systemStatus: 'online' | 'offline';
     activeAgents: number;
@@ -10,6 +12,7 @@ interface HeaderBarProps {
     onStartAnalysis: () => void;
     onShowHistory: () => void;
     isLoading: boolean;
+    currentView?: 'workspace' | 'technical-observability';
 }
 
 export const HeaderBar: React.FC<HeaderBarProps> = ({
@@ -21,19 +24,23 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
     onStartAnalysis,
     onShowHistory,
     isLoading,
+    currentView = 'workspace',
 }) => {
     return (
         <header className="h-20 w-full border-b border-border-main bg-bg-main px-8 flex items-center justify-between z-10">
-            {/* Brand */}
-            <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
-                    <Zap size={24} className="text-white fill-white" />
+            <div className="flex items-center gap-6">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
+                        <Zap size={24} className="text-white fill-white" />
+                    </div>
+                    <div>
+                        <h1 className="text-lg font-black tracking-tighter text-white">
+                            FINANCE<span className="text-primary text-cyan-500">AI</span>{' '}
+                            <span className="text-slate-500 font-medium">LAB</span>
+                        </h1>
+                    </div>
                 </div>
-                <div>
-                    <h1 className="text-lg font-black tracking-tighter text-white">
-                        FINANCE<span className="text-primary text-cyan-500">AI</span> <span className="text-slate-500 font-medium">LAB</span>
-                    </h1>
-                </div>
+                <PrimaryViewNav currentView={currentView} />
             </div>
 
             {/* Stats Cluster */}
@@ -65,7 +72,6 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
 
             {/* Action Cluster */}
             <div className="flex items-center gap-4">
-                {/* Ticker Input Group */}
                 <div className="flex items-center bg-slate-900 border border-slate-800 rounded-xl px-4 h-12 focus-within:border-primary/50 transition-all">
                     <div className="bg-success/10 text-success text-[10px] font-bold px-2 py-0.5 rounded border border-success/20 mr-3">
                         US Stock
@@ -79,7 +85,6 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                     />
                 </div>
 
-                {/* Model Selector */}
                 <button
                     className="flex items-center gap-3 bg-slate-900 border border-slate-800 rounded-xl px-4 h-12 text-slate-300 hover:bg-slate-800 transition-all"
                     aria-label="Select Model"
@@ -88,7 +93,6 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                     <ChevronDown size={14} className="text-slate-500" />
                 </button>
 
-                {/* Buttons */}
                 <button
                     onClick={onStartAnalysis}
                     disabled={isLoading || !ticker}
