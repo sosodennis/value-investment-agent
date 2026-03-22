@@ -112,18 +112,13 @@ def test_compress_ta_data():
     # Mock TA output
     ta_output = {
         "ticker": "AAPL",
-        "timestamp": "2026-01-19T00:00:00Z",
-        "signal_state": {
-            "z_score": 2.1,
-            "direction": "BULLISH_EXTENSION",
-            "risk_level": "CRITICAL",
-            "statistical_state": "anomaly",
-        },
-        "frac_diff_metrics": {
-            "optimal_d": 0.42,
-            "memory_strength": "balanced",
-        },
-        "semantic_tags": ["MEMORY_BALANCED", "STATE_STATISTICAL_ANOMALY"],
+        "as_of": "2026-01-19T00:00:00Z",
+        "direction": "BULLISH_EXTENSION",
+        "risk_level": "critical",
+        "confidence": 0.62,
+        "summary_tags": ["MEMORY_BALANCED", "STATE_STATISTICAL_ANOMALY"],
+        "diagnostics": {"is_degraded": False, "degraded_reasons": []},
+        "artifact_refs": {"chart_data_id": "chart-1"},
         "llm_interpretation": "Test interpretation",
         "raw_data": {"price_series": {}, "fracdiff_series": {}},
     }
@@ -133,9 +128,10 @@ def test_compress_ta_data():
     assert compressed is not None
     assert compressed["ticker"] == "AAPL"
     assert "raw_data" not in compressed
-    assert compressed["signal_summary"]["z_score"] == 2.1
-    assert compressed["memory_metrics"]["optimal_d"] == 0.42
-    assert len(compressed["semantic_tags"]) == 2
+    assert compressed["signal_summary"]["direction"] == "BULLISH_EXTENSION"
+    assert compressed["signal_summary"]["risk_level"] == "critical"
+    assert compressed["signal_summary"]["confidence"] == 0.62
+    assert len(compressed["summary_tags"]) == 2
 
 
 def test_compress_ta_data_handles_none():

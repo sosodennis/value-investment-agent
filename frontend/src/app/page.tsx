@@ -20,9 +20,9 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
     agentStatuses,
     currentNode,
     currentStatus: globalStatus,
-    activityFeed,
     agentOutputs,
     activeAgentId,
+    projectionUpdatedAt,
   } = useAgent(assistantId);
 
   const [ticker, setTicker] = useState('');
@@ -164,7 +164,8 @@ export default function Home({ assistantId = "agent" }: { assistantId?: string }
             allAgentOutputs={agentOutputs}
             currentNode={currentNode}
             currentStatus={globalStatus}
-            activityFeed={activityFeed}
+            threadId={threadId}
+            projectionUpdatedAt={projectionUpdatedAt}
           />
         </div>
       </div>

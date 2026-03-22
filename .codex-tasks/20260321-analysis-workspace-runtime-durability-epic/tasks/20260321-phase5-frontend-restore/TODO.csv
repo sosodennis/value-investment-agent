@@ -1,0 +1,4 @@
+id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
+1,Adopt durable snapshot-first restore flow,DONE,"The frontend hydrates from the new thread snapshot contract before attaching stream deltas","cd frontend && npm run test && npm run typecheck","2026-03-21 22:55:06",0,
+2,Rewrite active agent and process derivation,DONE,"Roster and detail panel reflect durable active state rather than stale local selection or weak status merges","cd frontend && npm run test && npm run typecheck","2026-03-21 22:55:06",0,
+3,Add focused refresh and reconnect regressions,DONE,"Tests cover active-run refresh, completed-thread restore, and reconnect resume","cd frontend && npm run test && npm run typecheck","2026-03-21 22:55:06",0,

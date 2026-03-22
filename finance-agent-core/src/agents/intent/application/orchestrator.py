@@ -28,6 +28,7 @@ from src.agents.intent.interface.parsers import (
     parse_ticker_candidates,
 )
 from src.agents.intent.interface.serializers import (
+    build_ticker_selection_interrupt_ui_payload,
     serialize_ticker_candidates,
     serialize_ticker_selection_interrupt_payload,
 )
@@ -210,6 +211,16 @@ class IntentOrchestrator:
         interrupt_payload_dump: JSONObject,
     ) -> dict[str, object] | None:
         candidate_objs = self.parse_candidates(candidates_raw)
+        reason_raw = interrupt_payload_dump.get("reason")
+        reason = (
+            reason_raw
+            if isinstance(reason_raw, str)
+            else "Multiple tickers found or ambiguity detected."
+        )
+        ui_payload = build_ticker_selection_interrupt_ui_payload(
+            candidates=candidate_objs,
+            reason=reason,
+        )
         selected_symbol = self.resolve_selected_symbol(
             user_input=user_input,
             candidate_objs=candidate_objs,
@@ -251,8 +262,8 @@ class IntentOrchestrator:
                 AIMessage(
                     content="",
                     additional_kwargs={
-                        "type": "ticker_selection",
-                        "data": interrupt_payload_dump,
+                        "type": "interrupt.request",
+                        "data": ui_payload,
                         "agent_id": "intent_extraction",
                     },
                 ),
@@ -260,7 +271,6 @@ class IntentOrchestrator:
             ],
             "current_node": "clarifying",
             "internal_progress": {"clarifying": "done"},
-            "node_statuses": {"intent_extraction": "done"},
         }
 
     def run_extraction(self, state: Mapping[str, object]) -> IntentNodeResult:
@@ -336,7 +346,6 @@ class IntentOrchestrator:
                     },
                     "current_node": "extraction",
                     "internal_progress": {"extraction": "done", "searching": "running"},
-                    "node_statuses": {"intent_extraction": "running"},
                 },
                 goto="searching",
             )
@@ -370,7 +379,6 @@ class IntentOrchestrator:
                         "extraction": "error",
                         "clarifying": "running",
                     },
-                    "node_statuses": {"intent_extraction": "degraded"},
                     "error_logs": [
                         {
                             "node": "extraction",
@@ -541,7 +549,6 @@ class IntentOrchestrator:
                         "searching": "error",
                         "clarifying": "running",
                     },
-                    "node_statuses": {"intent_extraction": "degraded"},
                     "error_logs": [
                         {
                             "node": "searching",
@@ -729,7 +736,6 @@ class IntentOrchestrator:
                     "intent_extraction": resolved_ctx,
                     "current_node": "deciding",
                     "internal_progress": {"deciding": "done"},
-                    "node_statuses": {"intent_extraction": "done"},
                 },
                 goto="END",
             )
@@ -771,7 +777,6 @@ class IntentOrchestrator:
                     "intent_extraction": {"status": "clarifying"},
                     "current_node": "deciding",
                     "internal_progress": {"deciding": "error", "clarifying": "running"},
-                    "node_statuses": {"intent_extraction": "degraded"},
                     "error_logs": [
                         {
                             "node": "deciding",

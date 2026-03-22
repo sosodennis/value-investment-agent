@@ -97,7 +97,6 @@ async def run_aggregator_node_use_case(
                 },
                 "current_node": "aggregator_node",
                 "internal_progress": {"aggregator_node": "error"},
-                "node_statuses": {"financial_news_research": "error"},
                 "error_logs": [
                     {
                         "node": "aggregator_node",
@@ -155,7 +154,6 @@ async def run_aggregator_node_use_case(
                 },
                 "current_node": "aggregator_node",
                 "internal_progress": {"aggregator_node": "error"},
-                "node_statuses": {"financial_news_research": "error"},
                 "error_logs": [
                     {
                         "node": "aggregator_node",

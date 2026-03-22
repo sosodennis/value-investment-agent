@@ -332,7 +332,6 @@ def build_valuation_missing_inputs_update(
         "fundamental_analysis": fa_update,
         "current_node": "calculation",
         "internal_progress": {"calculation": "error"},
-        "node_statuses": {"fundamental_analysis": "error"},
         "error_logs": [
             {
                 "node": "calculation",
@@ -485,7 +484,6 @@ def build_valuation_success_update(
         "fundamental_analysis": fa_update,
         "current_node": "calculation",
         "internal_progress": {"calculation": "done"},
-        "node_statuses": {"fundamental_analysis": "done"},
         "artifact": artifact,
     }
 
@@ -500,5 +498,4 @@ def build_valuation_error_update(error: str) -> JSONObject:
             }
         ],
         "internal_progress": {"calculation": "error"},
-        "node_statuses": {"fundamental_analysis": "error"},
     }

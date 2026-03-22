@@ -12,7 +12,7 @@ import {
     IntentExtraction,
     TickerCandidate,
 } from './interrupts';
-import { isRecord } from './preview';
+import { UnknownRecord, isRecord } from './preview';
 import { operations } from './generated/api-contract';
 
 type ApiThreadStateResponse =
@@ -41,6 +41,43 @@ export interface StatusHistoryEntry {
     timestamp: number;
 }
 
+export interface ActivitySegment {
+    id: string;
+    agentId: string;
+    node: string;
+    runId: string;
+    status: AgentStatus;
+    started_at: string;
+    updated_at: string;
+    ended_at?: string | null;
+    is_current: boolean;
+}
+
+export interface ActivityTimelineEntry {
+    event_id: string;
+    seq_id: number;
+    event_type: string;
+    agent_id: string;
+    node: string | null;
+    status: string | null;
+    created_at: string;
+    run_id: string | null;
+    payload: UnknownRecord;
+}
+
+export interface RuntimeCursor {
+    last_seq_id: number;
+    updated_at?: string | null;
+}
+
+export interface RunStatus {
+    run_id: string;
+    status: AgentStatus;
+    started_at: string;
+    updated_at: string;
+    ended_at?: string | null;
+}
+
 const AGENT_STATUS_VALUES: AgentStatus[] = [
     'idle',
     'running',
@@ -56,7 +93,7 @@ const isAgentStatus = (value: unknown): value is AgentStatus =>
 const toRecord = (
     value: unknown,
     context: string
-): Record<string, unknown> => {
+): UnknownRecord => {
     if (!isRecord(value) || Array.isArray(value)) {
         throw new TypeError(`${context} must be an object.`);
     }
@@ -359,7 +396,7 @@ export const parseHistoryResponse = (value: unknown): Message[] => {
     return value.map((entry, idx) => parseMessage(entry, `history[${idx}]`));
 };
 
-const parseStatusHistoryEntries = (
+export const parseStatusHistoryEntries = (
     value: unknown,
     context: string
 ): StatusHistoryEntry[] => {
@@ -403,6 +440,218 @@ const parseStatusHistoryEntries = (
     });
 };
 
+export const parseActivitySegments = (
+    value: unknown,
+    context: string
+): ActivitySegment[] => {
+    if (!Array.isArray(value)) {
+        throw new TypeError(`${context} must be an array.`);
+    }
+    return value.map((entry, idx) => {
+        const record = toRecord(entry, `${context}[${idx}]`);
+        const id = record.id;
+        const node = record.node;
+        const agentId = record.agentId;
+        const runId = record.runId;
+        const status = record.status;
+        const startedAt = record.started_at;
+        const updatedAt = record.updated_at;
+        const endedAt = record.ended_at;
+        const isCurrent = record.is_current;
+
+        if (typeof id !== 'string') {
+            throw new TypeError(`${context}[${idx}].id must be a string.`);
+        }
+        if (typeof node !== 'string') {
+            throw new TypeError(`${context}[${idx}].node must be a string.`);
+        }
+        if (typeof agentId !== 'string') {
+            throw new TypeError(`${context}[${idx}].agentId must be a string.`);
+        }
+        if (typeof runId !== 'string') {
+            throw new TypeError(`${context}[${idx}].runId must be a string.`);
+        }
+        const parsedStatus = parseAgentStatus(status, `${context}[${idx}].status`);
+        if (typeof startedAt !== 'string') {
+            throw new TypeError(`${context}[${idx}].started_at must be a string.`);
+        }
+        if (Number.isNaN(Date.parse(startedAt))) {
+            throw new TypeError(`${context}[${idx}].started_at must be an ISO datetime.`);
+        }
+        if (typeof updatedAt !== 'string') {
+            throw new TypeError(`${context}[${idx}].updated_at must be a string.`);
+        }
+        if (Number.isNaN(Date.parse(updatedAt))) {
+            throw new TypeError(`${context}[${idx}].updated_at must be an ISO datetime.`);
+        }
+        const parsedEndedAt = parseNullableOptionalString(
+            endedAt,
+            `${context}[${idx}].ended_at`
+        );
+        if (parsedEndedAt !== undefined && parsedEndedAt !== null) {
+            if (Number.isNaN(Date.parse(parsedEndedAt))) {
+                throw new TypeError(
+                    `${context}[${idx}].ended_at must be an ISO datetime or null.`
+                );
+            }
+        }
+        if (typeof isCurrent !== 'boolean') {
+            throw new TypeError(`${context}[${idx}].is_current must be a boolean.`);
+        }
+
+        return {
+            id,
+            node,
+            agentId,
+            runId,
+            status: parsedStatus,
+            started_at: startedAt,
+            updated_at: updatedAt,
+            ended_at: parsedEndedAt,
+            is_current: isCurrent,
+        };
+    });
+};
+
+const parseActivityTimelineEntries = (
+    value: unknown,
+    context: string
+): ActivityTimelineEntry[] => {
+    if (!Array.isArray(value)) {
+        throw new TypeError(`${context} must be an array.`);
+    }
+    return value.map((entry, idx) => {
+        const record = toRecord(entry, `${context}[${idx}]`);
+        const event_id = record.event_id;
+        const seq_id = record.seq_id;
+        const event_type = record.event_type;
+        const agent_id = record.agent_id;
+        const created_at = record.created_at;
+        if (typeof event_id !== 'string') {
+            throw new TypeError(`${context}[${idx}].event_id must be a string.`);
+        }
+        if (typeof seq_id !== 'number') {
+            throw new TypeError(`${context}[${idx}].seq_id must be a number.`);
+        }
+        if (typeof event_type !== 'string') {
+            throw new TypeError(`${context}[${idx}].event_type must be a string.`);
+        }
+        if (typeof agent_id !== 'string') {
+            throw new TypeError(`${context}[${idx}].agent_id must be a string.`);
+        }
+        if (typeof created_at !== 'string') {
+            throw new TypeError(`${context}[${idx}].created_at must be a string.`);
+        }
+
+        const node = parseNullableOptionalString(
+            record.node,
+            `${context}[${idx}].node`
+        );
+        const status = parseNullableOptionalString(
+            record.status,
+            `${context}[${idx}].status`
+        );
+        const run_id = parseNullableOptionalString(
+            record.run_id,
+            `${context}[${idx}].run_id`
+        );
+        const payload = toRecord(
+            record.payload,
+            `${context}[${idx}].payload`
+        );
+
+        return {
+            event_id,
+            seq_id,
+            event_type,
+            agent_id,
+            node: node ?? null,
+            status: status ?? null,
+            created_at,
+            run_id: run_id ?? null,
+            payload,
+        };
+    });
+};
+
+const parseRuntimeCursor = (
+    value: unknown,
+    context: string
+): RuntimeCursor | null | undefined => {
+    if (value === undefined) {
+        return undefined;
+    }
+    if (value === null) {
+        return null;
+    }
+    const record = toRecord(value, context);
+    const last_seq_id = record.last_seq_id;
+    if (typeof last_seq_id !== 'number') {
+        throw new TypeError(`${context}.last_seq_id must be a number.`);
+    }
+    const updated_at = parseNullableOptionalString(
+        record.updated_at,
+        `${context}.updated_at`
+    );
+    const cursor: RuntimeCursor = {
+        last_seq_id,
+    };
+    if (updated_at !== undefined) {
+        cursor.updated_at = updated_at;
+    }
+    return cursor;
+};
+
+const parseRunStatus = (
+    value: unknown,
+    context: string
+): RunStatus | null | undefined => {
+    if (value === undefined) {
+        return undefined;
+    }
+    if (value === null) {
+        return null;
+    }
+    const record = toRecord(value, context);
+    const runId = record.run_id;
+    const status = record.status;
+    const startedAt = record.started_at;
+    const updatedAt = record.updated_at;
+    const endedAt = record.ended_at;
+    if (typeof runId !== 'string') {
+        throw new TypeError(`${context}.run_id must be a string.`);
+    }
+    const parsedStatus = parseAgentStatus(status, `${context}.status`);
+    if (typeof startedAt !== 'string') {
+        throw new TypeError(`${context}.started_at must be a string.`);
+    }
+    if (Number.isNaN(Date.parse(startedAt))) {
+        throw new TypeError(`${context}.started_at must be an ISO datetime.`);
+    }
+    if (typeof updatedAt !== 'string') {
+        throw new TypeError(`${context}.updated_at must be a string.`);
+    }
+    if (Number.isNaN(Date.parse(updatedAt))) {
+        throw new TypeError(`${context}.updated_at must be an ISO datetime.`);
+    }
+    const parsedEndedAt = parseNullableOptionalString(
+        endedAt,
+        `${context}.ended_at`
+    );
+    if (parsedEndedAt !== undefined && parsedEndedAt !== null) {
+        if (Number.isNaN(Date.parse(parsedEndedAt))) {
+            throw new TypeError(`${context}.ended_at must be an ISO datetime or null.`);
+        }
+    }
+    return {
+        run_id: runId,
+        status: parsedStatus,
+        started_at: startedAt,
+        updated_at: updatedAt,
+        ended_at: parsedEndedAt,
+    };
+};
+
 export const parseThreadStateResponse = (
     value: unknown
 ): ThreadStateResponse => {
@@ -420,6 +669,12 @@ export const parseThreadStateResponse = (
         throw new TypeError('thread response.last_seq_id must be a number.');
     }
 
+    const activity_timeline = parseActivityTimelineEntries(
+        record.activity_timeline,
+        'thread response.activity_timeline'
+    );
+    const cursor = parseRuntimeCursor(record.cursor, 'thread response.cursor');
+    const run = parseRunStatus(record.run, 'thread response.run');
     const messages = parseHistoryResponse(record.messages);
 
     if (!Array.isArray(record.interrupts)) {
@@ -438,6 +693,18 @@ export const parseThreadStateResponse = (
         node_statuses[node] = parseAgentStatus(
             statusRaw,
             `thread.node_statuses.${node}`
+        );
+    }
+
+    const agentStatusesRecord = toRecord(
+        record.agent_statuses,
+        'thread response.agent_statuses'
+    );
+    const agent_statuses: Record<string, AgentStatus> = {};
+    for (const [agentId, statusRaw] of Object.entries(agentStatusesRecord)) {
+        agent_statuses[agentId] = parseAgentStatus(
+            statusRaw,
+            `thread.agent_statuses.${agentId}`
         );
     }
 
@@ -472,17 +739,25 @@ export const parseThreadStateResponse = (
         record.status,
         'thread response.status'
     );
+    const active_agent_id = parseNullableOptionalString(
+        record.active_agent_id,
+        'thread response.active_agent_id'
+    );
+    const effectiveLastSeqId =
+        cursor && cursor !== null ? cursor.last_seq_id : lastSeqId;
 
     const response: ThreadStateResponse = {
         thread_id: threadId,
         is_running: isRunning,
-        last_seq_id: lastSeqId,
+        last_seq_id: effectiveLastSeqId,
         messages,
         interrupts,
+        agent_statuses,
         node_statuses,
         agent_outputs,
         next,
         status_history: [],
+        activity_timeline,
     };
     const current_node = parseNullableOptionalString(
         record.current_node,
@@ -503,8 +778,13 @@ export const parseThreadStateResponse = (
     );
     if (resolved_ticker !== undefined) response.resolved_ticker = resolved_ticker;
     if (status !== undefined) response.status = status;
+    if (active_agent_id !== undefined) {
+        response.active_agent_id = active_agent_id;
+    }
     if (current_node !== undefined) response.current_node = current_node;
     if (current_status !== undefined) response.current_status = current_status;
+    if (cursor !== undefined) response.cursor = cursor;
+    if (run !== undefined) response.run = run;
     response.status_history = status_history;
     return response;
 };
@@ -519,9 +799,13 @@ export const parseStreamStartResponse = (
     if (typeof record.thread_id !== 'string') {
         throw new TypeError('stream start response.thread_id must be a string.');
     }
+    if (typeof record.run_id !== 'string') {
+        throw new TypeError('stream start response.run_id must be a string.');
+    }
     return {
         status: record.status,
         thread_id: record.thread_id,
+        run_id: record.run_id,
     };
 };
 
@@ -531,6 +815,7 @@ export type AgentEventType =
     | 'state.update'
     | 'interrupt.request'
     | 'agent.status'
+    | 'agent.lifecycle'
     | 'error';
 
 const isAgentEventType = (value: unknown): value is AgentEventType =>
@@ -539,6 +824,7 @@ const isAgentEventType = (value: unknown): value is AgentEventType =>
     value === 'state.update' ||
     value === 'interrupt.request' ||
     value === 'agent.status' ||
+    value === 'agent.lifecycle' ||
     value === 'error';
 
 type LifecycleStatus = LifecycleStatusEvent['data']['status'];
@@ -561,7 +847,7 @@ interface AgentEventBase {
     seq_id: number;
     protocol_version: 'v1';
     source: string;
-    metadata?: Record<string, unknown>;
+    metadata?: UnknownRecord;
 }
 
 export interface ContentDeltaEvent extends AgentEventBase {
@@ -589,6 +875,13 @@ export interface AgentStatusEvent extends AgentEventBase {
     };
 }
 
+export interface AgentLifecycleEvent extends AgentEventBase {
+    type: 'agent.lifecycle';
+    data: {
+        status: AgentStatus;
+    };
+}
+
 export interface LifecycleStatusEvent extends AgentEventBase {
     type: 'lifecycle.status';
     data: {
@@ -608,26 +901,39 @@ export type AgentEvent =
     | StateUpdateEvent
     | InterruptRequestEvent
     | AgentStatusEvent
+    | AgentLifecycleEvent
     | LifecycleStatusEvent
     | ErrorEvent;
 
 export type ThreadStateResponse = Omit<
     ApiThreadStateResponse,
-    'node_statuses' | 'agent_outputs' | 'interrupts' | 'messages' | 'status_history'
+    | 'node_statuses'
+    | 'agent_statuses'
+    | 'agent_outputs'
+    | 'interrupts'
+    | 'messages'
+    | 'status_history'
+    | 'activity_timeline'
+    | 'cursor'
 > & {
     messages: Message[];
     interrupts: HumanTickerSelection[];
+    agent_statuses: Record<string, AgentStatus>;
     node_statuses: Record<string, AgentStatus>;
     agent_outputs: Record<string, StandardAgentOutput>;
     current_node?: string | null;
     current_status?: AgentStatus | null;
     status_history: StatusHistoryEntry[];
+    activity_timeline: ActivityTimelineEntry[];
+    cursor?: RuntimeCursor | null;
+    run?: RunStatus | null;
 };
 
 export type AgentStatusesResponse = Omit<
     ApiAgentStatusesResponse,
-    'node_statuses' | 'agent_outputs'
+    'agent_statuses' | 'node_statuses' | 'agent_outputs'
 > & {
+    agent_statuses: Record<string, AgentStatus>;
     node_statuses: Record<string, AgentStatus>;
     agent_outputs: Record<string, StandardAgentOutput>;
 };
@@ -676,6 +982,17 @@ export const parseAgentStatusesResponse = (
     value: unknown
 ): AgentStatusesResponse => {
     const record = toRecord(value, 'agent statuses response');
+    const agentStatusesRecord = toRecord(
+        record.agent_statuses,
+        'agent statuses response.agent_statuses'
+    );
+    const agent_statuses: Record<string, AgentStatus> = {};
+    for (const [agentId, statusRaw] of Object.entries(agentStatusesRecord)) {
+        agent_statuses[agentId] = parseAgentStatus(
+            statusRaw,
+            `agent statuses response.agent_statuses.${agentId}`
+        );
+    }
     const nodeStatusesRecord = toRecord(
         record.node_statuses,
         'agent statuses response.node_statuses'
@@ -705,6 +1022,7 @@ export const parseAgentStatusesResponse = (
         'agent statuses response.current_node'
     );
     const response: AgentStatusesResponse = {
+        agent_statuses,
         node_statuses,
         agent_outputs,
     };
@@ -752,7 +1070,7 @@ export const parseAgentEvent = (
         throw new TypeError(`${context}.source must be a string.`);
     }
 
-    let metadata: Record<string, unknown> | undefined;
+    let metadata: UnknownRecord | undefined;
     if ('metadata' in record && record.metadata !== undefined) {
         metadata = toRecord(record.metadata, `${context}.metadata`);
     }
@@ -815,6 +1133,18 @@ export const parseAgentEvent = (
             event.data.node = node;
         }
         return event;
+    }
+
+    if (record.type === 'agent.lifecycle') {
+        const data = toRecord(record.data, `${context}.data`);
+        const status = parseAgentStatus(data.status, `${context}.data.status`);
+        return {
+            ...baseWithMetadata,
+            type: 'agent.lifecycle',
+            data: {
+                status,
+            },
+        };
     }
 
     if (record.type === 'lifecycle.status') {

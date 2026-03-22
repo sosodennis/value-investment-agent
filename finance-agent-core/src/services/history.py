@@ -12,6 +12,34 @@ from ..infrastructure.models import ChatMessage
 
 
 class HistoryService:
+    _ALLOWED_MESSAGE_TYPES = {"text", "financial_report", "interrupt.request"}
+
+    @staticmethod
+    def _normalize_message_type(metadata: JSONObject) -> JSONObject:
+        msg_type = metadata.get("type")
+        if msg_type is None:
+            metadata["type"] = "text"
+            return metadata
+        if not isinstance(msg_type, str):
+            raise TypeError("message metadata.type must be a string")
+        if msg_type not in HistoryService._ALLOWED_MESSAGE_TYPES:
+            raise TypeError(f"Unsupported message type: {msg_type}")
+        return metadata
+
+    @staticmethod
+    def _extract_agent_id(message: BaseMessage) -> str | None:
+        metadata = getattr(message, "additional_kwargs", {}) or {}
+        candidate = metadata.get("agentId") or metadata.get("agent_id")
+        if isinstance(candidate, str):
+            return candidate
+        response_metadata = getattr(message, "response_metadata", {}) or {}
+        candidate = response_metadata.get("agentId") or response_metadata.get(
+            "agent_id"
+        )
+        if isinstance(candidate, str):
+            return candidate
+        return None
+
     @staticmethod
     async def save_messages(
         thread_id: str, messages: list[BaseMessage]
@@ -32,12 +60,9 @@ class HistoryService:
             metadata = dict(message.additional_kwargs)
             metadata.update(message.response_metadata)
 
-            # Ensure we have a type and potentially data for structured messages
-            if "type" not in metadata:
-                metadata["type"] = "text"
-
             # Sanitize metadata to ensure JSON serializability (handle Pydantic models, etc.)
             metadata = cast(JSONObject, HistoryService._sanitize_obj(metadata))
+            metadata = HistoryService._normalize_message_type(metadata)
 
             db_messages.append(
                 ChatMessage(
@@ -46,6 +71,7 @@ class HistoryService:
                     content=message.content,
                     message_type=message.type,
                     metadata_=metadata,
+                    agent_id=HistoryService._extract_agent_id(message),
                 )
             )
 
@@ -71,6 +97,7 @@ class HistoryService:
             if "type" not in metadata:
                 metadata["type"] = "text"
             metadata = cast(JSONObject, HistoryService._sanitize_obj(metadata))
+            metadata = HistoryService._normalize_message_type(metadata)
 
             async with AsyncSessionLocal() as session:
                 db_message = ChatMessage(
@@ -79,6 +106,7 @@ class HistoryService:
                     content=message.content,
                     message_type=message.type,
                     metadata_=metadata,
+                    agent_id=HistoryService._extract_agent_id(message),
                 )
                 session.add(db_message)
                 await session.commit()

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from langchain_core.messages import AIMessage
-
 from src.agents.technical.application.state_updates import (
     SemanticCommandUpdateResult,
     build_semantic_success_update,
@@ -20,14 +18,4 @@ def build_semantic_translate_success_result(
         is_degraded=is_degraded,
         degraded_reasons=degraded_reasons,
     )
-    success_update.update["messages"] = [
-        AIMessage(
-            content="",
-            additional_kwargs={
-                "type": "technical_analysis",
-                "agent_id": "technical_analysis",
-                "status": "done",
-            },
-        )
-    ]
     return success_update

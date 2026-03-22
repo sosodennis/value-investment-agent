@@ -46,6 +46,7 @@ export function useAgent(assistantId: string = 'agent') {
     const [isLoading, setIsLoading] = useState(false);
     const [hasMore, setHasMore] = useState(true);
     const activeAgentId = deriveActiveAgentId({
+        active_agent_id: state.activeAgentId,
         current_node: state.currentNode,
         current_status: state.currentStatus,
         status_history: state.statusHistory,
@@ -56,10 +57,18 @@ export function useAgent(assistantId: string = 'agent') {
     });
 
     const parseStream = useCallback(
-        async (threadId: string) => {
+        async (threadId: string, afterSeq?: number) => {
             let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
             try {
-                const response = await fetch(`${API_URL}/stream/${threadId}`);
+                const streamUrl = new URL(`${API_URL}/stream/${threadId}`);
+                if (
+                    typeof afterSeq === 'number' &&
+                    Number.isFinite(afterSeq) &&
+                    afterSeq > 0
+                ) {
+                    streamUrl.searchParams.set('after_seq', String(afterSeq));
+                }
+                const response = await fetch(streamUrl.toString());
                 if (!response.ok) {
                     throw new Error(
                         await readErrorMessage(response, 'Failed to attach to stream')
@@ -76,20 +85,31 @@ export function useAgent(assistantId: string = 'agent') {
                     if (done) break;
 
                     buffer += decoder.decode(value, { stream: true });
-                    const lines = buffer.split('\n');
-                    buffer = lines.pop() || '';
+                    const events = buffer.split(/\r?\n\r?\n/);
+                    buffer = events.pop() || '';
 
-                    for (const line of lines) {
-                        if (!line.startsWith('data: ')) continue;
-                        const jsonStr = line.slice(6);
-                        if (jsonStr === 'null') return;
+                    for (const rawEvent of events) {
+                        const trimmed = rawEvent.replace(/\r/g, '').trim();
+                        if (!trimmed || trimmed.startsWith(':')) continue;
+
+                        const dataLines: string[] = [];
+                        const lines = trimmed.split('\n');
+                        for (const line of lines) {
+                            if (line.startsWith('data:')) {
+                                dataLines.push(line.slice(5).trimStart());
+                            }
+                        }
+
+                        if (dataLines.length === 0) continue;
+                        const jsonStr = dataLines.join('\n');
+                        if (jsonStr === 'null') continue;
                         try {
                             const parsed: unknown = JSON.parse(jsonStr);
                             const event = parseAgentEvent(parsed, 'stream event');
                             processEvent(event);
                         } catch (e) {
                             clientLogger.error('stream.parse_error', {
-                                line,
+                                event: trimmed,
                                 error: e instanceof Error ? e.message : String(e),
                                 threadId,
                             });
@@ -218,33 +238,36 @@ export function useAgent(assistantId: string = 'agent') {
         async (id: string, before?: string) => {
             setIsLoading(true);
             try {
-                const historyUrl = new URL(`${API_URL}/history/${id}`);
-                if (before) historyUrl.searchParams.append('before', before);
+                if (before) {
+                    const historyUrl = new URL(`${API_URL}/history/${id}`);
+                    historyUrl.searchParams.append('before', before);
+                    const historyResponse = await fetch(historyUrl.toString());
+                    if (!historyResponse.ok) {
+                        throw new Error(
+                            await readErrorMessage(historyResponse, 'History fetch failed')
+                        );
+                    }
 
-                const historyResponse = await fetch(historyUrl.toString());
-                if (!historyResponse.ok) {
-                    throw new Error(
-                        await readErrorMessage(historyResponse, 'History fetch failed')
-                    );
+                    const historyRaw: unknown = await historyResponse.json();
+                    const historyData = parseHistoryResponse(historyRaw);
+                    if (historyData.length < 20) setHasMore(false);
+                    dispatchLoadHistory(historyData, id);
+                    return;
                 }
 
-                const historyRaw: unknown = await historyResponse.json();
-                const historyData = parseHistoryResponse(historyRaw);
-                if (historyData.length < 20) setHasMore(false);
-
                 const stateResponse = await fetch(`${API_URL}/thread/${id}`);
-                if (stateResponse.ok) {
-                    const stateRaw: unknown = await stateResponse.json();
-                    const stateData = parseThreadStateResponse(stateRaw);
-                    dispatchLoadHistory(before ? historyData : stateData.messages, id, stateData);
-                    if (stateData.is_running && !before) {
-                        await parseStream(id);
-                    }
-                } else {
-                    setError(
+                if (!stateResponse.ok) {
+                    throw new Error(
                         await readErrorMessage(stateResponse, 'Thread state fetch failed')
                     );
-                    dispatchLoadHistory(historyData, id);
+                }
+                const stateRaw: unknown = await stateResponse.json();
+                const stateData = parseThreadStateResponse(stateRaw);
+                dispatchLoadHistory(stateData.messages, id, stateData);
+                if (stateData.is_running) {
+                    const afterSeq =
+                        stateData.cursor?.last_seq_id ?? stateData.last_seq_id;
+                    await parseStream(id, afterSeq);
                 }
             } catch (error) {
                 setError(toErrorMessage(error, 'Failed to load history.'));
@@ -274,5 +297,6 @@ export function useAgent(assistantId: string = 'agent') {
         currentStatus: state.currentStatus,
         activityFeed: state.statusHistory,
         activeAgentId,
+        projectionUpdatedAt: state.cursorUpdatedAt,
     };
 }

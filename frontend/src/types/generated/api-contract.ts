@@ -172,6 +172,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/thread/{thread_id}/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Agent Activity
+         * @description Retrieve per-agent activity segments with cursor pagination.
+         */
+        get: operations["get_agent_activity_thread__thread_id__activity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/thread/{thread_id}/agents": {
         parameters: {
             query?: never;
@@ -219,6 +239,59 @@ export interface components {
             /** Summary */
             summary: string;
         };
+        /** ActivitySegmentResponse */
+        ActivitySegmentResponse: {
+            /** Agentid */
+            agentId: string;
+            /** Ended At */
+            ended_at?: string | null;
+            /** Id */
+            id: string;
+            /** Is Current */
+            is_current: boolean;
+            /** Node */
+            node: string;
+            /** Runid */
+            runId: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Status */
+            status: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** ActivityTimelineEntryResponse */
+        ActivityTimelineEntryResponse: {
+            /** Agent Id */
+            agent_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Event Id */
+            event_id: string;
+            /** Event Type */
+            event_type: string;
+            /** Node */
+            node: string | null;
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            };
+            /** Run Id */
+            run_id: string | null;
+            /** Seq Id */
+            seq_id: number;
+            /** Status */
+            status: string | null;
+        };
         /**
          * AgentOutputArtifact
          * @description Standard container for all Sub-Agent outputs.
@@ -264,6 +337,10 @@ export interface components {
             /** Agent Outputs */
             agent_outputs: {
                 [key: string]: components["schemas"]["AgentOutputArtifact"];
+            };
+            /** Agent Statuses */
+            agent_statuses: {
+                [key: string]: string;
             };
             /** Current Node */
             current_node?: string | null;
@@ -1145,6 +1222,32 @@ export interface components {
             /** Thread Id */
             thread_id: string;
         };
+        /** RunStatusResponse */
+        RunStatusResponse: {
+            /** Ended At */
+            ended_at?: string | null;
+            /** Run Id */
+            run_id: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Status */
+            status: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** RuntimeCursorResponse */
+        RuntimeCursorResponse: {
+            /** Last Seq Id */
+            last_seq_id: number;
+            /** Updated At */
+            updated_at?: string | null;
+        };
         /** ScenarioModel */
         ScenarioModel: {
             /** Outcome Description */
@@ -1243,6 +1346,8 @@ export interface components {
         };
         /** StreamStartResponse */
         StreamStartResponse: {
+            /** Run Id */
+            run_id: string;
             /**
              * Status
              * @enum {string}
@@ -2475,14 +2580,26 @@ export interface components {
         };
         /** ThreadStateResponse */
         ThreadStateResponse: {
+            /** Active Agent Id */
+            active_agent_id?: string | null;
+            /**
+             * Activity Timeline
+             * @default []
+             */
+            activity_timeline: components["schemas"]["ActivityTimelineEntryResponse"][];
             /** Agent Outputs */
             agent_outputs: {
                 [key: string]: components["schemas"]["AgentOutputArtifact"];
+            };
+            /** Agent Statuses */
+            agent_statuses: {
+                [key: string]: string;
             };
             /** Current Node */
             current_node?: string | null;
             /** Current Status */
             current_status?: string | null;
+            cursor?: components["schemas"]["RuntimeCursorResponse"] | null;
             /** Interrupts */
             interrupts: components["schemas"]["HumanTickerSelection"][];
             /** Is Running */
@@ -2499,6 +2616,7 @@ export interface components {
             };
             /** Resolved Ticker */
             resolved_ticker?: string | null;
+            run?: components["schemas"]["RunStatusResponse"] | null;
             /** Status */
             status?: string | null;
             /**
@@ -2860,7 +2978,9 @@ export interface operations {
     };
     attach_stream_stream__thread_id__get: {
         parameters: {
-            query?: never;
+            query?: {
+                after_seq?: number | null;
+            };
             header?: never;
             path: {
                 thread_id: string;
@@ -2907,6 +3027,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ThreadStateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_agent_activity_thread__thread_id__activity_get: {
+        parameters: {
+            query: {
+                agent_id: string;
+                limit?: number;
+                before_updated_at?: string | null;
+            };
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivitySegmentResponse"][];
                 };
             };
             /** @description Validation Error */

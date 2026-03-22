@@ -76,73 +76,41 @@ def test_canonicalize_fundamental_artifact_normalizes_reports() -> None:
 
 def test_canonicalize_technical_artifact_normalizes_enums_and_series() -> None:
     payload = {
+        "schema_version": "2.0",
         "ticker": "TSLA",
-        "timestamp": "2026-02-12T12:00:00",
-        "frac_diff_metrics": {
-            "optimal_d": 0.44,
-            "window_length": 252,
-            "adf_statistic": -3.7,
-            "adf_pvalue": 0.01,
-            "memory_strength": "BALANCED",
-        },
-        "signal_state": {
-            "z_score": 2.3,
-            "statistical_state": "STATISTICAL_ANOMALY",
-            "direction": "BULLISH_EXTENSION",
-            "risk_level": "high",
-            "confluence": {
-                "bollinger_state": "BREAKOUT_UPPER",
-                "macd_momentum": "BULLISH_EXPANDING",
-                "obv_state": "ACCUMULATING",
-                "statistical_strength": 97.0,
-            },
-        },
-        "semantic_tags": ["STATISTICAL_EXTREME"],
-        "raw_data": {
-            "price_series": {
-                "2026-01-01": 100.0,
-                "2026-01-02": None,
-            },
-            "z_score_series": {
-                "2026-01-01": 1.5,
-                "2026-01-02": float("nan"),
-            },
+        "as_of": "2026-02-12T12:00:00",
+        "direction": "BULLISH_EXTENSION",
+        "risk_level": "high",
+        "confidence": 0.63,
+        "summary_tags": ["STATISTICAL_EXTREME"],
+        "diagnostics": {"is_degraded": False, "degraded_reasons": []},
+        "artifact_refs": {
+            "chart_data_id": "chart-1",
+            "timeseries_bundle_id": "bundle-1",
+            "feature_pack_id": "feature-1",
         },
     }
 
     normalized = parse_technical_artifact_model(payload)
 
-    assert normalized["frac_diff_metrics"]["memory_strength"] == "balanced"
-    assert normalized["signal_state"]["statistical_state"] == "anomaly"
-    assert normalized["signal_state"]["risk_level"] == "critical"
-    assert normalized["raw_data"]["price_series"] == {"2026-01-01": 100.0}
-    assert normalized["raw_data"]["z_score_series"] == {"2026-01-01": 1.5}
+    assert normalized["risk_level"] == "critical"
 
 
 def test_canonicalize_technical_artifact_rejects_invalid_risk_level() -> None:
     payload = {
+        "schema_version": "2.0",
         "ticker": "TSLA",
-        "timestamp": "2026-02-12T12:00:00",
-        "frac_diff_metrics": {
-            "optimal_d": 0.44,
-            "window_length": 252,
-            "adf_statistic": -3.7,
-            "adf_pvalue": 0.01,
-            "memory_strength": "balanced",
+        "as_of": "2026-02-12T12:00:00",
+        "direction": "NEUTRAL_CONSOLIDATION",
+        "risk_level": "severe",
+        "confidence": 0.2,
+        "summary_tags": [],
+        "diagnostics": {"is_degraded": False, "degraded_reasons": []},
+        "artifact_refs": {
+            "chart_data_id": "chart-1",
+            "timeseries_bundle_id": "bundle-1",
+            "feature_pack_id": "feature-1",
         },
-        "signal_state": {
-            "z_score": 0.1,
-            "statistical_state": "equilibrium",
-            "direction": "NEUTRAL_CONSOLIDATION",
-            "risk_level": "severe",
-            "confluence": {
-                "bollinger_state": "INSIDE",
-                "macd_momentum": "NEUTRAL",
-                "obv_state": "NEUTRAL",
-                "statistical_strength": 50.0,
-            },
-        },
-        "semantic_tags": [],
     }
 
     with pytest.raises(TypeError, match="risk_level"):

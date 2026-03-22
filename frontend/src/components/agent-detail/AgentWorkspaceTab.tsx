@@ -8,24 +8,78 @@ import {
 } from '@/types/interrupts';
 import { LayoutPanelTop, Activity, Clock } from 'lucide-react';
 import { DynamicInterruptForm } from '../DynamicInterruptForm';
+import { useAgentActivity } from '@/hooks/useAgentActivity';
 
 interface AgentWorkspaceTabProps {
     agent: AgentInfo;
+    threadId?: string | null;
     currentNode?: string | null;
     currentStatus?: string | null;
     messages: Message[];
     onSubmitCommand?: (payload: InterruptResumePayload) => Promise<void>;
-    activityFeed?: { id: string, node: string, agentId?: string, status: string, timestamp: number }[];
+    projectionUpdatedAt?: number | null;
 }
 
 export const AgentWorkspaceTab: React.FC<AgentWorkspaceTabProps> = ({
     agent,
+    threadId,
     currentNode,
     currentStatus,
     messages,
     onSubmitCommand,
-    activityFeed = []
+    projectionUpdatedAt = null
 }) => {
+    const ACTIVITY_LIMIT = 5;
+    const {
+        events: activityEvents,
+        hasMore: hasMoreActivity,
+        isLoading: isActivityLoading,
+        loadMore: loadMoreActivity,
+    } = useAgentActivity(threadId, agent.id, ACTIVITY_LIMIT);
+    const canLoadMoreActivity =
+        Boolean(threadId) && hasMoreActivity && !isActivityLoading;
+
+    const formatLag = (ms: number): string => {
+        if (ms < 1000) return 'now';
+        const totalSeconds = Math.floor(ms / 1000);
+        if (totalSeconds < 60) return `${totalSeconds}s`;
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        if (minutes < 60) return `${minutes}m ${seconds}s`;
+        const hours = Math.floor(minutes / 60);
+        const remMinutes = minutes % 60;
+        return `${hours}h ${remMinutes}m`;
+    };
+
+    const now = Date.now();
+    const lagMs =
+        projectionUpdatedAt && projectionUpdatedAt > 0
+            ? Math.max(0, now - projectionUpdatedAt)
+            : null;
+    const staleThresholdMs = 30_000;
+    const isStale = lagMs !== null && lagMs > staleThresholdMs;
+    const projectionLabel =
+        lagMs === null
+            ? 'Sync pending'
+            : isStale
+              ? `Lagging ${formatLag(lagMs)}`
+              : `Synced ${formatLag(lagMs)} ago`;
+    const projectionTime =
+        lagMs === null
+            ? null
+            : new Date(projectionUpdatedAt as number).toLocaleTimeString([], {
+                  hour12: false,
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+              });
+    const projectionTone = isStale ? 'text-warning' : 'text-slate-300';
+    const projectionBorder = isStale ? 'border-warning/30' : 'border-border-main';
+    const projectionBg = isStale ? 'bg-warning/10' : 'bg-bg-main/60';
+    const projectionTitle =
+        lagMs === null
+            ? 'Projection sync is not available yet.'
+            : `Projection last updated at ${projectionTime}. Read model may lag live execution.`;
     const interruptMessages = messages.filter(
         (message): message is Message & { data: InterruptRequestData } =>
             !!message.isInteractive &&
@@ -42,12 +96,24 @@ export const AgentWorkspaceTab: React.FC<AgentWorkspaceTabProps> = ({
                         <LayoutPanelTop size={18} className="text-primary" />
                         <h3 className="text-sm font-bold text-white uppercase tracking-widest">Active Workspace</h3>
                     </div>
-                    {agent.status === 'running' && (
-                        <div className="flex items-center gap-2 px-3 py-1 bg-primary/10 border border-primary/20 rounded-full">
-                            <div className="w-1.5 h-1.5 bg-primary rounded-full animate-pulse shadow-[0_0_5px_rgba(var(--cyan-500-rgb),1)]" />
-                            <span className="text-[10px] font-bold text-primary uppercase tracking-tighter">Live Session</span>
+                    <div className="flex items-center gap-2">
+                        {agent.status === 'running' && (
+                            <div className="flex items-center gap-2 px-3 py-1 bg-primary/10 border border-primary/20 rounded-full">
+                                <div className="w-1.5 h-1.5 bg-primary rounded-full animate-pulse shadow-[0_0_5px_rgba(var(--cyan-500-rgb),1)]" />
+                                <span className="text-[10px] font-bold text-primary uppercase tracking-tighter">Live Session</span>
+                            </div>
+                        )}
+                        <div
+                            className={`flex items-center gap-2 px-3 py-1 rounded-full border ${projectionBg} ${projectionBorder}`}
+                            title={projectionTitle}
+                        >
+                            <Clock size={12} className={projectionTone} />
+                            <span className="text-[10px] font-bold uppercase tracking-tighter text-slate-500">Projection</span>
+                            <span className={`text-[10px] font-bold uppercase tracking-tighter ${projectionTone}`}>
+                                {projectionLabel}
+                            </span>
                         </div>
-                    )}
+                    </div>
                 </div>
 
                 <div className="flex flex-col gap-4">
@@ -86,48 +152,79 @@ export const AgentWorkspaceTab: React.FC<AgentWorkspaceTabProps> = ({
                     <h3 className="text-label">Activity History</h3>
                 </div>
 
+                <div className="flex items-center justify-between text-[10px] text-slate-500 mb-4 uppercase tracking-widest">
+                    <span>
+                        {`Showing last ${Math.max(
+                            ACTIVITY_LIMIT,
+                            activityEvents.length
+                        )} events`}
+                    </span>
+                    <button
+                        type="button"
+                        onClick={() => loadMoreActivity()}
+                        disabled={!canLoadMoreActivity}
+                        className={`text-[10px] font-bold uppercase tracking-widest transition-colors ${
+                            canLoadMoreActivity
+                                ? 'text-primary hover:text-cyan-300'
+                                : 'text-slate-700 cursor-not-allowed'
+                        }`}
+                    >
+                        {hasMoreActivity ? 'View full history' : 'Full history loaded'}
+                    </button>
+                </div>
+
                 <div className="space-y-4">
                     {(() => {
-                        const filteredFeed = activityFeed.filter(step => step.agentId === agent.id);
-
-                        if (filteredFeed.length === 0) {
+                        if (activityEvents.length === 0) {
                             return (
                                 <div className="py-8 text-center bg-bg-main/30 rounded-xl border border-dashed border-border-main">
                                     <Clock size={20} className="text-slate-800 mx-auto mb-2" />
-                                    <span className="text-label">No history tracked</span>
+                                    <span className="text-label">No recent activity in last 5 events</span>
                                 </div>
                             );
                         }
 
-                        const latestByNode = new Map<string, typeof filteredFeed[0]>();
-                        filteredFeed.forEach(step => {
-                            latestByNode.set(step.node, step);
-                        });
-
-                        const displayFeed = Array.from(latestByNode.values())
-                            .sort((a, b) => b.timestamp - a.timestamp);
-
-                        return displayFeed.map((step, idx) => (
+                        return activityEvents.map((step, idx) => {
+                            const isCurrent = step.isCurrent;
+                            const isRunning = step.status === 'running' && isCurrent;
+                            const statusTone =
+                                step.status === 'error'
+                                    ? 'text-error'
+                                    : step.status === 'attention' || step.status === 'degraded'
+                                      ? 'text-warning'
+                                      : isRunning
+                                        ? 'text-primary animate-pulse'
+                                        : step.status === 'done'
+                                          ? 'text-success'
+                                          : 'text-slate-600 group-hover:text-slate-500';
+                            return (
                             <div key={step.id} className="flex gap-4 group">
                                 <div className="flex flex-col items-center gap-1">
-                                    <div className={`w-2 h-2 rounded-full mt-1 ${idx === 0 ? 'bg-primary shadow-[0_0_5px_rgba(var(--cyan-500-rgb),1)]' : 'bg-slate-800 group-hover:bg-slate-700'}`} />
-                                    {idx !== displayFeed.length - 1 && <div className="w-[1px] flex-1 bg-border-main" />}
+                                    <div
+                                        className={`w-2 h-2 rounded-full mt-1 ${
+                                            isCurrent
+                                                ? 'bg-primary shadow-[0_0_5px_rgba(var(--cyan-500-rgb),1)]'
+                                                : 'bg-slate-800 group-hover:bg-slate-700'
+                                        }`}
+                                    />
+                                    {idx !== activityEvents.length - 1 && <div className="w-[1px] flex-1 bg-border-main" />}
                                 </div>
                                 <div className="flex-1 pb-4">
                                     <div className="flex justify-between items-start">
-                                        <span className={`text-xs font-bold leading-none capitalize ${idx === 0 ? 'text-slate-200' : 'text-slate-50'}`}>
+                                        <span className={`text-xs font-bold leading-none capitalize ${isCurrent ? 'text-slate-200' : 'text-slate-50'}`}>
                                             {step.node.replace(/_/g, ' ')}
                                         </span>
                                         <span className="text-[9px] text-slate-700 font-mono">
                                             {new Date(step.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                                         </span>
                                     </div>
-                                    <div className={`text-[10px] mt-1 uppercase tracking-tighter transition-all ${step.status === 'running' ? 'text-primary animate-pulse' : 'text-slate-600 group-hover:text-slate-500'}`}>
+                                    <div className={`text-[10px] mt-1 uppercase tracking-tighter transition-all ${statusTone}`}>
                                         {step.status}
                                     </div>
                                 </div>
                             </div>
-                        ));
+                            );
+                        });
                     })()}
                 </div>
             </section>

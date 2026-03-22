@@ -21,7 +21,6 @@ def build_data_fetch_error_update(error_message: str) -> JSONObject:
         {
             "current_node": "data_fetch",
             "internal_progress": {"data_fetch": "error"},
-            "node_statuses": {"technical_analysis": "error"},
             "error_logs": [
                 {
                     "node": "data_fetch",
@@ -56,7 +55,6 @@ def build_data_fetch_success_update(
                 "data_fetch": "done",
                 "feature_compute": "running",
             },
-            "node_statuses": {"technical_analysis": "running"},
         },
     )
 
@@ -67,7 +65,6 @@ def build_feature_compute_error_update(error_message: str) -> JSONObject:
         {
             "current_node": "feature_compute",
             "internal_progress": {"feature_compute": "error"},
-            "node_statuses": {"technical_analysis": "error"},
             "error_logs": [
                 {
                     "node": "feature_compute",
@@ -104,7 +101,6 @@ def build_feature_compute_success_update(
                 "feature_compute": "done",
                 "pattern_compute": "running",
             },
-            "node_statuses": {"technical_analysis": "running"},
         },
     )
 
@@ -115,7 +111,6 @@ def build_pattern_compute_error_update(error_message: str) -> JSONObject:
         {
             "current_node": "pattern_compute",
             "internal_progress": {"pattern_compute": "error"},
-            "node_statuses": {"technical_analysis": "error"},
             "error_logs": [
                 {
                     "node": "pattern_compute",
@@ -144,7 +139,6 @@ def build_pattern_compute_success_update(
                 "pattern_compute": "done",
                 "alerts_compute": "running",
             },
-            "node_statuses": {"technical_analysis": "running"},
         },
     )
 
@@ -155,7 +149,6 @@ def build_alerts_compute_error_update(error_message: str) -> JSONObject:
         {
             "current_node": "alerts_compute",
             "internal_progress": {"alerts_compute": "error"},
-            "node_statuses": {"technical_analysis": "error"},
             "error_logs": [
                 {
                     "node": "alerts_compute",
@@ -184,7 +177,6 @@ def build_alerts_compute_success_update(
                 "alerts_compute": "done",
                 "regime_compute": "running",
             },
-            "node_statuses": {"technical_analysis": "running"},
         },
     )
 
@@ -195,7 +187,6 @@ def build_regime_compute_error_update(error_message: str) -> JSONObject:
         {
             "current_node": "regime_compute",
             "internal_progress": {"regime_compute": "error"},
-            "node_statuses": {"technical_analysis": "error"},
             "error_logs": [
                 {
                     "node": "regime_compute",
@@ -224,7 +215,6 @@ def build_regime_compute_success_update(
                 "regime_compute": "done",
                 "fusion_compute": "running",
             },
-            "node_statuses": {"technical_analysis": "running"},
         },
     )
 
@@ -235,7 +225,6 @@ def build_fusion_compute_error_update(error_message: str) -> JSONObject:
         {
             "current_node": "fusion_compute",
             "internal_progress": {"fusion_compute": "error"},
-            "node_statuses": {"technical_analysis": "error"},
             "error_logs": [
                 {
                     "node": "fusion_compute",
@@ -284,7 +273,6 @@ def build_fusion_compute_success_update(
                 "fusion_compute": "done",
                 "verification_compute": "running",
             },
-            "node_statuses": {"technical_analysis": "running"},
         },
     )
 
@@ -295,7 +283,6 @@ def build_verification_compute_error_update(error_message: str) -> JSONObject:
         {
             "current_node": "verification_compute",
             "internal_progress": {"verification_compute": "error"},
-            "node_statuses": {"technical_analysis": "error"},
             "error_logs": [
                 {
                     "node": "verification_compute",
@@ -346,7 +333,6 @@ def build_verification_compute_success_update(
                 "verification_compute": "done",
                 "semantic_translate": "running",
             },
-            "node_statuses": {"technical_analysis": "running"},
         },
     )
 
@@ -357,7 +343,6 @@ def build_fracdiff_error_update(error_message: str) -> JSONObject:
         {
             "current_node": "fracdiff_compute",
             "internal_progress": {"fracdiff_compute": "error"},
-            "node_statuses": {"technical_analysis": "error"},
             "error_logs": [
                 {
                     "node": "fracdiff_compute",
@@ -406,7 +391,6 @@ def build_fracdiff_success_update(
                 "fracdiff_compute": "done",
                 "semantic_translate": "running",
             },
-            "node_statuses": {"technical_analysis": "running"},
         },
     )
 
@@ -427,7 +411,6 @@ def build_semantic_success_update(
                 "technical_analysis": technical_analysis,
                 "current_node": "semantic_translate",
                 "internal_progress": {"semantic_translate": "done"},
-                "node_statuses": {"technical_analysis": "done"},
             },
         )
     )
@@ -440,7 +423,6 @@ def build_semantic_error_update(error_message: str) -> SemanticCommandUpdateResu
             {
                 "current_node": "semantic_translate",
                 "internal_progress": {"semantic_translate": "error"},
-                "node_statuses": {"technical_analysis": "error"},
                 "error_logs": [
                     {
                         "node": "semantic_translate",
@@ -474,7 +456,6 @@ def _guard_state_update(node: str, update: JSONObject) -> JSONObject:
     return {
         "current_node": node,
         "internal_progress": {node: "error"},
-        "node_statuses": {"technical_analysis": "error"},
         "error_logs": [
             {
                 "node": node,

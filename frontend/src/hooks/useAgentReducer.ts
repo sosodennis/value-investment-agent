@@ -7,7 +7,11 @@ import {
     StatusHistoryEntry,
     ThreadStateResponse,
 } from '../types/protocol';
-import { deriveHydratedAgentStatuses } from '@/lib/agent-session-state';
+import {
+    deriveActiveAgentId,
+    deriveHydratedAgentStatuses,
+    isLiveAgentStatus,
+} from '@/lib/agent-session-state';
 
 export interface AgentData {
     status: AgentStatus;
@@ -20,10 +24,12 @@ export interface AgentState {
     threadId: string | null;
     agents: Record<string, AgentData>;
     lastSeqId: number;
+    cursorUpdatedAt: number | null;
     error: string | null;
     currentNode: string | null;
     currentStatus: AgentStatus | null;
     statusHistory: StatusHistoryEntry[];
+    activeAgentId: string | null;
 }
 
 export type AgentAction =
@@ -40,10 +46,12 @@ const initialState: AgentState = {
     threadId: null,
     agents: {},
     lastSeqId: 0,
+    cursorUpdatedAt: null,
     error: null,
     currentNode: null,
     currentStatus: null,
     statusHistory: [],
+    activeAgentId: null,
 };
 
 const toInterruptRequestData = (
@@ -93,15 +101,25 @@ function agentReducer(state: AgentState, action: AgentAction): AgentState {
 
         case 'LOAD_HISTORY': {
             const { messages, threadId, stateData } = action;
+            const activeAgentId = stateData
+                ? deriveActiveAgentId(stateData)
+                : state.activeAgentId;
+            const hydratedLastSeqId =
+                stateData?.cursor?.last_seq_id ?? stateData?.last_seq_id ?? state.lastSeqId;
+            const cursorUpdatedAt = stateData?.cursor?.updated_at
+                ? Date.parse(stateData.cursor.updated_at)
+                : null;
             const newState: AgentState = {
                 ...state,
                 threadId,
                 messages,
                 status: stateData?.is_running ? 'running' : 'idle',
-                lastSeqId: stateData?.last_seq_id ?? state.lastSeqId,
+                lastSeqId: hydratedLastSeqId,
+                cursorUpdatedAt: Number.isNaN(cursorUpdatedAt) ? null : cursorUpdatedAt,
                 currentNode: stateData?.current_node ?? state.currentNode,
                 currentStatus: stateData?.current_status ?? state.currentStatus,
                 statusHistory: stateData?.status_history ?? state.statusHistory,
+                activeAgentId,
             };
 
             if (stateData?.interrupts.length) {
@@ -158,7 +176,15 @@ function agentReducer(state: AgentState, action: AgentAction): AgentState {
             const { event } = action;
             if (event.seq_id <= state.lastSeqId) return state;
 
-            const newState = { ...state, lastSeqId: event.seq_id };
+            const eventTimestamp = Date.parse(event.timestamp);
+            const cursorUpdatedAt = Number.isNaN(eventTimestamp)
+                ? state.cursorUpdatedAt
+                : eventTimestamp;
+            const newState = {
+                ...state,
+                lastSeqId: event.seq_id,
+                cursorUpdatedAt,
+            };
 
             switch (event.type) {
                 case 'content.delta': {
@@ -208,7 +234,25 @@ function agentReducer(state: AgentState, action: AgentAction): AgentState {
                                   timestamp: new Date(event.timestamp).getTime(),
                               },
                           ].slice(-20);
+                    const isLiveStatus = isLiveAgentStatus(status);
+                    const activeAgentId = isLiveStatus
+                        ? agentId
+                        : state.activeAgentId === agentId
+                          ? null
+                          : state.activeAgentId;
 
+                return {
+                        ...newState,
+                        currentNode: node || state.currentNode,
+                        currentStatus: status,
+                        statusHistory: newHistory,
+                        activeAgentId,
+                    };
+                }
+
+                case 'agent.lifecycle': {
+                    const { status } = event.data;
+                    const agentId = event.source;
                     return {
                         ...newState,
                         agents: {
@@ -218,9 +262,6 @@ function agentReducer(state: AgentState, action: AgentAction): AgentState {
                                 status,
                             },
                         },
-                        currentNode: node || state.currentNode,
-                        currentStatus: status,
-                        statusHistory: newHistory,
                     };
                 }
 

@@ -37,28 +37,44 @@ async def get_graph():
             builder.add_node(
                 "intent_agent",
                 build_intent_extraction_subgraph(),
-                metadata={"agent_id": "intent_extraction"},
+                metadata={
+                    "agent_id": "intent_extraction",
+                    "agent_scope": "agent",
+                    "agent_node": "intent_agent",
+                },
             )
 
             # Fundamental Analysis Agent
             builder.add_node(
                 "fundamental_agent",
                 build_fundamental_subgraph(),
-                metadata={"agent_id": "fundamental_analysis"},
+                metadata={
+                    "agent_id": "fundamental_analysis",
+                    "agent_scope": "agent",
+                    "agent_node": "fundamental_agent",
+                },
             )
 
             # Financial News Research Agent
             builder.add_node(
                 "news_agent",
                 build_financial_news_subgraph(),
-                metadata={"agent_id": "financial_news_research"},
+                metadata={
+                    "agent_id": "financial_news_research",
+                    "agent_scope": "agent",
+                    "agent_node": "news_agent",
+                },
             )
 
             # Technical Analysis Agent
             builder.add_node(
                 "technical_agent",
                 build_technical_subgraph(),
-                metadata={"agent_id": "technical_analysis"},
+                metadata={
+                    "agent_id": "technical_analysis",
+                    "agent_scope": "agent",
+                    "agent_node": "technical_agent",
+                },
             )
 
             # Research Consolidation
@@ -66,7 +82,13 @@ async def get_graph():
 
             # Debate Agent
             builder.add_node(
-                "debate_agent", build_debate_subgraph(), metadata={"agent_id": "debate"}
+                "debate_agent",
+                build_debate_subgraph(),
+                metadata={
+                    "agent_id": "debate",
+                    "agent_scope": "agent",
+                    "agent_node": "debate_agent",
+                },
             )
 
             # --- Edge Definitions ---

@@ -8,6 +8,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Index,
+    Integer,
     String,
     Text,
     UniqueConstraint,
@@ -26,9 +27,13 @@ class ChatMessage(Base):
     message_type = Column(String)  # 'human', 'ai', 'tool'
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     metadata_ = Column(JSON, default={})
+    agent_id = Column(String, nullable=True, index=True)
 
     # Compound index for efficient session retrieval with ordering
-    __table_args__ = (Index("idx_thread_created", "thread_id", "created_at"),)
+    __table_args__ = (
+        Index("idx_thread_created", "thread_id", "created_at"),
+        Index("idx_thread_agent_created", "thread_id", "agent_id", "created_at"),
+    )
 
     def to_dict(self):
         return {
@@ -39,9 +44,12 @@ class ChatMessage(Base):
             "data": self.metadata_.get("data") if self.metadata_ else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "agentId": (
-                self.metadata_.get("agentId") or self.metadata_.get("agent_id")
-                if self.metadata_
-                else None
+                self.agent_id
+                or (
+                    self.metadata_.get("agentId") or self.metadata_.get("agent_id")
+                    if self.metadata_
+                    else None
+                )
             ),
         }
 
@@ -190,4 +198,107 @@ class TechnicalApprovedLabelSnapshot(Base):
             "label_family",
             "approved_at",
         ),
+    )
+
+
+class WorkspaceRuntimeActivityEvent(Base):
+    __tablename__ = "workspace_runtime_activity_events"
+
+    event_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    thread_id = Column(String, nullable=False, index=True)
+    seq_id = Column(Integer, nullable=False)
+    run_id = Column(String, nullable=True)
+    agent_id = Column(String, nullable=False, index=True)
+    node = Column(String, nullable=True)
+    event_type = Column(String, nullable=False)
+    status = Column(String, nullable=True)
+    payload = Column(JSON, nullable=False, default={})
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "thread_id",
+            "seq_id",
+            name="uq_workspace_runtime_activity_thread_seq",
+        ),
+        Index(
+            "idx_workspace_runtime_activity_thread_seq",
+            "thread_id",
+            "seq_id",
+        ),
+        Index(
+            "idx_workspace_runtime_activity_thread_created",
+            "thread_id",
+            "created_at",
+        ),
+        Index(
+            "idx_workspace_runtime_activity_thread_agent_created",
+            "thread_id",
+            "agent_id",
+            "created_at",
+        ),
+    )
+
+
+class WorkspaceRuntimeActivitySegment(Base):
+    __tablename__ = "workspace_runtime_activity_segments"
+
+    segment_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    thread_id = Column(String, nullable=False, index=True)
+    agent_id = Column(String, nullable=False, index=True)
+    node = Column(String, nullable=False)
+    run_id = Column(String, nullable=False, index=True)
+    status = Column(String, nullable=False)
+    started_at = Column(DateTime, nullable=False)
+    updated_at = Column(DateTime, nullable=False, index=True)
+    ended_at = Column(DateTime, nullable=True)
+    last_seq_id = Column(Integer, nullable=False)
+
+    __table_args__ = (
+        Index(
+            "idx_workspace_runtime_segment_thread_agent_updated",
+            "thread_id",
+            "agent_id",
+            "updated_at",
+        ),
+        Index(
+            "idx_workspace_runtime_segment_thread_agent_run_updated",
+            "thread_id",
+            "agent_id",
+            "run_id",
+            "updated_at",
+        ),
+    )
+
+
+class WorkspaceRuntimeRunStatus(Base):
+    __tablename__ = "workspace_runtime_run_statuses"
+
+    thread_id = Column(String, primary_key=True)
+    run_id = Column(String, nullable=False, unique=True, index=True)
+    status = Column(String, nullable=False)
+    started_at = Column(DateTime, nullable=False)
+    updated_at = Column(DateTime, nullable=False, index=True)
+    ended_at = Column(DateTime, nullable=True)
+    last_seq_id = Column(Integer, nullable=False)
+
+    __table_args__ = (
+        Index(
+            "idx_workspace_runtime_run_status_updated",
+            "status",
+            "updated_at",
+        ),
+    )
+
+
+class WorkspaceRuntimeCursor(Base):
+    __tablename__ = "workspace_runtime_cursors"
+
+    thread_id = Column(String, primary_key=True)
+    last_seq_id = Column(Integer, nullable=False, default=0)
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False,
     )

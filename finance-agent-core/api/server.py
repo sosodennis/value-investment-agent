@@ -6,7 +6,7 @@ import uuid
 from collections import defaultdict
 from collections.abc import Mapping
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Literal
 
@@ -50,6 +50,14 @@ from src.interface.artifacts.artifact_api_models import (
 from src.interface.events.adapters import adapt_langgraph_event, create_interrupt_event
 from src.interface.events.protocol import AgentEvent
 from src.interface.events.schemas import AgentOutputArtifact
+from src.runtime.workspace_runtime_projection import (
+    WorkspaceRuntimeActivityRecord,
+    WorkspaceRuntimeActivitySegmentRecord,
+    WorkspaceRuntimeProjectionService,
+    build_default_workspace_runtime_projection_repository,
+    derive_active_agent_id,
+    derive_recent_activity,
+)
 from src.services.artifact_manager import artifact_manager
 from src.services.history import history_service
 from src.shared.kernel.tools.logger import (
@@ -83,6 +91,11 @@ async def lifespan(app: FastAPI):
     # Build Agent Identity Lookup (Zero Config)
     app.state.agent_lookup = build_agent_lookup(graph)
     logger.info(f"🔎 [Lifespan] Discovered {len(app.state.agent_lookup)} agent nodes.")
+
+    runtime_projection_repo = build_default_workspace_runtime_projection_repository()
+    app.state.runtime_projection = WorkspaceRuntimeProjectionService(
+        runtime_projection_repo
+    )
 
     warmup_enabled = os.getenv("NEWS_FINBERT_WARMUP", "1").strip().lower() not in {
         "0",
@@ -402,6 +415,43 @@ class StatusHistoryEntryResponse(BaseModel):
     timestamp: datetime
 
 
+class ActivitySegmentResponse(BaseModel):
+    id: str
+    agentId: str
+    node: str
+    runId: str
+    status: str
+    started_at: datetime
+    updated_at: datetime
+    ended_at: datetime | None = None
+    is_current: bool
+
+
+class RuntimeCursorResponse(BaseModel):
+    last_seq_id: int
+    updated_at: datetime | None = None
+
+
+class RunStatusResponse(BaseModel):
+    run_id: str
+    status: str
+    started_at: datetime
+    updated_at: datetime
+    ended_at: datetime | None = None
+
+
+class ActivityTimelineEntryResponse(BaseModel):
+    event_id: str
+    seq_id: int
+    run_id: str | None
+    agent_id: str
+    node: str | None
+    event_type: str
+    status: str | None
+    payload: dict[str, object]
+    created_at: datetime
+
+
 class ThreadStateResponse(BaseModel):
     thread_id: str
     messages: list[MessageResponse]
@@ -410,15 +460,21 @@ class ThreadStateResponse(BaseModel):
     status: str | None = None
     next: list[str] | None = None
     is_running: bool
+    agent_statuses: dict[str, str]
     node_statuses: dict[str, str]
     agent_outputs: dict[str, AgentOutputArtifact]
     last_seq_id: int
+    cursor: RuntimeCursorResponse | None = None
     current_node: str | None = None
     current_status: str | None = None
     status_history: list[StatusHistoryEntryResponse] = []
+    activity_timeline: list[ActivityTimelineEntryResponse] = []
+    active_agent_id: str | None = None
+    run: RunStatusResponse | None = None
 
 
 class AgentStatusesResponse(BaseModel):
+    agent_statuses: dict[str, str]
     node_statuses: dict[str, str]
     current_node: str | None = None
     agent_outputs: dict[str, AgentOutputArtifact]
@@ -427,12 +483,12 @@ class AgentStatusesResponse(BaseModel):
 class StreamStartResponse(BaseModel):
     status: Literal["started", "running"]
     thread_id: str
+    run_id: str
 
 
-# Track active tasks, event replay buffers, and sequence counters
+# Track active tasks, running queues, and sequence counters
 active_tasks: dict[str, asyncio.Task] = {}
 running_queues: dict[str, list[asyncio.Queue]] = defaultdict(list)
-event_replay_buffers: dict[str, list[str]] = defaultdict(list)
 thread_sequences: dict[str, int] = defaultdict(lambda: 1)
 
 
@@ -500,35 +556,74 @@ def _message_agent_id(value: object) -> str | None:
     return None
 
 
-def _build_status_history(thread_id: str) -> list[StatusHistoryEntryResponse]:
+def _build_activity_timeline(
+    records: list[WorkspaceRuntimeActivityRecord],
+) -> list[ActivityTimelineEntryResponse]:
+    timeline: list[ActivityTimelineEntryResponse] = []
+    for record in records:
+        if not isinstance(record, object):
+            continue
+        timeline.append(
+            ActivityTimelineEntryResponse(
+                event_id=record.event_id,
+                seq_id=record.seq_id,
+                run_id=record.run_id,
+                agent_id=record.agent_id,
+                node=record.node,
+                event_type=record.event_type,
+                status=record.status,
+                payload=record.payload,
+                created_at=record.created_at,
+            )
+        )
+    return timeline
+
+
+def _build_status_history_from_activity(
+    records: list[WorkspaceRuntimeActivityRecord],
+) -> list[StatusHistoryEntryResponse]:
     history: list[StatusHistoryEntryResponse] = []
-    for raw_message in event_replay_buffers.get(thread_id, []):
-        line = raw_message.strip()
-        if not line.startswith("data: "):
+    ordered = sorted(records, key=lambda record: record.created_at)
+    for record in ordered:
+        if record.event_type != "agent.status":
             continue
-        payload = line[6:].strip()
-        if payload == "null":
+        if record.status is None:
             continue
-        try:
-            event = AgentEvent.model_validate_json(payload)
-        except Exception:
-            continue
-        if event.type != "agent.status":
-            continue
-        status = event.data.get("status")
-        if not isinstance(status, str):
-            continue
-        node = event.data.get("node")
+        node = record.node if record.node else record.agent_id
         history.append(
             StatusHistoryEntryResponse(
-                id=f"status_{event.id}",
-                node=node if isinstance(node, str) and node else event.source,
-                agentId=event.source,
-                status=status,
-                timestamp=event.timestamp,
+                id=f"status_{record.event_id}",
+                node=node,
+                agentId=record.agent_id,
+                status=record.status,
+                timestamp=record.created_at,
             )
         )
     return history[-20:]
+
+
+def _build_activity_segment_entries(
+    records: list[WorkspaceRuntimeActivitySegmentRecord],
+    *,
+    mark_current: bool,
+) -> list[ActivitySegmentResponse]:
+    ordered = sorted(records, key=lambda record: record.updated_at, reverse=True)
+    segments: list[ActivitySegmentResponse] = []
+    for idx, record in enumerate(ordered):
+        segments.append(
+            ActivitySegmentResponse(
+                id=record.segment_id,
+                agentId=record.agent_id,
+                node=record.node,
+                runId=record.run_id,
+                status=record.status,
+                started_at=record.started_at,
+                updated_at=record.updated_at,
+                ended_at=record.ended_at,
+                is_current=mark_current and idx == 0,
+            )
+        )
+    return segments
 
 
 def _derive_current_status(
@@ -546,19 +641,76 @@ def _derive_current_status(
     return None
 
 
+def _format_sse_event(event: AgentEvent) -> str:
+    payload = event.model_dump_json()
+    return f"id: {event.seq_id}\n" f"event: {event.type}\n" f"data: {payload}\n\n"
+
+
+def _parse_after_seq(
+    *,
+    after_seq: int | None,
+    last_event_id: str | None,
+) -> int | None:
+    if after_seq is not None:
+        return after_seq
+    if last_event_id is None:
+        return None
+    try:
+        return int(last_event_id)
+    except ValueError:
+        return None
+
+
+def _build_event_from_activity_record(
+    record: WorkspaceRuntimeActivityRecord,
+) -> AgentEvent:
+    payload = record.payload if isinstance(record.payload, Mapping) else {}
+    data = payload.get("data") if isinstance(payload.get("data"), Mapping) else {}
+    metadata = (
+        payload.get("metadata") if isinstance(payload.get("metadata"), Mapping) else {}
+    )
+    return AgentEvent(
+        id=record.event_id,
+        timestamp=record.created_at,
+        thread_id=record.thread_id,
+        run_id=record.run_id or "",
+        seq_id=record.seq_id,
+        type=record.event_type,
+        source=record.agent_id,
+        data=dict(data),
+        metadata=dict(metadata),
+    )
+
+
+async def _resolve_next_seq_id(
+    *,
+    thread_id: str,
+    runtime_projection: WorkspaceRuntimeProjectionService | None,
+) -> int:
+    fallback_seq_id = thread_sequences.get(thread_id, 1)
+    if runtime_projection is None:
+        return fallback_seq_id
+    return await runtime_projection.resolve_next_seq_id(
+        thread_id=thread_id,
+        fallback_seq_id=fallback_seq_id,
+    )
+
+
 async def event_generator(
     thread_id: str,
     input_data: Command | dict[str, object],
     config: dict[str, dict[str, str]],
     graph: CompiledStateGraph,
+    *,
+    run_id: str,
     agent_lookup: dict[str, str] | None = None,
+    runtime_projection: WorkspaceRuntimeProjectionService | None = None,
 ):
     """
     Core event generator that transforms LangGraph events into standardized AgentEvents.
     """
     agent_lookup = agent_lookup or {}
     seq_counter = thread_sequences[thread_id]
-    run_id = str(uuid.uuid4())
     logger.info(
         "server_event_generator_started thread_id=%s seq=%d", thread_id, seq_counter
     )
@@ -571,6 +723,19 @@ async def event_generator(
         try:
             # State for token batching
             batch_state = {"buffer": [], "last_event": None}
+
+            async def persist_event(agent_event: AgentEvent) -> None:
+                if runtime_projection is None:
+                    return
+                try:
+                    await runtime_projection.record_event(agent_event)
+                except Exception as exc:
+                    logger.warning(
+                        "workspace_runtime_projection_write_failed seq=%d type=%s error=%s",
+                        agent_event.seq_id,
+                        agent_event.type,
+                        str(exc),
+                    )
 
             async def flush_deltas():
                 nonlocal seq_counter
@@ -586,17 +751,15 @@ async def event_generator(
                 last_delta.data["content"] = combined_content
                 last_delta.seq_id = seq_counter
 
-                msg = f"data: {last_delta.model_dump_json()}\n\n"
+                await persist_event(last_delta)
+
+                msg = _format_sse_event(last_delta)
                 # Silence high-frequency logs by using DEBUG level
                 logger.debug(
                     "server_dispatch_token_batch count=%d source=%s",
                     len(delta_buffer),
                     last_delta.source,
                 )
-
-                event_replay_buffers[thread_id].append(msg)
-                if len(event_replay_buffers[thread_id]) > 50:
-                    event_replay_buffers[thread_id].pop(0)
 
                 for q in running_queues[thread_id][:]:
                     await q.put(msg)
@@ -605,6 +768,24 @@ async def event_generator(
                 thread_sequences[thread_id] = seq_counter
                 batch_state["buffer"].clear()
                 batch_state["last_event"] = None
+
+            running_event = AgentEvent(
+                thread_id=thread_id,
+                run_id=run_id,
+                seq_id=seq_counter,
+                type="lifecycle.status",
+                source="System",
+                data={"status": "running"},
+            )
+            await persist_event(running_event)
+            running_msg = _format_sse_event(running_event)
+            logger.info("server_dispatch_lifecycle_running seq=%d", seq_counter)
+
+            for q in running_queues[thread_id][:]:
+                await q.put(running_msg)
+
+            seq_counter += 1
+            thread_sequences[thread_id] = seq_counter
 
             # 1. Stream refined events using adapter
             async for event in graph.astream_events(
@@ -644,17 +825,15 @@ async def event_generator(
                     event, thread_id, seq_counter, run_id
                 )
                 for agent_event in agent_events:
-                    msg = f"data: {agent_event.model_dump_json()}\n\n"
+                    await persist_event(agent_event)
+
+                    msg = _format_sse_event(agent_event)
                     logger.info(
                         "server_dispatch_event seq=%d type=%s source=%s",
                         seq_counter,
                         agent_event.type,
                         agent_event.source,
                     )
-
-                    event_replay_buffers[thread_id].append(msg)
-                    if len(event_replay_buffers[thread_id]) > 50:
-                        event_replay_buffers[thread_id].pop(0)
 
                     for q in running_queues[thread_id][:]:
                         await q.put(msg)
@@ -682,16 +861,56 @@ async def event_generator(
                             run_id,
                             source=source,
                         )
-                        msg = f"data: {agent_event.model_dump_json()}\n\n"
+                        await persist_event(agent_event)
+                        msg = _format_sse_event(agent_event)
                         logger.info(
                             "server_dispatch_interrupt seq=%d source=%s",
                             seq_counter,
                             source,
                         )
 
-                        event_replay_buffers[thread_id].append(msg)
                         for q in running_queues[thread_id][:]:
                             await q.put(msg)
+                        seq_counter += 1
+                        thread_sequences[thread_id] = seq_counter
+
+                        attention_event = AgentEvent(
+                            thread_id=thread_id,
+                            run_id=run_id,
+                            seq_id=seq_counter,
+                            type="agent.status",
+                            source=source,
+                            data={"status": "attention", "node": task.name},
+                        )
+                        await persist_event(attention_event)
+                        attention_msg = _format_sse_event(attention_event)
+                        logger.info(
+                            "server_dispatch_attention seq=%d source=%s",
+                            seq_counter,
+                            source,
+                        )
+                        for q in running_queues[thread_id][:]:
+                            await q.put(attention_msg)
+                        seq_counter += 1
+                        thread_sequences[thread_id] = seq_counter
+
+                        lifecycle_attention = AgentEvent(
+                            thread_id=thread_id,
+                            run_id=run_id,
+                            seq_id=seq_counter,
+                            type="agent.lifecycle",
+                            source=source,
+                            data={"status": "attention"},
+                        )
+                        await persist_event(lifecycle_attention)
+                        lifecycle_msg = _format_sse_event(lifecycle_attention)
+                        logger.info(
+                            "server_dispatch_lifecycle_attention seq=%d source=%s",
+                            seq_counter,
+                            source,
+                        )
+                        for q in running_queues[thread_id][:]:
+                            await q.put(lifecycle_msg)
                         seq_counter += 1
                         thread_sequences[thread_id] = seq_counter
             else:
@@ -704,12 +923,9 @@ async def event_generator(
                     source="System",
                     data={"status": "done"},
                 )
-                msg = f"data: {done_event.model_dump_json()}\n\n"
+                await persist_event(done_event)
+                msg = _format_sse_event(done_event)
                 logger.info("server_dispatch_done seq=%d", seq_counter)
-
-                event_replay_buffers[thread_id].append(msg)
-                if len(event_replay_buffers[thread_id]) > 50:
-                    event_replay_buffers[thread_id].pop(0)
 
                 for q in running_queues[thread_id][:]:
                     await q.put(msg)
@@ -732,7 +948,8 @@ async def event_generator(
                 source="System",
                 data={"message": str(exc)},
             )
-            msg = f"data: {error_event.model_dump_json()}\n\n"
+            await persist_event(error_event)
+            msg = _format_sse_event(error_event)
             for q in running_queues[thread_id][:]:
                 await q.put(msg)
         finally:
@@ -740,16 +957,11 @@ async def event_generator(
             for q in running_queues[thread_id][:]:
                 await q.put(None)
 
-            # Keep buffer for pending GETs.
-            await asyncio.sleep(2)
-
             # Cleanup.
             if thread_id in active_tasks:
                 del active_tasks[thread_id]
             if thread_id in running_queues:
                 del running_queues[thread_id]
-            if thread_id in event_replay_buffers:
-                del event_replay_buffers[thread_id]
             logger.info("server_task_finished thread_id=%s", thread_id)
 
 
@@ -829,14 +1041,61 @@ async def get_thread_history(request: Request, thread_id: str):
         from src.interface.events.mappers import NodeOutputMapper
 
         agent_outputs = NodeOutputMapper.map_all_outputs(snapshot.values)
-        node_statuses = _normalize_statuses(snapshot.values.get("node_statuses"))
-        last_seq_id = max(thread_sequences.get(thread_id, 1) - 1, 0)
         current_node_raw = snapshot.values.get("current_node")
         if current_node_raw is not None and not isinstance(current_node_raw, str):
             raise TypeError(
                 f"Invalid current_node type, expected str|None got {type(current_node_raw)!r}"
             )
-        status_history = _build_status_history(thread_id)
+        runtime_projection = getattr(request.app.state, "runtime_projection", None)
+        activity_records: list[WorkspaceRuntimeActivityRecord] = []
+        cursor = None
+        if runtime_projection is None:
+            raise RuntimeError("runtime_projection is required for thread hydration")
+        activity_records = list(
+            await runtime_projection.fetch_recent_activity(
+                thread_id=thread_id,
+                limit=50,
+            )
+        )
+        cursor = await runtime_projection.fetch_cursor(thread_id=thread_id)
+        node_statuses = await runtime_projection.fetch_latest_statuses(
+            thread_id=thread_id
+        )
+        agent_statuses = await runtime_projection.fetch_latest_lifecycle_statuses(
+            thread_id=thread_id
+        )
+        run_status_record = await runtime_projection.fetch_run_status(
+            thread_id=thread_id
+        )
+
+        activity_ordered = sorted(
+            activity_records, key=lambda record: record.created_at
+        )
+        recent_activity = list(derive_recent_activity(activity_records, limit=20))
+        activity_timeline = _build_activity_timeline(recent_activity)
+        status_history = _build_status_history_from_activity(activity_ordered)
+        active_agent_id = derive_active_agent_id(activity_ordered)
+        last_seq_id = cursor.last_seq_id if cursor else 0
+        cursor_payload = (
+            RuntimeCursorResponse(
+                last_seq_id=cursor.last_seq_id,
+                updated_at=cursor.updated_at,
+            )
+            if cursor
+            else None
+        )
+        run_payload = (
+            RunStatusResponse(
+                run_id=run_status_record.run_id,
+                status=run_status_record.status,
+                started_at=run_status_record.started_at,
+                updated_at=run_status_record.updated_at,
+                ended_at=run_status_record.ended_at,
+            )
+            if run_status_record
+            else None
+        )
+
         is_running = thread_id in active_tasks
         current_status = _derive_current_status(
             is_running=is_running,
@@ -852,12 +1111,17 @@ async def get_thread_history(request: Request, thread_id: str):
             status=fundamental.get("status"),
             next=snapshot.next,
             is_running=is_running,
+            agent_statuses=agent_statuses,
             node_statuses=node_statuses,
             agent_outputs=agent_outputs,
             last_seq_id=last_seq_id,
+            cursor=cursor_payload,
             current_node=current_node_raw,
             current_status=current_status,
             status_history=status_history,
+            activity_timeline=activity_timeline,
+            active_agent_id=active_agent_id,
+            run=run_payload,
         )
     except Exception as e:
         logger.error(f"❌ [Server] get_thread_history failed: {e}")
@@ -874,16 +1138,58 @@ async def get_agent_statuses(request: Request, thread_id: str):
         from src.interface.events.mappers import NodeOutputMapper
 
         agent_outputs = NodeOutputMapper.map_all_outputs(snapshot.values)
-        node_statuses = _normalize_statuses(snapshot.values.get("node_statuses"))
         current_node = snapshot.values.get("current_node")
         if current_node is not None and not isinstance(current_node, str):
             raise TypeError(
                 f"Invalid current_node type, expected str|None got {type(current_node)!r}"
             )
+        runtime_projection = getattr(request.app.state, "runtime_projection", None)
+        if runtime_projection is None:
+            raise RuntimeError("runtime_projection is required for agent statuses")
+        node_statuses = await runtime_projection.fetch_latest_statuses(
+            thread_id=thread_id
+        )
+        agent_statuses = await runtime_projection.fetch_latest_lifecycle_statuses(
+            thread_id=thread_id
+        )
         return AgentStatusesResponse(
+            agent_statuses=agent_statuses,
             node_statuses=node_statuses,
             current_node=current_node,
             agent_outputs=agent_outputs,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get("/thread/{thread_id}/activity", response_model=list[ActivitySegmentResponse])
+async def get_agent_activity(
+    request: Request,
+    thread_id: str,
+    agent_id: str = Query(..., min_length=1),
+    limit: int = Query(5, ge=1, le=200),
+    before_updated_at: datetime | None = Query(None),
+):
+    """Retrieve per-agent activity segments with cursor pagination."""
+    try:
+        runtime_projection = getattr(request.app.state, "runtime_projection", None)
+        if runtime_projection is None:
+            raise RuntimeError("runtime_projection is required for agent activity")
+        normalized_before_updated_at = before_updated_at
+        if before_updated_at is not None and before_updated_at.tzinfo is not None:
+            normalized_before_updated_at = before_updated_at.astimezone(
+                timezone.utc
+            ).replace(tzinfo=None)
+        records = list(
+            await runtime_projection.fetch_activity_segments(
+                thread_id=thread_id,
+                agent_id=agent_id,
+                limit=limit,
+                before_updated_at=normalized_before_updated_at,
+            )
+        )
+        return _build_activity_segment_entries(
+            records, mark_current=before_updated_at is None
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -913,7 +1219,11 @@ async def get_artifact(artifact_id: str):
 
 
 @app.get("/stream/{thread_id}")
-async def attach_stream(thread_id: str):
+async def attach_stream(
+    request: Request,
+    thread_id: str,
+    after_seq: int | None = Query(default=None, ge=0),
+):
     """Attach to an existing background job's event stream."""
 
     async def sse_adapter():
@@ -921,17 +1231,45 @@ async def attach_stream(thread_id: str):
         q = asyncio.Queue()
         running_queues[thread_id].append(q)
 
-        # 2. Replay already generated events for this thread (race condition fix)
-        if thread_id in event_replay_buffers:
-            logger.info(
-                f"🔄 [Server] Replaying {len(event_replay_buffers[thread_id])} events for attacher on {thread_id}"
-            )
-            for msg in event_replay_buffers[thread_id]:
-                await q.put(msg)
+        runtime_projection = getattr(request.app.state, "runtime_projection", None)
+        last_event_id = request.headers.get("Last-Event-ID")
+        replay_after = _parse_after_seq(
+            after_seq=after_seq,
+            last_event_id=last_event_id,
+        )
+
+        if runtime_projection is not None and replay_after is not None:
+            try:
+                backlog = await runtime_projection.fetch_activity_since(
+                    thread_id=thread_id,
+                    after_seq=replay_after,
+                    limit=200,
+                )
+                if backlog:
+                    logger.info(
+                        "server_stream_replay thread_id=%s count=%d after_seq=%s",
+                        thread_id,
+                        len(backlog),
+                        replay_after,
+                    )
+                for record in backlog:
+                    yield _format_sse_event(_build_event_from_activity_record(record))
+            except Exception as exc:
+                logger.warning(
+                    "server_stream_replay_failed thread_id=%s error=%s",
+                    thread_id,
+                    str(exc),
+                )
+
+        yield "retry: 10000\n\n"
 
         try:
             while True:
-                msg = await q.get()
+                try:
+                    msg = await asyncio.wait_for(q.get(), timeout=15.0)
+                except asyncio.TimeoutError:
+                    yield ": keep-alive\n\n"
+                    continue
                 if msg is None:
                     # EOF signal
                     break
@@ -948,26 +1286,67 @@ async def stream_agent(request: Request, body: RequestSchema):
     """Start or resume a job."""
     thread_id = body.thread_id
     config = {"configurable": {"thread_id": thread_id}}
+    runtime_projection = getattr(request.app.state, "runtime_projection", None)
 
     if thread_id in active_tasks:
         if body.message or body.resume_payload:
             raise HTTPException(
                 status_code=409, detail="Job already running for this thread."
             )
-        return StreamStartResponse(status="running", thread_id=thread_id)
+        existing_run = None
+        if runtime_projection is not None:
+            existing_run = await runtime_projection.fetch_run_status(
+                thread_id=thread_id
+            )
+        return StreamStartResponse(
+            status="running",
+            thread_id=thread_id,
+            run_id=existing_run.run_id if existing_run else "",
+        )
 
     # Prepare input
     if body.message:
-        # BRAND NEW analysis: Reset sequence and clear previous event buffers
-        thread_sequences[thread_id] = 1
-        if thread_id in event_replay_buffers:
-            event_replay_buffers[thread_id] = []
+        if runtime_projection is not None:
+            existing_run = await runtime_projection.fetch_run_status(
+                thread_id=thread_id
+            )
+            if existing_run is not None:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Thread already has a run. Start a new thread for a new ticker.",
+                )
+        run_id = str(uuid.uuid4())
+        # Advance sequence from durable cursor
+        thread_sequences[thread_id] = await _resolve_next_seq_id(
+            thread_id=thread_id,
+            runtime_projection=runtime_projection,
+        )
 
         user_msg = HumanMessage(content=body.message)
         await history_service.save_message(thread_id, user_msg)
         input_data = {"messages": [user_msg], "user_query": body.message}
     elif body.resume_payload:
+        run_id = str(uuid.uuid4())
+        if runtime_projection is not None:
+            existing_run = await runtime_projection.fetch_run_status(
+                thread_id=thread_id
+            )
+            if existing_run is None:
+                raise HTTPException(
+                    status_code=409,
+                    detail="No active run for this thread. Start a new thread.",
+                )
+            if existing_run.status in {"done", "error", "degraded"}:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Run already completed. Start a new thread for a new ticker.",
+                )
+            run_id = existing_run.run_id
         # RESUME: Keep existing sequence
+        thread_sequences[thread_id] = await _resolve_next_seq_id(
+            thread_id=thread_id,
+            runtime_projection=runtime_projection,
+        )
         input_data = Command(resume=body.resume_payload)
     else:
         raise HTTPException(
@@ -981,12 +1360,14 @@ async def stream_agent(request: Request, body: RequestSchema):
             input_data,
             config,
             request.app.state.graph,
-            request.app.state.agent_lookup,
+            run_id=run_id,
+            agent_lookup=request.app.state.agent_lookup,
+            runtime_projection=runtime_projection,
         )
     )
     active_tasks[thread_id] = task
 
-    return StreamStartResponse(status="started", thread_id=thread_id)
+    return StreamStartResponse(status="started", thread_id=thread_id, run_id=run_id)
 
 
 # Removed app.on_event("startup") in favor of lifespan

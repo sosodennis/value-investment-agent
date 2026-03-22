@@ -114,7 +114,6 @@ class DebateOrchestrator:
             return DebateNodeResult(
                 update={
                     "internal_progress": {"debate_aggregator": "error"},
-                    "node_statuses": {"debate": "error"},
                     "error_logs": [
                         {
                             "node": "debate_aggregator",
@@ -181,7 +180,6 @@ class DebateOrchestrator:
             },
         )
 
-        node_status = "degraded" if is_degraded else "running"
         error_logs = (
             [
                 {
@@ -201,7 +199,6 @@ class DebateOrchestrator:
                     "r1_bull": "running",
                     "r1_bear": "running",
                 },
-                "node_statuses": {"debate": node_status},
                 "context_summary_text": context_summary_text,
                 **({"error_logs": error_logs} if error_logs else {}),
             },
@@ -224,7 +221,6 @@ class DebateOrchestrator:
                 update={
                     "fact_extraction_status": "error",
                     "internal_progress": {"fact_extractor": "error"},
-                    "node_statuses": {"debate": "error"},
                     "error_logs": [
                         {
                             "node": "fact_extractor",
@@ -368,7 +364,6 @@ class DebateOrchestrator:
                     ],
                     "bull_thesis": "[ARGUMENT MISSING]",
                     "internal_progress": error_progress,
-                    "node_statuses": {"debate": "degraded"},
                     "error_logs": [
                         {"node": node_name, "error": exc_text, "severity": "error"}
                     ],
@@ -461,7 +456,6 @@ class DebateOrchestrator:
                     ],
                     "bear_thesis": "[ARGUMENT MISSING]",
                     "internal_progress": error_progress,
-                    "node_statuses": {"debate": "degraded"},
                     "error_logs": [
                         {"node": node_name, "error": exc_text, "severity": "error"}
                     ],
@@ -561,7 +555,6 @@ class DebateOrchestrator:
                     ],
                     "debate": {"current_round": round_num},
                     "internal_progress": error_progress,
-                    "node_statuses": {"debate": "degraded"},
                     "error_logs": [
                         {"node": node_name, "error": exc_text, "severity": "error"}
                     ],
@@ -582,7 +575,6 @@ class DebateOrchestrator:
             return DebateNodeResult(
                 update={
                     "internal_progress": {"verdict": "error"},
-                    "node_statuses": {"debate": "error"},
                     "error_logs": [
                         {
                             "node": "verdict",
@@ -682,7 +674,6 @@ class DebateOrchestrator:
                 update={
                     "debate": debate_update,
                     "internal_progress": {"verdict": "done"},
-                    "node_statuses": {"debate": "done"},
                 },
                 goto="END",
             )
@@ -699,7 +690,6 @@ class DebateOrchestrator:
             return DebateNodeResult(
                 update={
                     "internal_progress": {"verdict": "error"},
-                    "node_statuses": {"debate": "error"},
                     "error_logs": [
                         {
                             "node": "verdict",

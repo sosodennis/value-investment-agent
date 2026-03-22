@@ -62,6 +62,144 @@
         "title": "AIAnalysisModel",
         "type": "object"
       },
+      "ActivitySegmentResponse": {
+        "properties": {
+          "agentId": {
+            "title": "Agentid",
+            "type": "string"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_current": {
+            "title": "Is Current",
+            "type": "boolean"
+          },
+          "node": {
+            "title": "Node",
+            "type": "string"
+          },
+          "runId": {
+            "title": "Runid",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "agentId",
+          "node",
+          "runId",
+          "status",
+          "started_at",
+          "updated_at",
+          "is_current"
+        ],
+        "title": "ActivitySegmentResponse",
+        "type": "object"
+      },
+      "ActivityTimelineEntryResponse": {
+        "properties": {
+          "agent_id": {
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "node": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "seq_id": {
+            "title": "Seq Id",
+            "type": "integer"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "required": [
+          "event_id",
+          "seq_id",
+          "run_id",
+          "agent_id",
+          "node",
+          "event_type",
+          "status",
+          "payload",
+          "created_at"
+        ],
+        "title": "ActivityTimelineEntryResponse",
+        "type": "object"
+      },
       "AgentOutputArtifact": {
         "description": "Standard container for all Sub-Agent outputs.\n\nThis structure implements a three-tier data architecture:\n- L1 (summary): Message bubble text (<500 chars) - Always present\n- L2 (preview): Hot data for immediate UI rendering (<1KB) - Optional\n- L3 (reference): Cold data pointer for async loading - Optional\n\nThis ensures efficient state management by avoiding large data duplication\nin LangGraph checkpoints.",
         "properties": {
@@ -130,6 +268,13 @@
             "title": "Agent Outputs",
             "type": "object"
           },
+          "agent_statuses": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Agent Statuses",
+            "type": "object"
+          },
           "current_node": {
             "anyOf": [
               {
@@ -150,6 +295,7 @@
           }
         },
         "required": [
+          "agent_statuses",
           "node_statuses",
           "agent_outputs"
         ],
@@ -3437,6 +3583,73 @@
         "title": "RequestSchema",
         "type": "object"
       },
+      "RunStatusResponse": {
+        "properties": {
+          "ended_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "status",
+          "started_at",
+          "updated_at"
+        ],
+        "title": "RunStatusResponse",
+        "type": "object"
+      },
+      "RuntimeCursorResponse": {
+        "properties": {
+          "last_seq_id": {
+            "title": "Last Seq Id",
+            "type": "integer"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "last_seq_id"
+        ],
+        "title": "RuntimeCursorResponse",
+        "type": "object"
+      },
       "ScenarioModel": {
         "properties": {
           "outcome_description": {
@@ -3751,6 +3964,10 @@
       },
       "StreamStartResponse": {
         "properties": {
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
           "status": {
             "enum": [
               "started",
@@ -3766,7 +3983,8 @@
         },
         "required": [
           "status",
-          "thread_id"
+          "thread_id",
+          "run_id"
         ],
         "title": "StreamStartResponse",
         "type": "object"
@@ -8232,11 +8450,37 @@
       },
       "ThreadStateResponse": {
         "properties": {
+          "active_agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Agent Id"
+          },
+          "activity_timeline": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ActivityTimelineEntryResponse"
+            },
+            "title": "Activity Timeline",
+            "type": "array"
+          },
           "agent_outputs": {
             "additionalProperties": {
               "$ref": "#/components/schemas/AgentOutputArtifact"
             },
             "title": "Agent Outputs",
+            "type": "object"
+          },
+          "agent_statuses": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Agent Statuses",
             "type": "object"
           },
           "current_node": {
@@ -8260,6 +8504,16 @@
               }
             ],
             "title": "Current Status"
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RuntimeCursorResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "interrupts": {
             "items": {
@@ -8315,6 +8569,16 @@
             ],
             "title": "Resolved Ticker"
           },
+          "run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunStatusResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "status": {
             "anyOf": [
               {
@@ -8344,6 +8608,7 @@
           "messages",
           "interrupts",
           "is_running",
+          "agent_statuses",
           "node_statuses",
           "agent_outputs",
           "last_seq_id"
@@ -9616,6 +9881,23 @@
               "title": "Thread Id",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "after_seq",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After Seq"
+            }
           }
         ],
         "responses": {
@@ -9679,6 +9961,89 @@
           }
         },
         "summary": "Get Thread History"
+      }
+    },
+    "/thread/{thread_id}/activity": {
+      "get": {
+        "description": "Retrieve per-agent activity segments with cursor pagination.",
+        "operationId": "get_agent_activity_thread__thread_id__activity_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 5,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before_updated_at",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before Updated At"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ActivitySegmentResponse"
+                  },
+                  "title": "Response Get Agent Activity Thread  Thread Id  Activity Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Agent Activity"
       }
     },
     "/thread/{thread_id}/agents": {

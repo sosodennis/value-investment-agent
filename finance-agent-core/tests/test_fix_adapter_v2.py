@@ -9,8 +9,8 @@ from src.interface.events.mappers import NodeOutputMapper
 # Removed patch since we use metadata now
 def test_on_chain_end_status_behavior():
     """
-    Test that adapt_langgraph_event does NOT automatically emit agent.status='done'
-    just because a node finished (on_chain_end).
+    Test that adapt_langgraph_event emits agent.status='done'
+    when a node finishes without explicit node_statuses.
     """
     # Setup
     thread_id = "test_thread"
@@ -39,7 +39,7 @@ def test_on_chain_end_status_behavior():
     # Assert
     # We expect:
     # 1. state.update event (from NodeOutputMapper)
-    # 2. NO agent.status='done' event (This is what we are fixing)
+    # 2. agent.status='done' event for the agent
 
     state_updates = [e for e in events if e.type == "state.update"]
     status_updates = [e for e in events if e.type == "agent.status"]
@@ -47,11 +47,8 @@ def test_on_chain_end_status_behavior():
     assert len(state_updates) == 1
     assert state_updates[0].source == "debate"
 
-    # BEFORE FIX: This assertion would fail (we'd see 1 status update)
-    # AFTER FIX: This assertion should pass (we expect 0 auto-generated status updates)
-    assert (
-        len(status_updates) == 0
-    ), f"Expected 0 status updates, found: {[e.data for e in status_updates]}"
+    assert len(status_updates) == 1
+    assert status_updates[0].data["status"] == "done"
 
 
 @patch("src.interface.events.adapters.get_agent_name")
@@ -63,13 +60,17 @@ def test_explicit_status_update_via_state_with_mapper(mock_get_agent_name):
     # mock_get_agent_id.return_value = "intent_extraction" <-- Unused as we test Mapper directly?
     # Actually this test seems to invoke NodeOutputMapper directly, so the adapter patch is irrelevant
     # except that the test signature requires it.
-    pass
-
     # Adapter output typically looks like this:
     # Adapter output typically looks like this:
     adapter_output = {
         "intent_extraction": {
-            "artifact": {"some_intent": "data"}
+            "artifact": {
+                "kind": "intent_extraction.output",
+                "version": "v1",
+                "summary": "Ticker resolved",
+                "preview": {"ticker": "AAPL"},
+                "reference": None,
+            }
         },  # Context with artifact
         "node_statuses": {"intent_extraction": "done"},  # Explicit status
     }
@@ -79,6 +80,7 @@ def test_explicit_status_update_via_state_with_mapper(mock_get_agent_name):
 
     # Assertion
     assert result is not None
-    assert "some_intent" in result, "Mapper should extract artifact data"
+    assert result["kind"] == "intent_extraction.output"
+    assert result["preview"]["ticker"] == "AAPL"
     # Node statuses should be stripped as they are not part of the artifact
     assert "node_statuses" not in result, "Mapper should strip non-artifact fields"

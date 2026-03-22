@@ -7,19 +7,17 @@ import {
     InterruptResumePayload,
     parseInterruptResumePayload,
 } from '@/types/interrupts';
+import { UnknownRecord, isRecord } from '@/types/preview';
 
 interface EnumOption {
     value: string;
     label?: string;
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-    typeof value === 'object' && value !== null;
-
 interface DynamicInterruptFormProps {
     schema: RJSFSchema;
     uiSchema?: UiSchema;
-    formData?: Record<string, unknown>;
+    formData?: UnknownRecord;
     onSubmit: (data: InterruptResumePayload) => void;
     title?: string;
     description?: string;

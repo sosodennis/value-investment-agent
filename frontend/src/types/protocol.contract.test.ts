@@ -10,6 +10,7 @@ import {
     parseStreamStartResponse,
     parseThreadStateResponse,
 } from './protocol';
+import { isRecord } from './preview';
 
 interface FixtureManifestEntry {
     version: string;
@@ -19,9 +20,6 @@ interface FixtureManifestEntry {
 interface FixtureManifest {
     supported_versions: FixtureManifestEntry[];
 }
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-    typeof value === 'object' && value !== null && !Array.isArray(value);
 
 const locateFixturesDir = (): string => {
     const candidates = [
@@ -207,6 +205,10 @@ describe('REST boundary parsers', () => {
             status: 'done',
             next: null,
             is_running: false,
+            agent_statuses: {
+                intent_extraction: 'done',
+                fundamental_analysis: 'running',
+            },
             node_statuses: {
                 intent_extraction: 'done',
                 fundamental_analysis: 'running',
@@ -221,6 +223,24 @@ describe('REST boundary parsers', () => {
                 },
             },
             last_seq_id: 12,
+            cursor: {
+                last_seq_id: 12,
+                updated_at: '2026-03-21T08:00:00Z',
+            },
+            activity_timeline: [
+                {
+                    event_id: 'evt_1',
+                    seq_id: 12,
+                    event_type: 'agent.status',
+                    agent_id: 'intent_extraction',
+                    node: 'intent_extraction',
+                    status: 'running',
+                    created_at: '2026-03-21T08:00:00Z',
+                    run_id: 'run_1',
+                    payload: {},
+                },
+            ],
+            active_agent_id: 'intent_extraction',
             current_node: 'intent_extraction',
             current_status: 'running',
             status_history: [
@@ -235,12 +255,16 @@ describe('REST boundary parsers', () => {
         });
 
         expect(parsed.thread_id).toBe('thread_1');
+        expect(parsed.agent_statuses.intent_extraction).toBe('done');
         expect(parsed.node_statuses.intent_extraction).toBe('done');
         expect(parsed.node_statuses.fundamental_analysis).toBe('running');
         expect(parsed.agent_outputs.intent_extraction?.summary).toBe('Ticker resolved');
         expect(parsed.current_node).toBe('intent_extraction');
         expect(parsed.current_status).toBe('running');
         expect(parsed.status_history[0]?.agentId).toBe('intent_extraction');
+        expect(parsed.cursor?.last_seq_id).toBe(12);
+        expect(parsed.activity_timeline[0]?.event_id).toBe('evt_1');
+        expect(parsed.active_agent_id).toBe('intent_extraction');
     });
 
     it('rejects unknown node status values', () => {
@@ -257,6 +281,8 @@ describe('REST boundary parsers', () => {
                 ],
                 interrupts: [],
                 is_running: false,
+                activity_timeline: [],
+                agent_statuses: {},
                 node_statuses: {
                     unknown_agent: 'unexpected_status',
                 },
@@ -297,6 +323,10 @@ describe('REST boundary parsers', () => {
                 },
             ],
             is_running: false,
+            activity_timeline: [],
+            agent_statuses: {
+                intent_extraction: 'done',
+            },
             node_statuses: {
                 intent_extraction: 'done',
             },
@@ -316,6 +346,8 @@ describe('REST boundary parsers', () => {
                 messages: [],
                 interrupts: [],
                 is_running: false,
+                activity_timeline: [],
+                agent_statuses: {},
                 node_statuses: [],
                 agent_outputs: {},
                 last_seq_id: 1,
@@ -327,6 +359,7 @@ describe('REST boundary parsers', () => {
         const parsed = parseStreamStartResponse({
             status: 'started',
             thread_id: 'thread_2',
+            run_id: 'run_2',
         });
         expect(parsed.status).toBe('started');
 
@@ -334,6 +367,7 @@ describe('REST boundary parsers', () => {
             parseStreamStartResponse({
                 status: 'queued',
                 thread_id: 'thread_2',
+                run_id: 'run_2',
             })
         ).toThrowError('stream start response.status must be started or running.');
     });
@@ -341,6 +375,10 @@ describe('REST boundary parsers', () => {
     it('parses agent statuses response with strict status values', () => {
         const parsed = parseAgentStatusesResponse({
             current_node: 'intent_extraction',
+            agent_statuses: {
+                intent_extraction: 'running',
+                fundamental_analysis: 'done',
+            },
             node_statuses: {
                 intent_extraction: 'running',
                 fundamental_analysis: 'done',
@@ -358,6 +396,7 @@ describe('REST boundary parsers', () => {
         });
 
         expect(parsed.current_node).toBe('intent_extraction');
+        expect(parsed.agent_statuses.intent_extraction).toBe('running');
         expect(parsed.node_statuses.intent_extraction).toBe('running');
         expect(parsed.agent_outputs.intent_extraction?.summary).toBe(
             'Extracting ticker'
@@ -367,6 +406,7 @@ describe('REST boundary parsers', () => {
     it('rejects unknown status in agent statuses response', () => {
         expect(() =>
             parseAgentStatusesResponse({
+                agent_statuses: {},
                 node_statuses: {
                     intent_extraction: 'queued',
                 },

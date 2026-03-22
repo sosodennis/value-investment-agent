@@ -70,6 +70,7 @@ Collect these before execution:
 - Run required checks for that slice.
 - Record pass/fail with concise evidence.
 - Run legacy import/path sweep when migration is involved (for example `rg` old paths).
+- When function signatures change, sweep call sites (`rg "func_name"`), prefer keyword-only for new params, and add a minimal smoke validation to catch positional mismatch.
 - Confirm external imports route through the planned facade when introduced.
 - Confirm root topology and shared kernel placement match the plan after topology-related slices.
 - When output contracts change, update parsers/serializers and at least one consumer test/fixture in the same slice.

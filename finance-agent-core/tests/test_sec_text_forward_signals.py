@@ -840,9 +840,8 @@ def test_apply_finbert_direction_reviews_overrides_signal_direction() -> None:
         }
     ]
 
-    with patch(
-        "src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl.forward_signals_text.review_signal_direction_with_finbert",
-        return_value=FinbertDirectionReview(
+    def _review_fn(**_kwargs: object) -> FinbertDirectionReview:
+        return FinbertDirectionReview(
             elapsed_ms=12.0,
             reviewed=True,
             accepted=True,
@@ -850,9 +849,12 @@ def test_apply_finbert_direction_reviews_overrides_signal_direction() -> None:
             confidence=0.91,
             label="negative",
             reason="accepted_override_direction",
-        ),
-    ):
-        fields = _apply_finbert_direction_reviews(signals)
+        )
+
+    fields = _apply_finbert_direction_reviews(
+        signals,
+        review_signal_direction_with_finbert_fn=_review_fn,
+    )
 
     assert signals[0]["direction"] == "down"
     assert signals[0]["confidence"] > 0.62

@@ -1,5 +1,5 @@
 export type Primitive = string | number | boolean | null;
-export type UnknownRecord = Record<string, unknown>;
+export type UnknownRecord = { [key: string]: unknown };
 
 export interface IntentPreview extends UnknownRecord {
     ticker?: string;
@@ -55,7 +55,7 @@ const hasStringField = (value: UnknownRecord, key: string): boolean =>
     typeof value[key] === 'string';
 
 export const isRecord = (value: unknown): value is UnknownRecord =>
-    typeof value === 'object' && value !== null;
+    typeof value === 'object' && value !== null && !Array.isArray(value);
 
 export const isNewsPreview = (value: unknown): value is NewsPreview =>
     isRecord(value) && hasStringField(value, 'sentiment_display');

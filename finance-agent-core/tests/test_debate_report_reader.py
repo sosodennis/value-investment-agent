@@ -37,27 +37,21 @@ def test_load_debate_source_data_reads_all_three_sources() -> None:
                     },
                     {
                         "ticker": "AAPL",
-                        "timestamp": "2026-01-01T00:00:00+00:00",
-                        "frac_diff_metrics": {
-                            "optimal_d": 0.42,
-                            "window_length": 120,
-                            "adf_statistic": -3.2,
-                            "adf_pvalue": 0.03,
-                            "memory_strength": "balanced",
+                        "schema_version": "2.0",
+                        "as_of": "2026-01-01T00:00:00+00:00",
+                        "direction": "bullish",
+                        "risk_level": "medium",
+                        "confidence": 0.55,
+                        "summary_tags": ["mean-reversion"],
+                        "diagnostics": {
+                            "is_degraded": True,
+                            "degraded_reasons": ["low_liquidity"],
                         },
-                        "signal_state": {
-                            "z_score": 1.2,
-                            "statistical_state": "deviating",
-                            "direction": "bullish",
-                            "risk_level": "medium",
-                            "confluence": {
-                                "bollinger_state": "upper",
-                                "macd_momentum": "up",
-                                "obv_state": "accumulation",
-                                "statistical_strength": 0.7,
-                            },
+                        "artifact_refs": {
+                            "chart_data_id": "chart-1",
+                            "timeseries_bundle_id": "bundle-1",
+                            "feature_pack_id": "feature-1",
                         },
-                        "semantic_tags": ["mean-reversion"],
                     },
                 ]
             ),

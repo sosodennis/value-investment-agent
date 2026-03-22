@@ -40,6 +40,7 @@ class AgentEvent(BaseModel):
         "state.update",  # Business data updates (e.g. financial reports ready)
         "interrupt.request",  # Waiting for human-in-the-loop input
         "agent.status",  # Status update for a specific sub-agent (running, done, etc.)
+        "agent.lifecycle",  # Agent-level status updates (running, done, etc.)
         "error",  # System or execution error
     ]
 

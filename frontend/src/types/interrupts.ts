@@ -30,7 +30,7 @@ export interface InterruptRequestData extends UnknownRecord {
     type: 'ticker_selection';
     title: string;
     description: string;
-    data: Record<string, unknown>;
+    data: UnknownRecord;
     schema: RJSFSchema;
     ui_schema?: UiSchema;
 }

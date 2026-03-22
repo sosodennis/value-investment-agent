@@ -1,0 +1,5 @@
+id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
+1,Define shared JSON record types + decoder helpers,TODO,"Shared JsonObject/JsonValue helper exists and is imported by agent parsers","rg -n \"toRecord\\(\" frontend/src/types/agents | cat",,0,"Create frontend/src/types/json.ts (or records.ts) with JsonObject + toJsonObject/toJsonArray helpers."
+2,Refactor agent artifact parsers to use shared helper,TODO,"Agent parsers no longer define local toRecord/toRecordArray helpers","rg -n \"toRecord\\(\" frontend/src/types/agents | cat",,0,"Update artifact-parsers, artifact-envelope-parser, preview parsers."
+3,Refactor agent output types to JsonObject,TODO,"Agent type fields use JsonObject instead of Record<string, unknown>","rg -n \"Record<string, unknown>\" frontend/src/types/agents | cat",,0,"Update debate.ts, core.ts, technical.ts as scoped."
+4,Run frontend validation,TODO,"Frontend typecheck and tests pass","cd frontend && npm run typecheck && npm run test",,0,"If tests are unavailable, record SKIP with reason."

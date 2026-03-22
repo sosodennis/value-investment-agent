@@ -9,6 +9,7 @@ import { AgentWorkspaceTab } from './agent-detail/AgentWorkspaceTab';
 import { AgentScoreTab } from './agent-detail/AgentScoreTab';
 import { AgentHistoryTab } from './agent-detail/AgentHistoryTab';
 import { AgentOutputTab } from './agent-detail/AgentOutputTab';
+import { useAgentActivity } from '@/hooks/useAgentActivity';
 
 type DetailTab = 'Workspace' | 'Score' | 'History' | 'Output' | 'Logs';
 const DETAIL_TABS: DetailTab[] = ['Workspace', 'Score', 'History', 'Output', 'Logs'];
@@ -21,7 +22,8 @@ interface AgentDetailPanelProps {
     allAgentOutputs?: Record<string, StandardAgentOutput | null>;
     currentNode?: string | null;
     currentStatus?: string | null;
-    activityFeed?: { id: string, node: string, agentId?: string, status: string, timestamp: number }[];
+    threadId?: string | null;
+    projectionUpdatedAt?: number | null;
 }
 
 export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
@@ -32,9 +34,25 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
     allAgentOutputs = {},
     currentNode,
     currentStatus,
-    activityFeed = []
+    threadId,
+    projectionUpdatedAt = null
 }) => {
     const [activeTab, setActiveTab] = useState<DetailTab>('Workspace');
+    const LOG_ACTIVITY_LIMIT = 20;
+    const LOG_ACTIVITY_PAGE_SIZE = 50;
+    const {
+        events: logEvents,
+        hasMore: hasMoreLogs,
+        isLoading: isLogsLoading,
+        loadMore: loadMoreLogs,
+    } = useAgentActivity(
+        threadId,
+        agent?.id ?? null,
+        LOG_ACTIVITY_LIMIT,
+        LOG_ACTIVITY_PAGE_SIZE
+    );
+    const canLoadMoreLogs =
+        Boolean(threadId) && hasMoreLogs && !isLogsLoading;
 
     // Use our new hook to derive all financial data
     const {
@@ -117,11 +135,12 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                 {activeTab === 'Workspace' && (
                     <AgentWorkspaceTab
                         agent={agent}
+                        threadId={threadId}
                         currentNode={currentNode}
                         currentStatus={currentStatus}
                         messages={messages}
                         onSubmitCommand={onSubmitCommand}
-                        activityFeed={activityFeed}
+                        projectionUpdatedAt={projectionUpdatedAt}
                     />
                 )}
                 {activeTab === 'Score' && (
@@ -156,6 +175,26 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                             <Activity size={12} className="text-cyan-500" />
                             <span className="text-label tracking-[0.3em]">System Trace :: {agent.name}</span>
                         </div>
+                        <div className="flex items-center justify-between text-[9px] uppercase tracking-widest text-slate-600 mb-4">
+                            <span>
+                                {`Showing last ${Math.max(
+                                    LOG_ACTIVITY_LIMIT,
+                                    logEvents.length
+                                )} events`}
+                            </span>
+                            <button
+                                type="button"
+                                onClick={() => loadMoreLogs()}
+                                disabled={!canLoadMoreLogs}
+                                className={`font-bold transition-colors ${
+                                    canLoadMoreLogs
+                                        ? 'text-cyan-400 hover:text-cyan-300'
+                                        : 'text-slate-700 cursor-not-allowed'
+                                }`}
+                            >
+                                {hasMoreLogs ? 'View full history' : 'Full history loaded'}
+                            </button>
+                        </div>
                         <div className="terminal-text space-y-2 opacity-80">
                             <div className="flex gap-4">
                                 <span className="text-slate-600 shrink-0">10:48:02</span>
@@ -164,24 +203,37 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                             </div>
 
                             {/* Dynamic Activity Feed mapping */}
-                            {activityFeed
-                                .filter(step => step.agentId === agent.id)
-                                .map((step) => (
+                            {logEvents.map((step) => {
+                                const isCurrent = step.isCurrent;
+                                const isRunning = step.status === 'running' && isCurrent;
+                                const statusLabel = isRunning
+                                    ? 'WAIT'
+                                    : step.status.toUpperCase();
+                                const statusTone =
+                                    step.status === 'error'
+                                        ? 'text-error'
+                                        : step.status === 'attention' || step.status === 'degraded'
+                                          ? 'text-warning'
+                                          : isRunning
+                                            ? 'text-primary animate-pulse'
+                                            : 'text-emerald-500/80';
+                                return (
                                     <div key={step.id} className="flex gap-4">
                                         <span className="text-slate-600 shrink-0">
                                             {new Date(step.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                                         </span>
-                                        <span className={`uppercase tracking-tighter ${step.status === 'running' ? 'text-primary animate-pulse' : 'text-emerald-500/80'}`}>
-                                            [{step.status === 'running' ? 'WAIT' : 'DONE'}]
+                                        <span className={`uppercase tracking-tighter ${statusTone}`}>
+                                            [{statusLabel}]
                                         </span>
                                         <span className="text-slate-300">
                                             {step.node.replace(/_/g, ' ')}: {step.status}
                                         </span>
                                     </div>
-                                ))}
+                                );
+                            })}
 
                             {/* Fallback Current Status if no feed yet */}
-                            {activityFeed.filter(step => step.agentId === agent.id).length === 0 && (
+                            {logEvents.length === 0 && (
                                 <div key="current-status" className="flex gap-4">
                                     <span className="text-slate-600 shrink-0">--:--:--</span>
                                     <span className={`font-bold uppercase tracking-widest ${agent.status === 'running' ? 'text-primary animate-pulse' : 'text-slate-500'}`}>

@@ -3,6 +3,7 @@ import { FileText, Clock, Loader2, Database, AlertCircle, ChevronDown, ChevronUp
 import { AgentStatus } from '@/types/agents';
 import { GenericOutputViewModel } from '@/types/agents/output-adapter';
 import { parseUnknownArtifact } from '@/types/agents/artifact-parsers';
+import { UnknownRecord } from '@/types/preview';
 import { useArtifact } from '../../hooks/useArtifact';
 
 interface GenericAgentOutputProps {
@@ -28,7 +29,7 @@ const GenericAgentOutputComponent: React.FC<GenericAgentOutputProps> = ({
         'generic_output.artifact'
     );
 
-    const fallbackPayload: Record<string, unknown> = {};
+    const fallbackPayload: UnknownRecord = {};
     if (viewModel.summary !== null) {
         fallbackPayload.summary = viewModel.summary;
     }

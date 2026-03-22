@@ -45,7 +45,13 @@ def test_build_news_and_technical_facts_and_summary():
             },
         }
     ]
-    ta_payload = {"signal_state": {"direction": "BULLISH", "z_score": 2.1}}
+    ta_payload = {
+        "direction": "bullish",
+        "risk_level": "medium",
+        "confidence": 0.72,
+        "summary_tags": ["mean-reversion"],
+        "diagnostics": {"degraded_reasons": ["sparse_volume"]},
+    }
 
     news_facts = build_news_facts(news_items, start_index=1)
     ta_facts = build_technical_facts(ta_payload, ta_artifact_id="ta-123", start_index=2)
@@ -53,7 +59,7 @@ def test_build_news_and_technical_facts_and_summary():
 
     assert len(news_facts) == 1
     assert news_facts[0].fact_id == "N001"
-    assert len(ta_facts) >= 1
+    assert len(ta_facts) == 3
     assert ta_facts[0].fact_id == "T002"
     assert isinstance(ta_facts[0].provenance, ManualProvenance)
 
@@ -94,29 +100,21 @@ def test_build_valuation_facts_from_preview():
     assert summary == {"financials": 0, "news": 0, "technicals": 0, "valuation": 6}
 
 
-def test_build_technical_facts_expands_signal_and_confluence_metrics():
+def test_build_technical_facts_emits_summary_tags_and_diagnostics():
     ta_payload = {
-        "frac_diff_metrics": {"optimal_d": 0.43, "memory_strength": "balanced"},
-        "signal_state": {
-            "direction": "bullish",
-            "z_score": 1.8,
-            "confluence": {
-                "bollinger_state": "upper_band",
-                "macd_momentum": "uptrend",
-                "obv_state": "accumulation",
-            },
-        },
+        "direction": "bullish",
+        "risk_level": "medium",
+        "confidence": 0.61,
+        "summary_tags": ["mean-reversion", "momentum"],
+        "diagnostics": {"degraded_reasons": ["low_liquidity"]},
     }
     facts = build_technical_facts(ta_payload, ta_artifact_id="ta-xyz", start_index=10)
 
-    assert len(facts) == 6
+    assert len(facts) == 3
     assert [fact.fact_id for fact in facts] == [
         "T010",
         "T011",
         "T012",
-        "T013",
-        "T014",
-        "T015",
     ]
-    assert facts[0].summary.startswith("Technical signal direction")
-    assert facts[-1].summary.startswith("OBV state")
+    assert facts[0].summary.startswith("Technical direction")
+    assert facts[-1].summary.startswith("Technical data degraded")

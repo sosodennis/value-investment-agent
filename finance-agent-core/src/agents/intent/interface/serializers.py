@@ -33,3 +33,39 @@ def serialize_ticker_selection_interrupt_payload(
         "intent": intent_payload,
         "reason": reason,
     }
+
+
+def build_ticker_selection_interrupt_ui_payload(
+    *,
+    candidates: list[TickerCandidate],
+    reason: str = "Multiple tickers found or ambiguity detected.",
+) -> JSONObject:
+    ticker_options = [candidate.symbol for candidate in candidates]
+    ticker_titles = [
+        f"{candidate.symbol} - {candidate.name} ({(candidate.confidence * 100):.0f}% match)"
+        for candidate in candidates
+    ]
+
+    return {
+        "type": "ticker_selection",
+        "title": "Ticker Resolution",
+        "description": reason,
+        "data": {},
+        "schema": {
+            "title": "Select Correct Ticker",
+            "type": "object",
+            "properties": {
+                "selected_symbol": {
+                    "type": "string",
+                    "title": "Target Company",
+                    "enum": ticker_options,
+                    "oneOf": [
+                        {"const": symbol, "title": ticker_titles[idx]}
+                        for idx, symbol in enumerate(ticker_options)
+                    ],
+                }
+            },
+            "required": ["selected_symbol"],
+        },
+        "ui_schema": {"selected_symbol": {"ui:widget": "radio"}},
+    }

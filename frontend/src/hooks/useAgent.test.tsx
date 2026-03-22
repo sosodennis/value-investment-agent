@@ -18,19 +18,6 @@ describe('useAgent restore flow', () => {
         fetchMock
             .mockResolvedValueOnce(
                 new Response(
-                    JSON.stringify([
-                        {
-                            id: 'history-user-1',
-                            role: 'user',
-                            content: 'Valuate AAPL',
-                            type: 'text',
-                        },
-                    ]),
-                    { status: 200, headers: { 'Content-Type': 'application/json' } }
-                )
-            )
-            .mockResolvedValueOnce(
-                new Response(
                     JSON.stringify({
                         thread_id: 'thread_1',
                         messages: [
@@ -44,12 +31,34 @@ describe('useAgent restore flow', () => {
                         ],
                         interrupts: [],
                         is_running: true,
+                        agent_statuses: {
+                            intent_extraction: 'done',
+                            financial_news_research: 'running',
+                        },
                         node_statuses: {
                             intent_extraction: 'done',
                             financial_news_research: 'idle',
                         },
                         agent_outputs: {},
                         last_seq_id: 5,
+                        cursor: {
+                            last_seq_id: 9,
+                            updated_at: '2026-03-21T08:00:00Z',
+                        },
+                        activity_timeline: [
+                            {
+                                event_id: 'evt_1',
+                                seq_id: 9,
+                                event_type: 'agent.status',
+                                agent_id: 'financial_news_research',
+                                node: 'financial_news_research',
+                                status: 'running',
+                                created_at: '2026-03-21T08:00:00Z',
+                                run_id: 'run_1',
+                                payload: {},
+                            },
+                        ],
+                        active_agent_id: 'debate',
                         current_node: 'semantic_translate',
                         current_status: 'running',
                         status_history: [
@@ -86,7 +95,47 @@ describe('useAgent restore flow', () => {
         expect(result.current.activityFeed).toHaveLength(1);
         expect(result.current.activityFeed[0]?.agentId).toBe('financial_news_research');
         expect(result.current.agentStatuses.financial_news_research).toBe('running');
-        expect(result.current.activeAgentId).toBe('financial_news_research');
+        expect(result.current.activeAgentId).toBe('debate');
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(fetchMock.mock.calls[0]?.[0]).toContain('/thread/thread_1');
+        expect(fetchMock.mock.calls[1]?.[0]).toContain('/stream/thread_1?after_seq=9');
+    });
+
+    it('skips stream attach when the thread is not running', async () => {
+        fetchMock.mockResolvedValueOnce(
+            new Response(
+                JSON.stringify({
+                    thread_id: 'thread_2',
+                    messages: [],
+                    interrupts: [],
+                    is_running: false,
+                    agent_statuses: {
+                        intent_extraction: 'done',
+                    },
+                    node_statuses: {
+                        intent_extraction: 'done',
+                    },
+                    agent_outputs: {},
+                    last_seq_id: 0,
+                    cursor: {
+                        last_seq_id: 0,
+                        updated_at: '2026-03-21T08:05:00Z',
+                    },
+                    activity_timeline: [],
+                    status_history: [],
+                }),
+                { status: 200, headers: { 'Content-Type': 'application/json' } }
+            )
+        );
+
+        const { result } = renderHook(() => useAgent('test-agent'));
+
+        await act(async () => {
+            await result.current.loadHistory('thread_2');
+        });
+
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        expect(fetchMock.mock.calls[0]?.[0]).toContain('/thread/thread_2');
     });
 });
 

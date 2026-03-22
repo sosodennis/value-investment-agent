@@ -16,7 +16,6 @@ def _clear_news_context() -> JSONObject:
 def build_fetch_node_update(
     *, news_items_id: str | None, article_errors: list[str]
 ) -> JSONObject:
-    status = "degraded" if article_errors else "running"
     update: JSONObject = {
         "financial_news_research": {
             "news_items_artifact_id": news_items_id,
@@ -24,7 +23,6 @@ def build_fetch_node_update(
         },
         "current_node": "fetch_node",
         "internal_progress": {"fetch_node": "done", "analyst_node": "running"},
-        "node_statuses": {"financial_news_research": status},
     }
     if article_errors:
         update["error_logs"] = [
@@ -40,7 +38,6 @@ def build_fetch_node_update(
 def build_analyst_node_update(
     *, news_items_id: str | None, article_errors: list[str]
 ) -> JSONObject:
-    status = "degraded" if article_errors else "running"
     update: JSONObject = {
         "financial_news_research": {
             "news_items_artifact_id": news_items_id,
@@ -48,7 +45,6 @@ def build_analyst_node_update(
         },
         "current_node": "analyst_node",
         "internal_progress": {"analyst_node": "done", "aggregator_node": "running"},
-        "node_statuses": {"financial_news_research": status},
     }
     if article_errors:
         update["error_logs"] = [
@@ -66,7 +62,6 @@ def build_search_node_no_ticker_update() -> JSONObject:
         "financial_news_research": _clear_news_context(),
         "current_node": "search_node",
         "internal_progress": {"search_node": "done"},
-        "node_statuses": {"financial_news_research": "done"},
     }
 
 
@@ -74,7 +69,6 @@ def build_search_node_error_update(error_message: str) -> JSONObject:
     return {
         "current_node": "search_node",
         "internal_progress": {"search_node": "error"},
-        "node_statuses": {"financial_news_research": "error"},
         "error_logs": [
             {
                 "node": "search_node",
@@ -90,7 +84,6 @@ def build_search_node_empty_update() -> JSONObject:
         "financial_news_research": _clear_news_context(),
         "current_node": "search_node",
         "internal_progress": {"search_node": "done"},
-        "node_statuses": {"financial_news_research": "done"},
     }
 
 
@@ -109,7 +102,6 @@ def build_search_node_success_update(
         },
         "current_node": "search_node",
         "internal_progress": {"search_node": "done", "selector_node": "running"},
-        "node_statuses": {"financial_news_research": "running"},
     }
 
 
@@ -132,7 +124,6 @@ def build_selector_node_update(
             if error_message
             else "Selection failed due to an unknown error. Falling back to top articles."
         )
-        update["node_statuses"] = {"financial_news_research": "degraded"}
         update["error_logs"] = [
             {
                 "node": "selector_node",
@@ -147,7 +138,6 @@ def build_selector_node_error_update(error_message: str) -> JSONObject:
     return {
         "current_node": "selector_node",
         "internal_progress": {"selector_node": "error"},
-        "node_statuses": {"financial_news_research": "error"},
         "error_logs": [
             {
                 "node": "selector_node",
@@ -162,7 +152,6 @@ def build_fetch_node_error_update(error_message: str) -> JSONObject:
     return {
         "current_node": "fetch_node",
         "internal_progress": {"fetch_node": "error"},
-        "node_statuses": {"financial_news_research": "error"},
         "error_logs": [
             {
                 "node": "fetch_node",
@@ -177,7 +166,6 @@ def build_analyst_node_error_update(error_message: str) -> JSONObject:
     return {
         "current_node": "analyst_node",
         "internal_progress": {"analyst_node": "error"},
-        "node_statuses": {"financial_news_research": "error"},
         "error_logs": [
             {
                 "node": "analyst_node",
@@ -192,7 +180,6 @@ def build_analyst_chain_error_update(error_message: str) -> JSONObject:
     return {
         "current_node": "analyst_node",
         "internal_progress": {"analyst_node": "error"},
-        "node_statuses": {"financial_news_research": "error"},
         "error_logs": [
             {
                 "node": "analyst_node",
@@ -218,5 +205,4 @@ def build_aggregator_node_update(
         "financial_news_research": news_update,
         "current_node": "aggregator_node",
         "internal_progress": {"aggregator_node": "done"},
-        "node_statuses": {"financial_news_research": node_status},
     }

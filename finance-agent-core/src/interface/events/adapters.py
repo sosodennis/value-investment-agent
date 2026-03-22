@@ -22,6 +22,88 @@ def get_agent_name(metadata: Mapping[str, object] | None = None) -> str:
     return "System"
 
 
+def is_agent_boundary(metadata: Mapping[str, object] | None = None) -> bool:
+    """
+    Identify top-level agent boundaries to avoid emitting lifecycle events
+    for internal subgraph nodes.
+    """
+    if not metadata:
+        return False
+    if metadata.get("agent_scope") != "agent":
+        return False
+    node_name = metadata.get("langgraph_node")
+    boundary_node = metadata.get("agent_node")
+    if not isinstance(node_name, str) or not isinstance(boundary_node, str):
+        return False
+    return node_name == boundary_node
+
+
+def _iter_mappings(value: object) -> list[Mapping[str, object]]:
+    stack: list[object] = [value]
+    mappings: list[Mapping[str, object]] = []
+    while stack:
+        current = stack.pop()
+        if isinstance(current, Mapping):
+            mappings.append(current)
+            stack.extend(current.values())
+        elif isinstance(current, list):
+            stack.extend(current)
+    return mappings
+
+
+def _has_error_logs(output: Mapping[str, object]) -> bool:
+    error_logs = output.get("error_logs")
+    if not isinstance(error_logs, list):
+        return False
+    for entry in error_logs:
+        if not isinstance(entry, Mapping):
+            continue
+        severity = entry.get("severity")
+        if isinstance(severity, str) and severity.lower() == "error":
+            return True
+    return False
+
+
+def _has_degraded_flags(output: Mapping[str, object]) -> bool:
+    for mapping in _iter_mappings(output):
+        is_degraded = mapping.get("is_degraded")
+        if isinstance(is_degraded, bool) and is_degraded:
+            return True
+        degraded_reasons = mapping.get("degraded_reasons")
+        if isinstance(degraded_reasons, list) and degraded_reasons:
+            return True
+        quality_gates = mapping.get("quality_gates") or mapping.get(
+            "xbrl_quality_gates"
+        )
+        if isinstance(quality_gates, Mapping):
+            gate_degraded = quality_gates.get("is_degraded")
+            if isinstance(gate_degraded, bool) and gate_degraded:
+                return True
+    return False
+
+
+def _derive_agent_lifecycle_status(
+    output: Mapping[str, object], agent_id: str | None
+) -> str:
+    if _has_error_logs(output):
+        return "error"
+
+    explicit_status = None
+    agent_statuses_raw = output.get("agent_statuses")
+    if isinstance(agent_statuses_raw, Mapping) and agent_id:
+        status_raw = agent_statuses_raw.get(agent_id)
+        if isinstance(status_raw, str):
+            explicit_status = status_raw
+
+    if explicit_status in {"error", "degraded", "attention"}:
+        return explicit_status
+    if _has_degraded_flags(output):
+        return "degraded"
+    if explicit_status == "done":
+        return "done"
+    return "done"
+
+
 def _as_mapping(value: object, context: str) -> Mapping[str, object]:
     """Normalize allowed structured outputs into a mapping for downstream mappers."""
     if isinstance(value, Mapping):
@@ -88,7 +170,7 @@ def adapt_langgraph_event(
     elif kind == "on_chain_start":
         agent_id = get_agent_name(metadata)
         if agent_id and agent_id != "System":
-            return [
+            events = [
                 AgentEvent(
                     thread_id=thread_id,
                     run_id=run_id,
@@ -98,6 +180,18 @@ def adapt_langgraph_event(
                     data={"status": "running", "node": node_name},
                 )
             ]
+            if is_agent_boundary(metadata):
+                events.append(
+                    AgentEvent(
+                        thread_id=thread_id,
+                        run_id=run_id,
+                        seq_id=seq_id + 1,
+                        type="agent.lifecycle",
+                        source=agent_id,
+                        data={"status": "running"},
+                    )
+                )
+            return events
 
     elif kind == "on_chain_end":
         agent_id = get_agent_name(metadata)
@@ -122,6 +216,8 @@ def adapt_langgraph_event(
             raise TypeError(f"Invalid on_chain_end output type: {type(raw_output)!r}")
 
         events = []
+        emitted_status_for_agent = False
+        is_boundary = is_agent_boundary(metadata)
 
         # Step 2: Transform nested state to UI payload using mapper
         if agent_id and agent_id != "System":
@@ -159,6 +255,35 @@ def adapt_langgraph_event(
                         )
                     )
                     seq_id += 1
+                    if node_id == agent_id:
+                        emitted_status_for_agent = True
+
+            if is_boundary:
+                lifecycle_status = _derive_agent_lifecycle_status(output, agent_id)
+                events.append(
+                    AgentEvent(
+                        thread_id=thread_id,
+                        run_id=run_id,
+                        seq_id=seq_id,
+                        type="agent.lifecycle",
+                        source=agent_id,
+                        data={"status": lifecycle_status},
+                    )
+                )
+                seq_id += 1
+
+            if not emitted_status_for_agent:
+                events.append(
+                    AgentEvent(
+                        thread_id=thread_id,
+                        run_id=run_id,
+                        seq_id=seq_id,
+                        type="agent.status",
+                        source=agent_id,
+                        data={"status": "done", "node": node_name},
+                    )
+                )
+                seq_id += 1
 
         return events
 
@@ -170,16 +295,40 @@ def adapt_langgraph_event(
             err_raw = data_raw.get("error")
             if err_raw is not None:
                 error_message = str(err_raw)
-        return [
+        agent_id = get_agent_name(metadata)
+        events = [
             AgentEvent(
                 thread_id=thread_id,
                 run_id=run_id,
                 seq_id=seq_id,
                 type="error",
-                source=get_agent_name(metadata),
+                source=agent_id,
                 data={"message": error_message},
             )
         ]
+        if agent_id and agent_id != "System":
+            events.append(
+                AgentEvent(
+                    thread_id=thread_id,
+                    run_id=run_id,
+                    seq_id=seq_id + 1,
+                    type="agent.status",
+                    source=agent_id,
+                    data={"status": "error", "node": node_name},
+                )
+            )
+            if is_agent_boundary(metadata):
+                events.append(
+                    AgentEvent(
+                        thread_id=thread_id,
+                        run_id=run_id,
+                        seq_id=seq_id + 2,
+                        type="agent.lifecycle",
+                        source=agent_id,
+                        data={"status": "error"},
+                    )
+                )
+        return events
 
     return []
 
