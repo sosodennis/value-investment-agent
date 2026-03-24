@@ -6,13 +6,11 @@ import { Zap, Activity } from 'lucide-react';
 import { Message } from '@/types/protocol';
 import { useFinancialData } from '@/hooks/useFinancialData';
 import { AgentWorkspaceTab } from './AgentWorkspaceTab';
-import { AgentScoreTab } from './AgentScoreTab';
-import { AgentHistoryTab } from './AgentHistoryTab';
 import { AgentOutputTab } from './AgentOutputTab';
 import { useAgentActivity } from '@/hooks/useAgentActivity';
 
-type DetailTab = 'Workspace' | 'Score' | 'History' | 'Output' | 'Logs';
-const DETAIL_TABS: DetailTab[] = ['Workspace', 'Score', 'History', 'Output', 'Logs'];
+type DetailTab = 'Workspace' | 'Output' | 'Logs';
+const DETAIL_TABS: DetailTab[] = ['Workspace', 'Output', 'Logs'];
 
 interface AgentDetailPanelProps {
     agent: AgentInfo | null;
@@ -57,9 +55,6 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
     // Use our new hook to derive all financial data
     const {
         resolvedTicker,
-        dimensionScores,
-        financialMetrics,
-        latestReport,
         rawOutput
     } = useFinancialData(agent?.id || '', allAgentOutputs);
 
@@ -84,9 +79,6 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
             </div>
         );
     }
-
-    // Filter messages for this agent
-    const agentMessages = messages.filter(m => m.agentId === agent.id);
 
     return (
         <div className="flex-1 h-full flex flex-col overflow-hidden animate-in fade-in duration-500 bg-surface">
@@ -141,21 +133,6 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                         messages={messages}
                         onSubmitCommand={onSubmitCommand}
                         projectionUpdatedAt={projectionUpdatedAt}
-                    />
-                )}
-                {activeTab === 'Score' && (
-                    <AgentScoreTab
-                        agent={agent}
-                        dimensionScores={dimensionScores}
-                        financialMetrics={financialMetrics}
-                        latestReport={latestReport}
-                    />
-                )}
-
-                {activeTab === 'History' && (
-                    <AgentHistoryTab
-                        agentMessages={agentMessages}
-                        onSubmitCommand={onSubmitCommand}
                     />
                 )}
 
