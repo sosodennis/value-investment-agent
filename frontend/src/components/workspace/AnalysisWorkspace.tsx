@@ -3,9 +3,9 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useAgent } from '@/hooks/useAgent';
 import { useFinancialData } from '@/hooks/useFinancialData';
-import { HeaderBar } from '@/components/HeaderBar';
-import { AgentsRoster } from '@/components/AgentsRoster';
-import { AgentDetailPanel } from '@/components/AgentDetailPanel';
+import { WorkspaceLayout } from '@/components/workspace/layout';
+import { AgentsRoster } from '@/components/agents-roster/AgentsRoster';
+import { AgentDetailPanel } from '@/components/agent-detail/AgentDetailPanel';
 import { AgentInfo } from '@/types/agents';
 import { AGENT_CONFIGS, AgentConfig } from '@/config/agents';
 
@@ -175,29 +175,22 @@ export function AnalysisWorkspace({
         : null;
 
     return (
-        <main className="flex flex-col h-[calc(100vh-4rem)] w-full bg-slate-950 overflow-hidden font-sans selection:bg-cyan-500/30">
-            <HeaderBar
-                systemStatus="online"
-                activeAgents={agents.filter((a) => a.status !== 'idle').length}
-                stage={isLoading ? 'Running' : 'Idle'}
-                ticker={ticker}
-                onTickerChange={setTicker}
-                onStartAnalysis={handleStartAnalysis}
-                onShowHistory={() => { }}
-                isLoading={isLoading}
-                currentView="workspace"
-            />
+        <WorkspaceLayout.Root>
+            <WorkspaceLayout.Main>
+                <WorkspaceLayout.Sidebar className="w-80">
+                    <AgentsRoster
+                        agents={agents}
+                        selectedAgentId={selectedAgentId}
+                        onAgentSelect={setSelectedAgentId}
+                        systemStatus="online"
+                        stage={isLoading ? 'Running' : 'Idle'}
+                        targetTicker={ticker}
+                    />
+                </WorkspaceLayout.Sidebar>
 
-            <div className="flex flex-1 overflow-hidden">
-                <AgentsRoster
-                    agents={agents}
-                    selectedAgentId={selectedAgentId}
-                    onAgentSelect={setSelectedAgentId}
-                />
-
-                <div className="flex-1 flex flex-col relative">
-                    <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-cyan-600/5 rounded-full blur-[120px] pointer-events-none" />
-                    <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-emerald-600/5 rounded-full blur-[120px] pointer-events-none" />
+                <WorkspaceLayout.Content>
+                    <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-[120px] pointer-events-none" />
+                    <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-secondary/5 rounded-full blur-[120px] pointer-events-none" />
 
                     <AgentDetailPanel
                         agent={selectedAgent}
@@ -210,28 +203,28 @@ export function AnalysisWorkspace({
                         threadId={threadId}
                         projectionUpdatedAt={projectionUpdatedAt}
                     />
-                </div>
-            </div>
+                </WorkspaceLayout.Content>
+            </WorkspaceLayout.Main>
 
-            <footer className="h-8 w-full bg-slate-900/50 border-t border-slate-900 px-8 flex items-center justify-between z-10">
+            <WorkspaceLayout.Footer>
                 <div className="flex items-center gap-4">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                    <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">
                         Neuro-Symbolic Engine v2.4
                     </span>
-                    <div className="w-1 h-1 bg-slate-800 rounded-full" />
-                    <span className="text-[10px] font-medium text-slate-600">
+                    <div className="w-1 h-1 bg-outline-variant rounded-full" />
+                    <span className="text-[10px] font-medium text-outline">
                         Powered by LangGraph Checkpointer
                     </span>
                 </div>
 
                 {threadId && (
                     <div className="flex items-center gap-2">
-                        <span className="text-[9px] font-mono text-slate-500">
+                        <span className="text-[9px] font-mono text-outline">
                             SESSION: {threadId.slice(-12)}
                         </span>
                     </div>
                 )}
-            </footer>
-        </main>
+            </WorkspaceLayout.Footer>
+        </WorkspaceLayout.Root>
     );
 }

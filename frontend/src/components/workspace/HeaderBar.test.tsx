@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { HeaderBar } from './HeaderBar';
+import { HeaderBar } from '@/components/workspace/HeaderBar';
 
 vi.mock('next/link', () => ({
     default: ({

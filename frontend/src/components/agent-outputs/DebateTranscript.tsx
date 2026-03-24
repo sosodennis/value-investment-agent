@@ -22,7 +22,7 @@ const SourceBadge = ({
     type?: 'source' | 'fact';
     onClick?: () => void;
 }) => {
-    let color = "bg-slate-500/10 text-slate-400 border-slate-500/20"; // Default
+    let color = "bg-slate-500/10 text-on-surface-variant border-slate-500/20"; // Default
     let icon = <ShieldCheck className="w-2.5 h-2.5" />;
 
     if (type === 'fact') {
@@ -100,14 +100,14 @@ export const DebateTranscript: React.FC<DebateTranscriptProps> = ({ history }) =
     return (
         <div className="tech-card mt-8 animate-fade-in">
             {/* Terminal Header */}
-            <div className="px-5 py-3 border-b border-white/5 bg-slate-900/40 flex items-center justify-between">
+            <div className="px-5 py-3 border-b border-white/5 bg-surface-container-low flex items-center justify-between">
                 <div className="flex items-center gap-3">
                     <div className="flex gap-1.5">
                         <div className="w-2.5 h-2.5 rounded-full bg-rose-500/20 border border-rose-500/40" />
                         <div className="w-2.5 h-2.5 rounded-full bg-amber-500/20 border border-amber-500/40" />
                         <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/20 border border-emerald-500/40" />
                     </div>
-                    <div className="h-4 w-px bg-white/10 mx-1" />
+                    <div className="h-4 w-px bg-surface-container mx-1" />
                     <h3 className="text-label flex items-center gap-2">
                         <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse shadow-[0_0_8px_rgba(6,182,212,0.6)]"></span>
                         Agent Intelligence Transcript
@@ -117,11 +117,11 @@ export const DebateTranscript: React.FC<DebateTranscriptProps> = ({ history }) =
                     <span className="text-[8px] font-black text-emerald-500/80 tracking-[0.2em] border border-emerald-500/20 px-2 py-0.5 rounded bg-emerald-500/5">
                         LIVE_FEED
                     </span>
-                    <span className="text-[10px] text-slate-600 font-mono">v1.2.4</span>
+                    <span className="text-[10px] text-outline font-mono">v1.2.4</span>
                 </div>
             </div>
 
-            <div className="p-6 max-h-[600px] overflow-y-auto custom-scrollbar bg-slate-950/40">
+            <div className="p-6 max-h-[600px] overflow-y-auto custom-scrollbar bg-surface">
                 <div className="space-y-10 relative">
                     {/* Vertical line connector */}
                     <div className="absolute left-4 top-0 bottom-0 w-px bg-gradient-to-b from-white/5 via-white/5 to-transparent" />
@@ -136,8 +136,8 @@ export const DebateTranscript: React.FC<DebateTranscriptProps> = ({ history }) =
 
                         let avatarIcon = <div className="w-full h-full bg-slate-700" />;
                         const nameDisplay = msg.name || 'Agent';
-                        let roleColor = "text-slate-400";
-                        let ringColor = "border-slate-800";
+                        let roleColor = "text-on-surface-variant";
+                        let ringColor = "border-outline-variant/30";
                         let bgColor = "from-slate-900/40 to-slate-900/10";
                         let glowColor = "group-hover:shadow-[0_0_20px_-5px_rgba(148,163,184,0.1)]";
 
@@ -163,7 +163,7 @@ export const DebateTranscript: React.FC<DebateTranscriptProps> = ({ history }) =
 
                         return (
                             <div key={idx} className="flex gap-6 group relative animate-slide-up" style={{ animationDelay: `${idx * 0.1}s` }}>
-                                <div className={`z-10 w-9 h-9 rounded-full border-2 ${ringColor} bg-slate-950 flex items-center justify-center shrink-0 shadow-2xl transition-transform duration-300 group-hover:scale-110`}>
+                                <div className={`z-10 w-9 h-9 rounded-full border-2 ${ringColor} bg-surface flex items-center justify-center shrink-0 shadow-2xl transition-transform duration-300 group-hover:scale-110`}>
                                     {avatarIcon}
                                 </div>
                                 <div className="flex flex-col gap-2 w-full min-w-0">
@@ -171,28 +171,28 @@ export const DebateTranscript: React.FC<DebateTranscriptProps> = ({ history }) =
                                         <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${roleColor} flex items-center gap-2`}>
                                             {nameDisplay}
                                             <span className="w-1 h-1 rounded-full bg-slate-700" />
-                                            <span className="text-slate-600 font-medium tracking-normal lowercase">{msg.role}</span>
+                                            <span className="text-outline font-medium tracking-normal lowercase">{msg.role}</span>
                                         </span>
-                                        <div className="h-px bg-white/5 flex-grow" />
+                                        <div className="h-px bg-surface-container-low flex-grow" />
                                     </div>
-                                    <div className={`p-5 rounded-2xl border border-white/5 bg-gradient-to-br ${bgColor} transition-all duration-300 ${glowColor} backdrop-blur-sm group-hover:border-white/10`}>
-                                        <div className="text-[15px] leading-relaxed text-slate-300 font-sans tracking-tight">
+                                    <div className={`p-5 rounded-2xl border border-white/5 bg-gradient-to-br ${bgColor} transition-all duration-300 ${glowColor} backdrop-blur-sm group-hover:border-outline-variant/30`}>
+                                        <div className="text-[15px] leading-relaxed text-on-surface-variant font-sans tracking-tight">
                                             <ReactMarkdown
                                                 components={{
                                                     p: (props) => <p className="mb-4 last:mb-0" {...props} />,
-                                                    strong: (props) => <strong className="font-bold text-white tracking-tight" {...props} />,
-                                                    em: (props) => <em className="italic text-slate-400 border-b border-white/5 pb-0.5" {...props} />,
-                                                    h1: (props) => <h1 className="text-lg font-black text-white mt-6 mb-3 uppercase tracking-wider flex items-center gap-2 before:content-[''] before:w-1 before:h-4 before:bg-cyan-500" {...props} />,
-                                                    h2: (props) => <h2 className="text-base font-bold text-white mt-5 mb-2 border-b border-white/5 pb-1" {...props} />,
+                                                    strong: (props) => <strong className="font-bold text-on-surface tracking-tight" {...props} />,
+                                                    em: (props) => <em className="italic text-on-surface-variant border-b border-white/5 pb-0.5" {...props} />,
+                                                    h1: (props) => <h1 className="text-lg font-black text-on-surface mt-6 mb-3 uppercase tracking-wider flex items-center gap-2 before:content-[''] before:w-1 before:h-4 before:bg-cyan-500" {...props} />,
+                                                    h2: (props) => <h2 className="text-base font-bold text-on-surface mt-5 mb-2 border-b border-white/5 pb-1" {...props} />,
                                                     ul: (props) => <ul className="space-y-2 mb-4 list-none pl-1" {...props} />,
                                                     li: (props) => (
                                                         <li className="relative pl-5 mb-3 leading-relaxed before:content-['›'] before:absolute before:left-0 before:top-0 before:text-cyan-500 before:font-bold before:text-lg before:leading-none" {...props} />
                                                     ),
                                                     blockquote: (props) => (
-                                                        <blockquote className="border-l-2 border-slate-700 pl-4 py-1 my-4 italic text-slate-400 bg-white/2 rounded-r" {...props} />
+                                                        <blockquote className="border-l-2 border-outline-variant/50 pl-4 py-1 my-4 italic text-on-surface-variant bg-white/2 rounded-r" {...props} />
                                                     ),
                                                     code: (props) => (
-                                                        <code className="bg-slate-950 px-1.5 py-0.5 rounded font-mono text-[13px] text-cyan-400 border border-white/5" {...props} />
+                                                        <code className="bg-surface px-1.5 py-0.5 rounded font-mono text-[13px] text-cyan-400 border border-white/5" {...props} />
                                                     ),
                                                     // Intercept images to render badges
                                                     img: ({ src, alt }) => {
@@ -221,14 +221,14 @@ export const DebateTranscript: React.FC<DebateTranscriptProps> = ({ history }) =
                 </div>
             </div>
 
-            <div className="px-6 py-4 bg-slate-950/60 border-t border-white/5 flex justify-between items-center">
+            <div className="px-6 py-4 bg-surface border-t border-white/5 flex justify-between items-center">
                 <div className="flex items-center gap-4">
-                    <span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.3em] flex items-center gap-1.5">
+                    <span className="text-[9px] font-black text-outline uppercase tracking-[0.3em] flex items-center gap-1.5">
                         <span className="w-1 h-1 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
                         Verification Protocol Active
                     </span>
-                    <div className="h-4 w-px bg-white/5" />
-                    <span className="text-[9px] font-mono text-slate-600">SHA-256: 8f2b...3e1a</span>
+                    <div className="h-4 w-px bg-surface-container-low" />
+                    <span className="text-[9px] font-mono text-outline">SHA-256: 8f2b...3e1a</span>
                 </div>
                 <div className="flex gap-3">
                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/20" />

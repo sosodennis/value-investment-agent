@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&amp;family=Inter:wght@400;500;600&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-background": "#e1e2eb",
+              "on-primary-fixed-variant": "#004f54",
+              "on-surface-variant": "#b9cacb",
+              "on-surface": "#e1e2eb",
+              "secondary-fixed": "#6ffbbe",
+              "surface-container-lowest": "#0b0e14",
+              "on-tertiary-container": "#875500",
+              "on-primary-fixed": "#002022",
+              "surface-dim": "#10131a",
+              "surface-bright": "#363940",
+              "tertiary-fixed": "#ffddb8",
+              "surface-container-high": "#272a31",
+              "tertiary": "#fff6f0",
+              "surface-container": "#1d2026",
+              "surface-tint": "#00dbe7",
+              "on-secondary-container": "#00311f",
+              "secondary-container": "#00a572",
+              "on-tertiary-fixed-variant": "#653e00",
+              "error": "#ffb4ab",
+              "outline-variant": "#3a494b",
+              "primary-fixed-dim": "#00dbe7",
+              "on-tertiary": "#472a00",
+              "surface": "#10131a",
+              "on-primary-container": "#006a71",
+              "on-error-container": "#ffdad6",
+              "surface-variant": "#32353c",
+              "on-secondary-fixed": "#002113",
+              "on-secondary": "#003824",
+              "background": "#10131a",
+              "tertiary-fixed-dim": "#ffb95f",
+              "primary-container": "#00f2ff",
+              "surface-container-highest": "#32353c",
+              "secondary-fixed-dim": "#4edea3",
+              "on-tertiary-fixed": "#2a1700",
+              "secondary": "#4edea3",
+              "outline": "#849495",
+              "on-error": "#690005",
+              "inverse-on-surface": "#2e3037",
+              "on-primary": "#00363a",
+              "inverse-surface": "#e1e2eb",
+              "surface-container-low": "#191c22",
+              "on-secondary-fixed-variant": "#005236",
+              "inverse-primary": "#00696f",
+              "tertiary-container": "#ffd4a3",
+              "error-container": "#93000a",
+              "primary": "#e1fdff",
+              "primary-fixed": "#74f5ff"
+            },
+            fontFamily: {
+              "headline": ["Manrope", "sans-serif"],
+              "body": ["Inter", "sans-serif"],
+              "label": ["Inter", "sans-serif"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; background-color: #10131A; color: #e1e2eb; -webkit-font-smoothing: antialiased; }
+        .tabular-nums { font-variant-numeric: tabular-nums; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .glass-panel { background: rgba(50, 53, 60, 0.6); backdrop-filter: blur(20px); }
+        .hero-gradient { background: radial-gradient(circle at 50% 50%, rgba(0, 242, 255, 0.05) 0%, transparent 70%); }
+    </style>
+</head>
+<body class="bg-surface text-on-surface selection:bg-primary-container selection:text-on-primary">
+<!-- TopNavBar Implementation -->
+<nav class="w-full sticky top-0 z-50 bg-[#191C22] shadow-[0_1px_0_0_rgba(255,255,255,0.05)] h-16 px-8 flex justify-between items-center font-['Manrope'] antialiased tabular-nums text-sm tracking-tight">
+<div class="flex items-center gap-8">
+<span class="text-xl font-bold tracking-tighter text-[#00F2FF]">Oracle AI</span>
+<div class="hidden md:flex gap-6 items-center">
+<a class="text-[#00F2FF] border-b-2 border-[#00F2FF] pb-1 transition-all duration-200 ease-in-out hover:bg-[#191C22] focus:ring-2 focus:ring-[#00F2FF] focus:outline-none" href="#">Markets</a>
+<a class="text-slate-400 hover:text-slate-200 transition-colors transition-all duration-200 ease-in-out hover:bg-[#191C22] focus:ring-2 focus:ring-[#00F2FF] focus:outline-none" href="#">Portfolio</a>
+<a class="text-slate-400 hover:text-slate-200 transition-colors transition-all duration-200 ease-in-out hover:bg-[#191C22] focus:ring-2 focus:ring-[#00F2FF] focus:outline-none" href="#">Insights</a>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 text-slate-400 hover:text-slate-200 transition-all duration-200 focus:ring-2 focus:ring-[#00F2FF] focus:outline-none rounded">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="p-2 text-slate-400 hover:text-slate-200 transition-all duration-200 focus:ring-2 focus:ring-[#00F2FF] focus:outline-none rounded">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</button>
+<div class="h-8 w-8 rounded-full overflow-hidden border border-outline-variant">
+<img alt="User Profile" data-alt="minimalist user avatar profile picture with a sleek digital interface aesthetic" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAEmiowchLl8eQ46pG2lxTu3-2umUFwYJ89BXlnBC1kKKCKv05XSA5ITEYqqBqo6OulfWR96vaVU_eTnAeFKcViTC6JkY9nhVKhYBSgLC6UFt3Ieem4YAyWAWQ4xmkL6j4edAz51TsMlat0GRnhYKZyS3Iu3a66E5mvMMCl0l3uS3P9QdEkEGkSg_Ptyb3n-akkc8o5yEfjQ7EB44JBbMxWZ2MjJNQV7YLjaf4UA8KbwgpG-PYwpYuy4MnVs2IFXaFr_mSRJzfCvevM"/>
+</div>
+</div>
+</nav>
+<main class="relative min-h-[calc(100vh-4rem)] flex flex-col items-center px-4 pt-24 hero-gradient">
+<!-- Status Indicator -->
+<div class="absolute top-8 right-8 flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-container-low border border-outline-variant/20 shadow-lg">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-secondary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-secondary"></span>
+</span>
+<span class="text-[10px] uppercase tracking-widest font-bold text-secondary">Agent Online</span>
+</div>
+<!-- Central Search Section -->
+<div class="w-full max-w-3xl text-center space-y-12">
+<header class="space-y-4">
+<h1 class="text-5xl md:text-6xl font-extrabold tracking-tight font-headline text-primary-fixed leading-none">
+                    Financial Intelligence <br/>
+<span class="text-on-surface opacity-80">at Scale.</span>
+</h1>
+<p class="text-on-surface-variant font-body text-lg max-w-xl mx-auto">
+                    Real-time cross-asset analysis powered by Oracle's neural processing core.
+                </p>
+</header>
+<!-- Main Search Launchpad -->
+<div class="relative group">
+<div class="absolute -inset-1 bg-gradient-to-r from-primary-container/20 to-secondary-fixed/20 rounded-xl blur-lg opacity-50 group-hover:opacity-100 transition duration-1000 group-hover:duration-200"></div>
+<div class="relative glass-panel rounded-xl flex items-center p-2 focus-within:ring-2 focus-within:ring-primary-container transition-all">
+<span class="material-symbols-outlined text-primary-container px-4" data-icon="search">search</span>
+<input aria-label="Enter Ticker for financial analysis" class="w-full bg-transparent border-none text-xl font-body py-4 focus:ring-0 placeholder:text-outline/50 text-primary-fixed" placeholder="Enter Ticker (e.g. AAPL, TSLA, NVDA)" type="text"/>
+<button class="bg-primary-container text-on-primary px-8 py-3 rounded-lg font-bold text-sm tracking-wide hover:brightness-110 active:scale-95 transition-all focus:ring-2 focus:ring-offset-2 focus:ring-primary-container focus:ring-offset-surface">
+                        ANALYZE
+                    </button>
+</div>
+</div>
+<!-- Trending Section -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 pt-12">
+<div class="col-span-full flex items-center justify-between px-2">
+<h2 class="text-xs uppercase tracking-[0.2em] font-bold text-outline">Trending Tickers</h2>
+<span class="h-[1px] flex-grow mx-4 bg-outline-variant/30"></span>
+<button class="text-[10px] text-primary-container hover:underline tracking-widest uppercase">View All</button>
+</div>
+<!-- Ticker Card 1 -->
+<div class="bg-surface-container-low p-4 rounded-lg flex flex-col gap-3 group hover:bg-surface-container transition-colors cursor-pointer focus-within:ring-2 focus-within:ring-primary-container outline-none">
+<div class="flex justify-between items-start">
+<div>
+<span class="text-xs font-bold text-outline tracking-wider">NVDA</span>
+<h3 class="text-primary-fixed font-bold">NVIDIA Corp.</h3>
+</div>
+<span class="material-symbols-outlined text-secondary text-sm" data-icon="trending_up">trending_up</span>
+</div>
+<div class="flex items-end justify-between tabular-nums">
+<span class="text-2xl font-bold tracking-tight">$942.89</span>
+<span class="text-secondary font-medium text-sm">+2.45%</span>
+</div>
+</div>
+<!-- Ticker Card 2 -->
+<div class="bg-surface-container-low p-4 rounded-lg flex flex-col gap-3 group hover:bg-surface-container transition-colors cursor-pointer focus-within:ring-2 focus-within:ring-primary-container outline-none">
+<div class="flex justify-between items-start">
+<div>
+<span class="text-xs font-bold text-outline tracking-wider">TSLA</span>
+<h3 class="text-primary-fixed font-bold">Tesla, Inc.</h3>
+</div>
+<span class="material-symbols-outlined text-error text-sm" data-icon="trending_down">trending_down</span>
+</div>
+<div class="flex items-end justify-between tabular-nums">
+<span class="text-2xl font-bold tracking-tight">$171.05</span>
+<span class="text-error font-medium text-sm">-1.12%</span>
+</div>
+</div>
+<!-- Ticker Card 3 -->
+<div class="bg-surface-container-low p-4 rounded-lg flex flex-col gap-3 group hover:bg-surface-container transition-colors cursor-pointer focus-within:ring-2 focus-within:ring-primary-container outline-none">
+<div class="flex justify-between items-start">
+<div>
+<span class="text-xs font-bold text-outline tracking-wider">AAPL</span>
+<h3 class="text-primary-fixed font-bold">Apple Inc.</h3>
+</div>
+<span class="material-symbols-outlined text-outline text-sm" data-icon="horizontal_rule">horizontal_rule</span>
+</div>
+<div class="flex items-end justify-between tabular-nums">
+<span class="text-2xl font-bold tracking-tight">$182.52</span>
+<span class="text-on-surface-variant font-medium text-sm">0.00%</span>
+</div>
+</div>
+</div>
+<!-- Recent Analysis Bento -->
+<div class="pt-8 space-y-6">
+<div class="flex items-center justify-between px-2">
+<h2 class="text-xs uppercase tracking-[0.2em] font-bold text-outline">Recent Analysis</h2>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
+<div class="bg-surface-container p-5 rounded-xl border border-outline-variant/10 hover:border-primary-container/30 transition-all flex gap-4 cursor-pointer focus:ring-2 focus:ring-primary-container outline-none">
+<div class="h-12 w-12 rounded bg-surface-container-high flex items-center justify-center">
+<span class="material-symbols-outlined text-primary-container" data-icon="query_stats">query_stats</span>
+</div>
+<div>
+<h4 class="font-bold text-primary-fixed">MSFT Deep Dive</h4>
+<p class="text-xs text-on-surface-variant mt-1 line-clamp-1">AI workloads driving cloud revenue expansion beyond estimates.</p>
+<span class="text-[10px] text-outline mt-2 block uppercase tracking-tighter tabular-nums">Analyzed 14m ago</span>
+</div>
+</div>
+<div class="bg-surface-container p-5 rounded-xl border border-outline-variant/10 hover:border-primary-container/30 transition-all flex gap-4 cursor-pointer focus:ring-2 focus:ring-primary-container outline-none">
+<div class="h-12 w-12 rounded bg-surface-container-high flex items-center justify-center">
+<span class="material-symbols-outlined text-tertiary-fixed-dim" data-icon="psychology">psychology</span>
+</div>
+<div>
+<h4 class="font-bold text-primary-fixed">Market Sentiment Hub</h4>
+<p class="text-xs text-on-surface-variant mt-1 line-clamp-1">Fear/Greed index shifting toward aggressive accumulation.</p>
+<span class="text-[10px] text-outline mt-2 block uppercase tracking-tighter tabular-nums">Analyzed 2h ago</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Background Decoration -->
+<div class="fixed inset-0 pointer-events-none -z-10 overflow-hidden">
+<div class="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] bg-primary-container/5 rounded-full blur-[120px]"></div>
+<div class="absolute bottom-0 right-0 w-full h-[30%] bg-gradient-to-t from-surface-container-lowest to-transparent"></div>
+</div>
+<!-- SideNavBar (Hidden but structure included as per instructions/system logic for top-level) -->
+<!-- Suppressed on Home Launchpad as it's a focused entry point, but logic implies TopNavBar handles links here -->
+</body></html>

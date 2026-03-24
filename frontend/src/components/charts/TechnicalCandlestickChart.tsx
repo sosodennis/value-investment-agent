@@ -416,7 +416,7 @@ export const TechnicalCandlestickChart: React.FC<TechnicalCandlestickChartProps>
                 style={{ height }}
             />
             {!hasData && (
-                <div className="mt-3 text-xs text-slate-500">
+                <div className="mt-3 text-xs text-outline">
                     OHLC data unavailable for this timeframe.
                 </div>
             )}

@@ -14,11 +14,11 @@ vi.mock('@/hooks/useFinancialData', () => ({
     useFinancialData: vi.fn(),
 }));
 
-vi.mock('@/components/HeaderBar', () => ({
+vi.mock('@/components/workspace/HeaderBar', () => ({
     HeaderBar: () => <div data-testid="header-bar" />,
 }));
 
-vi.mock('@/components/AgentsRoster', () => ({
+vi.mock('@/components/agents-roster/AgentsRoster', () => ({
     AgentsRoster: ({
         selectedAgentId,
     }: {
@@ -26,7 +26,7 @@ vi.mock('@/components/AgentsRoster', () => ({
     }) => <div data-testid="agents-roster">{selectedAgentId ?? 'none'}</div>,
 }));
 
-vi.mock('@/components/AgentDetailPanel', () => ({
+vi.mock('@/components/agent-detail/AgentDetailPanel', () => ({
     AgentDetailPanel: ({
         agent,
     }: {

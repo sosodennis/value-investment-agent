@@ -7,7 +7,7 @@ import {
     isInterruptRequestData,
 } from '@/types/interrupts';
 import { LayoutPanelTop, Activity, Clock } from 'lucide-react';
-import { DynamicInterruptForm } from '../DynamicInterruptForm';
+import { DynamicInterruptForm } from '@/components/workspace/DynamicInterruptForm';
 import { useAgentActivity } from '@/hooks/useAgentActivity';
 
 interface AgentWorkspaceTabProps {
@@ -73,9 +73,9 @@ export const AgentWorkspaceTab: React.FC<AgentWorkspaceTabProps> = ({
                   minute: '2-digit',
                   second: '2-digit',
               });
-    const projectionTone = isStale ? 'text-warning' : 'text-slate-300';
-    const projectionBorder = isStale ? 'border-warning/30' : 'border-border-main';
-    const projectionBg = isStale ? 'bg-warning/10' : 'bg-bg-main/60';
+    const projectionTone = isStale ? 'text-warning' : 'text-on-surface-variant';
+    const projectionBorder = isStale ? 'border-warning/30' : 'border-outline-variant/30';
+    const projectionBg = isStale ? 'bg-warning/10' : 'bg-surface-container/60';
     const projectionTitle =
         lagMs === null
             ? 'Projection sync is not available yet.'
@@ -90,11 +90,11 @@ export const AgentWorkspaceTab: React.FC<AgentWorkspaceTabProps> = ({
     return (
         <div className="p-8 space-y-8 animate-in slide-in-from-bottom-2 duration-300">
             {/* Current Active Step */}
-            <section className="bg-bg-main/20 border border-border-subtle rounded-2xl p-6 backdrop-blur-sm">
+            <section className="bg-surface-container-low border border-outline-variant/30 rounded-2xl p-6 backdrop-blur-sm">
                 <div className="flex items-center justify-between mb-6">
                     <div className="flex items-center gap-3">
                         <LayoutPanelTop size={18} className="text-primary" />
-                        <h3 className="text-sm font-bold text-white uppercase tracking-widest">Active Workspace</h3>
+                        <h3 className="text-sm font-bold text-on-surface uppercase tracking-widest">Active Workspace</h3>
                     </div>
                     <div className="flex items-center gap-2">
                         {agent.status === 'running' && (
@@ -108,7 +108,7 @@ export const AgentWorkspaceTab: React.FC<AgentWorkspaceTabProps> = ({
                             title={projectionTitle}
                         >
                             <Clock size={12} className={projectionTone} />
-                            <span className="text-[10px] font-bold uppercase tracking-tighter text-slate-500">Projection</span>
+                            <span className="text-[10px] font-bold uppercase tracking-tighter text-outline">Projection</span>
                             <span className={`text-[10px] font-bold uppercase tracking-tighter ${projectionTone}`}>
                                 {projectionLabel}
                             </span>
@@ -117,13 +117,13 @@ export const AgentWorkspaceTab: React.FC<AgentWorkspaceTabProps> = ({
                 </div>
 
                 <div className="flex flex-col gap-4">
-                    <div className="bg-bg-main/50 border border-border-main rounded-xl p-5 flex items-center justify-between">
+                    <div className="bg-surface-container border border-outline-variant/30 rounded-xl p-5 flex items-center justify-between">
                         <div>
-                            <div className="text-label mb-1">Current Task</div>
-                            <div className="text-lg font-bold text-white capitalize">{currentNode || (agent.status === 'running' ? 'Initializing...' : 'Idle')}</div>
+                            <div className="text-[10px] font-black uppercase tracking-widest text-outline mb-1">Current Task</div>
+                            <div className="text-lg font-bold text-on-surface capitalize">{currentNode || (agent.status === 'running' ? 'Initializing...' : 'Idle')}</div>
                         </div>
                         <div className="text-right">
-                            <div className="text-label mb-1">Status</div>
+                            <div className="text-[10px] font-black uppercase tracking-widest text-outline mb-1">Status</div>
                             <div className={`text-sm font-bold ${currentStatus === 'attention' ? 'text-warning' : 'text-primary'}`}>
                                 {currentStatus || (agent.status === 'running' ? 'In Progress' : 'Waiting')}
                             </div>
@@ -146,13 +146,13 @@ export const AgentWorkspaceTab: React.FC<AgentWorkspaceTabProps> = ({
             </section>
 
             {/* Recent Activity Feed */}
-            <section className="bg-bg-main/10 border border-border-main rounded-2xl p-6">
+            <section className="bg-surface-container-low border border-outline-variant/30 rounded-2xl p-6">
                 <div className="flex items-center gap-3 mb-6">
-                    <Activity size={16} className="text-slate-500" />
-                    <h3 className="text-label">Activity History</h3>
+                    <Activity size={16} className="text-outline" />
+                    <h3 className="text-[10px] font-black uppercase tracking-widest text-outline">Activity History</h3>
                 </div>
 
-                <div className="flex items-center justify-between text-[10px] text-slate-500 mb-4 uppercase tracking-widest">
+                <div className="flex items-center justify-between text-[10px] text-on-surface-variant mb-4 uppercase tracking-widest">
                     <span>
                         {`Showing last ${Math.max(
                             ACTIVITY_LIMIT,
@@ -165,8 +165,8 @@ export const AgentWorkspaceTab: React.FC<AgentWorkspaceTabProps> = ({
                         disabled={!canLoadMoreActivity}
                         className={`text-[10px] font-bold uppercase tracking-widest transition-colors ${
                             canLoadMoreActivity
-                                ? 'text-primary hover:text-cyan-300'
-                                : 'text-slate-700 cursor-not-allowed'
+                                ? 'text-primary hover:text-primary-variant'
+                                : 'text-outline/50 cursor-not-allowed'
                         }`}
                     >
                         {hasMoreActivity ? 'View full history' : 'Full history loaded'}
@@ -177,9 +177,9 @@ export const AgentWorkspaceTab: React.FC<AgentWorkspaceTabProps> = ({
                     {(() => {
                         if (activityEvents.length === 0) {
                             return (
-                                <div className="py-8 text-center bg-bg-main/30 rounded-xl border border-dashed border-border-main">
-                                    <Clock size={20} className="text-slate-800 mx-auto mb-2" />
-                                    <span className="text-label">No recent activity in last 5 events</span>
+                                <div className="py-8 text-center bg-surface-container/30 rounded-xl border border-dashed border-outline-variant/30">
+                                    <Clock size={20} className="text-outline mx-auto mb-2" />
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-outline">No recent activity in last 5 events</span>
                                 </div>
                             );
                         }
@@ -211,10 +211,10 @@ export const AgentWorkspaceTab: React.FC<AgentWorkspaceTabProps> = ({
                                 </div>
                                 <div className="flex-1 pb-4">
                                     <div className="flex justify-between items-start">
-                                        <span className={`text-xs font-bold leading-none capitalize ${isCurrent ? 'text-slate-200' : 'text-slate-50'}`}>
+                                        <span className={`text-xs font-bold leading-none capitalize ${isCurrent ? 'text-on-surface' : 'text-on-surface-variant'}`}>
                                             {step.node.replace(/_/g, ' ')}
                                         </span>
-                                        <span className="text-[9px] text-slate-700 font-mono">
+                                        <span className="text-[9px] text-outline font-mono">
                                             {new Date(step.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                                         </span>
                                     </div>

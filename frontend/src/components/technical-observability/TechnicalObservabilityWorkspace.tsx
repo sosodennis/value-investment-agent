@@ -3,6 +3,7 @@
 import { startTransition, useState } from 'react';
 import Link from 'next/link';
 import { Activity, Database } from 'lucide-react';
+import { WorkspaceLayout } from '@/components/workspace/layout';
 
 import {
     createDefaultTechnicalObservabilityFilters,
@@ -100,38 +101,39 @@ export function TechnicalObservabilityWorkspace() {
         totalEvents === 0 ? '0%' : `${Math.round((totalLabeled / totalEvents) * 100)}%`;
 
     return (
-        <main className="min-h-[calc(100vh-4rem)] bg-[radial-gradient(circle_at_top,rgba(8,145,178,0.16),transparent_28%),linear-gradient(180deg,#020617_0%,#020617_44%,#030712_100%)] text-white selection:bg-cyan-500/30">
-            <header className="border-b border-white/6 bg-slate-950/70 px-6 py-5 backdrop-blur xl:px-8">
-                <div className="mx-auto flex max-w-[1600px] flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-                    <div className="flex items-center gap-6">
-                        <div>
-                            <div className="text-[10px] font-black uppercase tracking-[0.28em] text-cyan-300">
-                                Internal Governance
+        <WorkspaceLayout.Root className="bg-surface hero-gradient text-on-surface">
+            <WorkspaceLayout.Main>
+                <WorkspaceLayout.Content>
+                    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-6 py-8 xl:px-8">
+                        {/* Header Block inline, removed Toolbar wrapper */}
+                        <div className="w-full flex-col gap-4 xl:flex-row xl:flex xl:items-center xl:justify-between mb-4">
+                            <div className="flex items-center gap-6">
+                                <div>
+                                    <div className="text-[10px] font-black uppercase tracking-[0.28em] text-primary">
+                                        Internal Governance
+                                    </div>
+                                    <h1 className="mt-2 text-2xl font-black tracking-tight text-on-surface">
+                                        Technical Observability
+                                    </h1>
+                                </div>
                             </div>
-                            <h1 className="mt-2 text-2xl font-black tracking-tight text-white">
-                                Technical Observability
-                            </h1>
+
+                            <div className="flex flex-wrap items-center gap-3">
+                                <StatusPill icon={Database} label="DB Truth Model" />
+                                <StatusPill
+                                    icon={Activity}
+                                    label={isLoading ? 'Refreshing' : 'Read Model Ready'}
+                                />
+                                <Link
+                                    href="/workspace"
+                                    className="flex items-center justify-center min-h-11 rounded-xl border border-outline-variant/30 bg-surface-container-low px-4 text-[11px] font-black uppercase tracking-[0.2em] text-on-surface-variant transition hover:border-outline-variant hover:text-on-surface"
+                                >
+                                    Back To Analysis
+                                </Link>
+                            </div>
                         </div>
-                    </div>
 
-                    <div className="flex flex-wrap items-center gap-3">
-                        <StatusPill icon={Database} label="DB Truth Model" />
-                        <StatusPill
-                            icon={Activity}
-                            label={isLoading ? 'Refreshing' : 'Read Model Ready'}
-                        />
-                        <Link
-                            href="/"
-                            className="min-h-11 rounded-xl border border-white/10 px-4 py-2.5 text-[11px] font-black uppercase tracking-[0.2em] text-slate-300 transition hover:border-white/20 hover:text-white"
-                        >
-                            Back To Analysis
-                        </Link>
-                    </div>
-                </div>
-            </header>
-
-            <div className="mx-auto flex max-w-[1600px] flex-col gap-6 px-6 py-8 xl:px-8">
-                <ObservabilityFilterBar
+                        <ObservabilityFilterBar
                     draftFilters={draftFilters}
                     isApplying={isApplying}
                     onDraftFiltersChange={setDraftFilters}
@@ -162,7 +164,7 @@ export function TechnicalObservabilityWorkspace() {
                     />
                 </section>
 
-                <section className="rounded-[28px] border border-white/8 bg-slate-950/60 p-5 shadow-[0_22px_70px_rgba(2,6,23,0.32)]">
+                <section className="rounded-[28px] border border-outline-variant/30 bg-surface-container-lowest p-5 shadow-lg">
                     <div className="flex flex-wrap gap-2">
                         {TECHNICAL_OBSERVABILITY_VIEWS.map((view) => {
                             const isActive = view === activeView;
@@ -173,8 +175,8 @@ export function TechnicalObservabilityWorkspace() {
                                     onClick={() => setActiveView(view)}
                                     className={`min-h-11 rounded-xl px-4 text-xs font-black uppercase tracking-[0.22em] transition ${
                                         isActive
-                                            ? 'bg-cyan-500/14 text-cyan-200 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.25)]'
-                                            : 'text-slate-400 hover:bg-white/4 hover:text-white'
+                                            ? 'bg-primary/10 text-primary border border-primary/30'
+                                            : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface border border-transparent'
                                     }`}
                                 >
                                     {VIEW_COPY[view].title}
@@ -184,14 +186,14 @@ export function TechnicalObservabilityWorkspace() {
                     </div>
 
                     <div className="mt-6">
-                        <article className="rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.82),rgba(2,6,23,0.96))] p-6">
-                            <div className="text-[10px] font-black uppercase tracking-[0.28em] text-cyan-300">
+                        <article className="rounded-[24px] border border-outline-variant/30 bg-surface-container p-6">
+                            <div className="text-[10px] font-black uppercase tracking-[0.28em] text-primary">
                                 {activeViewCopy.kicker}
                             </div>
-                            <h2 className="mt-3 text-2xl font-black tracking-tight text-white">
+                            <h2 className="mt-3 text-2xl font-black tracking-tight text-on-surface">
                                 {activeViewCopy.title}
                             </h2>
-                            <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
+                            <p className="mt-3 max-w-3xl text-sm leading-6 text-on-surface-variant">
                                 {activeViewCopy.description}
                             </p>
                         </article>
@@ -256,7 +258,9 @@ export function TechnicalObservabilityWorkspace() {
                     </div>
                 </section>
             </div>
-        </main>
+        </WorkspaceLayout.Content>
+    </WorkspaceLayout.Main>
+</WorkspaceLayout.Root>
     );
 }
 
@@ -268,16 +272,16 @@ type MetricCardProps = {
 
 function MetricCard({ label, value, helper }: MetricCardProps) {
     return (
-        <article className="rounded-[24px] border border-white/8 bg-slate-950/60 p-5 shadow-[0_18px_48px_rgba(2,6,23,0.24)]">
+        <article className="rounded-[24px] border border-outline-variant/30 bg-surface-container-low p-5 shadow-lg">
             <div>
-                <div className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-500">
+                <div className="text-[10px] font-black uppercase tracking-[0.24em] text-outline">
                     {label}
                 </div>
-                <div className="mt-4 text-3xl font-black tracking-tight text-white">
+                <div className="mt-4 text-3xl font-black tracking-tight text-on-surface">
                     {value}
                 </div>
             </div>
-            <p className="mt-4 text-sm leading-6 text-slate-400">{helper}</p>
+            <p className="mt-4 text-sm leading-6 text-on-surface-variant">{helper}</p>
         </article>
     );
 }
@@ -289,8 +293,8 @@ type StatusPillProps = {
 
 function StatusPill({ icon: Icon, label }: StatusPillProps) {
     return (
-        <div className="flex min-h-11 items-center gap-2 rounded-xl border border-white/10 bg-slate-950/70 px-4 py-2.5 text-[11px] font-black uppercase tracking-[0.2em] text-slate-300">
-            <Icon className="h-4 w-4 text-cyan-300" />
+        <div className="flex min-h-11 items-center gap-2 rounded-xl border border-outline-variant/30 bg-surface-container px-4 py-2.5 text-[11px] font-black uppercase tracking-[0.2em] text-on-surface-variant">
+            <Icon className="h-4 w-4 text-primary" />
             {label}
         </div>
     );
@@ -303,11 +307,11 @@ type SummaryPanelProps = {
 
 function SummaryPanel({ title, value }: SummaryPanelProps) {
     return (
-        <div className="rounded-2xl border border-white/8 bg-white/3 p-4">
-            <div className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-500">
+        <div className="rounded-2xl border border-outline-variant/20 bg-surface-container p-4">
+            <div className="text-[10px] font-black uppercase tracking-[0.24em] text-outline">
                 {title}
             </div>
-            <div className="mt-3 text-sm font-semibold text-slate-100">{value}</div>
+            <div className="mt-3 text-sm font-semibold text-on-surface">{value}</div>
         </div>
     );
 }
@@ -319,11 +323,11 @@ type DetailLineProps = {
 
 function DetailLine({ label, value }: DetailLineProps) {
     return (
-        <div className="flex items-start justify-between gap-4 border-b border-white/6 pb-3 last:border-b-0">
-            <dt className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
+        <div className="flex items-start justify-between gap-4 border-b border-outline-variant/20 pb-3 last:border-b-0">
+            <dt className="text-[11px] font-black uppercase tracking-[0.2em] text-outline">
                 {label}
             </dt>
-            <dd className="text-right text-sm font-semibold text-slate-100">
+            <dd className="text-right text-sm font-semibold text-on-surface">
                 {value}
             </dd>
         </div>
@@ -346,16 +350,16 @@ type LabelLensControlsProps = {
 
 function LabelLensControls({ labelLens, onChange }: LabelLensControlsProps) {
     return (
-        <section className="rounded-[24px] border border-white/8 bg-slate-950/70 p-5">
+        <section className="rounded-[24px] border border-outline-variant/30 bg-surface-container p-5">
             <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                 <div>
-                    <div className="text-[10px] font-black uppercase tracking-[0.28em] text-cyan-300">
+                    <div className="text-[10px] font-black uppercase tracking-[0.28em] text-primary">
                         Label Lens
                     </div>
-                    <h3 className="mt-3 text-xl font-black tracking-tight text-white">
+                    <h3 className="mt-3 text-xl font-black tracking-tight text-on-surface">
                         Raw truth and governed labels stay separate
                     </h3>
-                    <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
+                    <p className="mt-3 max-w-3xl text-sm leading-6 text-on-surface-variant">
                         `Raw outcomes` show truth-model monitoring. `Approved snapshots`
                         represent versioned governance labels and must not be mistaken for
                         the same metric surface.
@@ -394,8 +398,8 @@ function LensButton({
             onClick={onClick}
             className={`min-h-11 rounded-xl px-4 text-xs font-black uppercase tracking-[0.22em] transition ${
                 isActive
-                    ? 'bg-cyan-500/14 text-cyan-200 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.25)]'
-                    : 'border border-white/10 text-slate-400 hover:bg-white/4 hover:text-white'
+                    ? 'bg-primary/10 text-primary border border-primary/30'
+                    : 'border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
             }`}
         >
             {label}
@@ -413,14 +417,14 @@ function PlaceholderView({
 }: PlaceholderViewProps) {
     return (
         <div className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
-            <article className="rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.82),rgba(2,6,23,0.96))] p-6">
-                <div className="text-[10px] font-black uppercase tracking-[0.28em] text-cyan-300">
+            <article className="rounded-[24px] border border-outline-variant/30 bg-surface-container-low p-6">
+                <div className="text-[10px] font-black uppercase tracking-[0.28em] text-primary">
                     Next Slice
                 </div>
-                <h3 className="mt-3 text-2xl font-black tracking-tight text-white">
+                <h3 className="mt-3 text-2xl font-black tracking-tight text-on-surface">
                     {activeViewTitle}
                 </h3>
-                <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-on-surface-variant">
                     {description}
                 </p>
 
@@ -445,8 +449,8 @@ function PlaceholderView({
                 </div>
             </article>
 
-            <aside className="rounded-[24px] border border-white/8 bg-slate-950/70 p-6">
-                <div className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-500">
+            <aside className="rounded-[24px] border border-outline-variant/30 bg-surface-container p-6">
+                <div className="text-[10px] font-black uppercase tracking-[0.28em] text-outline">
                     Shared State Preview
                 </div>
                 <dl className="mt-4 space-y-4 text-sm">

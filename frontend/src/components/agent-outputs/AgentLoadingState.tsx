@@ -31,10 +31,10 @@ export const AgentLoadingState: React.FC<AgentLoadingStateProps> = ({
 
     if (type === 'block') {
         return (
-            <div className={`p-8 border border-slate-800 rounded-xl bg-slate-900/30 text-center ${className}`}>
+            <div className={`p-8 border border-outline-variant/30 rounded-xl bg-surface-container-low text-center ${className}`}>
                 <div className="flex flex-col items-center justify-center gap-3">
                     <Loader2 size={20} className={`${colorClass} animate-spin opacity-50`} />
-                    <p className="text-slate-500 text-xs italic">
+                    <p className="text-on-surface-variant text-xs italic">
                         {title || description || "Loading content..."}
                     </p>
                 </div>
@@ -46,26 +46,26 @@ export const AgentLoadingState: React.FC<AgentLoadingStateProps> = ({
     return (
         <div className={`flex-1 flex flex-col items-center justify-center p-12 text-center h-full min-h-[300px] animate-in fade-in duration-500 ${className}`}>
             {Icon && (
-                <Icon size={48} className={`${colorClass.replace('text-', 'text-slate-900 ')} mb-4 animate-pulse opacity-50`} />
+                <Icon size={48} className={`${colorClass.replace('text-', 'text-surface-container-highest ')} mb-4 animate-pulse opacity-50`} />
             )}
             {!Icon && (
-                <div className="w-12 h-12 rounded-xl bg-slate-900/50 border border-slate-800 flex items-center justify-center mb-4">
+                <div className="w-12 h-12 rounded-xl bg-surface-container border border-outline-variant/30 flex items-center justify-center mb-4">
                     <Loader2 size={24} className={`${colorClass} animate-spin`} />
                 </div>
             )}
 
-            <h4 className="text-slate-500 font-bold text-xs uppercase tracking-widest">
+            <h4 className="text-outline font-bold text-xs uppercase tracking-widest">
                 {title || 'Processing...'}
             </h4>
 
             {description && (
-                <p className="text-slate-700 text-[10px] mt-2 max-w-[240px]">
+                <p className="text-on-surface-variant text-[10px] mt-2 max-w-[240px]">
                     {description}
                 </p>
             )}
 
             {status && (
-                <p className="text-[10px] text-slate-500 mt-2 font-mono opacity-60">
+                <p className="text-[10px] text-outline mt-2 font-mono opacity-60">
                     Status: {status}
                 </p>
             )}

@@ -442,7 +442,7 @@ export const TechnicalIndicatorChart: React.FC<TechnicalIndicatorChartProps> = (
         <div className="w-full">
             <div ref={containerRef} className="w-full" style={{ height }} />
             {!hasData && (
-                <div className="mt-3 text-xs text-slate-500">
+                <div className="mt-3 text-xs text-outline">
                     Indicator data unavailable for this timeframe.
                 </div>
             )}

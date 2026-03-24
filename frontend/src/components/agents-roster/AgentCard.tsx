@@ -48,8 +48,8 @@ export const AgentCard: React.FC<AgentCardProps> = ({
                 bg: 'bg-warning/5'
             };
             default: return {
-                border: 'border-border-main',
-                text: 'text-slate-500',
+                border: 'border-outline-variant/30',
+                text: 'text-outline',
                 bg: 'bg-transparent'
             };
         }
@@ -62,7 +62,7 @@ export const AgentCard: React.FC<AgentCardProps> = ({
             onClick={onClick}
             className={`
         relative flex items-center gap-4 p-4 rounded-xl border transition-all cursor-pointer overflow-hidden
-        ${isSelected ? 'bg-slate-900/80 border-primary/30' : 'bg-bg-main/40 border-border-main hover:border-border-subtle'}
+        ${isSelected ? 'bg-primary/10 border-primary/30' : 'bg-transparent border-transparent hover:bg-surface-container-low'}
         ${status === 'running' ? 'shadow-[0_0_15px_rgba(var(--primary-rgb),0.1)]' : ''}
       `}
         >
@@ -78,7 +78,7 @@ export const AgentCard: React.FC<AgentCardProps> = ({
                     />
                 </div>
                 {status === 'done' && (
-                    <div className="absolute -bottom-1 -right-1 bg-bg-main rounded-full p-0.5">
+                    <div className="absolute -bottom-1 -right-1 bg-surface-container-lowest rounded-full p-0.5 z-10">
                         <CheckCircle2 size={14} className="text-success" />
                     </div>
                 )}
@@ -86,10 +86,10 @@ export const AgentCard: React.FC<AgentCardProps> = ({
 
             {/* Content */}
             <div className="flex-1 min-w-0">
-                <h4 className={`text-sm font-bold truncate ${isSelected ? 'text-white' : 'text-slate-200'}`}>
+                <h4 className={`text-sm font-bold truncate ${isSelected ? 'text-on-surface' : 'text-on-surface-variant'}`}>
                     {name}
                 </h4>
-                <p className="text-[10px] font-medium text-slate-500 uppercase tracking-tighter truncate">
+                <p className="text-[10px] font-medium text-outline uppercase tracking-tighter truncate">
                     {role}
                 </p>
                 <p className={`text-[10px] font-bold mt-1 capitalize ${styles.text}`}>
@@ -104,7 +104,7 @@ export const AgentCard: React.FC<AgentCardProps> = ({
             <div className="shrink-0 flex items-center justify-center w-6">
                 <div className={`
                     w-4 h-4 rounded-full border flex items-center justify-center transition-all
-                    ${isSelected ? 'border-primary bg-primary/10' : 'border-slate-800 bg-transparent'}
+                    ${isSelected ? 'border-primary bg-primary/10' : 'border-outline-variant/50 bg-transparent'}
                 `}>
                     {isSelected && (
                         <div className="w-1.5 h-1.5 bg-primary rounded-full shadow-[0_0_8px_rgba(var(--primary-rgb),0.8)]" />

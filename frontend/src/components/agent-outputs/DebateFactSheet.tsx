@@ -14,7 +14,7 @@ const FactItem = ({ fact }: { fact: EvidenceFact }) => {
             case 'news': return 'bg-cyan-500/10 text-cyan-400 border-cyan-500/25';
             case 'technicals': return 'bg-amber-500/10 text-amber-400 border-amber-500/25';
             case 'valuation': return 'bg-violet-500/10 text-violet-400 border-violet-500/25';
-            default: return 'bg-slate-500/10 text-slate-400 border-slate-500/20';
+            default: return 'bg-slate-500/10 text-on-surface-variant border-slate-500/20';
         }
     };
 
@@ -34,7 +34,7 @@ const FactItem = ({ fact }: { fact: EvidenceFact }) => {
             case 'news': return <Newspaper className="w-3 h-3 text-cyan-400" />;
             case 'technicals': return <BarChart4 className="w-3 h-3 text-amber-400" />;
             case 'valuation': return <Database className="w-3 h-3 text-violet-400" />;
-            default: return <ShieldCheck className="w-3 h-3 text-slate-400" />;
+            default: return <ShieldCheck className="w-3 h-3 text-on-surface-variant" />;
         }
     };
 
@@ -42,7 +42,7 @@ const FactItem = ({ fact }: { fact: EvidenceFact }) => {
         <div
             id={`fact-${fact.fact_id}`}
             data-fact-id={fact.fact_id}
-            className="group bg-slate-900/40 border border-white/5 rounded-xl p-4 hover:border-white/10 transition-all duration-300 scroll-mt-6"
+            className="group bg-surface-container-low border border-white/5 rounded-xl p-4 hover:border-outline-variant/30 transition-all duration-300 scroll-mt-6"
         >
             <div className="flex items-start justify-between gap-4">
                 <div className="flex flex-col gap-2 flex-grow">
@@ -51,15 +51,15 @@ const FactItem = ({ fact }: { fact: EvidenceFact }) => {
                             {getBadgeIcon()}
                             {fact.fact_id}
                         </span>
-                        <span className="px-1.5 py-0.5 rounded border text-[8px] font-black tracking-widest uppercase bg-white/5 text-slate-500 border-white/10">
+                        <span className="px-1.5 py-0.5 rounded border text-[8px] font-black tracking-widest uppercase bg-surface-container-low text-outline border-outline-variant/30">
                             {fact.source_weight}
                         </span>
-                        <div className="h-3 w-px bg-white/5" />
-                        <span className="text-[10px] text-slate-500 uppercase tracking-wider font-mono">
+                        <div className="h-3 w-px bg-surface-container-low" />
+                        <span className="text-[10px] text-outline uppercase tracking-wider font-mono">
                             {fact.period || 'CURRENT'}
                         </span>
                     </div>
-                    <p className="text-sm text-slate-200 leading-snug">
+                    <p className="text-sm text-on-surface leading-snug">
                         {fact.summary}
                     </p>
                     {fact.value !== undefined && fact.value !== null && fact.value !== '' && (
@@ -69,11 +69,11 @@ const FactItem = ({ fact }: { fact: EvidenceFact }) => {
                     )}
                 </div>
                 <div className="flex flex-col items-end gap-2 shrink-0">
-                    <div className={`p-2 rounded-lg bg-slate-950 border border-white/5 shadow-inner`}>
+                    <div className={`p-2 rounded-lg bg-surface border border-white/5 shadow-inner`}>
                         {getIcon()}
                     </div>
                     {fact.provenance && (
-                        <button className="text-[8px] text-slate-500 flex items-center gap-1 hover:text-cyan-400 transition-colors uppercase tracking-widest">
+                        <button className="text-[8px] text-outline flex items-center gap-1 hover:text-cyan-400 transition-colors uppercase tracking-widest">
                             <ExternalLink size={8} /> Source
                         </button>
                     )}
@@ -85,9 +85,9 @@ const FactItem = ({ fact }: { fact: EvidenceFact }) => {
 
 export const DebateFactSheet: React.FC<DebateFactSheetProps> = ({ facts }) => {
     if (!facts || facts.length === 0) return (
-        <div className="text-center py-12 tech-card bg-slate-950/20">
-            <ShieldCheck className="w-12 h-12 text-slate-800 mx-auto mb-4 opacity-20" />
-            <p className="text-slate-500 text-xs uppercase tracking-widest font-bold">No evidence facts registry found</p>
+        <div className="text-center py-12 tech-card bg-surface">
+            <ShieldCheck className="w-12 h-12 text-outline-variant mx-auto mb-4 opacity-20" />
+            <p className="text-outline text-xs uppercase tracking-widest font-bold">No evidence facts registry found</p>
         </div>
     );
 
@@ -101,9 +101,9 @@ export const DebateFactSheet: React.FC<DebateFactSheetProps> = ({ facts }) => {
             <div className="flex items-center justify-between border-b border-white/5 pb-4 px-2">
                 <div className="flex items-center gap-3">
                     <div className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse" />
-                    <h3 className="text-xs font-black text-white uppercase tracking-[0.2em]">Validated Fact Registry</h3>
+                    <h3 className="text-xs font-black text-on-surface uppercase tracking-[0.2em]">Validated Fact Registry</h3>
                 </div>
-                <span className="text-[10px] text-slate-600 font-mono">COUNT: {facts.length}</span>
+                <span className="text-[10px] text-outline font-mono">COUNT: {facts.length}</span>
             </div>
 
             {financials.length > 0 && (

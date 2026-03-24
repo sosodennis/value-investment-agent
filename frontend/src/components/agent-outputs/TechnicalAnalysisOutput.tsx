@@ -158,8 +158,8 @@ const getAlertSeverityTone = (severity: AlertSeverity) => {
         default:
             return {
                 label: 'Info',
-                badge: 'bg-slate-500/20 border-slate-500/40 text-slate-200',
-                text: 'text-slate-200',
+                badge: 'bg-slate-500/20 border-slate-500/40 text-on-surface',
+                text: 'text-on-surface',
             };
     }
 };
@@ -173,9 +173,9 @@ const getLifecycleTone = (state?: string | null) => {
         return 'bg-amber-500/15 border-amber-500/35 text-amber-200';
     }
     if (normalized === 'suppressed') {
-        return 'bg-slate-500/15 border-slate-500/35 text-slate-300';
+        return 'bg-slate-500/15 border-slate-500/35 text-on-surface-variant';
     }
-    return 'bg-slate-500/15 border-slate-500/35 text-slate-300';
+    return 'bg-slate-500/15 border-slate-500/35 text-on-surface-variant';
 };
 
 const getQualityGateTone = (gate?: string | null) => {
@@ -189,7 +189,7 @@ const getQualityGateTone = (gate?: string | null) => {
     if (normalized === 'failed') {
         return 'bg-rose-500/15 border-rose-500/35 text-rose-200';
     }
-    return 'bg-slate-500/15 border-slate-500/35 text-slate-300';
+    return 'bg-slate-500/15 border-slate-500/35 text-on-surface-variant';
 };
 
 const getIndicatorToneClasses = (tone: IndicatorTone) => {
@@ -218,10 +218,10 @@ const getIndicatorToneClasses = (tone: IndicatorTone) => {
         };
     }
     return {
-        border: 'border-slate-700/80',
-        bg: 'bg-slate-900/40',
-        value: 'text-slate-100',
-        detail: 'text-slate-400',
+        border: 'border-outline-variant/50',
+        bg: 'bg-surface-container-low',
+        value: 'text-on-surface',
+        detail: 'text-on-surface-variant',
     };
 };
 
@@ -337,8 +337,8 @@ const tonePalette: Record<
         glow: '[text-shadow:0_0_15px_rgba(34,197,94,0.5)]',
     },
     neutral: {
-        badge: 'bg-slate-500/20 border-slate-500/40 text-slate-200',
-        value: 'text-slate-100',
+        badge: 'bg-slate-500/20 border-slate-500/40 text-on-surface',
+        value: 'text-on-surface',
         spark: '#94a3b8',
         glow: '[text-shadow:0_0_15px_rgba(148,163,184,0.5)]',
     },
@@ -502,7 +502,7 @@ const resolveNearestValue = <V,>(
 
 const renderIndicatorHighlights = (indicators: TechnicalFeaturePack['timeframes'][string]['classic_indicators'][string][]) => {
     if (indicators.length === 0) {
-        return <span className="text-xs text-slate-500">No indicators available.</span>;
+        return <span className="text-xs text-outline">No indicators available.</span>;
     }
     return (
         <div className="flex flex-wrap gap-2">
@@ -514,7 +514,7 @@ const renderIndicatorHighlights = (indicators: TechnicalFeaturePack['timeframes'
                 return (
                     <span
                         key={indicator.name}
-                        className="px-2.5 py-1 bg-slate-900/60 border border-slate-800 rounded-full text-[10px] font-bold text-slate-200 uppercase tracking-wide"
+                        className="px-2.5 py-1 bg-surface-container border border-outline-variant/30 rounded-full text-[10px] font-bold text-on-surface uppercase tracking-wide"
                     >
                         {descriptor.displayName}: {formatIndicatorValue(indicator.value)}
                         {descriptor.stateLabel ? ` · ${descriptor.stateLabel}` : ''}
@@ -529,7 +529,7 @@ const renderScorecardContributions = (
     items: TechnicalScorecardContribution[]
 ) => {
     if (items.length === 0) {
-        return <div className="text-[10px] text-slate-500">No contributions.</div>;
+        return <div className="text-[10px] text-outline">No contributions.</div>;
     }
     return (
         <div className="space-y-2">
@@ -544,17 +544,17 @@ const renderScorecardContributions = (
                         ? 'text-emerald-200'
                         : item.contribution < 0
                             ? 'text-rose-200'
-                            : 'text-slate-400';
+                            : 'text-on-surface-variant';
                 return (
                     <div
                         key={`${item.name}-${idx}`}
                         className="flex items-center justify-between gap-3 text-[11px]"
                     >
                         <div>
-                            <div className="text-slate-200 font-semibold">
+                            <div className="text-on-surface font-semibold">
                                 {formatLabel(item.name)}
                             </div>
-                            <div className="text-[10px] text-slate-500">
+                            <div className="text-[10px] text-outline">
                                 {stateText}
                                 {valueText ? ` · ${valueText}` : ''}
                                 {item.notes ? ` · ${item.notes}` : ''}
@@ -582,9 +582,9 @@ const MarketStatusBadge = ({ zScore }: { zScore: number }) => {
             iconTone: 'text-emerald-300',
         },
         neutral: {
-            accentText: 'text-slate-200',
-            badge: 'bg-slate-900/60 border-slate-800 text-slate-300',
-            iconTone: 'text-slate-400',
+            accentText: 'text-on-surface',
+            badge: 'bg-surface-container border-outline-variant/30 text-on-surface-variant',
+            iconTone: 'text-on-surface-variant',
         },
         warning: {
             accentText: 'text-amber-300',
@@ -608,13 +608,13 @@ const MarketStatusBadge = ({ zScore }: { zScore: number }) => {
     const Icon = iconMap[descriptor.icon];
 
     return (
-        <div className="bg-slate-950/50 border border-slate-800 rounded-xl p-4 flex items-center justify-between gap-6">
+        <div className="bg-surface border border-outline-variant/30 rounded-xl p-4 flex items-center justify-between gap-6">
             <div className="flex items-center gap-4">
-                <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800">
+                <div className="p-2 rounded-lg bg-surface-container border border-outline-variant/30">
                     <Icon size={18} className={toneClasses.iconTone} />
                 </div>
                 <div>
-                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1">
+                    <div className="text-[9px] font-black uppercase tracking-widest text-outline mb-1">
                         Market Sentiment
                     </div>
                     <div className={`text-sm font-semibold ${toneClasses.accentText}`}>
@@ -623,10 +623,10 @@ const MarketStatusBadge = ({ zScore }: { zScore: number }) => {
                 </div>
             </div>
             <div className="text-right">
-                <div className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1">
+                <div className="text-[9px] font-black uppercase tracking-widest text-outline mb-1">
                     {descriptor.readoutLabel}
                 </div>
-                <div className="text-xs text-slate-300">{descriptor.readout}</div>
+                <div className="text-xs text-on-surface-variant">{descriptor.readout}</div>
                 <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full border text-[9px] font-bold uppercase tracking-wide ${toneClasses.badge}`}>
                     {Math.abs(zScore).toFixed(2)} z
                 </span>
@@ -658,8 +658,8 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
     const crosshairSync = useCrosshairSync();
     const chartStackRef = useRef<HTMLDivElement | null>(null);
     const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
-    const sectionHeaderTextClass = "text-[10px] font-black text-slate-400 uppercase tracking-widest";
-    const sectionHeaderIconClass = "text-slate-400 opacity-70";
+    const sectionHeaderTextClass = "text-[10px] font-black text-on-surface-variant uppercase tracking-widest";
+    const sectionHeaderIconClass = "text-on-surface-variant opacity-70";
 
     const { data: reportData, isLoading: isArtifactLoading } = useArtifact(
         reference?.artifact_id,
@@ -1647,8 +1647,8 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                             <LineChart className="text-cyan-400" size={20} />
                         </div>
                         <div>
-                            <h3 className="text-xl font-bold text-white tracking-tight">Technical Intelligence (Preview)</h3>
-                            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                            <h3 className="text-xl font-bold text-on-surface tracking-tight">Technical Intelligence (Preview)</h3>
+                            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-outline">
                                 <span className="text-cyan-400">{previewData?.ticker || 'UNKNOWN'}</span>
                             </div>
                         </div>
@@ -1656,21 +1656,21 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                 </header>
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="tech-card p-4 text-center group hover:bg-slate-900/40">
-                        <div className="text-label mb-1 text-slate-600 group-hover:text-slate-400 transition-colors">Signal</div>
-                        <div className="text-lg font-black text-white">{previewData.signal_display}</div>
+                    <div className="tech-card p-4 text-center group hover:bg-surface-container-low">
+                        <div className="text-label mb-1 text-outline group-hover:text-on-surface-variant transition-colors">Signal</div>
+                        <div className="text-lg font-black text-on-surface">{previewData.signal_display}</div>
                     </div>
-                    <div className="tech-card p-4 text-center group hover:bg-slate-900/40">
-                        <div className="text-label mb-1 text-slate-600 group-hover:text-slate-400 transition-colors">Price</div>
-                        <div className="text-lg font-black text-white">{previewData.latest_price_display}</div>
+                    <div className="tech-card p-4 text-center group hover:bg-surface-container-low">
+                        <div className="text-label mb-1 text-outline group-hover:text-on-surface-variant transition-colors">Price</div>
+                        <div className="text-lg font-black text-on-surface">{previewData.latest_price_display}</div>
                     </div>
-                    <div className="tech-card p-4 text-center group hover:bg-slate-900/40">
-                        <div className="text-label mb-1 text-slate-600 group-hover:text-slate-400 transition-colors">Z-Score</div>
-                        <div className="text-lg font-black text-white">{previewData.z_score_display}</div>
+                    <div className="tech-card p-4 text-center group hover:bg-surface-container-low">
+                        <div className="text-label mb-1 text-outline group-hover:text-on-surface-variant transition-colors">Z-Score</div>
+                        <div className="text-lg font-black text-on-surface">{previewData.z_score_display}</div>
                     </div>
-                    <div className="tech-card p-4 text-center group hover:bg-slate-900/40">
-                        <div className="text-label mb-1 text-slate-600 group-hover:text-slate-400 transition-colors">Opt. d</div>
-                        <div className="text-lg font-black text-white">{previewData.optimal_d_display}</div>
+                    <div className="tech-card p-4 text-center group hover:bg-surface-container-low">
+                        <div className="text-label mb-1 text-outline group-hover:text-on-surface-variant transition-colors">Opt. d</div>
+                        <div className="text-lg font-black text-on-surface">{previewData.optimal_d_display}</div>
                     </div>
                 </div>
 
@@ -1778,8 +1778,8 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                         <LineChart className="text-cyan-400" size={20} />
                     </div>
                     <div>
-                        <h3 className="text-xl font-bold text-white tracking-tight">Technical Intelligence</h3>
-                        <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                        <h3 className="text-xl font-bold text-on-surface tracking-tight">Technical Intelligence</h3>
+                        <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-outline">
                             <span className="text-cyan-400">{reportData.ticker}</span>
                             <span className="opacity-30">|</span>
                             <span>{formatLabel(reportData.schema_version)}</span>
@@ -1793,31 +1793,31 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
             <section className="space-y-4">
                 <div className="flex items-center gap-2">
                     <Activity size={14} className="text-cyan-400 opacity-70" />
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Overview</span>
+                    <span className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest">Overview</span>
                 </div>
 
                 <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div className="tech-card p-4 flex flex-col border border-slate-700/50 bg-slate-900/20">
+                    <div className="tech-card p-4 flex flex-col border border-outline-variant/50 bg-surface-container-low">
                         <div className="flex-1">
                             <div className="flex justify-between items-start">
                                 <div>
-                                    <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Direction</div>
-                                    <div className="text-lg font-black text-white mt-1 leading-tight">{formatLabel(reportData.direction)}</div>
+                                    <div className="text-[10px] font-bold uppercase tracking-widest text-outline">Direction</div>
+                                    <div className="text-lg font-black text-on-surface mt-1 leading-tight">{formatLabel(reportData.direction)}</div>
                                 </div>
                                 <div className="p-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/20 shrink-0">
                                     <DirectionIcon size={16} className="text-cyan-400" />
                                 </div>
                             </div>
                         </div>
-                        <div className="mt-auto pt-4 border-t border-slate-800/50">
-                            <div className="text-[10px] leading-snug text-slate-500">
+                        <div className="mt-auto pt-4 border-t border-outline-variant/30">
+                            <div className="text-[10px] leading-snug text-outline">
                                 Primary trend vector based on momentum consensus.
                             </div>
                         </div>
                     </div>
                     <div className={`tech-card p-4 flex flex-col border ${riskTone.border} ${riskTone.bg}`}>
                         <div className="flex-1">
-                            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Risk Level</div>
+                            <div className="text-[10px] font-bold uppercase tracking-widest text-outline">Risk Level</div>
                             <div className={`text-lg font-black mt-1 leading-tight ${riskTone.color}`}>{riskTone.label}</div>
                             {isDegraded && (
                                 <div className="text-[9px] uppercase tracking-widest text-rose-300 mt-2 font-bold">
@@ -1825,15 +1825,15 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 </div>
                             )}
                         </div>
-                        <div className={`mt-auto pt-4 border-t ${isDegraded ? 'border-rose-500/20' : 'border-slate-800/50'}`}>
-                            <div className={`text-[10px] leading-snug ${isDegraded ? 'text-rose-400' : 'text-slate-500'}`}>
+                        <div className={`mt-auto pt-4 border-t ${isDegraded ? 'border-rose-500/20' : 'border-outline-variant/30'}`}>
+                            <div className={`text-[10px] leading-snug ${isDegraded ? 'text-rose-400' : 'text-outline'}`}>
                                 {isDegraded ? 'Degraded Data Path - Use Caution' : 'Composite risk assessment from volatility inputs.'}
                             </div>
                         </div>
                     </div>
                     <div className={`tech-card p-4 flex flex-col border ${setupReliabilityTone.border} ${setupReliabilityTone.bg}`}>
                         <div className="flex-1">
-                            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Setup Reliability</div>
+                            <div className="text-[10px] font-bold uppercase tracking-widest text-outline">Setup Reliability</div>
                             <div className={`text-lg font-black mt-1 leading-tight ${setupReliabilityTone.value}`}>
                                 {setupReliabilityDescriptor.label}
                             </div>
@@ -1841,15 +1841,15 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 {setupReliabilityDescriptor.detail}
                             </div>
                         </div>
-                        <div className="mt-auto pt-4 border-t border-slate-800/50">
-                            <div className="text-[10px] leading-snug text-slate-400/80">
+                        <div className="mt-auto pt-4 border-t border-outline-variant/30">
+                            <div className="text-[10px] leading-snug text-on-surface-variant/80">
                                 {setupReliabilityDescriptor.helper}
                             </div>
                         </div>
                     </div>
                     <div className={`tech-card p-4 flex flex-col border ${signalStrengthTone.border} ${signalStrengthTone.bg}`}>
                         <div className="flex-1">
-                            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Signal Strength</div>
+                            <div className="text-[10px] font-bold uppercase tracking-widest text-outline">Signal Strength</div>
                             <div className={`text-lg font-black mt-1 leading-tight ${signalStrengthTone.value}`}>
                                 {signalStrengthDescriptor.label}
                             </div>
@@ -1857,8 +1857,8 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 {signalStrengthDescriptor.detail}
                             </div>
                         </div>
-                        <div className="mt-auto pt-4 border-t border-slate-800/50">
-                            <div className="text-[10px] leading-snug text-slate-400/80">
+                        <div className="mt-auto pt-4 border-t border-outline-variant/30">
+                            <div className="text-[10px] leading-snug text-on-surface-variant/80">
                                 {signalStrengthDescriptor.helper}
                             </div>
                         </div>
@@ -1866,17 +1866,17 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                 </section>
 
                 {momentumSummary && (
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
-                        <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-on-surface-variant">
+                        <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-outline">
                             <Zap size={12} className="text-amber-300" />
                             Momentum & Extremes
                         </span>
                         {momentumTimeframe && (
-                            <span className="text-[9px] text-slate-600 uppercase">
+                            <span className="text-[9px] text-outline uppercase">
                                 {momentumTimeframe.toUpperCase()}
                             </span>
                         )}
-                        <span className="text-slate-300">{momentumSummary}</span>
+                        <span className="text-on-surface-variant">{momentumSummary}</span>
                     </div>
                 )}
 
@@ -1884,26 +1884,26 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                     <section className="space-y-4">
                         <div className="flex items-center gap-2">
                             <Sparkles size={14} className="text-cyan-300 opacity-70" />
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                            <span className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest">
                                 Key Evidence
                             </span>
                             {evidencePrimaryTimeframe && (
-                                <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-600">
+                                <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-outline">
                                     {evidencePrimaryTimeframe.toUpperCase()}
                                 </span>
                             )}
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-                            <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-5 space-y-3">
-                                <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+                            <div className="rounded-2xl border border-outline-variant/30 bg-surface p-5 space-y-3">
+                                <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">
                                     Regime & Score
                                 </div>
-                                <div className="text-lg font-black text-white">
+                                <div className="text-lg font-black text-on-surface">
                                     {evidenceRegimeSummary?.dominant_regime
                                         ? formatLabel(evidenceRegimeSummary.dominant_regime)
                                         : 'No regime readout'}
                                 </div>
-                                <div className="space-y-1 text-[11px] text-slate-300">
+                                <div className="space-y-1 text-[11px] text-on-surface-variant">
                                     {typeof evidenceRegimeSummary?.average_confidence === 'number' && (
                                         <div>
                                             Regime confidence: {formatConfidence(evidenceRegimeSummary.average_confidence)}
@@ -1927,16 +1927,16 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 </div>
                             </div>
 
-                            <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-5 space-y-3">
-                                <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+                            <div className="rounded-2xl border border-outline-variant/30 bg-surface p-5 space-y-3">
+                                <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">
                                     Structure Map
                                 </div>
-                                <div className="text-lg font-black text-white">
+                                <div className="text-lg font-black text-on-surface">
                                     {evidenceStructureSummary?.confluence_state
                                         ? formatLabel(evidenceStructureSummary.confluence_state)
                                         : 'Structure readout pending'}
                                 </div>
-                                <div className="space-y-2 text-[11px] text-slate-300">
+                                <div className="space-y-2 text-[11px] text-on-surface-variant">
                                     {typeof evidenceStructureSummary?.confluence_score === 'number' && (
                                         <div>
                                             Confluence score: {formatConfidence(evidenceStructureSummary.confluence_score)}
@@ -1980,8 +1980,8 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 </div>
                             </div>
 
-                            <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-5 space-y-3">
-                                <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+                            <div className="rounded-2xl border border-outline-variant/30 bg-surface p-5 space-y-3">
+                                <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">
                                     Breakouts & Tensions
                                 </div>
                                 <div className="flex flex-wrap gap-2">
@@ -1995,15 +1995,15 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                             </span>
                                         ))
                                     ) : (
-                                        <span className="text-xs text-slate-500">
+                                        <span className="text-xs text-outline">
                                             No breakout signal in the primary bundle.
                                         </span>
                                     )}
                                 </div>
-                                <div className="space-y-2 text-[11px] text-slate-300">
+                                <div className="space-y-2 text-[11px] text-on-surface-variant">
                                     {evidenceConflictReasons.length > 0 ? (
                                         <>
-                                            <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                            <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">
                                                 Conflict Reasons
                                             </div>
                                             <div className="flex flex-wrap gap-2">
@@ -2024,18 +2024,18 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                             </div>
 
                             {evidenceQuantContext && (
-                                <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-5 space-y-3">
-                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                <div className="rounded-2xl border border-outline-variant/30 bg-surface p-5 space-y-3">
+                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">
                                         Quant Context
                                     </div>
-                                    <div className="text-lg font-black text-white">
+                                    <div className="text-lg font-black text-on-surface">
                                         {evidenceQuantContext.alignment_state
                                             ? formatLabel(evidenceQuantContext.alignment_state)
                                             : evidenceQuantContext.stretch_state
                                                 ? formatLabel(evidenceQuantContext.stretch_state)
                                                 : 'Quant context pending'}
                                     </div>
-                                    <div className="space-y-1 text-[11px] text-slate-300">
+                                    <div className="space-y-1 text-[11px] text-on-surface-variant">
                                         {evidenceQuantContext.volatility_regime && (
                                             <div>
                                                 Volatility: {formatLabel(evidenceQuantContext.volatility_regime)}
@@ -2073,20 +2073,20 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                     <section className="space-y-4">
                         <div className="flex items-center gap-2">
                             <AlertTriangle size={14} className="text-amber-300 opacity-70" />
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                            <span className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest">
                                 Quality & Coverage
                             </span>
                         </div>
-                        <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-5 space-y-4">
+                        <div className="rounded-2xl border border-outline-variant/30 bg-surface p-5 space-y-4">
                             <div className="flex flex-wrap items-start justify-between gap-4">
                                 <div>
-                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">
                                         Coverage Status
                                     </div>
-                                    <div className="mt-2 text-lg font-black text-white">
+                                    <div className="mt-2 text-lg font-black text-on-surface">
                                         {qualityDescriptor.label}
                                     </div>
-                                    <p className="mt-2 max-w-2xl text-[12px] leading-6 text-slate-400">
+                                    <p className="mt-2 max-w-2xl text-[12px] leading-6 text-on-surface-variant">
                                         {qualityDescriptor.meaning}
                                     </p>
                                 </div>
@@ -2099,53 +2099,53 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 </span>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                <div className="rounded-xl border border-outline-variant/30 bg-surface-container-low p-4">
+                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">
                                         Ready Frames
                                     </div>
-                                    <div className="mt-2 text-lg font-black text-white">
+                                    <div className="mt-2 text-lg font-black text-on-surface">
                                         {qualityReadyTimeframes.length}
                                     </div>
-                                    <div className="mt-2 text-[10px] text-slate-400">
+                                    <div className="mt-2 text-[10px] text-on-surface-variant">
                                         {qualityReadyTimeframes.length > 0
                                             ? qualityReadyTimeframes.map((frame) => frame.toUpperCase()).join(' · ')
                                             : 'None reported'}
                                     </div>
                                 </div>
-                                <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                <div className="rounded-xl border border-outline-variant/30 bg-surface-container-low p-4">
+                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">
                                         Degraded Frames
                                     </div>
-                                    <div className="mt-2 text-lg font-black text-white">
+                                    <div className="mt-2 text-lg font-black text-on-surface">
                                         {qualityDegradedTimeframes.length}
                                     </div>
-                                    <div className="mt-2 text-[10px] text-slate-400">
+                                    <div className="mt-2 text-[10px] text-on-surface-variant">
                                         {qualityDegradedTimeframes.length > 0
                                             ? qualityDegradedTimeframes.map((frame) => frame.toUpperCase()).join(' · ')
                                             : 'No degraded frame listed'}
                                     </div>
                                 </div>
-                                <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                <div className="rounded-xl border border-outline-variant/30 bg-surface-container-low p-4">
+                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">
                                         Regime Inputs Ready
                                     </div>
-                                    <div className="mt-2 text-lg font-black text-white">
+                                    <div className="mt-2 text-lg font-black text-on-surface">
                                         {qualityRegimeReadyTimeframes.length}
                                     </div>
-                                    <div className="mt-2 text-[10px] text-slate-400">
+                                    <div className="mt-2 text-[10px] text-on-surface-variant">
                                         {qualityRegimeReadyTimeframes.length > 0
                                             ? qualityRegimeReadyTimeframes.map((frame) => frame.toUpperCase()).join(' · ')
                                             : 'No regime-ready frame listed'}
                                     </div>
                                 </div>
-                                <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                <div className="rounded-xl border border-outline-variant/30 bg-surface-container-low p-4">
+                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">
                                         Unavailable Indicators
                                     </div>
-                                    <div className="mt-2 text-lg font-black text-white">
+                                    <div className="mt-2 text-lg font-black text-on-surface">
                                         {qualitySummary?.unavailable_indicator_count ?? 0}
                                     </div>
-                                    <div className="mt-2 text-[10px] text-slate-400">
+                                    <div className="mt-2 text-[10px] text-on-surface-variant">
                                         Count reflects missing or intentionally skipped inputs.
                                     </div>
                                 </div>
@@ -2186,43 +2186,43 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                     <section className="space-y-4">
                         <div className="flex items-center gap-2">
                             <Bell size={14} className="text-rose-300 opacity-70" />
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                            <span className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest">
                                 Policy Alerts
                             </span>
                         </div>
-                        <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-5 space-y-4">
+                        <div className="rounded-2xl border border-outline-variant/30 bg-surface p-5 space-y-4">
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                <div className="rounded-xl border border-outline-variant/30 bg-surface-container-low p-4">
+                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">
                                         Total Alerts
                                     </div>
-                                    <div className="mt-2 text-lg font-black text-white">
+                                    <div className="mt-2 text-lg font-black text-on-surface">
                                         {alertReadout.total_alerts ?? 0}
                                     </div>
                                 </div>
-                                <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                <div className="rounded-xl border border-outline-variant/30 bg-surface-container-low p-4">
+                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">
                                         Highest Severity
                                     </div>
-                                    <div className="mt-2 text-lg font-black text-white">
+                                    <div className="mt-2 text-lg font-black text-on-surface">
                                         {alertReadout.highest_severity
                                             ? formatLabel(alertReadout.highest_severity)
                                             : 'None'}
                                     </div>
                                 </div>
-                                <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                <div className="rounded-xl border border-outline-variant/30 bg-surface-container-low p-4">
+                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">
                                         Active / Monitoring
                                     </div>
-                                    <div className="mt-2 text-lg font-black text-white">
+                                    <div className="mt-2 text-lg font-black text-on-surface">
                                         {alertReadout.active_alert_count ?? 0} / {alertReadout.monitoring_alert_count ?? 0}
                                     </div>
                                 </div>
-                                <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                <div className="rounded-xl border border-outline-variant/30 bg-surface-container-low p-4">
+                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">
                                         Suppressed
                                     </div>
-                                    <div className="mt-2 text-lg font-black text-white">
+                                    <div className="mt-2 text-lg font-black text-on-surface">
                                         {alertReadout.suppressed_alert_count ?? 0}
                                     </div>
                                 </div>
@@ -2236,14 +2236,14 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                         return (
                                             <div
                                                 key={`${alert.code}-${alert.policy_code ?? 'na'}`}
-                                                className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 space-y-3"
+                                                className="rounded-xl border border-outline-variant/30 bg-surface-container-low p-4 space-y-3"
                                             >
                                                 <div className="flex items-start justify-between gap-3">
                                                     <div>
-                                                        <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                                        <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">
                                                             {alert.timeframe.toUpperCase()} · {formatLabel(alert.code)}
                                                         </div>
-                                                        <div className="mt-2 text-sm font-black text-white">
+                                                        <div className="mt-2 text-sm font-black text-on-surface">
                                                             {alert.title}
                                                         </div>
                                                     </div>
@@ -2272,7 +2272,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                     })}
                                 </div>
                             ) : (
-                                <div className="text-xs text-slate-500">
+                                <div className="text-xs text-outline">
                                     No policy alert summary is available for this report.
                                 </div>
                             )}
@@ -2312,7 +2312,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                             <div className="flex flex-wrap items-start justify-between gap-4">
                                 <div className="space-y-4">
                                     <div className="flex flex-col md:flex-row md:items-start gap-4 mb-2">
-                                        <div className="flex-1 text-xl font-black text-white leading-snug">
+                                        <div className="flex-1 text-xl font-black text-on-surface leading-snug">
                                             {analystPerspective.stance_summary}
                                         </div>
                                         <div className="px-3 py-2 rounded-xl border border-indigo-400/30 bg-indigo-500/10 min-w-[160px] shrink-0">
@@ -2329,7 +2329,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                                 {analystPerspective.plain_language_summary}
                                             </p>
                                         )}
-                                        <p className="text-[13px] leading-7 text-slate-400">
+                                        <p className="text-[13px] leading-7 text-on-surface-variant">
                                             {analystPerspective.rationale_summary}
                                         </p>
                                     </div>
@@ -2340,14 +2340,14 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                     {analystEvidence.map((item) => (
                                         <div
                                             key={`${item.label}-${item.timeframe ?? 'na'}`}
-                                            className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4"
+                                            className="rounded-2xl border border-outline-variant/30 bg-surface p-4"
                                         >
                                             <div className="flex items-center justify-between gap-3">
-                                                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-outline">
                                                     {item.label}
                                                 </span>
                                                 {item.timeframe && (
-                                                    <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-600">
+                                                    <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-outline">
                                                         {item.timeframe}
                                                     </span>
                                                 )}
@@ -2357,7 +2357,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                                     {item.value_text}
                                                 </div>
                                             )}
-                                            <p className="mt-2 text-xs leading-6 text-slate-400">
+                                            <p className="mt-2 text-xs leading-6 text-on-surface-variant">
                                                 {item.rationale}
                                             </p>
                                         </div>
@@ -2368,7 +2368,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 <div className="space-y-3">
                                     <div className="flex items-center gap-2">
                                         <Sparkles size={14} className="text-indigo-300 opacity-80" />
-                                        <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                        <span className="text-[10px] font-black uppercase tracking-[0.18em] text-outline">
                                             Simple Signal Guide
                                         </span>
                                     </div>
@@ -2392,25 +2392,25 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
 
                                                     <div className="flex items-end gap-3 mt-1">
                                                         {item.value_text && (
-                                                            <div className="text-xl font-mono font-black text-white">
+                                                            <div className="text-xl font-mono font-black text-on-surface">
                                                                 {item.value_text}
                                                             </div>
                                                         )}
-                                                        <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 mb-1">
+                                                        <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-outline mb-1">
                                                             {item.signal}
                                                         </div>
                                                     </div>
                                                 </div>
 
                                                 <div className="flex flex-col flex-1">
-                                                    <p className="text-[13px] leading-6 text-slate-300">
+                                                    <p className="text-[13px] leading-6 text-on-surface-variant">
                                                         {item.what_it_means_now}
                                                     </p>
 
                                                     <div className="mt-auto pt-4 relative">
                                                         <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-indigo-500/20 to-transparent"></div>
-                                                        <p className="text-[11px] leading-5 text-slate-400 pt-3">
-                                                            <span className="font-bold text-slate-500 block mb-1 uppercase tracking-widest text-[9px]">Why it matters</span>
+                                                        <p className="text-[11px] leading-5 text-on-surface-variant pt-3">
+                                                            <span className="font-bold text-outline block mb-1 uppercase tracking-widest text-[9px]">Why it matters</span>
                                                             {item.why_it_matters_now}
                                                         </p>
                                                     </div>
@@ -2421,15 +2421,15 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 </div>
                             )}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
-                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">Trigger</div>
-                                    <div className="mt-2 text-sm leading-6 text-slate-300">
+                                <div className="rounded-2xl border border-outline-variant/30 bg-surface p-4">
+                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">Trigger</div>
+                                    <div className="mt-2 text-sm leading-6 text-on-surface-variant">
                                         {analystPerspective.trigger_condition ?? 'No explicit trigger detected.'}
                                     </div>
                                 </div>
-                                <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
-                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">Invalidation</div>
-                                    <div className="mt-2 text-sm leading-6 text-slate-300">
+                                <div className="rounded-2xl border border-outline-variant/30 bg-surface p-4">
+                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">Invalidation</div>
+                                    <div className="mt-2 text-sm leading-6 text-on-surface-variant">
                                         {analystPerspective.invalidation_condition ?? 'No explicit invalidation level available.'}
                                     </div>
                                     {analystInvalidationLevel && (
@@ -2438,22 +2438,22 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                         </div>
                                     )}
                                 </div>
-                                <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
-                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">Validation Note</div>
-                                    <div className="mt-2 text-sm leading-6 text-slate-300">
+                                <div className="rounded-2xl border border-outline-variant/30 bg-surface p-4">
+                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">Validation Note</div>
+                                    <div className="mt-2 text-sm leading-6 text-on-surface-variant">
                                         {analystPerspective.validation_note ?? 'No validation warning was supplied.'}
                                     </div>
                                 </div>
-                                <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
-                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">Confidence Note</div>
-                                    <div className="mt-2 text-sm leading-6 text-slate-300">
+                                <div className="rounded-2xl border border-outline-variant/30 bg-surface p-4">
+                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">Confidence Note</div>
+                                    <div className="mt-2 text-sm leading-6 text-on-surface-variant">
                                         {analystPerspective.confidence_note ?? 'Confidence follows the deterministic calibration output.'}
                                     </div>
                                 </div>
                             </div>
                         </div>
                     ) : (
-                        <div className="text-base text-slate-400 leading-relaxed">
+                        <div className="text-base text-on-surface-variant leading-relaxed">
                             Structured analyst perspective is not available yet.
                         </div>
                     )}
@@ -2465,7 +2465,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 </span>
                             ))
                         ) : (
-                            <span className="text-xs text-slate-500">No summary tags available.</span>
+                            <span className="text-xs text-outline">No summary tags available.</span>
                         )}
                     </div>
                 </section>
@@ -2476,7 +2476,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                 <section className="space-y-4">
                     <div className="flex items-center gap-2">
                         <Zap size={14} className="text-amber-300 opacity-70" />
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Setup Evidence</span>
+                        <span className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest">Setup Evidence</span>
                     </div>
                     {momentumFdRiskHint && (
                         <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[10px] font-bold uppercase text-amber-200">
@@ -2488,20 +2488,20 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                             {(visibleIndicators.rsi || visibleIndicators.fd) && (
                                 <div className="space-y-3 flex flex-col h-full lg:col-span-2">
-                                    <div className="flex items-center justify-between text-[10px] font-black text-slate-500 uppercase">
+                                    <div className="flex items-center justify-between text-[10px] font-black text-outline uppercase">
                                         <span>Momentum & Extremes</span>
                                         {momentumTimeframe && (
-                                            <span className="text-[9px] text-slate-600 uppercase">
+                                            <span className="text-[9px] text-outline uppercase">
                                                 {momentumTimeframe.toUpperCase()}
                                             </span>
                                         )}
                                     </div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
                                         {visibleIndicators.rsi && (
-                                            <div className="relative overflow-hidden flex flex-col justify-between h-full bg-slate-950/70 border border-slate-800 rounded-xl p-4">
+                                            <div className="relative overflow-hidden flex flex-col justify-between h-full bg-surface border border-outline-variant/30 rounded-xl p-4">
                                                 <div className="flex items-start justify-between gap-3 mb-3">
                                                     <div>
-                                                        <div className="text-[9px] font-black text-slate-500 uppercase">RSI (14)</div>
+                                                        <div className="text-[9px] font-black text-outline uppercase">RSI (14)</div>
                                                         <div
                                                             className={`text-xl font-mono font-bold ${tonePalette[momentumRsiDescriptor.tone].value} ${tonePalette[momentumRsiDescriptor.tone].glow}`}
                                                         >
@@ -2519,10 +2519,10 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                                 </div>
                                                 <div className="flex items-end justify-between gap-3 flex-1">
                                                     <div className="flex flex-col h-full space-y-1">
-                                                        <div className="text-[10px] text-slate-500 uppercase">
+                                                        <div className="text-[10px] text-outline uppercase">
                                                             Momentum State
                                                         </div>
-                                                        <div className="max-w-[150px] text-[11px] leading-5 text-slate-300 flex-1">
+                                                        <div className="max-w-[150px] text-[11px] leading-5 text-on-surface-variant flex-1">
                                                             {momentumRsiDescriptor.meaning}
                                                         </div>
                                                         <div className="text-[10px] font-bold uppercase tracking-wide text-amber-200 mt-auto pt-2">
@@ -2540,17 +2540,17 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                                                 />
                                                             </svg>
                                                         ) : (
-                                                            <div className="text-[10px] text-slate-600 uppercase">No trend</div>
+                                                            <div className="text-[10px] text-outline uppercase">No trend</div>
                                                         )}
                                                     </div>
                                                 </div>
                                             </div>
                                         )}
                                         {visibleIndicators.fd && (
-                                            <div className="relative overflow-hidden flex flex-col justify-between h-full bg-slate-950/70 border border-slate-800 rounded-xl p-4">
+                                            <div className="relative overflow-hidden flex flex-col justify-between h-full bg-surface border border-outline-variant/30 rounded-xl p-4">
                                                 <div className="flex items-start justify-between gap-3 mb-3">
                                                     <div>
-                                                        <div className="text-[9px] font-black text-slate-500 uppercase">FD Z-Score</div>
+                                                        <div className="text-[9px] font-black text-outline uppercase">FD Z-Score</div>
                                                         <div
                                                             className={`text-xl font-mono font-bold ${tonePalette[momentumFdDescriptor.tone].value} ${tonePalette[momentumFdDescriptor.tone].glow}`}
                                                         >
@@ -2568,10 +2568,10 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                                 </div>
                                                 <div className="flex items-end justify-between gap-3 flex-1">
                                                     <div className="flex flex-col h-full space-y-1">
-                                                        <div className="text-[10px] text-slate-500 uppercase">
+                                                        <div className="text-[10px] text-outline uppercase">
                                                             Deviation State
                                                         </div>
-                                                        <div className="max-w-[150px] text-[11px] leading-5 text-slate-300 flex-1">
+                                                        <div className="max-w-[150px] text-[11px] leading-5 text-on-surface-variant flex-1">
                                                             {momentumFdDescriptor.meaning}
                                                         </div>
                                                         <div className="text-[10px] font-bold uppercase tracking-wide text-amber-200 mt-auto pt-2">
@@ -2589,7 +2589,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                                                 />
                                                             </svg>
                                                         ) : (
-                                                            <div className="text-[10px] text-slate-600 uppercase">No trend</div>
+                                                            <div className="text-[10px] text-outline uppercase">No trend</div>
                                                         )}
                                                     </div>
                                                 </div>
@@ -2600,25 +2600,25 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                             )}
                             {visibleIndicators.macd && (
                                 <div className="space-y-3 flex flex-col h-full lg:col-span-1">
-                                    <div className="flex items-center justify-between text-[10px] font-black text-slate-500 uppercase">
+                                    <div className="flex items-center justify-between text-[10px] font-black text-outline uppercase">
                                         <span>Trend & Momentum</span>
                                         {momentumTimeframe && (
-                                            <span className="text-[9px] text-slate-600 uppercase">
+                                            <span className="text-[9px] text-outline uppercase">
                                                 {momentumTimeframe.toUpperCase()}
                                             </span>
                                         )}
                                     </div>
                                     <div className="grid grid-cols-1 gap-4 flex-1">
-                                        <div className="relative overflow-hidden flex flex-col justify-between h-full bg-slate-950/70 border border-slate-800 rounded-xl p-4">
+                                        <div className="relative overflow-hidden flex flex-col justify-between h-full bg-surface border border-outline-variant/30 rounded-xl p-4">
                                             <div className="flex items-start justify-between gap-3 mb-3">
                                                 <div>
-                                                    <div className="text-[9px] font-black text-slate-500 uppercase">MACD</div>
+                                                    <div className="text-[9px] font-black text-outline uppercase">MACD</div>
                                                     <div
                                                         className={`text-xl font-mono font-bold ${tonePalette[macdTone.tone].value} ${tonePalette[macdTone.tone].glow}`}
                                                     >
                                                         {formatIndicatorValue(latestMacd)}
                                                     </div>
-                                                    <div className="text-[10px] text-slate-500 uppercase">
+                                                    <div className="text-[10px] text-outline uppercase">
                                                         Signal Line: {formatIndicatorValue(latestMacdSignal)}
                                                     </div>
                                                 </div>
@@ -2630,10 +2630,10 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                             </div>
                                             <div className="flex items-end justify-between gap-3 flex-1">
                                                 <div className="flex flex-col h-full space-y-1">
-                                                    <div className="text-[10px] text-slate-500 uppercase">
+                                                    <div className="text-[10px] text-outline uppercase">
                                                         Momentum State
                                                     </div>
-                                                    <div className="max-w-[150px] text-[11px] leading-5 text-slate-300 flex-1">
+                                                    <div className="max-w-[150px] text-[11px] leading-5 text-on-surface-variant flex-1">
                                                         {macdTone.meaning}
                                                     </div>
                                                     <div className="text-[10px] font-bold uppercase tracking-wide text-amber-200 mt-auto pt-2">
@@ -2651,7 +2651,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                                             />
                                                         </svg>
                                                     ) : (
-                                                        <div className="text-[10px] text-slate-600 uppercase">No trend</div>
+                                                        <div className="text-[10px] text-outline uppercase">No trend</div>
                                                     )}
                                                 </div>
                                             </div>
@@ -2661,7 +2661,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                             )}
                         </div>
                     ) : (
-                        <div className="text-xs text-slate-500">
+                        <div className="text-xs text-outline">
                             Indicator evidence unavailable for this run.
                         </div>
                     )}
@@ -2670,7 +2670,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
 
             <section className="space-y-4">
                 {timeseriesBundleData && (
-                    <div className="bg-slate-950/40 border border-slate-800 rounded-xl p-4">
+                    <div className="bg-surface border border-outline-variant/30 rounded-xl p-4">
                         <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
                             <div className="flex items-center gap-2">
                                 <Layers size={14} className="text-cyan-400 opacity-50" />
@@ -2678,14 +2678,14 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                             </div>
                             <div className="flex flex-wrap items-center gap-4">
                                 {availableTimeseriesFrames.length > 0 ? (
-                                    <div className="flex items-center bg-slate-800/50 rounded-lg p-0.5 border border-slate-700/50">
+                                    <div className="flex items-center bg-surface-container-high rounded-lg p-0.5 border border-outline-variant/50">
                                         {availableTimeseriesFrames.map((frame) => (
                                             <button
                                                 key={frame}
                                                 onClick={() => setPriceTimeframe(frame)}
                                                 className={`px-2 py-1 rounded text-[9px] font-bold transition-all ${priceTimeframe === frame
                                                     ? 'bg-cyan-500/20 text-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.1)]'
-                                                    : 'text-slate-500 hover:text-slate-300'
+                                                    : 'text-outline hover:text-on-surface-variant'
                                                     }`}
                                             >
                                                 {frame.toUpperCase()}
@@ -2693,17 +2693,17 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                         ))}
                                     </div>
                                 ) : (
-                                    <div className="text-[10px] text-slate-500 uppercase">
+                                    <div className="text-[10px] text-outline uppercase">
                                         No OHLC frames
                                     </div>
                                 )}
                                 {indicatorTimeframe && (
-                                    <div className="text-[10px] font-bold uppercase text-slate-600">
+                                    <div className="text-[10px] font-bold uppercase text-outline">
                                         Indicators: {indicatorTimeframe.toUpperCase()}
                                     </div>
                                 )}
                                 {timeseriesWindow && (
-                                    <div className="text-[10px] font-bold uppercase text-slate-600">
+                                    <div className="text-[10px] font-bold uppercase text-outline">
                                         {timeseriesWindow.start} → {timeseriesWindow.end}
                                     </div>
                                 )}
@@ -2712,16 +2712,16 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
 
                         <div
                             ref={chartStackRef}
-                            className="relative rounded-xl border border-slate-800/70 bg-slate-950/55"
+                            className="relative rounded-xl border border-outline-variant/30 bg-surface"
                         >
-                            <div className="divide-y divide-slate-800/60">
+                            <div className="divide-y divide-outline-variant/30">
                                 <div className="px-4 py-3">
                                     <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                                        <div className="text-[9px] font-black text-slate-500 uppercase">
+                                        <div className="text-[9px] font-black text-outline uppercase">
                                             Price Action (OHLCV)
                                         </div>
                                         {priceOverlays.length > 0 && (
-                                            <div className="flex flex-wrap items-center gap-3 text-[9px] text-slate-500 uppercase">
+                                            <div className="flex flex-wrap items-center gap-3 text-[9px] text-outline uppercase">
                                                 {priceOverlays.map((overlay) => (
                                                     <span key={overlay.id} className="inline-flex items-center gap-1">
                                                         <span
@@ -2748,7 +2748,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 </div>
 
                                 <div className="px-4 py-3">
-                                    <div className="text-[9px] font-black text-slate-500 uppercase mb-2">Volume</div>
+                                    <div className="text-[9px] font-black text-outline uppercase mb-2">Volume</div>
                                     {volumeHistogram.length > 0 ? (
                                         <TechnicalIndicatorChart
                                             lines={[]}
@@ -2761,12 +2761,12 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                             syncState={crosshairSync}
                                         />
                                     ) : (
-                                        <div className="text-xs text-slate-500">Volume data unavailable.</div>
+                                        <div className="text-xs text-outline">Volume data unavailable.</div>
                                     )}
                                 </div>
 
                                 <div className="px-4 py-3">
-                                    <div className="text-[9px] font-black text-slate-500 uppercase mb-2">RSI (14)</div>
+                                    <div className="text-[9px] font-black text-outline uppercase mb-2">RSI (14)</div>
                                     {indicatorAvailability.rsi ? (
                                         <TechnicalIndicatorChart
                                             lines={rsiLines}
@@ -2778,12 +2778,12 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                             syncState={crosshairSync}
                                         />
                                     ) : (
-                                        <div className="text-xs text-slate-500">RSI data unavailable.</div>
+                                        <div className="text-xs text-outline">RSI data unavailable.</div>
                                     )}
                                 </div>
 
                                 <div className="px-4 py-3">
-                                    <div className="text-[9px] font-black text-slate-500 uppercase mb-2">MACD</div>
+                                    <div className="text-[9px] font-black text-outline uppercase mb-2">MACD</div>
                                     {indicatorAvailability.macd ? (
                                         <TechnicalIndicatorChart
                                             lines={macdLines}
@@ -2796,12 +2796,12 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                             syncState={crosshairSync}
                                         />
                                     ) : (
-                                        <div className="text-xs text-slate-500">MACD data unavailable.</div>
+                                        <div className="text-xs text-outline">MACD data unavailable.</div>
                                     )}
                                 </div>
 
                                 <div className="px-4 py-3">
-                                    <div className="text-[9px] font-black text-slate-500 uppercase mb-2">FracDiff</div>
+                                    <div className="text-[9px] font-black text-outline uppercase mb-2">FracDiff</div>
                                     {indicatorAvailability.fd ? (
                                         <TechnicalIndicatorChart
                                             lines={fdLines}
@@ -2813,17 +2813,17 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                             syncState={crosshairSync}
                                         />
                                     ) : (
-                                        <div className="text-xs text-slate-500">Fracdiff data unavailable.</div>
+                                        <div className="text-xs text-outline">Fracdiff data unavailable.</div>
                                     )}
                                 </div>
                             </div>
 
                             {tooltipPosition && tooltipPayload && (
                                 <div
-                                    className="pointer-events-none absolute z-20 w-60 rounded-xl border border-slate-700/60 bg-slate-950/80 backdrop-blur-md p-3 text-[10px] text-slate-100 shadow-lg"
+                                    className="pointer-events-none absolute z-20 w-60 rounded-xl border border-outline-variant/50 bg-surface backdrop-blur-md p-3 text-[10px] text-on-surface shadow-lg"
                                     style={{ left: tooltipPosition.x, top: tooltipPosition.y }}
                                 >
-                                    <div className="text-[9px] font-black uppercase text-slate-400 mb-2">
+                                    <div className="text-[9px] font-black uppercase text-on-surface-variant mb-2">
                                         {formatTooltipTimestamp(tooltipPayload.time, isIntradayTimeseries)}
                                     </div>
                                     <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
@@ -2832,41 +2832,41 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                         <div>L: {tooltipPayload.candle ? formatPrice(tooltipPayload.candle.low) : 'n/a'}</div>
                                         <div>C: {tooltipPayload.candle ? formatPrice(tooltipPayload.candle.close) : 'n/a'}</div>
                                     </div>
-                                    <div className="mt-2 border-t border-slate-800 pt-2 space-y-1">
+                                    <div className="mt-2 border-t border-outline-variant/30 pt-2 space-y-1">
                                         <div className="flex items-center justify-between">
-                                            <span className="text-slate-400">Volume</span>
+                                            <span className="text-on-surface-variant">Volume</span>
                                             <span>{formatVolume(tooltipPayload.volume as number | null)}</span>
                                         </div>
                                         <div className="flex items-center justify-between">
-                                            <span className="text-slate-400">RSI</span>
+                                            <span className="text-on-surface-variant">RSI</span>
                                             <span>{formatIndicatorValue(tooltipPayload.rsi as number | null)}</span>
                                         </div>
                                         <div className="flex items-center justify-between">
-                                            <span className="text-slate-400">MACD</span>
+                                            <span className="text-on-surface-variant">MACD</span>
                                             <span>{formatIndicatorValue(tooltipPayload.macd as number | null)}</span>
                                         </div>
                                         <div className="flex items-center justify-between">
-                                            <span className="text-slate-400">Signal Line</span>
+                                            <span className="text-on-surface-variant">Signal Line</span>
                                             <span>{formatIndicatorValue(tooltipPayload.macdSignal as number | null)}</span>
                                         </div>
                                         <div className="flex items-center justify-between">
-                                            <span className="text-slate-400">Histogram</span>
+                                            <span className="text-on-surface-variant">Histogram</span>
                                             <span>{formatIndicatorValue(tooltipPayload.macdHist as number | null)}</span>
                                         </div>
                                         <div className="flex items-center justify-between">
-                                            <span className="text-slate-400">FracDiff</span>
+                                            <span className="text-on-surface-variant">FracDiff</span>
                                             <span>{formatIndicatorValue(tooltipPayload.fd as number | null)}</span>
                                         </div>
                                     </div>
                                 </div>
                             )}
                         </div>
-                        <div className="mt-2 flex justify-end text-[9px] text-slate-500">
+                        <div className="mt-2 flex justify-end text-[9px] text-outline">
                             <a
                                 href="https://www.tradingview.com/"
                                 target="_blank"
                                 rel="noreferrer"
-                                className="hover:text-slate-300 underline"
+                                className="hover:text-on-surface-variant underline"
                             >
                                 Charts by TradingView
                             </a>
@@ -2878,7 +2878,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
             <section className="space-y-4">
                 <div className="flex items-center gap-2">
                     <AlertTriangle size={14} className="text-rose-400 opacity-70" />
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Diagnostics</span>
+                    <span className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest">Diagnostics</span>
                 </div>
                 {timeseriesBundleError && (
                     <div className="text-xs text-rose-300">
@@ -2896,7 +2896,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                             <AlertTriangle size={16} className="text-rose-400" />
                             <span className="text-xs font-black text-rose-200 uppercase tracking-[0.2em]">Degraded Data Path</span>
                         </div>
-                        <div className="text-xs text-slate-300">
+                        <div className="text-xs text-on-surface-variant">
                             One or more data sources were degraded or missing. Review the notes below before taking action.
                         </div>
                         {degradedReasons.length > 0 && (
@@ -2912,18 +2912,18 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                 )}
 
                 {observabilitySummary && (
-                    <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
+                    <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
                         <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-                            <div className="text-[9px] font-black text-slate-500 uppercase tracking-[0.18em]">
+                            <div className="text-[9px] font-black text-outline uppercase tracking-[0.18em]">
                                 Observability Summary
                             </div>
                             {observabilitySummary.primary_timeframe && (
-                                <div className="text-[10px] font-bold uppercase text-slate-500">
+                                <div className="text-[10px] font-bold uppercase text-outline">
                                     Primary {observabilitySummary.primary_timeframe.toUpperCase()}
                                 </div>
                             )}
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs text-slate-200">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs text-on-surface">
                             <div>Loaded Artifacts: {observabilitySummary.loaded_artifact_count ?? 0}</div>
                             <div>Missing Artifacts: {observabilitySummary.missing_artifact_count ?? 0}</div>
                             <div>Degraded Reasons: {observabilitySummary.degraded_reason_count ?? 0}</div>
@@ -2956,7 +2956,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                         {observabilitySummary.missing_artifacts.map((artifact) => (
                                             <span
                                                 key={`missing-${artifact}`}
-                                                className="px-2.5 py-1 bg-slate-500/10 border border-slate-500/20 rounded-full text-[10px] font-bold text-slate-300 uppercase tracking-wide"
+                                                className="px-2.5 py-1 bg-slate-500/10 border border-slate-500/20 rounded-full text-[10px] font-bold text-on-surface-variant uppercase tracking-wide"
                                             >
                                                 Missing · {formatLabel(artifact)}
                                             </span>
@@ -2981,9 +2981,9 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                 )}
 
                 {timeseriesSummary && (
-                    <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
-                        <div className="text-[9px] font-black text-slate-500 uppercase mb-2">OHLC Series</div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-slate-200">
+                    <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
+                        <div className="text-[9px] font-black text-outline uppercase mb-2">OHLC Series</div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-on-surface">
                             <div>Frames: {timeseriesSummary.frameCount}</div>
                             <div>Max Points: {timeseriesSummary.maxPoints}</div>
                             <div>Selected: {priceTimeframe ? priceTimeframe.toUpperCase() : 'n/a'}</div>
@@ -2997,9 +2997,9 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                 )}
 
                 {indicatorSeriesSummary && (
-                    <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
-                        <div className="text-[9px] font-black text-slate-500 uppercase mb-2">Indicator Series</div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-slate-200">
+                    <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
+                        <div className="text-[9px] font-black text-outline uppercase mb-2">Indicator Series</div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-on-surface">
                             <div>Frames: {indicatorSeriesSummary.timeframeCount}</div>
                             <div>Series: {indicatorSeriesSummary.seriesTotal}</div>
                             <div>Max Points: {indicatorSeriesSummary.maxPoints}</div>
@@ -3013,9 +3013,9 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                 )}
 
                 {hasMomentumExtremes && (
-                    <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
-                        <div className="text-[9px] font-black text-slate-500 uppercase mb-2">Raw Momentum & Extremes Data</div>
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs text-slate-200">
+                    <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
+                        <div className="text-[9px] font-black text-outline uppercase mb-2">Raw Momentum & Extremes Data</div>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs text-on-surface">
                             <div>
                                 Timeframe: {momentumTimeframe ? momentumTimeframe.toUpperCase() : 'n/a'}
                             </div>
@@ -3036,18 +3036,18 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
             <section className="space-y-4">
                 <div className="flex items-center gap-2">
                     <Layers size={14} className="text-cyan-400 opacity-70" />
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Other</span>
+                    <span className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest">Other</span>
                 </div>
 
                 {alertsId && (
                     <section className="tech-card overflow-hidden transition-all duration-300">
                         <button
                             onClick={() => setShowAlerts(!showAlerts)}
-                            className="w-full flex items-center justify-between p-4 bg-slate-900/20 hover:bg-slate-900/40 transition-colors"
+                            className="w-full flex items-center justify-between p-4 bg-surface-container-low hover:bg-surface-container-low transition-colors"
                         >
                             <div className="flex items-center gap-2">
-                                <Bell size={14} className="text-slate-500" />
-                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Alert Signals</span>
+                                <Bell size={14} className="text-outline" />
+                                <span className="text-[10px] font-black text-outline uppercase tracking-widest">Alert Signals</span>
                             </div>
                             <div className="flex items-center gap-4">
                                 {showAlerts && isAlertsLoadingState && (
@@ -3058,17 +3058,17 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                     />
                                 )}
                                 {alertsSummary && (
-                                    <div className="flex items-center gap-2 text-[9px] font-bold uppercase text-slate-500">
+                                    <div className="flex items-center gap-2 text-[9px] font-bold uppercase text-outline">
                                         <span>Total {alertsSummary.total}</span>
                                         <span className="text-rose-300">C {alertsSummary.severityCounts.critical}</span>
                                         <span className="text-amber-300">W {alertsSummary.severityCounts.warning}</span>
-                                        <span className="text-slate-400">I {alertsSummary.severityCounts.info}</span>
+                                        <span className="text-on-surface-variant">I {alertsSummary.severityCounts.info}</span>
                                     </div>
                                 )}
                                 {showAlerts ? (
-                                    <ChevronUp size={16} className="text-slate-500" />
+                                    <ChevronUp size={16} className="text-outline" />
                                 ) : (
-                                    <ChevronDown size={16} className="text-slate-500" />
+                                    <ChevronDown size={16} className="text-outline" />
                                 )}
                             </div>
                         </button>
@@ -3082,7 +3082,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 )}
 
                                 {!alertsData && !alertsError && (
-                                    <div className="text-xs text-slate-500">
+                                    <div className="text-xs text-outline">
                                         Alert data will appear here once loaded.
                                     </div>
                                 )}
@@ -3090,26 +3090,26 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 {alertsData && alertsSummary && (
                                     <>
                                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                            <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
-                                                <div className="text-[9px] font-black text-slate-500 uppercase mb-1">Total Alerts</div>
-                                                <div className="text-lg font-black text-white">{alertsSummary.total}</div>
+                                            <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
+                                                <div className="text-[9px] font-black text-outline uppercase mb-1">Total Alerts</div>
+                                                <div className="text-lg font-black text-on-surface">{alertsSummary.total}</div>
                                             </div>
-                                            <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
-                                                <div className="text-[9px] font-black text-slate-500 uppercase mb-1">Critical</div>
+                                            <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
+                                                <div className="text-[9px] font-black text-outline uppercase mb-1">Critical</div>
                                                 <div className="text-lg font-black text-rose-300">{alertsSummary.severityCounts.critical}</div>
                                             </div>
-                                            <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
-                                                <div className="text-[9px] font-black text-slate-500 uppercase mb-1">Warning</div>
+                                            <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
+                                                <div className="text-[9px] font-black text-outline uppercase mb-1">Warning</div>
                                                 <div className="text-lg font-black text-amber-300">{alertsSummary.severityCounts.warning}</div>
                                             </div>
-                                            <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
-                                                <div className="text-[9px] font-black text-slate-500 uppercase mb-1">Info</div>
-                                                <div className="text-lg font-black text-slate-200">{alertsSummary.severityCounts.info}</div>
+                                            <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
+                                                <div className="text-[9px] font-black text-outline uppercase mb-1">Info</div>
+                                                <div className="text-lg font-black text-on-surface">{alertsSummary.severityCounts.info}</div>
                                             </div>
                                         </div>
 
                                         {alertsSummary.generatedAt && (
-                                            <div className="text-[10px] text-slate-500">
+                                            <div className="text-[10px] text-outline">
                                                 Generated at {alertsSummary.generatedAt}
                                             </div>
                                         )}
@@ -3131,16 +3131,16 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                                     return (
                                                         <div
                                                             key={`${alert.code}-${idx}`}
-                                                            className="bg-slate-950/50 p-4 rounded-xl border border-slate-800 space-y-3"
+                                                            className="bg-surface p-4 rounded-xl border border-outline-variant/30 space-y-3"
                                                         >
                                                             <div className="flex items-start justify-between gap-4">
                                                                 <div>
-                                                                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1">
+                                                                    <div className="text-[9px] font-black uppercase tracking-widest text-outline mb-1">
                                                                         {alert.timeframe.toUpperCase()} · {formatLabel(alert.code)}
                                                                     </div>
-                                                                    <div className="text-sm font-black text-white">{alert.title}</div>
+                                                                    <div className="text-sm font-black text-on-surface">{alert.title}</div>
                                                                     {alert.message && (
-                                                                        <div className="text-xs text-slate-400 mt-1">
+                                                                        <div className="text-xs text-on-surface-variant mt-1">
                                                                             {alert.message}
                                                                         </div>
                                                                     )}
@@ -3151,7 +3151,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                                                     {tone.label}
                                                                 </span>
                                                             </div>
-                                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-[10px] text-slate-300">
+                                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-[10px] text-on-surface-variant">
                                                                 {alert.value !== null && alert.value !== undefined && (
                                                                     <div>
                                                                         Value: {formatIndicatorValue(alert.value)}
@@ -3183,7 +3183,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                                 })}
                                             </div>
                                         ) : (
-                                            <div className="text-xs text-slate-500">
+                                            <div className="text-xs text-outline">
                                                 No alert signals detected for the current window.
                                             </div>
                                         )}
@@ -3198,11 +3198,11 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                     <section className="tech-card overflow-hidden transition-all duration-300">
                         <button
                             onClick={() => setShowFeaturePack(!showFeaturePack)}
-                            className="w-full flex items-center justify-between p-4 bg-slate-900/20 hover:bg-slate-900/40 transition-colors"
+                            className="w-full flex items-center justify-between p-4 bg-surface-container-low hover:bg-surface-container-low transition-colors"
                         >
                             <div className="flex items-center gap-2">
-                                <Layers size={14} className="text-slate-500" />
-                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Feature Pack</span>
+                                <Layers size={14} className="text-outline" />
+                                <span className="text-[10px] font-black text-outline uppercase tracking-widest">Feature Pack</span>
                             </div>
                             <div className="flex items-center gap-4">
                                 {showFeaturePack && isFeaturePackLoading && (
@@ -3213,9 +3213,9 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                     />
                                 )}
                                 {showFeaturePack ? (
-                                    <ChevronUp size={16} className="text-slate-500" />
+                                    <ChevronUp size={16} className="text-outline" />
                                 ) : (
-                                    <ChevronDown size={16} className="text-slate-500" />
+                                    <ChevronDown size={16} className="text-outline" />
                                 )}
                             </div>
                         </button>
@@ -3229,7 +3229,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 )}
 
                                 {!featurePackData && !featurePackError && (
-                                    <div className="text-xs text-slate-500">
+                                    <div className="text-xs text-outline">
                                         Feature pack data will appear here once loaded.
                                     </div>
                                 )}
@@ -3237,17 +3237,17 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 {featurePackData && featurePackSummary && (
                                     <>
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                            <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
-                                                <div className="text-[9px] font-black text-slate-500 uppercase mb-1">Timeframes</div>
-                                                <div className="text-lg font-black text-white">{featurePackSummary.summaries.length}</div>
+                                            <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
+                                                <div className="text-[9px] font-black text-outline uppercase mb-1">Timeframes</div>
+                                                <div className="text-lg font-black text-on-surface">{featurePackSummary.summaries.length}</div>
                                             </div>
-                                            <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
-                                                <div className="text-[9px] font-black text-slate-500 uppercase mb-1">Classic Indicators</div>
-                                                <div className="text-lg font-black text-white">{featurePackSummary.classicTotal}</div>
+                                            <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
+                                                <div className="text-[9px] font-black text-outline uppercase mb-1">Classic Indicators</div>
+                                                <div className="text-lg font-black text-on-surface">{featurePackSummary.classicTotal}</div>
                                             </div>
-                                            <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
-                                                <div className="text-[9px] font-black text-slate-500 uppercase mb-1">Quant Features</div>
-                                                <div className="text-lg font-black text-white">{featurePackSummary.quantTotal}</div>
+                                            <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
+                                                <div className="text-[9px] font-black text-outline uppercase mb-1">Quant Features</div>
+                                                <div className="text-lg font-black text-on-surface">{featurePackSummary.quantTotal}</div>
                                             </div>
                                         </div>
 
@@ -3263,21 +3263,21 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
 
                                         <div className="grid grid-cols-1 gap-4">
                                             {featurePackSummary.summaries.map((frame) => (
-                                                <div key={frame.timeframe} className="bg-slate-950/50 p-5 rounded-xl border border-slate-800 space-y-3">
+                                                <div key={frame.timeframe} className="bg-surface p-5 rounded-xl border border-outline-variant/30 space-y-3">
                                                     <div className="flex items-center justify-between">
-                                                        <div className="text-xs font-black uppercase tracking-widest text-slate-400">
+                                                        <div className="text-xs font-black uppercase tracking-widest text-on-surface-variant">
                                                             {formatLabel(frame.timeframe)}
                                                         </div>
-                                                        <div className="text-[10px] text-slate-500 font-bold uppercase">
+                                                        <div className="text-[10px] text-outline font-bold uppercase">
                                                             Classic {frame.classicCount} · Quant {frame.quantCount}
                                                         </div>
                                                     </div>
                                                     <div>
-                                                        <div className="text-[9px] font-black text-slate-500 uppercase mb-2">Classic Highlights</div>
+                                                        <div className="text-[9px] font-black text-outline uppercase mb-2">Classic Highlights</div>
                                                         {renderIndicatorHighlights(frame.classicHighlights)}
                                                     </div>
                                                     <div>
-                                                        <div className="text-[9px] font-black text-slate-500 uppercase mb-2">Quant Highlights</div>
+                                                        <div className="text-[9px] font-black text-outline uppercase mb-2">Quant Highlights</div>
                                                         {renderIndicatorHighlights(frame.quantHighlights)}
                                                     </div>
                                                 </div>
@@ -3294,11 +3294,11 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                     <section className="tech-card overflow-hidden transition-all duration-300">
                         <button
                             onClick={() => setShowPatternPack(!showPatternPack)}
-                            className="w-full flex items-center justify-between p-4 bg-slate-900/20 hover:bg-slate-900/40 transition-colors"
+                            className="w-full flex items-center justify-between p-4 bg-surface-container-low hover:bg-surface-container-low transition-colors"
                         >
                             <div className="flex items-center gap-2">
-                                <Layers size={14} className="text-slate-500" />
-                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Pattern Pack</span>
+                                <Layers size={14} className="text-outline" />
+                                <span className="text-[10px] font-black text-outline uppercase tracking-widest">Pattern Pack</span>
                             </div>
                             <div className="flex items-center gap-4">
                                 {showPatternPack && isPatternPackLoading && (
@@ -3309,9 +3309,9 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                     />
                                 )}
                                 {showPatternPack ? (
-                                    <ChevronUp size={16} className="text-slate-500" />
+                                    <ChevronUp size={16} className="text-outline" />
                                 ) : (
-                                    <ChevronDown size={16} className="text-slate-500" />
+                                    <ChevronDown size={16} className="text-outline" />
                                 )}
                             </div>
                         </button>
@@ -3325,7 +3325,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 )}
 
                                 {!patternPackData && !patternPackError && (
-                                    <div className="text-xs text-slate-500">
+                                    <div className="text-xs text-outline">
                                         Pattern pack data will appear here once loaded.
                                     </div>
                                 )}
@@ -3333,17 +3333,17 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 {patternPackData && patternPackSummary && (
                                     <>
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                            <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
-                                                <div className="text-[9px] font-black text-slate-500 uppercase mb-1">Timeframes</div>
-                                                <div className="text-lg font-black text-white">{patternPackSummary.summaries.length}</div>
+                                            <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
+                                                <div className="text-[9px] font-black text-outline uppercase mb-1">Timeframes</div>
+                                                <div className="text-lg font-black text-on-surface">{patternPackSummary.summaries.length}</div>
                                             </div>
-                                            <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
-                                                <div className="text-[9px] font-black text-slate-500 uppercase mb-1">Levels</div>
-                                                <div className="text-lg font-black text-white">{patternPackSummary.totalLevels}</div>
+                                            <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
+                                                <div className="text-[9px] font-black text-outline uppercase mb-1">Levels</div>
+                                                <div className="text-lg font-black text-on-surface">{patternPackSummary.totalLevels}</div>
                                             </div>
-                                            <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
-                                                <div className="text-[9px] font-black text-slate-500 uppercase mb-1">Flags</div>
-                                                <div className="text-lg font-black text-white">{patternPackSummary.totalFlags}</div>
+                                            <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
+                                                <div className="text-[9px] font-black text-outline uppercase mb-1">Flags</div>
+                                                <div className="text-lg font-black text-on-surface">{patternPackSummary.totalFlags}</div>
                                             </div>
                                         </div>
 
@@ -3359,80 +3359,80 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
 
                                         <div className="grid grid-cols-1 gap-4">
                                             {patternPackSummary.summaries.map((frame) => (
-                                                <div key={frame.timeframe} className="bg-slate-950/50 p-5 rounded-xl border border-slate-800 space-y-4">
+                                                <div key={frame.timeframe} className="bg-surface p-5 rounded-xl border border-outline-variant/30 space-y-4">
                                                     <div className="flex items-center justify-between">
-                                                        <div className="text-xs font-black uppercase tracking-widest text-slate-400">
+                                                        <div className="text-xs font-black uppercase tracking-widest text-on-surface-variant">
                                                             {formatLabel(frame.timeframe)}
                                                         </div>
-                                                        <div className="text-[10px] text-slate-500 font-bold uppercase">
+                                                        <div className="text-[10px] text-outline font-bold uppercase">
                                                             Supports {frame.supportCount} · Resist {frame.resistanceCount} · Flags {frame.flagCount}
                                                         </div>
                                                     </div>
 
                                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                         <div>
-                                                            <div className="text-[9px] font-black text-slate-500 uppercase mb-2">Support Levels</div>
+                                                            <div className="text-[9px] font-black text-outline uppercase mb-2">Support Levels</div>
                                                             {frame.supportLevels.length > 0 ? (
                                                                 <div className="space-y-2">
                                                                     {frame.supportLevels.map((level, idx) => (
-                                                                        <div key={`${frame.timeframe}-support-${idx}`} className="flex items-center justify-between text-xs text-slate-200">
+                                                                        <div key={`${frame.timeframe}-support-${idx}`} className="flex items-center justify-between text-xs text-on-surface">
                                                                             <span>{level.label ? formatLabel(level.label) : 'Support'} @ {formatPrice(level.price)}</span>
-                                                                            <span className="text-[10px] text-slate-500">
+                                                                            <span className="text-[10px] text-outline">
                                                                                 {level.strength !== null && level.strength !== undefined ? `Strength ${level.strength.toFixed(2)}` : 'Strength n/a'}
                                                                             </span>
                                                                         </div>
                                                                     ))}
                                                                 </div>
                                                             ) : (
-                                                                <div className="text-xs text-slate-500">No support levels detected.</div>
+                                                                <div className="text-xs text-outline">No support levels detected.</div>
                                                             )}
                                                         </div>
                                                         <div>
-                                                            <div className="text-[9px] font-black text-slate-500 uppercase mb-2">Resistance Levels</div>
+                                                            <div className="text-[9px] font-black text-outline uppercase mb-2">Resistance Levels</div>
                                                             {frame.resistanceLevels.length > 0 ? (
                                                                 <div className="space-y-2">
                                                                     {frame.resistanceLevels.map((level, idx) => (
-                                                                        <div key={`${frame.timeframe}-resistance-${idx}`} className="flex items-center justify-between text-xs text-slate-200">
+                                                                        <div key={`${frame.timeframe}-resistance-${idx}`} className="flex items-center justify-between text-xs text-on-surface">
                                                                             <span>{level.label ? formatLabel(level.label) : 'Resistance'} @ {formatPrice(level.price)}</span>
-                                                                            <span className="text-[10px] text-slate-500">
+                                                                            <span className="text-[10px] text-outline">
                                                                                 {level.strength !== null && level.strength !== undefined ? `Strength ${level.strength.toFixed(2)}` : 'Strength n/a'}
                                                                             </span>
                                                                         </div>
                                                                     ))}
                                                                 </div>
                                                             ) : (
-                                                                <div className="text-xs text-slate-500">No resistance levels detected.</div>
+                                                                <div className="text-xs text-outline">No resistance levels detected.</div>
                                                             )}
                                                         </div>
                                                     </div>
 
                                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                         <div>
-                                                            <div className="text-[9px] font-black text-slate-500 uppercase mb-2">Breakouts</div>
+                                                            <div className="text-[9px] font-black text-outline uppercase mb-2">Breakouts</div>
                                                             {frame.breakoutFlags.length > 0 ? (
                                                                 <div className="flex flex-wrap gap-2">
                                                                     {frame.breakoutFlags.map((flag, idx) => (
-                                                                        <span key={`${frame.timeframe}-breakout-${idx}`} className="px-2.5 py-1 bg-slate-900/60 border border-slate-800 rounded-full text-[10px] font-bold text-slate-200 uppercase tracking-wide">
+                                                                        <span key={`${frame.timeframe}-breakout-${idx}`} className="px-2.5 py-1 bg-surface-container border border-outline-variant/30 rounded-full text-[10px] font-bold text-on-surface uppercase tracking-wide">
                                                                             {flag.name} {flag.confidence !== null && flag.confidence !== undefined ? `(${flag.confidence.toFixed(2)})` : ''}
                                                                         </span>
                                                                     ))}
                                                                 </div>
                                                             ) : (
-                                                                <div className="text-xs text-slate-500">No breakout flags detected.</div>
+                                                                <div className="text-xs text-outline">No breakout flags detected.</div>
                                                             )}
                                                         </div>
                                                         <div>
-                                                            <div className="text-[9px] font-black text-slate-500 uppercase mb-2">Trendlines</div>
+                                                            <div className="text-[9px] font-black text-outline uppercase mb-2">Trendlines</div>
                                                             {frame.trendFlags.length > 0 ? (
                                                                 <div className="flex flex-wrap gap-2">
                                                                     {frame.trendFlags.map((flag, idx) => (
-                                                                        <span key={`${frame.timeframe}-trend-${idx}`} className="px-2.5 py-1 bg-slate-900/60 border border-slate-800 rounded-full text-[10px] font-bold text-slate-200 uppercase tracking-wide">
+                                                                        <span key={`${frame.timeframe}-trend-${idx}`} className="px-2.5 py-1 bg-surface-container border border-outline-variant/30 rounded-full text-[10px] font-bold text-on-surface uppercase tracking-wide">
                                                                             {flag.name} {flag.confidence !== null && flag.confidence !== undefined ? `(${flag.confidence.toFixed(2)})` : ''}
                                                                         </span>
                                                                     ))}
                                                                 </div>
                                                             ) : (
-                                                                <div className="text-xs text-slate-500">No trendline flags detected.</div>
+                                                                <div className="text-xs text-outline">No trendline flags detected.</div>
                                                             )}
                                                         </div>
                                                     </div>
@@ -3450,11 +3450,11 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                     <section className="tech-card overflow-hidden transition-all duration-300">
                         <button
                             onClick={() => setShowFusionReport(!showFusionReport)}
-                            className="w-full flex items-center justify-between p-4 bg-slate-900/20 hover:bg-slate-900/40 transition-colors"
+                            className="w-full flex items-center justify-between p-4 bg-surface-container-low hover:bg-surface-container-low transition-colors"
                         >
                             <div className="flex items-center gap-2">
-                                <Layers size={14} className="text-slate-500" />
-                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Fusion Report</span>
+                                <Layers size={14} className="text-outline" />
+                                <span className="text-[10px] font-black text-outline uppercase tracking-widest">Fusion Report</span>
                             </div>
                             <div className="flex items-center gap-4">
                                 {showFusionReport &&
@@ -3466,9 +3466,9 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                         />
                                     )}
                                 {showFusionReport ? (
-                                    <ChevronUp size={16} className="text-slate-500" />
+                                    <ChevronUp size={16} className="text-outline" />
                                 ) : (
-                                    <ChevronDown size={16} className="text-slate-500" />
+                                    <ChevronDown size={16} className="text-outline" />
                                 )}
                             </div>
                         </button>
@@ -3488,7 +3488,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 )}
 
                                 {!fusionReportData && !fusionReportError && (
-                                    <div className="text-xs text-slate-500">
+                                    <div className="text-xs text-outline">
                                         Fusion report data will appear here once loaded.
                                     </div>
                                 )}
@@ -3496,30 +3496,30 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 {fusionReportData && (
                                     <>
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                            <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
-                                                <div className="text-[9px] font-black text-slate-500 uppercase mb-1">Timeframes</div>
-                                                <div className="text-lg font-black text-white">{fusionReportSummary?.totalFrames ?? 0}</div>
+                                            <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
+                                                <div className="text-[9px] font-black text-outline uppercase mb-1">Timeframes</div>
+                                                <div className="text-lg font-black text-on-surface">{fusionReportSummary?.totalFrames ?? 0}</div>
                                             </div>
-                                            <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
-                                                <div className="text-[9px] font-black text-slate-500 uppercase mb-1">Conflicts</div>
-                                                <div className="text-lg font-black text-white">{fusionReportData.conflict_reasons?.length ?? 0}</div>
+                                            <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
+                                                <div className="text-[9px] font-black text-outline uppercase mb-1">Conflicts</div>
+                                                <div className="text-lg font-black text-on-surface">{fusionReportData.conflict_reasons?.length ?? 0}</div>
                                             </div>
-                                            <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
-                                                <div className="text-[9px] font-black text-slate-500 uppercase mb-1">Signal Strength</div>
-                                                <div className="text-lg font-black text-white">
+                                            <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
+                                                <div className="text-[9px] font-black text-outline uppercase mb-1">Signal Strength</div>
+                                                <div className="text-lg font-black text-on-surface">
                                                     {fusionReportData.signal_strength_effective !== undefined &&
                                                         fusionReportData.signal_strength_effective !== null
                                                         ? formatConfidence(fusionReportData.signal_strength_effective)
                                                         : fusionConfidenceDisplay}
                                                 </div>
-                                                <div className="text-[9px] text-slate-500 uppercase tracking-widest mt-1">{fusionConfidenceLabel}</div>
+                                                <div className="text-[9px] text-outline uppercase tracking-widest mt-1">{fusionConfidenceLabel}</div>
                                                 {fusionReportData.confidence_eligibility?.eligible === false && (
-                                                    <div className="text-[9px] text-slate-600 uppercase tracking-widest mt-1">
+                                                    <div className="text-[9px] text-outline uppercase tracking-widest mt-1">
                                                         Not Probability-Rated
                                                     </div>
                                                 )}
                                                 {fusionRawDisplay && (
-                                                    <div className="text-[9px] text-slate-600 uppercase tracking-widest mt-1">
+                                                    <div className="text-[9px] text-outline uppercase tracking-widest mt-1">
                                                         Raw {fusionRawDisplay}
                                                     </div>
                                                 )}
@@ -3549,30 +3549,30 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                         {fusionReportSummary && fusionReportSummary.entries.length > 0 && (
                                             <div className="grid grid-cols-1 gap-4">
                                                 {fusionReportSummary.entries.map((entry) => (
-                                                    <div key={entry.timeframe} className="bg-slate-950/50 p-5 rounded-xl border border-slate-800 space-y-3">
+                                                    <div key={entry.timeframe} className="bg-surface p-5 rounded-xl border border-outline-variant/30 space-y-3">
                                                         <div className="flex items-center justify-between">
-                                                            <div className="text-xs font-black uppercase tracking-widest text-slate-400">
+                                                            <div className="text-xs font-black uppercase tracking-widest text-on-surface-variant">
                                                                 {formatLabel(entry.timeframe)}
                                                             </div>
-                                                            <div className="text-[10px] text-slate-500 font-bold uppercase">
+                                                            <div className="text-[10px] text-outline font-bold uppercase">
                                                                 Classic · Quant · Pattern
                                                             </div>
                                                         </div>
                                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                                            <div className="bg-slate-900/40 p-3 rounded-lg border border-slate-800">
-                                                                <div className="text-[9px] text-slate-500 font-bold uppercase mb-1">Classic</div>
-                                                                <div className="text-sm font-black text-white">{formatLabel(entry.classic)}</div>
-                                                                <div className="text-[10px] text-slate-500">Score {entry.classicScore !== null ? entry.classicScore.toFixed(2) : 'n/a'}</div>
+                                                            <div className="bg-surface-container-low p-3 rounded-lg border border-outline-variant/30">
+                                                                <div className="text-[9px] text-outline font-bold uppercase mb-1">Classic</div>
+                                                                <div className="text-sm font-black text-on-surface">{formatLabel(entry.classic)}</div>
+                                                                <div className="text-[10px] text-outline">Score {entry.classicScore !== null ? entry.classicScore.toFixed(2) : 'n/a'}</div>
                                                             </div>
-                                                            <div className="bg-slate-900/40 p-3 rounded-lg border border-slate-800">
-                                                                <div className="text-[9px] text-slate-500 font-bold uppercase mb-1">Quant</div>
-                                                                <div className="text-sm font-black text-white">{formatLabel(entry.quant)}</div>
-                                                                <div className="text-[10px] text-slate-500">Score {entry.quantScore !== null ? entry.quantScore.toFixed(2) : 'n/a'}</div>
+                                                            <div className="bg-surface-container-low p-3 rounded-lg border border-outline-variant/30">
+                                                                <div className="text-[9px] text-outline font-bold uppercase mb-1">Quant</div>
+                                                                <div className="text-sm font-black text-on-surface">{formatLabel(entry.quant)}</div>
+                                                                <div className="text-[10px] text-outline">Score {entry.quantScore !== null ? entry.quantScore.toFixed(2) : 'n/a'}</div>
                                                             </div>
-                                                            <div className="bg-slate-900/40 p-3 rounded-lg border border-slate-800">
-                                                                <div className="text-[9px] text-slate-500 font-bold uppercase mb-1">Pattern</div>
-                                                                <div className="text-sm font-black text-white">{formatLabel(entry.pattern)}</div>
-                                                                <div className="text-[10px] text-slate-500">Score {entry.patternScore !== null ? entry.patternScore.toFixed(2) : 'n/a'}</div>
+                                                            <div className="bg-surface-container-low p-3 rounded-lg border border-outline-variant/30">
+                                                                <div className="text-[9px] text-outline font-bold uppercase mb-1">Pattern</div>
+                                                                <div className="text-sm font-black text-on-surface">{formatLabel(entry.pattern)}</div>
+                                                                <div className="text-[10px] text-outline">Score {entry.patternScore !== null ? entry.patternScore.toFixed(2) : 'n/a'}</div>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -3583,41 +3583,41 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                         {directionScorecardData && scorecardSummary && scorecardSummary.entries.length > 0 && (
                                             <div className="space-y-4">
                                                 <div className="flex items-center justify-between">
-                                                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                                    <div className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">
                                                         Direction Scorecard
                                                     </div>
-                                                    <div className="text-[10px] text-slate-500 font-bold uppercase">
+                                                    <div className="text-[10px] text-outline font-bold uppercase">
                                                         Model {scorecardSummary.modelVersion ?? 'n/a'} · Neutral {scorecardSummary.neutralThreshold.toFixed(2)}
                                                     </div>
                                                 </div>
                                                 <div className="grid grid-cols-1 gap-4">
                                                     {scorecardSummary.entries.map(({ timeframe, frame }) => (
-                                                        <div key={timeframe} className="bg-slate-950/50 p-5 rounded-xl border border-slate-800 space-y-4">
+                                                        <div key={timeframe} className="bg-surface p-5 rounded-xl border border-outline-variant/30 space-y-4">
                                                             <div className="flex items-center justify-between">
-                                                                <div className="text-xs font-black uppercase tracking-widest text-slate-400">
+                                                                <div className="text-xs font-black uppercase tracking-widest text-on-surface-variant">
                                                                     {formatLabel(timeframe)}
                                                                 </div>
-                                                                <div className="text-[10px] text-slate-500 font-bold uppercase">
+                                                                <div className="text-[10px] text-outline font-bold uppercase">
                                                                     Total {formatContributionValue(frame.total_score)}
                                                                 </div>
                                                             </div>
                                                             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                                                <div className="bg-slate-900/40 p-3 rounded-lg border border-slate-800 space-y-2">
-                                                                    <div className="text-[9px] text-slate-500 font-bold uppercase">Classic</div>
-                                                                    <div className="text-sm font-black text-white">{formatLabel(frame.classic_label)}</div>
-                                                                    <div className="text-[10px] text-slate-500">Score {frame.classic_score.toFixed(2)}</div>
+                                                                <div className="bg-surface-container-low p-3 rounded-lg border border-outline-variant/30 space-y-2">
+                                                                    <div className="text-[9px] text-outline font-bold uppercase">Classic</div>
+                                                                    <div className="text-sm font-black text-on-surface">{formatLabel(frame.classic_label)}</div>
+                                                                    <div className="text-[10px] text-outline">Score {frame.classic_score.toFixed(2)}</div>
                                                                     {renderScorecardContributions(frame.contributions?.classic ?? [])}
                                                                 </div>
-                                                                <div className="bg-slate-900/40 p-3 rounded-lg border border-slate-800 space-y-2">
-                                                                    <div className="text-[9px] text-slate-500 font-bold uppercase">Quant</div>
-                                                                    <div className="text-sm font-black text-white">{formatLabel(frame.quant_label)}</div>
-                                                                    <div className="text-[10px] text-slate-500">Score {frame.quant_score.toFixed(2)}</div>
+                                                                <div className="bg-surface-container-low p-3 rounded-lg border border-outline-variant/30 space-y-2">
+                                                                    <div className="text-[9px] text-outline font-bold uppercase">Quant</div>
+                                                                    <div className="text-sm font-black text-on-surface">{formatLabel(frame.quant_label)}</div>
+                                                                    <div className="text-[10px] text-outline">Score {frame.quant_score.toFixed(2)}</div>
                                                                     {renderScorecardContributions(frame.contributions?.quant ?? [])}
                                                                 </div>
-                                                                <div className="bg-slate-900/40 p-3 rounded-lg border border-slate-800 space-y-2">
-                                                                    <div className="text-[9px] text-slate-500 font-bold uppercase">Pattern</div>
-                                                                    <div className="text-sm font-black text-white">{formatLabel(frame.pattern_label)}</div>
-                                                                    <div className="text-[10px] text-slate-500">Score {frame.pattern_score.toFixed(2)}</div>
+                                                                <div className="bg-surface-container-low p-3 rounded-lg border border-outline-variant/30 space-y-2">
+                                                                    <div className="text-[9px] text-outline font-bold uppercase">Pattern</div>
+                                                                    <div className="text-sm font-black text-on-surface">{formatLabel(frame.pattern_label)}</div>
+                                                                    <div className="text-[10px] text-outline">Score {frame.pattern_score.toFixed(2)}</div>
                                                                     {renderScorecardContributions(frame.contributions?.pattern ?? [])}
                                                                 </div>
                                                             </div>
@@ -3628,7 +3628,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                         )}
 
                                         {fusionReportData.alignment_report && Object.keys(fusionReportData.alignment_report).length > 0 && (
-                                            <div className="text-xs text-slate-400">
+                                            <div className="text-xs text-on-surface-variant">
                                                 Alignment report attached ({Object.keys(fusionReportData.alignment_report).length} fields).
                                             </div>
                                         )}
@@ -3645,11 +3645,11 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                             onClick={() =>
                                 setShowVerificationReport(!showVerificationReport)
                             }
-                            className="w-full flex items-center justify-between p-4 bg-slate-900/20 hover:bg-slate-900/40 transition-colors"
+                            className="w-full flex items-center justify-between p-4 bg-surface-container-low hover:bg-surface-container-low transition-colors"
                         >
                             <div className="flex items-center gap-2">
-                                <Layers size={14} className="text-slate-500" />
-                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Verification &amp; Baseline</span>
+                                <Layers size={14} className="text-outline" />
+                                <span className="text-[10px] font-black text-outline uppercase tracking-widest">Verification &amp; Baseline</span>
                             </div>
                             <div className="flex items-center gap-4">
                                 {showVerificationReport && isVerificationReportLoading && (
@@ -3660,9 +3660,9 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                     />
                                 )}
                                 {showVerificationReport ? (
-                                    <ChevronUp size={16} className="text-slate-500" />
+                                    <ChevronUp size={16} className="text-outline" />
                                 ) : (
-                                    <ChevronDown size={16} className="text-slate-500" />
+                                    <ChevronDown size={16} className="text-outline" />
                                 )}
                             </div>
                         </button>
@@ -3676,7 +3676,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 )}
 
                                 {!verificationReportData && !verificationReportError && (
-                                    <div className="text-xs text-slate-500">
+                                    <div className="text-xs text-outline">
                                         Verification report data will appear here once loaded.
                                     </div>
                                 )}
@@ -3684,17 +3684,17 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 {verificationReportData && (
                                     <>
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                            <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
-                                                <div className="text-[9px] font-black text-slate-500 uppercase mb-1">Baseline Gates</div>
-                                                <div className="text-lg font-black text-white">{verificationSummary?.gatesCount ?? 0}</div>
+                                            <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
+                                                <div className="text-[9px] font-black text-outline uppercase mb-1">Baseline Gates</div>
+                                                <div className="text-lg font-black text-on-surface">{verificationSummary?.gatesCount ?? 0}</div>
                                             </div>
-                                            <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
-                                                <div className="text-[9px] font-black text-slate-500 uppercase mb-1">Robustness Flags</div>
-                                                <div className="text-lg font-black text-white">{verificationSummary?.flagsCount ?? 0}</div>
+                                            <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
+                                                <div className="text-[9px] font-black text-outline uppercase mb-1">Robustness Flags</div>
+                                                <div className="text-lg font-black text-on-surface">{verificationSummary?.flagsCount ?? 0}</div>
                                             </div>
-                                            <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
-                                                <div className="text-[9px] font-black text-slate-500 uppercase mb-1">As Of</div>
-                                                <div className="text-lg font-black text-white">{verificationReportData.as_of}</div>
+                                            <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
+                                                <div className="text-[9px] font-black text-outline uppercase mb-1">As Of</div>
+                                                <div className="text-lg font-black text-on-surface">{verificationReportData.as_of}</div>
                                             </div>
                                         </div>
 
@@ -3719,9 +3719,9 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                         )}
 
                                         {verificationReportData.backtest_summary && (
-                                            <div className="bg-slate-950/50 p-5 rounded-xl border border-slate-800 space-y-3">
-                                                <div className="text-[9px] font-black text-slate-500 uppercase">Backtest Summary</div>
-                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-slate-200">
+                                            <div className="bg-surface p-5 rounded-xl border border-outline-variant/30 space-y-3">
+                                                <div className="text-[9px] font-black text-outline uppercase">Backtest Summary</div>
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-on-surface">
                                                     <div>Win Rate: {verificationReportData.backtest_summary.win_rate ?? 'n/a'}</div>
                                                     <div>Profit Factor: {verificationReportData.backtest_summary.profit_factor ?? 'n/a'}</div>
                                                     <div>Sharpe: {verificationReportData.backtest_summary.sharpe_ratio ?? 'n/a'}</div>
@@ -3732,9 +3732,9 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                         )}
 
                                         {verificationReportData.wfa_summary && (
-                                            <div className="bg-slate-950/50 p-5 rounded-xl border border-slate-800 space-y-3">
-                                                <div className="text-[9px] font-black text-slate-500 uppercase">Walk-Forward Summary</div>
-                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-slate-200">
+                                            <div className="bg-surface p-5 rounded-xl border border-outline-variant/30 space-y-3">
+                                                <div className="text-[9px] font-black text-outline uppercase">Walk-Forward Summary</div>
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-on-surface">
                                                     <div>WFA Sharpe: {verificationReportData.wfa_summary.wfa_sharpe ?? 'n/a'}</div>
                                                     <div>WFE Ratio: {verificationReportData.wfa_summary.wfe_ratio ?? 'n/a'}</div>
                                                     <div>Max DD: {verificationReportData.wfa_summary.wfa_max_drawdown ?? 'n/a'}</div>
@@ -3744,12 +3744,12 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                         )}
 
                                         {verificationReportData.baseline_gates && Object.keys(verificationReportData.baseline_gates).length > 0 && (
-                                            <div className="bg-slate-950/50 p-5 rounded-xl border border-slate-800">
-                                                <div className="text-[9px] font-black text-slate-500 uppercase mb-3">Baseline Gates</div>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-slate-200">
+                                            <div className="bg-surface p-5 rounded-xl border border-outline-variant/30">
+                                                <div className="text-[9px] font-black text-outline uppercase mb-3">Baseline Gates</div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-on-surface">
                                                     {Object.entries(verificationReportData.baseline_gates).map(([key, value]) => (
-                                                        <div key={key} className="flex items-center justify-between bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2">
-                                                            <span className="font-bold uppercase text-[9px] text-slate-500">{formatLabel(key)}</span>
+                                                        <div key={key} className="flex items-center justify-between bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2">
+                                                            <span className="font-bold uppercase text-[9px] text-outline">{formatLabel(key)}</span>
                                                             <span>{typeof value === 'boolean' ? (value ? 'PASS' : 'FAIL') : String(value)}</span>
                                                         </div>
                                                     ))}
@@ -3763,24 +3763,24 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                     </section>
                 )}
 
-                <section className="tech-card p-6 shadow-inner bg-slate-900/40">
+                <section className="tech-card p-6 shadow-inner bg-surface-container-low">
                     <div className="flex items-center gap-2 mb-6">
                         <Layers size={16} className="text-purple-400" />
-                        <span className="text-xs font-black text-white uppercase tracking-[0.2em]">Artifact References</span>
+                        <span className="text-xs font-black text-on-surface uppercase tracking-[0.2em]">Artifact References</span>
                     </div>
                     {artifactEntries.length > 0 ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {artifactEntries.map(([key, value]) => (
-                                <div key={key} className="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
-                                    <div className="text-[9px] font-black text-slate-500 uppercase mb-1">
+                                <div key={key} className="bg-surface p-4 rounded-xl border border-outline-variant/30">
+                                    <div className="text-[9px] font-black text-outline uppercase mb-1">
                                         {formatArtifactLabel(key)} ID
                                     </div>
-                                    <div className="text-sm font-mono font-bold text-slate-100">{formatArtifactId(value)}</div>
+                                    <div className="text-sm font-mono font-bold text-on-surface">{formatArtifactId(value)}</div>
                                 </div>
                             ))}
                         </div>
                     ) : (
-                        <div className="text-xs text-slate-500">No linked artifacts available.</div>
+                        <div className="text-xs text-outline">No linked artifacts available.</div>
                     )}
                 </section>
             </section>

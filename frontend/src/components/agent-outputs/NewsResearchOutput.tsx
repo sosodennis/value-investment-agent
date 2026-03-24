@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 import { Zap, TrendingUp } from 'lucide-react';
-import { NewsResearchCard } from '../NewsResearchCard';
-import { AINewsSummary } from '../AINewsSummary';
+import { NewsResearchCard } from '@/components/agent-outputs/NewsResearchCard';
+import { AINewsSummary } from '@/components/agent-outputs/AINewsSummary';
 import { parseNewsArtifact } from '@/types/agents/artifact-parsers';
 import { ArtifactReference, AgentStatus } from '@/types/agents';
 import { useArtifact } from '../../hooks/useArtifact';
@@ -59,7 +59,7 @@ const NewsResearchOutputComponent: React.FC<NewsResearchOutputProps> = ({
             <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-3">
                     <Zap size={18} className="text-amber-400" />
-                    <h3 className="text-sm font-bold text-white uppercase tracking-widest">News Research Intelligence</h3>
+                    <h3 className="text-sm font-bold text-on-surface uppercase tracking-widest">News Research Intelligence</h3>
                 </div>
                 {isReferenceLoading && (
                     <AgentLoadingState
@@ -76,7 +76,7 @@ const NewsResearchOutputComponent: React.FC<NewsResearchOutputProps> = ({
             <div className="space-y-4">
                 <div className="flex items-center gap-3 mb-4">
                     <TrendingUp size={16} className="text-cyan-400" />
-                    <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Article Breakdown</h3>
+                    <h3 className="text-[10px] font-bold text-outline uppercase tracking-widest">Article Breakdown</h3>
                 </div>
 
                 {artifactData?.news_items && artifactData.news_items.length > 0 ? (
@@ -87,11 +87,11 @@ const NewsResearchOutputComponent: React.FC<NewsResearchOutputProps> = ({
                     </div>
                 ) : isPreviewOnly && previewData?.top_headlines ? (
                     <div className="space-y-4">
-                        <div className="p-4 bg-slate-900/40 border border-slate-800 rounded-xl">
-                            <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Recent Headlines (Preview)</h4>
+                        <div className="p-4 bg-surface-container-low border border-outline-variant/30 rounded-xl">
+                            <h4 className="text-[10px] font-bold text-outline uppercase tracking-widest mb-3">Recent Headlines (Preview)</h4>
                             <div className="space-y-2">
                                 {previewData.top_headlines.map((headline: string, i: number) => (
-                                    <div key={i} className="flex gap-2 text-xs text-slate-300">
+                                    <div key={i} className="flex gap-2 text-xs text-on-surface-variant">
                                         <div className="w-1 h-1 bg-cyan-500 rounded-full mt-1.5 shrink-0" />
                                         <span>{headline}</span>
                                     </div>

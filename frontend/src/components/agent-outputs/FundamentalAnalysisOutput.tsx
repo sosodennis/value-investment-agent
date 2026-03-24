@@ -10,7 +10,7 @@ import {
     XAxis,
     YAxis,
 } from 'recharts';
-import { FinancialTable } from '../FinancialTable';
+import { FinancialTable } from '@/components/agent-outputs/FinancialTable';
 import { AgentStatus, ArtifactReference } from '@/types/agents';
 import { parseFundamentalArtifact } from '@/types/agents/artifact-parsers';
 import { ForwardSignal } from '@/types/agents/fundamental';
@@ -780,7 +780,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
             <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-3">
                     <LayoutPanelTop size={18} className="text-indigo-400" />
-                    <h3 className="text-sm font-bold text-white uppercase tracking-widest">Financial Data Matrix</h3>
+                    <h3 className="text-sm font-bold text-on-surface uppercase tracking-widest">Financial Data Matrix</h3>
                 </div>
                 <div className="flex items-center gap-2">
                     {modelTypeDisplay && (
@@ -805,7 +805,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                         <span className="text-label">Analyst Valuation Score</span>
                         {valuationScore !== undefined && (
                             <div className="flex items-center gap-3">
-                                <div className="h-1 w-24 bg-slate-800 rounded-full overflow-hidden">
+                                <div className="h-1 w-24 bg-surface-container-high rounded-full overflow-hidden">
                                     <div
                                         className={`h-full transition-all duration-1000 ${valuationScore > 70 ? 'bg-emerald-500' : valuationScore < 40 ? 'bg-rose-500' : 'bg-amber-500'}`}
                                         style={{ width: `${valuationScore}%` }}
@@ -821,9 +821,9 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                     {Object.keys(previewKeyMetrics).length > 0 && (
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                             {Object.entries(previewKeyMetrics).map(([label, value]) => (
-                                <div key={label} className="tech-card p-4 group hover:bg-slate-900/40">
-                                    <div className="text-label mb-1 text-slate-600 group-hover:text-slate-400 transition-colors">{label}</div>
-                                    <div className="text-sm font-black text-white">
+                                <div key={label} className="tech-card p-4 group hover:bg-surface-container-low">
+                                    <div className="text-label mb-1 text-outline group-hover:text-on-surface-variant transition-colors">{label}</div>
+                                    <div className="text-sm font-black text-on-surface">
                                         {typeof value === 'string' ? value : String(value)}
                                     </div>
                                 </div>
@@ -836,18 +836,18 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                             {valuationCards.map((card) => (
                                 <div
                                     key={card.label}
-                                    className="tech-card p-4 border-white/10 bg-slate-900/40"
+                                    className="tech-card p-4 border-outline-variant/30 bg-surface-container-low"
                                 >
                                     <div className="text-label mb-1">{card.label}</div>
                                     <div
                                         className={`text-xl font-black ${
                                             card.unavailable
-                                                ? 'text-slate-400'
+                                                ? 'text-on-surface-variant'
                                                 : card.tone === 'bull'
                                                     ? 'text-emerald-300'
                                                     : card.tone === 'bear'
                                                         ? 'text-rose-300'
-                                                        : 'text-white'
+                                                        : 'text-on-surface'
                                         }`}
                                     >
                                         {card.value}
@@ -880,7 +880,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                         </div>
                                     </div>
                                     {typeof assumptionBreakdown.monte_carlo?.enabled === 'boolean' && (
-                                        <div className="text-xs text-slate-300">
+                                        <div className="text-xs text-on-surface-variant">
                                             Monte Carlo: {assumptionBreakdown.monte_carlo.enabled ? 'Enabled' : 'Disabled'}
                                             {mcSamplerType ? ` (${mcSamplerType})` : ''}
                                         </div>
@@ -888,32 +888,32 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                     {mcEnabled && (
                                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2">
                                             {mcExecutedIterations !== undefined && (
-                                                <div className="text-[11px] text-slate-200 bg-slate-900/40 rounded px-2 py-1">
+                                                <div className="text-[11px] text-on-surface bg-surface-container-low rounded px-2 py-1">
                                                     Executed: {Math.round(mcExecutedIterations)}
                                                 </div>
                                             )}
                                             {mcEffectiveWindow !== undefined && (
-                                                <div className="text-[11px] text-slate-200 bg-slate-900/40 rounded px-2 py-1">
+                                                <div className="text-[11px] text-on-surface bg-surface-container-low rounded px-2 py-1">
                                                     Window: {Math.round(mcEffectiveWindow)}
                                                 </div>
                                             )}
                                             {mcStoppedEarly !== undefined && (
-                                                <div className="text-[11px] text-slate-200 bg-slate-900/40 rounded px-2 py-1">
+                                                <div className="text-[11px] text-on-surface bg-surface-container-low rounded px-2 py-1">
                                                     Early Stop: {mcStoppedEarly ? 'Yes' : 'No'}
                                                 </div>
                                             )}
                                             {mcPsdRepaired !== undefined && (
-                                                <div className="text-[11px] text-slate-200 bg-slate-900/40 rounded px-2 py-1">
+                                                <div className="text-[11px] text-on-surface bg-surface-container-low rounded px-2 py-1">
                                                     PSD Repair: {mcPsdRepaired ? 'Yes' : 'No'}
                                                 </div>
                                             )}
                                             {mcConverged !== undefined && (
-                                                <div className="text-[11px] text-slate-200 bg-slate-900/40 rounded px-2 py-1">
+                                                <div className="text-[11px] text-on-surface bg-surface-container-low rounded px-2 py-1">
                                                     Converged: {mcConverged ? 'Yes' : 'No'}
                                                 </div>
                                             )}
                                             {mcMedianDelta !== undefined && (
-                                                <div className="text-[11px] text-slate-200 bg-slate-900/40 rounded px-2 py-1">
+                                                <div className="text-[11px] text-on-surface bg-surface-container-low rounded px-2 py-1">
                                                     Median Δ: {(mcMedianDelta * 100).toFixed(2)}%
                                                     {mcTolerance !== undefined
                                                         ? ` / ${(mcTolerance * 100).toFixed(2)}% tol`
@@ -928,27 +928,27 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                         forwardSignalMappingVersion ||
                                         typeof forwardSignalCalibrationApplied === 'boolean') && (
                                         <div className="space-y-2">
-                                            <div className="text-[11px] uppercase tracking-wider text-slate-400">
+                                            <div className="text-[11px] uppercase tracking-wider text-on-surface-variant">
                                                 Forward Signal Policy
                                             </div>
                                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                                 {typeof forwardSignalSummary?.signals_total === 'number' && (
-                                                    <div className="text-[11px] text-slate-200 bg-slate-900/40 rounded px-2 py-1">
+                                                    <div className="text-[11px] text-on-surface bg-surface-container-low rounded px-2 py-1">
                                                         Signals: {Math.round(forwardSignalSummary.signals_total)}
                                                     </div>
                                                 )}
                                                 {typeof forwardSignalSummary?.signals_accepted === 'number' && (
-                                                    <div className="text-[11px] text-emerald-200 bg-slate-900/40 rounded px-2 py-1">
+                                                    <div className="text-[11px] text-emerald-200 bg-surface-container-low rounded px-2 py-1">
                                                         Accepted: {Math.round(forwardSignalSummary.signals_accepted)}
                                                     </div>
                                                 )}
                                                 {typeof forwardSignalSummary?.signals_rejected === 'number' && (
-                                                    <div className="text-[11px] text-rose-200 bg-slate-900/40 rounded px-2 py-1">
+                                                    <div className="text-[11px] text-rose-200 bg-surface-container-low rounded px-2 py-1">
                                                         Rejected: {Math.round(forwardSignalSummary.signals_rejected)}
                                                     </div>
                                                 )}
                                                 {typeof forwardSignalEvidenceCount === 'number' && (
-                                                    <div className="text-[11px] text-slate-200 bg-slate-900/40 rounded px-2 py-1">
+                                                    <div className="text-[11px] text-on-surface bg-surface-container-low rounded px-2 py-1">
                                                         Evidence: {Math.round(forwardSignalEvidenceCount)}
                                                     </div>
                                                 )}
@@ -1000,7 +1000,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                                         </span>
                                                     )}
                                                     {forwardSignalMappingVersion && (
-                                                        <span className="rounded border border-slate-400/30 bg-slate-800/60 px-2 py-0.5 text-[11px] text-slate-200">
+                                                        <span className="rounded border border-slate-400/30 bg-surface-container-high px-2 py-0.5 text-[11px] text-on-surface">
                                                             Mapping: {forwardSignalMappingVersion}
                                                         </span>
                                                     )}
@@ -1010,27 +1010,27 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                     )}
                                     {sensitivitySummary && (
                                         <div className="space-y-2">
-                                            <div className="text-[11px] uppercase tracking-wider text-slate-400">
+                                            <div className="text-[11px] uppercase tracking-wider text-on-surface-variant">
                                                 Sensitivity (One-Way)
                                             </div>
                                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                                 {typeof sensitivitySummary.enabled === 'boolean' && (
-                                                    <div className="text-[11px] text-slate-200 bg-slate-900/40 rounded px-2 py-1">
+                                                    <div className="text-[11px] text-on-surface bg-surface-container-low rounded px-2 py-1">
                                                         Enabled: {sensitivitySummary.enabled ? 'Yes' : 'No'}
                                                     </div>
                                                 )}
                                                 {typeof sensitivitySummary.scenario_count === 'number' && (
-                                                    <div className="text-[11px] text-slate-200 bg-slate-900/40 rounded px-2 py-1">
+                                                    <div className="text-[11px] text-on-surface bg-surface-container-low rounded px-2 py-1">
                                                         Scenarios: {Math.round(sensitivitySummary.scenario_count)}
                                                     </div>
                                                 )}
                                                 {typeof sensitivitySummary.max_upside_delta_pct === 'number' && (
-                                                    <div className="text-[11px] text-emerald-200 bg-slate-900/40 rounded px-2 py-1">
+                                                    <div className="text-[11px] text-emerald-200 bg-surface-container-low rounded px-2 py-1">
                                                         Max Upside: {formatPercent(sensitivitySummary.max_upside_delta_pct)}
                                                     </div>
                                                 )}
                                                 {typeof sensitivitySummary.max_downside_delta_pct === 'number' && (
-                                                    <div className="text-[11px] text-rose-200 bg-slate-900/40 rounded px-2 py-1">
+                                                    <div className="text-[11px] text-rose-200 bg-surface-container-low rounded px-2 py-1">
                                                         Max Downside: {formatPercent(sensitivitySummary.max_downside_delta_pct)}
                                                     </div>
                                                 )}
@@ -1062,7 +1062,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                         forwardSignalMappingVersion ||
                                         typeof forwardSignalCalibrationApplied === 'boolean') && (
                                         <div className="space-y-2">
-                                            <div className="text-[11px] uppercase tracking-wider text-slate-400">
+                                            <div className="text-[11px] uppercase tracking-wider text-on-surface-variant">
                                                 Growth / Anchor Policy
                                             </div>
                                             <div className="flex flex-wrap gap-2">
@@ -1089,11 +1089,11 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                             </div>
                                             {(forwardSignalMappingVersion ||
                                                 typeof forwardSignalCalibrationApplied === 'boolean') && (
-                                                <div className="space-y-1 text-[11px] text-slate-300">
+                                                <div className="space-y-1 text-[11px] text-on-surface-variant">
                                                     {typeof forwardSignalCalibrationApplied === 'boolean' && (
                                                         <div>
                                                             Calibration Applied (Diagnostics):{' '}
-                                                            <span className="font-semibold text-slate-100">
+                                                            <span className="font-semibold text-on-surface">
                                                                 {forwardSignalCalibrationApplied ? 'Yes' : 'No'}
                                                             </span>
                                                         </div>
@@ -1101,7 +1101,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                                     {forwardSignalMappingVersion && (
                                                         <div>
                                                             Calibration Mapping (Diagnostics):{' '}
-                                                            <span className="font-semibold text-slate-100">
+                                                            <span className="font-semibold text-on-surface">
                                                                 {forwardSignalMappingVersion}
                                                             </span>
                                                         </div>
@@ -1112,7 +1112,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                     )}
                                     {(hasBaseGrowthGuardrail || hasBaseMarginGuardrail) && (
                                         <div className="space-y-2">
-                                            <div className="text-[11px] uppercase tracking-wider text-slate-400">
+                                            <div className="text-[11px] uppercase tracking-wider text-on-surface-variant">
                                                 Base Assumption Guardrail
                                             </div>
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -1171,7 +1171,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                     )}
                                     {dataQualityFlags.length > 0 && (
                                         <div className="space-y-2">
-                                            <div className="text-[11px] uppercase tracking-wider text-slate-400">
+                                            <div className="text-[11px] uppercase tracking-wider text-on-surface-variant">
                                                 Data Quality Flags
                                             </div>
                                             <div className="flex flex-wrap gap-2">
@@ -1187,7 +1187,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                         </div>
                                     )}
                                     {timeAlignmentStatus && (
-                                        <div className="text-[11px] text-slate-300">
+                                        <div className="text-[11px] text-on-surface-variant">
                                             Time Alignment Status:{' '}
                                             <span
                                                 className={
@@ -1203,7 +1203,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                     {assumptionHighlights.length > 0 && (
                                         <div className="space-y-2">
                                             {assumptionHighlights.map((item, index) => (
-                                                <div key={`${item.statement}-${index}`} className="text-xs text-slate-200 bg-slate-900/40 rounded px-2 py-1">
+                                                <div key={`${item.statement}-${index}`} className="text-xs text-on-surface bg-surface-container-low rounded px-2 py-1">
                                                     {item.statement}
                                                 </div>
                                             ))}
@@ -1215,7 +1215,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                             {dataFreshness && (
                                 <div className="tech-card p-4 space-y-3 border-emerald-500/20 bg-gradient-to-br from-emerald-950/20 via-slate-900/40 to-slate-950/20">
                                     <span className="text-label">Data Freshness</span>
-                                    <div className="space-y-1 text-xs text-slate-200">
+                                    <div className="space-y-1 text-xs text-on-surface">
                                         {dataFreshness.financial_statement?.period_end_date && (
                                             <div>
                                                 Financial Period End: {dataFreshness.financial_statement.period_end_date}
@@ -1302,7 +1302,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                         </span>
                                     )}
                                     {bandDeviationText && (
-                                        <span className="text-xs text-slate-300">
+                                        <span className="text-xs text-on-surface-variant">
                                             {bandDeviationText}
                                         </span>
                                     )}
@@ -1313,13 +1313,13 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                     {distributionLegendItems.map((legendItem) => (
                                         <div
                                             key={legendItem.key}
-                                            className="inline-flex items-center gap-2 rounded-md border border-white/10 bg-slate-900/40 px-2 py-1"
+                                            className="inline-flex items-center gap-2 rounded-md border border-outline-variant/30 bg-surface-container-low px-2 py-1"
                                         >
                                             <span
                                                 className={`block w-4 border-t ${legendItem.lineThicknessClassName ?? ''} ${legendItem.lineClassName}`}
                                                 aria-hidden="true"
                                             />
-                                            <span className="text-[11px] text-slate-300">
+                                            <span className="text-[11px] text-on-surface-variant">
                                                 {legendItem.label}: {formatCurrency(legendItem.value)}
                                             </span>
                                         </div>
@@ -1333,9 +1333,9 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                             {scenarioCards.length > 0 && (
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                     {scenarioCards.map((scenario) => (
-                                        <div key={scenario.key} className="rounded-lg border border-white/10 bg-slate-900/40 p-3">
+                                        <div key={scenario.key} className="rounded-lg border border-outline-variant/30 bg-surface-container-low p-3">
                                             <div className="text-label mb-1">{scenario.label}</div>
-                                            <div className="text-lg font-black text-white">
+                                            <div className="text-lg font-black text-on-surface">
                                                 {formatCurrency(scenario.price)}
                                             </div>
                                             {scenario.key === 'bear' && bandStatus === 'undervalued_high' && bandDeviationText && (
@@ -1354,8 +1354,8 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                             )}
 
                             {canShowCurve && scenarioCards.length > 0 && (
-                                <div className="flex items-center justify-between rounded-lg border border-cyan-400/20 bg-slate-900/40 px-3 py-2">
-                                    <div className="text-xs text-slate-300">
+                                <div className="flex items-center justify-between rounded-lg border border-cyan-400/20 bg-surface-container-low px-3 py-2">
+                                    <div className="text-xs text-on-surface-variant">
                                         詳細分佈曲線可用於查看尾部風險（P5/P95）。
                                     </div>
                                     <button
@@ -1533,7 +1533,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                         mcCorrPearsonMaeText !== undefined ||
                                         mcCorrSpearmanMaeText !== undefined)) ||
                                 mcAsOf) && (
-                                <div className="text-[11px] text-slate-300">
+                                <div className="text-[11px] text-on-surface-variant">
                                     {mcExecutedIterations !== undefined && (
                                         <span>
                                             MC runs: {Math.round(mcExecutedIterations)}
@@ -1608,7 +1608,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                 <div className="tech-card p-4 space-y-4 border-cyan-500/25 bg-gradient-to-br from-cyan-950/20 via-slate-900/40 to-slate-950/20">
                     <div className="flex items-center justify-between">
                         <span className="text-label">Forward Signals</span>
-                        <span className="text-xs text-slate-300">
+                        <span className="text-xs text-on-surface-variant">
                             {forwardSignals.length} extracted signals
                         </span>
                     </div>
@@ -1616,11 +1616,11 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                         {forwardSignals.map((signal) => (
                             <div
                                 key={signal.signal_id}
-                                className="rounded-lg border border-white/10 bg-slate-950/50 p-3 space-y-3"
+                                className="rounded-lg border border-outline-variant/30 bg-surface p-3 space-y-3"
                             >
                                 <div className="flex flex-wrap items-center gap-2 justify-between">
                                     <div className="flex flex-wrap items-center gap-2">
-                                        <span className="text-sm font-semibold text-white">
+                                        <span className="text-sm font-semibold text-on-surface">
                                             {formatSignalMetric(signal.metric)}
                                         </span>
                                         <span
@@ -1629,7 +1629,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                                     ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200'
                                                     : signal.direction === 'down'
                                                         ? 'border-rose-400/40 bg-rose-500/10 text-rose-200'
-                                                        : 'border-slate-400/40 bg-slate-500/10 text-slate-200'
+                                                        : 'border-slate-400/40 bg-slate-500/10 text-on-surface'
                                             }`}
                                         >
                                             {signal.direction.toUpperCase()}
@@ -1638,7 +1638,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                             Source: {signal.source_type}
                                         </span>
                                     </div>
-                                    <div className="flex flex-wrap items-center gap-3 text-xs text-slate-200">
+                                    <div className="flex flex-wrap items-center gap-3 text-xs text-on-surface">
                                         <span>Value: {formatSignalValue(signal.value, signal.unit)}</span>
                                         <span>
                                             Confidence: {(signal.confidence * 100).toFixed(1)}%
@@ -1646,9 +1646,9 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                         <span>As-of: {formatSignalDate(signal.as_of)}</span>
                                     </div>
                                 </div>
-                                <div className="overflow-x-auto rounded border border-white/10">
+                                <div className="overflow-x-auto rounded border border-outline-variant/30">
                                     <table className="w-full text-left text-xs">
-                                        <thead className="bg-slate-900/70 text-slate-300">
+                                        <thead className="bg-surface-container text-on-surface-variant">
                                             <tr>
                                                 <th className="px-3 py-2 font-semibold">Evidence</th>
                                                 <th className="px-3 py-2 font-semibold">Filing Date</th>
@@ -1667,7 +1667,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                                 return (
                                                 <tr
                                                     key={rowKey}
-                                                    className="border-t border-white/5 text-slate-200 align-top"
+                                                    className="border-t border-white/5 text-on-surface align-top"
                                                 >
                                                     <td className="px-3 py-2 min-w-[360px]">
                                                         <div>{displayedText}</div>
@@ -1686,7 +1686,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                                             </button>
                                                         )}
                                                         {(item.doc_type || item.period) && (
-                                                            <div className="mt-1 text-[11px] text-slate-400">
+                                                            <div className="mt-1 text-[11px] text-on-surface-variant">
                                                                 {[item.doc_type, item.period]
                                                                     .filter(Boolean)
                                                                     .join(' · ')}
