@@ -4,7 +4,6 @@ import { startTransition, useState } from 'react';
 import Link from 'next/link';
 import { Activity, Database } from 'lucide-react';
 
-import { PrimaryViewNav } from '@/components/PrimaryViewNav';
 import {
     createDefaultTechnicalObservabilityFilters,
     TECHNICAL_OBSERVABILITY_VIEWS,
@@ -101,7 +100,7 @@ export function TechnicalObservabilityWorkspace() {
         totalEvents === 0 ? '0%' : `${Math.round((totalLabeled / totalEvents) * 100)}%`;
 
     return (
-        <main className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(8,145,178,0.16),transparent_28%),linear-gradient(180deg,#020617_0%,#020617_44%,#030712_100%)] text-white selection:bg-cyan-500/30">
+        <main className="min-h-[calc(100vh-4rem)] bg-[radial-gradient(circle_at_top,rgba(8,145,178,0.16),transparent_28%),linear-gradient(180deg,#020617_0%,#020617_44%,#030712_100%)] text-white selection:bg-cyan-500/30">
             <header className="border-b border-white/6 bg-slate-950/70 px-6 py-5 backdrop-blur xl:px-8">
                 <div className="mx-auto flex max-w-[1600px] flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                     <div className="flex items-center gap-6">
@@ -113,7 +112,6 @@ export function TechnicalObservabilityWorkspace() {
                                 Technical Observability
                             </h1>
                         </div>
-                        <PrimaryViewNav currentView="technical-observability" />
                     </div>
 
                     <div className="flex flex-wrap items-center gap-3">

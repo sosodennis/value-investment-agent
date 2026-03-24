@@ -1,7 +1,5 @@
 import React from 'react';
-import { Zap, ChevronDown, Play, Clock } from 'lucide-react';
-
-import { PrimaryViewNav } from './PrimaryViewNav';
+import { ChevronDown, Play, Clock } from 'lucide-react';
 
 interface HeaderBarProps {
     systemStatus: 'online' | 'offline';
@@ -27,21 +25,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
     currentView = 'workspace',
 }) => {
     return (
-        <header className="h-20 w-full border-b border-border-main bg-bg-main px-8 flex items-center justify-between z-10">
-            <div className="flex items-center gap-6">
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
-                        <Zap size={24} className="text-white fill-white" />
-                    </div>
-                    <div>
-                        <h1 className="text-lg font-black tracking-tighter text-white">
-                            FINANCE<span className="text-primary text-cyan-500">AI</span>{' '}
-                            <span className="text-slate-500 font-medium">LAB</span>
-                        </h1>
-                    </div>
-                </div>
-                <PrimaryViewNav currentView={currentView} />
-            </div>
+        <header className="h-16 w-full border-b border-border-main bg-bg-main px-8 flex items-center justify-between z-10">
 
             {/* Stats Cluster */}
             <nav className="hidden lg:flex items-center gap-12" aria-label="System Stats">

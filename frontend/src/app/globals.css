@@ -22,6 +22,22 @@
   --color-glass-white: rgba(255, 255, 255, 0.03);
   --color-glass-primary: rgba(6, 182, 212, 0.05);
 
+  --color-surface: #10131a;
+  --color-surface-container-lowest: #0b0e14;
+  --color-surface-container-low: #191c22;
+  --color-surface-container: #1d2026;
+  --color-surface-container-high: #272a31;
+  --color-surface-container-highest: #32353c;
+  --color-on-surface: #e1e2eb;
+  --color-on-surface-variant: #b9cacb;
+  --color-primary-container: #00f2ff;
+  --color-primary-fixed: #74f5ff;
+  --color-secondary: #4edea3;
+  --color-tertiary-fixed-dim: #ffb95f;
+  --color-outline: #849495;
+  --color-outline-variant: #3a494b;
+  --color-on-primary: #00363a;
+
   /* Animations */
   --animate-shimmer: shimmer 2s infinite linear;
   --animate-fade-in: fade-in 0.5s ease-out forwards;
@@ -77,13 +93,15 @@
   --success-rgb: 16, 185, 129;
   --background: #020617;
   --foreground: #f8fafc;
+  --font-headline: var(--font-manrope);
+  --font-body: var(--font-inter);
 }
 
 @layer base {
   body {
     background-color: var(--background);
     color: var(--foreground);
-    @apply antialiased overflow-hidden font-sans;
+    @apply antialiased font-sans;
   }
 
   /* Reset default border color to be more subtle */
@@ -115,12 +133,29 @@
     @apply bg-slate-800 rounded-full hover:bg-slate-700 transition-colors;
   }
 
+  .font-headline {
+    font-family: var(--font-headline);
+  }
+
+  .font-body {
+    font-family: var(--font-body);
+  }
+
+  .font-label {
+    font-family: var(--font-body);
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
   .text-label {
     @apply text-[9px] font-black uppercase tracking-[0.2em] text-slate-500;
   }
 
   .glass-panel {
-    @apply bg-slate-950/40 backdrop-blur-xl border border-white/5;
+    background: rgba(50, 53, 60, 0.6);
+    backdrop-filter: blur(20px);
   }
 
   .tech-card {
@@ -133,5 +168,13 @@
 
   .glow-cyan {
     box-shadow: 0 0 20px -5px rgba(6, 182, 212, 0.3);
+  }
+
+  .hero-gradient {
+    background: radial-gradient(
+      circle at 50% 50%,
+      rgba(0, 242, 255, 0.05) 0%,
+      transparent 70%
+    );
   }
 }

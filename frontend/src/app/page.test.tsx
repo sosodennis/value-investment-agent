@@ -2,23 +2,23 @@
 
 import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import Home from './page';
-import { useAgent } from '../hooks/useAgent';
-import { useFinancialData } from '../hooks/useFinancialData';
+import { AnalysisWorkspace } from '@/components/workspace/AnalysisWorkspace';
+import { useAgent } from '@/hooks/useAgent';
+import { useFinancialData } from '@/hooks/useFinancialData';
 
-vi.mock('../hooks/useAgent', () => ({
+vi.mock('@/hooks/useAgent', () => ({
     useAgent: vi.fn(),
 }));
 
-vi.mock('../hooks/useFinancialData', () => ({
+vi.mock('@/hooks/useFinancialData', () => ({
     useFinancialData: vi.fn(),
 }));
 
-vi.mock('../components/HeaderBar', () => ({
+vi.mock('@/components/HeaderBar', () => ({
     HeaderBar: () => <div data-testid="header-bar" />,
 }));
 
-vi.mock('../components/AgentsRoster', () => ({
+vi.mock('@/components/AgentsRoster', () => ({
     AgentsRoster: ({
         selectedAgentId,
     }: {
@@ -26,7 +26,7 @@ vi.mock('../components/AgentsRoster', () => ({
     }) => <div data-testid="agents-roster">{selectedAgentId ?? 'none'}</div>,
 }));
 
-vi.mock('../components/AgentDetailPanel', () => ({
+vi.mock('@/components/AgentDetailPanel', () => ({
     AgentDetailPanel: ({
         agent,
     }: {
@@ -38,7 +38,7 @@ const mockUseAgent = vi.mocked(useAgent);
 const mockUseFinancialData = vi.mocked(useFinancialData);
 const storage = new Map<string, string>();
 
-describe('Home refresh restore behavior', () => {
+describe('AnalysisWorkspace refresh restore behavior', () => {
     beforeEach(() => {
         storage.clear();
         vi.stubGlobal('localStorage', {
@@ -95,7 +95,7 @@ describe('Home refresh restore behavior', () => {
             activeAgentId: 'financial_news_research',
         });
 
-        render(<Home />);
+        render(<AnalysisWorkspace />);
 
         await waitFor(() => {
             expect(screen.getByTestId('agent-detail').textContent).toBe(
