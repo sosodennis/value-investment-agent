@@ -759,6 +759,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                             value: point.value,
                             color: point.color,
                         })),
+                        priceFormat: { type: 'volume' },
                     },
                 ]
                 : [],

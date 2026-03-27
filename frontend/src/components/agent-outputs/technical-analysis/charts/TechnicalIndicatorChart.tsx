@@ -15,6 +15,7 @@ import {
     UTCTimestamp,
 } from 'lightweight-charts';
 import { CrosshairSyncState } from './useCrosshairSync';
+import { TECHNICAL_PALETTE } from '../technicalPalette';
 
 export type IndicatorLinePoint = { time: UTCTimestamp; value: number } | { time: UTCTimestamp };
 export type IndicatorHistogramPoint =
@@ -32,6 +33,12 @@ export interface IndicatorHistogramSeries {
     id: string;
     data: IndicatorHistogramPoint[];
     color?: string;
+    priceFormat?: {
+        type: 'volume' | 'price' | 'custom';
+        precision?: number;
+        minMove?: number;
+        formatter?: (price: number) => string;
+    };
 }
 
 export interface IndicatorPriceLine {
@@ -357,7 +364,8 @@ export const TechnicalIndicatorChart: React.FC<TechnicalIndicatorChartProps> = (
             const histogram = histograms[index];
             if (!histogram) return;
             series.applyOptions({
-                color: histogram.color ?? 'rgba(148, 163, 184, 0.35)',
+                color: histogram.color ?? TECHNICAL_PALETTE.histogram,
+                priceFormat: histogram.priceFormat,
             });
             series.setData(histogram.data ?? []);
         });
