@@ -4,8 +4,8 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { useAgent } from '@/hooks/useAgent';
 import { useFinancialData } from '@/hooks/useFinancialData';
 import { WorkspaceLayout } from '@/components/workspace/layout';
-import { AgentsRoster } from '@/components/agents-roster/AgentsRoster';
-import { AgentDetailPanel } from '@/components/agent-detail/AgentDetailPanel';
+import { AgentsRoster } from '@/components/workspace/agents-roster/AgentsRoster';
+import { AgentDetailPanel } from '@/components/workspace/agent-detail/AgentDetailPanel';
 import { AgentInfo } from '@/types/agents';
 import { AGENT_CONFIGS, AgentConfig } from '@/config/agents';
 
@@ -148,15 +148,6 @@ export function AnalysisWorkspace({
             setSelectedAgentId(preferredAgent.id);
         }
     }, [agents, selectedAgentId]);
-
-    const handleStartAnalysis = () => {
-        const normalized = ticker.trim().toUpperCase();
-        if (!normalized || isLoading) return;
-        if (normalized !== ticker) {
-            setTicker(normalized);
-        }
-        sendMessage(`Valuate ${normalized}`, true);
-    };
 
     useEffect(() => {
         if (!autoStart || hasAutoStartedRef.current) return;

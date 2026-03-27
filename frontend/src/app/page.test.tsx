@@ -14,11 +14,7 @@ vi.mock('@/hooks/useFinancialData', () => ({
     useFinancialData: vi.fn(),
 }));
 
-vi.mock('@/components/workspace/HeaderBar', () => ({
-    HeaderBar: () => <div data-testid="header-bar" />,
-}));
-
-vi.mock('@/components/agents-roster/AgentsRoster', () => ({
+vi.mock('@/components/workspace/agents-roster/AgentsRoster', () => ({
     AgentsRoster: ({
         selectedAgentId,
     }: {
@@ -26,7 +22,7 @@ vi.mock('@/components/agents-roster/AgentsRoster', () => ({
     }) => <div data-testid="agents-roster">{selectedAgentId ?? 'none'}</div>,
 }));
 
-vi.mock('@/components/agent-detail/AgentDetailPanel', () => ({
+vi.mock('@/components/workspace/agent-detail/AgentDetailPanel', () => ({
     AgentDetailPanel: ({
         agent,
     }: {
@@ -93,6 +89,7 @@ describe('AnalysisWorkspace refresh restore behavior', () => {
                 },
             ],
             activeAgentId: 'financial_news_research',
+            projectionUpdatedAt: null,
         });
 
         render(<AnalysisWorkspace />);

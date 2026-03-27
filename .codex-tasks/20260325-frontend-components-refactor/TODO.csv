@@ -1,0 +1,7 @@
+id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
+1,Phase 1: normalize agent-outputs folders + shared kernel,DONE,All agent-outputs moved into feature subfolders/shared and imports updated; old paths removed,"rg \components/agent-outputs/(DebateOutput|DebateTranscript|DebateFactSheet|NewsResearchOutput|NewsResearchCard|AINewsSummary|TechnicalAnalysisOutput|FundamentalAnalysisOutput|FinancialTable|technical-wording)\"" frontend/src""",2026-03-25 14:18,0,
+2,Phase 2: move charts into technical-analysis,DONE,Charts live under technical-analysis/charts and no imports from components/charts remain,"rg \components/charts/\"" frontend/src""",2026-03-25 14:24,0,
+3,Phase 3: colocate workspace-only components,DONE,agent-detail and agents-roster moved under components/workspace and imports updated,"rg \components/(agent-detail|agents-roster)/\"" frontend/src""",2026-03-25 14:32,0,
+4,Final validation,FAILED,Lint/typecheck/tests run or explicitly deferred,npm run lint && npm run typecheck && npm run test,2026-03-25 14:36,0,npm run lint failed with pre-existing lint errors in frontend (see PROGRESS.md).
+5,Fix lint errors from validation,DONE,All eslint errors addressed; lint passes locally,npm run lint,2026-03-25 14:39,0,User requested direct lint fixes after failed validation.
+6,Final validation (lint/typecheck/tests),DONE,Lint/typecheck/tests pass or explicit deferral recorded,npm run lint && npm run typecheck && npm run test,2026-03-25 14:39,0,

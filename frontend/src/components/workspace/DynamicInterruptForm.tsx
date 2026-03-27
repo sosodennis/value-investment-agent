@@ -100,7 +100,7 @@ const TickerCardRadioWidget = (props: WidgetProps) => {
                             key={option.value}
                             onClick={() => onChange(option.value)}
                             className={`
-                                relative px-3 py-2.5 rounded-lg border transition-all cursor-pointer group flex justify-between items-center
+                                relative px-3 py-2.5 rounded-lg border transition cursor-pointer group flex justify-between items-center
                                 ${isSelected
                                     ? 'bg-slate-900 border-slate-700 shadow-[0_0_15px_rgba(var(--primary-rgb),0.05)]'
                                     : 'bg-slate-950/40 border-slate-900/30 hover:bg-slate-900/40 hover:border-slate-800'}
@@ -125,7 +125,7 @@ const TickerCardRadioWidget = (props: WidgetProps) => {
                                 )}
 
                                 <div className={`
-                                    w-4 h-4 rounded-full border flex items-center justify-center transition-all bg-slate-950/60
+                                    w-4 h-4 rounded-full border flex items-center justify-center transition bg-slate-950/60
                                     ${isSelected ? 'border-primary bg-primary/10 shadow-[0_0_8px_rgba(var(--primary-rgb),0.2)]' : 'border-slate-800 bg-transparent group-hover:border-slate-700'}
                                 `}>
                                     {isSelected && (
@@ -165,7 +165,7 @@ export const DynamicInterruptForm: React.FC<DynamicInterruptFormProps> = ({
         ...uiSchema,
         "ui:submitButtonOptions": {
             "props": {
-                "className": "w-full mt-3 bg-cyan-600 hover:bg-cyan-500 text-white text-[10px] font-bold py-2.5 rounded-lg transition-all uppercase tracking-[0.15em] shadow-xl shadow-cyan-500/10 border-none cursor-pointer flex items-center justify-center gap-2"
+                "className": "w-full mt-3 bg-cyan-600 hover:bg-cyan-500 text-white text-[10px] font-bold py-2.5 rounded-lg transition uppercase tracking-[0.15em] shadow-xl shadow-cyan-500/10 border-none cursor-pointer flex items-center justify-center gap-2"
             },
             "submitText": isTickerForm ? "Confirm Selection" : "Submit Decision"
         }
@@ -251,7 +251,7 @@ export const DynamicInterruptForm: React.FC<DynamicInterruptFormProps> = ({
                     padding: 0.625rem 0.75rem;
                     color: white;
                     font-size: 0.875rem;
-                    transition: all 0.2s;
+                    transition: background-color 0.2s, border-color 0.2s, box-shadow 0.2s;
                     box-sizing: border-box;
                 }
                 .interrupt-form-container input:focus,

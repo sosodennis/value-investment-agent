@@ -1,0 +1,5 @@
+id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
+1,Inventory transition-all + copy targets,DONE,"Target list recorded in PROGRESS.md","rg \"transition-all\" frontend/src && rg \"Processing\\.\\.\\.|Loading Artifact\\.\\.\\.|ANALYZE|Enter Ticker \\(e.g\\. AAPL, TSLA, NVDA\\)\" frontend/src","2026-03-24 18:34",0,
+2,Replace transition-all / transition: all usages,DONE,"No transition-all or transition: all remain in frontend/src","! rg \"transition-all\" frontend/src && ! rg \"transition: all\" frontend/src","2026-03-24 18:39",0,
+3,Update ellipsis + Analyze button copy,DONE,"Legacy copy strings removed and new copy in place","! rg \"ANALYZE\" frontend/src && ! rg \"\\\"[^\\\"]*\\.\\.\\.[^\\\"]*\\\"|'[^']*\\.\\.\\.[^']*'\" frontend/src","2026-03-24 18:42",0,
+4,Run final validation,DONE,"Final validation command passes","! rg \"transition-all\" frontend/src && ! rg \"transition: all\" frontend/src && ! rg \"ANALYZE\" frontend/src && ! rg \"\\\"[^\\\"]*\\.\\.\\.[^\\\"]*\\\"|'[^']*\\.\\.\\.[^']*'\" frontend/src","2026-03-24 18:43",0,

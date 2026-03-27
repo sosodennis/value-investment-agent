@@ -159,7 +159,7 @@
   }
 
   .tech-card {
-    @apply relative overflow-hidden rounded-xl border border-white/5 bg-slate-900/20 backdrop-blur-sm transition-all duration-300;
+    @apply relative overflow-hidden rounded-xl border border-white/5 bg-slate-900/20 backdrop-blur-sm transition duration-300;
   }
 
   .terminal-text {

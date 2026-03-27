@@ -19,13 +19,13 @@ export function AppHeader() {
             </div>
             <GlobalNav.Actions>
                 <button
-                    className="p-2 text-on-surface-variant hover:text-on-surface transition-all duration-200 focus:ring-2 focus:ring-primary-container focus:outline-none rounded"
+                    className="p-2 text-on-surface-variant hover:text-on-surface transition-colors duration-200 focus:ring-2 focus:ring-primary-container focus:outline-none rounded"
                     aria-label="Notifications"
                 >
                     <Bell size={18} />
                 </button>
                 <button
-                    className="p-2 text-on-surface-variant hover:text-on-surface transition-all duration-200 focus:ring-2 focus:ring-primary-container focus:outline-none rounded"
+                    className="p-2 text-on-surface-variant hover:text-on-surface transition-colors duration-200 focus:ring-2 focus:ring-primary-container focus:outline-none rounded"
                     aria-label="Settings"
                 >
                     <Settings size={18} />

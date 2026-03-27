@@ -252,15 +252,33 @@ const parseStructureConfluenceSummary = (
     if (value === undefined || value === null) return undefined;
     const record = toRecord(value, context);
     const summary: TechnicalStructureConfluenceSummary = {};
-    const stringFields = [
+    type StructureStringField =
+        | 'timeframe'
+        | 'confluence_state'
+        | 'profile_method'
+        | 'profile_fidelity'
+        | 'breakout_bias'
+        | 'trend_bias';
+    type StructureNumericField =
+        | 'confluence_score'
+        | 'volume_node_count'
+        | 'nearest_volume_node'
+        | 'nearest_support'
+        | 'nearest_resistance'
+        | 'poc'
+        | 'vah'
+        | 'val';
+    type StructureBooleanField = 'near_volume_node' | 'near_support' | 'near_resistance';
+
+    const stringFields: StructureStringField[] = [
         'timeframe',
         'confluence_state',
         'profile_method',
         'profile_fidelity',
         'breakout_bias',
         'trend_bias',
-    ] as const;
-    const numericFields = [
+    ];
+    const numericFields: StructureNumericField[] = [
         'confluence_score',
         'volume_node_count',
         'nearest_volume_node',
@@ -269,12 +287,12 @@ const parseStructureConfluenceSummary = (
         'poc',
         'vah',
         'val',
-    ] as const;
-    const booleanFields = [
+    ];
+    const booleanFields: StructureBooleanField[] = [
         'near_volume_node',
         'near_support',
         'near_resistance',
-    ] as const;
+    ];
 
     for (const field of stringFields) {
         const parsed = parseNullableOptionalString(record[field], `${context}.${field}`);
@@ -657,13 +675,20 @@ const parseSetupReliabilitySummary = (
     if (value === undefined || value === null) return undefined;
     const record = toRecord(value, context);
     const summary: TechnicalSetupReliabilitySummary = {};
-    const stringFields = [
+    type SetupReliabilityStringField =
+        | 'level'
+        | 'calibration_status'
+        | 'coverage_status'
+        | 'conflict_level'
+        | 'recommended_reliance';
+
+    const stringFields: SetupReliabilityStringField[] = [
         'level',
         'calibration_status',
         'coverage_status',
         'conflict_level',
         'recommended_reliance',
-    ] as const;
+    ];
     for (const field of stringFields) {
         const parsed = parseNullableOptionalString(record[field], `${context}.${field}`);
         if (parsed !== undefined) {

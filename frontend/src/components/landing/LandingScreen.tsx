@@ -33,12 +33,14 @@ const TRENDING_TICKERS: TrendingTicker[] = [
 
 const RECENT_ANALYSIS: RecentAnalysisItem[] = [
     {
+        id: 'msft-deep-dive',
         title: 'MSFT Deep Dive',
         summary: 'AI workloads driving cloud revenue expansion beyond estimates.',
         time: 'Analyzed 14m ago',
         icon: 'stats',
     },
     {
+        id: 'market-sentiment-hub',
         title: 'Market Sentiment Hub',
         summary: 'Fear/Greed index shifting toward aggressive accumulation.',
         time: 'Analyzed 2h ago',

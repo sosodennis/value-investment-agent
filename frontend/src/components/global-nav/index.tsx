@@ -4,7 +4,9 @@ import React, { createContext } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-const GlobalNavContext = createContext<{}>({});
+type GlobalNavContextValue = Record<string, never>;
+
+const GlobalNavContext = createContext<GlobalNavContextValue>({});
 
 function Root({ children }: { children: React.ReactNode }) {
     return (
@@ -39,7 +41,7 @@ function NavLink({ href, children }: { href: string; children: React.ReactNode }
     return (
         <Link
             href={href}
-            className={`transition-all duration-200 ease-in-out focus:ring-2 focus:ring-primary-container focus:outline-none rounded px-1 pt-1 ${
+            className={`transition-colors duration-200 ease-in-out focus:ring-2 focus:ring-primary-container focus:outline-none rounded px-1 pt-1 ${
                 isActive
                     ? 'text-primary-container border-b-2 border-primary-container pb-1'
                     : 'text-on-surface-variant hover:text-on-surface border-b-2 border-transparent pb-1'

@@ -1,0 +1,5 @@
+id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
+1,Inventory extraction targets,DONE,"Target sections and new file names recorded in PROGRESS.md","rg -n \"Other\" frontend/src/components/agent-outputs/TechnicalAnalysisOutput.tsx && rg -n \"Valuation Distribution\" frontend/src/components/agent-outputs/FundamentalAnalysisOutput.tsx","2026-03-24 19:33",0,
+2,Extract TechnicalAnalysisOutput supplementary sections,DONE,"New subcomponent file(s) created and TechnicalAnalysisOutput uses them","rg -n \"TechnicalAnalysisSupplementarySection\" frontend/src/components/agent-outputs/TechnicalAnalysisOutput.tsx","2026-03-24 20:16",0,Paused to start step 3 per user request.
+3,Extract FundamentalAnalysisOutput distribution section,DONE,"New subcomponent file(s) created and FundamentalAnalysisOutput uses them","rg -n \"ValuationDistributionSection\" frontend/src/components/agent-outputs/FundamentalAnalysisOutput.tsx","2026-03-24 19:59",0,
+4,Run typecheck,DONE,"npm run typecheck passes","npm run typecheck","2026-03-24 20:26",0,"Fixed missing HeaderBar module, mock projectionUpdatedAt, and restored MC summary wiring before re-running."

@@ -1,6 +1,7 @@
 import { Brain, BarChart3 } from 'lucide-react';
 
 export type RecentAnalysisItem = {
+    id: string;
     title: string;
     summary: string;
     time: string;
@@ -29,8 +30,8 @@ export function RecentAnalysis({ items }: RecentAnalysisProps) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
                 {items.map((item) => (
                     <div
-                        key={item.title}
-                        className="bg-surface-container p-5 rounded-xl border border-outline-variant/10 hover:border-primary-container/30 transition-all flex gap-4"
+                        key={item.id}
+                        className="bg-surface-container p-5 rounded-xl border border-outline-variant/10 hover:border-primary-container/30 transition-colors flex gap-4"
                     >
                         <div className="h-12 w-12 rounded bg-surface-container-high flex items-center justify-center">
                             {iconFor(item.icon)}
