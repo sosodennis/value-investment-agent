@@ -1,4 +1,4 @@
-import React, { useState, useMemo, memo } from 'react';
+import React, { useState, useMemo, memo, useRef } from 'react';
 import { AgentStatus, ArtifactReference } from '@/types/agents';
 import {
     Activity,
@@ -1071,6 +1071,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
     const macdSignalIndex = useMemo(() => buildSeriesIndex(macdSignalSeries), [macdSignalSeries]);
     const macdHistIndex = useMemo(() => buildSeriesIndex(macdHistSeries), [macdHistSeries]);
     const fdIndex = useMemo(() => buildSeriesIndex(fdSeries), [fdSeries]);
+    const chartStackRef = useRef<HTMLDivElement | null>(null);
 
     const tooltipPayload = useMemo(() => {
         if (!crosshairSync.crosshairTime) return null;
@@ -1160,23 +1161,20 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
     );
 
     const tooltipPosition = useMemo(() => {
-        if (!crosshairSync.crosshairPoint || typeof window === 'undefined') {
+        if (!crosshairSync.crosshairPoint || !chartStackRef.current) {
             return null;
         }
+        const bounds = chartStackRef.current.getBoundingClientRect();
         const TOOLTIP_WIDTH = 240;
         const TOOLTIP_HEIGHT = 190;
         const padding = 12;
-        const maxX = Math.max(padding, window.innerWidth - TOOLTIP_WIDTH - padding);
-        const maxY = Math.max(padding, window.innerHeight - TOOLTIP_HEIGHT - padding);
+        const localX = crosshairSync.crosshairPoint.x - bounds.left;
+        const localY = crosshairSync.crosshairPoint.y - bounds.top;
+        const maxX = Math.max(padding, bounds.width - TOOLTIP_WIDTH - padding);
+        const maxY = Math.max(padding, bounds.height - TOOLTIP_HEIGHT - padding);
         return {
-            x: Math.min(
-                Math.max(crosshairSync.crosshairPoint.x + padding, padding),
-                maxX
-            ),
-            y: Math.min(
-                Math.max(crosshairSync.crosshairPoint.y + padding, padding),
-                maxY
-            ),
+            x: Math.min(Math.max(localX + padding, padding), maxX),
+            y: Math.min(Math.max(localY + padding, padding), maxY),
         };
     }, [crosshairSync.crosshairPoint]);
 
@@ -2447,7 +2445,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                             </div>
                         </div>
 
-                        <div className="relative rounded-xl border border-outline-variant/20 bg-surface-container-low">
+                        <div ref={chartStackRef} className="relative rounded-xl border border-outline-variant/20 bg-surface-container-low">
                             <div className="divide-y divide-outline-variant/20">
                                 <div className="px-4 py-3">
                                     <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
@@ -2554,10 +2552,10 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
 
                             {tooltipPosition && tooltipPayload && (
                                 <div
-                                    className="pointer-events-none fixed z-20 w-60 rounded-xl border border-outline-variant/30 bg-surface-container-high backdrop-blur-md p-3 text-[10px] text-on-surface shadow-lg"
+                                    className="pointer-events-none absolute z-50 w-60 rounded-xl border border-outline-variant/40 bg-surface-container-highest backdrop-blur-md p-3 text-[10px] text-on-surface shadow-[0_12px_30px_rgba(0,0,0,0.45)]"
                                     style={{ left: tooltipPosition.x, top: tooltipPosition.y }}
                                 >
-                                    <div className="text-[9px] font-black uppercase text-on-surface-variant mb-2">
+                                    <div className="text-[9px] font-bold uppercase text-outline mb-2">
                                         {formatTooltipTimestamp(tooltipPayload.time, isIntradayTimeseries)}
                                     </div>
                                     <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
