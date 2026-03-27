@@ -286,17 +286,11 @@ const KeyEvidenceSection: React.FC<{ facts: KeyFact[] }> = ({ facts }) => {
                     onClick={() => setIsExpanded(!isExpanded)}
                     className="w-full flex items-center justify-center gap-1.5 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-outline hover:text-primary-container transition-colors rounded-lg border border-outline-variant/20 hover:border-primary-container/30 bg-surface-container-low"
                 >
-                    {isExpanded ? (
-                        <>
-                            <ChevronUp size={12} className="transition-transform duration-300" />
-                            Show less
-                        </>
-                    ) : (
-                        <>
-                            <ChevronDown size={12} className="transition-transform duration-300" />
-                            Show {hiddenCount} more
-                        </>
-                    )}
+                    <ChevronDown
+                        size={12}
+                        className={`transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
+                    />
+                    {isExpanded ? 'Show less' : `Show ${hiddenCount} more`}
                 </button>
             )}
         </div>

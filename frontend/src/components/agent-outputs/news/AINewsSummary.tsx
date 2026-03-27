@@ -85,7 +85,7 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
     if (!isPreview && (newsItems.length === 0 || typeof output.sentiment_score !== 'number')) {
         return (
             <div className="flex flex-col items-center justify-center p-12 text-on-surface-variant">
-                <Zap className="w-12 h-12 mb-4 animate-pulse opacity-50" />
+                <Zap className="w-12 h-12 mb-4 pulse-ambient opacity-50" />
                 <p className="font-bold uppercase tracking-[0.2em] text-[10px]">Analyzing News Sentiment...</p>
             </div>
         );

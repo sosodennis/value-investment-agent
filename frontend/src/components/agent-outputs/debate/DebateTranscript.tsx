@@ -98,7 +98,7 @@ export const DebateTranscript: React.FC<DebateTranscriptProps> = ({ history }) =
     };
 
     return (
-        <div className="tech-card mt-8 animate-fade-in">
+        <div className="tech-card mt-8 animate-fade-slide-up">
             {/* Terminal Header */}
             <div className="px-5 py-3 border-b border-white/5 bg-surface-container-low flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -109,7 +109,7 @@ export const DebateTranscript: React.FC<DebateTranscriptProps> = ({ history }) =
                     </div>
                     <div className="h-4 w-px bg-surface-container mx-1" />
                     <h3 className="text-label flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse shadow-[0_0_8px_rgba(6,182,212,0.6)]"></span>
+                        <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 pulse-ambient shadow-[0_0_8px_rgba(6,182,212,0.6)]"></span>
                         Agent Intelligence Transcript
                     </h3>
                 </div>
@@ -142,7 +142,7 @@ export const DebateTranscript: React.FC<DebateTranscriptProps> = ({ history }) =
                         let glowColor = "group-hover:shadow-[0_0_20px_-5px_rgba(148,163,184,0.1)]";
 
                         if (isBull) {
-                            avatarIcon = <TrendingUp className="w-4 h-4 text-emerald-400 animate-pulse" />;
+                            avatarIcon = <TrendingUp className="w-4 h-4 text-emerald-400 pulse-ambient" />;
                             roleColor = "text-emerald-400";
                             ringColor = "border-emerald-500/30";
                             bgColor = "from-emerald-950/20 to-slate-900/20";
@@ -162,7 +162,11 @@ export const DebateTranscript: React.FC<DebateTranscriptProps> = ({ history }) =
                         }
 
                         return (
-                            <div key={idx} className="flex gap-6 group relative animate-slide-up" style={{ animationDelay: `${idx * 0.1}s` }}>
+                            <div
+                                key={idx}
+                                className="flex gap-6 group relative animate-fade-slide-up"
+                                style={{ animationDelay: `${idx * 0.1}s` }}
+                            >
                                 <div className={`z-10 w-9 h-9 rounded-full border-2 ${ringColor} bg-surface flex items-center justify-center shrink-0 shadow-2xl transition-transform duration-300 group-hover:scale-110`}>
                                     {avatarIcon}
                                 </div>

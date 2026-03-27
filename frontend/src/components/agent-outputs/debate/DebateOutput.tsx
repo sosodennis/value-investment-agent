@@ -33,7 +33,7 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
     if ((status !== 'done' && !hasData) || (!artifactData && !isPreviewOnly)) {
         return (
             <div className="flex flex-col items-center justify-center h-full text-outline py-12 min-h-[400px]">
-                <Shield size={48} className="text-outline-variant mb-4 opacity-50 animate-pulse" />
+                <Shield size={48} className="text-outline-variant mb-4 opacity-50 pulse-ambient" />
                 <p className="text-sm font-bold uppercase tracking-widest">Debate in Progress</p>
                 <p className="text-[10px] mt-2 opacity-60">Wait for the debate between Bull and Bear agents to conclude.</p>
                 <p className="text-[10px] text-outline mt-2">Status: {status}</p>
@@ -53,7 +53,7 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
                     bg: 'bg-emerald-500/20',
                     border: 'border-emerald-500/40',
                     accent: 'text-emerald-300',
-                    icon: <TrendingUp size={20} className="text-emerald-400 animate-pulse" />,
+                    icon: <TrendingUp size={20} className="text-emerald-400 pulse-ambient" />,
                 };
             case 'LONG':
                 return {
@@ -69,7 +69,7 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
                     bg: 'bg-rose-500/20',
                     border: 'border-rose-500/40',
                     accent: 'text-rose-300',
-                    icon: <TrendingDown size={20} className="text-rose-400 animate-pulse" />,
+                    icon: <TrendingDown size={20} className="text-rose-400 pulse-ambient" />,
                 };
             case 'SHORT':
                 return {
@@ -102,8 +102,8 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
     const isReferenceLoading = reference && isArtifactLoading && !artifactData;
 
     return (
-        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-12">
-            <div className={`tech-card p-6 ${styles.bg} ${styles.border} relative overflow-hidden animate-slide-up`}>
+        <div className="space-y-6 animate-fade-slide-up pb-12">
+            <div className={`tech-card p-6 ${styles.bg} ${styles.border} relative overflow-hidden animate-fade-slide-up`}>
                 <div className="absolute top-0 right-0 p-4">
                     <div className="px-2 py-0.5 rounded-full border border-outline-variant/30 bg-surface-container-low text-[8px] font-black text-on-surface-variant uppercase tracking-widest">
                         {conclusion?.risk_profile?.replace('_', ' ')}
@@ -117,7 +117,7 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
                     </div>
                     <div className="flex items-center gap-2">
                         {isReferenceLoading && (
-                            <div className="px-3 py-1 rounded bg-surface-container border border-outline-variant/30 text-[9px] font-bold text-cyan-500 uppercase tracking-widest flex items-center gap-2 animate-pulse">
+                            <div className="px-3 py-1 rounded bg-surface-container border border-outline-variant/30 text-[9px] font-bold text-cyan-500 uppercase tracking-widest flex items-center gap-2 pulse-ambient">
                                 <Loader2 size={10} className="animate-spin" /> Fetching L3...
                             </div>
                         )}
@@ -164,7 +164,7 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
                     {isPreviewOnly ? (
                         <div className="tech-card p-5 bg-amber-500/5 border-amber-500/10">
                             <div className="flex items-center gap-3 mb-3">
-                                <Zap size={14} className="text-amber-400 animate-pulse" />
+                                <Zap size={14} className="text-amber-400 pulse-ambient" />
                                 <span className="text-label text-on-surface">Verdict Summary (Simulation)</span>
                             </div>
                             <p className="text-sm text-on-surface-variant italic leading-relaxed font-serif">

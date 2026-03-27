@@ -49,7 +49,7 @@ const GenericAgentOutputComponent: React.FC<GenericAgentOutputProps> = ({
     if (status !== 'done' && !effectiveData) {
         return (
             <div className="flex-1 flex flex-col items-center justify-center p-12 text-center h-full min-h-[300px]">
-                <Clock size={48} className="text-slate-900 mb-4 animate-pulse opacity-50" />
+                <Clock size={48} className="text-slate-900 mb-4 pulse-ambient opacity-50" />
                 <h4 className="text-label">Processing…</h4>
                 <p className="text-outline-variant text-[10px] mt-2 max-w-[240px]">
                     {agentName} is currently working on its task.
@@ -69,7 +69,7 @@ const GenericAgentOutputComponent: React.FC<GenericAgentOutputProps> = ({
                     <h3 className="text-sm font-bold text-on-surface uppercase tracking-widest">{agentName} Result</h3>
                 </div>
                 {isReferenceLoading && (
-                    <div className="flex items-center gap-2 text-[10px] text-primary font-bold uppercase tracking-widest animate-pulse">
+                    <div className="flex items-center gap-2 text-[10px] text-primary font-bold uppercase tracking-widest pulse-ambient">
                         <Loader2 size={12} className="animate-spin" />
                         <span>Loading Artifact…</span>
                     </div>

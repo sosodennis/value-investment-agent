@@ -55,8 +55,8 @@ const NewsResearchOutputComponent: React.FC<NewsResearchOutputProps> = ({
     const isReferenceLoading = reference && isArtifactLoading && !artifactData;
 
     return (
-        <div className="space-y-8 pb-12">
-            <div className="flex items-center justify-between mb-2">
+        <div className="space-y-8 pb-12 animate-fade-slide-up">
+            <div className="flex items-center justify-between mb-6 px-2">
                 <div className="flex items-center gap-3">
                     <Zap size={18} className="text-amber-400" />
                     <h3 className="text-xs font-bold text-outline uppercase tracking-[0.2em]">News Research Intelligence</h3>

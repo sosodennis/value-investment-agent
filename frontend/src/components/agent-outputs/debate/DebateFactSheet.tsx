@@ -97,10 +97,10 @@ export const DebateFactSheet: React.FC<DebateFactSheetProps> = ({ facts }) => {
     const valuation = facts.filter(f => f.source_type === 'valuation');
 
     return (
-        <div className="space-y-8 animate-fade-in py-6">
+        <div className="space-y-8 animate-fade-slide-up py-6">
             <div className="flex items-center justify-between border-b border-white/5 pb-4 px-2">
                 <div className="flex items-center gap-3">
-                    <div className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse" />
+                    <div className="w-2 h-2 rounded-full bg-cyan-500 pulse-ambient" />
                     <h3 className="text-xs font-black text-on-surface uppercase tracking-[0.2em]">Validated Fact Registry</h3>
                 </div>
                 <span className="text-[10px] text-outline font-mono">COUNT: {facts.length}</span>

@@ -22,7 +22,7 @@ export const AgentLoadingState: React.FC<AgentLoadingStateProps> = ({
 }) => {
     if (type === 'header') {
         return (
-            <div className={`flex items-center gap-2 text-[10px] ${colorClass} font-bold uppercase tracking-widest animate-pulse ${className}`}>
+            <div className={`flex items-center gap-2 text-[10px] ${colorClass} font-bold uppercase tracking-widest pulse-ambient ${className}`}>
                 <Loader2 size={12} className="animate-spin" />
                 <span>{title || 'Loading…'}</span>
             </div>
@@ -46,7 +46,7 @@ export const AgentLoadingState: React.FC<AgentLoadingStateProps> = ({
     return (
         <div className={`flex-1 flex flex-col items-center justify-center p-12 text-center h-full min-h-[300px] animate-in fade-in duration-500 ${className}`}>
             {Icon && (
-                <Icon size={48} className={`${colorClass.replace('text-', 'text-surface-container-highest ')} mb-4 animate-pulse opacity-50`} />
+                <Icon size={48} className={`${colorClass.replace('text-', 'text-surface-container-highest ')} mb-4 pulse-ambient opacity-50`} />
             )}
             {!Icon && (
                 <div className="w-12 h-12 rounded-xl bg-surface-container border border-outline-variant/30 flex items-center justify-center mb-4">

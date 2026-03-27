@@ -134,7 +134,7 @@ const FinancialTableComponent: React.FC<FinancialTableProps> = ({ reports, ticke
     };
 
     return (
-        <div className="w-full mt-4 mb-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="w-full mt-4 mb-6 animate-fade-slide-up">
             <div className="bg-surface-container border border-outline-variant/10 rounded-xl overflow-hidden">
                 <div className="px-6 py-4 bg-surface-container-low flex justify-between items-center">
                     <h3 className="text-on-surface font-bold flex items-center gap-2">

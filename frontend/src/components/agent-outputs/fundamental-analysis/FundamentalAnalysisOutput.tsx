@@ -584,7 +584,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
     const isReferenceLoading = reference && isArtifactLoading && !artifactData;
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 animate-fade-slide-up">
             <div className="flex items-center justify-between mb-6 px-2">
                 <div className="flex items-center gap-3">
                     <LayoutPanelTop size={18} className="text-secondary" />
@@ -608,7 +608,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
 
             {/* Preview Section - Valuation & Metrics */}
             {hasPreview && (
-                <div className="space-y-4 animate-slide-up">
+                <div className="space-y-4 animate-fade-slide-up">
                     {valuationScore !== undefined && (
                         <div className="bg-surface-container p-5 rounded-xl border border-outline-variant/10 flex items-center justify-between">
                             <span className="text-[10px] text-outline mb-2 block uppercase tracking-tighter">Analyst Valuation Score</span>
