@@ -178,7 +178,7 @@ export const ValuationDistributionSection: React.FC<ValuationDistributionSection
         return points.sort((a, b) => a.x - b.x);
     }, [distributionSummary]);
 
-    const [showDistributionCurve, setShowDistributionCurve] = useState(false);
+    const [showDistributionCurve, setShowDistributionCurve] = useState(true);
     const canShowCurve = distributionChartData.length > 0;
     const shouldRenderCurve = canShowCurve && (scenarioCards.length === 0 || showDistributionCurve);
 
@@ -409,20 +409,20 @@ export const ValuationDistributionSection: React.FC<ValuationDistributionSection
     })();
 
     return (
-        <div className="tech-card p-5 space-y-4 bg-gradient-to-br from-cyan-950/20 via-slate-900/40 to-slate-950/20 border-cyan-500/20">
+        <div className="bg-surface-container p-5 rounded-xl border border-outline-variant/10 space-y-5 flex flex-col">
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <ChartArea size={16} className="text-cyan-300" />
-                    <span className="text-label">Valuation Distribution</span>
+                    <ChartArea size={16} className="text-primary-container" />
+                    <span className="text-[10px] text-outline uppercase tracking-tighter">Valuation Distribution</span>
                 </div>
                 <div className="flex items-center gap-4">
                     {distributionSummary?.median !== undefined && (
-                        <span className="text-sm font-black text-cyan-200">
+                        <span className="text-sm font-black text-primary-fixed tabular-nums">
                             Median: {formatCurrency(distributionSummary.median)}
                         </span>
                     )}
                     {typeof currentPriceAnchor === 'number' && (
-                        <span className="text-sm font-semibold text-rose-200">
+                        <span className="text-sm font-semibold text-rose-200 tabular-nums">
                             Current: {formatCurrency(currentPriceAnchor)}
                         </span>
                     )}
@@ -469,9 +469,9 @@ export const ValuationDistributionSection: React.FC<ValuationDistributionSection
             {scenarioCards.length > 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     {scenarioCards.map((scenario) => (
-                        <div key={scenario.key} className="rounded-lg border border-outline-variant/30 bg-surface-container-low p-3">
-                            <div className="text-label mb-1">{scenario.label}</div>
-                            <div className="text-lg font-black text-on-surface">
+                        <div key={scenario.key} className="bg-surface-container p-5 rounded-xl border border-outline-variant/10">
+                            <div className="text-[10px] text-outline mb-2 block uppercase tracking-tighter">{scenario.label}</div>
+                            <div className="text-lg font-black text-on-surface tabular-nums tracking-tight">
                                 {formatCurrency(scenario.price)}
                             </div>
                             {scenario.key === 'bear' && bandStatus === 'undervalued_high' && bandDeviationText && (
@@ -490,13 +490,13 @@ export const ValuationDistributionSection: React.FC<ValuationDistributionSection
             )}
 
             {canShowCurve && scenarioCards.length > 0 && (
-                <div className="flex items-center justify-between rounded-lg border border-cyan-400/20 bg-surface-container-low px-3 py-2">
+                <div className="flex items-center justify-between rounded-lg bg-surface-container px-3 py-2">
                     <div className="text-xs text-on-surface-variant">
-                        詳細分佈曲線可用於查看尾部風險（P5/P95）。
+                        The detailed distribution curve can be used to view tail risks (P5/P95).
                     </div>
                     <button
                         type="button"
-                        className="text-xs font-semibold text-cyan-300 hover:text-cyan-200 transition-colors"
+                        className="text-xs font-semibold text-primary-container hover:text-primary-fixed transition-colors"
                         onClick={() => setShowDistributionCurve((current) => !current)}
                     >
                         {showDistributionCurve ? 'Hide Curve' : 'Show Curve'}

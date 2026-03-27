@@ -66,10 +66,10 @@ const FinancialTableComponent: React.FC<FinancialTableProps> = ({ reports, ticke
 
     const renderRow = (label: string, accessor: (r: FinancialReport) => TraceableField | null | undefined, formatter = formatCurrency) => {
         return (
-            <tr className="border-b border-slate-800 hover:bg-slate-800/50 transition-colors">
-                <td className="py-3 px-4 text-slate-400 text-sm font-medium">{label}</td>
+            <tr className="hover:bg-surface-container-high transition-colors">
+                <td className="py-3 px-4 text-on-surface-variant text-sm font-medium">{label}</td>
                 {sortedReports.map((r, i) => (
-                    <td key={i} className="py-3 px-4 text-slate-200 text-sm text-right font-mono">
+                    <td key={i} className="py-3 px-4 text-on-surface text-sm text-right font-mono tabular-nums">
                         <div className="group relative inline-block">
                             {formatter(accessor(r))}
                             {accessor(r)?.provenance && (
@@ -89,10 +89,10 @@ const FinancialTableComponent: React.FC<FinancialTableProps> = ({ reports, ticke
     // Ratios
     const renderRatioRow = (label: string, numAccessor: (r: FinancialReport) => TraceableField | null, denAccessor: (r: FinancialReport) => TraceableField | null) => {
         return (
-            <tr className="border-b border-slate-800 hover:bg-slate-800/50 transition-colors bg-slate-900/30">
-                <td className="py-3 px-4 text-indigo-400 text-sm font-bold">{label}</td>
+            <tr className="hover:bg-surface-container-high transition-colors bg-surface-container-low">
+                <td className="py-3 px-4 text-primary-container text-sm font-bold">{label}</td>
                 {sortedReports.map((r, i) => (
-                    <td key={i} className="py-3 px-4 text-indigo-300 text-sm text-right font-mono font-bold">
+                    <td key={i} className="py-3 px-4 text-primary-fixed text-sm text-right font-mono font-bold tabular-nums">
                         {formatRatio(numAccessor(r), denAccessor(r))}
                     </td>
                 ))}
@@ -135,13 +135,13 @@ const FinancialTableComponent: React.FC<FinancialTableProps> = ({ reports, ticke
 
     return (
         <div className="w-full mt-4 mb-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
-                <div className="px-6 py-4 border-b border-slate-800 bg-slate-950 flex justify-between items-center">
-                    <h3 className="text-slate-200 font-semibold flex items-center gap-2">
-                        <Info size={16} className="text-blue-500" />
-                        Financial Health Report: <span className="text-indigo-400">{ticker}</span>
+            <div className="bg-surface-container border border-outline-variant/10 rounded-xl overflow-hidden">
+                <div className="px-6 py-4 bg-surface-container-low flex justify-between items-center">
+                    <h3 className="text-on-surface font-bold flex items-center gap-2">
+                        <Info size={16} className="text-primary-container" />
+                        Financial Health Report: <span className="text-primary-container">{ticker}</span>
                     </h3>
-                    <span className="text-[10px] text-slate-500 bg-slate-900 px-2 py-1 rounded border border-slate-800 uppercase tracking-wider">
+                    <span className="text-[10px] text-outline bg-surface px-2 py-1 rounded-sm uppercase tracking-widest">
                         {extensionType || 'General'} Model
                     </span>
                 </div>
@@ -149,10 +149,10 @@ const FinancialTableComponent: React.FC<FinancialTableProps> = ({ reports, ticke
                 <div className="overflow-x-auto">
                     <table className="w-full">
                         <thead>
-                            <tr className="bg-slate-950/50">
-                                <th className="text-left py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Metric</th>
+                            <tr className="bg-surface-container-lowest">
+                                <th className="text-left py-3 px-4 text-xs font-bold text-outline uppercase tracking-wider">Metric</th>
                                 {headers.map((h, i) => (
-                                    <th key={i} className="text-right py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">{h}</th>
+                                    <th key={i} className="text-right py-3 px-4 text-xs font-bold text-outline uppercase tracking-wider tabular-nums">{h}</th>
                                 ))}
                             </tr>
                         </thead>
@@ -161,7 +161,7 @@ const FinancialTableComponent: React.FC<FinancialTableProps> = ({ reports, ticke
                             {renderRatioRow("ROE", r => r.base.net_income, r => r.base.total_equity)}
                             {renderRatioRow("Debt/Equity", r => r.base.total_liabilities, r => r.base.total_equity)}
 
-                            <tr className="bg-slate-800/20"><td colSpan={headers.length + 1} className="py-1"></td></tr>
+                            <tr className="bg-surface-container"><td colSpan={headers.length + 1} className="py-1"></td></tr>
 
                             {/* Base Metrics */}
                             {renderRow("Revenue", r => r.base.total_revenue)}
@@ -176,7 +176,7 @@ const FinancialTableComponent: React.FC<FinancialTableProps> = ({ reports, ticke
                             {/* Extension Metrics */}
                             {extensionType === 'Industrial' && (
                                 <>
-                                    <tr className="bg-slate-800/20"><td colSpan={headers.length + 1} className="py-2 px-4 text-xs font-bold text-slate-500 uppercase">Industrial Metrics</td></tr>
+                                    <tr className="bg-surface-container"><td colSpan={headers.length + 1} className="py-2 px-4 text-xs font-bold text-outline uppercase tracking-wider">Industrial Metrics</td></tr>
                                     {renderRow("Inventory", r => getIndustrialField(r, 'inventory'))}
                                     {renderRow("R&D Info", r => getIndustrialField(r, 'rd_expense'))}
                                     {renderRow("Capex", r => getIndustrialField(r, 'capex'))}
@@ -185,7 +185,7 @@ const FinancialTableComponent: React.FC<FinancialTableProps> = ({ reports, ticke
 
                             {extensionType === 'FinancialServices' && (
                                 <>
-                                    <tr className="bg-slate-800/20"><td colSpan={headers.length + 1} className="py-2 px-4 text-xs font-bold text-slate-500 uppercase">Banking Metrics</td></tr>
+                                    <tr className="bg-surface-container"><td colSpan={headers.length + 1} className="py-2 px-4 text-xs font-bold text-outline uppercase tracking-wider">Banking Metrics</td></tr>
                                     {renderRow("Loans", r => getFinancialServicesField(r, 'loans_and_leases'))}
                                     {renderRow("Deposits", r => getFinancialServicesField(r, 'deposits'))}
                                     {renderRow("Interest Income", r => getFinancialServicesField(r, 'interest_income'))}
@@ -194,7 +194,7 @@ const FinancialTableComponent: React.FC<FinancialTableProps> = ({ reports, ticke
 
                             {extensionType === 'RealEstate' && (
                                 <>
-                                    <tr className="bg-slate-800/20"><td colSpan={headers.length + 1} className="py-2 px-4 text-xs font-bold text-slate-500 uppercase">REIT Metrics</td></tr>
+                                    <tr className="bg-surface-container"><td colSpan={headers.length + 1} className="py-2 px-4 text-xs font-bold text-outline uppercase tracking-wider">REIT Metrics</td></tr>
                                     {renderRow("Real Estate Assets", r => getRealEstateField(r, 'real_estate_assets'))}
                                     {renderRow("FFO", r => getRealEstateField(r, 'ffo'))}
                                 </>

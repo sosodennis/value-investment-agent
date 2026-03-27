@@ -22,7 +22,7 @@ function Logo() {
     return (
         <Link
             href="/"
-            className="text-xl font-extrabold tracking-tighter text-primary-container focus:outline-none focus:ring-2 focus:ring-primary-container rounded"
+            className="text-xl font-extrabold tracking-tighter text-primary-container focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-container/50 rounded"
         >
             Oracle AI
         </Link>
@@ -41,7 +41,7 @@ function NavLink({ href, children }: { href: string; children: React.ReactNode }
     return (
         <Link
             href={href}
-            className={`transition-colors duration-200 ease-in-out focus:ring-2 focus:ring-primary-container focus:outline-none rounded px-1 pt-1 ${
+            className={`transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-container/50 rounded px-1 pt-1 ${
                 isActive
                     ? 'text-primary-container border-b-2 border-primary-container pb-1'
                     : 'text-on-surface-variant hover:text-on-surface border-b-2 border-transparent pb-1'

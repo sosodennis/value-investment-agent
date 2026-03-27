@@ -96,6 +96,11 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
         assumptionBreakdown?.data_quality_flags ??
         []
     ).filter((flag): flag is string => typeof flag === 'string' && flag.length > 0);
+    const dataQualityFlagsPreview = dataQualityFlags.slice(0, 6);
+    const dataQualityFlagsOverflow =
+        dataQualityFlags.length > dataQualityFlagsPreview.length
+            ? dataQualityFlags.length - dataQualityFlagsPreview.length
+            : 0;
     const timeAlignmentStatus =
         previewData?.time_alignment_status ??
         assumptionBreakdown?.time_alignment_status ??
@@ -114,6 +119,11 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
     const forwardSignalSourceTypes = (forwardSignalSummary?.source_types ?? []).filter(
         (item): item is string => typeof item === 'string' && item.length > 0
     );
+    const forwardSignalSourcePreview = forwardSignalSourceTypes.slice(0, 2);
+    const forwardSignalSourceOverflow =
+        forwardSignalSourceTypes.length > forwardSignalSourcePreview.length
+            ? forwardSignalSourceTypes.length - forwardSignalSourcePreview.length
+            : 0;
     const forwardSignalMappingVersion =
         typeof valuationDiagnostics?.forward_signal_mapping_version === 'string' &&
         valuationDiagnostics.forward_signal_mapping_version.length > 0
@@ -172,6 +182,11 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
     const baseGrowthReasons = (baseAssumptionGuardrailSummary?.growth?.reasons ?? []).filter(
         (item): item is string => typeof item === 'string' && item.length > 0
     );
+    const baseGrowthReasonsPreview = baseGrowthReasons.slice(0, 2);
+    const baseGrowthReasonsOverflow = Math.max(
+        0,
+        baseGrowthReasons.length - baseGrowthReasonsPreview.length
+    );
     const baseMarginGuardrailApplied =
         typeof valuationDiagnostics?.base_margin_guardrail_applied === 'boolean'
             ? valuationDiagnostics.base_margin_guardrail_applied
@@ -216,6 +231,11 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
     const baseMarginReasons = (baseAssumptionGuardrailSummary?.margin?.reasons ?? []).filter(
         (item): item is string => typeof item === 'string' && item.length > 0
     );
+    const baseMarginReasonsPreview = baseMarginReasons.slice(0, 2);
+    const baseMarginReasonsOverflow = Math.max(
+        0,
+        baseMarginReasons.length - baseMarginReasonsPreview.length
+    );
     const hasBaseGrowthGuardrail =
         typeof baseGrowthGuardrailApplied === 'boolean' ||
         !!baseGrowthGuardrailVersion ||
@@ -238,15 +258,24 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
             typeof item.shock_value_bp === 'number' ||
             typeof item.delta_pct_vs_base === 'number')
     ));
+    const sensitivityTopDriversPreview = sensitivityTopDrivers.slice(0, 2);
+    const sensitivityTopDriversOverflow = Math.max(
+        0,
+        sensitivityTopDrivers.length - sensitivityTopDriversPreview.length
+    );
     const equityValue = previewData?.equity_value;
     const intrinsicValue = previewData?.intrinsic_value;
     const upsidePotential = previewData?.upside_potential;
     const assumptionHighlights = useMemo(
-        () => assumptionBreakdown?.assumptions?.slice(0, 3) ?? [],
+        () => assumptionBreakdown?.assumptions?.slice(0, 2) ?? [],
         [assumptionBreakdown]
     );
+    const assumptionHighlightsTotal = assumptionBreakdown?.assumptions?.length ?? 0;
+    const assumptionHighlightsOverflow = Math.max(
+        0,
+        assumptionHighlightsTotal - assumptionHighlights.length
+    );
     const monteCarloMeta = assumptionBreakdown?.monte_carlo;
-    const mcEnabled = monteCarloMeta?.enabled === true;
     const mcExecutedIterations =
         typeof monteCarloMeta?.executed_iterations === 'number'
             ? monteCarloMeta.executed_iterations
@@ -291,6 +320,16 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
         typeof monteCarloMeta?.sampler_type === 'string'
             ? monteCarloMeta.sampler_type
             : undefined;
+    const hasMonteCarloSummary =
+        typeof monteCarloMeta?.enabled === 'boolean' ||
+        mcExecutedIterations !== undefined ||
+        mcEffectiveWindow !== undefined ||
+        mcStoppedEarly !== undefined ||
+        mcConfiguredIterations !== undefined ||
+        mcConverged !== undefined ||
+        mcMedianDelta !== undefined ||
+        mcTolerance !== undefined ||
+        mcSamplerType !== undefined;
     const mcPsdRepaired =
         typeof monteCarloMeta?.psd_repaired === 'boolean'
             ? monteCarloMeta.psd_repaired
@@ -350,6 +389,104 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
         }
         return undefined;
     })();
+    type SummaryItem = { label: string; value: string; tone?: string };
+    const assumptionSummaryItems: SummaryItem[] = [];
+    if (typeof monteCarloMeta?.enabled === 'boolean') {
+        assumptionSummaryItems.push({
+            label: 'Monte Carlo',
+            value: monteCarloMeta.enabled ? 'Enabled' : 'Disabled',
+            tone: monteCarloMeta.enabled ? 'text-emerald-200' : 'text-on-surface-variant',
+        });
+    }
+    const forwardSignalSummaryValue = (() => {
+        if (
+            typeof forwardSignalSummary?.signals_total === 'number' &&
+            typeof forwardSignalSummary?.signals_accepted === 'number'
+        ) {
+            return `${Math.round(forwardSignalSummary.signals_accepted)}/${Math.round(forwardSignalSummary.signals_total)} accepted`;
+        }
+        if (typeof forwardSignalEvidenceCount === 'number') {
+            return `Evidence: ${Math.round(forwardSignalEvidenceCount)}`;
+        }
+        return null;
+    })();
+    if (forwardSignalSummaryValue) {
+        const tone =
+            forwardSignalRiskLevel === 'high'
+                ? 'text-rose-200'
+                : forwardSignalRiskLevel === 'medium'
+                    ? 'text-amber-200'
+                    : forwardSignalRiskLevel === 'low'
+                        ? 'text-emerald-200'
+                        : undefined;
+        assumptionSummaryItems.push({
+            label: 'Forward Signals',
+            value: forwardSignalSummaryValue,
+            tone,
+        });
+    }
+    if (
+        typeof sensitivitySummary?.enabled === 'boolean' ||
+        typeof sensitivitySummary?.scenario_count === 'number'
+    ) {
+        const scenarioText =
+            typeof sensitivitySummary?.scenario_count === 'number'
+                ? `${Math.round(sensitivitySummary.scenario_count)} scenarios`
+                : null;
+        const statusText =
+            typeof sensitivitySummary?.enabled === 'boolean'
+                ? sensitivitySummary.enabled
+                    ? 'On'
+                    : 'Off'
+                : 'On';
+        assumptionSummaryItems.push({
+            label: 'Sensitivity',
+            value: `${statusText}${scenarioText ? ` · ${scenarioText}` : ''}`,
+            tone: sensitivitySummary?.enabled ? 'text-emerald-200' : 'text-on-surface-variant',
+        });
+    }
+    if (timeAlignmentStatus) {
+        assumptionSummaryItems.push({
+            label: 'Time Alignment',
+            value: timeAlignmentStatus,
+            tone:
+                timeAlignmentStatus === 'high_risk' || timeAlignmentStatus === 'warning'
+                    ? 'text-rose-200'
+                    : 'text-emerald-200',
+        });
+    }
+    const dataFreshnessItems = useMemo(() => {
+        if (!dataFreshness) return [];
+        const items: { label: string; value: string }[] = [];
+        const pushItem = (
+            label: string,
+            value: string | number | null | undefined
+        ) => {
+            if (value === null || value === undefined || value === '') return;
+            items.push({ label, value: String(value) });
+        };
+        pushItem(
+            'Financial Period End',
+            dataFreshness.financial_statement?.period_end_date
+        );
+        pushItem('Fiscal Year', dataFreshness.financial_statement?.fiscal_year);
+        pushItem('Market Provider', dataFreshness.market_data?.provider);
+        pushItem('Market As-Of', dataFreshness.market_data?.as_of);
+        pushItem('Shares Source', dataFreshness.shares_outstanding_source);
+        if (typeof dataFreshness.time_alignment?.lag_days === 'number') {
+            const lagDays = Math.round(dataFreshness.time_alignment.lag_days);
+            const threshold =
+                typeof dataFreshness.time_alignment.threshold_days === 'number'
+                    ? Math.round(dataFreshness.time_alignment.threshold_days)
+                    : null;
+            pushItem(
+                'Time Alignment Lag',
+                threshold !== null ? `${lagDays} days (threshold ${threshold} days)` : `${lagDays} days`
+            );
+        }
+        pushItem('Time Alignment Policy', dataFreshness.time_alignment?.policy);
+        return items;
+    }, [dataFreshness]);
     type ValuationCard = {
         label: string;
         value: string;
@@ -448,14 +585,14 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-6 px-2">
                 <div className="flex items-center gap-3">
-                    <LayoutPanelTop size={18} className="text-indigo-400" />
-                    <h3 className="text-sm font-bold text-on-surface uppercase tracking-widest">Financial Data Matrix</h3>
+                    <LayoutPanelTop size={18} className="text-secondary" />
+                    <h3 className="text-xs uppercase tracking-[0.2em] font-bold text-outline">Financial Data Matrix</h3>
                 </div>
                 <div className="flex items-center gap-2">
                     {modelTypeDisplay && (
-                        <span className="rounded border border-indigo-400/30 bg-indigo-500/10 px-2 py-1 text-[11px] font-semibold text-indigo-200">
+                        <span className="rounded border border-outline-variant/10 bg-surface-container-low px-2 py-1 text-[11px] font-semibold text-primary-container">
                             Model: {modelTypeDisplay.label} ({modelTypeDisplay.code})
                         </span>
                     )}
@@ -472,9 +609,9 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
             {/* Preview Section - Valuation & Metrics */}
             {hasPreview && (
                 <div className="space-y-4 animate-slide-up">
-                    <div className="tech-card p-4 flex items-center justify-between bg-gradient-to-r from-slate-900/40 to-slate-900/10">
-                        <span className="text-label">Analyst Valuation Score</span>
-                        {valuationScore !== undefined && (
+                    {valuationScore !== undefined && (
+                        <div className="bg-surface-container p-5 rounded-xl border border-outline-variant/10 flex items-center justify-between">
+                            <span className="text-[10px] text-outline mb-2 block uppercase tracking-tighter">Analyst Valuation Score</span>
                             <div className="flex items-center gap-3">
                                 <div className="h-1 w-24 bg-surface-container-high rounded-full overflow-hidden">
                                     <div
@@ -486,15 +623,15 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                     {Math.round(valuationScore)}/100
                                 </span>
                             </div>
-                        )}
-                    </div>
+                        </div>
+                    )}
 
                     {Object.keys(previewKeyMetrics).length > 0 && (
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                             {Object.entries(previewKeyMetrics).map(([label, value]) => (
-                                <div key={label} className="tech-card p-4 group hover:bg-surface-container-low">
-                                    <div className="text-label mb-1 text-outline group-hover:text-on-surface-variant transition-colors">{label}</div>
-                                    <div className="text-sm font-black text-on-surface">
+                                <div key={label} className="bg-surface-container p-5 rounded-xl border border-outline-variant/10 hover:border-primary-container/30 transition-colors group">
+                                    <div className="text-[10px] text-outline mb-2 block uppercase tracking-tighter group-hover:text-on-surface-variant transition-colors">{label}</div>
+                                    <div className="text-lg font-black text-on-surface tabular-nums tracking-tight">
                                         {typeof value === 'string' ? value : String(value)}
                                     </div>
                                 </div>
@@ -507,9 +644,9 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                             {valuationCards.map((card) => (
                                 <div
                                     key={card.label}
-                                    className="tech-card p-4 border-outline-variant/30 bg-surface-container-low"
+                                    className="bg-surface-container-low p-5 rounded-xl border border-outline-variant/10"
                                 >
-                                    <div className="text-label mb-1">{card.label}</div>
+                                    <div className="text-[10px] text-outline mb-2 block uppercase tracking-tighter">{card.label}</div>
                                     <div
                                         className={`text-xl font-black ${
                                             card.unavailable
@@ -534,412 +671,472 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                     </div>
 
                     {(assumptionBreakdown || dataFreshness) && (
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 gap-4 items-start">
                             {assumptionBreakdown && (
-                                <div className="tech-card p-4 space-y-3 border-amber-500/20 bg-gradient-to-br from-amber-950/20 via-slate-900/40 to-slate-950/20">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-label">Assumption Breakdown</span>
+                                <div className="bg-surface-container p-5 rounded-xl border border-outline-variant/10 space-y-4">
+                                    <div className="flex flex-wrap items-start justify-between gap-3">
                                         <div className="flex items-center gap-2">
+                                            <span className="text-[10px] text-outline mb-2 block uppercase tracking-tighter">Assumption Breakdown</span>
                                             {assumptionRiskBadge && (
                                                 <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${assumptionRiskBadge.className}`}>
                                                     {assumptionRiskBadge.label}
                                                 </span>
                                             )}
-                                            <span className="text-xs font-semibold text-amber-300">
-                                                {assumptionBreakdown.total_assumptions ?? 0} assumptions
-                                            </span>
                                         </div>
+                                        <span className="text-xs font-semibold text-amber-300">
+                                            {assumptionBreakdown.total_assumptions ?? 0} assumptions
+                                        </span>
                                     </div>
-                                    {typeof assumptionBreakdown.monte_carlo?.enabled === 'boolean' && (
-                                        <div className="text-xs text-on-surface-variant">
-                                            Monte Carlo: {assumptionBreakdown.monte_carlo.enabled ? 'Enabled' : 'Disabled'}
-                                            {mcSamplerType ? ` (${mcSamplerType})` : ''}
+                                    {assumptionSummaryItems.length > 0 && (
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                            {assumptionSummaryItems.map((item) => (
+                                                <div
+                                                    key={item.label}
+                                                    className="rounded-lg border border-outline-variant/20 bg-surface-container-low px-2 py-1"
+                                                >
+                                                    <div className="text-[10px] text-outline uppercase tracking-wider">
+                                                        {item.label}
+                                                    </div>
+                                                    <div
+                                                        className={`text-[11px] font-semibold ${item.tone ?? 'text-on-surface'}`}
+                                                    >
+                                                        {item.value}
+                                                    </div>
+                                                </div>
+                                            ))}
                                         </div>
                                     )}
-                                    {mcEnabled && (
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2">
-                                            {mcExecutedIterations !== undefined && (
-                                                <div className="text-[11px] text-on-surface bg-surface-container-low rounded px-2 py-1">
-                                                    Executed: {Math.round(mcExecutedIterations)}
-                                                </div>
-                                            )}
-                                            {mcEffectiveWindow !== undefined && (
-                                                <div className="text-[11px] text-on-surface bg-surface-container-low rounded px-2 py-1">
-                                                    Window: {Math.round(mcEffectiveWindow)}
-                                                </div>
-                                            )}
-                                            {mcStoppedEarly !== undefined && (
-                                                <div className="text-[11px] text-on-surface bg-surface-container-low rounded px-2 py-1">
-                                                    Early Stop: {mcStoppedEarly ? 'Yes' : 'No'}
-                                                </div>
-                                            )}
-                                            {mcPsdRepaired !== undefined && (
-                                                <div className="text-[11px] text-on-surface bg-surface-container-low rounded px-2 py-1">
-                                                    PSD Repair: {mcPsdRepaired ? 'Yes' : 'No'}
-                                                </div>
-                                            )}
-                                            {mcConverged !== undefined && (
-                                                <div className="text-[11px] text-on-surface bg-surface-container-low rounded px-2 py-1">
-                                                    Converged: {mcConverged ? 'Yes' : 'No'}
-                                                </div>
-                                            )}
-                                            {mcMedianDelta !== undefined && (
-                                                <div className="text-[11px] text-on-surface bg-surface-container-low rounded px-2 py-1">
-                                                    Median Δ: {(mcMedianDelta * 100).toFixed(2)}%
-                                                    {mcTolerance !== undefined
-                                                        ? ` / ${(mcTolerance * 100).toFixed(2)}% tol`
-                                                        : ''}
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                    {(forwardSignalSummary ||
-                                        forwardSignalRiskLevel ||
-                                        forwardSignalEvidenceCount !== undefined ||
-                                        forwardSignalMappingVersion ||
-                                        typeof forwardSignalCalibrationApplied === 'boolean') && (
-                                        <div className="space-y-2">
+                                    {assumptionHighlights.length > 0 && (
+                                        <div className="rounded-lg border border-outline-variant/20 bg-surface-container-low p-3 space-y-2">
                                             <div className="text-[11px] uppercase tracking-wider text-on-surface-variant">
-                                                Forward Signal Policy
+                                                Assumption Highlights
                                             </div>
-                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                                {typeof forwardSignalSummary?.signals_total === 'number' && (
-                                                    <div className="text-[11px] text-on-surface bg-surface-container-low rounded px-2 py-1">
-                                                        Signals: {Math.round(forwardSignalSummary.signals_total)}
+                                            <div className="space-y-2">
+                                                {assumptionHighlights.map((item, index) => (
+                                                    <div
+                                                        key={`${item.statement}-${index}`}
+                                                        className="text-xs text-on-surface bg-surface-container-high rounded px-2 py-1 break-words"
+                                                    >
+                                                        {item.statement}
                                                     </div>
-                                                )}
-                                                {typeof forwardSignalSummary?.signals_accepted === 'number' && (
-                                                    <div className="text-[11px] text-emerald-200 bg-surface-container-low rounded px-2 py-1">
-                                                        Accepted: {Math.round(forwardSignalSummary.signals_accepted)}
-                                                    </div>
-                                                )}
-                                                {typeof forwardSignalSummary?.signals_rejected === 'number' && (
-                                                    <div className="text-[11px] text-rose-200 bg-surface-container-low rounded px-2 py-1">
-                                                        Rejected: {Math.round(forwardSignalSummary.signals_rejected)}
-                                                    </div>
-                                                )}
-                                                {typeof forwardSignalEvidenceCount === 'number' && (
-                                                    <div className="text-[11px] text-on-surface bg-surface-container-low rounded px-2 py-1">
-                                                        Evidence: {Math.round(forwardSignalEvidenceCount)}
+                                                ))}
+                                                {assumptionHighlightsOverflow > 0 && (
+                                                    <div className="text-[11px] text-on-surface-variant">
+                                                        +{assumptionHighlightsOverflow} more assumptions
                                                     </div>
                                                 )}
                                             </div>
-                                            {(typeof forwardSignalSummary?.growth_adjustment_basis_points === 'number' ||
-                                                typeof forwardSignalSummary?.margin_adjustment_basis_points === 'number') && (
-                                                <div className="flex flex-wrap gap-2">
-                                                    {typeof forwardSignalSummary?.growth_adjustment_basis_points === 'number' && (
-                                                        <span className="rounded border border-cyan-400/30 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-200">
-                                                            Growth adjustment: {formatSignedBasisPoints(forwardSignalSummary.growth_adjustment_basis_points)}
-                                                        </span>
-                                                    )}
-                                                    {typeof forwardSignalSummary?.margin_adjustment_basis_points === 'number' && (
-                                                        <span className="rounded border border-cyan-400/30 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-200">
-                                                            Margin adjustment: {formatSignedBasisPoints(forwardSignalSummary.margin_adjustment_basis_points)}
-                                                        </span>
-                                                    )}
+                                        </div>
+                                    )}
+                                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+                                        <div className="space-y-3">
+                                            {hasMonteCarloSummary && (
+                                                <div className="rounded-lg border border-outline-variant/20 bg-surface-container-low p-3 space-y-2">
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="text-[11px] uppercase tracking-wider text-on-surface-variant">
+                                                            Monte Carlo
+                                                        </div>
+                                                        {mcSamplerType && (
+                                                            <span className="text-[11px] text-on-surface-variant">
+                                                                Sampler: {mcSamplerType}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                                        {mcConfiguredIterations !== undefined && (
+                                                            <div className="text-[11px] text-on-surface bg-surface-container-high rounded px-2 py-1">
+                                                                Configured: {Math.round(mcConfiguredIterations)}
+                                                            </div>
+                                                        )}
+                                                        {mcExecutedIterations !== undefined && (
+                                                            <div className="text-[11px] text-on-surface bg-surface-container-high rounded px-2 py-1">
+                                                                Executed: {Math.round(mcExecutedIterations)}
+                                                            </div>
+                                                        )}
+                                                        {mcEffectiveWindow !== undefined && (
+                                                            <div className="text-[11px] text-on-surface bg-surface-container-high rounded px-2 py-1">
+                                                                Window: {Math.round(mcEffectiveWindow)}
+                                                            </div>
+                                                        )}
+                                                        {mcStoppedEarly !== undefined && (
+                                                            <div className="text-[11px] text-on-surface bg-surface-container-high rounded px-2 py-1">
+                                                                Early Stop: {mcStoppedEarly ? 'Yes' : 'No'}
+                                                            </div>
+                                                        )}
+                                                        {mcPsdRepaired !== undefined && (
+                                                            <div className="text-[11px] text-on-surface bg-surface-container-high rounded px-2 py-1">
+                                                                PSD Repair: {mcPsdRepaired ? 'Yes' : 'No'}
+                                                            </div>
+                                                        )}
+                                                        {mcConverged !== undefined && (
+                                                            <div className="text-[11px] text-on-surface bg-surface-container-high rounded px-2 py-1">
+                                                                Converged: {mcConverged ? 'Yes' : 'No'}
+                                                            </div>
+                                                        )}
+                                                        {mcMedianDelta !== undefined && (
+                                                            <div className="text-[11px] text-on-surface bg-surface-container-high rounded px-2 py-1">
+                                                                Median Δ: {(mcMedianDelta * 100).toFixed(2)}%
+                                                                {mcTolerance !== undefined
+                                                                    ? ` / ${(mcTolerance * 100).toFixed(2)}% tol`
+                                                                    : ''}
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             )}
-                                            {(forwardSignalRiskLevel ||
-                                                forwardSignalSourceTypes.length > 0 ||
+                                            {(forwardSignalSummary ||
+                                                forwardSignalRiskLevel ||
+                                                forwardSignalEvidenceCount !== undefined ||
                                                 forwardSignalMappingVersion ||
                                                 typeof forwardSignalCalibrationApplied === 'boolean') && (
-                                                <div className="flex flex-wrap items-center gap-2">
-                                                    {forwardSignalRiskLevel && (
-                                                        <span
-                                                            className={`rounded border px-2 py-0.5 text-[11px] ${
-                                                                forwardSignalRiskLevel === 'high'
-                                                                    ? 'border-rose-400/40 bg-rose-500/10 text-rose-200'
-                                                                    : forwardSignalRiskLevel === 'medium'
-                                                                        ? 'border-amber-400/40 bg-amber-500/10 text-amber-200'
-                                                                        : 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200'
-                                                            }`}
-                                                        >
-                                                            Forward Risk: {forwardSignalRiskLevel}
-                                                        </span>
+                                                <div className="rounded-lg border border-outline-variant/20 bg-surface-container-low p-3 space-y-2">
+                                                    <div className="text-[11px] uppercase tracking-wider text-on-surface-variant">
+                                                        Forward Signal Policy
+                                                    </div>
+                                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                                        {typeof forwardSignalSummary?.signals_total === 'number' && (
+                                                            <div className="text-[11px] text-on-surface bg-surface-container-high rounded px-2 py-1">
+                                                                Signals: {Math.round(forwardSignalSummary.signals_total)}
+                                                            </div>
+                                                        )}
+                                                        {typeof forwardSignalSummary?.signals_accepted === 'number' && (
+                                                            <div className="text-[11px] text-emerald-200 bg-surface-container-high rounded px-2 py-1">
+                                                                Accepted: {Math.round(forwardSignalSummary.signals_accepted)}
+                                                            </div>
+                                                        )}
+                                                        {typeof forwardSignalSummary?.signals_rejected === 'number' && (
+                                                            <div className="text-[11px] text-rose-200 bg-surface-container-high rounded px-2 py-1">
+                                                                Rejected: {Math.round(forwardSignalSummary.signals_rejected)}
+                                                            </div>
+                                                        )}
+                                                        {typeof forwardSignalEvidenceCount === 'number' && (
+                                                            <div className="text-[11px] text-on-surface bg-surface-container-high rounded px-2 py-1">
+                                                                Evidence: {Math.round(forwardSignalEvidenceCount)}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    {(typeof forwardSignalSummary?.growth_adjustment_basis_points === 'number' ||
+                                                        typeof forwardSignalSummary?.margin_adjustment_basis_points === 'number') && (
+                                                        <div className="flex flex-wrap gap-2">
+                                                            {typeof forwardSignalSummary?.growth_adjustment_basis_points === 'number' && (
+                                                                <span className="rounded border border-cyan-400/30 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-200">
+                                                                    Growth adjustment: {formatSignedBasisPoints(forwardSignalSummary.growth_adjustment_basis_points)}
+                                                                </span>
+                                                            )}
+                                                            {typeof forwardSignalSummary?.margin_adjustment_basis_points === 'number' && (
+                                                                <span className="rounded border border-cyan-400/30 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-200">
+                                                                    Margin adjustment: {formatSignedBasisPoints(forwardSignalSummary.margin_adjustment_basis_points)}
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     )}
-                                                    {forwardSignalSourceTypes.map((source) => (
-                                                        <span
-                                                            key={source}
-                                                            className="rounded border border-indigo-400/30 bg-indigo-500/10 px-2 py-0.5 text-[11px] text-indigo-200"
-                                                        >
-                                                            Source: {source}
-                                                        </span>
-                                                    ))}
-                                                    {typeof forwardSignalCalibrationApplied === 'boolean' && (
-                                                        <span className="rounded border border-cyan-400/30 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-200">
-                                                            Calibration: {forwardSignalCalibrationApplied ? 'Applied' : 'Bypassed'}
-                                                        </span>
-                                                    )}
-                                                    {forwardSignalMappingVersion && (
-                                                        <span className="rounded border border-slate-400/30 bg-surface-container-high px-2 py-0.5 text-[11px] text-on-surface">
-                                                            Mapping: {forwardSignalMappingVersion}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                    {sensitivitySummary && (
-                                        <div className="space-y-2">
-                                            <div className="text-[11px] uppercase tracking-wider text-on-surface-variant">
-                                                Sensitivity (One-Way)
-                                            </div>
-                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                                {typeof sensitivitySummary.enabled === 'boolean' && (
-                                                    <div className="text-[11px] text-on-surface bg-surface-container-low rounded px-2 py-1">
-                                                        Enabled: {sensitivitySummary.enabled ? 'Yes' : 'No'}
-                                                    </div>
-                                                )}
-                                                {typeof sensitivitySummary.scenario_count === 'number' && (
-                                                    <div className="text-[11px] text-on-surface bg-surface-container-low rounded px-2 py-1">
-                                                        Scenarios: {Math.round(sensitivitySummary.scenario_count)}
-                                                    </div>
-                                                )}
-                                                {typeof sensitivitySummary.max_upside_delta_pct === 'number' && (
-                                                    <div className="text-[11px] text-emerald-200 bg-surface-container-low rounded px-2 py-1">
-                                                        Max Upside: {formatPercent(sensitivitySummary.max_upside_delta_pct)}
-                                                    </div>
-                                                )}
-                                                {typeof sensitivitySummary.max_downside_delta_pct === 'number' && (
-                                                    <div className="text-[11px] text-rose-200 bg-surface-container-low rounded px-2 py-1">
-                                                        Max Downside: {formatPercent(sensitivitySummary.max_downside_delta_pct)}
-                                                    </div>
-                                                )}
-                                            </div>
-                                            {sensitivityTopDrivers.length > 0 && (
-                                                <div className="flex flex-wrap gap-2">
-                                                    {sensitivityTopDrivers.slice(0, 3).map((driver, index) => (
-                                                        <span
-                                                            key={`${driver.shock_dimension ?? 'driver'}-${driver.shock_value_bp ?? index}-${index}`}
-                                                            className="rounded border border-cyan-400/30 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-200"
-                                                        >
-                                                            {(driver.shock_dimension ?? 'driver').replace(/_/g, ' ')}{' '}
-                                                            {typeof driver.shock_value_bp === 'number'
-                                                                ? formatShockBp(driver.shock_value_bp)
-                                                                : ''}
-                                                            {typeof driver.delta_pct_vs_base === 'number'
-                                                                ? ` -> ${formatPercent(driver.delta_pct_vs_base)}`
-                                                                : ''}
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                    {(growthConsensusPolicyLabel ||
-                                        growthConsensusHorizon ||
-                                        terminalAnchorPolicyLabel ||
-                                        typeof terminalAnchorStaleFallback === 'boolean' ||
-                                        forwardSignalMappingVersion ||
-                                        typeof forwardSignalCalibrationApplied === 'boolean') && (
-                                        <div className="space-y-2">
-                                            <div className="text-[11px] uppercase tracking-wider text-on-surface-variant">
-                                                Growth / Anchor Policy
-                                            </div>
-                                            <div className="flex flex-wrap gap-2">
-                                                {growthConsensusPolicyLabel && (
-                                                    <span className="rounded border border-indigo-400/30 bg-indigo-500/10 px-2 py-0.5 text-[11px] text-indigo-200">
-                                                        Consensus: {growthConsensusPolicyLabel}
-                                                    </span>
-                                                )}
-                                                {growthConsensusHorizon && (
-                                                    <span className="rounded border border-indigo-400/30 bg-indigo-500/10 px-2 py-0.5 text-[11px] text-indigo-200">
-                                                        Horizon: {growthConsensusHorizon}
-                                                    </span>
-                                                )}
-                                                {terminalAnchorPolicyLabel && (
-                                                    <span className="rounded border border-amber-400/30 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-200">
-                                                        Terminal Anchor: {terminalAnchorPolicyLabel}
-                                                    </span>
-                                                )}
-                                                {typeof terminalAnchorStaleFallback === 'boolean' && (
-                                                    <span className="rounded border border-amber-400/30 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-200">
-                                                        Stale Fallback: {terminalAnchorStaleFallback ? 'Yes' : 'No'}
-                                                    </span>
-                                                )}
-                                            </div>
-                                            {(forwardSignalMappingVersion ||
-                                                typeof forwardSignalCalibrationApplied === 'boolean') && (
-                                                <div className="space-y-1 text-[11px] text-on-surface-variant">
-                                                    {typeof forwardSignalCalibrationApplied === 'boolean' && (
-                                                        <div>
-                                                            Calibration Applied (Diagnostics):{' '}
-                                                            <span className="font-semibold text-on-surface">
-                                                                {forwardSignalCalibrationApplied ? 'Yes' : 'No'}
-                                                            </span>
+                                                    {(forwardSignalRiskLevel ||
+                                                        forwardSignalSourceTypes.length > 0 ||
+                                                        typeof forwardSignalCalibrationApplied === 'boolean') && (
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            {forwardSignalRiskLevel && (
+                                                                <span
+                                                                    className={`rounded border border-outline-variant/10 px-2 py-0.5 text-[11px] ${
+                                                                        forwardSignalRiskLevel === 'high'
+                                                                            ? 'bg-rose-500/10 text-rose-200'
+                                                                            : forwardSignalRiskLevel === 'medium'
+                                                                                ? 'bg-amber-500/10 text-amber-200'
+                                                                                : 'bg-emerald-500/10 text-emerald-200'
+                                                                    }`}
+                                                                >
+                                                                    Forward Risk: {forwardSignalRiskLevel}
+                                                                </span>
+                                                            )}
+                                                            {forwardSignalSourcePreview.map((source) => (
+                                                                <span
+                                                                    key={source}
+                                                                    className="rounded bg-surface-container-high px-2 py-0.5 text-[11px] break-all max-w-full min-w-0"
+                                                                >
+                                                                    Source: {source}
+                                                                </span>
+                                                            ))}
+                                                            {forwardSignalSourceOverflow > 0 && (
+                                                                <span className="rounded bg-surface-container-high px-2 py-0.5 text-[11px] text-on-surface-variant">
+                                                                    +{forwardSignalSourceOverflow} sources
+                                                                </span>
+                                                            )}
+                                                            {typeof forwardSignalCalibrationApplied === 'boolean' && (
+                                                                <span className="rounded border border-cyan-400/30 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-200">
+                                                                    Calibration: {forwardSignalCalibrationApplied ? 'Applied' : 'Bypassed'}
+                                                                </span>
+                                                            )}
                                                         </div>
                                                     )}
                                                     {forwardSignalMappingVersion && (
-                                                        <div>
-                                                            Calibration Mapping (Diagnostics):{' '}
-                                                            <span className="font-semibold text-on-surface">
+                                                        <div className="text-[11px] text-on-surface-variant break-all">
+                                                            Mapping:{' '}
+                                                            <span className="text-on-surface">
                                                                 {forwardSignalMappingVersion}
                                                             </span>
                                                         </div>
                                                     )}
                                                 </div>
                                             )}
-                                        </div>
-                                    )}
-                                    {(hasBaseGrowthGuardrail || hasBaseMarginGuardrail) && (
-                                        <div className="space-y-2">
-                                            <div className="text-[11px] uppercase tracking-wider text-on-surface-variant">
-                                                Base Assumption Guardrail
-                                            </div>
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                                {hasBaseGrowthGuardrail && (
-                                                    <div className="rounded border border-cyan-400/30 bg-cyan-500/10 px-2 py-1 text-[11px] text-cyan-100 space-y-1">
-                                                        {typeof baseGrowthGuardrailApplied === 'boolean' && (
-                                                            <div>Growth: {baseGrowthGuardrailApplied ? 'Applied' : 'Bypassed'}</div>
+                                            {sensitivitySummary && (
+                                                <div className="rounded-lg border border-outline-variant/20 bg-surface-container-low p-3 space-y-2">
+                                                    <div className="text-[11px] uppercase tracking-wider text-on-surface-variant">
+                                                        Sensitivity (One-Way)
+                                                    </div>
+                                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                                        {typeof sensitivitySummary.enabled === 'boolean' && (
+                                                            <div className="text-[11px] text-on-surface bg-surface-container-high rounded px-2 py-1">
+                                                                Enabled: {sensitivitySummary.enabled ? 'Yes' : 'No'}
+                                                            </div>
                                                         )}
-                                                        {baseGrowthGuardrailVersion && (
-                                                            <div>Growth Version: {baseGrowthGuardrailVersion}</div>
+                                                        {typeof sensitivitySummary.scenario_count === 'number' && (
+                                                            <div className="text-[11px] text-on-surface bg-surface-container-high rounded px-2 py-1">
+                                                                Scenarios: {Math.round(sensitivitySummary.scenario_count)}
+                                                            </div>
                                                         )}
-                                                        {typeof baseGrowthRawYear1 === 'number' && (
-                                                            <div>Growth Y1 Raw: {formatRatePercent(baseGrowthRawYear1)}</div>
+                                                        {typeof sensitivitySummary.max_upside_delta_pct === 'number' && (
+                                                            <div className="text-[11px] text-emerald-200 bg-surface-container-high rounded px-2 py-1">
+                                                                Max Upside: {formatPercent(sensitivitySummary.max_upside_delta_pct)}
+                                                            </div>
                                                         )}
-                                                        {typeof baseGrowthGuardedYear1 === 'number' && (
-                                                            <div>Growth Y1 Guarded: {formatRatePercent(baseGrowthGuardedYear1)}</div>
-                                                        )}
-                                                        {typeof baseGrowthRawYearN === 'number' && (
-                                                            <div>Growth YN Raw: {formatRatePercent(baseGrowthRawYearN)}</div>
-                                                        )}
-                                                        {typeof baseGrowthGuardedYearN === 'number' && (
-                                                            <div>Growth YN Guarded: {formatRatePercent(baseGrowthGuardedYearN)}</div>
-                                                        )}
-                                                        {baseGrowthReasons.length > 0 && (
-                                                            <div>Growth Reasons: {baseGrowthReasons.join(', ')}</div>
+                                                        {typeof sensitivitySummary.max_downside_delta_pct === 'number' && (
+                                                            <div className="text-[11px] text-rose-200 bg-surface-container-high rounded px-2 py-1">
+                                                                Max Downside: {formatPercent(sensitivitySummary.max_downside_delta_pct)}
+                                                            </div>
                                                         )}
                                                     </div>
-                                                )}
-                                                {hasBaseMarginGuardrail && (
-                                                    <div className="rounded border border-amber-400/30 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-100 space-y-1">
-                                                        {typeof baseMarginGuardrailApplied === 'boolean' && (
-                                                            <div>Margin: {baseMarginGuardrailApplied ? 'Applied' : 'Bypassed'}</div>
-                                                        )}
-                                                        {baseMarginGuardrailVersion && (
-                                                            <div>Margin Version: {baseMarginGuardrailVersion}</div>
-                                                        )}
-                                                        {typeof baseMarginRawYear1 === 'number' && (
-                                                            <div>Margin Y1 Raw: {formatRatePercent(baseMarginRawYear1)}</div>
-                                                        )}
-                                                        {typeof baseMarginGuardedYear1 === 'number' && (
-                                                            <div>Margin Y1 Guarded: {formatRatePercent(baseMarginGuardedYear1)}</div>
-                                                        )}
-                                                        {typeof baseMarginRawYearN === 'number' && (
-                                                            <div>Margin YN Raw: {formatRatePercent(baseMarginRawYearN)}</div>
-                                                        )}
-                                                        {typeof baseMarginGuardedYearN === 'number' && (
-                                                            <div>Margin YN Guarded: {formatRatePercent(baseMarginGuardedYearN)}</div>
-                                                        )}
-                                                        {baseMarginReasons.length > 0 && (
-                                                            <div>Margin Reasons: {baseMarginReasons.join(', ')}</div>
-                                                        )}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-                                    {dataQualityFlags.length > 0 && (
-                                        <div className="space-y-2">
-                                            <div className="text-[11px] uppercase tracking-wider text-on-surface-variant">
-                                                Data Quality Flags
-                                            </div>
-                                            <div className="flex flex-wrap gap-2">
-                                                {dataQualityFlags.map((flag) => (
-                                                    <span
-                                                        key={flag}
-                                                        className="rounded border border-rose-400/30 bg-rose-500/10 px-2 py-0.5 text-[11px] text-rose-200"
-                                                    >
-                                                        {flag}
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-                                    {timeAlignmentStatus && (
-                                        <div className="text-[11px] text-on-surface-variant">
-                                            Time Alignment Status:{' '}
-                                            <span
-                                                className={
-                                                    timeAlignmentStatus === 'high_risk' || timeAlignmentStatus === 'warning'
-                                                        ? 'text-rose-300 font-semibold'
-                                                        : 'text-emerald-300 font-semibold'
-                                                }
-                                            >
-                                                {timeAlignmentStatus}
-                                            </span>
-                                        </div>
-                                    )}
-                                    {assumptionHighlights.length > 0 && (
-                                        <div className="space-y-2">
-                                            {assumptionHighlights.map((item, index) => (
-                                                <div key={`${item.statement}-${index}`} className="text-xs text-on-surface bg-surface-container-low rounded px-2 py-1">
-                                                    {item.statement}
+                                                    {sensitivityTopDriversPreview.length > 0 && (
+                                                        <div className="flex flex-wrap gap-2">
+                                                            {sensitivityTopDriversPreview.map((driver, index) => (
+                                                                <span
+                                                                    key={`${driver.shock_dimension ?? 'driver'}-${driver.shock_value_bp ?? index}-${index}`}
+                                                                    className="rounded border border-cyan-400/30 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-200"
+                                                                >
+                                                                    {(driver.shock_dimension ?? 'driver').replace(/_/g, ' ')}{' '}
+                                                                    {typeof driver.shock_value_bp === 'number'
+                                                                        ? formatShockBp(driver.shock_value_bp)
+                                                                        : ''}
+                                                                    {typeof driver.delta_pct_vs_base === 'number'
+                                                                        ? ` -> ${formatPercent(driver.delta_pct_vs_base)}`
+                                                                        : ''}
+                                                                </span>
+                                                            ))}
+                                                            {sensitivityTopDriversOverflow > 0 && (
+                                                                <span className="rounded bg-surface-container-high px-2 py-0.5 text-[11px] text-on-surface-variant">
+                                                                    +{sensitivityTopDriversOverflow} drivers
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    )}
                                                 </div>
-                                            ))}
+                                            )}
                                         </div>
-                                    )}
+                                        <div className="space-y-3">
+                                            {(growthConsensusPolicyLabel ||
+                                                growthConsensusHorizon ||
+                                                terminalAnchorPolicyLabel ||
+                                                typeof terminalAnchorStaleFallback === 'boolean' ||
+                                                forwardSignalMappingVersion ||
+                                                typeof forwardSignalCalibrationApplied === 'boolean') && (
+                                                <div className="rounded-lg border border-outline-variant/20 bg-surface-container-low p-3 space-y-2">
+                                                    <div className="text-[11px] uppercase tracking-wider text-on-surface-variant">
+                                                        Growth / Anchor Policy
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {growthConsensusPolicyLabel && (
+                                                            <span className="rounded border border-indigo-400/30 bg-indigo-500/10 px-2 py-0.5 text-[11px] text-indigo-200">
+                                                                Consensus: {growthConsensusPolicyLabel}
+                                                            </span>
+                                                        )}
+                                                        {growthConsensusHorizon && (
+                                                            <span className="rounded border border-indigo-400/30 bg-indigo-500/10 px-2 py-0.5 text-[11px] text-indigo-200">
+                                                                Horizon: {growthConsensusHorizon}
+                                                            </span>
+                                                        )}
+                                                        {terminalAnchorPolicyLabel && (
+                                                            <span className="rounded border border-amber-400/30 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-200">
+                                                                Terminal Anchor: {terminalAnchorPolicyLabel}
+                                                            </span>
+                                                        )}
+                                                        {typeof terminalAnchorStaleFallback === 'boolean' && (
+                                                            <span className="rounded border border-amber-400/30 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-200">
+                                                                Stale Fallback: {terminalAnchorStaleFallback ? 'Yes' : 'No'}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    {(forwardSignalMappingVersion ||
+                                                        typeof forwardSignalCalibrationApplied === 'boolean') && (
+                                                        <div className="text-[11px] text-on-surface-variant">
+                                                            {typeof forwardSignalCalibrationApplied === 'boolean' && (
+                                                                <span>
+                                                                    Calibration:{' '}
+                                                                    <span className="text-on-surface">
+                                                                        {forwardSignalCalibrationApplied ? 'Applied' : 'Bypassed'}
+                                                                    </span>
+                                                                </span>
+                                                            )}
+                                                            {forwardSignalMappingVersion && (
+                                                                <span>
+                                                                    {typeof forwardSignalCalibrationApplied === 'boolean'
+                                                                        ? ' · '
+                                                                        : ''}
+                                                                    Mapping:{' '}
+                                                                    <span className="text-on-surface">
+                                                                        {forwardSignalMappingVersion}
+                                                                    </span>
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                            {(hasBaseGrowthGuardrail || hasBaseMarginGuardrail) && (
+                                                <div className="rounded-lg border border-outline-variant/20 bg-surface-container-low p-3 space-y-2">
+                                                    <div className="text-[11px] uppercase tracking-wider text-on-surface-variant">
+                                                        Base Assumption Guardrail
+                                                    </div>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                        {hasBaseGrowthGuardrail && (
+                                                            <div className="rounded border border-cyan-400/30 bg-cyan-500/10 px-2 py-2 text-[11px] text-cyan-100 space-y-1 min-w-0">
+                                                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                                                    <span className="font-semibold">Growth</span>
+                                                                    {typeof baseGrowthGuardrailApplied === 'boolean' && (
+                                                                        <span className="text-[10px] uppercase tracking-wider">
+                                                                            {baseGrowthGuardrailApplied ? 'Applied' : 'Bypassed'}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                {baseGrowthGuardrailVersion && (
+                                                                    <div className="text-[10px] text-cyan-100/80 break-all">
+                                                                        Version: {baseGrowthGuardrailVersion}
+                                                                    </div>
+                                                                )}
+                                                                <div className="grid grid-cols-2 gap-1">
+                                                                    {typeof baseGrowthRawYear1 === 'number' && (
+                                                                        <div>Y1 Raw: {formatRatePercent(baseGrowthRawYear1)}</div>
+                                                                    )}
+                                                                    {typeof baseGrowthGuardedYear1 === 'number' && (
+                                                                        <div>Y1 Guarded: {formatRatePercent(baseGrowthGuardedYear1)}</div>
+                                                                    )}
+                                                                    {typeof baseGrowthRawYearN === 'number' && (
+                                                                        <div>YN Raw: {formatRatePercent(baseGrowthRawYearN)}</div>
+                                                                    )}
+                                                                    {typeof baseGrowthGuardedYearN === 'number' && (
+                                                                        <div>YN Guarded: {formatRatePercent(baseGrowthGuardedYearN)}</div>
+                                                                    )}
+                                                                </div>
+                                                                {baseGrowthReasonsPreview.length > 0 && (
+                                                                    <div className="text-[10px] text-cyan-100/80 break-all">
+                                                                        Reasons: {baseGrowthReasonsPreview.join(', ')}
+                                                                        {baseGrowthReasonsOverflow > 0
+                                                                            ? ` +${baseGrowthReasonsOverflow}`
+                                                                            : ''}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                        {hasBaseMarginGuardrail && (
+                                                            <div className="rounded border border-amber-400/30 bg-amber-500/10 px-2 py-2 text-[11px] text-amber-100 space-y-1 min-w-0">
+                                                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                                                    <span className="font-semibold">Margin</span>
+                                                                    {typeof baseMarginGuardrailApplied === 'boolean' && (
+                                                                        <span className="text-[10px] uppercase tracking-wider">
+                                                                            {baseMarginGuardrailApplied ? 'Applied' : 'Bypassed'}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                {baseMarginGuardrailVersion && (
+                                                                    <div className="text-[10px] text-amber-100/80 break-all">
+                                                                        Version: {baseMarginGuardrailVersion}
+                                                                    </div>
+                                                                )}
+                                                                <div className="grid grid-cols-2 gap-1">
+                                                                    {typeof baseMarginRawYear1 === 'number' && (
+                                                                        <div>Y1 Raw: {formatRatePercent(baseMarginRawYear1)}</div>
+                                                                    )}
+                                                                    {typeof baseMarginGuardedYear1 === 'number' && (
+                                                                        <div>Y1 Guarded: {formatRatePercent(baseMarginGuardedYear1)}</div>
+                                                                    )}
+                                                                    {typeof baseMarginRawYearN === 'number' && (
+                                                                        <div>YN Raw: {formatRatePercent(baseMarginRawYearN)}</div>
+                                                                    )}
+                                                                    {typeof baseMarginGuardedYearN === 'number' && (
+                                                                        <div>YN Guarded: {formatRatePercent(baseMarginGuardedYearN)}</div>
+                                                                    )}
+                                                                </div>
+                                                                {baseMarginReasonsPreview.length > 0 && (
+                                                                    <div className="text-[10px] text-amber-100/80 break-all">
+                                                                        Reasons: {baseMarginReasonsPreview.join(', ')}
+                                                                        {baseMarginReasonsOverflow > 0
+                                                                            ? ` +${baseMarginReasonsOverflow}`
+                                                                            : ''}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {dataQualityFlagsPreview.length > 0 && (
+                                                <div className="rounded-lg border border-outline-variant/20 bg-surface-container-low p-3 space-y-2">
+                                                    <div className="text-[11px] uppercase tracking-wider text-on-surface-variant">
+                                                        Data Quality Flags
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {dataQualityFlagsPreview.map((flag) => (
+                                                            <span
+                                                                key={flag}
+                                                                className="rounded border border-rose-400/30 bg-rose-500/10 px-2 py-0.5 text-[11px] text-rose-200 break-all max-w-full min-w-0"
+                                                            >
+                                                                {flag}
+                                                            </span>
+                                                        ))}
+                                                        {dataQualityFlagsOverflow > 0 && (
+                                                            <span className="rounded bg-surface-container-high px-2 py-0.5 text-[11px] text-on-surface-variant">
+                                                                +{dataQualityFlagsOverflow} more
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
                             )}
 
                             {dataFreshness && (
-                                <div className="tech-card p-4 space-y-3 border-emerald-500/20 bg-gradient-to-br from-emerald-950/20 via-slate-900/40 to-slate-950/20">
-                                    <span className="text-label">Data Freshness</span>
-                                    <div className="space-y-1 text-xs text-on-surface">
-                                        {dataFreshness.financial_statement?.period_end_date && (
-                                            <div>
-                                                Financial Period End: {dataFreshness.financial_statement.period_end_date}
-                                            </div>
-                                        )}
-                                        {typeof dataFreshness.financial_statement?.fiscal_year === 'number' && (
-                                            <div>
-                                                Fiscal Year: {dataFreshness.financial_statement.fiscal_year}
-                                            </div>
-                                        )}
-                                        {dataFreshness.market_data?.provider && (
-                                            <div>
-                                                Market Provider: {dataFreshness.market_data.provider}
-                                            </div>
-                                        )}
-                                        {dataFreshness.market_data?.as_of && (
-                                            <div>
-                                                Market As-Of: {dataFreshness.market_data.as_of}
-                                            </div>
-                                        )}
-                                        {dataFreshness.shares_outstanding_source && (
-                                            <div>
-                                                Shares Source: {dataFreshness.shares_outstanding_source}
-                                            </div>
-                                        )}
+                                <div className="bg-surface-container p-5 rounded-xl border border-outline-variant/10 space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[10px] text-outline mb-2 block uppercase tracking-tighter">Data Freshness</span>
                                         {dataFreshness.time_alignment?.status && (
-                                            <div>
-                                                Time Alignment Status:{' '}
-                                                <span
-                                                    className={
-                                                        dataFreshness.time_alignment.status === 'high_risk'
-                                                            ? 'text-rose-300 font-semibold'
-                                                            : 'text-emerald-300 font-semibold'
-                                                    }
-                                                >
-                                                    {dataFreshness.time_alignment.status}
-                                                </span>
-                                            </div>
-                                        )}
-                                        {typeof dataFreshness.time_alignment?.lag_days === 'number' && (
-                                            <div>
-                                                Time Alignment Lag: {Math.round(dataFreshness.time_alignment.lag_days)} days
-                                                {typeof dataFreshness.time_alignment?.threshold_days === 'number'
-                                                    ? ` (threshold ${Math.round(dataFreshness.time_alignment.threshold_days)} days)`
-                                                    : ''}
-                                            </div>
-                                        )}
-                                        {dataFreshness.time_alignment?.policy && (
-                                            <div>
-                                                Time Alignment Policy: {dataFreshness.time_alignment.policy}
-                                            </div>
+                                            <span
+                                                className={`rounded border px-2 py-0.5 text-[11px] font-semibold ${
+                                                    dataFreshness.time_alignment.status === 'high_risk' ||
+                                                    dataFreshness.time_alignment.status === 'warning'
+                                                        ? 'border-rose-400/40 bg-rose-500/10 text-rose-200'
+                                                        : 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200'
+                                                }`}
+                                            >
+                                                Alignment: {dataFreshness.time_alignment.status}
+                                            </span>
                                         )}
                                     </div>
+                                    {dataFreshnessItems.length > 0 && (
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                            {dataFreshnessItems.map((item) => (
+                                                <div
+                                                    key={item.label}
+                                                    className="rounded-lg border border-outline-variant/20 bg-surface-container-low px-3 py-2"
+                                                >
+                                                    <div className="text-[10px] text-outline uppercase tracking-wider">
+                                                        {item.label}
+                                                    </div>
+                                                    <div className="text-sm font-semibold text-on-surface break-all">
+                                                        {item.value}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -975,9 +1172,9 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
             )}
 
             {forwardSignals.length > 0 && (
-                <div className="tech-card p-4 space-y-4 border-cyan-500/25 bg-gradient-to-br from-cyan-950/20 via-slate-900/40 to-slate-950/20">
+                <div className="bg-surface-container p-5 rounded-xl border border-outline-variant/10 space-y-4 flex flex-col">
                     <div className="flex items-center justify-between">
-                        <span className="text-label">Forward Signals</span>
+                        <span className="text-[10px] text-outline mb-2 block uppercase tracking-tighter">Forward Signals</span>
                         <span className="text-xs text-on-surface-variant">
                             {forwardSignals.length} extracted signals
                         </span>
