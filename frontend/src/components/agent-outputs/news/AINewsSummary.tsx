@@ -27,15 +27,7 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
         switch (sentiment) {
             case 'bullish': return 'text-emerald-400';
             case 'bearish': return 'text-rose-400';
-            default: return 'text-slate-400';
-        }
-    };
-
-    const getSentimentBg = (sentiment: SentimentLabel) => {
-        switch (sentiment) {
-            case 'bullish': return 'bg-emerald-500/10 border-emerald-500/20';
-            case 'bearish': return 'bg-rose-500/10 border-rose-500/20';
-            default: return 'bg-slate-500/10 border-slate-500/20';
+            default: return 'text-on-surface-variant';
         }
     };
 
@@ -75,7 +67,7 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
     const getSignalConfidence = () => {
         if (totalSources >= 8) return { level: 'High', color: 'text-emerald-400', icon: '🔥' };
         if (totalSources >= 5) return { level: 'Medium', color: 'text-amber-400', icon: '⚡' };
-        return { level: 'Low', color: 'text-slate-400', icon: '💨' };
+        return { level: 'Low', color: 'text-on-surface-variant', icon: '💨' };
     };
     const signalConfidence = getSignalConfidence();
 
@@ -92,9 +84,9 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
 
     if (!isPreview && (newsItems.length === 0 || typeof output.sentiment_score !== 'number')) {
         return (
-            <div className="flex flex-col items-center justify-center p-12 text-slate-500">
+            <div className="flex flex-col items-center justify-center p-12 text-on-surface-variant">
                 <Zap className="w-12 h-12 mb-4 animate-pulse opacity-50" />
-                <p className="font-bold uppercase tracking-widest text-[10px]">Analyzing News Sentiment...</p>
+                <p className="font-bold uppercase tracking-[0.2em] text-[10px]">Analyzing News Sentiment...</p>
             </div>
         );
     }
@@ -103,21 +95,21 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
         <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {/* Overall Sentiment Card - Redesigned to emphasize consensus */}
-                <div className={`col-span-1 md:col-span-2 tech-card p-6 ${getSentimentBg(overallSentiment)}`}>
+                <div className="col-span-1 md:col-span-2 bg-surface-container p-5 rounded-xl border border-outline-variant/10">
                     {/* Header with Consensus Label */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                         <div className="flex items-center gap-3">
                             <Zap size={18} className="text-amber-400 flex-shrink-0" />
-                            <h3 className="text-sm font-bold text-white uppercase tracking-widest whitespace-nowrap">Market Consensus</h3>
+                            <h3 className="text-[10px] font-bold text-outline uppercase tracking-[0.2em] whitespace-nowrap">Market Consensus</h3>
                         </div>
-                        <div className={`px-4 py-1.5 rounded-full border text-[10px] font-black uppercase tracking-[0.2em] bg-slate-950/40 text-center whitespace-nowrap ${getSentimentColor(overallSentiment)}`}>
+                        <div className={`px-3 py-1 rounded-full border border-outline-variant/40 bg-surface-container-low text-[11px] font-semibold uppercase tracking-wider text-center whitespace-nowrap ${getSentimentColor(overallSentiment)}`}>
                             {getConsensusLabel()}
                         </div>
                     </div>
 
                     {/* Signal Confidence Indicator */}
-                    <div className="flex flex-wrap items-center gap-2 mb-6 text-[10px] font-bold uppercase tracking-widest">
-                        <span className="text-slate-500 whitespace-nowrap">Signal Confidence:</span>
+                    <div className="flex flex-wrap items-center gap-2 mb-6 text-[10px] font-bold uppercase tracking-wider">
+                        <span className="text-outline whitespace-nowrap">Signal Confidence:</span>
                         {isPreview ? (
                             <span className="text-cyan-400">PREVIEW MODE</span>
                         ) : (
@@ -125,7 +117,7 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
                                 <span className={`${signalConfidence.color} flex items-center gap-1 whitespace-nowrap`}>
                                     {signalConfidence.icon} {signalConfidence.level}
                                 </span>
-                                <span className="text-slate-600 whitespace-nowrap overflow-hidden text-ellipsis max-w-full">
+                                <span className="text-on-surface-variant whitespace-nowrap overflow-hidden text-ellipsis max-w-full">
                                     (Based on {totalSources} sources, {allFacts.length} evidence points)
                                 </span>
                             </div>
@@ -134,8 +126,8 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
 
                     {/* HERO: Evidence Distribution - Main Visual */}
                     <div className="space-y-3 mb-6">
-                        <div className="flex justify-between items-center text-xs font-bold uppercase tracking-widest">
-                            <span className="text-white">Evidence Distribution</span>
+                        <div className="flex justify-between items-center text-[11px] font-bold uppercase tracking-wider">
+                            <span className="text-on-surface">Evidence Distribution</span>
                             {isPreview && (
                                 <span className="text-cyan-400 text-[10px]">{previewArticleCountDisplay || 'Loading…'}</span>
                             )}
@@ -148,13 +140,13 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
                         </div>
 
                         {/* Thick Stacked Bar - The Hero Visual */}
-                        <div className="flex h-10 w-full rounded-xl overflow-hidden bg-slate-950/50 border border-slate-800 shadow-lg">
+                        <div className="flex h-10 w-full rounded-xl overflow-hidden bg-surface-container-high border border-outline-variant/20 shadow-lg">
                             {bullFactsCount > 0 && (
                                 <div
                                     className="bg-gradient-to-r from-emerald-600 to-emerald-500 transition-[width] duration-1000 flex items-center justify-center relative group"
                                     style={{ width: `${isPreview ? 0 : (bullFactsCount / (allFacts.length || 1)) * 100}%` }}
                                 >
-                                    <div className="flex items-center gap-1.5 text-white font-bold">
+                                    <div className="flex items-center gap-1.5 text-on-surface font-bold">
                                         <TrendingUp size={14} />
                                         <span className="text-sm">{bullFactsCount}</span>
                                     </div>
@@ -162,10 +154,10 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
                             )}
                             {(neutralFactsCount > 0 || isPreview) && (
                                 <div
-                                    className="bg-gradient-to-r from-slate-600 to-slate-500 transition-[width] duration-1000 flex items-center justify-center"
+                                    className="bg-gradient-to-r from-surface-container-high to-surface-container transition-[width] duration-1000 flex items-center justify-center"
                                     style={{ width: `${isPreview ? 100 : (neutralFactsCount / (allFacts.length || 1)) * 100}%` }}
                                 >
-                                    <div className="flex items-center gap-1.5 text-slate-300 font-bold">
+                                    <div className="flex items-center gap-1.5 text-on-surface-variant font-bold">
                                         <Minus size={14} />
                                         <span className="text-sm">{isPreview ? 'LOADING EVIDENCE…' : neutralFactsCount}</span>
                                     </div>
@@ -176,7 +168,7 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
                                     className="bg-gradient-to-r from-rose-600 to-rose-500 transition-[width] duration-1000 flex items-center justify-center"
                                     style={{ width: `${(bearFactsCount / (allFacts.length || 1)) * 100}%` }}
                                 >
-                                    <div className="flex items-center gap-1.5 text-white font-bold">
+                                    <div className="flex items-center gap-1.5 text-on-surface font-bold">
                                         <TrendingDown size={14} />
                                         <span className="text-sm">{bearFactsCount}</span>
                                     </div>
@@ -185,13 +177,13 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
                         </div>
 
                         {/* Legend */}
-                        <div className="flex justify-center gap-6 text-[9px] font-bold uppercase tracking-widest text-slate-500">
+                        <div className="flex justify-center gap-6 text-[9px] font-bold uppercase tracking-wider text-on-surface-variant">
                             <div className="flex items-center gap-1.5">
                                 <div className="w-3 h-3 rounded bg-emerald-500" />
                                 <span>Bullish ({bullFactsCount})</span>
                             </div>
                             <div className="flex items-center gap-1.5">
-                                <div className="w-3 h-3 rounded bg-slate-500" />
+                                <div className="w-3 h-3 rounded bg-surface-container-high" />
                                 <span>Neutral ({neutralFactsCount})</span>
                             </div>
                             <div className="flex items-center gap-1.5">
@@ -202,10 +194,10 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
                     </div>
 
                     {/* Supplementary: Average Intensity */}
-                    <div className="pt-4 border-t border-slate-800/50 space-y-2">
-                        <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                    <div className="pt-4 border-t border-outline-variant/20 space-y-2">
+                        <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
                             <span>Average Intensity</span>
-                            <span className="text-slate-300">
+                            <span className="text-on-surface">
                                 {isPreview ? (previewSentimentDisplay || 'PREVIEW MODE') : (
                                     <>
                                         {sentimentScore > 0 ? '+' : ''}{sentimentScore.toFixed(2)} ({sentimentScore > 0.3 ? 'Strong' : sentimentScore > 0 ? 'Moderate' : sentimentScore < -0.3 ? 'Strong' : sentimentScore < 0 ? 'Moderate' : 'Neutral'})
@@ -213,13 +205,13 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
                                 )}
                             </span>
                         </div>
-                        <div className="h-2 w-full bg-slate-950/50 rounded-full overflow-hidden border border-slate-800">
+                        <div className="h-2 w-full bg-surface-container-high rounded-full overflow-hidden border border-outline-variant/20">
                             <div
-                                className={`h-full transition-[width,background-color] duration-1000 ease-out ${sentimentScore > 0 ? 'bg-emerald-500/60' : sentimentScore < 0 ? 'bg-rose-500/60' : 'bg-slate-500/60'}`}
+                            className={`h-full transition-[width,background-color] duration-1000 ease-out ${sentimentScore > 0 ? 'bg-emerald-500/60' : sentimentScore < 0 ? 'bg-rose-500/60' : 'bg-surface-container-high'}`}
                                 style={{ width: `${scorePercentage}%` }}
                             />
                         </div>
-                        <div className="flex justify-between text-[8px] text-slate-600 font-bold uppercase tracking-tighter">
+                        <div className="flex justify-between text-[8px] text-outline font-bold uppercase tracking-tighter">
                             <span>Bearish (-1.0)</span>
                             <span>Neutral (0.0)</span>
                             <span>Bullish (+1.0)</span>
@@ -228,31 +220,31 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
                 </div>
 
                 {/* Debate-Ready Metrics Card */}
-                <div className="tech-card p-6 backdrop-blur-md">
+                <div className="bg-surface-container p-5 rounded-xl border border-outline-variant/10">
                     <div className="flex items-center gap-3 mb-6">
                         <ShieldCheck size={16} className="text-cyan-400" />
-                        <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Evidence Quality</h3>
+                        <h3 className="text-[10px] font-bold text-outline uppercase tracking-[0.2em]">Evidence Quality</h3>
                     </div>
 
                     <div className="space-y-4">
-                        <div className="flex justify-between items-center border-b border-white/5 pb-3">
+                        <div className="flex justify-between items-center border-b border-outline-variant/20 pb-3">
                             <div className="flex items-center gap-2">
-                                <Database size={12} className="text-slate-500" />
-                                <span className="text-[11px] text-slate-500 font-medium uppercase tracking-tighter">Total Evidence</span>
+                                <Database size={12} className="text-outline" />
+                                <span className="text-[11px] text-on-surface-variant font-medium uppercase tracking-tighter">Total Evidence</span>
                             </div>
-                            <span className="text-xs font-bold text-slate-200">{allFacts.length}</span>
+                            <span className="text-xs font-bold text-on-surface">{allFacts.length}</span>
                         </div>
-                        <div className="flex justify-between items-center border-b border-white/5 pb-3">
+                        <div className="flex justify-between items-center border-b border-outline-variant/20 pb-3">
                             <div className="flex items-center gap-2">
                                 <BarChart3 size={12} className="text-cyan-500" />
-                                <span className="text-[11px] text-slate-500 font-medium uppercase tracking-tighter">Quantitative</span>
+                                <span className="text-[11px] text-on-surface-variant font-medium uppercase tracking-tighter">Quantitative</span>
                             </div>
                             <span className="text-xs font-bold text-cyan-400">{quantFactsCount}</span>
                         </div>
-                        <div className="flex justify-between items-center border-b border-white/5 pb-3">
+                        <div className="flex justify-between items-center border-b border-outline-variant/20 pb-3">
                             <div className="flex items-center gap-2">
                                 <ShieldCheck size={12} className="text-emerald-500" />
-                                <span className="text-[11px] text-slate-500 font-medium uppercase tracking-tighter">Source Reliability</span>
+                                <span className="text-[11px] text-on-surface-variant font-medium uppercase tracking-tighter">Source Reliability</span>
                             </div>
                             <span className="text-xs font-bold text-emerald-400">High</span>
                         </div>
@@ -262,33 +254,33 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
 
             {/* Sub-Agent Triage Stats */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="tech-card p-6">
+                <div className="bg-surface-container p-5 rounded-xl border border-outline-variant/10">
                     <div className="flex items-center gap-3 mb-6">
                         <List size={16} className="text-indigo-400" />
-                        <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Knowledge Themes</h3>
+                        <h3 className="text-[10px] font-bold text-outline uppercase tracking-[0.2em]">Knowledge Themes</h3>
                     </div>
 
                     <div className="flex flex-wrap gap-2">
                         {keyThemes.map(theme => (
-                            <div key={theme} className="px-4 py-2 bg-slate-900/50 border border-slate-800 rounded-xl text-xs font-medium text-slate-300 hover:border-indigo-500/50 hover:text-white transition-colors cursor-default">
+                            <div key={theme} className="px-4 py-2 bg-surface-container-low border border-outline-variant/20 rounded-xl text-xs font-medium text-on-surface-variant hover:border-primary-container/30 hover:text-on-surface transition-colors cursor-default">
                                 {theme}
                             </div>
                         ))}
                         {keyThemes.length === 0 && (
-                            <div className="text-xs text-slate-600 italic">No specific themes identified.</div>
+                            <div className="text-xs text-on-surface-variant italic">No specific themes identified.</div>
                         )}
                     </div>
                 </div>
 
-                <div className="tech-card p-6">
+                <div className="bg-surface-container p-5 rounded-xl border border-outline-variant/10">
                     <div className="flex items-center gap-3 mb-6">
                         <PieChart size={16} className="text-amber-400" />
-                        <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Search Category Coverage</h3>
+                        <h3 className="text-[10px] font-bold text-outline uppercase tracking-[0.2em]">Search Category Coverage</h3>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
                         {Object.entries(categoryStats).map(([cat, count]) => (
-                            <div key={cat} className="flex justify-between items-center p-2 bg-slate-900/50 rounded-lg border border-slate-800">
+                            <div key={cat} className="flex justify-between items-center p-2 bg-surface-container-low rounded-lg border border-outline-variant/20">
                                 <div className="flex items-center gap-2">
                                     {cat === 'bullish' && <TrendingUp size={10} className="text-emerald-500" />}
                                     {cat === 'bearish' && <TrendingDown size={10} className="text-rose-500" />}
@@ -296,11 +288,11 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
                                     {cat === 'financials' && <BarChart3 size={10} className="text-cyan-500" />}
                                     {cat === 'trusted_news' && <ShieldCheck size={10} className="text-amber-500" />}
                                     {cat === 'analyst_opinion' && <MessageSquare size={10} className="text-amber-500" />}
-                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
+                                    <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-tighter">
                                         {cat.replace('_', ' ')}
                                     </span>
                                 </div>
-                                <span className="text-xs font-bold text-white">{count}</span>
+                                <span className="text-xs font-bold text-on-surface">{count}</span>
                             </div>
                         ))}
                     </div>
