@@ -209,18 +209,18 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
     <section className="space-y-4">
         <div className="flex items-center gap-2">
             <Layers size={14} className="text-cyan-400 opacity-70" />
-            <span className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest">Other</span>
+            <span className="text-[10px] font-bold text-outline uppercase tracking-[0.2em]">Other</span>
         </div>
 
         {alertsId && (
-            <section className="tech-card overflow-hidden transition duration-300">
+            <section className="rounded-xl border border-outline-variant/10 bg-surface-container overflow-hidden transition-colors duration-300">
                 <button
                     onClick={() => setShowAlerts(!showAlerts)}
                     className="w-full flex items-center justify-between p-4 bg-surface-container-low hover:bg-surface-container-low transition-colors"
                 >
                     <div className="flex items-center gap-2">
                         <Bell size={14} className="text-outline" />
-                        <span className="text-[10px] font-black text-outline uppercase tracking-widest">Alert Signals</span>
+                        <span className="text-[10px] font-bold text-outline uppercase tracking-[0.2em]">Alert Signals</span>
                     </div>
                     <div className="flex items-center gap-4">
                         {showAlerts && isAlertsLoadingState && (
@@ -263,20 +263,20 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                         {alertsData && alertsSummary && (
                             <>
                                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                    <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
-                                        <div className="text-[9px] font-black text-outline uppercase mb-1">Total Alerts</div>
+                                    <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/20">
+                                        <div className="text-[9px] font-bold text-outline uppercase mb-1">Total Alerts</div>
                                         <div className="text-lg font-black text-on-surface">{alertsSummary.total}</div>
                                     </div>
-                                    <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
-                                        <div className="text-[9px] font-black text-outline uppercase mb-1">Critical</div>
+                                    <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/20">
+                                        <div className="text-[9px] font-bold text-outline uppercase mb-1">Critical</div>
                                         <div className="text-lg font-black text-rose-300">{alertsSummary.severityCounts.critical}</div>
                                     </div>
-                                    <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
-                                        <div className="text-[9px] font-black text-outline uppercase mb-1">Warning</div>
+                                    <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/20">
+                                        <div className="text-[9px] font-bold text-outline uppercase mb-1">Warning</div>
                                         <div className="text-lg font-black text-amber-300">{alertsSummary.severityCounts.warning}</div>
                                     </div>
-                                    <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
-                                        <div className="text-[9px] font-black text-outline uppercase mb-1">Info</div>
+                                    <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/20">
+                                        <div className="text-[9px] font-bold text-outline uppercase mb-1">Info</div>
                                         <div className="text-lg font-black text-on-surface">{alertsSummary.severityCounts.info}</div>
                                     </div>
                                 </div>
@@ -304,11 +304,11 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                                             return (
                                                 <div
                                                     key={`${alert.code}-${idx}`}
-                                                    className="bg-surface p-4 rounded-xl border border-outline-variant/30 space-y-3"
+                                                    className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/20 space-y-3"
                                                 >
                                                     <div className="flex items-start justify-between gap-4">
                                                         <div>
-                                                            <div className="text-[9px] font-black uppercase tracking-widest text-outline mb-1">
+                                                            <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-outline mb-1">
                                                                 {alert.timeframe.toUpperCase()} · {formatLabel(alert.code)}
                                                             </div>
                                                             <div className="text-sm font-black text-on-surface">{alert.title}</div>
@@ -319,7 +319,7 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                                                             )}
                                                         </div>
                                                         <span
-                                                            className={`px-2.5 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest ${tone.badge}`}
+                                                            className={`px-2.5 py-1 rounded-full border text-[9px] font-black uppercase tracking-[0.2em] ${tone.badge}`}
                                                         >
                                                             {tone.label}
                                                         </span>
@@ -368,14 +368,14 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
         )}
 
         {featurePackId && (
-            <section className="tech-card overflow-hidden transition duration-300">
+            <section className="rounded-xl border border-outline-variant/10 bg-surface-container overflow-hidden transition-colors duration-300">
                 <button
                     onClick={() => setShowFeaturePack(!showFeaturePack)}
                     className="w-full flex items-center justify-between p-4 bg-surface-container-low hover:bg-surface-container-low transition-colors"
                 >
                     <div className="flex items-center gap-2">
                         <Layers size={14} className="text-outline" />
-                        <span className="text-[10px] font-black text-outline uppercase tracking-widest">Feature Pack</span>
+                        <span className="text-[10px] font-bold text-outline uppercase tracking-[0.2em]">Feature Pack</span>
                     </div>
                     <div className="flex items-center gap-4">
                         {showFeaturePack && isFeaturePackLoading && (
@@ -410,16 +410,16 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                         {featurePackData && featurePackSummary && (
                             <>
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
-                                        <div className="text-[9px] font-black text-outline uppercase mb-1">Timeframes</div>
+                                    <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/20">
+                                        <div className="text-[9px] font-bold text-outline uppercase mb-1">Timeframes</div>
                                         <div className="text-lg font-black text-on-surface">{featurePackSummary.summaries.length}</div>
                                     </div>
-                                    <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
-                                        <div className="text-[9px] font-black text-outline uppercase mb-1">Classic Indicators</div>
+                                    <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/20">
+                                        <div className="text-[9px] font-bold text-outline uppercase mb-1">Classic Indicators</div>
                                         <div className="text-lg font-black text-on-surface">{featurePackSummary.classicTotal}</div>
                                     </div>
-                                    <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
-                                        <div className="text-[9px] font-black text-outline uppercase mb-1">Quant Features</div>
+                                    <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/20">
+                                        <div className="text-[9px] font-bold text-outline uppercase mb-1">Quant Features</div>
                                         <div className="text-lg font-black text-on-surface">{featurePackSummary.quantTotal}</div>
                                     </div>
                                 </div>
@@ -436,9 +436,9 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
 
                                 <div className="grid grid-cols-1 gap-4">
                                     {featurePackSummary.summaries.map((frame) => (
-                                        <div key={frame.timeframe} className="bg-surface p-5 rounded-xl border border-outline-variant/30 space-y-3">
+                                        <div key={frame.timeframe} className="bg-surface-container-low p-5 rounded-xl border border-outline-variant/20 space-y-3">
                                             <div className="flex items-center justify-between">
-                                                <div className="text-xs font-black uppercase tracking-widest text-on-surface-variant">
+                                                <div className="text-xs font-black uppercase tracking-[0.2em] text-on-surface-variant">
                                                     {formatLabel(frame.timeframe)}
                                                 </div>
                                                 <div className="text-[10px] text-outline font-bold uppercase">
@@ -446,11 +446,11 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                                                 </div>
                                             </div>
                                             <div>
-                                                <div className="text-[9px] font-black text-outline uppercase mb-2">Classic Highlights</div>
+                                                <div className="text-[9px] font-bold text-outline uppercase mb-2">Classic Highlights</div>
                                                 {renderIndicatorHighlights(frame.classicHighlights)}
                                             </div>
                                             <div>
-                                                <div className="text-[9px] font-black text-outline uppercase mb-2">Quant Highlights</div>
+                                                <div className="text-[9px] font-bold text-outline uppercase mb-2">Quant Highlights</div>
                                                 {renderIndicatorHighlights(frame.quantHighlights)}
                                             </div>
                                         </div>
@@ -464,14 +464,14 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
         )}
 
         {patternPackId && (
-            <section className="tech-card overflow-hidden transition duration-300">
+            <section className="rounded-xl border border-outline-variant/10 bg-surface-container overflow-hidden transition-colors duration-300">
                 <button
                     onClick={() => setShowPatternPack(!showPatternPack)}
                     className="w-full flex items-center justify-between p-4 bg-surface-container-low hover:bg-surface-container-low transition-colors"
                 >
                     <div className="flex items-center gap-2">
                         <Layers size={14} className="text-outline" />
-                        <span className="text-[10px] font-black text-outline uppercase tracking-widest">Pattern Pack</span>
+                        <span className="text-[10px] font-bold text-outline uppercase tracking-[0.2em]">Pattern Pack</span>
                     </div>
                     <div className="flex items-center gap-4">
                         {showPatternPack && isPatternPackLoading && (
@@ -506,16 +506,16 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                         {patternPackData && patternPackSummary && (
                             <>
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
-                                        <div className="text-[9px] font-black text-outline uppercase mb-1">Timeframes</div>
+                                    <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/20">
+                                        <div className="text-[9px] font-bold text-outline uppercase mb-1">Timeframes</div>
                                         <div className="text-lg font-black text-on-surface">{patternPackSummary.summaries.length}</div>
                                     </div>
-                                    <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
-                                        <div className="text-[9px] font-black text-outline uppercase mb-1">Levels</div>
+                                    <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/20">
+                                        <div className="text-[9px] font-bold text-outline uppercase mb-1">Levels</div>
                                         <div className="text-lg font-black text-on-surface">{patternPackSummary.totalLevels}</div>
                                     </div>
-                                    <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
-                                        <div className="text-[9px] font-black text-outline uppercase mb-1">Flags</div>
+                                    <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/20">
+                                        <div className="text-[9px] font-bold text-outline uppercase mb-1">Flags</div>
                                         <div className="text-lg font-black text-on-surface">{patternPackSummary.totalFlags}</div>
                                     </div>
                                 </div>
@@ -532,9 +532,9 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
 
                                 <div className="grid grid-cols-1 gap-4">
                                     {patternPackSummary.summaries.map((frame) => (
-                                        <div key={frame.timeframe} className="bg-surface p-5 rounded-xl border border-outline-variant/30 space-y-4">
+                                        <div key={frame.timeframe} className="bg-surface-container-low p-5 rounded-xl border border-outline-variant/20 space-y-4">
                                             <div className="flex items-center justify-between">
-                                                <div className="text-xs font-black uppercase tracking-widest text-on-surface-variant">
+                                                <div className="text-xs font-black uppercase tracking-[0.2em] text-on-surface-variant">
                                                     {formatLabel(frame.timeframe)}
                                                 </div>
                                                 <div className="text-[10px] text-outline font-bold uppercase">
@@ -544,7 +544,7 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
 
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                 <div>
-                                                    <div className="text-[9px] font-black text-outline uppercase mb-2">Support Levels</div>
+                                                    <div className="text-[9px] font-bold text-outline uppercase mb-2">Support Levels</div>
                                                     {frame.supportLevels.length > 0 ? (
                                                         <div className="space-y-2">
                                                             {frame.supportLevels.map((level, idx) => (
@@ -561,7 +561,7 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                                                     )}
                                                 </div>
                                                 <div>
-                                                    <div className="text-[9px] font-black text-outline uppercase mb-2">Resistance Levels</div>
+                                                    <div className="text-[9px] font-bold text-outline uppercase mb-2">Resistance Levels</div>
                                                     {frame.resistanceLevels.length > 0 ? (
                                                         <div className="space-y-2">
                                                             {frame.resistanceLevels.map((level, idx) => (
@@ -581,11 +581,11 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
 
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                 <div>
-                                                    <div className="text-[9px] font-black text-outline uppercase mb-2">Breakouts</div>
+                                                    <div className="text-[9px] font-bold text-outline uppercase mb-2">Breakouts</div>
                                                     {frame.breakoutFlags.length > 0 ? (
                                                         <div className="flex flex-wrap gap-2">
                                                             {frame.breakoutFlags.map((flag, idx) => (
-                                                                <span key={`${frame.timeframe}-breakout-${idx}`} className="px-2.5 py-1 bg-surface-container border border-outline-variant/30 rounded-full text-[10px] font-bold text-on-surface uppercase tracking-wide">
+                                                                <span key={`${frame.timeframe}-breakout-${idx}`} className="px-2.5 py-1 bg-surface-container border border-outline-variant/20 rounded-full text-[10px] font-bold text-on-surface uppercase tracking-wide">
                                                                     {flag.name} {flag.confidence !== null && flag.confidence !== undefined ? `(${flag.confidence.toFixed(2)})` : ''}
                                                                 </span>
                                                             ))}
@@ -595,11 +595,11 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                                                     )}
                                                 </div>
                                                 <div>
-                                                    <div className="text-[9px] font-black text-outline uppercase mb-2">Trendlines</div>
+                                                    <div className="text-[9px] font-bold text-outline uppercase mb-2">Trendlines</div>
                                                     {frame.trendFlags.length > 0 ? (
                                                         <div className="flex flex-wrap gap-2">
                                                             {frame.trendFlags.map((flag, idx) => (
-                                                                <span key={`${frame.timeframe}-trend-${idx}`} className="px-2.5 py-1 bg-surface-container border border-outline-variant/30 rounded-full text-[10px] font-bold text-on-surface uppercase tracking-wide">
+                                                                <span key={`${frame.timeframe}-trend-${idx}`} className="px-2.5 py-1 bg-surface-container border border-outline-variant/20 rounded-full text-[10px] font-bold text-on-surface uppercase tracking-wide">
                                                                     {flag.name} {flag.confidence !== null && flag.confidence !== undefined ? `(${flag.confidence.toFixed(2)})` : ''}
                                                                 </span>
                                                             ))}
@@ -620,14 +620,14 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
         )}
 
         {fusionReportId && (
-            <section className="tech-card overflow-hidden transition duration-300">
+            <section className="rounded-xl border border-outline-variant/10 bg-surface-container overflow-hidden transition-colors duration-300">
                 <button
                     onClick={() => setShowFusionReport(!showFusionReport)}
                     className="w-full flex items-center justify-between p-4 bg-surface-container-low hover:bg-surface-container-low transition-colors"
                 >
                     <div className="flex items-center gap-2">
                         <Layers size={14} className="text-outline" />
-                        <span className="text-[10px] font-black text-outline uppercase tracking-widest">Fusion Report</span>
+                        <span className="text-[10px] font-bold text-outline uppercase tracking-[0.2em]">Fusion Report</span>
                     </div>
                     <div className="flex items-center gap-4">
                         {showFusionReport &&
@@ -669,30 +669,30 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                         {fusionReportData && (
                             <>
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
-                                        <div className="text-[9px] font-black text-outline uppercase mb-1">Timeframes</div>
+                                    <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/20">
+                                        <div className="text-[9px] font-bold text-outline uppercase mb-1">Timeframes</div>
                                         <div className="text-lg font-black text-on-surface">{fusionReportSummary?.totalFrames ?? 0}</div>
                                     </div>
-                                    <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
-                                        <div className="text-[9px] font-black text-outline uppercase mb-1">Conflicts</div>
+                                    <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/20">
+                                        <div className="text-[9px] font-bold text-outline uppercase mb-1">Conflicts</div>
                                         <div className="text-lg font-black text-on-surface">{fusionReportData.conflict_reasons?.length ?? 0}</div>
                                     </div>
-                                    <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
-                                        <div className="text-[9px] font-black text-outline uppercase mb-1">Signal Strength</div>
+                                    <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/20">
+                                        <div className="text-[9px] font-bold text-outline uppercase mb-1">Signal Strength</div>
                                         <div className="text-lg font-black text-on-surface">
                                             {fusionReportData.signal_strength_effective !== undefined &&
                                                 fusionReportData.signal_strength_effective !== null
                                                 ? formatConfidence(fusionReportData.signal_strength_effective)
                                                 : fusionConfidenceDisplay}
                                         </div>
-                                        <div className="text-[9px] text-outline uppercase tracking-widest mt-1">{fusionConfidenceLabel}</div>
+                                        <div className="text-[9px] text-outline uppercase tracking-[0.2em] mt-1">{fusionConfidenceLabel}</div>
                                         {fusionReportData.confidence_eligibility?.eligible === false && (
-                                            <div className="text-[9px] text-outline uppercase tracking-widest mt-1">
+                                            <div className="text-[9px] text-outline uppercase tracking-[0.2em] mt-1">
                                                 Not Probability-Rated
                                             </div>
                                         )}
                                         {fusionRawDisplay && (
-                                            <div className="text-[9px] text-outline uppercase tracking-widest mt-1">
+                                            <div className="text-[9px] text-outline uppercase tracking-[0.2em] mt-1">
                                                 Raw {fusionRawDisplay}
                                             </div>
                                         )}
@@ -722,9 +722,9 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                                 {fusionReportSummary && fusionReportSummary.entries.length > 0 && (
                                     <div className="grid grid-cols-1 gap-4">
                                         {fusionReportSummary.entries.map((entry) => (
-                                            <div key={entry.timeframe} className="bg-surface p-5 rounded-xl border border-outline-variant/30 space-y-3">
+                                            <div key={entry.timeframe} className="bg-surface-container-low p-5 rounded-xl border border-outline-variant/20 space-y-3">
                                                 <div className="flex items-center justify-between">
-                                                    <div className="text-xs font-black uppercase tracking-widest text-on-surface-variant">
+                                                    <div className="text-xs font-black uppercase tracking-[0.2em] text-on-surface-variant">
                                                         {formatLabel(entry.timeframe)}
                                                     </div>
                                                     <div className="text-[10px] text-outline font-bold uppercase">
@@ -732,17 +732,17 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                                                     </div>
                                                 </div>
                                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                                    <div className="bg-surface-container-low p-3 rounded-lg border border-outline-variant/30">
+                                                    <div className="bg-surface-container-low p-3 rounded-lg border border-outline-variant/20">
                                                         <div className="text-[9px] text-outline font-bold uppercase mb-1">Classic</div>
                                                         <div className="text-sm font-black text-on-surface">{formatLabel(entry.classic)}</div>
                                                         <div className="text-[10px] text-outline">Score {entry.classicScore !== null ? entry.classicScore.toFixed(2) : 'n/a'}</div>
                                                     </div>
-                                                    <div className="bg-surface-container-low p-3 rounded-lg border border-outline-variant/30">
+                                                    <div className="bg-surface-container-low p-3 rounded-lg border border-outline-variant/20">
                                                         <div className="text-[9px] text-outline font-bold uppercase mb-1">Quant</div>
                                                         <div className="text-sm font-black text-on-surface">{formatLabel(entry.quant)}</div>
                                                         <div className="text-[10px] text-outline">Score {entry.quantScore !== null ? entry.quantScore.toFixed(2) : 'n/a'}</div>
                                                     </div>
-                                                    <div className="bg-surface-container-low p-3 rounded-lg border border-outline-variant/30">
+                                                    <div className="bg-surface-container-low p-3 rounded-lg border border-outline-variant/20">
                                                         <div className="text-[9px] text-outline font-bold uppercase mb-1">Pattern</div>
                                                         <div className="text-sm font-black text-on-surface">{formatLabel(entry.pattern)}</div>
                                                         <div className="text-[10px] text-outline">Score {entry.patternScore !== null ? entry.patternScore.toFixed(2) : 'n/a'}</div>
@@ -756,7 +756,7 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                                 {directionScorecardData && scorecardSummary && scorecardSummary.entries.length > 0 && (
                                     <div className="space-y-4">
                                         <div className="flex items-center justify-between">
-                                            <div className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">
+                                            <div className="text-[10px] font-black uppercase tracking-[0.2em] text-on-surface-variant">
                                                 Direction Scorecard
                                             </div>
                                             <div className="text-[10px] text-outline font-bold uppercase">
@@ -765,9 +765,9 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                                         </div>
                                         <div className="grid grid-cols-1 gap-4">
                                             {scorecardSummary.entries.map(({ timeframe, frame }) => (
-                                                <div key={timeframe} className="bg-surface p-5 rounded-xl border border-outline-variant/30 space-y-4">
+                                                <div key={timeframe} className="bg-surface-container-low p-5 rounded-xl border border-outline-variant/20 space-y-4">
                                                     <div className="flex items-center justify-between">
-                                                        <div className="text-xs font-black uppercase tracking-widest text-on-surface-variant">
+                                                        <div className="text-xs font-black uppercase tracking-[0.2em] text-on-surface-variant">
                                                             {formatLabel(timeframe)}
                                                         </div>
                                                         <div className="text-[10px] text-outline font-bold uppercase">
@@ -775,19 +775,19 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                                                         </div>
                                                     </div>
                                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                                        <div className="bg-surface-container-low p-3 rounded-lg border border-outline-variant/30 space-y-2">
+                                                        <div className="bg-surface-container-low p-3 rounded-lg border border-outline-variant/20 space-y-2">
                                                             <div className="text-[9px] text-outline font-bold uppercase">Classic</div>
                                                             <div className="text-sm font-black text-on-surface">{formatLabel(frame.classic_label)}</div>
                                                             <div className="text-[10px] text-outline">Score {frame.classic_score.toFixed(2)}</div>
                                                             {renderScorecardContributions(frame.contributions?.classic ?? [])}
                                                         </div>
-                                                        <div className="bg-surface-container-low p-3 rounded-lg border border-outline-variant/30 space-y-2">
+                                                        <div className="bg-surface-container-low p-3 rounded-lg border border-outline-variant/20 space-y-2">
                                                             <div className="text-[9px] text-outline font-bold uppercase">Quant</div>
                                                             <div className="text-sm font-black text-on-surface">{formatLabel(frame.quant_label)}</div>
                                                             <div className="text-[10px] text-outline">Score {frame.quant_score.toFixed(2)}</div>
                                                             {renderScorecardContributions(frame.contributions?.quant ?? [])}
                                                         </div>
-                                                        <div className="bg-surface-container-low p-3 rounded-lg border border-outline-variant/30 space-y-2">
+                                                        <div className="bg-surface-container-low p-3 rounded-lg border border-outline-variant/20 space-y-2">
                                                             <div className="text-[9px] text-outline font-bold uppercase">Pattern</div>
                                                             <div className="text-sm font-black text-on-surface">{formatLabel(frame.pattern_label)}</div>
                                                             <div className="text-[10px] text-outline">Score {frame.pattern_score.toFixed(2)}</div>
@@ -813,7 +813,7 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
         )}
 
         {verificationReportId && (
-            <section className="tech-card overflow-hidden transition duration-300">
+            <section className="rounded-xl border border-outline-variant/10 bg-surface-container overflow-hidden transition-colors duration-300">
                 <button
                     onClick={() =>
                         setShowVerificationReport(!showVerificationReport)
@@ -822,7 +822,7 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                 >
                     <div className="flex items-center gap-2">
                         <Layers size={14} className="text-outline" />
-                        <span className="text-[10px] font-black text-outline uppercase tracking-widest">Verification &amp; Baseline</span>
+                        <span className="text-[10px] font-bold text-outline uppercase tracking-[0.2em]">Verification &amp; Baseline</span>
                     </div>
                     <div className="flex items-center gap-4">
                         {showVerificationReport && isVerificationReportLoading && (
@@ -857,16 +857,16 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                         {verificationReportData && (
                             <>
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
-                                        <div className="text-[9px] font-black text-outline uppercase mb-1">Baseline Gates</div>
+                                    <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/20">
+                                        <div className="text-[9px] font-bold text-outline uppercase mb-1">Baseline Gates</div>
                                         <div className="text-lg font-black text-on-surface">{verificationSummary?.gatesCount ?? 0}</div>
                                     </div>
-                                    <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
-                                        <div className="text-[9px] font-black text-outline uppercase mb-1">Robustness Flags</div>
+                                    <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/20">
+                                        <div className="text-[9px] font-bold text-outline uppercase mb-1">Robustness Flags</div>
                                         <div className="text-lg font-black text-on-surface">{verificationSummary?.flagsCount ?? 0}</div>
                                     </div>
-                                    <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
-                                        <div className="text-[9px] font-black text-outline uppercase mb-1">As Of</div>
+                                    <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/20">
+                                        <div className="text-[9px] font-bold text-outline uppercase mb-1">As Of</div>
                                         <div className="text-lg font-black text-on-surface">{verificationReportData.as_of}</div>
                                     </div>
                                 </div>
@@ -892,8 +892,8 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                                 )}
 
                                 {verificationReportData.backtest_summary && (
-                                    <div className="bg-surface p-5 rounded-xl border border-outline-variant/30 space-y-3">
-                                        <div className="text-[9px] font-black text-outline uppercase">Backtest Summary</div>
+                                    <div className="bg-surface-container-low p-5 rounded-xl border border-outline-variant/20 space-y-3">
+                                        <div className="text-[9px] font-bold text-outline uppercase">Backtest Summary</div>
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-on-surface">
                                             <div>Win Rate: {verificationReportData.backtest_summary.win_rate ?? 'n/a'}</div>
                                             <div>Profit Factor: {verificationReportData.backtest_summary.profit_factor ?? 'n/a'}</div>
@@ -905,8 +905,8 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                                 )}
 
                                 {verificationReportData.wfa_summary && (
-                                    <div className="bg-surface p-5 rounded-xl border border-outline-variant/30 space-y-3">
-                                        <div className="text-[9px] font-black text-outline uppercase">Walk-Forward Summary</div>
+                                    <div className="bg-surface-container-low p-5 rounded-xl border border-outline-variant/20 space-y-3">
+                                        <div className="text-[9px] font-bold text-outline uppercase">Walk-Forward Summary</div>
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-on-surface">
                                             <div>WFA Sharpe: {verificationReportData.wfa_summary.wfa_sharpe ?? 'n/a'}</div>
                                             <div>WFE Ratio: {verificationReportData.wfa_summary.wfe_ratio ?? 'n/a'}</div>
@@ -917,11 +917,11 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                                 )}
 
                                 {verificationReportData.baseline_gates && Object.keys(verificationReportData.baseline_gates).length > 0 && (
-                                    <div className="bg-surface p-5 rounded-xl border border-outline-variant/30">
-                                        <div className="text-[9px] font-black text-outline uppercase mb-3">Baseline Gates</div>
+                                    <div className="bg-surface-container-low p-5 rounded-xl border border-outline-variant/20">
+                                        <div className="text-[9px] font-bold text-outline uppercase mb-3">Baseline Gates</div>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-on-surface">
                                             {Object.entries(verificationReportData.baseline_gates).map(([key, value]) => (
-                                                <div key={key} className="flex items-center justify-between bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2">
+                                                <div key={key} className="flex items-center justify-between bg-surface-container border border-outline-variant/20 rounded-lg px-3 py-2">
                                                     <span className="font-bold uppercase text-[9px] text-outline">{formatLabel(key)}</span>
                                                     <span>{typeof value === 'boolean' ? (value ? 'PASS' : 'FAIL') : String(value)}</span>
                                                 </div>
@@ -936,16 +936,16 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
             </section>
         )}
 
-        <section className="tech-card p-6 shadow-inner bg-surface-container-low">
+        <section className="rounded-xl border border-outline-variant/10 bg-surface-container p-6">
             <div className="flex items-center gap-2 mb-6">
                 <Layers size={16} className="text-purple-400" />
-                <span className="text-xs font-black text-on-surface uppercase tracking-[0.2em]">Artifact References</span>
+                <span className="text-xs font-bold text-outline uppercase tracking-[0.2em]">Artifact References</span>
             </div>
             {artifactEntries.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {artifactEntries.map(([key, value]) => (
-                        <div key={key} className="bg-surface p-4 rounded-xl border border-outline-variant/30">
-                            <div className="text-[9px] font-black text-outline uppercase mb-1">
+                        <div key={key} className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/20">
+                            <div className="text-[9px] font-bold text-outline uppercase mb-1">
                                 {formatArtifactLabel(key)} ID
                             </div>
                             <div className="text-sm font-mono font-bold text-on-surface">{formatArtifactId(value)}</div>

@@ -171,8 +171,8 @@ const getAlertSeverityTone = (severity: AlertSeverity) => {
         default:
             return {
                 label: 'Info',
-                badge: 'bg-slate-500/20 border-slate-500/40 text-on-surface',
-                text: 'text-on-surface',
+                badge: 'bg-surface-container-high border-outline-variant/30 text-on-surface-variant',
+                text: 'text-on-surface-variant',
             };
     }
 };
@@ -186,9 +186,9 @@ const getLifecycleTone = (state?: string | null) => {
         return 'bg-amber-500/15 border-amber-500/35 text-amber-200';
     }
     if (normalized === 'suppressed') {
-        return 'bg-slate-500/15 border-slate-500/35 text-on-surface-variant';
+        return 'bg-surface-container-high border-outline-variant/30 text-on-surface-variant';
     }
-    return 'bg-slate-500/15 border-slate-500/35 text-on-surface-variant';
+    return 'bg-surface-container-high border-outline-variant/30 text-on-surface-variant';
 };
 
 const getQualityGateTone = (gate?: string | null) => {
@@ -202,7 +202,7 @@ const getQualityGateTone = (gate?: string | null) => {
     if (normalized === 'failed') {
         return 'bg-rose-500/15 border-rose-500/35 text-rose-200';
     }
-    return 'bg-slate-500/15 border-slate-500/35 text-on-surface-variant';
+    return 'bg-surface-container-high border-outline-variant/30 text-on-surface-variant';
 };
 
 const getIndicatorToneClasses = (tone: IndicatorTone) => {
@@ -308,8 +308,8 @@ const tonePalette: Record<
         glow: '[text-shadow:0_0_15px_rgba(34,197,94,0.5)]',
     },
     neutral: {
-        badge: 'bg-slate-500/20 border-slate-500/40 text-on-surface',
-        value: 'text-on-surface',
+        badge: 'bg-surface-container-high border-outline-variant/30 text-on-surface-variant',
+        value: 'text-on-surface-variant',
         spark: '#94a3b8',
         glow: '[text-shadow:0_0_15px_rgba(148,163,184,0.5)]',
     },
@@ -493,7 +493,7 @@ const renderIndicatorHighlights = (indicators: TechnicalFeaturePack['timeframes'
                 return (
                     <span
                         key={indicator.name}
-                        className="px-2.5 py-1 bg-surface-container border border-outline-variant/30 rounded-full text-[10px] font-bold text-on-surface uppercase tracking-wide"
+                        className="px-2.5 py-1 bg-surface-container border border-outline-variant/20 rounded-full text-[10px] font-bold text-on-surface uppercase tracking-wide"
                     >
                         {descriptor.displayName}: {formatIndicatorValue(indicator.value)}
                         {descriptor.stateLabel ? ` · ${descriptor.stateLabel}` : ''}
@@ -563,7 +563,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
     const [showVerificationReport, setShowVerificationReport] = useState(false);
     const [priceTimeframe, setPriceTimeframe] = useState<string | null>(null);
     const crosshairSync = useCrosshairSync();
-    const sectionHeaderTextClass = "text-[10px] font-black text-on-surface-variant uppercase tracking-widest";
+    const sectionHeaderTextClass = 'text-[10px] font-bold text-outline uppercase tracking-[0.2em]';
 
     const { data: reportData } = useArtifact(
         reference?.artifact_id,
@@ -1389,35 +1389,36 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
     if (!reportData && previewData?.signal_display) {
         return (
             <div className="space-y-6 animate-fade-slide-up">
-                <header className="space-y-4">
+                <div className="flex items-center justify-between mb-6 px-2">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-600/20 border border-cyan-500/30 flex items-center justify-center shadow-inner">
-                            <LineChart className="text-cyan-400" size={20} />
-                        </div>
-                        <div>
-                            <h3 className="text-xl font-bold text-on-surface tracking-tight">Technical Intelligence (Preview)</h3>
-                            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-outline">
-                                <span className="text-cyan-400">{previewData?.ticker || 'UNKNOWN'}</span>
-                            </div>
-                        </div>
+                        <LineChart size={18} className="text-cyan-400" />
+                        <h3 className="text-xs font-bold text-outline uppercase tracking-[0.2em]">Technical Intelligence</h3>
                     </div>
-                </header>
+                    <div className="flex items-center gap-2">
+                        <span className="rounded border border-outline-variant/10 bg-surface-container-low px-2 py-1 text-[11px] font-semibold text-primary-container">
+                            Preview
+                        </span>
+                        <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-outline">
+                            {previewData?.ticker || 'UNKNOWN'}
+                        </span>
+                    </div>
+                </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="tech-card p-4 text-center group hover:bg-surface-container-low">
-                        <div className="text-label mb-1 text-outline group-hover:text-on-surface-variant transition-colors">Signal</div>
+                    <div className="bg-surface-container p-5 rounded-xl border border-outline-variant/10 text-center transition-colors hover:border-primary-container/30">
+                        <div className="text-[10px] font-bold text-outline uppercase tracking-[0.2em] mb-2">Signal</div>
                         <div className="text-lg font-black text-on-surface">{previewData.signal_display}</div>
                     </div>
-                    <div className="tech-card p-4 text-center group hover:bg-surface-container-low">
-                        <div className="text-label mb-1 text-outline group-hover:text-on-surface-variant transition-colors">Price</div>
+                    <div className="bg-surface-container p-5 rounded-xl border border-outline-variant/10 text-center transition-colors hover:border-primary-container/30">
+                        <div className="text-[10px] font-bold text-outline uppercase tracking-[0.2em] mb-2">Price</div>
                         <div className="text-lg font-black text-on-surface">{previewData.latest_price_display}</div>
                     </div>
-                    <div className="tech-card p-4 text-center group hover:bg-surface-container-low">
-                        <div className="text-label mb-1 text-outline group-hover:text-on-surface-variant transition-colors">Z-Score</div>
+                    <div className="bg-surface-container p-5 rounded-xl border border-outline-variant/10 text-center transition-colors hover:border-primary-container/30">
+                        <div className="text-[10px] font-bold text-outline uppercase tracking-[0.2em] mb-2">Z-Score</div>
                         <div className="text-lg font-black text-on-surface">{previewData.z_score_display}</div>
                     </div>
-                    <div className="tech-card p-4 text-center group hover:bg-surface-container-low">
-                        <div className="text-label mb-1 text-outline group-hover:text-on-surface-variant transition-colors">Opt. d</div>
+                    <div className="bg-surface-container p-5 rounded-xl border border-outline-variant/10 text-center transition-colors hover:border-primary-container/30">
+                        <div className="text-[10px] font-bold text-outline uppercase tracking-[0.2em] mb-2">Opt. d</div>
                         <div className="text-lg font-black text-on-surface">{previewData.optimal_d_display}</div>
                     </div>
                 </div>
@@ -1522,36 +1523,36 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
 
     return (
         <div className="space-y-6 animate-fade-slide-up">
-            <header className="space-y-4">
+            <div className="flex items-center justify-between mb-6 px-2">
                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-600/20 border border-cyan-500/30 flex items-center justify-center shadow-inner">
-                        <LineChart className="text-cyan-400" size={20} />
-                    </div>
-                    <div>
-                        <h3 className="text-xl font-bold text-on-surface tracking-tight">Technical Intelligence</h3>
-                        <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-outline">
-                            <span className="text-cyan-400">{reportData.ticker}</span>
-                            <span className="opacity-30">|</span>
-                            <span>{formatLabel(reportData.schema_version)}</span>
-                            <span className="opacity-30">|</span>
-                            <span>As of {reportData.as_of}</span>
-                        </div>
-                    </div>
+                    <LineChart size={18} className="text-cyan-400" />
+                    <h3 className="text-xs font-bold text-outline uppercase tracking-[0.2em]">Technical Intelligence</h3>
                 </div>
-            </header>
+                <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded border border-outline-variant/10 bg-surface-container-low px-2 py-1 text-[11px] font-semibold text-cyan-300">
+                        {reportData.ticker}
+                    </span>
+                    <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-outline">
+                        {formatLabel(reportData.schema_version)}
+                    </span>
+                    <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-outline">
+                        As of {reportData.as_of}
+                    </span>
+                </div>
+            </div>
 
             <section className="space-y-4">
                 <div className="flex items-center gap-2">
                     <Activity size={14} className="text-cyan-400 opacity-70" />
-                    <span className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest">Overview</span>
+                    <span className="text-[10px] font-bold text-outline uppercase tracking-[0.2em]">Overview</span>
                 </div>
 
                 <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div className="tech-card p-4 flex flex-col border border-outline-variant/50 bg-surface-container-low">
+                    <div className="rounded-xl bg-surface-container p-5 border border-outline-variant/10 flex flex-col transition-colors hover:border-primary-container/30">
                         <div className="flex-1">
                             <div className="flex justify-between items-start">
                                 <div>
-                                    <div className="text-[10px] font-bold uppercase tracking-widest text-outline">Direction</div>
+                                    <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-outline">Direction</div>
                                     <div className="text-lg font-black text-on-surface mt-1 leading-tight">{formatLabel(reportData.direction)}</div>
                                 </div>
                                 <div className="p-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/20 shrink-0">
@@ -1565,12 +1566,12 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                             </div>
                         </div>
                     </div>
-                    <div className={`tech-card p-4 flex flex-col border ${riskTone.border} ${riskTone.bg}`}>
+                    <div className={`rounded-xl p-5 flex flex-col border ${riskTone.border} ${riskTone.bg}`}>
                         <div className="flex-1">
-                            <div className="text-[10px] font-bold uppercase tracking-widest text-outline">Risk Level</div>
+                            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-outline">Risk Level</div>
                             <div className={`text-lg font-black mt-1 leading-tight ${riskTone.color}`}>{riskTone.label}</div>
                             {isDegraded && (
-                                <div className="text-[9px] uppercase tracking-widest text-rose-300 mt-2 font-bold">
+                                <div className="text-[9px] uppercase tracking-[0.2em] text-rose-300 mt-2 font-bold">
                                     System Warning
                                 </div>
                             )}
@@ -1581,13 +1582,13 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                             </div>
                         </div>
                     </div>
-                    <div className={`tech-card p-4 flex flex-col border ${setupReliabilityTone.border} ${setupReliabilityTone.bg}`}>
+                    <div className={`rounded-xl p-5 flex flex-col border ${setupReliabilityTone.border} ${setupReliabilityTone.bg}`}>
                         <div className="flex-1">
-                            <div className="text-[10px] font-bold uppercase tracking-widest text-outline">Setup Reliability</div>
+                            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-outline">Setup Reliability</div>
                             <div className={`text-lg font-black mt-1 leading-tight ${setupReliabilityTone.value}`}>
                                 {setupReliabilityDescriptor.label}
                             </div>
-                            <div className={`text-[9px] uppercase tracking-widest mt-2 ${setupReliabilityTone.detail}`}>
+                            <div className={`text-[9px] uppercase tracking-[0.2em] mt-2 ${setupReliabilityTone.detail}`}>
                                 {setupReliabilityDescriptor.detail}
                             </div>
                         </div>
@@ -1597,13 +1598,13 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                             </div>
                         </div>
                     </div>
-                    <div className={`tech-card p-4 flex flex-col border ${signalStrengthTone.border} ${signalStrengthTone.bg}`}>
+                    <div className={`rounded-xl p-5 flex flex-col border ${signalStrengthTone.border} ${signalStrengthTone.bg}`}>
                         <div className="flex-1">
-                            <div className="text-[10px] font-bold uppercase tracking-widest text-outline">Signal Strength</div>
+                            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-outline">Signal Strength</div>
                             <div className={`text-lg font-black mt-1 leading-tight ${signalStrengthTone.value}`}>
                                 {signalStrengthDescriptor.label}
                             </div>
-                            <div className={`text-[9px] uppercase tracking-widest mt-2 ${signalStrengthTone.detail}`}>
+                            <div className={`text-[9px] uppercase tracking-[0.2em] mt-2 ${signalStrengthTone.detail}`}>
                                 {signalStrengthDescriptor.detail}
                             </div>
                         </div>
@@ -1617,7 +1618,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
 
                 {momentumSummary && (
                     <div className="flex flex-wrap items-center gap-2 text-xs text-on-surface-variant">
-                        <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-outline">
+                        <span className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-outline">
                             <Zap size={12} className="text-amber-300" />
                             Momentum & Extremes
                         </span>
@@ -1634,18 +1635,18 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                     <section className="space-y-4">
                         <div className="flex items-center gap-2">
                             <Sparkles size={14} className="text-cyan-300 opacity-70" />
-                            <span className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest">
+                            <span className="text-[10px] font-bold text-outline uppercase tracking-[0.2em]">
                                 Key Evidence
                             </span>
                             {evidencePrimaryTimeframe && (
-                                <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-outline">
+                                <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-outline">
                                     {evidencePrimaryTimeframe.toUpperCase()}
                                 </span>
                             )}
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-                            <div className="rounded-2xl border border-outline-variant/30 bg-surface p-5 space-y-3">
-                                <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">
+                            <div className="rounded-xl border border-outline-variant/10 bg-surface-container p-5 space-y-3">
+                                <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-outline">
                                     Regime & Score
                                 </div>
                                 <div className="text-lg font-black text-on-surface">
@@ -1677,8 +1678,8 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 </div>
                             </div>
 
-                            <div className="rounded-2xl border border-outline-variant/30 bg-surface p-5 space-y-3">
-                                <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">
+                            <div className="rounded-xl border border-outline-variant/10 bg-surface-container p-5 space-y-3">
+                                <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-outline">
                                     Structure Map
                                 </div>
                                 <div className="text-lg font-black text-on-surface">
@@ -1716,8 +1717,8 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 </div>
                             </div>
 
-                            <div className="rounded-2xl border border-outline-variant/30 bg-surface p-5 space-y-3">
-                                <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">
+                            <div className="rounded-xl border border-outline-variant/10 bg-surface-container p-5 space-y-3">
+                                <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-outline">
                                     Breakouts & Tensions
                                 </div>
                                 <div className="flex flex-wrap gap-2">
@@ -1739,7 +1740,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 <div className="space-y-2 text-[11px] text-on-surface-variant">
                                     {evidenceConflictReasons.length > 0 ? (
                                         <>
-                                            <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">
+                                            <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-outline">
                                                 Conflict Reasons
                                             </div>
                                             <div className="flex flex-wrap gap-2">
@@ -1760,8 +1761,8 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                             </div>
 
                             {evidenceQuantContext && (
-                                <div className="rounded-2xl border border-outline-variant/30 bg-surface p-5 space-y-3">
-                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">
+                                <div className="rounded-xl border border-outline-variant/10 bg-surface-container p-5 space-y-3">
+                                    <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-outline">
                                         Quant Context
                                     </div>
                                     <div className="text-lg font-black text-on-surface">
@@ -1809,14 +1810,14 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                     <section className="space-y-4">
                         <div className="flex items-center gap-2">
                             <AlertTriangle size={14} className="text-amber-300 opacity-70" />
-                            <span className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest">
+                            <span className="text-[10px] font-bold text-outline uppercase tracking-[0.2em]">
                                 Quality & Coverage
                             </span>
                         </div>
-                        <div className="rounded-2xl border border-outline-variant/30 bg-surface p-5 space-y-4">
+                        <div className="rounded-xl border border-outline-variant/10 bg-surface-container p-5 space-y-4">
                             <div className="flex flex-wrap items-start justify-between gap-4">
                                 <div>
-                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">
+                                    <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-outline">
                                         Coverage Status
                                     </div>
                                     <div className="mt-2 text-lg font-black text-on-surface">
@@ -1827,7 +1828,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                     </p>
                                 </div>
                                 <span
-                                    className={`inline-flex px-3 py-1 rounded-full border text-[10px] font-black uppercase tracking-[0.18em] ${tonePalette[qualityDescriptor.tone].badge}`}
+                                    className={`inline-flex px-3 py-1 rounded-full border text-[10px] font-black uppercase tracking-[0.2em] ${tonePalette[qualityDescriptor.tone].badge}`}
                                 >
                                     {qualitySummary?.overall_quality
                                         ? formatLabel(qualitySummary.overall_quality)
@@ -1835,8 +1836,8 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 </span>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                <div className="rounded-xl border border-outline-variant/30 bg-surface-container-low p-4">
-                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">
+                                <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4">
+                                    <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-outline">
                                         Ready Frames
                                     </div>
                                     <div className="mt-2 text-lg font-black text-on-surface">
@@ -1848,8 +1849,8 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                             : 'None reported'}
                                     </div>
                                 </div>
-                                <div className="rounded-xl border border-outline-variant/30 bg-surface-container-low p-4">
-                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">
+                                <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4">
+                                    <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-outline">
                                         Degraded Frames
                                     </div>
                                     <div className="mt-2 text-lg font-black text-on-surface">
@@ -1861,8 +1862,8 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                             : 'No degraded frame listed'}
                                     </div>
                                 </div>
-                                <div className="rounded-xl border border-outline-variant/30 bg-surface-container-low p-4">
-                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">
+                                <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4">
+                                    <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-outline">
                                         Regime Inputs Ready
                                     </div>
                                     <div className="mt-2 text-lg font-black text-on-surface">
@@ -1874,8 +1875,8 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                             : 'No regime-ready frame listed'}
                                     </div>
                                 </div>
-                                <div className="rounded-xl border border-outline-variant/30 bg-surface-container-low p-4">
-                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">
+                                <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4">
+                                    <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-outline">
                                         Unavailable Indicators
                                     </div>
                                     <div className="mt-2 text-lg font-black text-on-surface">
@@ -1922,22 +1923,22 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                     <section className="space-y-4">
                         <div className="flex items-center gap-2">
                             <Bell size={14} className="text-rose-300 opacity-70" />
-                            <span className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest">
+                            <span className="text-[10px] font-bold text-outline uppercase tracking-[0.2em]">
                                 Policy Alerts
                             </span>
                         </div>
-                        <div className="rounded-2xl border border-outline-variant/30 bg-surface p-5 space-y-4">
+                        <div className="rounded-xl border border-outline-variant/10 bg-surface-container p-5 space-y-4">
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                <div className="rounded-xl border border-outline-variant/30 bg-surface-container-low p-4">
-                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">
+                                <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4">
+                                    <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-outline">
                                         Total Alerts
                                     </div>
                                     <div className="mt-2 text-lg font-black text-on-surface">
                                         {alertReadout.total_alerts ?? 0}
                                     </div>
                                 </div>
-                                <div className="rounded-xl border border-outline-variant/30 bg-surface-container-low p-4">
-                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">
+                                <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4">
+                                    <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-outline">
                                         Highest Severity
                                     </div>
                                     <div className="mt-2 text-lg font-black text-on-surface">
@@ -1946,16 +1947,16 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                             : 'None'}
                                     </div>
                                 </div>
-                                <div className="rounded-xl border border-outline-variant/30 bg-surface-container-low p-4">
-                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">
+                                <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4">
+                                    <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-outline">
                                         Active / Monitoring
                                     </div>
                                     <div className="mt-2 text-lg font-black text-on-surface">
                                         {alertReadout.active_alert_count ?? 0} / {alertReadout.monitoring_alert_count ?? 0}
                                     </div>
                                 </div>
-                                <div className="rounded-xl border border-outline-variant/30 bg-surface-container-low p-4">
-                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">
+                                <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4">
+                                    <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-outline">
                                         Suppressed
                                     </div>
                                     <div className="mt-2 text-lg font-black text-on-surface">
@@ -1972,11 +1973,11 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                         return (
                                             <div
                                                 key={`${alert.code}-${alert.policy_code ?? 'na'}`}
-                                                className="rounded-xl border border-outline-variant/30 bg-surface-container-low p-4 space-y-3"
+                                                className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4 space-y-3"
                                             >
                                                 <div className="flex items-start justify-between gap-3">
                                                     <div>
-                                                        <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">
+                                                        <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-outline">
                                                             {alert.timeframe.toUpperCase()} · {formatLabel(alert.code)}
                                                         </div>
                                                         <div className="mt-2 text-sm font-black text-on-surface">
@@ -1984,7 +1985,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                                         </div>
                                                     </div>
                                                     <span
-                                                        className={`px-2.5 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest ${tone.badge}`}
+                                                        className={`px-2.5 py-1 rounded-full border text-[9px] font-black uppercase tracking-[0.2em] ${tone.badge}`}
                                                     >
                                                         {tone.label}
                                                     </span>
@@ -2028,7 +2029,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                     </section>
                 )}
 
-                <section className="tech-card p-6 relative overflow-hidden group shadow-2xl bg-indigo-500/[0.03] border-indigo-500/20">
+                <section className="relative overflow-hidden rounded-xl border border-outline-variant/10 bg-surface-container p-6 group">
                     <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
                         <BrainCircuit size={80} className="text-indigo-400" />
                     </div>
@@ -2038,7 +2039,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                             <span className="text-xs font-black text-indigo-200 uppercase tracking-[0.2em]">Analyst Perspective</span>
                         </div>
                         {analystPerspective?.decision_posture && (
-                            <span className="px-3 py-1 rounded-full border border-indigo-400/25 bg-indigo-500/10 text-[10px] font-black uppercase tracking-[0.18em] text-indigo-200">
+                            <span className="px-3 py-1 rounded-full border border-indigo-400/25 bg-indigo-500/10 text-[10px] font-black uppercase tracking-[0.2em] text-indigo-200">
                                 {formatLabel(analystPerspective.decision_posture)}
                             </span>
                         )}
@@ -2052,7 +2053,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                             {analystPerspective.stance_summary}
                                         </div>
                                         <div className="px-3 py-2 rounded-xl border border-indigo-400/30 bg-indigo-500/10 min-w-[160px] shrink-0">
-                                            <div className="text-[9px] font-black uppercase tracking-[0.18em] text-indigo-300">Stance</div>
+                                            <div className="text-[9px] font-black uppercase tracking-[0.2em] text-indigo-300">Stance</div>
                                             <div className="mt-1 text-sm font-black text-indigo-100">
                                                 {formatLabel(analystPerspective.stance)}
                                             </div>
@@ -2076,14 +2077,14 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                     {analystEvidence.map((item) => (
                                         <div
                                             key={`${item.label}-${item.timeframe ?? 'na'}`}
-                                            className="rounded-2xl border border-outline-variant/30 bg-surface p-4"
+                                            className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4"
                                         >
                                             <div className="flex items-center justify-between gap-3">
-                                                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-outline">
+                                                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-outline">
                                                     {item.label}
                                                 </span>
                                                 {item.timeframe && (
-                                                    <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-outline">
+                                                    <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-outline">
                                                         {item.timeframe}
                                                     </span>
                                                 )}
@@ -2104,7 +2105,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 <div className="space-y-3">
                                     <div className="flex items-center gap-2">
                                         <Sparkles size={14} className="text-indigo-300 opacity-80" />
-                                        <span className="text-[10px] font-black uppercase tracking-[0.18em] text-outline">
+                                        <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-outline">
                                             Simple Signal Guide
                                         </span>
                                     </div>
@@ -2112,15 +2113,15 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                         {analystSignalExplainers.map((item) => (
                                             <div
                                                 key={`${item.signal}-${item.timeframe ?? 'na'}`}
-                                                className="relative overflow-hidden flex flex-col justify-between h-full rounded-2xl border border-indigo-500/20 bg-indigo-500/[0.03] hover:bg-indigo-500/[0.06] transition-colors p-5"
+                                                className="relative overflow-hidden flex flex-col justify-between h-full rounded-xl border border-indigo-500/20 bg-indigo-500/[0.03] hover:bg-indigo-500/[0.06] transition-colors p-5"
                                             >
                                                 <div className="flex flex-col gap-1 mb-4">
                                                     <div className="flex items-start justify-between gap-3">
-                                                        <div className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-300">
+                                                        <div className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-300">
                                                             {item.plain_name}
                                                         </div>
                                                         {item.timeframe && (
-                                                            <div className="text-[9px] font-bold uppercase tracking-[0.14em] px-2 py-0.5 rounded border border-indigo-400/20 bg-indigo-500/10 text-indigo-200">
+                                                            <div className="text-[9px] font-bold uppercase tracking-[0.2em] px-2 py-0.5 rounded border border-indigo-400/20 bg-indigo-500/10 text-indigo-200">
                                                                 {item.timeframe}
                                                             </div>
                                                         )}
@@ -2132,7 +2133,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                                                 {item.value_text}
                                                             </div>
                                                         )}
-                                                        <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-outline mb-1">
+                                                        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-outline mb-1">
                                                             {item.signal}
                                                         </div>
                                                     </div>
@@ -2146,7 +2147,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                                     <div className="mt-auto pt-4 relative">
                                                         <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-indigo-500/20 to-transparent"></div>
                                                         <p className="text-[11px] leading-5 text-on-surface-variant pt-3">
-                                                            <span className="font-bold text-outline block mb-1 uppercase tracking-widest text-[9px]">Why it matters</span>
+                                                            <span className="font-bold text-outline block mb-1 uppercase tracking-[0.2em] text-[9px]">Why it matters</span>
                                                             {item.why_it_matters_now}
                                                         </p>
                                                     </div>
@@ -2157,31 +2158,31 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 </div>
                             )}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                <div className="rounded-2xl border border-outline-variant/30 bg-surface p-4">
-                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">Trigger</div>
+                                <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4">
+                                    <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-outline">Trigger</div>
                                     <div className="mt-2 text-sm leading-6 text-on-surface-variant">
                                         {analystPerspective.trigger_condition ?? 'No explicit trigger detected.'}
                                     </div>
                                 </div>
-                                <div className="rounded-2xl border border-outline-variant/30 bg-surface p-4">
-                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">Invalidation</div>
+                                <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4">
+                                    <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-outline">Invalidation</div>
                                     <div className="mt-2 text-sm leading-6 text-on-surface-variant">
                                         {analystPerspective.invalidation_condition ?? 'No explicit invalidation level available.'}
                                     </div>
                                     {analystInvalidationLevel && (
-                                        <div className="mt-2 text-[10px] font-black uppercase tracking-[0.16em] text-rose-300">
+                                        <div className="mt-2 text-[10px] font-black uppercase tracking-[0.2em] text-rose-300">
                                             Level {analystInvalidationLevel}
                                         </div>
                                     )}
                                 </div>
-                                <div className="rounded-2xl border border-outline-variant/30 bg-surface p-4">
-                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">Validation Note</div>
+                                <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4">
+                                    <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-outline">Validation Note</div>
                                     <div className="mt-2 text-sm leading-6 text-on-surface-variant">
                                         {analystPerspective.validation_note ?? 'No validation warning was supplied.'}
                                     </div>
                                 </div>
-                                <div className="rounded-2xl border border-outline-variant/30 bg-surface p-4">
-                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-outline">Confidence Note</div>
+                                <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4">
+                                    <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-outline">Confidence Note</div>
                                     <div className="mt-2 text-sm leading-6 text-on-surface-variant">
                                         {analystPerspective.confidence_note ?? 'Confidence follows the deterministic calibration output.'}
                                     </div>
@@ -2212,7 +2213,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                 <section className="space-y-4">
                     <div className="flex items-center gap-2">
                         <Zap size={14} className="text-amber-300 opacity-70" />
-                        <span className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest">Setup Evidence</span>
+                        <span className="text-[10px] font-bold text-outline uppercase tracking-[0.2em]">Setup Evidence</span>
                     </div>
                     {momentumFdRiskHint && (
                         <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[10px] font-bold uppercase text-amber-200">
@@ -2224,7 +2225,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                             {(visibleIndicators.rsi || visibleIndicators.fd) && (
                                 <div className="space-y-3 flex flex-col h-full lg:col-span-2">
-                                    <div className="flex items-center justify-between text-[10px] font-black text-outline uppercase">
+                                    <div className="flex items-center justify-between text-[10px] font-bold text-outline uppercase">
                                         <span>Momentum & Extremes</span>
                                         {momentumTimeframe && (
                                             <span className="text-[9px] text-outline uppercase">
@@ -2234,10 +2235,10 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                     </div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
                                         {visibleIndicators.rsi && (
-                                            <div className="relative overflow-hidden flex flex-col justify-between h-full bg-surface border border-outline-variant/30 rounded-xl p-4">
+                                            <div className="relative overflow-hidden flex flex-col justify-between h-full bg-surface-container border border-outline-variant/20 rounded-xl p-4">
                                                 <div className="flex items-start justify-between gap-3 mb-3">
                                                     <div>
-                                                        <div className="text-[9px] font-black text-outline uppercase">RSI (14)</div>
+                                                        <div className="text-[9px] font-bold text-outline uppercase">RSI (14)</div>
                                                         <div
                                                             className={`text-xl font-mono font-bold ${tonePalette[momentumRsiDescriptor.tone].value} ${tonePalette[momentumRsiDescriptor.tone].glow}`}
                                                         >
@@ -2283,10 +2284,10 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                             </div>
                                         )}
                                         {visibleIndicators.fd && (
-                                            <div className="relative overflow-hidden flex flex-col justify-between h-full bg-surface border border-outline-variant/30 rounded-xl p-4">
+                                            <div className="relative overflow-hidden flex flex-col justify-between h-full bg-surface-container border border-outline-variant/20 rounded-xl p-4">
                                                 <div className="flex items-start justify-between gap-3 mb-3">
                                                     <div>
-                                                        <div className="text-[9px] font-black text-outline uppercase">FD Z-Score</div>
+                                                        <div className="text-[9px] font-bold text-outline uppercase">FD Z-Score</div>
                                                         <div
                                                             className={`text-xl font-mono font-bold ${tonePalette[momentumFdDescriptor.tone].value} ${tonePalette[momentumFdDescriptor.tone].glow}`}
                                                         >
@@ -2336,7 +2337,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                             )}
                             {visibleIndicators.macd && (
                                 <div className="space-y-3 flex flex-col h-full lg:col-span-1">
-                                    <div className="flex items-center justify-between text-[10px] font-black text-outline uppercase">
+                                    <div className="flex items-center justify-between text-[10px] font-bold text-outline uppercase">
                                         <span>Trend & Momentum</span>
                                         {momentumTimeframe && (
                                             <span className="text-[9px] text-outline uppercase">
@@ -2345,10 +2346,10 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                         )}
                                     </div>
                                     <div className="grid grid-cols-1 gap-4 flex-1">
-                                        <div className="relative overflow-hidden flex flex-col justify-between h-full bg-surface border border-outline-variant/30 rounded-xl p-4">
+                                        <div className="relative overflow-hidden flex flex-col justify-between h-full bg-surface-container border border-outline-variant/20 rounded-xl p-4">
                                             <div className="flex items-start justify-between gap-3 mb-3">
                                                 <div>
-                                                    <div className="text-[9px] font-black text-outline uppercase">MACD</div>
+                                                    <div className="text-[9px] font-bold text-outline uppercase">MACD</div>
                                                     <div
                                                         className={`text-xl font-mono font-bold ${tonePalette[macdTone.tone].value} ${tonePalette[macdTone.tone].glow}`}
                                                     >
@@ -2406,7 +2407,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
 
             <section className="space-y-4">
                 {timeseriesBundleData && (
-                    <div className="bg-surface border border-outline-variant/30 rounded-xl p-4">
+                    <div className="bg-surface-container border border-outline-variant/10 rounded-xl p-4">
                         <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
                             <div className="flex items-center gap-2">
                                 <Layers size={14} className="text-cyan-400 opacity-50" />
@@ -2446,11 +2447,11 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                             </div>
                         </div>
 
-                        <div className="relative rounded-xl border border-outline-variant/30 bg-surface">
-                            <div className="divide-y divide-outline-variant/30">
+                        <div className="relative rounded-xl border border-outline-variant/20 bg-surface-container-low">
+                            <div className="divide-y divide-outline-variant/20">
                                 <div className="px-4 py-3">
                                     <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                                        <div className="text-[9px] font-black text-outline uppercase">
+                                        <div className="text-[9px] font-bold text-outline uppercase">
                                             Price Action (OHLCV)
                                         </div>
                                         {priceOverlays.length > 0 && (
@@ -2481,7 +2482,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 </div>
 
                                 <div className="px-4 py-3">
-                                    <div className="text-[9px] font-black text-outline uppercase mb-2">Volume</div>
+                                    <div className="text-[9px] font-bold text-outline uppercase mb-2">Volume</div>
                                     {volumeHistogram.length > 0 ? (
                                         <TechnicalIndicatorChart
                                             lines={[]}
@@ -2499,7 +2500,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 </div>
 
                                 <div className="px-4 py-3">
-                                    <div className="text-[9px] font-black text-outline uppercase mb-2">RSI (14)</div>
+                                    <div className="text-[9px] font-bold text-outline uppercase mb-2">RSI (14)</div>
                                     {indicatorAvailability.rsi ? (
                                         <TechnicalIndicatorChart
                                             lines={rsiLines}
@@ -2516,7 +2517,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 </div>
 
                                 <div className="px-4 py-3">
-                                    <div className="text-[9px] font-black text-outline uppercase mb-2">MACD</div>
+                                    <div className="text-[9px] font-bold text-outline uppercase mb-2">MACD</div>
                                     {indicatorAvailability.macd ? (
                                         <TechnicalIndicatorChart
                                             lines={macdLines}
@@ -2534,7 +2535,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 </div>
 
                                 <div className="px-4 py-3">
-                                    <div className="text-[9px] font-black text-outline uppercase mb-2">FracDiff</div>
+                                    <div className="text-[9px] font-bold text-outline uppercase mb-2">FracDiff</div>
                                     {indicatorAvailability.fd ? (
                                         <TechnicalIndicatorChart
                                             lines={fdLines}
@@ -2553,7 +2554,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
 
                             {tooltipPosition && tooltipPayload && (
                                 <div
-                                    className="pointer-events-none fixed z-20 w-60 rounded-xl border border-outline-variant/50 bg-surface backdrop-blur-md p-3 text-[10px] text-on-surface shadow-lg"
+                                    className="pointer-events-none fixed z-20 w-60 rounded-xl border border-outline-variant/30 bg-surface-container-high backdrop-blur-md p-3 text-[10px] text-on-surface shadow-lg"
                                     style={{ left: tooltipPosition.x, top: tooltipPosition.y }}
                                 >
                                     <div className="text-[9px] font-black uppercase text-on-surface-variant mb-2">
@@ -2611,7 +2612,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
             <section className="space-y-4">
                 <div className="flex items-center gap-2">
                     <AlertTriangle size={14} className="text-rose-400 opacity-70" />
-                    <span className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest">Diagnostics</span>
+                    <span className="text-[10px] font-bold text-outline uppercase tracking-[0.2em]">Diagnostics</span>
                 </div>
                 {timeseriesBundleError && (
                     <div className="text-xs text-rose-300">
@@ -2624,7 +2625,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                     </div>
                 )}
                 {(isDegraded || degradedReasons.length > 0) && (
-                    <section className="tech-card p-5 border border-rose-500/20 bg-rose-500/5">
+                    <section className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-5">
                         <div className="flex items-center gap-2 mb-3">
                             <AlertTriangle size={16} className="text-rose-400" />
                             <span className="text-xs font-black text-rose-200 uppercase tracking-[0.2em]">Degraded Data Path</span>
@@ -2645,9 +2646,9 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                 )}
 
                 {observabilitySummary && (
-                    <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
+                    <div className="bg-surface-container p-4 rounded-xl border border-outline-variant/10">
                         <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-                            <div className="text-[9px] font-black text-outline uppercase tracking-[0.18em]">
+                            <div className="text-[9px] font-bold text-outline uppercase tracking-[0.2em]">
                                 Observability Summary
                             </div>
                             {observabilitySummary.primary_timeframe && (
@@ -2689,7 +2690,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                         {observabilitySummary.missing_artifacts.map((artifact) => (
                                             <span
                                                 key={`missing-${artifact}`}
-                                                className="px-2.5 py-1 bg-slate-500/10 border border-slate-500/20 rounded-full text-[10px] font-bold text-on-surface-variant uppercase tracking-wide"
+                                                className="px-2.5 py-1 bg-surface-container-high border border-outline-variant/30 rounded-full text-[10px] font-bold text-on-surface-variant uppercase tracking-wide"
                                             >
                                                 Missing · {formatLabel(artifact)}
                                             </span>
@@ -2714,8 +2715,8 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                 )}
 
                 {timeseriesSummary && (
-                    <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
-                        <div className="text-[9px] font-black text-outline uppercase mb-2">OHLC Series</div>
+                    <div className="bg-surface-container p-4 rounded-xl border border-outline-variant/10">
+                        <div className="text-[9px] font-bold text-outline uppercase mb-2">OHLC Series</div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-on-surface">
                             <div>Frames: {timeseriesSummary.frameCount}</div>
                             <div>Max Points: {timeseriesSummary.maxPoints}</div>
@@ -2730,8 +2731,8 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                 )}
 
                 {indicatorSeriesSummary && (
-                    <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
-                        <div className="text-[9px] font-black text-outline uppercase mb-2">Indicator Series</div>
+                    <div className="bg-surface-container p-4 rounded-xl border border-outline-variant/10">
+                        <div className="text-[9px] font-bold text-outline uppercase mb-2">Indicator Series</div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-on-surface">
                             <div>Frames: {indicatorSeriesSummary.timeframeCount}</div>
                             <div>Series: {indicatorSeriesSummary.seriesTotal}</div>
@@ -2746,8 +2747,8 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                 )}
 
                 {hasMomentumExtremes && (
-                    <div className="bg-surface p-4 rounded-xl border border-outline-variant/30">
-                        <div className="text-[9px] font-black text-outline uppercase mb-2">Raw Momentum & Extremes Data</div>
+                    <div className="bg-surface-container p-4 rounded-xl border border-outline-variant/10">
+                        <div className="text-[9px] font-bold text-outline uppercase mb-2">Raw Momentum & Extremes Data</div>
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs text-on-surface">
                             <div>
                                 Timeframe: {momentumTimeframe ? momentumTimeframe.toUpperCase() : 'n/a'}
