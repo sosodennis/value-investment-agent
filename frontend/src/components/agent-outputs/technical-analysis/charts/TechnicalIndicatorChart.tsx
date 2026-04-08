@@ -39,6 +39,8 @@ export interface IndicatorHistogramSeries {
         minMove?: number;
         formatter?: (price: number) => string;
     };
+    lastValueVisible?: boolean;
+    priceLineVisible?: boolean;
 }
 
 export interface IndicatorPriceLine {
@@ -194,19 +196,19 @@ export const TechnicalIndicatorChart: React.FC<TechnicalIndicatorChartProps> = (
             height,
             layout: {
                 background: { type: ColorType.Solid, color: 'transparent' },
-                textColor: '#94a3b8',
+                textColor: TECHNICAL_PALETTE.axisText,
                 fontSize: 11,
                 fontFamily: 'ui-sans-serif, system-ui, -apple-system, sans-serif',
                 attributionLogo: false,
             },
             grid: {
-                vertLines: { color: 'rgba(30, 41, 59, 0.6)' },
-                horzLines: { color: 'rgba(30, 41, 59, 0.6)' },
+                vertLines: { color: TECHNICAL_PALETTE.gridLineSoft },
+                horzLines: { color: TECHNICAL_PALETTE.gridLineSoft },
             },
             crosshair: { mode: CrosshairMode.Normal },
-            rightPriceScale: { borderColor: 'rgba(51, 65, 85, 0.7)' },
+            rightPriceScale: { borderColor: TECHNICAL_PALETTE.axisBorder },
             timeScale: {
-                borderColor: 'rgba(51, 65, 85, 0.7)',
+                borderColor: TECHNICAL_PALETTE.axisBorder,
                 rightOffset: 0,
                 barSpacing: 6,
                 fixLeftEdge: true,
@@ -227,13 +229,13 @@ export const TechnicalIndicatorChart: React.FC<TechnicalIndicatorChartProps> = (
 
         const lineSeries = Array.from({ length: lines.length }, () =>
             chart.addSeries(LineSeries, {
-                color: '#60a5fa',
+                color: TECHNICAL_PALETTE.indicatorDefault,
                 lineWidth: 2,
             })
         );
         const histogramSeries = Array.from({ length: histograms.length }, () =>
             chart.addSeries(HistogramSeries, {
-                color: 'rgba(148, 163, 184, 0.35)',
+                color: TECHNICAL_PALETTE.histogram,
                 priceScaleId: '',
             })
         );
@@ -366,6 +368,8 @@ export const TechnicalIndicatorChart: React.FC<TechnicalIndicatorChartProps> = (
             series.applyOptions({
                 color: histogram.color ?? TECHNICAL_PALETTE.histogram,
                 priceFormat: histogram.priceFormat,
+                lastValueVisible: histogram.lastValueVisible,
+                priceLineVisible: histogram.priceLineVisible,
             });
             series.setData(histogram.data ?? []);
         });

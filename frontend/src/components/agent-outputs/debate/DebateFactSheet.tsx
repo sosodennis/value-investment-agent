@@ -42,10 +42,10 @@ const FactItem = ({ fact }: { fact: EvidenceFact }) => {
         <div
             id={`fact-${fact.fact_id}`}
             data-fact-id={fact.fact_id}
-            className="group bg-surface-container-low border border-white/5 rounded-xl p-4 hover:border-outline-variant/30 transition-colors duration-300 scroll-mt-6"
+            className="group bg-surface-container-low border border-outline-variant/10 rounded-xl p-4 hover:border-outline-variant/30 transition-colors duration-300 scroll-mt-6"
         >
             <div className="flex items-start justify-between gap-4">
-                <div className="flex flex-col gap-2 flex-grow">
+                <div className="flex flex-col gap-2 flex-grow min-w-0">
                     <div className="flex items-center gap-2">
                         <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[8px] font-black tracking-widest uppercase ${getTypeColor()}`}>
                             {getBadgeIcon()}
@@ -59,17 +59,17 @@ const FactItem = ({ fact }: { fact: EvidenceFact }) => {
                             {fact.period || 'CURRENT'}
                         </span>
                     </div>
-                    <p className="text-sm text-on-surface leading-snug">
+                    <p className="text-sm text-on-surface leading-snug break-words">
                         {fact.summary}
                     </p>
                     {fact.value !== undefined && fact.value !== null && fact.value !== '' && (
-                        <div className="text-xs font-mono text-cyan-400/80">
+                        <div className="text-xs font-mono text-cyan-400/80 break-words">
                             Metric: <span className="text-cyan-400">{fact.value}</span>
                         </div>
                     )}
                 </div>
                 <div className="flex flex-col items-end gap-2 shrink-0">
-                    <div className={`p-2 rounded-lg bg-surface border border-white/5 shadow-inner`}>
+                    <div className="p-2 rounded-lg bg-surface border border-outline-variant/20 shadow-inner">
                         {getIcon()}
                     </div>
                     {fact.provenance && (
@@ -85,9 +85,9 @@ const FactItem = ({ fact }: { fact: EvidenceFact }) => {
 
 export const DebateFactSheet: React.FC<DebateFactSheetProps> = ({ facts }) => {
     if (!facts || facts.length === 0) return (
-        <div className="text-center py-12 tech-card bg-surface">
+        <div className="text-center py-12 rounded-2xl border border-outline-variant/10 bg-surface-container-low">
             <ShieldCheck className="w-12 h-12 text-outline-variant mx-auto mb-4 opacity-20" />
-            <p className="text-outline text-xs uppercase tracking-widest font-bold">No evidence facts registry found</p>
+            <p className="text-outline text-xs uppercase tracking-widest font-bold">No Evidence Registry Found</p>
         </div>
     );
 
@@ -98,10 +98,10 @@ export const DebateFactSheet: React.FC<DebateFactSheetProps> = ({ facts }) => {
 
     return (
         <div className="space-y-8 animate-fade-slide-up py-6">
-            <div className="flex items-center justify-between border-b border-white/5 pb-4 px-2">
+            <div className="flex items-center justify-between border-b border-outline-variant/10 pb-4 px-2">
                 <div className="flex items-center gap-3">
-                    <div className="w-2 h-2 rounded-full bg-cyan-500 pulse-ambient" />
-                    <h3 className="text-xs font-black text-on-surface uppercase tracking-[0.2em]">Validated Fact Registry</h3>
+                    <div className="w-2 h-2 rounded-full bg-cyan-500/80" />
+                    <h3 className="text-xs font-bold text-outline uppercase tracking-[0.2em]">Validated Fact Registry</h3>
                 </div>
                 <span className="text-[10px] text-outline font-mono">COUNT: {facts.length}</span>
             </div>
@@ -110,7 +110,7 @@ export const DebateFactSheet: React.FC<DebateFactSheetProps> = ({ facts }) => {
                 <div className="space-y-4">
                     <div className="flex items-center gap-3 px-2">
                         <Database className="w-4 h-4 text-emerald-500/60" />
-                        <h4 className="text-[10px] font-black text-emerald-500/80 uppercase tracking-widest">Financial Data</h4>
+                        <h4 className="text-[10px] font-bold text-emerald-500/80 uppercase tracking-[0.2em]">Financial Data</h4>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {financials.map(f => <FactItem key={f.fact_id} fact={f} />)}
@@ -122,7 +122,7 @@ export const DebateFactSheet: React.FC<DebateFactSheetProps> = ({ facts }) => {
                 <div className="space-y-4">
                     <div className="flex items-center gap-3 px-2">
                         <Newspaper className="w-4 h-4 text-cyan-500/60" />
-                        <h4 className="text-[10px] font-black text-cyan-500/80 uppercase tracking-widest">Market News</h4>
+                        <h4 className="text-[10px] font-bold text-cyan-500/80 uppercase tracking-[0.2em]">Market News</h4>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {news.map(f => <FactItem key={f.fact_id} fact={f} />)}
@@ -134,7 +134,7 @@ export const DebateFactSheet: React.FC<DebateFactSheetProps> = ({ facts }) => {
                 <div className="space-y-4">
                     <div className="flex items-center gap-3 px-2">
                         <BarChart4 className="w-4 h-4 text-amber-500/60" />
-                        <h4 className="text-[10px] font-black text-amber-500/80 uppercase tracking-widest">Technical Indicators</h4>
+                        <h4 className="text-[10px] font-bold text-amber-500/80 uppercase tracking-[0.2em]">Technical Indicators</h4>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {technicals.map(f => <FactItem key={f.fact_id} fact={f} />)}
@@ -146,7 +146,7 @@ export const DebateFactSheet: React.FC<DebateFactSheetProps> = ({ facts }) => {
                 <div className="space-y-4">
                     <div className="flex items-center gap-3 px-2">
                         <Database className="w-4 h-4 text-violet-500/60" />
-                        <h4 className="text-[10px] font-black text-violet-500/80 uppercase tracking-widest">Valuation Signals</h4>
+                        <h4 className="text-[10px] font-bold text-violet-500/80 uppercase tracking-[0.2em]">Valuation Signals</h4>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {valuation.map(f => <FactItem key={f.fact_id} fact={f} />)}

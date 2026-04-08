@@ -574,7 +574,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
             <AgentLoadingState
                 type="full"
                 icon={BarChart3}
-                title="Processing Financials..."
+                title="Processing Financials…"
                 description="Extracting and analyzing financial data from 10-K/10-Q reports."
                 status={status}
             />
@@ -599,7 +599,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                     {isReferenceLoading && (
                         <AgentLoadingState
                             type="header"
-                            title="Loading Reports..."
+                            title="Loading Reports…"
                             colorClass="text-indigo-400"
                         />
                     )}
@@ -1297,7 +1297,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
             ) : (
                 <AgentLoadingState
                     type="block"
-                    title={isReferenceLoading ? "Loading financial reports..." : "No financial reports generated."}
+                    title={isReferenceLoading ? "Loading Financial Reports…" : "No Financial Reports Generated"}
                     colorClass="text-indigo-400"
                 />
             )}

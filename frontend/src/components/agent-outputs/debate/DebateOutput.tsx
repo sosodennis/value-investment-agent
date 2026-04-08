@@ -1,11 +1,12 @@
 import React, { memo } from 'react';
-import { Shield, Target, AlertTriangle, TrendingUp, TrendingDown, Minus, Info, CheckCircle2, Zap, Loader2 } from 'lucide-react';
+import { Shield, Target, AlertTriangle, TrendingUp, TrendingDown, Minus, Info, CheckCircle2, Zap, Gavel } from 'lucide-react';
 import { parseDebateArtifact } from '@/types/agents/artifact-parsers';
 import { DebateTranscript } from './DebateTranscript';
 import { DebateFactSheet } from './DebateFactSheet';
 import { ArtifactReference, AgentStatus } from '@/types/agents';
 import { useArtifact } from '../../../hooks/useArtifact';
 import { DebatePreview } from '@/types/preview';
+import { AgentLoadingState } from '../shared/AgentLoadingState';
 
 interface DebateOutputProps {
     reference: ArtifactReference | null;
@@ -32,12 +33,14 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
 
     if ((status !== 'done' && !hasData) || (!artifactData && !isPreviewOnly)) {
         return (
-            <div className="flex flex-col items-center justify-center h-full text-outline py-12 min-h-[400px]">
-                <Shield size={48} className="text-outline-variant mb-4 opacity-50 pulse-ambient" />
-                <p className="text-sm font-bold uppercase tracking-widest">Debate in Progress</p>
-                <p className="text-[10px] mt-2 opacity-60">Wait for the debate between Bull and Bear agents to conclude.</p>
-                <p className="text-[10px] text-outline mt-2">Status: {status}</p>
-            </div>
+            <AgentLoadingState
+                type="full"
+                icon={Gavel}
+                title="Debate in Progress…"
+                description="Wait for the debate between Bull and Bear agents to conclude."
+                status={status}
+                colorClass="text-amber-400"
+            />
         );
     }
 
@@ -49,50 +52,44 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
         switch (direction) {
             case 'STRONG_LONG':
                 return {
-                    color: 'text-emerald-400',
-                    bg: 'bg-emerald-500/20',
-                    border: 'border-emerald-500/40',
-                    accent: 'text-emerald-300',
-                    icon: <TrendingUp size={20} className="text-emerald-400 pulse-ambient" />,
+                    tone: 'text-emerald-400',
+                    chip: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400',
+                    accentBar: 'bg-emerald-500/50',
+                    icon: <TrendingUp size={20} className="text-emerald-400" />,
                 };
             case 'LONG':
                 return {
-                    color: 'text-emerald-400',
-                    bg: 'bg-emerald-500/10',
-                    border: 'border-emerald-500/20',
-                    accent: 'text-emerald-400',
-                    icon: <TrendingUp size={20} className="text-emerald-500" />,
+                    tone: 'text-emerald-400',
+                    chip: 'border-emerald-500/20 bg-emerald-500/5 text-emerald-400',
+                    accentBar: 'bg-emerald-500/40',
+                    icon: <TrendingUp size={20} className="text-emerald-400" />,
                 };
             case 'STRONG_SHORT':
                 return {
-                    color: 'text-rose-400',
-                    bg: 'bg-rose-500/20',
-                    border: 'border-rose-500/40',
-                    accent: 'text-rose-300',
-                    icon: <TrendingDown size={20} className="text-rose-400 pulse-ambient" />,
+                    tone: 'text-rose-400',
+                    chip: 'border-rose-500/30 bg-rose-500/10 text-rose-400',
+                    accentBar: 'bg-rose-500/50',
+                    icon: <TrendingDown size={20} className="text-rose-400" />,
                 };
             case 'SHORT':
                 return {
-                    color: 'text-rose-400',
-                    bg: 'bg-rose-500/10',
-                    border: 'border-rose-500/20',
-                    accent: 'text-rose-400',
-                    icon: <TrendingDown size={20} className="text-rose-500" />,
+                    tone: 'text-rose-400',
+                    chip: 'border-rose-500/20 bg-rose-500/5 text-rose-400',
+                    accentBar: 'bg-rose-500/40',
+                    icon: <TrendingDown size={20} className="text-rose-400" />,
                 };
             case 'AVOID':
                 return {
-                    color: 'text-amber-400',
-                    bg: 'bg-amber-500/10',
-                    border: 'border-amber-500/20',
-                    accent: 'text-amber-400',
-                    icon: <AlertTriangle size={20} className="text-amber-500" />,
+                    tone: 'text-amber-400',
+                    chip: 'border-amber-500/20 bg-amber-500/5 text-amber-400',
+                    accentBar: 'bg-amber-500/40',
+                    icon: <AlertTriangle size={20} className="text-amber-400" />,
                 };
             default:
                 return {
-                    color: 'text-on-surface-variant',
-                    bg: 'bg-slate-500/10',
-                    border: 'border-slate-500/20',
-                    accent: 'text-on-surface-variant',
+                    tone: 'text-on-surface-variant',
+                    chip: 'border-outline-variant/40 bg-surface-container-low text-on-surface-variant',
+                    accentBar: 'bg-outline-variant/40',
                     icon: <Minus size={20} className="text-outline" />,
                 };
         }
@@ -103,7 +100,29 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
 
     return (
         <div className="space-y-6 animate-fade-slide-up pb-12">
-            <div className={`tech-card p-6 ${styles.bg} ${styles.border} relative overflow-hidden animate-fade-slide-up`}>
+            <div className="flex items-center justify-between mb-6 px-2">
+                <div className="flex items-center gap-3">
+                    <Gavel size={18} className="text-amber-400" />
+                    <h3 className="text-xs font-bold text-outline uppercase tracking-[0.2em]">Debate Council</h3>
+                </div>
+                <div className="flex items-center gap-2">
+                    {isReferenceLoading && (
+                        <AgentLoadingState
+                            type="header"
+                            title="Loading Verdict…"
+                            colorClass="text-amber-400"
+                        />
+                    )}
+                    {conclusion?.debate_rounds !== undefined && (
+                        <span className="rounded border border-outline-variant/20 bg-surface-container-low px-2 py-1 text-[10px] font-semibold text-outline uppercase tracking-[0.2em]">
+                            Rounds: {conclusion.debate_rounds}
+                        </span>
+                    )}
+                </div>
+            </div>
+
+            <div className="relative overflow-hidden rounded-2xl border border-outline-variant/10 bg-surface-container p-6">
+                <div className={`absolute inset-y-0 left-0 w-0.5 ${styles.accentBar}`} />
                 <div className="absolute top-0 right-0 p-4">
                     <div className="px-2 py-0.5 rounded-full border border-outline-variant/30 bg-surface-container-low text-[8px] font-black text-on-surface-variant uppercase tracking-widest">
                         {conclusion?.risk_profile?.replace('_', ' ')}
@@ -112,16 +131,11 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
 
                 <div className="flex items-center justify-between mb-8">
                     <div className="flex items-center gap-3">
-                        <Shield size={18} className="text-cyan-400" />
-                        <h3 className="text-label text-on-surface">Investment Verdict</h3>
+                        <Shield size={18} className="text-amber-400" />
+                        <h3 className="text-xs font-bold text-outline uppercase tracking-[0.2em]">Investment Verdict</h3>
                     </div>
                     <div className="flex items-center gap-2">
-                        {isReferenceLoading && (
-                            <div className="px-3 py-1 rounded bg-surface-container border border-outline-variant/30 text-[9px] font-bold text-cyan-500 uppercase tracking-widest flex items-center gap-2 pulse-ambient">
-                                <Loader2 size={10} className="animate-spin" /> Fetching L3...
-                            </div>
-                        )}
-                        <div className={`px-4 py-1.5 rounded-full border text-[10px] font-black uppercase tracking-[0.2em] bg-surface ${styles.border} ${styles.color} shadow-lg shadow-black/20`}>
+                        <div className={`px-3 py-1.5 rounded-full border text-[10px] font-bold uppercase tracking-[0.2em] ${styles.chip}`}>
                             {direction}
                         </div>
                         {conclusion?.data_quality_warning && (
@@ -134,10 +148,10 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
 
                 <div className="space-y-6 mb-8">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="tech-card p-4 bg-surface group relative">
-                            <div className="absolute inset-y-0 left-0 w-0.5 bg-amber-500 shadow-[2px_0_10px_rgba(245,158,11,0.4)]" />
+                        <div className="rounded-xl border border-outline-variant/10 bg-surface-container-low p-4 relative">
+                            <div className="absolute inset-y-0 left-0 w-0.5 bg-amber-500/70" />
                             <div className="flex items-center justify-between mb-1">
-                                <span className="text-label text-on-surface-variant">Reward/Risk Ratio</span>
+                                <span className="text-[10px] font-bold text-outline uppercase tracking-[0.2em]">Reward/Risk Ratio</span>
                                 <span className="text-amber-400 font-black text-xl">
                                     {conclusion?.rr_ratio ? conclusion.rr_ratio.toFixed(2) + 'x' : 'N/A'}
                                 </span>
@@ -147,10 +161,10 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
                             </div>
                         </div>
 
-                        <div className="tech-card p-4 bg-surface group relative">
-                            <div className="absolute inset-y-0 left-0 w-0.5 bg-cyan-500 shadow-[2px_0_10px_rgba(6,182,212,0.4)]" />
+                        <div className="rounded-xl border border-outline-variant/10 bg-surface-container-low p-4 relative">
+                            <div className="absolute inset-y-0 left-0 w-0.5 bg-cyan-500/70" />
                             <div className="flex items-center justify-between mb-1">
-                                <span className="text-label text-on-surface-variant">Edge (Alpha)</span>
+                                <span className="text-[10px] font-bold text-outline uppercase tracking-[0.2em]">Edge (Alpha)</span>
                                 <span className={`${(conclusion?.alpha ?? 0) > 0 ? 'text-emerald-400' : 'text-rose-400'} font-black text-xl`}>
                                     {conclusion?.alpha !== undefined ? (conclusion.alpha * 100).toFixed(1) + '%' : 'N/A'}
                                 </span>
@@ -162,10 +176,10 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
                     </div>
 
                     {isPreviewOnly ? (
-                        <div className="tech-card p-5 bg-amber-500/5 border-amber-500/10">
+                        <div className="rounded-xl border border-outline-variant/10 bg-surface-container-low p-5">
                             <div className="flex items-center gap-3 mb-3">
-                                <Zap size={14} className="text-amber-400 pulse-ambient" />
-                                <span className="text-label text-on-surface">Verdict Summary (Simulation)</span>
+                                <Zap size={14} className="text-amber-400" />
+                                <span className="text-[10px] font-bold text-outline uppercase tracking-[0.2em]">Verdict Summary (Simulation)</span>
                             </div>
                             <p className="text-sm text-on-surface-variant italic leading-relaxed font-serif">
                                 &quot;{previewData?.verdict_display || 'Calculating probability cases…'}&quot;
@@ -184,7 +198,7 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
                                     </span>
                                     <span className="text-emerald-400">{scenarios?.bull_case?.probability}%</span>
                                 </div>
-                                <div className="h-1.5 w-full bg-surface-container rounded-full overflow-hidden border border-white/5">
+                                <div className="h-1.5 w-full bg-surface-container rounded-full overflow-hidden border border-outline-variant/20">
                                     <div className="h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.4)]" style={{ width: `${scenarios?.bull_case?.probability}%` }} />
                                 </div>
                                 <p className="text-[10px] text-on-surface-variant leading-relaxed italic">&quot;{scenarios?.bull_case?.outcome_description}&quot;</p>
@@ -198,7 +212,7 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
                                     </span>
                                     <span className="text-on-surface-variant">{scenarios?.base_case?.probability}%</span>
                                 </div>
-                                <div className="h-1 w-full bg-surface-container rounded-full overflow-hidden border border-white/5">
+                                <div className="h-1 w-full bg-surface-container rounded-full overflow-hidden border border-outline-variant/20">
                                     <div className="h-full bg-slate-500" style={{ width: `${scenarios?.base_case?.probability}%` }} />
                                 </div>
                                 <p className="text-[10px] text-outline leading-relaxed italic">&quot;{scenarios?.base_case?.outcome_description}&quot;</p>
@@ -212,7 +226,7 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
                                     </span>
                                     <span className="text-rose-400">{scenarios?.bear_case?.probability}%</span>
                                 </div>
-                                <div className="h-1.5 w-full bg-surface-container rounded-full overflow-hidden border border-white/5">
+                                <div className="h-1.5 w-full bg-surface-container rounded-full overflow-hidden border border-outline-variant/20">
                                     <div className="h-full bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.4)]" style={{ width: `${scenarios?.bear_case?.probability}%` }} />
                                 </div>
                                 <p className="text-[10px] text-rose-300/60 leading-relaxed italic">&quot;{scenarios?.bear_case?.outcome_description}&quot;</p>
@@ -226,7 +240,7 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
                 <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-[0.2em]">
                     <div className="flex items-center gap-3">
                         <span className="text-outline">Conf_Level:</span>
-                        <span className={`${styles.color} text-sm`}>{conclusion?.conviction ?? 50}%</span>
+                        <span className={`${styles.tone} text-sm`}>{conclusion?.conviction ?? 50}%</span>
                     </div>
                     <div className="flex items-center gap-3">
                         <span className="text-outline">Sys_Model:</span>
@@ -236,15 +250,15 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
             </div>
 
             <div className="grid grid-cols-1 gap-6">
-                <div className="tech-card p-8 bg-surface-container-low relative overflow-hidden group">
+                <div className="rounded-2xl border border-outline-variant/10 bg-surface-container p-6 relative overflow-hidden group">
                     <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:opacity-[0.1] transition-opacity duration-700">
                         <Shield size={160} />
                     </div>
                     <div className="flex items-center gap-3 mb-5 relative z-10">
-                        <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.1)]">
+                        <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
                             <CheckCircle2 size={16} className="text-emerald-400" />
                         </div>
-                        <h4 className="text-label text-emerald-400">Dominant Thesis</h4>
+                        <h4 className="text-[10px] font-bold text-emerald-400 uppercase tracking-[0.2em]">Dominant Thesis</h4>
                     </div>
                     <p className="text-base text-on-surface leading-relaxed font-black tracking-tight relative z-10 italic">
                         &quot;{isPreviewOnly ? previewData?.thesis_display : artifactData?.winning_thesis}&quot;
@@ -252,46 +266,46 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="tech-card p-6 bg-surface-container-low group hover:border-cyan-500/20 hover:bg-surface-container transition duration-500">
+                    <div className="rounded-xl border border-outline-variant/10 bg-surface-container-low p-6 group hover:border-outline-variant/30 transition duration-300">
                         <div className="flex items-center gap-3 mb-4">
-                            <div className="p-2 rounded-xl bg-cyan-500/10 border border-cyan-500/20 group-hover:shadow-[0_0_15px_rgba(6,182,212,0.1)]">
+                            <div className="p-2 rounded-xl bg-cyan-500/10 border border-cyan-500/20">
                                 <Target size={16} className="text-cyan-400" />
                             </div>
-                            <h4 className="text-label text-cyan-400">Primary Catalyst</h4>
+                            <h4 className="text-[10px] font-bold text-cyan-400 uppercase tracking-[0.2em]">Primary Catalyst</h4>
                         </div>
-                        <p className="text-sm text-on-surface-variant leading-relaxed group-hover:text-on-surface transition-colors duration-300">
+                        <p className="text-sm text-on-surface-variant leading-relaxed">
                             {isPreviewOnly ? previewData?.catalyst_display : artifactData?.primary_catalyst}
                         </p>
                     </div>
 
-                    <div className="tech-card p-6 bg-surface-container-low group border-rose-500/10 hover:border-rose-500/30 hover:bg-rose-950/5 transition duration-500">
+                    <div className="rounded-xl border border-outline-variant/10 bg-surface-container-low p-6 group hover:border-outline-variant/30 transition duration-300">
                         <div className="flex items-center gap-3 mb-4">
-                            <div className="p-2 rounded-xl bg-rose-500/10 border border-rose-500/20 group-hover:shadow-[0_0_15px_rgba(244,63,94,0.1)] transition-shadow">
+                            <div className="p-2 rounded-xl bg-rose-500/10 border border-rose-500/20">
                                 <AlertTriangle size={16} className="text-rose-400" />
                             </div>
-                            <h4 className="text-label text-rose-400">Risk Vectors</h4>
+                            <h4 className="text-[10px] font-bold text-rose-400 uppercase tracking-[0.2em]">Risk Vectors</h4>
                         </div>
-                        <p className="text-sm text-rose-100/70 leading-relaxed group-hover:text-rose-100 transition-colors duration-300 font-medium">
+                        <p className="text-sm text-on-surface-variant leading-relaxed font-medium">
                             {isPreviewOnly ? previewData?.risk_display : artifactData?.primary_risk}
                         </p>
                     </div>
                 </div>
             </div>
 
-            <div className="bg-surface border border-outline-variant/20 rounded-2xl p-6">
+            <div className="rounded-2xl border border-outline-variant/10 bg-surface-container p-6">
                 <div className="flex items-center gap-2 mb-6">
                     <Info size={14} className="text-outline" />
-                    <h4 className="text-[10px] font-bold text-outline uppercase tracking-widest">Supporting Audit Factors</h4>
+                    <h4 className="text-[10px] font-bold text-outline uppercase tracking-[0.2em]">Supporting Audit Factors</h4>
                 </div>
                 <div className="space-y-3">
                     {conclusion?.supporting_factors?.map((factor: string, i: number) => (
-                        <div key={i} className="flex gap-3 text-xs text-on-surface-variant hover:text-on-surface-variant transition-colors p-3 bg-surface-container-low rounded-xl border border-outline-variant/30">
+                        <div key={i} className="flex gap-3 text-xs text-on-surface-variant transition-colors p-3 bg-surface-container-low rounded-xl border border-outline-variant/20">
                             <div className="w-1.5 h-1.5 rounded-full bg-slate-700 mt-1.5 shrink-0" />
                             <p className="leading-relaxed">{factor}</p>
                         </div>
                     ))}
                     {(!conclusion?.supporting_factors || conclusion.supporting_factors.length === 0) && (
-                        <p className="text-[10px] text-outline italic">No secondary factors recorded.</p>
+                        <p className="text-[10px] text-outline italic">No Secondary Factors Recorded</p>
                     )}
                 </div>
             </div>

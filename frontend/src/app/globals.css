@@ -194,4 +194,12 @@
   .pulse-ambient {
     animation: pulse 1.6s ease-in-out infinite;
   }
+
+  .expandable-panel {
+    @apply grid transition-[grid-template-rows,opacity] duration-300 ease-out;
+  }
+
+  .expandable-chevron {
+    @apply transition-transform duration-300 ease-out;
+  }
 }

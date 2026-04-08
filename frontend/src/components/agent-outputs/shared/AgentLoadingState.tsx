@@ -35,7 +35,7 @@ export const AgentLoadingState: React.FC<AgentLoadingStateProps> = ({
                 <div className="flex flex-col items-center justify-center gap-3">
                     <Loader2 size={20} className={`${colorClass} animate-spin opacity-50`} />
                     <p className="text-on-surface-variant text-xs italic">
-                        {title || description || "Loading content…"}
+                        {title || description || "Loading Content…"}
                     </p>
                 </div>
             </div>

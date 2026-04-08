@@ -2,6 +2,7 @@ import React, { memo, useMemo } from 'react';
 import { PieChart, List, TrendingUp, TrendingDown, Minus, Zap, BarChart3, Database, ShieldCheck, AlertCircle, MessageSquare } from 'lucide-react';
 import { NewsResearchOutput, SentimentLabel } from '@/types/agents/news';
 import { NewsPreview, isNewsPreview } from '@/types/preview';
+import { AgentLoadingState } from '../shared/AgentLoadingState';
 
 interface AINewsSummaryProps {
     output: NewsResearchOutput | NewsPreview;
@@ -84,10 +85,11 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
 
     if (!isPreview && (newsItems.length === 0 || typeof output.sentiment_score !== 'number')) {
         return (
-            <div className="flex flex-col items-center justify-center p-12 text-on-surface-variant">
-                <Zap className="w-12 h-12 mb-4 pulse-ambient opacity-50" />
-                <p className="font-bold uppercase tracking-[0.2em] text-[10px]">Analyzing News Sentiment...</p>
-            </div>
+            <AgentLoadingState
+                type="block"
+                title="Analyzing News Sentiment…"
+                colorClass="text-amber-400"
+            />
         );
     }
 
@@ -132,10 +134,10 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
                                 <span className="text-cyan-400 text-[10px]">{previewArticleCountDisplay || 'Loading…'}</span>
                             )}
                             {!isPreview && decidedCount > 0 && bearFactsCount === 0 && (
-                                <span className="text-emerald-400 text-[10px]">⚠️ No bearish evidence found</span>
+                                <span className="text-emerald-400 text-[10px]">⚠️ No Bearish Evidence Found</span>
                             )}
                             {!isPreview && decidedCount > 0 && bullFactsCount === 0 && (
-                                <span className="text-rose-400 text-[10px]">⚠️ No bullish evidence found</span>
+                                <span className="text-rose-400 text-[10px]">⚠️ No Bullish Evidence Found</span>
                             )}
                         </div>
 
@@ -267,8 +269,8 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
                             </div>
                         ))}
                         {keyThemes.length === 0 && (
-                            <div className="text-xs text-on-surface-variant italic">No specific themes identified.</div>
-                        )}
+                        <div className="text-xs text-on-surface-variant italic">No Specific Themes Identified</div>
+                    )}
                     </div>
                 </div>
 

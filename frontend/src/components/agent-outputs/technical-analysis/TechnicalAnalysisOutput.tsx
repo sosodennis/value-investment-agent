@@ -67,6 +67,7 @@ import {
     resolveRsiDescriptor,
     type IndicatorTone,
 } from './technical-wording';
+import { TECHNICAL_PALETTE } from './technicalPalette';
 
 interface TechnicalAnalysisOutputProps {
     reference: ArtifactReference | null;
@@ -304,26 +305,26 @@ const tonePalette: Record<
     positive: {
         badge: 'bg-emerald-500/20 border-emerald-500/40 text-emerald-200',
         value: 'text-emerald-200',
-        spark: '#22c55e',
-        glow: '[text-shadow:0_0_15px_rgba(34,197,94,0.5)]',
+        spark: TECHNICAL_PALETTE.sparkPositive,
+        glow: '[text-shadow:0_0_15px_rgba(25,128,56,0.5)]',
     },
     neutral: {
         badge: 'bg-surface-container-high border-outline-variant/30 text-on-surface-variant',
         value: 'text-on-surface-variant',
-        spark: '#94a3b8',
+        spark: TECHNICAL_PALETTE.sparkNeutral,
         glow: '[text-shadow:0_0_15px_rgba(148,163,184,0.5)]',
     },
     warning: {
         badge: 'bg-amber-500/20 border-amber-500/40 text-amber-200',
         value: 'text-amber-200',
-        spark: '#f59e0b',
-        glow: '[text-shadow:0_0_15px_rgba(245,158,11,0.5)]',
+        spark: TECHNICAL_PALETTE.sparkWarning,
+        glow: '[text-shadow:0_0_15px_rgba(241,194,27,0.5)]',
     },
     danger: {
         badge: 'bg-rose-500/20 border-rose-500/40 text-rose-200',
         value: 'text-rose-200',
-        spark: '#f43f5e',
-        glow: '[text-shadow:0_0_15px_rgba(244,63,94,0.5)]',
+        spark: TECHNICAL_PALETTE.sparkDanger,
+        glow: '[text-shadow:0_0_15px_rgba(218,30,40,0.5)]',
     },
 };
 
@@ -481,7 +482,7 @@ const resolveNearestValue = <V,>(
 
 const renderIndicatorHighlights = (indicators: TechnicalFeaturePack['timeframes'][string]['classic_indicators'][string][]) => {
     if (indicators.length === 0) {
-        return <span className="text-xs text-outline">No indicators available.</span>;
+        return <span className="text-xs text-outline">No Indicators Available</span>;
     }
     return (
         <div className="flex flex-wrap gap-2">
@@ -508,7 +509,7 @@ const renderScorecardContributions = (
     items: TechnicalScorecardContribution[]
 ) => {
     if (items.length === 0) {
-        return <div className="text-[10px] text-outline">No contributions.</div>;
+        return <div className="text-[10px] text-outline">No Contributions</div>;
     }
     return (
         <div className="space-y-2">
@@ -738,7 +739,10 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                 volumes.push({
                     time,
                     value: volume,
-                    color: close >= open ? 'rgba(34, 197, 94, 0.45)' : 'rgba(248, 113, 113, 0.45)',
+                    color:
+                        close >= open
+                            ? 'rgba(25, 128, 56, 0.45)'
+                            : 'rgba(250, 77, 86, 0.45)',
                 });
             }
         });
@@ -760,6 +764,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                             color: point.color,
                         })),
                         priceFormat: { type: 'volume' },
+                        priceLineVisible: false,
                     },
                 ]
                 : [],
@@ -817,7 +822,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
             overlays.push({
                 id: 'SMA 20',
                 data: sma20Series,
-                color: '#38bdf8',
+                color: TECHNICAL_PALETTE.overlayPrimary,
                 lineWidth: 2,
             });
         }
@@ -825,7 +830,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
             overlays.push({
                 id: 'EMA 20',
                 data: ema20Series,
-                color: '#f59e0b',
+                color: TECHNICAL_PALETTE.overlaySecondary,
                 lineWidth: 2,
             });
         }
@@ -833,7 +838,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
             overlays.push({
                 id: 'BB Upper',
                 data: bbUpperSeries,
-                color: 'rgba(148, 163, 184, 0.6)',
+                color: TECHNICAL_PALETTE.overlayBandStrong,
                 lineWidth: 1,
                 lineStyle: 'dashed',
             });
@@ -842,7 +847,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
             overlays.push({
                 id: 'BB Middle',
                 data: bbMiddleSeries,
-                color: 'rgba(148, 163, 184, 0.45)',
+                color: TECHNICAL_PALETTE.overlayBandSoft,
                 lineWidth: 1,
                 lineStyle: 'dashed',
             });
@@ -851,7 +856,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
             overlays.push({
                 id: 'BB Lower',
                 data: bbLowerSeries,
-                color: 'rgba(148, 163, 184, 0.6)',
+                color: TECHNICAL_PALETTE.overlayBandStrong,
                 lineWidth: 1,
                 lineStyle: 'dashed',
             });
@@ -879,7 +884,10 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
             .map((point) => ({
                 time: point.time,
                 value: point.value,
-                color: point.value >= 0 ? 'rgba(34, 197, 94, 0.45)' : 'rgba(248, 113, 113, 0.45)',
+                color:
+                    point.value >= 0
+                        ? 'rgba(25, 128, 56, 0.45)'
+                        : 'rgba(250, 77, 86, 0.45)',
             }));
     }, [indicatorFrame]);
     const fdSeries = useMemo(() => {
@@ -1030,7 +1038,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
             {
                 id: 'RSI 14',
                 data: alignedRsiSeries,
-                color: '#38bdf8',
+                color: TECHNICAL_PALETTE.rsiLine,
                 lineWidth: 2,
             },
         ],
@@ -1038,8 +1046,8 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
     );
     const macdLines = useMemo<IndicatorLineSeries[]>(
         () => [
-            { id: 'MACD', data: alignedMacdSeries, color: '#fbbf24', lineWidth: 2 },
-            { id: 'Signal', data: alignedMacdSignalSeries, color: '#22d3ee', lineWidth: 2 },
+            { id: 'MACD', data: alignedMacdSeries, color: TECHNICAL_PALETTE.macdLine, lineWidth: 2 },
+            { id: 'Signal', data: alignedMacdSignalSeries, color: TECHNICAL_PALETTE.macdSignal, lineWidth: 2 },
         ],
         [alignedMacdSeries, alignedMacdSignalSeries]
     );
@@ -1048,7 +1056,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
             {
                 id: 'Histogram',
                 data: alignedMacdHistSeries,
-                color: 'rgba(148, 163, 184, 0.35)',
+                color: TECHNICAL_PALETTE.histogram,
             },
         ],
         [alignedMacdHistSeries]
@@ -1058,7 +1066,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
             {
                 id: indicatorFrame?.series?.['FD_ZSCORE'] ? 'FD Z-Score' : 'FracDiff',
                 data: alignedFdSeries,
-                color: '#a855f7',
+                color: TECHNICAL_PALETTE.fdLine,
                 lineWidth: 2,
             },
         ],
@@ -1109,17 +1117,17 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         () => [
             {
                 price: 70,
-                color: 'rgba(248, 113, 113, 0.55)',
-                axisLabelColor: 'rgba(248, 113, 113, 0.4)',
-                axisLabelTextColor: '#ffffff',
+                color: TECHNICAL_PALETTE.overbought,
+                axisLabelColor: TECHNICAL_PALETTE.overboughtLabel,
+                axisLabelTextColor: TECHNICAL_PALETTE.axisLabelText,
                 title: 'Overbought',
                 style: 'dashed',
             },
             {
                 price: 30,
-                color: 'rgba(34, 197, 94, 0.55)',
-                axisLabelColor: 'rgba(34, 197, 94, 0.4)',
-                axisLabelTextColor: '#ffffff',
+                color: TECHNICAL_PALETTE.oversold,
+                axisLabelColor: TECHNICAL_PALETTE.oversoldLabel,
+                axisLabelTextColor: TECHNICAL_PALETTE.axisLabelText,
                 title: 'Oversold',
                 style: 'dashed',
             },
@@ -1130,9 +1138,9 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         () => [
             {
                 price: 0,
-                color: 'rgba(148, 163, 184, 0.55)',
-                axisLabelColor: 'rgba(148, 163, 184, 0.4)',
-                axisLabelTextColor: '#0f172a',
+                color: TECHNICAL_PALETTE.neutralLine,
+                axisLabelColor: TECHNICAL_PALETTE.neutralLabel,
+                axisLabelTextColor: TECHNICAL_PALETTE.axisLabelText,
                 title: 'Zero',
                 style: 'dashed',
             },
@@ -1143,17 +1151,17 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         () => [
             {
                 price: 2,
-                color: 'rgba(248, 113, 113, 0.55)',
-                axisLabelColor: 'rgba(248, 113, 113, 0.4)',
-                axisLabelTextColor: '#ffffff',
+                color: TECHNICAL_PALETTE.overbought,
+                axisLabelColor: TECHNICAL_PALETTE.overboughtLabel,
+                axisLabelTextColor: TECHNICAL_PALETTE.axisLabelText,
                 title: '+2',
                 style: 'dashed',
             },
             {
                 price: -2,
-                color: 'rgba(34, 197, 94, 0.55)',
-                axisLabelColor: 'rgba(34, 197, 94, 0.4)',
-                axisLabelTextColor: '#ffffff',
+                color: TECHNICAL_PALETTE.oversold,
+                axisLabelColor: TECHNICAL_PALETTE.oversoldLabel,
+                axisLabelTextColor: TECHNICAL_PALETTE.axisLabelText,
                 title: '-2',
                 style: 'dashed',
             },
@@ -1651,7 +1659,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 <div className="text-lg font-black text-on-surface">
                                     {evidenceRegimeSummary?.dominant_regime
                                         ? formatLabel(evidenceRegimeSummary.dominant_regime)
-                                        : 'No regime readout'}
+                                        : 'No Regime Readout'}
                                 </div>
                                 <div className="space-y-1 text-[11px] text-on-surface-variant">
                                     {typeof evidenceRegimeSummary?.average_confidence === 'number' && (
@@ -1732,7 +1740,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                         ))
                                     ) : (
                                         <span className="text-xs text-outline">
-                                            No breakout signal in the primary bundle.
+                                            No Breakout Signal In The Primary Bundle
                                         </span>
                                     )}
                                 </div>
@@ -1754,7 +1762,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                             </div>
                                         </>
                                     ) : (
-                                        <div>No major evidence conflict is flagged in the report bundle.</div>
+                                        <div>No Major Evidence Conflict Is Flagged In The Report Bundle</div>
                                     )}
                                 </div>
                             </div>
@@ -1858,7 +1866,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                     <div className="mt-2 text-[10px] text-on-surface-variant">
                                         {qualityDegradedTimeframes.length > 0
                                             ? qualityDegradedTimeframes.map((frame) => frame.toUpperCase()).join(' · ')
-                                            : 'No degraded frame listed'}
+                                            : 'No Degraded Frame Listed'}
                                     </div>
                                 </div>
                                 <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4">
@@ -1871,7 +1879,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                     <div className="mt-2 text-[10px] text-on-surface-variant">
                                         {qualityRegimeReadyTimeframes.length > 0
                                             ? qualityRegimeReadyTimeframes.map((frame) => frame.toUpperCase()).join(' · ')
-                                            : 'No regime-ready frame listed'}
+                                            : 'No Regime-Ready Frame Listed'}
                                     </div>
                                 </div>
                                 <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4">
@@ -2009,7 +2017,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 </div>
                             ) : (
                                 <div className="text-xs text-outline">
-                                    No policy alert summary is available for this report.
+                                    No Policy Alert Summary Is Available For This Report
                                 </div>
                             )}
                             {alertReadoutGateEntries.length > 0 && (
@@ -2160,13 +2168,13 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4">
                                     <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-outline">Trigger</div>
                                     <div className="mt-2 text-sm leading-6 text-on-surface-variant">
-                                        {analystPerspective.trigger_condition ?? 'No explicit trigger detected.'}
+                                        {analystPerspective.trigger_condition ?? 'No Explicit Trigger Detected'}
                                     </div>
                                 </div>
                                 <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4">
                                     <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-outline">Invalidation</div>
                                     <div className="mt-2 text-sm leading-6 text-on-surface-variant">
-                                        {analystPerspective.invalidation_condition ?? 'No explicit invalidation level available.'}
+                                        {analystPerspective.invalidation_condition ?? 'No Explicit Invalidation Level Available'}
                                     </div>
                                     {analystInvalidationLevel && (
                                         <div className="mt-2 text-[10px] font-black uppercase tracking-[0.2em] text-rose-300">
@@ -2177,7 +2185,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4">
                                     <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-outline">Validation Note</div>
                                     <div className="mt-2 text-sm leading-6 text-on-surface-variant">
-                                        {analystPerspective.validation_note ?? 'No validation warning was supplied.'}
+                                        {analystPerspective.validation_note ?? 'No Validation Warning Was Supplied'}
                                     </div>
                                 </div>
                                 <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4">
@@ -2201,7 +2209,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                 </span>
                             ))
                         ) : (
-                            <span className="text-xs text-outline">No summary tags available.</span>
+                            <span className="text-xs text-outline">No Summary Tags Available</span>
                         )}
                     </div>
                 </section>
@@ -2276,7 +2284,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                                                 />
                                                             </svg>
                                                         ) : (
-                                                            <div className="text-[10px] text-outline uppercase">No trend</div>
+                                                            <div className="text-[10px] text-outline uppercase">No Trend</div>
                                                         )}
                                                     </div>
                                                 </div>
@@ -2325,7 +2333,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                                                 />
                                                             </svg>
                                                         ) : (
-                                                            <div className="text-[10px] text-outline uppercase">No trend</div>
+                                                            <div className="text-[10px] text-outline uppercase">No Trend</div>
                                                         )}
                                                     </div>
                                                 </div>
@@ -2387,7 +2395,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                                             />
                                                         </svg>
                                                     ) : (
-                                                        <div className="text-[10px] text-outline uppercase">No trend</div>
+                                                        <div className="text-[10px] text-outline uppercase">No Trend</div>
                                                     )}
                                                 </div>
                                             </div>
@@ -2398,7 +2406,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                         </div>
                     ) : (
                         <div className="text-xs text-outline">
-                            Indicator evidence unavailable for this run.
+                            Indicator Evidence Unavailable For This Run
                         </div>
                     )}
                 </section>
@@ -2430,7 +2438,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                     </div>
                                 ) : (
                                     <div className="text-[10px] text-outline uppercase">
-                                        No OHLC frames
+                                        No OHLC Frames
                                     </div>
                                 )}
                                 {indicatorTimeframe && (

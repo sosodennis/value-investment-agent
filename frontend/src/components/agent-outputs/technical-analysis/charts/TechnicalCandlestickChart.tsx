@@ -16,6 +16,7 @@ import {
     UTCTimestamp,
 } from 'lightweight-charts';
 import { CrosshairSyncState } from './useCrosshairSync';
+import { TECHNICAL_PALETTE } from '../technicalPalette';
 
 export interface CandlestickDatum {
     time: UTCTimestamp;
@@ -161,23 +162,23 @@ export const TechnicalCandlestickChart: React.FC<TechnicalCandlestickChartProps>
             height,
             layout: {
                 background: { type: ColorType.Solid, color: 'transparent' },
-                textColor: '#94a3b8',
+                textColor: TECHNICAL_PALETTE.axisText,
                 fontSize: 11,
                 fontFamily: 'ui-sans-serif, system-ui, -apple-system, sans-serif',
                 attributionLogo: false,
             },
             grid: {
-                vertLines: { color: 'rgba(30, 41, 59, 0.6)' },
-                horzLines: { color: 'rgba(30, 41, 59, 0.6)' },
+                vertLines: { color: TECHNICAL_PALETTE.gridLineSoft },
+                horzLines: { color: TECHNICAL_PALETTE.gridLineSoft },
             },
             crosshair: {
                 mode: CrosshairMode.Normal,
             },
             rightPriceScale: {
-                borderColor: 'rgba(51, 65, 85, 0.7)',
+                borderColor: TECHNICAL_PALETTE.axisBorder,
             },
             timeScale: {
-                borderColor: 'rgba(51, 65, 85, 0.7)',
+                borderColor: TECHNICAL_PALETTE.axisBorder,
                 rightOffset: 0,
                 barSpacing: 6,
                 fixLeftEdge: true,
@@ -197,16 +198,16 @@ export const TechnicalCandlestickChart: React.FC<TechnicalCandlestickChartProps>
         });
 
         const candleSeries = chart.addSeries(CandlestickSeries, {
-            upColor: '#22c55e',
-            downColor: '#f87171',
-            wickUpColor: '#22c55e',
-            wickDownColor: '#f87171',
+            upColor: TECHNICAL_PALETTE.candleUp,
+            downColor: TECHNICAL_PALETTE.candleDown,
+            wickUpColor: TECHNICAL_PALETTE.candleUp,
+            wickDownColor: TECHNICAL_PALETTE.candleDown,
             borderVisible: false,
         });
 
         const volumeSeries = showVolume
             ? chart.addSeries(HistogramSeries, {
-                  color: 'rgba(148, 163, 184, 0.45)',
+                  color: TECHNICAL_PALETTE.volume,
                   priceScaleId: '',
                   priceFormat: { type: 'volume' },
               })

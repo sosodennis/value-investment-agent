@@ -100,11 +100,11 @@ const NewsResearchOutputComponent: React.FC<NewsResearchOutputProps> = ({
                         </div>
                     </div>
                 ) : (
-                    <AgentLoadingState
-                        type="block"
-                        title={isReferenceLoading ? "Loading articles…" : "No articles found."}
-                        colorClass="text-cyan-400"
-                    />
+                <AgentLoadingState
+                    type="block"
+                    title={isReferenceLoading ? "Loading Articles…" : "No Articles Found"}
+                    colorClass="text-cyan-400"
+                />
                 )}
 
             </div>

@@ -1,5 +1,5 @@
 import React, { useState, memo } from 'react';
-import { ExternalLink, Calendar, Tag, AlertCircle, Info, TrendingUp, TrendingDown, Minus, Star, BarChart3, MessageSquare, ShieldCheck, ChevronDown, ChevronUp } from 'lucide-react';
+import { ExternalLink, Calendar, Tag, AlertCircle, Info, TrendingUp, TrendingDown, Minus, Star, BarChart3, MessageSquare, ShieldCheck, ChevronDown } from 'lucide-react';
 import { FinancialNewsItem, SentimentLabel, ImpactLevel, SearchCategory, KeyFact } from '@/types/agents/news';
 
 interface NewsResearchCardProps {
@@ -272,7 +272,7 @@ const KeyEvidenceSection: React.FC<{ facts: KeyFact[] }> = ({ facts }) => {
             </div>
             {shouldCollapse && (
                 <div
-                    className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${isExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}
+                    className={`expandable-panel ${isExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}
                 >
                     <div className="overflow-hidden">
                         <div className="grid grid-cols-1 gap-2 pt-2">
@@ -288,7 +288,7 @@ const KeyEvidenceSection: React.FC<{ facts: KeyFact[] }> = ({ facts }) => {
                 >
                     <ChevronDown
                         size={12}
-                        className={`transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
+                        className={`expandable-chevron ${isExpanded ? 'rotate-180' : ''}`}
                     />
                     {isExpanded ? 'Show less' : `Show ${hiddenCount} more`}
                 </button>

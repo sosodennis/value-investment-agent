@@ -1,10 +1,11 @@
 import React, { memo } from 'react';
-import { FileText, Clock, Loader2, Database, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { FileText, Clock, Database, AlertCircle, ChevronDown, Loader2 } from 'lucide-react';
 import { AgentStatus } from '@/types/agents';
 import { GenericOutputViewModel } from '@/types/agents/output-adapter';
 import { parseUnknownArtifact } from '@/types/agents/artifact-parsers';
 import { UnknownRecord } from '@/types/preview';
 import { useArtifact } from '../../../hooks/useArtifact';
+import { AgentLoadingState } from './AgentLoadingState';
 
 interface GenericAgentOutputProps {
     agentName: string;
@@ -48,14 +49,14 @@ const GenericAgentOutputComponent: React.FC<GenericAgentOutputProps> = ({
 
     if (status !== 'done' && !effectiveData) {
         return (
-            <div className="flex-1 flex flex-col items-center justify-center p-12 text-center h-full min-h-[300px]">
-                <Clock size={48} className="text-slate-900 mb-4 pulse-ambient opacity-50" />
-                <h4 className="text-label">Processing…</h4>
-                <p className="text-outline-variant text-[10px] mt-2 max-w-[240px]">
-                    {agentName} is currently working on its task.
-                </p>
-                <p className="text-[10px] text-outline mt-2">Status: {status}</p>
-            </div>
+            <AgentLoadingState
+                type="full"
+                icon={Clock}
+                title="Processing…"
+                description={`${agentName} is currently working on its task.`}
+                status={status}
+                colorClass="text-primary"
+            />
         );
     }
 
@@ -69,10 +70,11 @@ const GenericAgentOutputComponent: React.FC<GenericAgentOutputProps> = ({
                     <h3 className="text-sm font-bold text-on-surface uppercase tracking-widest">{agentName} Result</h3>
                 </div>
                 {isReferenceLoading && (
-                    <div className="flex items-center gap-2 text-[10px] text-primary font-bold uppercase tracking-widest pulse-ambient">
-                        <Loader2 size={12} className="animate-spin" />
-                        <span>Loading Artifact…</span>
-                    </div>
+                    <AgentLoadingState
+                        type="header"
+                        title="Loading Artifact…"
+                        colorClass="text-primary"
+                    />
                 )}
             </div>
 
@@ -86,7 +88,7 @@ const GenericAgentOutputComponent: React.FC<GenericAgentOutputProps> = ({
                     </pre>
                 ) : (
                     <div className="flex flex-col items-center justify-center py-12 text-outline italic">
-                        <p>Empty result payload.</p>
+                        <p>Empty Result Payload</p>
                     </div>
                 )}
             </div>
@@ -114,27 +116,36 @@ const GenericAgentOutputComponent: React.FC<GenericAgentOutputProps> = ({
                                 System Logs ({errorLogs.length})
                             </span>
                         </div>
-                        {isLogsExpanded ? <ChevronUp size={14} className="text-outline" /> : <ChevronDown size={14} className="text-outline" />}
+                        <ChevronDown
+                            size={14}
+                            className={`text-outline expandable-chevron ${isLogsExpanded ? 'rotate-180' : ''}`}
+                        />
                     </button>
 
-                    {isLogsExpanded && (
-                        <div className="border-t border-outline-variant/30 p-1 space-y-1">
-                            {errorLogs.map((log, idx: number) => (
-                                <div key={idx} className="p-3 bg-surface-container-low rounded-lg flex gap-3">
-                                    <div className="mt-0.5">
-                                        <div className={`w-1.5 h-1.5 rounded-full mt-1 ${log.severity === 'error' ? 'bg-error' : 'bg-warning'}`} />
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center justify-between mb-1">
-                                            <span className="text-[9px] font-bold text-on-surface-variant uppercase tracking-tight">Node: {log.node}</span>
-                                            {log.timestamp && <span className="text-[8px] text-outline font-mono">{log.timestamp}</span>}
+                    <div
+                        className={`expandable-panel ${
+                            isLogsExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+                        }`}
+                    >
+                        <div className="overflow-hidden">
+                            <div className="border-t border-outline-variant/30 p-1 space-y-1">
+                                {errorLogs.map((log, idx: number) => (
+                                    <div key={idx} className="p-3 bg-surface-container-low rounded-lg flex gap-3">
+                                        <div className="mt-0.5">
+                                            <div className={`w-1.5 h-1.5 rounded-full mt-1 ${log.severity === 'error' ? 'bg-error' : 'bg-warning'}`} />
                                         </div>
-                                        <p className="text-[10px] text-on-surface-variant leading-relaxed break-words">{log.error}</p>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center justify-between mb-1">
+                                                <span className="text-[9px] font-bold text-on-surface-variant uppercase tracking-tight">Node: {log.node}</span>
+                                                {log.timestamp && <span className="text-[8px] text-outline font-mono">{log.timestamp}</span>}
+                                            </div>
+                                            <p className="text-[10px] text-on-surface-variant leading-relaxed break-words">{log.error}</p>
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
+                                ))}
+                            </div>
                         </div>
-                    )}
+                    </div>
                 </div>
             )}
         </div>

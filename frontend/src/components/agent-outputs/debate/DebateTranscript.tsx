@@ -98,24 +98,15 @@ export const DebateTranscript: React.FC<DebateTranscriptProps> = ({ history }) =
     };
 
     return (
-        <div className="tech-card mt-8 animate-fade-slide-up">
-            {/* Terminal Header */}
-            <div className="px-5 py-3 border-b border-white/5 bg-surface-container-low flex items-center justify-between">
+        <div className="mt-8 animate-fade-slide-up rounded-2xl border border-outline-variant/10 bg-surface-container">
+            <div className="px-5 py-3 border-b border-outline-variant/10 bg-surface-container-low flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                    <div className="flex gap-1.5">
-                        <div className="w-2.5 h-2.5 rounded-full bg-rose-500/20 border border-rose-500/40" />
-                        <div className="w-2.5 h-2.5 rounded-full bg-amber-500/20 border border-amber-500/40" />
-                        <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/20 border border-emerald-500/40" />
-                    </div>
-                    <div className="h-4 w-px bg-surface-container mx-1" />
-                    <h3 className="text-label flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 pulse-ambient shadow-[0_0_8px_rgba(6,182,212,0.6)]"></span>
-                        Agent Intelligence Transcript
-                    </h3>
+                    <Gavel className="w-4 h-4 text-cyan-400" />
+                    <h3 className="text-xs font-bold text-outline uppercase tracking-[0.2em]">Debate Transcript</h3>
                 </div>
-                <div className="flex items-center gap-3">
-                    <span className="text-[8px] font-black text-emerald-500/80 tracking-[0.2em] border border-emerald-500/20 px-2 py-0.5 rounded bg-emerald-500/5">
-                        LIVE_FEED
+                <div className="flex items-center gap-2">
+                    <span className="rounded border border-outline-variant/30 bg-surface-container px-2 py-0.5 text-[9px] font-semibold text-outline uppercase tracking-[0.2em]">
+                        Live
                     </span>
                     <span className="text-[10px] text-outline font-mono">v1.2.4</span>
                 </div>
@@ -124,7 +115,7 @@ export const DebateTranscript: React.FC<DebateTranscriptProps> = ({ history }) =
             <div className="p-6 max-h-[600px] overflow-y-auto custom-scrollbar bg-surface">
                 <div className="space-y-10 relative">
                     {/* Vertical line connector */}
-                    <div className="absolute left-4 top-0 bottom-0 w-px bg-gradient-to-b from-white/5 via-white/5 to-transparent" />
+                    <div className="absolute left-4 top-0 bottom-0 w-px bg-gradient-to-b from-outline-variant/30 via-outline-variant/20 to-transparent" />
 
                     {history.map((msg, idx) => {
                         // Filter out system messages
@@ -138,27 +129,23 @@ export const DebateTranscript: React.FC<DebateTranscriptProps> = ({ history }) =
                         const nameDisplay = msg.name || 'Agent';
                         let roleColor = "text-on-surface-variant";
                         let ringColor = "border-outline-variant/30";
-                        let bgColor = "from-slate-900/40 to-slate-900/10";
-                        let glowColor = "group-hover:shadow-[0_0_20px_-5px_rgba(148,163,184,0.1)]";
+                        let accentBorder = "border-l-outline-variant/30";
 
                         if (isBull) {
                             avatarIcon = <TrendingUp className="w-4 h-4 text-emerald-400 pulse-ambient" />;
                             roleColor = "text-emerald-400";
                             ringColor = "border-emerald-500/30";
-                            bgColor = "from-emerald-950/20 to-slate-900/20";
-                            glowColor = "group-hover:shadow-[0_0_20px_-5px_rgba(16,185,129,0.2)]";
+                            accentBorder = "border-l-emerald-500/40";
                         } else if (isBear) {
                             avatarIcon = <TrendingDown className="w-4 h-4 text-rose-400" />;
                             roleColor = "text-rose-400";
                             ringColor = "border-rose-500/30";
-                            bgColor = "from-rose-950/20 to-slate-900/20";
-                            glowColor = "group-hover:shadow-[0_0_20px_-5px_rgba(244,63,94,0.2)]";
+                            accentBorder = "border-l-rose-500/40";
                         } else if (isJudge) {
                             avatarIcon = <Gavel className="w-4 h-4 text-cyan-400" />;
                             roleColor = "text-cyan-400";
                             ringColor = "border-cyan-500/30";
-                            bgColor = "from-cyan-950/20 to-slate-900/20";
-                            glowColor = "group-hover:shadow-[0_0_20px_-5px_rgba(6,182,212,0.2)]";
+                            accentBorder = "border-l-cyan-500/40";
                         }
 
                         return (
@@ -179,15 +166,15 @@ export const DebateTranscript: React.FC<DebateTranscriptProps> = ({ history }) =
                                         </span>
                                         <div className="h-px bg-surface-container-low flex-grow" />
                                     </div>
-                                    <div className={`p-5 rounded-2xl border border-white/5 bg-gradient-to-br ${bgColor} transition duration-300 ${glowColor} backdrop-blur-sm group-hover:border-outline-variant/30`}>
-                                        <div className="text-[15px] leading-relaxed text-on-surface-variant font-sans tracking-tight">
+                                    <div className={`p-5 rounded-2xl border border-outline-variant/10 border-l-2 bg-surface-container-low transition duration-300 group-hover:border-outline-variant/30 ${accentBorder}`}>
+                                        <div className="text-[14px] leading-relaxed text-on-surface-variant font-sans tracking-tight break-words">
                                             <ReactMarkdown
                                                 components={{
                                                     p: (props) => <p className="mb-4 last:mb-0" {...props} />,
                                                     strong: (props) => <strong className="font-bold text-on-surface tracking-tight" {...props} />,
-                                                    em: (props) => <em className="italic text-on-surface-variant border-b border-white/5 pb-0.5" {...props} />,
+                                                    em: (props) => <em className="italic text-on-surface-variant border-b border-outline-variant/30 pb-0.5" {...props} />,
                                                     h1: (props) => <h1 className="text-lg font-black text-on-surface mt-6 mb-3 uppercase tracking-wider flex items-center gap-2 before:content-[''] before:w-1 before:h-4 before:bg-cyan-500" {...props} />,
-                                                    h2: (props) => <h2 className="text-base font-bold text-on-surface mt-5 mb-2 border-b border-white/5 pb-1" {...props} />,
+                                                    h2: (props) => <h2 className="text-base font-bold text-on-surface mt-5 mb-2 border-b border-outline-variant/30 pb-1" {...props} />,
                                                     ul: (props) => <ul className="space-y-2 mb-4 list-none pl-1" {...props} />,
                                                     li: (props) => (
                                                         <li className="relative pl-5 mb-3 leading-relaxed before:content-['›'] before:absolute before:left-0 before:top-0 before:text-cyan-500 before:font-bold before:text-lg before:leading-none" {...props} />
@@ -196,7 +183,7 @@ export const DebateTranscript: React.FC<DebateTranscriptProps> = ({ history }) =
                                                         <blockquote className="border-l-2 border-outline-variant/50 pl-4 py-1 my-4 italic text-on-surface-variant bg-white/2 rounded-r" {...props} />
                                                     ),
                                                     code: (props) => (
-                                                        <code className="bg-surface px-1.5 py-0.5 rounded font-mono text-[13px] text-cyan-400 border border-white/5" {...props} />
+                                                        <code className="bg-surface px-1.5 py-0.5 rounded font-mono text-[13px] text-cyan-400 border border-outline-variant/30" {...props} />
                                                     ),
                                                     // Intercept images to render badges
                                                     img: ({ src, alt }) => {
@@ -225,14 +212,14 @@ export const DebateTranscript: React.FC<DebateTranscriptProps> = ({ history }) =
                 </div>
             </div>
 
-            <div className="px-6 py-4 bg-surface border-t border-white/5 flex justify-between items-center">
+            <div className="px-6 py-4 bg-surface border-t border-outline-variant/10 flex justify-between items-center">
                 <div className="flex items-center gap-4">
-                    <span className="text-[9px] font-black text-outline uppercase tracking-[0.3em] flex items-center gap-1.5">
-                        <span className="w-1 h-1 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
+                    <span className="text-[9px] font-bold text-outline uppercase tracking-[0.2em] flex items-center gap-1.5">
+                        <span className="w-1 h-1 rounded-full bg-emerald-500/70 shadow-[0_0_8px_rgba(16,185,129,0.2)]" />
                         Verification Protocol Active
                     </span>
                     <div className="h-4 w-px bg-surface-container-low" />
-                    <span className="text-[9px] font-mono text-outline">SHA-256: 8f2b...3e1a</span>
+                    <span className="text-[9px] font-mono text-outline">SHA-256: 8f2b…3e1a</span>
                 </div>
                 <div className="flex gap-3">
                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/20" />
