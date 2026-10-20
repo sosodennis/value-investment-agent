@@ -5,10 +5,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from math import isnan
 
-from src.agents.technical.subdomains.calibration.domain.contracts import (
+from src.agents.technical.subdomains.calibration.public import (
     TechnicalDirectionCalibrationObservation,
-)
-from src.agents.technical.subdomains.calibration.domain.policies.technical_direction_calibration_service import (
     resolve_direction_family,
 )
 

@@ -10,11 +10,14 @@ from src.agents.technical.subdomains.decision_observability.application import (
     OutcomeLabelingMarketDataReader,
     TechnicalDecisionObservabilityRuntimeService,
 )
-from src.agents.technical.subdomains.market_data.application.ports import (
-    MarketDataOhlcvFetchResult,
+from src.agents.technical.subdomains.market_data import (
+    MarketDataRuntimeService,
 )
-from src.agents.technical.subdomains.market_data.infrastructure.yahoo_ohlcv_provider import (
-    fetch_ohlcv,
+from src.agents.technical.subdomains.market_data.public import (
+    MarketDataCacheConfig,
+    MarketDataOhlcvFetchResult,
+    MarketDataRetryPolicy,
+    build_default_market_data_provider,
 )
 from src.shared.kernel.tools.logger import get_logger, log_event
 
@@ -27,10 +30,7 @@ logger = get_logger(__name__)
 
 @dataclass(frozen=True)
 class TechnicalOutcomeLabelingMarketDataReader:
-    cache_base_dir: str = "/tmp/ta_labeling_market_data_cache"
-    cache_key_prefix: str = "labeling"
-    max_retries: int = 2
-    retry_delay_seconds: float = 0.5
+    runtime_service: MarketDataRuntimeService
 
     async def fetch_ohlcv(
         self,
@@ -40,14 +40,10 @@ class TechnicalOutcomeLabelingMarketDataReader:
         interval: str = "1d",
     ) -> MarketDataOhlcvFetchResult:
         return await asyncio.to_thread(
-            fetch_ohlcv,
+            self.runtime_service.fetch_ohlcv,
             ticker_symbol,
             period=period,
             interval=interval,
-            cache_base_dir=self.cache_base_dir,
-            cache_key_prefix=self.cache_key_prefix,
-            max_retries=self.max_retries,
-            retry_delay_seconds=self.retry_delay_seconds,
         )
 
 
@@ -109,7 +105,20 @@ def build_default_technical_outcome_labeling_worker_service() -> (
 ):
     return TechnicalOutcomeLabelingWorkerService(
         runtime_service=build_default_technical_decision_observability_runtime_service(),
-        market_data_reader=TechnicalOutcomeLabelingMarketDataReader(),
+        market_data_reader=TechnicalOutcomeLabelingMarketDataReader(
+            runtime_service=MarketDataRuntimeService(
+                provider=build_default_market_data_provider(
+                    cache=MarketDataCacheConfig(
+                        base_dir="/tmp/ta_labeling_market_data_cache",
+                        namespace="labeling",
+                    ),
+                    retry_policy=MarketDataRetryPolicy(
+                        max_retries=2,
+                        delay_seconds=0.5,
+                    ),
+                )
+            )
+        ),
     )
 
 

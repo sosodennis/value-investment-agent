@@ -10,7 +10,7 @@ from src.agents.technical.subdomains.decision_observability.domain.contracts imp
     TechnicalOutcomePathRecord,
     TechnicalPredictionEventRecord,
 )
-from src.agents.technical.subdomains.market_data.application.ports import (
+from src.agents.technical.subdomains.market_data.public import (
     MarketDataOhlcvFetchResult,
 )
 
