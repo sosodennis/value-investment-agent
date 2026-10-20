@@ -6,7 +6,7 @@ from src.agents.debate.domain.entities import EvidenceFact
 from src.agents.debate.domain.report_compression_service import (
     compress_financial_data,
 )
-from src.agents.fundamental.domain.shared.contracts.traceable import (
+from src.shared.artifacts.traceable import (
     ManualProvenance,
     XBRLProvenance,
 )

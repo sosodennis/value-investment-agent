@@ -1,1 +1,1 @@
-"""Debate workflow node package."""
+"""Compatibility imports for legacy debate node consumers."""

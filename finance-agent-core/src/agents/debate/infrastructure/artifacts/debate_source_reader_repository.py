@@ -7,13 +7,13 @@ from src.agents.debate.application.dto import (
     DebateSourceData,
     DebateSourceLoadIssue,
 )
-from src.agents.news.interface.contracts import NewsArtifactModel
 from src.interface.artifacts.artifact_contract_registry import (
     parse_artifact_data_json,
     parse_artifact_data_model_as,
 )
 from src.interface.artifacts.artifact_data_models import FinancialReportsArtifactData
 from src.services.artifact_manager import artifact_manager
+from src.shared.artifacts.news_contracts import NewsArtifactModel
 from src.shared.kernel.contracts import (
     ARTIFACT_KIND_FINANCIAL_REPORTS,
     ARTIFACT_KIND_NEWS_ANALYSIS_REPORT,
