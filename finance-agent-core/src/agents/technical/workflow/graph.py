@@ -5,8 +5,10 @@ from langgraph.graph import START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import RetryPolicy
 
-from src.agents.technical.application.factory import TechnicalWorkflowRunner
-from src.agents.technical.workflow.nodes import build_technical_nodes
+from src.agents.technical.workflow.nodes import (
+    TechnicalWorkflowRunnerPort,
+    build_technical_nodes,
+)
 from src.agents.technical.workflow.state import (
     TechnicalAnalysisInput,
     TechnicalAnalysisOutput,
@@ -15,7 +17,7 @@ from src.agents.technical.workflow.state import (
 
 
 def build_technical_workflow(
-    runner: TechnicalWorkflowRunner,
+    runner: TechnicalWorkflowRunnerPort,
 ) -> CompiledStateGraph:
     nodes = build_technical_nodes(runner)
     builder = StateGraph(
