@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from src.agents.fundamental.subdomains.core_valuation.domain.valuation_model import (
-    ValuationModel,
-)
+from src.agents.fundamental.subdomains.core_valuation.public import ValuationModel
 
 from .model_selection_contracts import ModelSpec
 
