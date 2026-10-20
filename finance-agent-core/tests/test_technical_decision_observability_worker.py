@@ -240,7 +240,7 @@ async def test_worker_service_emits_completion_report() -> None:
 
 
 @pytest.mark.asyncio
-async def test_market_data_reader_uses_labeling_cache_namespace(
+async def test_default_market_data_reader_preserves_labeling_cache_and_retries(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: dict[str, object] = {}
@@ -269,30 +269,25 @@ async def test_market_data_reader_uses_labeling_cache_namespace(
         return MarketDataOhlcvFetchResult(data=pd.DataFrame())
 
     monkeypatch.setattr(
-        "src.agents.technical.subdomains.decision_observability.infrastructure.labeling_worker_service.fetch_ohlcv",
+        "src.agents.technical.subdomains.market_data.infrastructure.yahoo_market_data_provider.fetch_ohlcv",
         _fake_fetch_ohlcv,
     )
 
     from src.agents.technical.subdomains.decision_observability import (
-        TechnicalOutcomeLabelingMarketDataReader,
+        build_default_technical_outcome_labeling_worker_service,
     )
 
-    reader = TechnicalOutcomeLabelingMarketDataReader(
-        cache_base_dir="/tmp/technical-labeling-cache",
-        cache_key_prefix="decision_labeling",
-        max_retries=3,
-        retry_delay_seconds=1.25,
-    )
-    await reader.fetch_ohlcv("AAPL", period="6mo", interval="1d")
+    worker = build_default_technical_outcome_labeling_worker_service()
+    await worker.market_data_reader.fetch_ohlcv("AAPL", period="6mo", interval="1d")
 
     assert captured == {
         "ticker_symbol": "AAPL",
         "period": "6mo",
         "interval": "1d",
-        "cache_base_dir": "/tmp/technical-labeling-cache",
-        "cache_key_prefix": "decision_labeling",
-        "max_retries": 3,
-        "retry_delay_seconds": 1.25,
+        "cache_base_dir": "/tmp/ta_labeling_market_data_cache",
+        "cache_key_prefix": "labeling",
+        "max_retries": 2,
+        "retry_delay_seconds": 0.5,
     }
 
 
