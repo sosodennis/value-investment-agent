@@ -1,6 +1,0 @@
-CAPABILITY_PRIVATE_IMPORT|src.agents.fundamental.application.wiring|src.agents.fundamental.subdomains.artifacts_provenance.infrastructure.fundamental_artifact_repository|FUNDAMENTAL-CORE
-CAPABILITY_PRIVATE_IMPORT|src.agents.fundamental.application.wiring|src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl|FUNDAMENTAL-CORE
-CAPABILITY_PRIVATE_IMPORT|src.agents.fundamental.application.wiring|src.agents.fundamental.subdomains.forward_signals.application.extraction_service|FUNDAMENTAL-CORE
-CAPABILITY_PRIVATE_IMPORT|src.agents.fundamental.application.wiring|src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl|FUNDAMENTAL-CORE
-CAPABILITY_PRIVATE_IMPORT|src.agents.fundamental.application.wiring|src.agents.fundamental.subdomains.market_data.infrastructure.factory|FUNDAMENTAL-CORE
-CROSS_AGENT_PRIVATE_IMPORT|src.agents.fundamental.application.wiring|src.agents.news.infrastructure.sentiment.finbert_sentiment_provider|FUNDAMENTAL-CORE

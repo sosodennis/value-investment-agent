@@ -1,5 +1,4 @@
-"""Stable deterministic valuation contracts and services."""
-
+from .domain.parameterization import apply_missing_metric_policy
 from .domain.parameterization.contracts import ParamBuilderPayload, ParamBuildResult
 from .domain.parameterization.orchestrator import build_params
 from .domain.valuation_model import ValuationModel
@@ -12,5 +11,6 @@ __all__ = [
     "ValuationModel",
     "ValuationModelRegistry",
     "build_params",
+    "apply_missing_metric_policy",
     "resolve_calculator_model_type",
 ]

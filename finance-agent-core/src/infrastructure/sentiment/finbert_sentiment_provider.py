@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import os
 import re
@@ -34,15 +36,15 @@ class FinBERTAnalyzer:
     Optimized for cost/latency by providing a 'skip LLM' recommendation.
     """
 
-    _instance: "FinBERTAnalyzer | None" = None
+    _instance: FinBERTAnalyzer | None = None
 
-    def __new__(cls):
+    def __new__(cls: type[FinBERTAnalyzer]) -> FinBERTAnalyzer:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
         return cls._instance
 
-    def __init__(self):
+    def __init__(self) -> None:
         if self._initialized:
             return
         self.tokenizer = None

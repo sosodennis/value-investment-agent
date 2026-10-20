@@ -8,10 +8,8 @@ from src.agents.fundamental.application.workflow_orchestrator.state_readers impo
     read_fundamental_state,
     read_intent_state,
 )
-from src.agents.fundamental.subdomains.financial_statements.interface.parsers import (
-    ValuationModelRuntime,
-)
 from src.agents.fundamental.subdomains.financial_statements.public import (
+    ValuationModelRuntime,
     parse_valuation_model_runtime,
 )
 from src.agents.fundamental.subdomains.forward_signals.public import (

@@ -29,7 +29,6 @@ from src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl i
 )
 from src.agents.intent.entrypoint import InterruptValue
 from src.agents.news.infrastructure.content_fetch import close_shared_async_client
-from src.agents.news.infrastructure.sentiment import get_finbert_analyzer
 from src.agents.technical.subdomains.decision_observability import (
     TechnicalCalibrationObservationBuildResultModel,
     TechnicalDecisionObservabilityRuntimeService,
@@ -44,6 +43,7 @@ from src.agents.technical.subdomains.decision_observability import (
     build_technical_monitoring_row_model,
 )
 from src.infrastructure.database import init_db
+from src.infrastructure.sentiment import get_finbert_analyzer
 from src.interface.artifacts.artifact_api_models import (
     ArtifactApiResponse,
     validate_artifact_api_response,

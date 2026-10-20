@@ -13,9 +13,9 @@ from src.agents.news.infrastructure.artifacts import (
 from src.agents.news.infrastructure.content_fetch import fetch_clean_text_async
 from src.agents.news.infrastructure.ids import generate_news_id
 from src.agents.news.infrastructure.search import news_search_multi_timeframe
-from src.agents.news.infrastructure.sentiment import get_finbert_analyzer
 from src.agents.news.infrastructure.source_reliability import get_source_reliability
 from src.infrastructure.llm.provider import get_llm
+from src.infrastructure.sentiment import get_finbert_analyzer
 from src.shared.kernel.types import JSONObject
 
 

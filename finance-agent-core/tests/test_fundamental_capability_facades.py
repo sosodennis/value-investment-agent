@@ -6,6 +6,7 @@ from types import ModuleType
 FACADE_EXPORTS: dict[str, set[str]] = {
     "artifacts_provenance": {
         "FundamentalArtifactModel",
+        "fundamental_artifact_repository",
         "parse_fundamental_artifact_model",
     },
     "core_valuation": {
@@ -13,6 +14,7 @@ FACADE_EXPORTS: dict[str, set[str]] = {
         "ParamBuilderPayload",
         "ValuationModel",
         "ValuationModelRegistry",
+        "apply_missing_metric_policy",
         "build_params",
         "resolve_calculator_model_type",
     },
@@ -29,6 +31,8 @@ FACADE_EXPORTS: dict[str, set[str]] = {
         "TraceableOptionalText",
         "TraceableProvenance",
         "TraceableValue",
+        "ValuationModelRuntime",
+        "fetch_financial_reports_payload",
         "parse_calculation_metrics",
         "parse_financial_reports_model",
         "parse_financial_statements_payload",
@@ -45,8 +49,11 @@ FACADE_EXPORTS: dict[str, set[str]] = {
         "ForwardSignalPolicyResult",
         "ForwardSignalSourceLocator",
         "apply_forward_signal_policy",
+        "build_finbert_direction_reviewer",
         "calibrate_signal_basis_points",
         "extract_forward_signals",
+        "extract_forward_signals_from_sec_text",
+        "extract_forward_signals_from_xbrl_reports",
         "parse_forward_signal_calibration_config",
         "parse_forward_signals",
         "serialize_forward_signals",
