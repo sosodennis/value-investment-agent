@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from langgraph.graph.state import CompiledStateGraph
+
 from src.agents.debate.application.factory import (
     DebateWorkflowRunner,
     build_debate_workflow_runner,
@@ -71,5 +73,5 @@ def get_debate_workflow_runner() -> DebateWorkflowRunner:
     return _workflow_runner
 
 
-def build_debate_subgraph():
+def build_debate_subgraph() -> CompiledStateGraph:
     return build_graph(get_debate_workflow_runner())

@@ -1,4 +1,5 @@
 from langgraph.graph import END, START, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import RetryPolicy
 
 from src.agents.debate.application.ports import DebateWorkflowPort
@@ -7,7 +8,7 @@ from .nodes import build_debate_nodes
 from .state import DebateInput, DebateOutput, DebateState
 
 
-def build_debate_workflow(runner: DebateWorkflowPort):
+def build_debate_workflow(runner: DebateWorkflowPort) -> CompiledStateGraph:
     nodes = build_debate_nodes(runner)
     builder = StateGraph(
         DebateState,
