@@ -80,7 +80,7 @@ jobs:
           FUNDAMENTAL_LIVE_REPLAY_COHORT_CYCLE_TAG: "ci"
           FUNDAMENTAL_LIVE_REPLAY_COHORT_RUN_PATH: "reports/fundamental_live_replay_cohort_run_ci.json"
           FUNDAMENTAL_LIVE_REPLAY_DISCOVER_ROOT: "tests/fixtures/fundamental_replay_inputs"
-          FUNDAMENTAL_REINVESTMENT_CLAMP_PROFILE_PATH: "src/agents/fundamental/domain/valuation/parameterization/config/reinvestment_clamp_profile.default.json"
+          FUNDAMENTAL_REINVESTMENT_CLAMP_PROFILE_PATH: "src/agents/fundamental/subdomains/core_valuation/domain/parameterization/config/reinvestment_clamp_profile.default.json"
           FUNDAMENTAL_REINVESTMENT_CLAMP_PROFILE_VALIDATION_REPORT_PATH: "reports/fundamental_reinvestment_clamp_profile_validation_report_ci.json"
           FUNDAMENTAL_REINVESTMENT_CLAMP_PROFILE_MAX_AGE_DAYS: "21"
           FUNDAMENTAL_REINVESTMENT_CLAMP_PROFILE_MIN_EVIDENCE_REFS: "1"
