@@ -249,17 +249,16 @@ def test_recompute_market_snapshot_staleness_reuses_market_data_policy() -> None
 def test_market_data_service_prefers_consensus_aggregate_for_target_mean_price() -> (
     None
 ):
+    recent_as_of = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
     yfinance = _StaticProvider(
         name="yfinance",
         license_note="yahoo license",
         datums={
-            "current_price": MarketDatum(90.0, "yfinance", "2026-03-05T00:00:00Z"),
-            "shares_outstanding": MarketDatum(
-                1_000.0, "yfinance", "2026-03-05T00:00:00Z"
-            ),
-            "beta": MarketDatum(1.1, "yfinance", "2026-03-05T00:00:00Z"),
-            "risk_free_rate": MarketDatum(0.04, "yfinance", "2026-03-05T00:00:00Z"),
-            "target_mean_price": MarketDatum(220.0, "yfinance", "2026-03-05T00:00:00Z"),
+            "current_price": MarketDatum(90.0, "yfinance", recent_as_of),
+            "shares_outstanding": MarketDatum(1_000.0, "yfinance", recent_as_of),
+            "beta": MarketDatum(1.1, "yfinance", recent_as_of),
+            "risk_free_rate": MarketDatum(0.04, "yfinance", recent_as_of),
+            "target_mean_price": MarketDatum(220.0, "yfinance", recent_as_of),
         },
     )
     tipranks = _StaticProvider(
@@ -269,12 +268,12 @@ def test_market_data_service_prefers_consensus_aggregate_for_target_mean_price()
             "target_mean_price": MarketDatum(
                 200.0,
                 "tipranks",
-                "2026-03-05T00:00:00Z",
+                recent_as_of,
             ),
             "target_analyst_count": MarketDatum(
                 30.0,
                 "tipranks",
-                "2026-03-05T00:00:00Z",
+                recent_as_of,
             ),
         },
     )
@@ -285,12 +284,12 @@ def test_market_data_service_prefers_consensus_aggregate_for_target_mean_price()
             "target_mean_price": MarketDatum(
                 210.0,
                 "investing",
-                "2026-03-05T00:00:00Z",
+                recent_as_of,
             ),
             "target_analyst_count": MarketDatum(
                 24.0,
                 "investing",
-                "2026-03-05T00:00:00Z",
+                recent_as_of,
             ),
         },
     )
@@ -423,16 +422,15 @@ def test_market_data_service_degrades_single_source_aggregate_consensus(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("FUNDAMENTAL_TARGET_CONSENSUS_MIN_SOURCES", "1")
+    recent_as_of = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
     yfinance = _StaticProvider(
         name="yfinance",
         license_note="yahoo license",
         datums={
-            "current_price": MarketDatum(90.0, "yfinance", "2026-03-05T00:00:00Z"),
-            "shares_outstanding": MarketDatum(
-                1_000.0, "yfinance", "2026-03-05T00:00:00Z"
-            ),
-            "beta": MarketDatum(1.1, "yfinance", "2026-03-05T00:00:00Z"),
-            "risk_free_rate": MarketDatum(0.04, "yfinance", "2026-03-05T00:00:00Z"),
+            "current_price": MarketDatum(90.0, "yfinance", recent_as_of),
+            "shares_outstanding": MarketDatum(1_000.0, "yfinance", recent_as_of),
+            "beta": MarketDatum(1.1, "yfinance", recent_as_of),
+            "risk_free_rate": MarketDatum(0.04, "yfinance", recent_as_of),
         },
     )
     tipranks = _StaticProvider(
@@ -442,12 +440,12 @@ def test_market_data_service_degrades_single_source_aggregate_consensus(
             "target_mean_price": MarketDatum(
                 200.0,
                 "tipranks",
-                "2026-03-05T00:00:00Z",
+                recent_as_of,
             ),
             "target_analyst_count": MarketDatum(
                 24.0,
                 "tipranks",
-                "2026-03-05T00:00:00Z",
+                recent_as_of,
             ),
         },
     )
