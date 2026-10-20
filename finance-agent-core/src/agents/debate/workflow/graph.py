@@ -1,4 +1,4 @@
-from langgraph.graph import END, START, StateGraph
+from langgraph.graph import START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import RetryPolicy
 
@@ -40,15 +40,4 @@ def build_debate_workflow(runner: DebateWorkflowPort) -> CompiledStateGraph:
         )
 
     builder.add_edge(START, "debate_aggregator")
-    builder.add_edge("debate_aggregator", "fact_extractor")
-    builder.add_edge("fact_extractor", "r1_bull")
-    builder.add_edge("fact_extractor", "r1_bear")
-    builder.add_edge(["r1_bull", "r1_bear"], "r1_moderator")
-    builder.add_edge("r1_moderator", "r2_bull")
-    builder.add_edge("r2_bull", "r2_bear")
-    builder.add_edge("r2_bear", "r2_moderator")
-    builder.add_edge("r2_moderator", "r3_bear")
-    builder.add_edge("r3_bear", "r3_bull")
-    builder.add_edge("r3_bull", "verdict")
-    builder.add_edge("verdict", END)
     return builder.compile()
