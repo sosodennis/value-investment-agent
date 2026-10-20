@@ -1,5 +1,3 @@
-"""Stable public contracts and services for technical features."""
-
 from .application import (
     FeatureRuntimeRequest,
     FeatureRuntimeResult,
@@ -60,6 +58,7 @@ from .domain import (
     serialize_fracdiff_outputs,
     supports_session_vwap_timeframe,
 )
+from .infrastructure import PandasTaIndicatorEngine
 
 __all__ = [
     "BollingerIndicator",
@@ -77,6 +76,7 @@ __all__ = [
     "IndicatorSeriesRuntimeResult",
     "IndicatorSeriesRuntimeService",
     "MacdIndicator",
+    "PandasTaIndicatorEngine",
     "ObvIndicator",
     "ObvSnapshot",
     "RollingFracdiffOutput",
