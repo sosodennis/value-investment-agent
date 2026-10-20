@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from src.agents.technical.interface.contracts import AnalystPerspectiveModel
+from src.shared.artifacts.technical_contracts import AnalystPerspectiveModel
 
 INTERPRETATION_GUARDRAIL_VERSION = "ta_interpretation_guardrail_v2"
 
