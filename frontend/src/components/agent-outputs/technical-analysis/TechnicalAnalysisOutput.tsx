@@ -1177,7 +1177,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
             return;
         }
 
-        const observer = new ResizeObserver(() => {
+        const updateTooltipPosition = () => {
             const bounds = chartStack.getBoundingClientRect();
             const TOOLTIP_WIDTH = 240;
             const TOOLTIP_HEIGHT = 190;
@@ -1190,7 +1190,10 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                 x: Math.min(Math.max(localX + padding, padding), maxX),
                 y: Math.min(Math.max(localY + padding, padding), maxY),
             });
-        });
+        };
+
+        updateTooltipPosition();
+        const observer = new ResizeObserver(updateTooltipPosition);
         observer.observe(chartStack);
         return () => observer.disconnect();
     }, [crosshairSync.crosshairPoint]);
