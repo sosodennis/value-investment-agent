@@ -1,4 +1,0 @@
-CAPABILITY_PRIVATE_IMPORT|src.agents.fundamental.interface.workflow_orchestrator.serializers|src.agents.fundamental.subdomains.artifacts_provenance.interface.contracts|FUNDAMENTAL-CORE
-CAPABILITY_PRIVATE_IMPORT|src.agents.fundamental.interface.workflow_orchestrator.serializers|src.agents.fundamental.subdomains.financial_statements.interface.contracts|FUNDAMENTAL-CORE
-CAPABILITY_PRIVATE_IMPORT|src.agents.fundamental.interface.workflow_orchestrator.serializers|src.agents.fundamental.subdomains.forward_signals.interface.contracts|FUNDAMENTAL-CORE
-CAPABILITY_PRIVATE_IMPORT|src.agents.fundamental.interface.workflow_orchestrator.serializers|src.agents.fundamental.subdomains.forward_signals.interface.serializers|FUNDAMENTAL-CORE

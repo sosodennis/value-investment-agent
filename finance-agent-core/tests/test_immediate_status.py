@@ -3,8 +3,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.agents.fundamental.application.wiring import get_fundamental_workflow_runner
+from src.agents.fundamental.workflow.nodes import build_fundamental_nodes
 from src.workflow.nodes.debate.nodes import verdict_node
-from src.workflow.nodes.fundamental_analysis.nodes import model_selection_node
 
 
 @pytest.mark.anyio
@@ -71,6 +72,9 @@ async def test_immediate_status_emission():
     # model_selection_node returns a Command object
     # We need to inspect command.update
 
+    model_selection_node = build_fundamental_nodes(get_fundamental_workflow_runner())[
+        "model_selection"
+    ]
     result = await model_selection_node(mock_fa_state)
 
     # Command object has .update attribute

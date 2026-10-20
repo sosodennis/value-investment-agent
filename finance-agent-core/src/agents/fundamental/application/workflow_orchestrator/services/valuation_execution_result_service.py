@@ -3,13 +3,13 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from src.agents.fundamental.subdomains.core_valuation.domain.parameterization.contracts import (
+from src.agents.fundamental.subdomains.core_valuation.public import (
     ParamBuildResult,
 )
-from src.agents.fundamental.subdomains.financial_statements.interface.parsers import (
+from src.agents.fundamental.subdomains.financial_statements.public import (
     parse_calculation_metrics,
 )
-from src.agents.fundamental.subdomains.forward_signals.interface.contracts import (
+from src.agents.fundamental.subdomains.forward_signals.public import (
     ForwardSignalPayload,
 )
 from src.shared.kernel.types import JSONObject

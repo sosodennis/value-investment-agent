@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.agents.fundamental.subdomains.model_selection.interface.report_projection_service import (
+from src.agents.fundamental.subdomains.model_selection.public import (
     extract_latest_preview_metrics,
     project_selection_reports,
 )

@@ -13,13 +13,11 @@ from src.agents.fundamental.application.workflow_orchestrator.dto import (
 from src.agents.fundamental.application.workflow_orchestrator.ports import (
     IFundamentalReportRepo,
 )
-from src.agents.fundamental.subdomains.forward_signals.interface.contracts import (
+from src.agents.fundamental.subdomains.forward_signals.public import (
     ForwardSignalPayload,
 )
-from src.agents.fundamental.subdomains.model_selection.domain.entities import (
+from src.agents.fundamental.subdomains.model_selection.public import (
     FundamentalSelectionReport,
-)
-from src.agents.fundamental.subdomains.model_selection.domain.financial_health_service import (
     build_latest_health_context,
 )
 from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
