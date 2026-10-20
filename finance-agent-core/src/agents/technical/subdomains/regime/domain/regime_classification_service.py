@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import pandas as pd
 
 from src.agents.technical.domain.shared import PriceSeries
-from src.agents.technical.subdomains.features.domain import (
+from src.agents.technical.subdomains.features.public import (
     compute_adx,
     compute_atr,
     compute_bollinger,
