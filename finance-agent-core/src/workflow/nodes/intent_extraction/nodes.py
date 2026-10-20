@@ -1,122 +1,21 @@
-"""
-Intent Extraction Nodes.
-Handles extraction, searching, decision, and clarification for ticker resolution.
-"""
+"""Compatibility exports for the agent-owned intent workflow nodes."""
 
-import asyncio
-import logging
-from collections.abc import Mapping
+from collections.abc import Callable
 
-from langgraph.graph import END
-from langgraph.types import Command, interrupt
+from langgraph.types import Command
 
 from src.agents.intent.application.wiring import get_intent_orchestrator
-from src.shared.kernel.tools.logger import get_logger, log_event
-from src.workflow.command_adapter import command_from_result, command_from_update
+from src.agents.intent.workflow.nodes import build_intent_nodes
+from src.agents.intent.workflow.state import IntentExtractionState
 
-from .subgraph_state import IntentExtractionState
-
-logger = get_logger(__name__)
 intent_orchestrator = get_intent_orchestrator()
+_intent_nodes = build_intent_nodes(intent_orchestrator)
 
-
-async def extraction_node(state: IntentExtractionState) -> Command:
-    """Extract company and model from user query."""
-    result = await asyncio.to_thread(intent_orchestrator.run_extraction, state)
-    return command_from_result(result, end_node=END)
-
-
-async def searching_node(state: IntentExtractionState) -> Command:
-    """Search for the ticker based on extracted intent."""
-    result = await asyncio.to_thread(intent_orchestrator.run_searching, state)
-    return command_from_result(result, end_node=END)
-
-
-async def decision_node(state: IntentExtractionState) -> Command:
-    """Decide if ticker is resolved or needs clarification."""
-    result = await asyncio.to_thread(intent_orchestrator.run_decision, state)
-    return command_from_result(result, end_node=END)
-
-
-async def clarification_node(state: IntentExtractionState) -> Command:
-    """
-    Triggers an interrupt to ask the user to select a ticker or provide clarification.
-    """
-    log_event(
-        logger,
-        event="intent_clarification_waiting_for_user",
-        message="ticker ambiguity detected; waiting for user clarification",
-        level=logging.WARNING,
-        error_code="INTENT_CLARIFICATION_REQUIRED",
-    )
-
-    interrupt_payload_dump, candidates_raw = (
-        intent_orchestrator.build_clarification_interrupt_payload(state)
-    )
-    candidate_count = len(candidates_raw) if isinstance(candidates_raw, list) else 0
-    user_input = interrupt(interrupt_payload_dump)
-    payload_keys: list[str] = []
-    if isinstance(user_input, Mapping):
-        payload_keys = sorted(str(key) for key in user_input.keys())
-    log_event(
-        logger,
-        event="intent_clarification_input_received",
-        message="intent clarification input received",
-        fields={
-            "payload_type": type(user_input).__name__,
-            "payload_keys": payload_keys,
-        },
-    )
-
-    resolution_update = intent_orchestrator.build_clarification_resolution_update(
-        user_input=user_input,
-        candidates_raw=candidates_raw,
-        interrupt_payload_dump=interrupt_payload_dump,
-    )
-    if resolution_update is not None:
-        resolved_ticker: str | None = None
-        intent_ctx_raw = resolution_update.get("intent_extraction")
-        if isinstance(intent_ctx_raw, Mapping):
-            resolved_ticker_raw = intent_ctx_raw.get("resolved_ticker")
-            if isinstance(resolved_ticker_raw, str) and resolved_ticker_raw.strip():
-                resolved_ticker = resolved_ticker_raw
-        log_event(
-            logger,
-            event="intent_clarification_completed",
-            message="intent clarification completed",
-            fields={
-                "status": "resolved",
-                "goto_node": "END",
-                "is_degraded": False,
-                "candidate_count": candidate_count,
-                "resolved_ticker": resolved_ticker,
-            },
-        )
-        return command_from_update(resolution_update, goto="END", end_node=END)
-
-    # If even fallback fails, retry extraction
-    log_event(
-        logger,
-        event="intent_clarification_resolution_failed_retrying",
-        message="intent clarification resolution failed; retrying extraction",
-        level=logging.WARNING,
-        error_code="INTENT_CLARIFICATION_RETRY",
-    )
-    log_event(
-        logger,
-        event="intent_clarification_completed",
-        message="intent clarification completed",
-        level=logging.WARNING,
-        error_code="INTENT_CLARIFICATION_RETRY",
-        fields={
-            "status": "retry_extraction",
-            "goto_node": "extraction",
-            "is_degraded": True,
-            "candidate_count": candidate_count,
-            "resolved_ticker": None,
-        },
-    )
-    result = await asyncio.to_thread(
-        intent_orchestrator.build_clarification_retry_update
-    )
-    return command_from_result(result, end_node=END)
+extraction_node: Callable[[IntentExtractionState], Command] = _intent_nodes[
+    "extraction"
+]
+searching_node: Callable[[IntentExtractionState], Command] = _intent_nodes["searching"]
+decision_node: Callable[[IntentExtractionState], Command] = _intent_nodes["deciding"]
+clarification_node: Callable[[IntentExtractionState], Command] = _intent_nodes[
+    "clarifying"
+]

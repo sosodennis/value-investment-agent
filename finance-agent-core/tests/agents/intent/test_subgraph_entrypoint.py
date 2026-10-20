@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from src.shared.kernel.workflow_contracts import WorkflowNodeResult
-from src.workflow.nodes.intent_extraction.subgraph_state import (
+from src.agents.intent.application.ports import IntentRuntimePorts
+from src.agents.intent.workflow.state import (
     IntentExtractionInput,
     IntentExtractionOutput,
 )
+from src.shared.kernel.workflow_contracts import WorkflowNodeResult
 
 
 class _FakeIntentOrchestrator:
@@ -22,19 +23,23 @@ class _FakeIntentOrchestrator:
 async def test_intent_subgraph_entrypoint_builds_and_invokes_with_fake_orchestrator(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from src.agents.intent.application import wiring
-    from src.agents.intent.application.subgraph import build_intent_extraction_subgraph
-
     fake_orchestrator = _FakeIntentOrchestrator()
-    monkeypatch.setattr(wiring, "get_intent_orchestrator", lambda: fake_orchestrator)
-
-    from src.workflow.nodes import intent_extraction
+    runtime_ports = IntentRuntimePorts(
+        llm_provider=lambda timeout: None,  # type: ignore[arg-type]
+        search_ticker=lambda query: None,  # type: ignore[arg-type]
+        web_search=lambda query: None,  # type: ignore[arg-type]
+        company_profile=lambda ticker: None,  # type: ignore[arg-type]
+    )
+    from src.agents.intent.application import factory
 
     monkeypatch.setattr(
-        intent_extraction.nodes, "intent_orchestrator", fake_orchestrator
+        factory,
+        "build_intent_orchestrator",
+        lambda *, runtime_ports: fake_orchestrator,  # type: ignore[assignment]
     )
+    from src.agents.intent.entrypoint import build_intent_extraction_graph
 
-    graph = build_intent_extraction_subgraph()
+    graph = build_intent_extraction_graph(runtime_ports)
 
     assert graph.get_input_schema() is IntentExtractionInput
     assert set(graph.get_output_schema().model_fields) == set(
