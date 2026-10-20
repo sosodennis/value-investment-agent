@@ -41,15 +41,16 @@ async def test_news_subgraph_entrypoint_builds_and_invokes_with_fake_adapter() -
     assert fake_adapter.calls == ["run_search"]
 
 
-async def test_news_application_wiring_builds_workflow_with_fake_runner(
+async def test_news_entrypoint_uses_default_wiring(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from src.agents.news.application import wiring
+    from src.agents.news.entrypoint import build_financial_news_subgraph
 
     fake_runner = _FakeWorkflowAdapter()
     monkeypatch.setattr(wiring, "get_news_workflow_runner", lambda: fake_runner)
 
-    graph = wiring.build_financial_news_subgraph()
+    graph = build_financial_news_subgraph()
 
     assert graph.get_input_schema() is FinancialNewsInput
     assert set(graph.get_output_schema().model_fields) == set(

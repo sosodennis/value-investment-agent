@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from langgraph.graph.state import CompiledStateGraph
-
 from src.agents.news.application.factory import (
     NewsWorkflowDependencies,
     NewsWorkflowRunner,
@@ -17,7 +15,6 @@ from src.agents.news.infrastructure.ids import generate_news_id
 from src.agents.news.infrastructure.search import news_search_multi_timeframe
 from src.agents.news.infrastructure.sentiment import get_finbert_analyzer
 from src.agents.news.infrastructure.source_reliability import get_source_reliability
-from src.agents.news.workflow.graph import build_news_workflow as build_news_graph
 from src.infrastructure.llm.provider import get_llm
 from src.shared.kernel.types import JSONObject
 
@@ -72,10 +69,6 @@ def get_news_workflow_runner() -> NewsWorkflowRunner:
     if _news_workflow_runner is None:
         _news_workflow_runner = build_default_news_workflow_runner()
     return _news_workflow_runner
-
-
-def build_financial_news_subgraph() -> CompiledStateGraph:
-    return build_news_graph(get_news_workflow_runner())
 
 
 __all__ = [

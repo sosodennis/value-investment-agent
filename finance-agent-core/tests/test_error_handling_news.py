@@ -3,13 +3,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.agents.news.application.wiring import get_news_workflow_runner
-from src.workflow.nodes.financial_news_research.nodes import (
-    aggregator_node,
-    analyst_node,
-    fetch_node,
-    search_node,
-    selector_node,
-)
+from src.agents.news.workflow.nodes import build_news_nodes
+
+news_nodes = build_news_nodes(get_news_workflow_runner())
+aggregator_node = news_nodes["aggregator_node"]
+analyst_node = news_nodes["analyst_node"]
+fetch_node = news_nodes["fetch_node"]
+search_node = news_nodes["search_node"]
+selector_node = news_nodes["selector_node"]
 
 
 @pytest.mark.asyncio
@@ -17,7 +18,6 @@ async def test_search_node_error_log():
     state = {
         "ticker": "AAPL",
         "intent_extraction": {"resolved_ticker": "AAPL"},
-        "node_statuses": {},
         "error_logs": [],
     }
 
@@ -29,7 +29,6 @@ async def test_search_node_error_log():
         command = await search_node(state)
 
         assert command.update["internal_progress"]["search_node"] == "error"
-        assert command.update["node_statuses"]["financial_news_research"] == "error"
         assert len(command.update["error_logs"]) == 1
         assert "Search API Error" in command.update["error_logs"][0]["error"]
         assert command.goto == "__end__"
@@ -58,10 +57,7 @@ async def test_selector_node_error_log():
 
                 command = await selector_node(state)
 
-                assert (
-                    command.update["node_statuses"]["financial_news_research"]
-                    == "degraded"
-                )
+                assert command.update["internal_progress"]["selector_node"] == "done"
                 assert "error_logs" in command.update
                 assert "Selection failed" in command.update["error_logs"][0]["error"]
                 assert command.goto == "fetch_node"
@@ -85,7 +81,7 @@ async def test_fetch_node_error_log():
 
         command = await fetch_node(state)
 
-        assert command.update["node_statuses"]["financial_news_research"] == "error"
+        assert command.update["internal_progress"]["fetch_node"] == "error"
         # The error message comes from the new catch block
         assert (
             "Failed to retrieve search/selection artifacts"
@@ -149,8 +145,7 @@ async def test_analyst_node_error_log():
                 command = await analyst_node(state)
 
                 assert (
-                    command.update["node_statuses"]["financial_news_research"]
-                    == "degraded"
+                    command.update["internal_progress"]["aggregator_node"] == "running"
                 )
                 assert "Failed to analyze" in command.update["error_logs"][0]["error"]
                 assert command.goto == "aggregator_node"
@@ -192,7 +187,6 @@ async def test_aggregator_node_payload_build_failure_returns_error_update() -> N
 
     assert command.goto == "__end__"
     assert command.update["internal_progress"]["aggregator_node"] == "error"
-    assert command.update["node_statuses"]["financial_news_research"] == "error"
     assert (
         command.update["error_logs"][0]["error_code"]
         == "NEWS_REPORT_PAYLOAD_BUILD_FAILED"

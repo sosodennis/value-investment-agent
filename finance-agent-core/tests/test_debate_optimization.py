@@ -4,7 +4,12 @@ import pytest
 
 from src.agents.debate.application.dto import DebateSourceLoadIssue
 from src.agents.debate.application.report_service import PreparedDebateReports
-from src.workflow.nodes.debate.nodes import debate_aggregator_node, r1_bull_node
+from src.agents.debate.application.wiring import get_debate_workflow_runner
+from src.agents.debate.workflow.nodes import build_debate_nodes
+
+debate_nodes = build_debate_nodes(get_debate_workflow_runner())
+debate_aggregator_node = debate_nodes["debate_aggregator"]
+r1_bull_node = debate_nodes["r1_bull"]
 
 
 @pytest.mark.asyncio
@@ -20,7 +25,7 @@ async def test_debate_aggregator_caches_reports():
     with (
         patch(
             "src.agents.debate.application.orchestrator.prepare_debate_reports",
-            new_mock=AsyncMock(),
+            new=AsyncMock(),
         ) as mock_prepare,
         patch(
             "src.agents.debate.application.orchestrator.DebateOrchestrator._compress_reports",
@@ -36,7 +41,8 @@ async def test_debate_aggregator_caches_reports():
 
         assert "context_summary_text" in command.update
         assert command.update["context_summary_text"] == "compressed_data"
-        assert command.update["node_statuses"]["debate"] == "running"
+        assert command.update["internal_progress"]["debate_aggregator"] == "done"
+        assert command.update["internal_progress"]["r1_bull"] == "running"
         mock_prepare.assert_called_once()
         mock_compress.assert_called_once()
 
@@ -52,7 +58,7 @@ async def test_debate_aggregator_exposes_degraded_source_state() -> None:
     with (
         patch(
             "src.agents.debate.application.orchestrator.prepare_debate_reports",
-            new_mock=AsyncMock(),
+            new=AsyncMock(),
         ) as mock_prepare,
         patch(
             "src.agents.debate.application.orchestrator.DebateOrchestrator._compress_reports",
@@ -71,7 +77,7 @@ async def test_debate_aggregator_exposes_degraded_source_state() -> None:
         )
         command = await debate_aggregator_node(state)
 
-    assert command.update["node_statuses"]["debate"] == "degraded"
+    assert command.update["internal_progress"]["debate_aggregator"] == "done"
     assert command.update["error_logs"][0]["node"] == "debate_aggregator"
     assert "degraded source inputs" in command.update["error_logs"][0]["error"]
 
@@ -90,7 +96,7 @@ async def test_agent_uses_cached_reports():
     with (
         patch(
             "src.agents.debate.application.report_service.prepare_debate_reports",
-            new_mock=AsyncMock(),
+            new=AsyncMock(),
         ) as mock_prepare,
         patch("src.agents.debate.application.wiring.get_llm") as mock_get_llm,
     ):
@@ -117,7 +123,7 @@ async def test_agent_fallbacks_if_no_cache():
     with (
         patch(
             "src.agents.debate.application.report_service.prepare_debate_reports",
-            new_mock=AsyncMock(),
+            new=AsyncMock(),
         ) as mock_prepare,
         patch(
             "src.agents.debate.application.report_service.compress_reports",

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -13,13 +15,11 @@ class HumanTickerSelection(BaseModel):
     intent: IntentExtraction | None = None
     reason: str = "Multiple tickers found or ambiguity detected."
 
-    def to_ui_payload(self) -> dict:
-        """Generates a schema-driven UI payload for RJSF."""
-        # Create enum for ticker selection
-        ticker_options = [c.symbol for c in self.candidates]
+    def to_ui_payload(self) -> dict[str, object]:
+        ticker_options = [candidate.symbol for candidate in self.candidates]
         ticker_titles = [
-            f"{c.symbol} - {c.name} ({(c.confidence*100):.0f}% match)"
-            for c in self.candidates
+            f"{candidate.symbol} - {candidate.name} ({candidate.confidence * 100:.0f}% match)"
+            for candidate in self.candidates
         ]
 
         return {
@@ -36,8 +36,8 @@ class HumanTickerSelection(BaseModel):
                         "title": "Target Company",
                         "enum": ticker_options,
                         "oneOf": [
-                            {"const": symbol, "title": ticker_titles[idx]}
-                            for idx, symbol in enumerate(ticker_options)
+                            {"const": symbol, "title": ticker_titles[index]}
+                            for index, symbol in enumerate(ticker_options)
                         ],
                     }
                 },
@@ -47,5 +47,4 @@ class HumanTickerSelection(BaseModel):
         }
 
 
-# Composite type for all possible interrupts
 InterruptValue = HumanTickerSelection

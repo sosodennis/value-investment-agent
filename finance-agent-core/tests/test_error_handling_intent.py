@@ -4,26 +4,28 @@ from unittest.mock import patch
 import pytest
 
 from src.agents.intent.application.orchestrator import _SearchCandidatesOutcome
+from src.agents.intent.application.wiring import get_intent_orchestrator
 from src.agents.intent.domain.ticker_candidate import TickerCandidate
-from src.workflow.nodes.intent_extraction.nodes import (
-    decision_node,
-    extraction_node,
-    searching_node,
-)
+from src.agents.intent.workflow.nodes import build_intent_nodes
+
+intent_orchestrator = get_intent_orchestrator()
+intent_nodes = build_intent_nodes(intent_orchestrator)
+decision_node = intent_nodes["deciding"]
+extraction_node = intent_nodes["extraction"]
+searching_node = intent_nodes["searching"]
 
 
 @pytest.mark.asyncio
 async def test_extraction_node_error_degraded_path():
     state = {"user_query": "Analyze Apple"}
 
-    with patch(
-        "src.workflow.nodes.intent_extraction.nodes.intent_orchestrator.extract_intent",
-        side_effect=Exception("LLM Error"),
+    with patch.object(
+        intent_orchestrator, "extract_intent", side_effect=Exception("LLM Error")
     ):
         command = await extraction_node(state)
 
         assert command.goto == "clarifying"
-        assert command.update["node_statuses"]["intent_extraction"] == "degraded"
+        assert command.update["internal_progress"]["extraction"] == "error"
         assert (
             "Model failed to extract intent" in command.update["error_logs"][0]["error"]
         )
@@ -37,14 +39,13 @@ async def test_searching_node_error_degraded_path():
         }
     }
 
-    with patch(
-        "src.workflow.nodes.intent_extraction.nodes.intent_orchestrator.search_candidates",
-        side_effect=Exception("Search Error"),
+    with patch.object(
+        intent_orchestrator, "search_candidates", side_effect=Exception("Search Error")
     ):
         command = await searching_node(state)
 
         assert command.goto == "clarifying"
-        assert command.update["node_statuses"]["intent_extraction"] == "degraded"
+        assert command.update["internal_progress"]["searching"] == "error"
         assert "Search tool failed" in command.update["error_logs"][0]["error"]
 
 
@@ -56,14 +57,15 @@ async def test_decision_node_error_degraded_path():
         }
     }
 
-    with patch(
-        "src.workflow.nodes.intent_extraction.nodes.intent_orchestrator.parse_candidates",
+    with patch.object(
+        intent_orchestrator,
+        "parse_candidates",
         side_effect=Exception("Validation Error"),
     ):
         command = await decision_node(state)
 
         assert command.goto == "clarifying"
-        assert command.update["node_statuses"]["intent_extraction"] == "degraded"
+        assert command.update["internal_progress"]["deciding"] == "error"
         assert "Decision logic crashed" in command.update["error_logs"][0]["error"]
 
 
@@ -81,8 +83,9 @@ async def test_searching_node_serializes_domain_candidates_to_json():
         TickerCandidate(symbol="GMED", name="Globus Medical, Inc.", confidence=0.73),
     ]
 
-    with patch(
-        "src.workflow.nodes.intent_extraction.nodes.intent_orchestrator.search_candidates",
+    with patch.object(
+        intent_orchestrator,
+        "search_candidates",
         return_value=_SearchCandidatesOutcome(
             candidates=candidates,
             is_degraded=False,
@@ -117,10 +120,7 @@ async def test_searching_node_marks_degraded_when_web_channel_degraded(caplog):
         degrade_source="web_search",
     )
 
-    with patch(
-        "src.workflow.nodes.intent_extraction.nodes.intent_orchestrator.search_candidates",
-        return_value=outcome,
-    ):
+    with patch.object(intent_orchestrator, "search_candidates", return_value=outcome):
         with caplog.at_level(logging.INFO):
             command = await searching_node(state)
 
@@ -160,9 +160,8 @@ async def test_extraction_completed_uses_null_resolved_ticker_for_empty_value(ca
                 "reasoning": self.reasoning,
             }
 
-    with patch(
-        "src.workflow.nodes.intent_extraction.nodes.intent_orchestrator.extract_intent",
-        return_value=_IntentStub(),
+    with patch.object(
+        intent_orchestrator, "extract_intent", return_value=_IntentStub()
     ):
         with caplog.at_level(logging.INFO):
             command = await extraction_node(state)

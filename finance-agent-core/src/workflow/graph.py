@@ -1,15 +1,19 @@
+from __future__ import annotations
+
 import logging
 import os
+from dataclasses import dataclass
 
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.graph import END, START, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 from psycopg_pool import AsyncConnectionPool
 
-from src.agents.debate.application.subgraph import build_debate_subgraph
-from src.agents.fundamental.application.subgraph import build_fundamental_subgraph
-from src.agents.intent.application.subgraph import build_intent_extraction_subgraph
-from src.agents.news.application.subgraph import build_financial_news_subgraph
-from src.agents.technical.application.subgraph import build_technical_subgraph
+from src.agents.debate.entrypoint import build_debate_subgraph
+from src.agents.fundamental.entrypoint import build_fundamental_subgraph
+from src.agents.intent.entrypoint import build_intent_extraction_graph
+from src.agents.news.entrypoint import build_financial_news_subgraph
+from src.agents.technical.entrypoint import build_technical_subgraph
 from src.shared.kernel.tools.logger import get_logger, log_event
 
 from .nodes.consolidate_research import consolidate_research_node
@@ -18,103 +22,95 @@ from .state import AgentState
 logger = get_logger(__name__)
 
 
-# Helper for initialization
-_compiled_graph = None
-_saver = None
+@dataclass(frozen=True)
+class RootAgentGraphs:
+    intent: CompiledStateGraph
+    fundamental: CompiledStateGraph
+    news: CompiledStateGraph
+    technical: CompiledStateGraph
+    debate: CompiledStateGraph
 
 
-async def get_graph():
+def build_root_graph(graphs: RootAgentGraphs) -> StateGraph:
+    builder = StateGraph(AgentState)
+    builder.add_node(
+        "intent_agent",
+        graphs.intent,
+        metadata={
+            "agent_id": "intent_extraction",
+            "agent_scope": "agent",
+            "agent_node": "intent_agent",
+        },
+    )
+    builder.add_node(
+        "fundamental_agent",
+        graphs.fundamental,
+        metadata={
+            "agent_id": "fundamental_analysis",
+            "agent_scope": "agent",
+            "agent_node": "fundamental_agent",
+        },
+    )
+    builder.add_node(
+        "news_agent",
+        graphs.news,
+        metadata={
+            "agent_id": "financial_news_research",
+            "agent_scope": "agent",
+            "agent_node": "news_agent",
+        },
+    )
+    builder.add_node(
+        "technical_agent",
+        graphs.technical,
+        metadata={
+            "agent_id": "technical_analysis",
+            "agent_scope": "agent",
+            "agent_node": "technical_agent",
+        },
+    )
+    builder.add_node("consolidate_research", consolidate_research_node)
+    builder.add_node(
+        "debate_agent",
+        graphs.debate,
+        metadata={
+            "agent_id": "debate",
+            "agent_scope": "agent",
+            "agent_node": "debate_agent",
+        },
+    )
+
+    builder.add_edge(START, "intent_agent")
+    builder.add_edge("intent_agent", "fundamental_agent")
+    builder.add_edge("intent_agent", "news_agent")
+    builder.add_edge("intent_agent", "technical_agent")
+    builder.add_edge(
+        ["fundamental_agent", "news_agent", "technical_agent"],
+        "consolidate_research",
+    )
+    builder.add_edge("consolidate_research", "debate_agent")
+    builder.add_edge("debate_agent", END)
+    return builder
+
+
+_compiled_graph: CompiledStateGraph | None = None
+_saver: AsyncPostgresSaver | None = None
+
+
+async def get_graph() -> CompiledStateGraph:
     """Lazy-initialize and return the compiled graph with persistent checkpointer."""
     global _compiled_graph, _saver
     if _compiled_graph is None:
         try:
-            # 1. Build Parent Graph
-            builder = StateGraph(AgentState)
-
-            # --- Node Definitions ---
-
-            # Intent Extraction Agent
-            builder.add_node(
-                "intent_agent",
-                build_intent_extraction_subgraph(),
-                metadata={
-                    "agent_id": "intent_extraction",
-                    "agent_scope": "agent",
-                    "agent_node": "intent_agent",
-                },
+            graphs = RootAgentGraphs(
+                intent=build_intent_extraction_graph(),
+                fundamental=build_fundamental_subgraph(),
+                news=build_financial_news_subgraph(),
+                technical=build_technical_subgraph(),
+                debate=build_debate_subgraph(),
             )
+            builder = build_root_graph(graphs)
 
-            # Fundamental Analysis Agent
-            builder.add_node(
-                "fundamental_agent",
-                build_fundamental_subgraph(),
-                metadata={
-                    "agent_id": "fundamental_analysis",
-                    "agent_scope": "agent",
-                    "agent_node": "fundamental_agent",
-                },
-            )
-
-            # Financial News Research Agent
-            builder.add_node(
-                "news_agent",
-                build_financial_news_subgraph(),
-                metadata={
-                    "agent_id": "financial_news_research",
-                    "agent_scope": "agent",
-                    "agent_node": "news_agent",
-                },
-            )
-
-            # Technical Analysis Agent
-            builder.add_node(
-                "technical_agent",
-                build_technical_subgraph(),
-                metadata={
-                    "agent_id": "technical_analysis",
-                    "agent_scope": "agent",
-                    "agent_node": "technical_agent",
-                },
-            )
-
-            # Research Consolidation
-            builder.add_node("consolidate_research", consolidate_research_node)
-
-            # Debate Agent
-            builder.add_node(
-                "debate_agent",
-                build_debate_subgraph(),
-                metadata={
-                    "agent_id": "debate",
-                    "agent_scope": "agent",
-                    "agent_node": "debate_agent",
-                },
-            )
-
-            # --- Edge Definitions ---
-
-            # 1. Start -> Intent
-            builder.add_edge(START, "intent_agent")
-
-            # 2. Intent -> Parallel Research Agents
-            builder.add_edge("intent_agent", "fundamental_agent")
-            builder.add_edge("intent_agent", "news_agent")
-            builder.add_edge("intent_agent", "technical_agent")
-
-            # 3. Parallel Agents -> Consolidate
-            builder.add_edge(
-                ["fundamental_agent", "news_agent", "technical_agent"],
-                "consolidate_research",
-            )
-
-            # 4. Consolidate -> Debate
-            builder.add_edge("consolidate_research", "debate_agent")
-
-            # 5. Debate -> End
-            builder.add_edge("debate_agent", END)
-
-            # --- Initialize Checkpointer ---
-            # Construct DB URI from environment variables
             pg_user = os.environ.get("POSTGRES_USER", "postgres")
             pg_pass = os.environ.get("POSTGRES_PASSWORD", "postgres")
             pg_host = os.environ.get("POSTGRES_HOST", "localhost")
@@ -129,18 +125,12 @@ async def get_graph():
                 fields={"host": pg_host, "port": pg_port, "database": pg_db},
             )
 
-            # Create connection pool
             pool = AsyncConnectionPool(
                 conninfo=db_uri, max_size=10, open=False, kwargs={"autocommit": True}
             )
             await pool.open()
-
             _saver = AsyncPostgresSaver(pool)
-
-            # Ensure tables are created
             await _saver.setup()
-
-            # Compile
             _compiled_graph = builder.compile(checkpointer=_saver)
         except Exception as exc:
             log_event(

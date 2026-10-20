@@ -27,6 +27,7 @@ from src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl i
     warmup_dependency_matcher,
     warmup_forward_looking_filter,
 )
+from src.agents.intent.entrypoint import InterruptValue
 from src.agents.news.infrastructure.content_fetch import close_shared_async_client
 from src.agents.news.infrastructure.sentiment import get_finbert_analyzer
 from src.agents.technical.subdomains.decision_observability import (
@@ -68,7 +69,6 @@ from src.shared.kernel.tools.logger import (
 )
 from src.shared.kernel.types import InterruptResumePayload, JSONObject
 from src.workflow.graph import get_graph
-from src.workflow.interrupts import InterruptValue
 
 logger = get_logger(__name__)
 

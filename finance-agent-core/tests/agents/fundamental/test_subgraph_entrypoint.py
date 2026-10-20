@@ -72,26 +72,3 @@ async def test_fundamental_subgraph_entrypoint_uses_default_wiring(
         "run_model_selection",
         "run_valuation",
     ]
-
-
-async def test_temporary_application_subgraph_bridge_executes_default_graph(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from src.agents.fundamental.application import subgraph, wiring
-
-    fake_adapter = _FakeWorkflowAdapter()
-    monkeypatch.setattr(wiring, "get_fundamental_workflow_runner", lambda: fake_adapter)
-
-    graph = subgraph.build_fundamental_subgraph()
-
-    assert graph.get_input_schema() is FundamentalAnalysisInput
-    assert set(graph.get_output_schema().model_fields) == set(
-        FundamentalAnalysisOutput.model_fields
-    )
-    await graph.ainvoke({})
-
-    assert fake_adapter.calls == [
-        "run_financial_health",
-        "run_model_selection",
-        "run_valuation",
-    ]

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from langgraph.graph.state import CompiledStateGraph
-
 from src.agents.fundamental.application.workflow_orchestrator.factory import (
     FundamentalWorkflowRunner,
     build_fundamental_orchestrator,
@@ -26,9 +24,6 @@ from src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl i
 )
 from src.agents.fundamental.subdomains.market_data.infrastructure.factory import (
     market_data_service,
-)
-from src.agents.fundamental.workflow.graph import (
-    build_fundamental_workflow,
 )
 from src.agents.news.infrastructure.sentiment.finbert_sentiment_provider import (
     get_finbert_analyzer,
@@ -102,13 +97,8 @@ def get_fundamental_workflow_runner() -> FundamentalWorkflowRunner:
     return _fundamental_workflow_runner
 
 
-def build_fundamental_subgraph() -> CompiledStateGraph:
-    return build_fundamental_workflow(get_fundamental_workflow_runner())
-
-
 __all__ = [
     "FundamentalWorkflowRunner",
     "build_default_fundamental_workflow_runner",
-    "build_fundamental_subgraph",
     "get_fundamental_workflow_runner",
 ]

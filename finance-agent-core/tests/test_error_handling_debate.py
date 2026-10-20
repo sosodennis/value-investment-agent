@@ -3,7 +3,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 from langchain_core.messages import AIMessage
 
-from src.workflow.nodes.debate.nodes import r1_bull_node, verdict_node
+from src.agents.debate.application.wiring import get_debate_workflow_runner
+from src.agents.debate.workflow.nodes import build_debate_nodes
+
+debate_nodes = build_debate_nodes(get_debate_workflow_runner())
+r1_bull_node = debate_nodes["r1_bull"]
+verdict_node = debate_nodes["verdict"]
 
 
 @pytest.mark.asyncio
@@ -23,7 +28,7 @@ async def test_r1_bull_node_error_resilience():
         # Should continue to moderator
         assert command.goto == "r1_moderator"
         # Status should be degraded
-        assert command.update["node_statuses"]["debate"] == "degraded"
+        assert command.update["internal_progress"]["r1_bull"] == "error"
         # History should have phantom message
         assert "Bull Agent failed" in command.update["history"][0].content
         assert "[SYSTEM]" in command.update["history"][0].content
@@ -53,6 +58,6 @@ async def test_verdict_node_error_log():
         # Should end workflow
         assert command.goto == "__end__"
         # Status should be error
-        assert command.update["node_statuses"]["debate"] == "error"
+        assert command.update["internal_progress"]["verdict"] == "error"
         # Error log present
         assert "Verdict generation failed" in command.update["error_logs"][0]["error"]

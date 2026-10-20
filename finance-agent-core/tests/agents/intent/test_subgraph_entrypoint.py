@@ -48,3 +48,18 @@ async def test_intent_subgraph_entrypoint_builds_and_invokes_with_fake_orchestra
     await graph.ainvoke({})
 
     assert fake_orchestrator.calls == ["run_extraction"]
+
+
+async def test_intent_entrypoint_uses_default_wiring(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.agents.intent.application import wiring
+    from src.agents.intent.entrypoint import build_intent_extraction_graph
+
+    fake_orchestrator = _FakeIntentOrchestrator()
+    monkeypatch.setattr(wiring, "get_intent_orchestrator", lambda: fake_orchestrator)
+
+    graph = build_intent_extraction_graph()
+    await graph.ainvoke({})
+
+    assert fake_orchestrator.calls == ["run_extraction"]

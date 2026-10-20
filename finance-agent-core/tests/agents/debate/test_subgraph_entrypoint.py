@@ -73,3 +73,17 @@ async def test_debate_subgraph_stops_when_node_routes_to_end() -> None:
     await build_debate_subgraph(fake_adapter).ainvoke({})  # type: ignore[arg-type]
 
     assert fake_adapter.calls == ["run_debate_aggregator"]
+
+
+async def test_debate_entrypoint_uses_default_wiring(
+    monkeypatch,
+) -> None:
+    from src.agents.debate.application import wiring
+    from src.agents.debate.entrypoint import build_debate_subgraph
+
+    fake_adapter = _FakeWorkflowAdapter({"run_debate_aggregator": "END"})
+    monkeypatch.setattr(wiring, "get_debate_workflow_runner", lambda: fake_adapter)
+
+    await build_debate_subgraph().ainvoke({})
+
+    assert fake_adapter.calls == ["run_debate_aggregator"]

@@ -431,6 +431,7 @@ jobs:
           tests/agents/intent/test_subgraph_entrypoint.py
           tests/agents/news/test_subgraph_entrypoint.py
           tests/agents/technical/test_subgraph_entrypoint.py
+          tests/test_root_workflow_composition.py
           -q
 
   frontend-lint-type-test:
