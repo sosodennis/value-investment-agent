@@ -1,2 +1,1 @@
-LAYER_DIRECTION|src.agents.debate.application.subgraph|src.workflow.nodes.debate.nodes|DEBATE-CORE
-LAYER_DIRECTION|src.agents.debate.application.subgraph|src.workflow.nodes.debate.subgraph_state|DEBATE-CORE
+LAYER_DIRECTION|src.agents.debate.application.subgraph|src.agents.debate.application.wiring|DEBATE-CORE

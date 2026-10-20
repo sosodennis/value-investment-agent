@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Protocol
 
 from src.agents.debate.application.dto import DebateSourceData
 from src.interface.artifacts.artifact_data_models import DebateFactsArtifactData
 from src.shared.kernel.types import JSONObject
+from src.shared.kernel.workflow_contracts import WorkflowFanoutNodeResult
 
 
 class SycophancyDetectorPort(Protocol):
@@ -31,6 +33,52 @@ class DebateArtifactRepositoryPort(Protocol):
         produced_by: str,
         key_prefix: str | None = None,
     ) -> str: ...
+
+
+class DebateWorkflowPort(Protocol):
+    async def run_debate_aggregator(
+        self, state: Mapping[str, object]
+    ) -> WorkflowFanoutNodeResult: ...
+
+    async def run_fact_extractor(
+        self, state: Mapping[str, object]
+    ) -> WorkflowFanoutNodeResult: ...
+
+    async def run_r1_bull(
+        self, state: Mapping[str, object]
+    ) -> WorkflowFanoutNodeResult: ...
+
+    async def run_r1_bear(
+        self, state: Mapping[str, object]
+    ) -> WorkflowFanoutNodeResult: ...
+
+    async def run_r1_moderator(
+        self, state: Mapping[str, object]
+    ) -> WorkflowFanoutNodeResult: ...
+
+    async def run_r2_bull(
+        self, state: Mapping[str, object]
+    ) -> WorkflowFanoutNodeResult: ...
+
+    async def run_r2_bear(
+        self, state: Mapping[str, object]
+    ) -> WorkflowFanoutNodeResult: ...
+
+    async def run_r2_moderator(
+        self, state: Mapping[str, object]
+    ) -> WorkflowFanoutNodeResult: ...
+
+    async def run_r3_bull(
+        self, state: Mapping[str, object]
+    ) -> WorkflowFanoutNodeResult: ...
+
+    async def run_r3_bear(
+        self, state: Mapping[str, object]
+    ) -> WorkflowFanoutNodeResult: ...
+
+    async def run_verdict(
+        self, state: Mapping[str, object]
+    ) -> WorkflowFanoutNodeResult: ...
 
     async def load_facts_bundle(
         self,

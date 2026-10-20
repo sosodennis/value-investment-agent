@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from langgraph.graph.state import CompiledStateGraph
+
 from src.agents.debate.application.factory import (
     DebateWorkflowRunner,
     build_debate_workflow_runner,
 )
 from src.agents.debate.application.orchestrator import DebateOrchestrator
+from src.agents.debate.entrypoint import build_debate_subgraph as build_graph
 from src.agents.debate.infrastructure.artifacts import (
     debate_artifact_repository,
     debate_source_reader_repository,
@@ -68,3 +71,7 @@ def get_debate_workflow_runner() -> DebateWorkflowRunner:
     if _workflow_runner is None:
         _workflow_runner = build_debate_workflow_runner(build_debate_orchestrator())
     return _workflow_runner
+
+
+def build_debate_subgraph() -> CompiledStateGraph:
+    return build_graph(get_debate_workflow_runner())
