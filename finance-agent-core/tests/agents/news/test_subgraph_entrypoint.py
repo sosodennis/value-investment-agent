@@ -4,11 +4,11 @@ from collections.abc import Awaitable, Callable
 
 import pytest
 
-from src.shared.kernel.workflow_contracts import WorkflowNodeResult
-from src.workflow.nodes.financial_news_research.subgraph_state import (
+from src.agents.news.workflow.state import (
     FinancialNewsInput,
     FinancialNewsOutput,
 )
+from src.shared.kernel.workflow_contracts import WorkflowNodeResult
 
 
 class _FakeWorkflowAdapter:
@@ -26,16 +26,11 @@ class _FakeWorkflowAdapter:
         return run
 
 
-async def test_news_subgraph_entrypoint_builds_and_invokes_with_fake_adapter(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from src.agents.news.application.subgraph import build_financial_news_subgraph
-    from src.workflow.nodes.financial_news_research import nodes
-
+async def test_news_subgraph_entrypoint_builds_and_invokes_with_fake_adapter() -> None:
     fake_adapter = _FakeWorkflowAdapter()
-    monkeypatch.setattr(nodes, "get_news_workflow_runner", lambda: fake_adapter)
+    from src.agents.news.entrypoint import build_financial_news_subgraph
 
-    graph = build_financial_news_subgraph()
+    graph = build_financial_news_subgraph(fake_adapter)  # type: ignore[arg-type]
 
     assert graph.get_input_schema() is FinancialNewsInput
     assert set(graph.get_output_schema().model_fields) == set(
@@ -44,3 +39,22 @@ async def test_news_subgraph_entrypoint_builds_and_invokes_with_fake_adapter(
     await graph.ainvoke({})
 
     assert fake_adapter.calls == ["run_search"]
+
+
+async def test_news_application_wiring_builds_workflow_with_fake_runner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.agents.news.application import wiring
+
+    fake_runner = _FakeWorkflowAdapter()
+    monkeypatch.setattr(wiring, "get_news_workflow_runner", lambda: fake_runner)
+
+    graph = wiring.build_financial_news_subgraph()
+
+    assert graph.get_input_schema() is FinancialNewsInput
+    assert set(graph.get_output_schema().model_fields) == set(
+        FinancialNewsOutput.model_fields
+    )
+    await graph.ainvoke({})
+
+    assert fake_runner.calls == ["run_search"]
