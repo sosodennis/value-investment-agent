@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import math
+
 import pandas as pd
 
-from src.agents.technical.subdomains.signal_fusion import safe_float
 from src.shared.kernel.types import JSONObject
 
 from .contracts import (
@@ -17,7 +18,7 @@ def _series_to_json(series: pd.Series) -> dict[str, float | None]:
     return {
         (
             key.strftime("%Y-%m-%d") if isinstance(key, pd.Timestamp) else str(key)
-        ): safe_float(raw_value)
+        ): _finite_float(raw_value)
         for key, raw_value in series.to_dict().items()
     }
 
@@ -31,21 +32,21 @@ def serialize_fracdiff_outputs(
     obv_data: JSONObject,
 ) -> FracdiffSerializationResult:
     bollinger = BollingerSnapshot(
-        upper=safe_float(bollinger_data.get("upper")),
-        middle=safe_float(bollinger_data.get("middle")),
-        lower=safe_float(bollinger_data.get("lower")),
+        upper=_finite_float(bollinger_data.get("upper")),
+        middle=_finite_float(bollinger_data.get("middle")),
+        lower=_finite_float(bollinger_data.get("lower")),
         state=str(bollinger_data.get("state") or "INSIDE"),
-        bandwidth=safe_float(bollinger_data.get("bandwidth")),
+        bandwidth=_finite_float(bollinger_data.get("bandwidth")),
     )
 
     stat_strength = StatisticalStrengthSnapshot(
-        value=safe_float(stat_strength_data.get("value"))
+        value=_finite_float(stat_strength_data.get("value"))
     )
 
     obv = ObvSnapshot(
-        raw_obv_val=safe_float(obv_data.get("raw_obv_val")),
-        fd_obv_z=safe_float(obv_data.get("fd_obv_z")),
-        optimal_d=safe_float(obv_data.get("optimal_d")),
+        raw_obv_val=_finite_float(obv_data.get("raw_obv_val")),
+        fd_obv_z=_finite_float(obv_data.get("fd_obv_z")),
+        optimal_d=_finite_float(obv_data.get("optimal_d")),
         state=str(obv_data.get("state") or "NEUTRAL"),
     )
 
@@ -56,3 +57,14 @@ def serialize_fracdiff_outputs(
         fracdiff_series=_series_to_json(fd_series),
         z_score_series=_series_to_json(z_score_series),
     )
+
+
+def _finite_float(value: object) -> float | None:
+    try:
+        numeric_value = float(value)
+    except (ValueError, TypeError):
+        return None
+
+    if math.isnan(numeric_value) or math.isinf(numeric_value):
+        return None
+    return numeric_value
