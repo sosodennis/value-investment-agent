@@ -2,10 +2,15 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from src.workflow.nodes.fundamental_analysis.nodes import (
-    financial_health_node,
-    model_selection_node,
+from src.agents.fundamental.application.wiring import get_fundamental_workflow_runner
+from src.agents.fundamental.workflow.nodes import (
+    FundamentalNode,
+    build_fundamental_nodes,
 )
+
+
+def _fundamental_nodes() -> dict[str, FundamentalNode]:
+    return build_fundamental_nodes(get_fundamental_workflow_runner())
 
 
 @pytest.mark.asyncio
@@ -21,7 +26,7 @@ async def test_financial_health_node_error_log():
     ) as mock_fetch:
         mock_fetch.side_effect = Exception("Network Timeout")
 
-        command = await financial_health_node(state)
+        command = await _fundamental_nodes()["financial_health"](state)
 
         assert "error_logs" in command.update
         assert command.update["error_logs"][0]["node"] == "financial_health"
@@ -51,7 +56,7 @@ async def test_model_selection_node_error_log():
     ) as mock_select:
         mock_select.side_effect = Exception("Selection Logic Error")
 
-        command = await model_selection_node(state)
+        command = await _fundamental_nodes()["model_selection"](state)
 
         assert "error_logs" in command.update
         assert command.update["error_logs"][0]["node"] == "model_selection"
@@ -103,7 +108,7 @@ async def test_model_selection_node_accepts_canonical_report_shape():
             new=AsyncMock(return_value="artifact_saved"),
         ),
     ):
-        command = await model_selection_node(state)
+        command = await _fundamental_nodes()["model_selection"](state)
 
     assert command.goto == "calculation"
     assert "error_logs" not in command.update

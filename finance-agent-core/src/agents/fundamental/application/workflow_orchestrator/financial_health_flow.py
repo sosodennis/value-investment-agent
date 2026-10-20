@@ -19,13 +19,11 @@ from src.agents.fundamental.application.workflow_orchestrator.state_updates impo
     build_financial_health_success_update,
     build_node_error_update,
 )
-from src.agents.fundamental.subdomains.financial_statements.interface.parsers import (
+from src.agents.fundamental.subdomains.financial_statements.public import (
     FinancialStatementsPayload,
 )
-from src.agents.fundamental.subdomains.forward_signals.interface.contracts import (
+from src.agents.fundamental.subdomains.forward_signals.public import (
     ForwardSignalPayload,
-)
-from src.agents.fundamental.subdomains.forward_signals.interface.serializers import (
     serialize_forward_signals,
 )
 from src.shared.kernel.tools.logger import get_logger, log_event

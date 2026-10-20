@@ -1,2 +1,0 @@
-LAYER_DIRECTION|src.workflow.nodes.fundamental_analysis.nodes|src.agents.fundamental.application.wiring|ROOT-WORKFLOW
-LAYER_DIRECTION|src.workflow.nodes.fundamental_analysis.nodes|src.workflow.command_adapter|ROOT-WORKFLOW
