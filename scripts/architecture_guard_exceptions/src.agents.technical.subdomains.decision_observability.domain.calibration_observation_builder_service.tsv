@@ -1,0 +1,2 @@
+CAPABILITY_PRIVATE_IMPORT|src.agents.technical.subdomains.decision_observability.domain.calibration_observation_builder_service|src.agents.technical.subdomains.calibration.domain.contracts|TECHNICAL-CAP-DECISION-OBSERVABILITY
+CAPABILITY_PRIVATE_IMPORT|src.agents.technical.subdomains.decision_observability.domain.calibration_observation_builder_service|src.agents.technical.subdomains.calibration.domain.policies.technical_direction_calibration_service|TECHNICAL-CAP-DECISION-OBSERVABILITY

@@ -1,0 +1,5 @@
+ROOT_WORKFLOW_PRIVATE_IMPORT|src.workflow.graph|src.agents.debate.application.subgraph|ROOT-WORKFLOW
+ROOT_WORKFLOW_PRIVATE_IMPORT|src.workflow.graph|src.agents.fundamental.application.subgraph|ROOT-WORKFLOW
+ROOT_WORKFLOW_PRIVATE_IMPORT|src.workflow.graph|src.agents.intent.application.subgraph|ROOT-WORKFLOW
+ROOT_WORKFLOW_PRIVATE_IMPORT|src.workflow.graph|src.agents.news.application.subgraph|ROOT-WORKFLOW
+ROOT_WORKFLOW_PRIVATE_IMPORT|src.workflow.graph|src.agents.technical.application.subgraph|ROOT-WORKFLOW

@@ -1,0 +1,2 @@
+LAYER_DIRECTION|src.workflow.nodes.debate.nodes|src.agents.debate.application.wiring|ROOT-WORKFLOW
+LAYER_DIRECTION|src.workflow.nodes.debate.nodes|src.workflow.command_adapter|ROOT-WORKFLOW

@@ -1,0 +1,2 @@
+LAYER_DIRECTION|src.workflow.nodes.financial_news_research.nodes|src.agents.news.application.wiring|ROOT-WORKFLOW
+LAYER_DIRECTION|src.workflow.nodes.financial_news_research.nodes|src.workflow.command_adapter|ROOT-WORKFLOW

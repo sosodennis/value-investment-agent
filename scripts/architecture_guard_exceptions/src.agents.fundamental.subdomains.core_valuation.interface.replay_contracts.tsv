@@ -1,0 +1,2 @@
+CAPABILITY_PRIVATE_IMPORT|src.agents.fundamental.subdomains.core_valuation.interface.replay_contracts|src.agents.fundamental.subdomains.financial_statements.interface.contracts|FUNDAMENTAL-CAP-CORE-VALUATION
+CAPABILITY_PRIVATE_IMPORT|src.agents.fundamental.subdomains.core_valuation.interface.replay_contracts|src.agents.fundamental.subdomains.forward_signals.interface.contracts|FUNDAMENTAL-CAP-CORE-VALUATION

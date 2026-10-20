@@ -1,0 +1,2 @@
+CAPABILITY_PRIVATE_IMPORT|src.agents.technical.application.use_cases.run_data_fetch_use_case|src.agents.technical.subdomains.market_data.application.multi_timeframe_fetch_service|TECHNICAL-CORE
+CAPABILITY_PRIVATE_IMPORT|src.agents.technical.application.use_cases.run_data_fetch_use_case|src.agents.technical.subdomains.market_data.application.ports|TECHNICAL-CORE
