@@ -58,7 +58,7 @@ The CI check is `python3 scripts/architecture_guard.py`. Its exception file list
 - Keep graph state, node adapters, and subgraph construction inside the owning agent's `workflow/` package.
 - The public entrypoint presents stable input/output schemas and delegates graph execution to that workflow. It obtains the default graph or runner through its own `application.wiring` factory when no runner is supplied; callers can inject a runner for tests.
 - Test every agent graph with fake adapters: the graph builds, input/output schemas exist, and a minimal invocation reaches the fakes without live providers.
-- Test migrated agents through their public `entrypoint.py` with fake adapters. Legacy `application/subgraph.py` builders and root workflow node tests may remain temporarily while callers migrate, but they are compatibility coverage rather than the target graph contract.
+- Test agent graphs through their public `entrypoint.py` with fake adapters. Test the root composer with fake compiled agent graphs and preserve observable root handoff and routing behavior.
 
 ## 4. Implementation Standards
 

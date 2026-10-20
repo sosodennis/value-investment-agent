@@ -174,24 +174,26 @@ def test_update_payload_builders_include_error_log_when_needed() -> None:
     analyst_update = build_analyst_node_update(
         news_items_id="nid", article_errors=["e1", "e2"]
     )
-    assert fetch_update["node_statuses"]["financial_news_research"] == "degraded"
+    assert fetch_update["internal_progress"]["fetch_node"] == "done"
+    assert fetch_update["internal_progress"]["analyst_node"] == "running"
     assert len(fetch_update["error_logs"]) == 1
-    assert analyst_update["node_statuses"]["financial_news_research"] == "degraded"
+    assert analyst_update["internal_progress"]["analyst_node"] == "done"
+    assert analyst_update["internal_progress"]["aggregator_node"] == "running"
     assert "Failed to analyze 2 articles" in analyst_update["error_logs"][0]["error"]
 
 
 def test_node_update_builders_for_search_selector_and_analyst_chain() -> None:
     no_ticker = build_search_node_no_ticker_update()
     assert no_ticker["current_node"] == "search_node"
-    assert no_ticker["node_statuses"]["financial_news_research"] == "done"
+    assert no_ticker["internal_progress"]["search_node"] == "done"
 
     search_error = build_search_node_error_update("boom")
-    assert search_error["node_statuses"]["financial_news_research"] == "error"
+    assert search_error["internal_progress"]["search_node"] == "error"
     assert "Search failed" in search_error["error_logs"][0]["error"]
 
     empty = build_search_node_empty_update()
     assert empty["internal_progress"]["search_node"] == "done"
-    assert empty["node_statuses"]["financial_news_research"] == "done"
+    assert empty["internal_progress"]["search_node"] == "done"
 
     success = build_search_node_success_update(
         artifact={
@@ -204,25 +206,26 @@ def test_node_update_builders_for_search_selector_and_analyst_chain() -> None:
         search_artifact_id="a1",
     )
     assert success["financial_news_research"]["search_artifact_id"] == "a1"
-    assert success["node_statuses"]["financial_news_research"] == "running"
+    assert success["internal_progress"]["search_node"] == "done"
+    assert success["internal_progress"]["selector_node"] == "running"
 
     selector_degraded = build_selector_node_update(
         selection_artifact_id="s1",
         is_degraded=True,
         error_message="x",
     )
-    assert selector_degraded["node_statuses"]["financial_news_research"] == "degraded"
+    assert selector_degraded["internal_progress"]["selector_node"] == "done"
     selector_error = build_selector_node_error_update("selector failed")
-    assert selector_error["node_statuses"]["financial_news_research"] == "error"
+    assert selector_error["internal_progress"]["selector_node"] == "error"
 
     fetch_error = build_fetch_node_error_update("fetch failed")
-    assert fetch_error["node_statuses"]["financial_news_research"] == "error"
+    assert fetch_error["internal_progress"]["fetch_node"] == "error"
 
     analyst_error = build_analyst_node_error_update("analyst failed")
-    assert analyst_error["node_statuses"]["financial_news_research"] == "error"
+    assert analyst_error["internal_progress"]["analyst_node"] == "error"
 
     analyst_chain_error = build_analyst_chain_error_update("chain boom")
-    assert analyst_chain_error["node_statuses"]["financial_news_research"] == "error"
+    assert analyst_chain_error["internal_progress"]["analyst_node"] == "error"
     assert (
         "Failed to create analysis chains"
         in analyst_chain_error["error_logs"][0]["error"]
@@ -540,7 +543,8 @@ def test_run_fetch_node_use_case_keeps_partial_success_when_one_fetch_fails() ->
     )
 
     assert result.goto == "analyst_node"
-    assert result.update["node_statuses"]["financial_news_research"] == "degraded"
+    assert result.update["internal_progress"]["fetch_node"] == "done"
+    assert result.update["internal_progress"]["analyst_node"] == "running"
     assert "Content fetch degraded" in result.update["error_logs"][0]["error"]
     assert port.saved_news_items is not None
     saved_items = port.saved_news_items["news_items"]
@@ -581,7 +585,7 @@ def test_run_aggregator_node_use_case_fails_fast_when_loading_news_items_fails()
 
     assert result.goto == "END"
     assert result.update["internal_progress"]["aggregator_node"] == "error"
-    assert result.update["node_statuses"]["financial_news_research"] == "error"
+    assert result.update["internal_progress"]["aggregator_node"] == "error"
     assert "Failed to load news items" in result.update["error_logs"][0]["error"]
 
 
@@ -651,7 +655,7 @@ def test_run_selector_node_use_case_marks_degraded_when_context_load_fails() -> 
 
     assert llm_called is False
     assert result.goto == "END"
-    assert result.update["node_statuses"]["financial_news_research"] == "error"
+    assert result.update["internal_progress"]["selector_node"] == "error"
     assert "selector context" in result.update["error_logs"][0]["error"]
 
 
@@ -697,5 +701,5 @@ def test_run_search_node_use_case_stops_when_search_artifact_save_fails() -> Non
     )
 
     assert result.goto == "END"
-    assert result.update["node_statuses"]["financial_news_research"] == "error"
+    assert result.update["internal_progress"]["search_node"] == "error"
     assert "artifact save failed" in result.update["error_logs"][0]["error"]

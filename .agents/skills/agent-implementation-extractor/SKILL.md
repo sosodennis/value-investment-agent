@@ -27,7 +27,7 @@ Prioritize evidence-backed mechanics over generic summaries.
 
 ### Step 1: Structure and State
 1. Extract a concise package tree for the target module.
-2. Map ownership and imports across the agent entrypoint, workflow, application, domain, capabilities, infrastructure, and shared contracts. Label legacy placement explicitly. Graph construction and node adapters belong to the agent's `workflow/`; `application/subgraph.py` is only a temporary caller bridge during root composition migration.
+2. Map ownership and imports across the agent entrypoint, workflow, application, domain, capabilities, infrastructure, and shared contracts. Label legacy placement explicitly. Graph construction and node adapters belong to the agent's `workflow/`; treat `application/subgraph.py` as a migration-era root bridge when present.
 3. Identify which package owns the agent graph and any nested capability graph. Do not assume root-level workflow code owns agent state.
 4. Extract state and contract payloads from files that exist, such as `workflow/state.py`, `workflow/*state*.py`, application state readers/writers, and boundary schemas.
 5. Record key fields, their meaning, and where they are produced and consumed.

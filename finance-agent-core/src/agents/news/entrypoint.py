@@ -9,8 +9,12 @@ from src.agents.news.workflow.state import (
 
 
 def build_financial_news_subgraph(
-    runner: NewsWorkflowRunner,
+    runner: NewsWorkflowRunner | None = None,
 ) -> CompiledStateGraph:
+    if runner is None:
+        from src.agents.news.application.wiring import get_news_workflow_runner
+
+        runner = get_news_workflow_runner()
     return build_news_workflow(runner)
 
 
