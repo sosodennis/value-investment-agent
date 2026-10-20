@@ -32,6 +32,7 @@ import pytest
                 "FeatureRuntimeService",
                 "IIndicatorEngine",
                 "MacdIndicator",
+                "PandasTaIndicatorEngine",
                 "calculate_rolling_fracdiff",
                 "compute_realized_volatility",
             },

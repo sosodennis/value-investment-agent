@@ -13,12 +13,10 @@ from src.agents.technical.subdomains.artifacts import (
 from src.agents.technical.subdomains.decision_observability import (
     build_default_technical_decision_observability_runtime_service,
 )
-from src.agents.technical.subdomains.features.infrastructure import (
-    PandasTaIndicatorEngine,
-)
 from src.agents.technical.subdomains.features.public import (
     FeatureRuntimeService,
     IndicatorSeriesRuntimeService,
+    PandasTaIndicatorEngine,
 )
 from src.agents.technical.subdomains.interpretation import (
     TechnicalInterpretationProvider,
