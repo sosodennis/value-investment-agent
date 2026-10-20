@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from typing import cast
 
 import pytest
 
-from src.shared.kernel.workflow_contracts import WorkflowNodeResult
-from src.workflow.nodes.technical_analysis.subgraph_state import (
+from src.agents.technical.application.factory import TechnicalWorkflowRunner
+from src.agents.technical.entrypoint import build_technical_subgraph
+from src.agents.technical.workflow.state import (
     TechnicalAnalysisInput,
     TechnicalAnalysisOutput,
 )
+from src.shared.kernel.workflow_contracts import WorkflowNodeResult
 
 
 class _FakeWorkflowAdapter:
@@ -26,16 +29,11 @@ class _FakeWorkflowAdapter:
         return run
 
 
-async def test_technical_subgraph_entrypoint_builds_and_invokes_with_fake_adapter(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from src.agents.technical.application.subgraph import build_technical_subgraph
-    from src.workflow.nodes.technical_analysis import nodes
-
+async def test_technical_subgraph_entrypoint_builds_and_invokes_with_fake_adapter() -> (
+    None
+):
     fake_adapter = _FakeWorkflowAdapter()
-    monkeypatch.setattr(nodes, "get_technical_workflow_runner", lambda: fake_adapter)
-
-    graph = build_technical_subgraph()
+    graph = build_technical_subgraph(cast(TechnicalWorkflowRunner, fake_adapter))
 
     assert graph.get_input_schema() is TechnicalAnalysisInput
     assert set(graph.get_output_schema().model_fields) == set(
@@ -53,3 +51,23 @@ async def test_technical_subgraph_entrypoint_builds_and_invokes_with_fake_adapte
         "run_verification_compute",
         "run_semantic_translate",
     ]
+
+
+def test_legacy_application_subgraph_delegates_to_entrypoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.agents.technical.application import subgraph
+
+    fake_adapter = _FakeWorkflowAdapter()
+    monkeypatch.setattr(
+        subgraph,
+        "get_technical_workflow_runner",
+        lambda: cast(TechnicalWorkflowRunner, fake_adapter),
+    )
+
+    graph = subgraph.build_technical_subgraph()
+
+    assert graph.get_input_schema() is TechnicalAnalysisInput
+    assert set(graph.get_output_schema().model_fields) == set(
+        TechnicalAnalysisOutput.model_fields
+    )

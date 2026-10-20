@@ -20,7 +20,7 @@ from src.agents.technical.interface.serializers import (
     build_verification_compute_preview,
     build_verification_report_payload,
 )
-from src.agents.technical.subdomains.features.domain import (
+from src.agents.technical.subdomains.features.public import (
     calculate_fd_bollinger,
     calculate_fd_macd,
     calculate_fd_obv,

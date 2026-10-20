@@ -68,7 +68,7 @@ The CI check is `python3 scripts/architecture_guard.py`. Its exception file list
 - Make partial workflow state reads tolerant. Keep error updates machine-readable and distinguish missing artifacts from valid empty payloads.
 - In async workflows, use async APIs or offload blocking I/O and heavy computation. Reuse long-lived clients on hot paths and bound heavy-compute concurrency.
 - Return typed degraded outcomes instead of bare `None` when callers need a failure reason. Emit structured completion and degradation logs with stable event names and bounded diagnostic fields.
-- Migrate callers and remove obsolete paths within the same slice when practical. Do not leave compatibility shims after migration.
+- Migrate callers and remove obsolete paths within the same slice when practical. A narrowly scoped compatibility shim may remain only while an explicitly owned caller is scheduled in another slice; keep it tested and remove it with that caller migration.
 
 ## 5. Review Checklist
 

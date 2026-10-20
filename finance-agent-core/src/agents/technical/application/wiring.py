@@ -13,17 +13,19 @@ from src.agents.technical.subdomains.artifacts import (
 from src.agents.technical.subdomains.decision_observability import (
     build_default_technical_decision_observability_runtime_service,
 )
-from src.agents.technical.subdomains.features import (
-    FeatureRuntimeService,
-    IndicatorSeriesRuntimeService,
-)
 from src.agents.technical.subdomains.features.infrastructure import (
     PandasTaIndicatorEngine,
+)
+from src.agents.technical.subdomains.features.public import (
+    FeatureRuntimeService,
+    IndicatorSeriesRuntimeService,
 )
 from src.agents.technical.subdomains.interpretation import (
     TechnicalInterpretationProvider,
 )
-from src.agents.technical.subdomains.market_data import YahooMarketDataProvider
+from src.agents.technical.subdomains.market_data.public import (
+    build_default_market_data_provider,
+)
 from src.agents.technical.subdomains.patterns import PatternRuntimeService
 from src.agents.technical.subdomains.regime import RegimeRuntimeService
 from src.agents.technical.subdomains.signal_fusion import (
@@ -46,7 +48,7 @@ def build_default_technical_workflow_runner() -> TechnicalWorkflowRunner:
         port=repository,
         decision_observability=decision_observability,
     )
-    market_data_provider = YahooMarketDataProvider()
+    market_data_provider = build_default_market_data_provider()
     interpretation_provider = TechnicalInterpretationProvider()
     indicator_engine = PandasTaIndicatorEngine()
     if not indicator_engine.availability().available:

@@ -15,9 +15,7 @@ from src.agents.technical.application.semantic_pipeline_contracts import (
     BacktestContextResult,
     TechnicalPortLike,
 )
-from src.agents.technical.subdomains.market_data.application.ports import (
-    IMarketDataProvider,
-)
+from src.agents.technical.subdomains.market_data.public import IMarketDataProvider
 from src.shared.kernel.tools.logger import get_logger, log_event
 
 logger = get_logger(__name__)

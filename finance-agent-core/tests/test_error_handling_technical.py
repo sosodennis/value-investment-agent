@@ -2,11 +2,18 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from src.workflow.nodes.technical_analysis.nodes import (
-    data_fetch_node,
-    semantic_translate_node,
-    verification_compute_node,
-)
+from src.agents.technical.application import wiring as technical_wiring
+from src.agents.technical.workflow.nodes import TechnicalNode, build_technical_nodes
+
+
+@pytest.fixture(autouse=True)
+def reset_workflow_runner(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(technical_wiring, "_technical_workflow_runner", None)
+
+
+def _nodes() -> dict[str, TechnicalNode]:
+    runner = technical_wiring.get_technical_workflow_runner()
+    return build_technical_nodes(runner)
 
 
 @pytest.mark.asyncio
@@ -21,9 +28,9 @@ async def test_data_fetch_node_error():
     ) as mock_fetch:
         mock_fetch.side_effect = Exception("YF API Error")
 
-        command = await data_fetch_node(state)
+        command = await _nodes()["data_fetch"](state)
 
-        assert command.update["node_statuses"]["technical_analysis"] == "error"
+        assert command.update["current_node"] == "data_fetch"
         assert command.update["internal_progress"]["data_fetch"] == "error"
         assert "Data fetch failed" in command.update["error_logs"][0]["error"]
         assert command.goto == "__end__"
@@ -37,9 +44,9 @@ async def test_verification_compute_node_error_missing_inputs():
         }
     }
 
-    command = await verification_compute_node(state)
+    command = await _nodes()["verification_compute"](state)
 
-    assert command.update["node_statuses"]["technical_analysis"] == "error"
+    assert command.update["current_node"] == "verification_compute"
     assert (
         "Missing timeseries/feature/fusion inputs"
         in command.update["error_logs"][0]["error"]
@@ -62,9 +69,9 @@ async def test_verification_compute_node_crash():
         "src.agents.technical.subdomains.artifacts.infrastructure.technical_artifact_repository.TechnicalArtifactRepository.load_timeseries_bundle",
         new=AsyncMock(side_effect=Exception("Load Error")),
     ):
-        command = await verification_compute_node(state)
+        command = await _nodes()["verification_compute"](state)
 
-    assert command.update["node_statuses"]["technical_analysis"] == "error"
+    assert command.update["current_node"] == "verification_compute"
     assert "Verification compute failed" in command.update["error_logs"][0]["error"]
 
 
@@ -86,7 +93,7 @@ async def test_semantic_translate_node_error():
     ) as mock_assemble:
         mock_assemble.side_effect = Exception("Assembler Crash")
 
-        command = await semantic_translate_node(state)
+        command = await _nodes()["semantic_translate"](state)
 
-        assert command.update["node_statuses"]["technical_analysis"] == "error"
-        assert "Semantic translation failed" in command.update["error_logs"][0]["error"]
+    assert command.update["current_node"] == "semantic_translate"
+    assert "Semantic translation failed" in command.update["error_logs"][0]["error"]

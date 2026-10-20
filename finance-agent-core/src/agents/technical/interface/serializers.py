@@ -12,7 +12,7 @@ from src.agents.technical.subdomains.signal_fusion import (
     IndicatorContribution,
     safe_float,
 )
-from src.agents.technical.subdomains.verification.domain import (
+from src.agents.technical.subdomains.verification.public import (
     BacktestSummary,
     VerificationGateResult,
     WfaSummary,
