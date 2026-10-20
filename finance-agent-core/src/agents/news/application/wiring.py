@@ -9,7 +9,6 @@ from src.agents.news.application.factory import (
     build_news_workflow_runner,
 )
 from src.agents.news.application.ports import FetchContentResult
-from src.agents.news.entrypoint import build_financial_news_subgraph as build_news_graph
 from src.agents.news.infrastructure.artifacts import (
     build_default_news_artifact_repository,
 )
@@ -18,6 +17,7 @@ from src.agents.news.infrastructure.ids import generate_news_id
 from src.agents.news.infrastructure.search import news_search_multi_timeframe
 from src.agents.news.infrastructure.sentiment import get_finbert_analyzer
 from src.agents.news.infrastructure.source_reliability import get_source_reliability
+from src.agents.news.workflow.graph import build_news_workflow as build_news_graph
 from src.infrastructure.llm.provider import get_llm
 from src.shared.kernel.types import JSONObject
 
