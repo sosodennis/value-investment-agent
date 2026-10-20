@@ -1,3 +1,0 @@
-SHARED_IMPORTS_AGENT|src.interface.artifacts.artifact_data_models|src.agents.debate.interface.contracts|SHARED-BOUNDARY
-SHARED_IMPORTS_AGENT|src.interface.artifacts.artifact_data_models|src.agents.fundamental.subdomains.financial_statements.interface.contracts|SHARED-BOUNDARY
-SHARED_IMPORTS_AGENT|src.interface.artifacts.artifact_data_models|src.agents.news.interface.contracts|SHARED-BOUNDARY

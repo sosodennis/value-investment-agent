@@ -1,8 +1,24 @@
+from src.agents.debate.interface.contracts import (
+    DebateArtifactModel as AgentDebateArtifactModel,
+)
+from src.agents.debate.interface.contracts import (
+    EvidenceFactModel as AgentEvidenceFactModel,
+)
+from src.agents.fundamental.domain.shared.contracts.traceable import (
+    ManualProvenance as AgentManualProvenance,
+)
 from src.interface.artifacts.artifact_contract_registry import (
     parse_artifact_data_json,
     parse_artifact_data_model_as,
 )
 from src.interface.artifacts.artifact_data_models import PriceSeriesArtifactData
+from src.shared.artifacts.debate_contracts import (
+    DebateArtifactModel as SharedDebateArtifactModel,
+)
+from src.shared.artifacts.debate_contracts import (
+    EvidenceFactModel as SharedEvidenceFactModel,
+)
+from src.shared.artifacts.traceable import ManualProvenance as SharedManualProvenance
 from src.shared.kernel.contracts import (
     ARTIFACT_KIND_DEBATE_FINAL_REPORT,
     ARTIFACT_KIND_FINANCIAL_REPORTS,
@@ -28,6 +44,16 @@ def _news_item_minimal() -> dict[str, object]:
         "categories": ["general"],
         "tags": [],
     }
+
+
+def test_agent_artifact_contracts_reexport_shared_definitions() -> None:
+    assert AgentDebateArtifactModel is SharedDebateArtifactModel
+    assert AgentEvidenceFactModel is SharedEvidenceFactModel
+    assert AgentManualProvenance is SharedManualProvenance
+    assert (
+        PriceSeriesArtifactData.__module__
+        == "src.shared.artifacts.artifact_data_models"
+    )
 
 
 def test_parse_artifact_data_model_as_routes_kind_to_model() -> None:
