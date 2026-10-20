@@ -1,0 +1,2 @@
+LAYER_DIRECTION|src.agents.fundamental.application.subgraph|src.workflow.nodes.fundamental_analysis.nodes|FUNDAMENTAL-CORE
+LAYER_DIRECTION|src.agents.fundamental.application.subgraph|src.workflow.nodes.fundamental_analysis.subgraph_state|FUNDAMENTAL-CORE

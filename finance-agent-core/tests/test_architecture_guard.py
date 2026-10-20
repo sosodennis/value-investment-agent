@@ -160,7 +160,7 @@ def test_guard_fails_for_new_and_stale_edges(
         "src.agents.intent.domain.policy",
         "from src.agents.intent.infrastructure.provider import Provider\n",
     )
-    allowlist = tmp_path / "exceptions.tsv"
+    exceptions_dir = tmp_path / "exceptions"
     report = tmp_path / "actions.md"
     report.write_text("### [INTENT-CORE] Module remediation\n", encoding="utf-8")
     collect_violations = architecture_guard.collect_violations
@@ -169,13 +169,14 @@ def test_guard_fails_for_new_and_stale_edges(
         "collect_violations",
         lambda: collect_violations(src_root),
     )
-    monkeypatch.setattr(architecture_guard, "ALLOWLIST_PATH", allowlist)
+    monkeypatch.setattr(architecture_guard, "EXCEPTIONS_DIR", exceptions_dir)
     monkeypatch.setattr(architecture_guard, "REPORT_PATH", report)
 
     assert architecture_guard.main([]) == 1
     assert "unapproved dependency violations" in capsys.readouterr().out
 
-    allowlist.write_text(
+    exceptions_dir.mkdir()
+    (exceptions_dir / "src.agents.intent.domain.old.tsv").write_text(
         "LAYER_DIRECTION|src.agents.intent.domain.old|"
         "src.agents.intent.infrastructure.old|INTENT-CORE\n",
         encoding="utf-8",
@@ -184,6 +185,32 @@ def test_guard_fails_for_new_and_stale_edges(
 
     assert architecture_guard.main([]) == 1
     assert "stale exceptions" in capsys.readouterr().out
+
+
+def test_exception_shards_require_source_module_filename(tmp_path: Path) -> None:
+    shard = tmp_path / "wrong-source.tsv"
+    shard.write_text(
+        "LAYER_DIRECTION|src.agents.intent.domain.policy|"
+        "src.agents.intent.infrastructure.provider|INTENT-CORE\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ValueError, match="belongs in src.agents.intent.domain.policy.tsv"
+    ):
+        architecture_guard.load_exceptions(tmp_path)
+
+
+def test_exception_shards_reject_duplicate_records(tmp_path: Path) -> None:
+    record = (
+        "LAYER_DIRECTION|src.agents.intent.domain.policy|"
+        "src.agents.intent.infrastructure.provider|INTENT-CORE\n"
+    )
+    shard = tmp_path / "src.agents.intent.domain.policy.tsv"
+    shard.write_text(record + record, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Duplicate exception"):
+        architecture_guard.load_exceptions(tmp_path)
 
 
 def test_cycle_findings_use_the_scanned_capability_root(tmp_path: Path) -> None:

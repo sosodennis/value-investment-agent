@@ -301,8 +301,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Architecture dependency guard (exact legacy edges only)
-        run: python3 scripts/architecture_guard.py
+      - name: Architecture dependency guard (module-sharded legacy edges)
+        run: python3 scripts/architecture_guard.py --exceptions-dir scripts/architecture_guard_exceptions
 
       - name: Guard against enumNames fallback reintroduction
         run: |

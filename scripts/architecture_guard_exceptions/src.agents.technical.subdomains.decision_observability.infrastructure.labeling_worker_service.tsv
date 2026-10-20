@@ -1,0 +1,2 @@
+CAPABILITY_PRIVATE_IMPORT|src.agents.technical.subdomains.decision_observability.infrastructure.labeling_worker_service|src.agents.technical.subdomains.market_data.application.ports|TECHNICAL-CAP-DECISION-OBSERVABILITY
+CAPABILITY_PRIVATE_IMPORT|src.agents.technical.subdomains.decision_observability.infrastructure.labeling_worker_service|src.agents.technical.subdomains.market_data.infrastructure.yahoo_ohlcv_provider|TECHNICAL-CAP-DECISION-OBSERVABILITY

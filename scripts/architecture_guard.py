@@ -12,7 +12,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = REPO_ROOT / "finance-agent-core" / "src"
-ALLOWLIST_PATH = REPO_ROOT / "scripts" / "architecture_guard_exceptions.tsv"
+EXCEPTIONS_DIR = REPO_ROOT / "scripts" / "architecture_guard_exceptions"
 REPORT_PATH = (
     REPO_ROOT
     / "finance-agent-core"
@@ -406,24 +406,42 @@ def _capability_package_path(owner: tuple[str, str], src_root: Path) -> str:
     return f"src.agents.{agent}.capabilities.{capability}"
 
 
-def load_exceptions(path: Path = ALLOWLIST_PATH) -> dict[str, str]:
+def load_exceptions(path: Path = EXCEPTIONS_DIR) -> dict[str, str]:
     if not path.exists():
         return {}
+    if not path.is_dir():
+        raise ValueError(
+            f"Architecture exceptions must be stored in a directory: {path}"
+        )
+    unexpected = sorted(
+        item.name for item in path.iterdir() if item.is_file() and item.suffix != ".tsv"
+    )
+    if unexpected:
+        raise ValueError(
+            f"Unexpected files in architecture exception directory: {unexpected}"
+        )
+
     exceptions: dict[str, str] = {}
-    for line_number, line in enumerate(
-        path.read_text(encoding="utf-8").splitlines(), start=1
-    ):
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        parts = stripped.split("|")
-        if len(parts) != 4 or not all(parts):
-            raise ValueError(f"Malformed exception at {path}:{line_number}")
-        rule, source, target, action = parts
-        key = f"{rule}|{source}|{target}"
-        if key in exceptions:
-            raise ValueError(f"Duplicate exception at {path}:{line_number}: {key}")
-        exceptions[key] = action
+    for shard in sorted(path.glob("*.tsv")):
+        for line_number, line in enumerate(
+            shard.read_text(encoding="utf-8").splitlines(), start=1
+        ):
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            parts = stripped.split("|")
+            if len(parts) != 4 or not all(parts):
+                raise ValueError(f"Malformed exception at {shard}:{line_number}")
+            rule, source, target, action = parts
+            key = f"{rule}|{source}|{target}"
+            expected_shard = f"{source}.tsv"
+            if shard.name != expected_shard:
+                raise ValueError(
+                    f"Exception at {shard}:{line_number} belongs in {expected_shard}"
+                )
+            if key in exceptions:
+                raise ValueError(f"Duplicate exception at {shard}:{line_number}: {key}")
+            exceptions[key] = action
     return exceptions
 
 
@@ -502,9 +520,9 @@ def write_module_report(violations: list[Violation], path: Path = REPORT_PATH) -
         "",
         "Generated from `scripts/architecture_guard.py --write-module-report`.",
         "Each item identifies a source module, exact import target, and first remediation action.",
-        "Resolve items within their module, then remove the matching edge from",
-        "`scripts/architecture_guard_exceptions.tsv`. CI rejects new edges, stale edges,",
-        "and exceptions without a matching action ID in this report.",
+        "Resolve items within their module, then remove the matching edge from its",
+        "`scripts/architecture_guard_exceptions/<source-module>.tsv` shard. CI rejects new",
+        "edges, stale edges, and exceptions without a matching action ID in this report.",
         "",
         f"Current documented findings: {len(violations)}.",
     ]
@@ -552,7 +570,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--print-current", action="store_true")
     parser.add_argument("--summary", action="store_true")
     parser.add_argument("--write-module-report", action="store_true")
-    parser.add_argument("--allowlist", type=Path, default=ALLOWLIST_PATH)
+    parser.add_argument("--exceptions-dir", type=Path, default=EXCEPTIONS_DIR)
     parser.add_argument("--report", type=Path, default=REPORT_PATH)
     args = parser.parse_args(argv)
 
@@ -568,7 +586,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Wrote {len(violations)} findings to {args.report}")
         return 0
 
-    exceptions = load_exceptions(args.allowlist)
+    exceptions = load_exceptions(args.exceptions_dir)
     action_ids = load_action_ids(args.report)
     action_errors = validate_exception_actions(exceptions, action_ids)
     current_keys = {item.key() for item in violations}
@@ -579,7 +597,7 @@ def main(argv: list[str] | None = None) -> int:
         print("Architecture guard found unapproved dependency violations:")
         print_findings(unapproved)
     if stale:
-        print("Remove stale exceptions from the architecture allowlist:")
+        print("Remove stale exceptions from the architecture exception shards:")
         for key in stale:
             print(f"  {key} -> {exceptions[key]}")
     if action_errors:

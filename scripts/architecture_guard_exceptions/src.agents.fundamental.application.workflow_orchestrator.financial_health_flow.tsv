@@ -1,0 +1,3 @@
+CAPABILITY_PRIVATE_IMPORT|src.agents.fundamental.application.workflow_orchestrator.financial_health_flow|src.agents.fundamental.subdomains.financial_statements.interface.parsers|FUNDAMENTAL-CORE
+CAPABILITY_PRIVATE_IMPORT|src.agents.fundamental.application.workflow_orchestrator.financial_health_flow|src.agents.fundamental.subdomains.forward_signals.interface.contracts|FUNDAMENTAL-CORE
+CAPABILITY_PRIVATE_IMPORT|src.agents.fundamental.application.workflow_orchestrator.financial_health_flow|src.agents.fundamental.subdomains.forward_signals.interface.serializers|FUNDAMENTAL-CORE

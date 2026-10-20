@@ -1,0 +1,3 @@
+SHARED_IMPORTS_AGENT|src.interface.artifacts.artifact_contract_specs|src.agents.debate.interface.contracts|SHARED-BOUNDARY
+SHARED_IMPORTS_AGENT|src.interface.artifacts.artifact_contract_specs|src.agents.news.interface.contracts|SHARED-BOUNDARY
+SHARED_IMPORTS_AGENT|src.interface.artifacts.artifact_contract_specs|src.agents.technical.interface.contracts|SHARED-BOUNDARY
