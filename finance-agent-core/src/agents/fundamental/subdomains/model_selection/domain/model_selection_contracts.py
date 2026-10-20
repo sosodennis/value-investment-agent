@@ -3,9 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from src.agents.fundamental.subdomains.core_valuation.domain.valuation_model import (
-    ValuationModel,
-)
+from src.agents.fundamental.subdomains.core_valuation.public import ValuationModel
 
 SelectionField = Literal[
     "total_revenue",

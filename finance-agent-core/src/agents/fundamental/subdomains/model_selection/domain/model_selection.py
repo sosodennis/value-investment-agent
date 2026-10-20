@@ -11,9 +11,7 @@ from __future__ import annotations
 
 import logging
 
-from src.agents.fundamental.subdomains.core_valuation.domain.valuation_model import (
-    ValuationModel,
-)
+from src.agents.fundamental.subdomains.core_valuation.public import ValuationModel
 from src.agents.fundamental.subdomains.model_selection.domain.entities import (
     FundamentalSelectionReport,
 )

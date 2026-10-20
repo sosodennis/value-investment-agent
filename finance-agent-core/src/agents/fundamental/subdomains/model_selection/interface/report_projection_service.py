@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Protocol, cast
 
-from src.agents.fundamental.subdomains.financial_statements.interface.contracts import (
+from src.agents.fundamental.subdomains.financial_statements.public import (
     FinancialReportModel,
-    RealEstateExtensionModel,
     TraceableFieldModel,
 )
 from src.agents.fundamental.subdomains.model_selection.domain.entities import (
@@ -22,6 +22,10 @@ class FundamentalPreviewMetrics:
     net_income_raw: float | None
     total_assets_raw: float | None
     roe_ratio: float | None
+
+
+class _SupportsFfo(Protocol):
+    ffo: TraceableFieldModel | None
 
 
 def _traceable_to_float(field: TraceableFieldModel | None) -> float | None:
@@ -78,8 +82,9 @@ def project_selection_reports_from_models(
     for report in reports:
         base = report.base
         extension_ffo: float | None = None
-        if isinstance(report.extension, RealEstateExtensionModel):
-            extension_ffo = _traceable_to_float(report.extension.ffo)
+        if report.extension_type == "RealEstate" and report.extension is not None:
+            extension = cast(_SupportsFfo, report.extension)
+            extension_ffo = _traceable_to_float(extension.ffo)
 
         projections.append(
             FundamentalSelectionReport(
