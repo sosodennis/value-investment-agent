@@ -1,4 +1,0 @@
-id,task,status,notes
-1,Create governance domain contracts + drift/report services and subdomain facade,done,governance domain + facade added
-2,Add governance registry/report script wired to calibration + model versions,done,script outputs registry + report
-3,Add minimal tests (optional) and run validation gates,done,drift test added; ruff validation run
