@@ -15,7 +15,8 @@ Prioritize evidence-backed mechanics over generic summaries.
 - Focus on core mechanisms; skip trivial boilerplate.
 - Do not skip behavior-shaping reliability logic: retry, backoff, timeout, fallback, idempotency, cache.
 - If evidence is missing, write `未在代碼中觀察到` and stop inferring.
-- Map architecture as-is first, then note deviations from Domain/Application/Infrastructure/Interface.
+- Map the implemented architecture first, then distinguish it from the target in `architecture-standard-enforcer/references/cross-agent-architecture-standard.md`.
+- Treat `entrypoint.py`, agent-owned `workflow/`, `application/`, `domain/`, and optional `capabilities/` as target paths. Report `subdomains/`, root `src/workflow/nodes/<agent>/`, and `application/subgraph.py` as migration-era paths when present.
 
 ## Scope Resolution
 1. Resolve target module path: `finance-agent-core/src/agents/<target_agent>/`.
@@ -26,26 +27,20 @@ Prioritize evidence-backed mechanics over generic summaries.
 
 ### Step 1: Structure and State
 1. Extract a concise package tree for the target module.
-2. Map layer ownership from paths and import direction; highlight root layer vs subdomain layout, vertical-slice boundaries, and shared kernel usage.
-3. Identify cross-subdomain orchestration location (root `application/` vs subdomain) and note deviations.
-4. Extract state and contract payloads from likely files:
-- `interface/types.py`
-- `interface/contracts.py`
-- `application/state_readers.py`
-- `application/state_updates.py`
-- `application/dto.py`
-4. Record key fields, their meaning, and where they are produced/consumed.
+2. Map ownership and imports across the agent entrypoint, workflow, application, domain, capabilities, infrastructure, and shared contracts. Label legacy placement explicitly.
+3. Identify which package owns the agent graph and any nested capability graph. Do not assume root-level workflow code owns agent state.
+4. Extract state and contract payloads from files that exist, such as `workflow/state.py`, `workflow/*state*.py`, application state readers/writers, and boundary schemas.
+5. Record key fields, their meaning, and where they are produced and consumed.
 
 ### Step 2: Workflow Graph
-1. Read workflow files in this order:
-- `subgraph.py`
-- `wiring.py`
-- `application/orchestrator.py`
-2. Build a `stateDiagram-v2` with:
+1. Start with `entrypoint.py` and the agent's `workflow/` package (state, nodes, and subgraph builder).
+2. If those paths do not exist, trace the implemented legacy path: `application/subgraph.py`, `application/wiring.py`, and `src/workflow/nodes/<agent>/` including its state module.
+3. Read application orchestrators and state readers/writers after locating the graph boundary.
+4. Build a `stateDiagram-v2` with:
 - Nodes and node responsibilities
 - Edges and branch conditions
 - Parallel fan-out/fan-in if present
-3. If no conditional edges exist, explicitly output `No conditional edges observed`.
+5. If no conditional edges exist, explicitly output `No conditional edges observed`.
 
 ### Step 3: Deep Implementation Dive
 Use Tool-Action-Result for every non-trivial mechanism.
@@ -84,9 +79,10 @@ Extract:
 
 ### Step 5: Boundaries and Dependencies
 1. Identify upstream inputs and downstream outputs.
-2. Identify cross-agent or kernel dependencies, ports, repositories, and shared contracts.
+2. Identify cross-agent imports, capability facade usage, ports, repositories, and shared contracts.
 3. Mark boundary assumptions as `Inferred` unless directly wired in code.
-4. Note any legacy path usage or empty layer packages as deviations.
+4. Check capability edges for private imports and cycles with `python3 scripts/architecture_guard.py`; use the module action report to explain existing exceptions.
+5. Note legacy paths and empty packages as observed deviations, not proof that the target architecture is implemented.
 
 ## Boilerplate Filter Policy
 - Ignore: simple pass-through logging, generic try/except wrappers, obvious serializer plumbing.
@@ -98,9 +94,10 @@ Use these searches when canonical files are absent:
 
 ```bash
 rg --files finance-agent-core/src/agents/<target_agent>
-rg -n "StateGraph|add_node|add_edge|add_conditional_edges|compile" finance-agent-core/src/agents/<target_agent>
+rg -n "StateGraph|add_node|add_edge|add_conditional_edges|compile" finance-agent-core/src/agents/<target_agent> finance-agent-core/src/workflow/nodes
 rg -n "prompt|with_structured_output|parser|retry|backoff|timeout" finance-agent-core/src/agents/<target_agent>
 rg -n "TypedDict|TypeAlias|BaseModel|state_readers|state_updates" finance-agent-core/src/agents/<target_agent>
+rg -n "from src\.agents\.|import src\.agents\." finance-agent-core/src/agents/<target_agent> finance-agent-core/src/workflow
 ```
 
 ## Output Contract

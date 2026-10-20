@@ -17,17 +17,17 @@ Produce actionable findings, not broad speculative rewrites.
 - Pin the failing node/use-case and minimal reproduction path.
 
 2. Boundary isolation.
-- Isolate failure by layer and owner (`domain/application/interface/infrastructure`).
+- Isolate failure by owner (`entrypoint/workflow/application/domain/capability/infrastructure/interface`).
 - Identify whether the issue is contract, runtime, data-shape, async, or dependency drift.
-- Check for boundary leaks (interface → domain/application, application → infrastructure).
-- Check enterprise topology compliance: root layers, cross-subdomain orchestration placement, shared kernel location.
+- Check canonical import directions and whether the root graph reaches into agent internals.
+- Treat `subdomains/`, root `src/workflow/nodes/<agent>/`, and `application/subgraph.py` as migration-era paths when present; compare observed placement with the target standard.
 
 3. Evidence collection.
 - Collect stack traces, logs, state snapshots, and contract mismatches.
 - Validate whether degraded behavior is typed and observable.
-- Check for circular imports introduced by refactors.
-- Sweep for legacy path imports or empty layer packages left behind.
-- Flag root-level `workflow_orchestrator` packages that bypass root `application/`.
+- Check for import cycles and new architecture-guard violations. Existing exact exceptions are migration work, not approval for new edges; use their action IDs in `src/agents/ARCHITECTURE_MODULE_ACTIONS.md`.
+- Sweep for private capability imports, cross-agent internals, and root workflow imports that bypass `entrypoint.py`.
+- For graph changes, run the focused fake-adapter entrypoint test and confirm graph input/output schemas.
 - For runtime quality checks (similarity/scoring/consensus detectors), verify input provenance:
   - confirm reader path matches writer path in workflow state.
   - confirm logs expose bounded input diagnostics (for example text length/hash) to detect empty/wrong-source inputs.
@@ -51,21 +51,22 @@ Produce actionable findings, not broad speculative rewrites.
 - Define exact checks needed to confirm remediation.
 - Include residual risk and coverage gaps if unresolved.
 
-## Subdomain Split Diagnostic Lens
+## Capability Boundary Diagnostic Lens
 
 - Use when boundary leaks, circular imports, or ownership confusion appear after refactors.
-- Evaluate whether a missing or over-split subdomain is the root cause using the criteria below.
+- Evaluate whether a missing or over-split capability boundary is the root cause using the criteria below.
 - **Capability boundary**: a coherent capability has a stable API and can evolve independently.
 - **Dependency boundary**: distinct external dependencies or data sources justify a separate subdomain.
 - **Pipeline boundary**: multi-stage pipelines (fetch/extract/map/score/postprocess) benefit from stage grouping or subdomain split.
 - **Ownership boundary**: different teams or lifecycles need isolated changes and tests.
-- **Cohesion signal**: 4+ tightly-coupled owner modules in one area that change together repeatedly.
+- **Cohesion signal**: a cohesive set of owner modules changes together and has a stable public contract.
 - **Do not split** if it only reduces LOC or increases indirection without clear boundary value.
+- Prefer `capabilities/` for new packages; record existing `subdomains/` as legacy placement.
 
 ## Cohesion/Facade Diagnostic Lens
 
 - Use when refactors introduce deep imports, long import paths, or difficult traceability.
-- Assess over-fragmentation and missing facade exports; propose consolidation or facade creation.
+- Assess over-fragmentation, missing capability facade exports, and cross-capability cycles; propose consolidation or a stable facade.
 - Validate against `$architecture-standard-enforcer` cohesion/facade standards.
 
 ## Severity Baseline
