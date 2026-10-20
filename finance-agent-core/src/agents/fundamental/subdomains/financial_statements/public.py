@@ -1,5 +1,4 @@
-"""Stable financial statement payload contracts and parsers."""
-
+from .infrastructure.sec_xbrl import fetch_financial_reports_payload
 from .interface.contracts import (
     FinancialReportBaseLike,
     FinancialReportLike,
@@ -10,6 +9,7 @@ from .interface.contracts import (
 )
 from .interface.parsers import (
     FinancialStatementsPayload,
+    ValuationModelRuntime,
     parse_calculation_metrics,
     parse_financial_statements_payload,
     parse_valuation_model_runtime,
@@ -28,6 +28,7 @@ __all__ = [
     "FinancialReportLike",
     "FinancialReportModel",
     "FinancialStatementsPayload",
+    "ValuationModelRuntime",
     "FundamentalBaseModel",
     "FundamentalText",
     "OptionalFundamentalNumber",
@@ -40,4 +41,5 @@ __all__ = [
     "parse_financial_reports_model",
     "parse_financial_statements_payload",
     "parse_valuation_model_runtime",
+    "fetch_financial_reports_payload",
 ]

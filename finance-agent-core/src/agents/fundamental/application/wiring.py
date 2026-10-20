@@ -8,26 +8,22 @@ from src.agents.fundamental.application.workflow_orchestrator.factory import (
 from src.agents.fundamental.application.workflow_orchestrator.ports import (
     FundamentalFinancialStatementsPayload,
 )
-from src.agents.fundamental.subdomains.artifacts_provenance.infrastructure.fundamental_artifact_repository import (
+from src.agents.fundamental.subdomains.artifacts_provenance.public import (
     fundamental_artifact_repository,
 )
-from src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl import (
+from src.agents.fundamental.subdomains.financial_statements.public import (
     fetch_financial_reports_payload,
 )
-from src.agents.fundamental.subdomains.forward_signals.application.extraction_service import (
-    extract_forward_signals,
-)
-from src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl import (
+from src.agents.fundamental.subdomains.forward_signals.public import (
     build_finbert_direction_reviewer,
+    extract_forward_signals,
     extract_forward_signals_from_sec_text,
     extract_forward_signals_from_xbrl_reports,
 )
-from src.agents.fundamental.subdomains.market_data.infrastructure.factory import (
+from src.agents.fundamental.subdomains.market_data.public import (
     market_data_service,
 )
-from src.agents.news.infrastructure.sentiment.finbert_sentiment_provider import (
-    get_finbert_analyzer,
-)
+from src.infrastructure.sentiment import get_finbert_analyzer
 
 
 def _normalize_financial_reports_contract(
