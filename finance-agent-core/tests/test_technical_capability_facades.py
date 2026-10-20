@@ -44,8 +44,11 @@ import pytest
             "src.agents.technical.subdomains.market_data.public",
             {
                 "IMarketDataProvider",
+                "MarketDataCacheConfig",
                 "MarketDataOhlcvFetchResult",
+                "MarketDataRetryPolicy",
                 "MultiTimeframeFetchRequest",
+                "build_default_market_data_provider",
                 "fetch_timeseries_bundle",
             },
         ),

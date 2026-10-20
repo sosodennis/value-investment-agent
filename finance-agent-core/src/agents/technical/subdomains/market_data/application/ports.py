@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+import re
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -20,6 +22,39 @@ class MarketDataCacheMetadata:
     cache_hit: bool
     cache_age_seconds: float | None = None
     cache_bucket: str | None = None
+
+
+@dataclass(frozen=True)
+class MarketDataCacheConfig:
+    base_dir: str | None = None
+    namespace: str = ""
+
+    def __post_init__(self) -> None:
+        if not re.fullmatch(r"[A-Za-z0-9_-]*", self.namespace):
+            raise ValueError(
+                "cache namespace must contain only letters, digits, '_' or '-'"
+            )
+
+
+@dataclass(frozen=True)
+class MarketDataRetryPolicy:
+    max_retries: int = 0
+    delay_seconds: float = 0.0
+
+    def __post_init__(self) -> None:
+        if (
+            isinstance(self.max_retries, bool)
+            or not isinstance(self.max_retries, int)
+            or self.max_retries < 0
+        ):
+            raise ValueError("max_retries must be a non-negative integer")
+        if (
+            isinstance(self.delay_seconds, bool)
+            or not isinstance(self.delay_seconds, int | float)
+            or not math.isfinite(self.delay_seconds)
+            or self.delay_seconds < 0
+        ):
+            raise ValueError("delay_seconds must be finite and non-negative")
 
 
 @dataclass(frozen=True)
