@@ -58,6 +58,8 @@ def test_validate_reinvestment_clamp_profile_passes_for_valid_payload(
     payload = json.loads(completed.stdout)
     assert payload["gate_passed"] is True
     assert payload["issues"] == []
+    assert payload["scope"] == "release_evidence"
+    assert payload["freshness_status"] == "passed"
     report_payload = json.loads(report_path.read_text(encoding="utf-8"))
     assert report_payload["gate_passed"] is True
 
@@ -110,6 +112,30 @@ def test_validate_reinvestment_clamp_profile_fails_for_stale_date(
     payload = json.loads(completed.stdout)
     assert payload["gate_passed"] is False
     assert any(item.startswith("profile_stale:") for item in payload["issues"])
+
+    offline_completed = subprocess.run(
+        [
+            sys.executable,
+            str(script_path),
+            "--path",
+            str(profile_path),
+            "--scope",
+            "offline_fixture_contract",
+            "--max-age-days",
+            "21",
+            "--min-evidence-refs",
+            "1",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=project_root,
+    )
+    assert offline_completed.returncode == 0
+    offline_payload = json.loads(offline_completed.stdout)
+    assert offline_payload["gate_passed"] is True
+    assert offline_payload["issues"] == []
+    assert offline_payload["freshness_status"] == "not_evaluated"
 
 
 def test_validate_reinvestment_clamp_profile_fails_for_missing_evidence_refs(

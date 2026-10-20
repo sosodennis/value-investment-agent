@@ -506,5 +506,279 @@ def test_validate_replay_cohort_gate_fails_on_quality_and_performance_thresholds
     assert "replay_report_validation_rule_drift_count_above_max" in payload["issues"]
 
 
+def test_offline_cohort_records_unmeasured_metrics_without_calling_them_passed(
+    tmp_path: Path,
+) -> None:
+    project_root = Path(__file__).resolve().parents[1]
+    script_path = (
+        project_root / "scripts" / "validate_fundamental_replay_cohort_gate.py"
+    )
+    manifest_path, report_path = _write_cohort_artifacts(
+        project_root=project_root,
+        tmp_path=tmp_path,
+        summary={
+            "intrinsic_delta_available_cases": 0,
+            "intrinsic_delta_p90_abs": None,
+            "quality_block_rate": 0.0,
+            "validation_block_rate": 0.0,
+            "cache_hit_rate": 0.0,
+            "warm_latency_available_cases": 0,
+            "warm_latency_p90_ms": None,
+            "cold_latency_available_cases": 2,
+            "cold_latency_p90_ms": 250.0,
+            "arelle_parse_latency_available_cases": 0,
+            "arelle_parse_latency_p90_ms": None,
+            "arelle_runtime_lock_wait_available_cases": 0,
+            "arelle_runtime_lock_wait_p90_ms": None,
+            "validation_rule_drift_count": 0,
+        },
+    )
+    command = _offline_gate_command(
+        script_path=script_path,
+        manifest_path=manifest_path,
+        report_path=report_path,
+    )
+    for metric in (
+        "intrinsic_delta_p90_abs",
+        "warm_latency_p90_ms",
+        "arelle_parse_latency_p90_ms",
+        "arelle_runtime_lock_wait_p90_ms",
+    ):
+        command.extend(["--allow-unmeasured-metric", metric])
+
+    completed = subprocess.run(
+        command,
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=project_root,
+    )
+    assert completed.returncode == 0
+    payload = json.loads(completed.stdout)
+    assert payload["gate_passed"] is True
+    assert payload["unmeasured_metrics"] == [
+        "arelle_parse_latency_p90_ms",
+        "arelle_runtime_lock_wait_p90_ms",
+        "intrinsic_delta_p90_abs",
+        "warm_latency_p90_ms",
+    ]
+    assert payload["replay_cold_latency_p90_ms"] == 250.0
+    assert payload["replay_cache_hit_rate"] == 0.0
+
+    missing_opt_in = subprocess.run(
+        _offline_gate_command(
+            script_path=script_path,
+            manifest_path=manifest_path,
+            report_path=report_path,
+        ),
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=project_root,
+    )
+    assert missing_opt_in.returncode == 1
+    missing_payload = json.loads(missing_opt_in.stdout)
+    assert (
+        "replay_report_intrinsic_delta_available_cases_empty"
+        in missing_payload["issues"]
+    )
+    assert (
+        "replay_report_warm_latency_p90_ms_missing_or_invalid"
+        in missing_payload["issues"]
+    )
+
+
+def test_offline_cohort_still_checks_available_optional_metric_thresholds(
+    tmp_path: Path,
+) -> None:
+    project_root = Path(__file__).resolve().parents[1]
+    script_path = (
+        project_root / "scripts" / "validate_fundamental_replay_cohort_gate.py"
+    )
+    manifest_path, report_path = _write_cohort_artifacts(
+        project_root=project_root,
+        tmp_path=tmp_path,
+        summary={
+            "intrinsic_delta_available_cases": 2,
+            "intrinsic_delta_p90_abs": 1001.0,
+            "quality_block_rate": 0.0,
+            "validation_block_rate": 0.0,
+            "cache_hit_rate": 0.0,
+            "warm_latency_available_cases": 0,
+            "warm_latency_p90_ms": None,
+            "cold_latency_available_cases": 2,
+            "cold_latency_p90_ms": 250.0,
+            "arelle_parse_latency_available_cases": 0,
+            "arelle_parse_latency_p90_ms": None,
+            "arelle_runtime_lock_wait_available_cases": 0,
+            "arelle_runtime_lock_wait_p90_ms": None,
+            "validation_rule_drift_count": 0,
+        },
+    )
+    command = _offline_gate_command(
+        script_path=script_path,
+        manifest_path=manifest_path,
+        report_path=report_path,
+    )
+    command.extend(["--allow-unmeasured-metric", "intrinsic_delta_p90_abs"])
+
+    completed = subprocess.run(
+        command,
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=project_root,
+    )
+    assert completed.returncode == 1
+    payload = json.loads(completed.stdout)
+    assert payload["gate_passed"] is False
+    assert "replay_report_intrinsic_delta_p90_abs_above_max" in payload["issues"]
+    assert "intrinsic_delta_p90_abs" not in payload["unmeasured_metrics"]
+
+
+def test_unmeasured_metrics_reject_values_with_zero_availability(
+    tmp_path: Path,
+) -> None:
+    project_root = Path(__file__).resolve().parents[1]
+    script_path = (
+        project_root / "scripts" / "validate_fundamental_replay_cohort_gate.py"
+    )
+    manifest_path, report_path = _write_cohort_artifacts(
+        project_root=project_root,
+        tmp_path=tmp_path,
+        summary={
+            "intrinsic_delta_available_cases": 0,
+            "intrinsic_delta_p90_abs": 1.0,
+            "quality_block_rate": 0.0,
+            "validation_block_rate": 0.0,
+            "cache_hit_rate": 0.0,
+            "warm_latency_available_cases": 0,
+            "warm_latency_p90_ms": 1.0,
+            "cold_latency_available_cases": 2,
+            "cold_latency_p90_ms": 250.0,
+            "arelle_parse_latency_available_cases": 0,
+            "arelle_parse_latency_p90_ms": 1.0,
+            "arelle_runtime_lock_wait_available_cases": 0,
+            "arelle_runtime_lock_wait_p90_ms": 1.0,
+            "validation_rule_drift_count": 0,
+        },
+    )
+    command = _offline_gate_command(
+        script_path=script_path,
+        manifest_path=manifest_path,
+        report_path=report_path,
+    )
+    for metric in (
+        "intrinsic_delta_p90_abs",
+        "warm_latency_p90_ms",
+        "arelle_parse_latency_p90_ms",
+        "arelle_runtime_lock_wait_p90_ms",
+    ):
+        command.extend(["--allow-unmeasured-metric", metric])
+
+    completed = subprocess.run(
+        command,
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=project_root,
+    )
+    assert completed.returncode == 1
+    payload = json.loads(completed.stdout)
+    assert payload["gate_passed"] is False
+    assert payload["unmeasured_metrics"] == []
+    assert (
+        "replay_report_intrinsic_delta_distribution_inconsistent" in payload["issues"]
+    )
+    assert "replay_report_warm_latency_distribution_inconsistent" in payload["issues"]
+    assert (
+        "replay_report_arelle_parse_latency_distribution_inconsistent"
+        in payload["issues"]
+    )
+    assert (
+        "replay_report_arelle_runtime_lock_wait_distribution_inconsistent"
+        in payload["issues"]
+    )
+
+
 def _copy_fixture(src: Path, dst: Path) -> None:
     dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+
+
+def _write_cohort_artifacts(
+    *,
+    project_root: Path,
+    tmp_path: Path,
+    summary: dict[str, object],
+) -> tuple[Path, Path]:
+    fixture_dir = project_root / "tests" / "fixtures" / "fundamental_replay_inputs"
+    _copy_fixture(fixture_dir / "aapl.replay.json", tmp_path / "aapl.replay.json")
+    _copy_fixture(fixture_dir / "nvda.replay.json", tmp_path / "nvda.replay.json")
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "valuation_replay_manifest_v1",
+                "cases": [
+                    {"case_id": "AAPL_01", "input_path": "aapl.replay.json"},
+                    {"case_id": "NVDA_01", "input_path": "nvda.replay.json"},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    report_path = tmp_path / "replay_report.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "fundamental_replay_checks_report_v1",
+                "summary": {
+                    "total_cases": 2,
+                    "passed_cases": 2,
+                    "failed_cases": 0,
+                    "trace_contract_pass_rate": 1.0,
+                    **summary,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    return manifest_path, report_path
+
+
+def _offline_gate_command(
+    *,
+    script_path: Path,
+    manifest_path: Path,
+    report_path: Path,
+) -> list[str]:
+    return [
+        sys.executable,
+        str(script_path),
+        "--manifest",
+        str(manifest_path),
+        "--report",
+        str(report_path),
+        "--min-cases",
+        "2",
+        "--min-unique-tickers",
+        "2",
+        "--min-pass-rate",
+        "1.0",
+        "--max-intrinsic-delta-p90-abs",
+        "1000.0",
+        "--max-quality-block-rate",
+        "0.0",
+        "--min-cache-hit-rate",
+        "0.0",
+        "--max-warm-latency-p90-ms",
+        "120000.0",
+        "--max-cold-latency-p90-ms",
+        "120000.0",
+        "--max-arelle-parse-latency-p90-ms",
+        "120000.0",
+        "--max-arelle-runtime-lock-wait-p90-ms",
+        "120000.0",
+        "--max-validation-rule-drift-count",
+        "0",
+    ]

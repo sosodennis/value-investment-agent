@@ -22,6 +22,7 @@ DEFAULT_MIN_EVIDENCE_REFS_ENV = (
 )
 _DEFAULT_MAX_AGE_DAYS = 21
 _DEFAULT_MIN_EVIDENCE_REFS = 1
+VALIDATION_SCOPES = ("release_evidence", "offline_fixture_contract")
 
 
 def parse_args() -> argparse.Namespace:
@@ -47,6 +48,15 @@ def parse_args() -> argparse.Namespace:
         help="Minimum required number of evidence refs.",
     )
     parser.add_argument(
+        "--scope",
+        choices=VALIDATION_SCOPES,
+        default="release_evidence",
+        help=(
+            "Validation scope. Release evidence enforces profile freshness; offline "
+            "fixture contracts validate profile structure without claiming freshness."
+        ),
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=None,
@@ -59,10 +69,13 @@ def main() -> int:
     args = parse_args()
     payload = _read_payload(args.path)
     profile = parse_reinvestment_clamp_profile(payload)
-    issues, as_of_date, age_days, evidence_ref_count = _validate_payload(
-        payload=payload,
-        max_age_days=args.max_age_days,
-        min_evidence_refs=args.min_evidence_refs,
+    issues, as_of_date, age_days, evidence_ref_count, freshness_status = (
+        _validate_payload(
+            payload=payload,
+            max_age_days=args.max_age_days,
+            min_evidence_refs=args.min_evidence_refs,
+            scope=args.scope,
+        )
     )
 
     output = {
@@ -74,6 +87,8 @@ def main() -> int:
         "evidence_ref_count": evidence_ref_count,
         "max_age_days": args.max_age_days,
         "min_evidence_refs": args.min_evidence_refs,
+        "scope": args.scope,
+        "freshness_status": freshness_status,
         "gate_passed": len(issues) == 0,
         "issues": issues,
     }
@@ -100,7 +115,8 @@ def _validate_payload(
     payload: Mapping[str, object],
     max_age_days: int,
     min_evidence_refs: int,
-) -> tuple[list[str], str | None, int | None, int]:
+    scope: str,
+) -> tuple[list[str], str | None, int | None, int, str]:
     issues: list[str] = []
 
     as_of_raw = payload.get("as_of_date")
@@ -109,16 +125,20 @@ def _validate_payload(
 
     parsed_as_of_date = _parse_as_of_date(as_of_date_value)
     age_days: int | None = None
+    freshness_status = "not_evaluated"
     if parsed_as_of_date is None:
         issues.append("as_of_date_missing_or_invalid")
     else:
         age_days = _compute_age_days(parsed_as_of_date)
         if age_days < 0:
             issues.append("as_of_date_in_future")
-        if age_days > max_age_days:
+        elif scope == "release_evidence" and age_days > max_age_days:
+            freshness_status = "failed"
             issues.append(
                 f"profile_stale:age_days={age_days}>max_age_days={max_age_days}"
             )
+        elif scope == "release_evidence":
+            freshness_status = "passed"
 
     evidence_refs_raw = payload.get("evidence_refs")
     evidence_ref_count = _count_evidence_refs(evidence_refs_raw)
@@ -128,7 +148,7 @@ def _validate_payload(
             f"count={evidence_ref_count}<min_evidence_refs={min_evidence_refs}"
         )
 
-    return issues, as_of_date, age_days, evidence_ref_count
+    return issues, as_of_date, age_days, evidence_ref_count, freshness_status
 
 
 def _parse_as_of_date(raw: str) -> date | None:

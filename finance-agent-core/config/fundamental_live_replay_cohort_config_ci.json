@@ -1,6 +1,7 @@
 {
   "schema_version": "fundamental_live_replay_cohort_config_v1",
   "profile": "live_cohort_ci_v1",
+  "gate_scope": "offline_fixture_contract",
   "discover_root_env_key": "FUNDAMENTAL_LIVE_REPLAY_DISCOVER_ROOT",
   "require_discover_root_env": true,
   "discover_root": "tests/fixtures/fundamental_replay_inputs",
@@ -16,8 +17,20 @@
   "min_cases": 2,
   "min_unique_tickers": 2,
   "min_pass_rate": 1.0,
+  "max_intrinsic_delta_p90_abs": 1000.0,
   "max_quality_block_rate": 0.0,
+  "min_cache_hit_rate": 0.0,
+  "max_warm_latency_p90_ms": 120000.0,
+  "max_cold_latency_p90_ms": 120000.0,
+  "max_arelle_parse_latency_p90_ms": 120000.0,
+  "max_arelle_runtime_lock_wait_p90_ms": 120000.0,
   "max_validation_rule_drift_count": 0,
+  "allow_unmeasured_metrics": [
+    "intrinsic_delta_p90_abs",
+    "warm_latency_p90_ms",
+    "arelle_parse_latency_p90_ms",
+    "arelle_runtime_lock_wait_p90_ms"
+  ],
   "stage_root": "reports/fundamental_replay_inputs",
   "stage_prefix": "live_ci",
   "require_relative_input_paths": true

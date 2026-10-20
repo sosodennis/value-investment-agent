@@ -150,9 +150,11 @@ For FB-034 governance hardening, market consensus now follows two hard rules:
 ## CI Integration
 
 - Workflow: `.github/workflows/monorepo-contract-gates.yml`
-- Job: `fundamental-release-gate`
+- PR and mainline job: `fundamental-offline-fixture-contracts`. It checks the checked-in backtest/replay fixtures, calibration pipeline fixture, and clamp-profile structure. Its `offline_fixture_contract` scope reports unavailable cohort metrics as unmeasured and does not evaluate production evidence freshness.
+- Manual production-evidence job: `fundamental-release-gate` (`workflow_dispatch`). It uses `prod_cohort_v1`, the release cohort config, the 21-day clamp-profile freshness requirement, and the production-like evidence thresholds. Missing required evidence remains a failure.
 - Output artifact: `fundamental-backtest-report` (`finance-agent-core/reports/fundamental_backtest_report_ci.json`)
 - Output artifact: `fundamental-release-gate-snapshot` (`finance-agent-core/reports/fundamental_release_gate_snapshot_ci.json`)
+- Output artifact: `fundamental-offline-fixture-contracts` (`finance-agent-core/reports/fundamental_live_replay_cohort_run_ci.json` and related replay artifacts)
 - Snapshot validator: `finance-agent-core/scripts/validate_fundamental_release_gate_snapshot.py`
 - Checklist builder: `finance-agent-core/scripts/build_fundamental_cohort_release_checklist.py`
 - Gate profile config: `finance-agent-core/config/fundamental_gate_profiles.json`

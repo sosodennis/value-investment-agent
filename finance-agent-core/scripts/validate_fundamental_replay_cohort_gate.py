@@ -17,6 +17,17 @@ from src.agents.fundamental.subdomains.core_valuation.interface.replay_contracts
     parse_valuation_replay_manifest_model,
 )
 
+REPLAY_METRIC_KEYS = (
+    "intrinsic_delta_p90_abs",
+    "quality_block_rate",
+    "cache_hit_rate",
+    "warm_latency_p90_ms",
+    "cold_latency_p90_ms",
+    "arelle_parse_latency_p90_ms",
+    "arelle_runtime_lock_wait_p90_ms",
+    "validation_rule_drift_count",
+)
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -75,8 +86,7 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=None,
         help=(
-            "Optional minimum allowed cache_hit_rate "
-            "from replay checks report summary."
+            "Optional minimum allowed cache_hit_rate from replay checks report summary."
         ),
     )
     parser.add_argument(
@@ -122,6 +132,17 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Optional maximum allowed validation_rule_drift_count "
             "from replay checks report summary."
+        ),
+    )
+    parser.add_argument(
+        "--allow-unmeasured-metric",
+        action="append",
+        choices=REPLAY_METRIC_KEYS,
+        default=[],
+        help=(
+            "In an offline fixture cohort, record this metric as unmeasured when "
+            "its availability count is zero. If a value exists, its threshold "
+            "still applies."
         ),
     )
     parser.add_argument(
@@ -189,6 +210,7 @@ def main() -> int:
             if args.max_validation_rule_drift_count is not None
             else None
         ),
+        allow_unmeasured_metrics=set(args.allow_unmeasured_metric),
         require_relative_input_paths=bool(args.require_relative_input_paths),
         require_input_root=(
             args.require_input_root.resolve()
@@ -230,6 +252,7 @@ def _evaluate(
     max_arelle_parse_latency_p90_ms: float | None,
     max_arelle_runtime_lock_wait_p90_ms: float | None,
     max_validation_rule_drift_count: int | None,
+    allow_unmeasured_metrics: set[str],
     require_relative_input_paths: bool,
     require_input_root: Path | None,
 ) -> dict[str, object]:
@@ -298,6 +321,7 @@ def _evaluate(
     replay_arelle_parse_latency_p90_ms = None
     replay_arelle_runtime_lock_wait_p90_ms = None
     replay_validation_rule_drift_count = None
+    unmeasured_metrics: set[str] = set()
     if isinstance(summary_raw, Mapping):
         replay_intrinsic_delta_available_cases = _coerce_int(
             summary_raw.get("intrinsic_delta_available_cases")
@@ -310,9 +334,18 @@ def _evaluate(
                 issues.append(
                     "replay_report_intrinsic_delta_available_cases_missing_or_invalid"
                 )
-            elif replay_intrinsic_delta_available_cases <= 0:
-                issues.append("replay_report_intrinsic_delta_available_cases_empty")
-            if replay_intrinsic_delta_p90_abs is None:
+            elif replay_intrinsic_delta_available_cases < 0:
+                issues.append("replay_report_intrinsic_delta_available_cases_invalid")
+            elif replay_intrinsic_delta_available_cases == 0:
+                if replay_intrinsic_delta_p90_abs is not None:
+                    issues.append(
+                        "replay_report_intrinsic_delta_distribution_inconsistent"
+                    )
+                elif "intrinsic_delta_p90_abs" in allow_unmeasured_metrics:
+                    unmeasured_metrics.add("intrinsic_delta_p90_abs")
+                else:
+                    issues.append("replay_report_intrinsic_delta_available_cases_empty")
+            elif replay_intrinsic_delta_p90_abs is None:
                 issues.append(
                     "replay_report_intrinsic_delta_p90_abs_missing_or_invalid"
                 )
@@ -345,10 +378,35 @@ def _evaluate(
             summary_raw.get("warm_latency_p90_ms")
         )
         if max_warm_latency_p90_ms is not None:
+            warm_latency_available_cases = _coerce_int(
+                summary_raw.get("warm_latency_available_cases")
+            )
+            if warm_latency_available_cases is None:
+                issues.append(
+                    "replay_report_warm_latency_available_cases_missing_or_invalid"
+                )
+            elif warm_latency_available_cases < 0:
+                issues.append("replay_report_warm_latency_available_cases_invalid")
             if replay_warm_latency_p90_ms is not None and (
                 replay_warm_latency_p90_ms > max_warm_latency_p90_ms
             ):
                 issues.append("replay_report_warm_latency_p90_ms_above_max")
+            if replay_warm_latency_p90_ms is not None and (
+                warm_latency_available_cases == 0
+            ):
+                issues.append("replay_report_warm_latency_distribution_inconsistent")
+            elif replay_warm_latency_p90_ms is None:
+                if warm_latency_available_cases == 0:
+                    if "warm_latency_p90_ms" in allow_unmeasured_metrics:
+                        unmeasured_metrics.add("warm_latency_p90_ms")
+                    else:
+                        issues.append(
+                            "replay_report_warm_latency_p90_ms_missing_or_invalid"
+                        )
+                else:
+                    issues.append(
+                        "replay_report_warm_latency_p90_ms_missing_or_invalid"
+                    )
 
         replay_cold_latency_p90_ms = _coerce_float(
             summary_raw.get("cold_latency_p90_ms")
@@ -363,26 +421,72 @@ def _evaluate(
             summary_raw.get("arelle_parse_latency_p90_ms")
         )
         if max_arelle_parse_latency_p90_ms is not None:
-            if replay_arelle_parse_latency_p90_ms is None:
+            arelle_parse_available_cases = _coerce_int(
+                summary_raw.get("arelle_parse_latency_available_cases")
+            )
+            if arelle_parse_available_cases is None:
                 issues.append(
-                    "replay_report_arelle_parse_latency_p90_ms_missing_or_invalid"
+                    "replay_report_arelle_parse_latency_available_cases_missing_or_invalid"
                 )
-            elif replay_arelle_parse_latency_p90_ms > max_arelle_parse_latency_p90_ms:
-                issues.append("replay_report_arelle_parse_latency_p90_ms_above_max")
+            elif arelle_parse_available_cases < 0:
+                issues.append(
+                    "replay_report_arelle_parse_latency_available_cases_invalid"
+                )
+            if replay_arelle_parse_latency_p90_ms is None:
+                if (
+                    arelle_parse_available_cases == 0
+                    and "arelle_parse_latency_p90_ms" in allow_unmeasured_metrics
+                ):
+                    unmeasured_metrics.add("arelle_parse_latency_p90_ms")
+                else:
+                    issues.append(
+                        "replay_report_arelle_parse_latency_p90_ms_missing_or_invalid"
+                    )
+            else:
+                if arelle_parse_available_cases == 0:
+                    issues.append(
+                        "replay_report_arelle_parse_latency_distribution_inconsistent"
+                    )
+                if replay_arelle_parse_latency_p90_ms > max_arelle_parse_latency_p90_ms:
+                    issues.append("replay_report_arelle_parse_latency_p90_ms_above_max")
 
         replay_arelle_runtime_lock_wait_p90_ms = _coerce_float(
             summary_raw.get("arelle_runtime_lock_wait_p90_ms")
         )
         if max_arelle_runtime_lock_wait_p90_ms is not None:
-            if replay_arelle_runtime_lock_wait_p90_ms is None:
+            arelle_lock_wait_available_cases = _coerce_int(
+                summary_raw.get("arelle_runtime_lock_wait_available_cases")
+            )
+            if arelle_lock_wait_available_cases is None:
                 issues.append(
-                    "replay_report_arelle_runtime_lock_wait_p90_ms_missing_or_invalid"
+                    "replay_report_arelle_runtime_lock_wait_available_cases_missing_or_invalid"
                 )
-            elif (
-                replay_arelle_runtime_lock_wait_p90_ms
-                > max_arelle_runtime_lock_wait_p90_ms
-            ):
-                issues.append("replay_report_arelle_runtime_lock_wait_p90_ms_above_max")
+            elif arelle_lock_wait_available_cases < 0:
+                issues.append(
+                    "replay_report_arelle_runtime_lock_wait_available_cases_invalid"
+                )
+            if replay_arelle_runtime_lock_wait_p90_ms is None:
+                if (
+                    arelle_lock_wait_available_cases == 0
+                    and "arelle_runtime_lock_wait_p90_ms" in allow_unmeasured_metrics
+                ):
+                    unmeasured_metrics.add("arelle_runtime_lock_wait_p90_ms")
+                else:
+                    issues.append(
+                        "replay_report_arelle_runtime_lock_wait_p90_ms_missing_or_invalid"
+                    )
+            else:
+                if arelle_lock_wait_available_cases == 0:
+                    issues.append(
+                        "replay_report_arelle_runtime_lock_wait_distribution_inconsistent"
+                    )
+                if (
+                    replay_arelle_runtime_lock_wait_p90_ms
+                    > max_arelle_runtime_lock_wait_p90_ms
+                ):
+                    issues.append(
+                        "replay_report_arelle_runtime_lock_wait_p90_ms_above_max"
+                    )
 
         replay_validation_rule_drift_count = _coerce_int(
             summary_raw.get("validation_rule_drift_count")
@@ -430,6 +534,7 @@ def _evaluate(
         "max_arelle_parse_latency_p90_ms": max_arelle_parse_latency_p90_ms,
         "max_arelle_runtime_lock_wait_p90_ms": (max_arelle_runtime_lock_wait_p90_ms),
         "max_validation_rule_drift_count": max_validation_rule_drift_count,
+        "unmeasured_metrics": sorted(unmeasured_metrics),
         "require_relative_input_paths": require_relative_input_paths,
         "required_input_root": str(require_input_root) if require_input_root else None,
         "manifest_cases": manifest_cases,
