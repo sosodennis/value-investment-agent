@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping
 
-from src.agents.fundamental.subdomains.financial_statements.interface.contracts import (
+from src.agents.fundamental.subdomains.financial_statements.public import (
     FinancialReportModel,
 )
 from src.agents.fundamental.subdomains.forward_signals.interface.contracts import (
