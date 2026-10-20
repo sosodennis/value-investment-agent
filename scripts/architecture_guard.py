@@ -166,6 +166,19 @@ def _is_agent_entrypoint(module_name: str, agent: str) -> bool:
     return module_name == f"src.agents.{agent}.entrypoint"
 
 
+def _is_own_entrypoint_wiring_import(
+    ref: ImportRef, source: ModuleOwner, target: ModuleOwner
+) -> bool:
+    return (
+        source.layer == "entrypoint"
+        and target.layer == "composition"
+        and source.agent is not None
+        and source.agent == target.agent
+        and _is_agent_entrypoint(ref.source, source.agent)
+        and ref.target == f"src.agents.{source.agent}.application.wiring"
+    )
+
+
 def _is_capability_facade(module_name: str, agent: str, capability: str) -> bool:
     for root in CAPABILITY_ROOTS:
         package = f"src.agents.{agent}.{root}.{capability}"
@@ -348,7 +361,9 @@ def collect_violations(src_root: Path = SRC_ROOT) -> list[Violation]:
             source.agent == target.agent or target.layer == "root_workflow"
         ):
             layer_message = _layer_violation(source, target)
-            if layer_message:
+            if layer_message and not _is_own_entrypoint_wiring_import(
+                ref, source, target
+            ):
                 add(_make_violation(ref, "LAYER_DIRECTION", layer_message))
 
         if source.agent and source.agent == target.agent:

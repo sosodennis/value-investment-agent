@@ -37,7 +37,7 @@ Dependencies point toward policy and stable contracts:
 | `interface` | domain and shared contracts | application, infrastructure, workflow, entrypoint, composition |
 | `workflow` | agent application/domain contracts, capability facades, shared contracts, same workflow | concrete infrastructure, root workflow internals, entrypoint, composition |
 | `infrastructure` | application ports, domain contracts, shared contracts | workflow, entrypoint, composition |
-| `entrypoint` | its agent's public graph and boundary contracts | concrete infrastructure, another agent's private modules, root workflow internals |
+| `entrypoint` | its agent's public graph and boundary contracts; its own `application.wiring` factory for default graph construction | concrete infrastructure, another agent's private modules or composition wiring, root workflow internals |
 | composition/wiring | application ports, workflow builders, domain contracts, and infrastructure adapters | root workflow internals; policy code importing the composition module |
 
 Additional hard rules:
@@ -49,13 +49,14 @@ Additional hard rules:
 5. `application` coordinates use cases through typed ports. Composition code constructs adapters at the boundary; use cases do not import concrete adapters.
 6. `interface`, when present, owns external schemas, serialization, mapping, and prompt specifications. It does not own application orchestration, domain policy, or I/O.
 7. `infrastructure` owns provider/client/repository adapters. Repository adapters perform persistence access and do not absorb domain aggregation or workflow routing.
+8. An agent entrypoint may use only its own `application.wiring` factory to construct the default graph or runner when none is injected. Keep runner injection available so tests can provide fake adapters. Application-to-entrypoint imports remain forbidden.
 
 The CI check is `python3 scripts/architecture_guard.py`. Its exception file lists exact legacy module edges and an action ID from `src/agents/ARCHITECTURE_MODULE_ACTIONS.md`. Exceptions are temporary migration records: new edges fail CI, removed edges make the old exception fail as stale, and each fix removes its exception.
 
 ## 3. Graph Contract
 
 - Keep graph state, node adapters, and subgraph construction inside the owning agent's `workflow/` package.
-- The public entrypoint presents stable input/output schemas and delegates graph construction to that workflow.
+- The public entrypoint presents stable input/output schemas and delegates graph execution to that workflow. It obtains the default graph or runner through its own `application.wiring` factory when no runner is supplied; callers can inject a runner for tests.
 - Test every agent graph with fake adapters: the graph builds, input/output schemas exist, and a minimal invocation reaches the fakes without live providers.
 - Test migrated agents through their public `entrypoint.py` with fake adapters. Legacy `application/subgraph.py` builders and root workflow node tests may remain temporarily while callers migrate, but they are compatibility coverage rather than the target graph contract.
 
