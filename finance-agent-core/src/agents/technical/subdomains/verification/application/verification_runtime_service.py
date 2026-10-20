@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
-from src.agents.technical.subdomains.features.domain import (
+from src.agents.technical.subdomains.features.public import (
     BollingerIndicator,
     ObvIndicator,
     StatisticalStrengthSeries,
