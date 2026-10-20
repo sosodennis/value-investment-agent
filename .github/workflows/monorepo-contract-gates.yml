@@ -264,7 +264,11 @@ jobs:
           tests/test_debate_mapper.py
           tests/test_interrupts.py
           tests/test_architecture_guard.py
-          tests/test_agent_subgraph_entrypoints.py
+          tests/agents/debate/test_subgraph_entrypoint.py
+          tests/agents/fundamental/test_subgraph_entrypoint.py
+          tests/agents/intent/test_subgraph_entrypoint.py
+          tests/agents/news/test_subgraph_entrypoint.py
+          tests/agents/technical/test_subgraph_entrypoint.py
           -q
 
   frontend-lint-type-test:
