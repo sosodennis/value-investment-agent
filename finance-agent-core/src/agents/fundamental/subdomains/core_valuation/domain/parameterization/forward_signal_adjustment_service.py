@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from src.agents.fundamental.subdomains.forward_signals.domain.policies.forward_signal_policy import (
+from src.agents.fundamental.subdomains.forward_signals.public import (
     apply_forward_signal_policy,
 )
 from src.shared.kernel.types import JSONObject
