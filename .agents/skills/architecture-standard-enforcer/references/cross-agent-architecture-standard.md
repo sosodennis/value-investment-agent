@@ -1,194 +1,82 @@
-# Cross-Agent Class Naming and Layer Responsibility Standard
+# Agent Architecture Standard
 
-Date: 2026-03-03
-Scope: `finance-agent-core/src/agents/*`
-Status: Active
+Scope: `finance-agent-core/src/agents/*`, `src/workflow/*`, and shared contracts.
+Status: Active; existing violations are tracked in the module action report.
 
-This is the canonical cross-agent architecture standard. Keep this file short and enforceable.
+This document is the canonical architecture policy for agent work. The current source tree is still migrating; describe code as observed and distinguish it from this target.
 
-## 1. Design Principles
+## 1. Ownership and Package Shape
 
-1. Maintainability first: clear ownership, low coupling, readable paths.
-2. No compatibility residue: once call sites migrate, remove old routes.
-3. No over-design: add abstractions only when they remove real complexity.
-4. Typed boundaries over implicit behavior.
-5. LOC is a signal, not a target:
-   - use high LOC as a review trigger for cohesion/ownership risks
-   - do not split purely to hit arbitrary line-count thresholds
-   - keep cohesive logic together when a split would increase indirection or reduce readability
+Each agent is a vertical slice and owns its public entrypoint, graph contract, use cases, domain rules, and adapters.
 
-## 2. Layer Boundaries (Hard Rules)
+```text
+src/agents/<agent>/
+  entrypoint.py                 # public inputs/outputs and graph entry
+  workflow/                     # state, nodes, graph and routing
+  application/                  # use-case coordination and ports
+  domain/                       # deterministic business rules
+  capabilities/<capability>/    # optional cohesive, independently bounded capability
+  infrastructure/               # external data and persistence adapters
+```
 
-1. `domain`
-   - Owns deterministic business logic, policies, and contracts.
-   - Entity/Value Object vs Domain Service split:
-     - if logic depends on one aggregate/value-object state only and has no external I/O, keep behavior on that model owner.
-     - use domain service only for cross-entity/aggregate coordination or policy orchestration that does not naturally belong to one model.
-   - Must not do network/storage/framework/LLM calls.
-2. `application`
-   - Owns use-case orchestration and workflow-state routing.
-   - Depends on ports/contracts, not concrete infrastructure adapters.
-3. `interface`
-   - Owns boundary contracts, serialization/mapping, and prompt rendering/specs.
-   - Must not import `application` layer DTO/service owners.
-   - Must not own domain policy or infrastructure I/O.
-   - If workflow/app context mapping is needed, keep the mapper owner in `application`.
-4. `infrastructure`
-   - Owns provider/client/repository adapters and runtime wiring/config.
-   - Repository adapters are storage gateways only; do not mix domain projection/aggregation logic into repository owners.
-   - Must not own workflow orchestration or domain policy decisions.
+- `workflow/` is part of every agent slice. It owns the agent state, nodes, and subgraph. A capability may own another workflow only when it has an independently useful state machine.
+- Add layers only where they clarify ownership. A thin agent does not need empty `domain/` or `infrastructure/` directories.
+- Prefer `capabilities/` for new capability packages. Existing `subdomains/` paths are migration-era paths and remain visible in the action report; do not create new ones.
+- A capability exposes stable imports through its package facade or a direct `api`, `contracts`, or `public` module. Other capabilities must not import its implementation files.
+- `src/workflow/` is the cross-agent composition root. It assembles agent entrypoints and shared contracts; it does not own an agent's state or private nodes.
+- Shared contracts and platform code must not import agent packages. Move a genuinely cross-agent contract to `src/shared/` rather than depending on one agent's private implementation.
 
-## 2.5 Enterprise Layer Topology (Hard Rules)
+## 2. Dependency Direction
 
-1. Default topology for new/major refactors:
-   - root: `application/`, `domain/`, `interface/`, `subdomains/`
-   - `subdomains/<capability>/{domain,application,interface,infrastructure}`
-2. Cross-subdomain orchestration lives in root `application/`.
-   - `workflow_orchestrator` is a subpackage name under `application/`, not a root peer of subdomains.
-3. Shared kernel location:
-   - Allowed: `domain/shared/` only.
-   - `application/shared/` allowed only for cross-use-case orchestration utilities with explicit justification.
-   - `interface/shared/` and `infrastructure/shared/` are disallowed unless a cross-subdomain dependency cannot be owned elsewhere and is explicitly justified in the plan.
+Dependencies point toward policy and stable contracts:
 
-## 3. Naming Contract (Hard Rules)
+| Source | May depend on | Must not depend on |
+| --- | --- | --- |
+| `domain` | same domain, stable shared/domain contracts | application, interface, workflow, entrypoint, composition, I/O adapters |
+| `application` | domain, declared ports/contracts, capability facades, shared contracts | concrete infrastructure, workflow, entrypoint, composition |
+| `interface` | domain and shared contracts | application, infrastructure, workflow, entrypoint, composition |
+| `workflow` | agent application/domain contracts, capability facades, shared contracts, same workflow | concrete infrastructure, root workflow internals, entrypoint, composition |
+| `infrastructure` | application ports, domain contracts, shared contracts | workflow, entrypoint, composition |
+| `entrypoint` | its agent's public graph and boundary contracts | concrete infrastructure, another agent's private modules, root workflow internals |
+| composition/wiring | application ports, workflow builders, domain contracts, and infrastructure adapters | root workflow internals; policy code importing the composition module |
 
-1. Suffix semantics are mandatory:
-   - `*Provider`: single upstream source adapter.
-   - `*Repository`: persistence/artifact gateway.
-   - `*Client`: low-level transport wrapper.
-   - `*Service`: coordination/processing owner.
-   - `*Factory`: object assembly only.
-   - `*Mapper`: shape transform only.
-   - `*Policy`: deterministic rule/threshold policy.
-   - `*Port`: protocol/abstraction only (never concrete).
-2. File name must match owner role (`*_service.py`, `*_provider.py`, etc.).
-3. Do not introduce generic owner modules in mature contexts:
-   - avoid `tools.py`, `helpers.py`, `rules.py`, `models.py`, `services.py`.
-4. Avoid capability-token stutter inside capability packages:
-   - use `contracts.py`, `orchestrator.py`, `*_service.py`, not repeated prefixed names.
-5. Prompt content ownership:
-   - prompt specs/renderers belong to `interface`, not `domain`.
-6. Preview projection naming and ownership:
-   - avoid generic `view_models.py` modules in mature agents
-   - keep preview projection in `interface` with semantic owner naming (for example `preview_projection_service.py`).
+Additional hard rules:
 
-## 4. Capability Packaging Rules
+1. The root workflow imports an agent's `entrypoint.py`, never its private state, node, application, or infrastructure modules.
+2. Cross-agent imports target the other agent's public entrypoint or a shared contract. Agent internals do not reach into another agent's package.
+3. Cross-capability imports target the capability facade. Capability dependency cycles are forbidden, including cycles that pass through public facades.
+4. `domain` contains deterministic policy and models; it does not call networks, storage, frameworks, or LLMs.
+5. `application` coordinates use cases through typed ports. Composition code constructs adapters at the boundary; use cases do not import concrete adapters.
+6. `interface`, when present, owns external schemas, serialization, mapping, and prompt specifications. It does not own application orchestration, domain policy, or I/O.
+7. `infrastructure` owns provider/client/repository adapters. Repository adapters perform persistence access and do not absorb domain aggregation or workflow routing.
 
-1. One bounded capability -> one canonical package path.
-2. Do not split one capability across root-prefixed files plus sibling package.
-3. If a capability grows to 4+ tightly-coupled owner modules, group into a dedicated subpackage.
-4. For model-builder families, use `per-model subpackages + shared subpackage + parent dispatch/context`.
-5. File-size guidance is heuristic only:
-   - consider split when a file is both large and multi-responsibility
-   - keep single-owner, cohesive modules intact even when LOC is relatively high
+The CI check is `python3 scripts/architecture_guard.py`. Its exception file lists exact legacy module edges and an action ID from `src/agents/ARCHITECTURE_MODULE_ACTIONS.md`. Exceptions are temporary migration records: new edges fail CI, removed edges make the old exception fail as stale, and each fix removes its exception.
 
-## 5. Runtime Wiring and Type Rules
+## 3. Graph Contract
 
-1. Composition/wiring is outside application use-case modules.
-2. Avoid long callable bundles (`*_fn`) across orchestrator/use-case chains:
-   - inject typed runtime ports instead.
-3. Avoid `object`-typed runtime port boundaries when minimal typed contracts are available.
-4. `object` is allowed only at boundary decoding/parsing points (typically `interface/parsers`) and must be normalized immediately.
-5. `application` runtime boundaries (`ports`, `orchestrator`, `state_readers`) must not keep avoidable `object` types.
-6. Infrastructure registry/bootstrap must be explicit or lazy accessor based:
-   - no import-time registration side effects.
-7. In async use-cases, avoid blocking SDK calls on the event loop:
-   - prefer native async APIs (`ainvoke`, async client methods)
-   - if only sync API exists, use `asyncio.to_thread(...)` at the boundary.
-8. In high-frequency async HTTP adapters/providers, reuse client/session objects:
-   - avoid per-request `AsyncClient`/session construction on hot paths
-   - expose explicit close hook and wire it into app shutdown lifecycle.
-9. External provider degraded outcomes must be typed:
-   - do not encode failure as bare `None` without reason metadata.
-   - return machine-readable failure info (`failure_code`, optional transport metadata like HTTP status) so use-cases can produce deterministic degraded state and diagnostics.
-10. Heavy-compute capability owners (for example Monte Carlo, walk-forward optimization) must expose explicit runtime boundaries:
-   - if invoked from async use-cases, do not run compute directly on the event loop.
-   - use boundary offload (`asyncio.to_thread(...)`, executor, or dedicated background worker) with bounded concurrency.
-11. Heavy-compute changes must include a minimal reproducible performance gate:
-   - keep fixed-input benchmark/test baselines (for example seed/window/iterations pinned).
-   - enforce a regression threshold so refactors do not silently degrade latency.
+- Keep graph state, node adapters, and subgraph construction inside the owning agent's `workflow/` package.
+- The public entrypoint presents stable input/output schemas and delegates graph construction to that workflow.
+- Test every agent graph with fake adapters: the graph builds, input/output schemas exist, and a minimal invocation reaches the fakes without live providers.
+- The current tests exercise legacy `application/subgraph.py` builders and root workflow nodes. Move the test target to `entrypoint.py` as each slice is migrated; do not treat the legacy path as the target architecture.
 
-## 6. Error Handling and State Rules
+## 4. Implementation Standards
 
-1. Fail-fast is allowed at interface/infrastructure boundary parsing.
-2. Workflow `state_readers` must be tolerant for optional/partial state:
-   - return typed optional values (`None`) instead of raising parse exceptions.
-3. Error update contract must stay consistent across agents:
-   - `current_node`, `internal_progress`, `node_statuses`, `error_logs`.
-   - `error_logs` item shape: `node`, `error`, `severity`.
-4. Workflow state entry boundary may remain `Mapping[str, object]` (LangGraph heterogeneous state contract):
-   - keep this boundary at node/orchestrator entry only
-   - normalize to typed values immediately in `state_readers` and avoid propagating raw state into deeper service contracts.
-5. Artifact read semantics must distinguish `not_found` from `empty_payload`:
-   - repository/read-boundary owners must not silently normalize missing artifact id/data to empty values (`[]`, `{}`, `""`).
-   - missing artifact must surface as explicit failure so use-cases can decide terminal vs degraded behavior deterministically.
-6. State writer/reader ownership must align for runtime quality checks:
-   - if a use-case writes runtime fields (for example `bull_thesis`, `bear_thesis`) at one state path, readers/consumers must read the same canonical path.
-   - do not mix top-level and nested-context variants for the same semantic field without an explicit migration contract.
+- Prefer clear ownership and typed contracts. Do not split modules only to reduce line count or create a layer without an owner responsibility.
+- Use role-specific names: `Provider` for one upstream source, `Client` for transport, `Repository` for persistence, `Service` for coordination, `Factory` for assembly, `Mapper` for shape conversion, `Policy` for deterministic rules, and `Port` for protocols only.
+- Keep raw `object` values at decode or LangGraph state boundaries; normalize them before they enter application/domain contracts.
+- Make partial workflow state reads tolerant. Keep error updates machine-readable and distinguish missing artifacts from valid empty payloads.
+- In async workflows, use async APIs or offload blocking I/O and heavy computation. Reuse long-lived clients on hot paths and bound heavy-compute concurrency.
+- Return typed degraded outcomes instead of bare `None` when callers need a failure reason. Emit structured completion and degradation logs with stable event names and bounded diagnostic fields.
+- Migrate callers and remove obsolete paths within the same slice when practical. Do not leave compatibility shims after migration.
 
-## 7. Refactor Migration Rules
+## 5. Review Checklist
 
-1. No long-lived compatibility shim/alias modules.
-2. Migrate call sites atomically within a slice whenever feasible.
-3. Keep each slice testable and reversible; remove old paths immediately after validation.
-4. Add/extend hygiene guards for removed legacy imports/modules.
+1. Does every changed module have one clear owner and point dependencies inward?
+2. Does the root workflow depend only on public agent entrypoints and shared contracts?
+3. Do capability imports use facades, and is the capability graph acyclic?
+4. Can each changed agent graph build and run with fake adapters?
+5. Are application contracts typed, infrastructure calls kept at boundaries, and domain rules deterministic?
+6. Are partial state, degraded results, persistence misses, and async work handled explicitly?
+7. Were resolved edges removed from the exception file and the module action report refreshed?
 
-## 8. Logging Quality Rules
-
-1. Use structured logs only:
-   - every event uses a stable `event` name and machine-readable `fields`.
-   - avoid free-form logs for state transitions, degradation, and failures.
-2. Every node/use-case must emit exactly one start and one completion summary log:
-   - start includes key input scope (for example ticker, input count).
-   - completion includes output counts and final quality flags (`is_degraded`, `status`).
-   - completion summary must be emitted on every terminal return path (success, waiting/degraded, and error), including early-return validation failures.
-3. Every degraded/error path must emit a dedicated reason log with `error_code`:
-   - include `stage/source`, impact metrics (`input_count`, `output_count`, fallback size), and a short reason string.
-   - do not rely on UI `error_logs` state only; backend logs must be independently diagnosable.
-4. Fallback behavior must be observable:
-   - log `fallback_mode` and fallback selection size/count.
-5. Keep logs high-signal and low-noise:
-   - no large payload dumps, no duplicated per-item success spam in hot paths.
-   - per-item failure logs are allowed if each carries actionable fields (`url`, status/error_code).
-6. Keep field naming consistent across agents:
-   - prefer `*_count`, `is_degraded`, `error_code`, `node`, `ticker`, `artifact_id`.
-7. Exception text in logs should be bounded (truncated) to avoid oversized noisy events.
-8. For model/comparator quality checks (for example similarity/sycophancy), log input diagnostics:
-   - include bounded observability fields (for example `*_chars`, optional content hash) so false positives can be traced to input shape/path issues.
-   - never dump full raw text in hot-path logs.
-
-## 9. Minimal PR Checklist
-
-1. Does each changed module have a single clear owner responsibility?
-2. Any concrete class still named `*Port`?
-3. Any application/domain import concrete infrastructure?
-4. Any generic catch-all module introduced?
-5. Any capability split across two parallel package routes?
-6. Any import-time bootstrap side effect introduced?
-7. Any runtime boundary still using avoidable `object` types?
-8. Any prompt or narrative formatting left in domain?
-9. Are error updates still in the unified contract shape?
-10. Are state readers still resilient (no optional-state exception leakage)?
-11. Were compatibility paths removed after call-site migration?
-12. Did this change improve maintainability without unnecessary abstraction?
-13. Any preview projection logic left in `application/view_models.py` instead of `interface` projection owner?
-14. Any repository adapter mixing persistence I/O with domain projection/aggregation logic?
-15. Any avoidable `object` type left in `application` runtime boundaries (outside parser decoding boundary and workflow-state entry boundary)?
-16. Any async node/use-case still doing blocking sync network/LLM calls on the event loop?
-17. Are start/completion/degraded logs present and structured for the changed node/use-case?
-18. Are degraded/error logs carrying machine-readable reason and impact metrics (not only free-text)?
-19. Any repository/read boundary silently converting missing artifact to empty payload?
-20. Any high-frequency async adapter still creating per-request client/session objects without lifecycle-managed reuse?
-21. Any external provider still returning bare `None` for degraded failures where typed failure metadata is required for state/log diagnostics?
-22. Any `interface` module importing `application` owners (DTO/services/context mappers)?
-23. Is deterministic logic placed on the right owner (entity/value object vs domain service) per single-aggregate vs cross-entity rule?
-24. Any heavy compute path inside async use-cases still running directly on the event loop?
-25. For changed heavy-compute code, is the reproducible performance baseline/test updated and within threshold?
-26. For runtime quality checks, do state writer/reader paths align and do logs include comparator input diagnostics (`*_chars`/hash)?
-27. For enterprise topology, are root directories exactly `application/`, `domain/`, `interface/`, `subdomains/`?
-28. Is cross-subdomain orchestration placed under root `application/` (not a root peer of subdomains)?
-29. Is the shared kernel limited to `domain/shared/` and any `application/shared/` explicitly justified?
-
-## 10. Standard Update Policy
-
-Update this file only when a new anti-pattern class appears in real code. Do not add case-specific rules that do not generalize across agents.
+Update this standard only when an approved architecture decision changes a reusable rule. Keep implementation evidence and migration findings in the action report, not in this policy.

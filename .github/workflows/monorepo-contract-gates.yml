@@ -263,6 +263,8 @@ jobs:
           tests/test_news_mapper.py
           tests/test_debate_mapper.py
           tests/test_interrupts.py
+          tests/test_architecture_guard.py
+          tests/test_agent_subgraph_entrypoints.py
           -q
 
   frontend-lint-type-test:
@@ -299,8 +301,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Architecture boundary guard (no new violations)
-        run: python3 scripts/check_architecture_boundaries.py
+      - name: Architecture dependency guard (exact legacy edges only)
+        run: python3 scripts/architecture_guard.py
 
       - name: Guard against enumNames fallback reintroduction
         run: |

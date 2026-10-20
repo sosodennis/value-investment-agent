@@ -1,87 +1,36 @@
 ---
 name: architecture-standard-enforcer
-description: Enforce canonical cross-agent architecture compliance for finance-agent-core/src/agents/* and directly affected boundary modules. Use when creating or changing agent modules/classes, reviewing PRs, auditing code, planning refactors, or validating post-refactor compliance for layer boundaries, naming contracts, runtime/type boundaries, async behavior, error/state contracts, structured logging, and migration hygiene.
+description: Enforce the project's vertical-slice agent architecture across public entrypoints, agent workflows, capabilities, shared contracts, and the root graph. Use when creating or changing agent code, reviewing architecture, or validating a module refactor.
 ---
 
 # Architecture Standard Enforcer
 
-Use this as the single architecture compliance entry point for agent code.
+Use this as the single compliance entrypoint for agent architecture work.
 
 ## Required Reference
 
-Read `references/cross-agent-architecture-standard.md` before analysis.
-Treat hard rules as blocking unless the user explicitly requests a temporary exception.
+Read `references/cross-agent-architecture-standard.md` before analysis. It is the canonical source for package ownership, import direction, capability boundaries, and graph contracts.
 
 ## Workflow
 
-1. Scope the slice.
-- Focus on new or changed code under `finance-agent-core/src/agents/*` and directly affected boundary modules.
-- Ignore unrelated files unless coupling or import direction is impacted.
+1. Scope changed agent modules and directly affected graph or shared-contract boundaries.
+2. Map observed ownership across `entrypoint.py`, `workflow/`, `application/`, `domain/`, optional `capabilities/`, `infrastructure/`, optional `interface/`, root workflow, and shared contracts. Separate current structure from target structure.
+3. Check dependency direction, root graph imports, cross-agent imports, capability facades, and capability cycles. Treat existing `subdomains/`, `src/workflow/nodes/<agent>/`, and `application/subgraph.py` as migration-era paths; new capability code belongs under `capabilities/`.
+4. Review relevant runtime contracts: typed ports, state normalization, async I/O and compute, persistence semantics, degraded outcomes, and structured diagnostics.
+5. For import-boundary changes, run `python3 scripts/architecture_guard.py` from the repository root. Use `finance-agent-core/src/agents/ARCHITECTURE_MODULE_ACTIONS.md` to locate documented legacy edges. An allowlisted edge is tracked migration debt, not a recommended dependency.
+6. For graph changes, run `uv run pytest tests/test_agent_subgraph_entrypoints.py -q` from `finance-agent-core`; confirm fake adapters are reached and input/output schemas remain defined.
+7. Report severity-ranked findings with file/line, impact, the smallest remediation, validation, and remaining coverage gaps. Say explicitly when no findings remain.
 
-2. Map ownership and layer boundaries.
-- Classify each changed module as `domain`, `application`, `interface`, or `infrastructure`.
-- Flag cross-layer leakage and wrong owner placement; enforce hard boundaries from the reference.
-- For enterprise topology, validate root layer layout and shared kernel placement (`domain/shared`).
+## Review Focus
 
-3. Enforce naming and packaging contracts.
-- Validate class suffix semantics (`*Provider`, `*Repository`, `*Client`, `*Service`, `*Factory`, `*Mapper`, `*Policy`, `*Port`) and filename-role consistency (`*_service.py`, `*_provider.py`, etc.).
-- Flag generic catch-all modules in mature paths.
-- Flag empty layer packages (`application/`, `domain/`, `interface/`, `infrastructure`).
-- Flag root-level `workflow_orchestrator` packages that are not under `application/`.
-
-4. Validate runtime/type/async boundaries.
-- Flag avoidable `object` propagation beyond allowed decode/state-entry boundaries.
-- Replace long callable bundles (`*_fn`) across orchestrator/use-case chains with typed runtime ports.
-- Flag blocking sync I/O or heavy compute on async event-loop paths.
-- Flag missing lifecycle-managed client/session reuse in hot async adapters.
-
-5. Validate error/state/logging contracts.
-- Check unified error update shape and resilient state readers.
-- Distinguish artifact `not_found` vs `empty_payload`.
-- Require typed degraded outcomes (not bare `None`) for providers.
-- Require structured start/completion/degraded logs with machine-readable fields.
-
-6. Validate migration hygiene.
-- Ensure call-site migration is atomic per slice when feasible.
-- Remove compatibility shims/aliases after migration validation.
-- Add hygiene guards for removed legacy imports/modules when relevant.
-- Scan for legacy path imports after refactors (old → new path).
-- Ensure pipeline-heavy infrastructure is grouped by stage when applicable.
-- Confirm preview/projection contracts live in `interface`, not `domain`.
-
-7. Report findings and remediation direction.
-- Order findings by severity and include file/line, violated rule section, impact, and the smallest maintainable remediation.
-- State residual risks and test gaps; explicitly report when no findings are detected.
-
-## Subdomain Split Enforcement
-
-- Apply when a change introduces or removes a subdomain.
-- Validate justification using the criteria below and flag violations as findings.
-- **Capability boundary**: a coherent capability has a stable API and can evolve independently.
-- **Dependency boundary**: distinct external dependencies or data sources justify a separate subdomain.
-- **Pipeline boundary**: multi-stage pipelines (fetch/extract/map/score/postprocess) benefit from stage grouping or subdomain split.
-- **Ownership boundary**: different teams or lifecycles need isolated changes and tests.
-- **Cohesion signal**: 4+ tightly-coupled owner modules in one area that change together repeatedly.
-- **Do not split** if it only reduces LOC or increases indirection without clear boundary value.
-
-## Cohesion and Facade Standards
-
-- Apply when deep imports or fine-grained modules appear after refactors.
-- Flag over-fragmentation: multiple single-purpose modules only used together in one workflow path.
-- Require facade exports for deep internals: external imports should target subdomain top-level or explicit `application`/`interface` entrypoints, not deep `infrastructure/...` or `.../extract/...`.
-- Allow deep nesting only for pipeline-stage grouping (fetch/extract/map/score/postprocess); otherwise flatten or add a facade.
-- Do not expose internal stage modules outside their subdomain.
-
-## Output Contract
-
-Use this report structure:
-- `Findings`: severity-ordered list with file/line, violated rule section, impact, and remediation; explicitly say when there are no findings.
-- `Assumptions/Open Questions`: only when blockers remain.
-- `Applied Changes`: concise summary only if edits were made.
-- `Validation`: checks executed and results, or an explicit statement that checks were not run; include residual coverage gaps.
+- Keep each agent's state, nodes, and subgraph within that agent's `workflow/` package.
+- Keep use-case coordination in application and deterministic rules in domain. Infrastructure owns external adapters; composition belongs at a boundary.
+- Use stable public entrypoints and capability facades instead of imports into another slice's private modules.
+- Add a capability only when its ownership and public contract reduce coupling. Do not create empty layers, split by LOC alone, or preserve compatibility aliases after callers migrate.
+- Apply naming, runtime, state, error, and logging details from the canonical reference; do not restate or extend its rules here.
 
 ## Guardrails
 
-- Do not invent new standards; enforce the canonical reference.
-- Keep findings actionable and specific.
-- Prefer minimal, maintainable fixes over broad rewrites.
+- Do not infer that the target architecture is already implemented. Ground findings in the current source tree.
+- Do not create new architecture exceptions as a shortcut. Existing exceptions must map to a current report action and are removed when their edge is resolved.
+- Prefer focused remediation over broad restructuring unless the requested scope is a full module migration.

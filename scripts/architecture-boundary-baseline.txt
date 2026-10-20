@@ -1,3 +1,0 @@
-# Architecture boundary baseline
-# This file tracks known existing boundary violations before deep refactor.
-# CI fails only on NEW violations beyond this baseline.
