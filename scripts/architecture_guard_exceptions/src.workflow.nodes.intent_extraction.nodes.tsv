@@ -1,2 +1,1 @@
 LAYER_DIRECTION|src.workflow.nodes.intent_extraction.nodes|src.agents.intent.application.wiring|ROOT-WORKFLOW
-LAYER_DIRECTION|src.workflow.nodes.intent_extraction.nodes|src.workflow.command_adapter|ROOT-WORKFLOW

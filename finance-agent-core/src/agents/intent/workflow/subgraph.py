@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from langchain_core.runnables import RunnableLambda
 from langgraph.graph import START, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 
 from src.agents.intent.application.orchestrator import IntentOrchestrator
 
@@ -9,7 +10,9 @@ from .nodes import build_intent_nodes
 from .state import IntentExtractionInput, IntentExtractionOutput, IntentExtractionState
 
 
-def build_intent_workflow(orchestrator: IntentOrchestrator):
+def build_intent_workflow(
+    orchestrator: IntentOrchestrator,
+) -> CompiledStateGraph:
     builder = StateGraph(
         IntentExtractionState,
         input_schema=IntentExtractionInput,
