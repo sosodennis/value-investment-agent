@@ -72,6 +72,11 @@ FACADE_EXPORTS: dict[str, set[str]] = {
         "project_selection_reports_from_models",
         "select_valuation_model",
     },
+    "market_data": {
+        "MarketDataService",
+        "MarketSnapshot",
+        "market_data_service",
+    },
 }
 
 
@@ -89,3 +94,10 @@ def test_fundamental_public_facades_export_stable_contracts_only() -> None:
             "workflow" in name.lower() or "infrastructure" in name.lower()
             for name in facade.__all__
         )
+
+
+def test_market_data_public_facade_hides_infrastructure_assembly() -> None:
+    facade = _load_facade("market_data")
+
+    assert not hasattr(facade, "build_market_data_service")
+    assert not hasattr(facade, "YahooFinanceProvider")
