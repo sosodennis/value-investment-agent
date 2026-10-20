@@ -57,7 +57,7 @@ The CI check is `python3 scripts/architecture_guard.py`. Its exception file list
 - Keep graph state, node adapters, and subgraph construction inside the owning agent's `workflow/` package.
 - The public entrypoint presents stable input/output schemas and delegates graph construction to that workflow.
 - Test every agent graph with fake adapters: the graph builds, input/output schemas exist, and a minimal invocation reaches the fakes without live providers.
-- The current tests exercise legacy `application/subgraph.py` builders and root workflow nodes. Move the test target to `entrypoint.py` as each slice is migrated; do not treat the legacy path as the target architecture.
+- Test migrated agents through their public `entrypoint.py` with fake adapters. Legacy `application/subgraph.py` builders and root workflow node tests may remain temporarily while callers migrate, but they are compatibility coverage rather than the target graph contract.
 
 ## 4. Implementation Standards
 
