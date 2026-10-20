@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from src.agents.fundamental.subdomains.financial_statements.interface.contracts import (
+from src.agents.fundamental.subdomains.financial_statements.public import (
     FinancialReportLike,
 )
 from src.agents.fundamental.subdomains.forward_signals.interface.contracts import (
