@@ -79,6 +79,75 @@ def test_guard_rejects_agent_dependency_on_root_workflow(tmp_path: Path) -> None
     ]
 
 
+def test_guard_allows_entrypoint_to_use_own_wiring_factory(tmp_path: Path) -> None:
+    src_root = tmp_path / "src"
+    _write_module(
+        src_root,
+        "src.agents.intent.entrypoint",
+        "from src.agents.intent.application.wiring import build_default_runner\n",
+    )
+    _write_module(
+        src_root,
+        "src.agents.intent.application.wiring",
+        "def build_default_runner(): pass\n",
+    )
+
+    violations = architecture_guard.collect_violations(src_root)
+
+    assert violations == []
+
+
+@pytest.mark.parametrize(
+    ("module", "source", "expected_rule"),
+    [
+        (
+            "src.agents.intent.entrypoint",
+            "from src.agents.intent.infrastructure.provider import Provider\n",
+            "LAYER_DIRECTION",
+        ),
+        (
+            "src.agents.intent.entrypoint",
+            "from src.agents.intent.application.composition import build_runner\n",
+            "LAYER_DIRECTION",
+        ),
+        (
+            "src.agents.intent.entrypoint",
+            "from src.agents.intent.application.wiring.factory import build_runner\n",
+            "LAYER_DIRECTION",
+        ),
+        (
+            "src.agents.intent.entrypoint",
+            "from src.workflow.graph import build_graph\n",
+            "LAYER_DIRECTION",
+        ),
+        (
+            "src.agents.intent.entrypoint",
+            "from src.agents.news.application.runner import Runner\n",
+            "CROSS_AGENT_PRIVATE_IMPORT",
+        ),
+        (
+            "src.agents.intent.entrypoint",
+            "from src.agents.news.application.wiring import build_runner\n",
+            "CROSS_AGENT_PRIVATE_IMPORT",
+        ),
+        (
+            "src.agents.intent.application.runner",
+            "from src.agents.intent.entrypoint import run_graph\n",
+            "LAYER_DIRECTION",
+        ),
+    ],
+)
+def test_guard_preserves_entrypoint_and_application_boundaries(
+    tmp_path: Path, module: str, source: str, expected_rule: str
+) -> None:
+    src_root = tmp_path / "src"
+    _write_module(src_root, module, source)
+
+    rules = {item.rule for item in architecture_guard.collect_violations(src_root)}
+
+    assert expected_rule in rules
+
+
 def test_guard_rejects_root_and_cross_agent_private_imports(tmp_path: Path) -> None:
     src_root = tmp_path / "src"
     _write_module(
