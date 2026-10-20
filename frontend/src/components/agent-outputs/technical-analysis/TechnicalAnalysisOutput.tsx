@@ -1,4 +1,4 @@
-import React, { useState, useMemo, memo, useRef } from 'react';
+import React, { useState, useMemo, memo, useRef, useEffect } from 'react';
 import { AgentStatus, ArtifactReference } from '@/types/agents';
 import {
     Activity,
@@ -1081,6 +1081,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
     const macdHistIndex = useMemo(() => buildSeriesIndex(macdHistSeries), [macdHistSeries]);
     const fdIndex = useMemo(() => buildSeriesIndex(fdSeries), [fdSeries]);
     const chartStackRef = useRef<HTMLDivElement | null>(null);
+    const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
 
     const tooltipPayload = useMemo(() => {
         if (!crosshairSync.crosshairTime) return null;
@@ -1169,22 +1170,29 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         []
     );
 
-    const tooltipPosition = useMemo(() => {
-        if (!crosshairSync.crosshairPoint || !chartStackRef.current) {
-            return null;
+    useEffect(() => {
+        const point = crosshairSync.crosshairPoint;
+        const chartStack = chartStackRef.current;
+        if (!point || !chartStack) {
+            return;
         }
-        const bounds = chartStackRef.current.getBoundingClientRect();
-        const TOOLTIP_WIDTH = 240;
-        const TOOLTIP_HEIGHT = 190;
-        const padding = 12;
-        const localX = crosshairSync.crosshairPoint.x - bounds.left;
-        const localY = crosshairSync.crosshairPoint.y - bounds.top;
-        const maxX = Math.max(padding, bounds.width - TOOLTIP_WIDTH - padding);
-        const maxY = Math.max(padding, bounds.height - TOOLTIP_HEIGHT - padding);
-        return {
-            x: Math.min(Math.max(localX + padding, padding), maxX),
-            y: Math.min(Math.max(localY + padding, padding), maxY),
-        };
+
+        const observer = new ResizeObserver(() => {
+            const bounds = chartStack.getBoundingClientRect();
+            const TOOLTIP_WIDTH = 240;
+            const TOOLTIP_HEIGHT = 190;
+            const padding = 12;
+            const localX = point.x - bounds.left;
+            const localY = point.y - bounds.top;
+            const maxX = Math.max(padding, bounds.width - TOOLTIP_WIDTH - padding);
+            const maxY = Math.max(padding, bounds.height - TOOLTIP_HEIGHT - padding);
+            setTooltipPosition({
+                x: Math.min(Math.max(localX + padding, padding), maxX),
+                y: Math.min(Math.max(localY + padding, padding), maxY),
+            });
+        });
+        observer.observe(chartStack);
+        return () => observer.disconnect();
     }, [crosshairSync.crosshairPoint]);
 
     const featurePackSummary = useMemo(() => {
