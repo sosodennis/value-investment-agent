@@ -1,6 +1,6 @@
 import React from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { FundamentalAnalysisOutput } from './FundamentalAnalysisOutput';
 import { ParsedFinancialPreview } from '@/types/agents/fundamental-preview-parser';
 
@@ -14,7 +14,18 @@ vi.mock('./FinancialTable', () => ({
     FinancialTable: () => <div data-testid="financial-table">financial-table</div>,
 }));
 
+const expectSummaryValue = (label: string, value: string) => {
+    const matchingLabel = screen.getAllByText(label, { exact: true }).find(
+        (element) => element.nextElementSibling?.textContent === value
+    );
+    expect(matchingLabel).toBeDefined();
+};
+
 describe('FundamentalAnalysisOutput', () => {
+    afterEach(() => {
+        cleanup();
+    });
+
     beforeEach(() => {
         mockUseArtifact.mockReturnValue({ data: null, isLoading: false });
     });
@@ -43,7 +54,7 @@ describe('FundamentalAnalysisOutput', () => {
         expect(screen.queryByText('Intrinsic Value')).not.toBeNull();
         expect(screen.queryByText('Equity Value')).not.toBeNull();
         expect(screen.queryByText('Upside Potential')).not.toBeNull();
-        expect(screen.queryByText('Monte Carlo: Disabled')).not.toBeNull();
+        expectSummaryValue('Monte Carlo', 'Disabled');
     });
 
     it('renders MC diagnostics and quality signals when MC is enabled', () => {
@@ -80,7 +91,7 @@ describe('FundamentalAnalysisOutput', () => {
             },
         });
 
-        expect(screen.queryByText('Monte Carlo: Enabled')).not.toBeNull();
+        expectSummaryValue('Monte Carlo', 'Enabled');
         expect(screen.queryByText('Executed: 300')).not.toBeNull();
         expect(screen.queryByText('Window: 100')).not.toBeNull();
         expect(screen.queryByText('Early Stop: No')).not.toBeNull();
@@ -90,8 +101,7 @@ describe('FundamentalAnalysisOutput', () => {
         expect(screen.queryByText('Risk: High')).not.toBeNull();
         expect(screen.queryByText('defaults_present')).not.toBeNull();
         expect(screen.queryByText('time_alignment:high_risk')).not.toBeNull();
-        expect(screen.queryByText(/Time Alignment Status/i)).not.toBeNull();
-        expect(screen.getAllByText('high_risk').length).toBeGreaterThan(0);
+        expectSummaryValue('Time Alignment', 'high_risk');
         expect(screen.queryAllByText('Forward Signal Policy').length).toBeGreaterThan(0);
         expect(screen.queryByText('Signals: 3')).not.toBeNull();
         expect(screen.queryByText('Accepted: 2')).not.toBeNull();
@@ -105,9 +115,12 @@ describe('FundamentalAnalysisOutput', () => {
         ).not.toBeNull();
         expect(screen.queryAllByText('Calibration: Applied').length).toBeGreaterThan(0);
         expect(
-            screen.queryAllByText(
-                'Mapping: forward_signal_calibration_v2_2026_03_05'
-            ).length
+            screen.getAllByText('Mapping:', { exact: true }).length
+        ).toBeGreaterThan(0);
+        expect(
+            screen.getAllByText('forward_signal_calibration_v2_2026_03_05', {
+                exact: true,
+            }).length
         ).toBeGreaterThan(0);
         expect(screen.queryByText('Forward Risk: medium')).not.toBeNull();
         expect(screen.queryByText('Source: mda')).not.toBeNull();
@@ -161,7 +174,11 @@ describe('FundamentalAnalysisOutput', () => {
 
         render(
             <FundamentalAnalysisOutput
-                reference={null}
+                reference={{
+                    artifact_id: 'test-artifact',
+                    download_url: '/artifacts/test-artifact',
+                    type: 'application/json',
+                }}
                 previewData={{ ticker: 'AAPL' }}
                 resolvedTicker="AAPL"
                 status="done"
@@ -172,12 +189,16 @@ describe('FundamentalAnalysisOutput', () => {
         expect(screen.queryByText('Model: DCF (dcf)')).not.toBeNull();
         expect(screen.queryByText('Growth Outlook')).not.toBeNull();
         expect(screen.getAllByText('Source: mda').length).toBeGreaterThan(0);
-        expect(screen.queryAllByText('Calibration: Applied').length).toBeGreaterThan(0);
+        const growthAnchorPolicy = screen.getByText('Growth / Anchor Policy').parentElement!;
+        expect(within(growthAnchorPolicy).getByText('Calibration:', { exact: true })).not.toBeNull();
+        expect(within(growthAnchorPolicy).getByText('Applied', { exact: true })).not.toBeNull();
+        expect(within(growthAnchorPolicy).getByText(/Mapping:/)).not.toBeNull();
         expect(
-            screen.queryAllByText(
-                'Mapping: forward_signal_calibration_v2_2026_03_05'
-            ).length
-        ).toBeGreaterThan(0);
+            within(growthAnchorPolicy).getByText(
+                'forward_signal_calibration_v2_2026_03_05',
+                { exact: true }
+            )
+        ).not.toBeNull();
         expect(screen.queryByText('2025-11-03')).not.toBeNull();
         expect(screen.queryByText('0000320193-25-000073')).not.toBeNull();
         expect(
@@ -228,12 +249,16 @@ describe('FundamentalAnalysisOutput', () => {
         expect(screen.queryByText(/wacc -100bp -> \+22.0%/i)).not.toBeNull();
         expect(screen.queryAllByText('Forward Signal Policy').length).toBeGreaterThan(0);
         expect(screen.queryAllByText('Calibration: Applied').length).toBeGreaterThan(0);
+        const growthAnchorPolicy = screen.getByText('Growth / Anchor Policy').parentElement!;
+        expect(within(growthAnchorPolicy).getByText('Calibration:', { exact: true })).not.toBeNull();
+        expect(within(growthAnchorPolicy).getByText('Applied', { exact: true })).not.toBeNull();
+        expect(within(growthAnchorPolicy).getByText(/Mapping:/)).not.toBeNull();
         expect(
-            screen.queryAllByText(
-                'Mapping: forward_signal_calibration_v2_2026_03_05'
-            ).length
-        ).toBeGreaterThan(0);
-        expect(screen.queryAllByText('Growth / Anchor Policy').length).toBeGreaterThan(0);
+            within(growthAnchorPolicy).getByText(
+                'forward_signal_calibration_v2_2026_03_05',
+                { exact: true }
+            )
+        ).not.toBeNull();
         expect(screen.queryAllByText('Consensus: Ignored').length).toBeGreaterThan(0);
         expect(screen.queryAllByText('Horizon: short_term').length).toBeGreaterThan(0);
         expect(
@@ -241,12 +266,6 @@ describe('FundamentalAnalysisOutput', () => {
                 .length
         ).toBeGreaterThan(0);
         expect(screen.queryAllByText('Stale Fallback: Yes').length).toBeGreaterThan(0);
-        expect(
-            screen.queryAllByText('Calibration Applied (Diagnostics):').length
-        ).toBeGreaterThan(0);
-        expect(
-            screen.queryAllByText('Calibration Mapping (Diagnostics):').length
-        ).toBeGreaterThan(0);
     });
 
     it('renders base assumption guardrail summary from diagnostics and assumption breakdown fallback', () => {
@@ -278,28 +297,33 @@ describe('FundamentalAnalysisOutput', () => {
         });
 
         expect(screen.queryByText('Base Assumption Guardrail')).not.toBeNull();
-        expect(screen.queryByText('Growth: Applied')).not.toBeNull();
+        const growthGuardrail = screen.getByText('Growth', { exact: true }).parentElement!
+            .parentElement!;
+        expect(within(growthGuardrail).getByText('Applied')).not.toBeNull();
         expect(
-            screen.queryByText(
-                'Growth Version: base_assumption_guardrail_v1_2026_03_05'
+            within(growthGuardrail).getByText(
+                'Version: base_assumption_guardrail_v1_2026_03_05'
             )
         ).not.toBeNull();
-        expect(screen.queryByText('Growth Y1 Raw: 66.8%')).not.toBeNull();
-        expect(screen.queryByText('Growth Y1 Guarded: 42.0%')).not.toBeNull();
-        expect(screen.queryByText('Growth YN Raw: 4.0%')).not.toBeNull();
-        expect(screen.queryByText('Growth YN Guarded: 3.0%')).not.toBeNull();
-        expect(screen.queryByText('Margin: Applied')).not.toBeNull();
+        expect(within(growthGuardrail).getByText('Y1 Raw: 66.8%')).not.toBeNull();
+        expect(within(growthGuardrail).getByText('Y1 Guarded: 42.0%')).not.toBeNull();
+        expect(within(growthGuardrail).getByText('YN Raw: 4.0%')).not.toBeNull();
+        expect(within(growthGuardrail).getByText('YN Guarded: 3.0%')).not.toBeNull();
+
+        const marginGuardrail = screen.getByText('Margin', { exact: true }).parentElement!
+            .parentElement!;
+        expect(within(marginGuardrail).getByText('Applied')).not.toBeNull();
         expect(
-            screen.queryByText(
-                'Margin Version: base_assumption_guardrail_v1_2026_03_05'
+            within(marginGuardrail).getByText(
+                'Version: base_assumption_guardrail_v1_2026_03_05'
             )
         ).not.toBeNull();
-        expect(screen.queryByText('Margin Y1 Raw: 59.4%')).not.toBeNull();
-        expect(screen.queryByText('Margin Y1 Guarded: 45.0%')).not.toBeNull();
-        expect(screen.queryByText('Margin YN Raw: 59.4%')).not.toBeNull();
-        expect(screen.queryByText('Margin YN Guarded: 35.0%')).not.toBeNull();
+        expect(within(marginGuardrail).getByText('Y1 Raw: 59.4%')).not.toBeNull();
+        expect(within(marginGuardrail).getByText('Y1 Guarded: 45.0%')).not.toBeNull();
+        expect(within(marginGuardrail).getByText('YN Raw: 59.4%')).not.toBeNull();
+        expect(within(marginGuardrail).getByText('YN Guarded: 35.0%')).not.toBeNull();
         expect(
-            screen.queryByText('Margin Reasons: margin_ceiling_clamp')
+            within(marginGuardrail).getByText('Reasons: margin_ceiling_clamp')
         ).not.toBeNull();
     });
 

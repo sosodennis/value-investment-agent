@@ -63,7 +63,8 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
     const distributionSummary = previewData?.distribution_summary?.summary;
     const distributionDiagnostics = previewData?.distribution_summary?.diagnostics;
     const distributionScenarios = previewData?.distribution_scenarios;
-    const valuationDiagnostics = previewData?.valuation_diagnostics;
+    const valuationDiagnostics =
+        previewData?.valuation_diagnostics ?? artifactData?.valuation_diagnostics;
     const sensitivitySummary = valuationDiagnostics?.sensitivity_summary;
     const growthConsensusPolicy = valuationDiagnostics?.growth_consensus_policy;
     const growthConsensusHorizon = valuationDiagnostics?.growth_consensus_horizon;
@@ -670,23 +671,25 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                         )}
                     </div>
 
-                    {(assumptionBreakdown || dataFreshness) && (
+                    {(assumptionBreakdown || dataFreshness || valuationDiagnostics) && (
                         <div className="grid grid-cols-1 gap-4 items-start">
-                            {assumptionBreakdown && (
+                            {(assumptionBreakdown || valuationDiagnostics) && (
                                 <div className="bg-surface-container p-5 rounded-xl border border-outline-variant/10 space-y-4">
-                                    <div className="flex flex-wrap items-start justify-between gap-3">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-[10px] text-outline mb-2 block uppercase tracking-tighter">Assumption Breakdown</span>
-                                            {assumptionRiskBadge && (
-                                                <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${assumptionRiskBadge.className}`}>
-                                                    {assumptionRiskBadge.label}
-                                                </span>
-                                            )}
+                                    {assumptionBreakdown && (
+                                        <div className="flex flex-wrap items-start justify-between gap-3">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[10px] text-outline mb-2 block uppercase tracking-tighter">Assumption Breakdown</span>
+                                                {assumptionRiskBadge && (
+                                                    <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${assumptionRiskBadge.className}`}>
+                                                        {assumptionRiskBadge.label}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <span className="text-xs font-semibold text-amber-300">
+                                                {assumptionBreakdown.total_assumptions ?? 0} assumptions
+                                            </span>
                                         </div>
-                                        <span className="text-xs font-semibold text-amber-300">
-                                            {assumptionBreakdown.total_assumptions ?? 0} assumptions
-                                        </span>
-                                    </div>
+                                    )}
                                     {assumptionSummaryItems.length > 0 && (
                                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                             {assumptionSummaryItems.map((item) => (
