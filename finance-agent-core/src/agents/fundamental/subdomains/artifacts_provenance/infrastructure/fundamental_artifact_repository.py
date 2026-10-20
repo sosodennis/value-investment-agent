@@ -1,15 +1,15 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
-from src.agents.fundamental.subdomains.financial_statements.interface.contracts import (
+from pydantic import ValidationError
+
+from src.agents.fundamental.subdomains.financial_statements.public import (
     FinancialReportModel,
 )
-from src.agents.fundamental.subdomains.forward_signals.interface.contracts import (
+from src.agents.fundamental.subdomains.forward_signals.public import (
     ForwardSignalPayload,
-)
-from src.agents.fundamental.subdomains.forward_signals.interface.parsers import (
-    parse_forward_signals,
 )
 from src.interface.artifacts.artifact_data_models import FinancialReportsArtifactData
 from src.services.artifact_manager import artifact_manager
@@ -21,7 +21,17 @@ from src.shared.kernel.types import JSONObject
 def _normalize_forward_signals(raw: object) -> list[ForwardSignalPayload] | None:
     if not isinstance(raw, list | tuple):
         return None
-    return parse_forward_signals(raw, context="financial_reports.forward_signals")
+
+    parsed: list[ForwardSignalPayload] = []
+    for item in raw:
+        if isinstance(item, ForwardSignalPayload):
+            parsed.append(item)
+        elif isinstance(item, Mapping):
+            try:
+                parsed.append(ForwardSignalPayload.model_validate(item))
+            except ValidationError:
+                continue
+    return parsed or None
 
 
 @dataclass

@@ -1,3 +1,0 @@
-CAPABILITY_PRIVATE_IMPORT|src.agents.fundamental.subdomains.artifacts_provenance.interface.contracts|src.agents.fundamental.subdomains.financial_statements.interface.contracts|FUNDAMENTAL-CAP-ARTIFACTS-PROVENANCE
-CAPABILITY_PRIVATE_IMPORT|src.agents.fundamental.subdomains.artifacts_provenance.interface.contracts|src.agents.fundamental.subdomains.financial_statements.interface.types|FUNDAMENTAL-CAP-ARTIFACTS-PROVENANCE
-CAPABILITY_PRIVATE_IMPORT|src.agents.fundamental.subdomains.artifacts_provenance.interface.contracts|src.agents.fundamental.subdomains.forward_signals.interface.contracts|FUNDAMENTAL-CAP-ARTIFACTS-PROVENANCE
