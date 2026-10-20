@@ -1194,7 +1194,7 @@ async def test_run_valuation_keeps_success_when_snapshot_save_fails() -> None:
     )
 
     assert result.goto == "END"
-    assert result.update["node_statuses"]["fundamental_analysis"] == "done"
+    assert result.update["internal_progress"]["calculation"] == "done"
     assert (
         result.update["fundamental_analysis"]["financial_reports_artifact_id"]
         == "fa-report-1"

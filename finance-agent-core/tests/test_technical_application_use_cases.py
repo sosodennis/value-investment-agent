@@ -709,10 +709,10 @@ def test_semantic_command_update_builders() -> None:
     error = build_semantic_error_update("boom")
 
     assert success.update["current_node"] == "semantic_translate"
-    assert success.update["node_statuses"]["technical_analysis"] == "done"
+    assert success.update["internal_progress"]["semantic_translate"] == "done"
     assert success.update["technical_analysis"]["is_degraded"] is False
     assert success.update["technical_analysis"]["degraded_reasons"] == []
-    assert error.update["node_statuses"]["technical_analysis"] == "error"
+    assert error.update["internal_progress"]["semantic_translate"] == "error"
     assert error.update["error_logs"][0]["error"] == "boom"
 
 
@@ -734,8 +734,9 @@ def test_data_fetch_update_builders() -> None:
     assert success["technical_analysis"]["price_artifact_id"] == "price-1"
     assert success["technical_analysis"]["is_degraded"] is True
     assert success["technical_analysis"]["degraded_reasons"] == ["1h_UNAVAILABLE"]
-    assert success["node_statuses"]["technical_analysis"] == "running"
-    assert error["node_statuses"]["technical_analysis"] == "error"
+    assert success["internal_progress"]["data_fetch"] == "done"
+    assert success["internal_progress"]["feature_compute"] == "running"
+    assert error["internal_progress"]["data_fetch"] == "error"
     assert error["error_logs"][0]["node"] == "data_fetch"
 
 
@@ -1440,7 +1441,7 @@ async def test_run_data_fetch_handles_typed_provider_failure() -> None:
     )
 
     assert result.goto == "END"
-    assert result.update["node_statuses"]["technical_analysis"] == "error"
+    assert result.update["internal_progress"]["data_fetch"] == "error"
     assert "Empty daily data returned" in result.update["error_logs"][0]["error"]
 
 
