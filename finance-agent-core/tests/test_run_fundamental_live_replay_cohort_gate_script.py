@@ -8,6 +8,8 @@ import sys
 from collections.abc import Mapping
 from pathlib import Path
 
+import pytest
+
 
 def test_run_live_replay_cohort_gate_end_to_end(tmp_path: Path) -> None:
     project_root = Path(__file__).resolve().parents[1]
@@ -31,6 +33,7 @@ def test_run_live_replay_cohort_gate_end_to_end(tmp_path: Path) -> None:
             {
                 "schema_version": "fundamental_live_replay_cohort_config_v1",
                 "profile": "test_live_cohort",
+                "gate_scope": "offline_fixture_contract",
                 "discover_root": str(discover_root),
                 "discover_glob": "*.replay-input.v2.json",
                 "discover_recursive": False,
@@ -39,6 +42,20 @@ def test_run_live_replay_cohort_gate_end_to_end(tmp_path: Path) -> None:
                 "min_cases": 2,
                 "min_unique_tickers": 2,
                 "min_pass_rate": 1.0,
+                "max_intrinsic_delta_p90_abs": 1000.0,
+                "max_quality_block_rate": 0.0,
+                "min_cache_hit_rate": 0.0,
+                "max_warm_latency_p90_ms": 120000.0,
+                "max_cold_latency_p90_ms": 120000.0,
+                "max_arelle_parse_latency_p90_ms": 120000.0,
+                "max_arelle_runtime_lock_wait_p90_ms": 120000.0,
+                "max_validation_rule_drift_count": 0,
+                "allow_unmeasured_metrics": [
+                    "intrinsic_delta_p90_abs",
+                    "warm_latency_p90_ms",
+                    "arelle_parse_latency_p90_ms",
+                    "arelle_runtime_lock_wait_p90_ms",
+                ],
                 "stage_root": str(tmp_path / "stage"),
                 "stage_prefix": "live_test",
                 "require_relative_input_paths": True,
@@ -72,7 +89,14 @@ def test_run_live_replay_cohort_gate_end_to_end(tmp_path: Path) -> None:
     payload = json.loads(completed.stdout)
     assert payload["gate_passed"] is True
     assert payload["issues"] == []
-    assert payload["max_intrinsic_delta_p90_abs"] is None
+    assert payload["gate_scope"] == "offline_fixture_contract"
+    assert payload["unmeasured_metrics"] == [
+        "arelle_parse_latency_p90_ms",
+        "arelle_runtime_lock_wait_p90_ms",
+        "intrinsic_delta_p90_abs",
+        "warm_latency_p90_ms",
+    ]
+    assert payload["max_intrinsic_delta_p90_abs"] == 1000.0
 
     manifest_path = Path(payload["manifest_path"])
     replay_report_path = Path(payload["replay_report_path"])
@@ -86,6 +110,7 @@ def test_run_live_replay_cohort_gate_end_to_end(tmp_path: Path) -> None:
     gate_payload = json.loads(gate_path.read_text(encoding="utf-8"))
     assert gate_payload["gate_passed"] is True
     assert gate_payload["manifest_cases"] == 2
+    assert gate_payload["replay_intrinsic_delta_p90_abs"] is None
 
 
 def test_run_live_replay_cohort_gate_uses_discover_root_env_key(
@@ -254,6 +279,34 @@ def test_run_live_replay_cohort_gate_prefers_env_intrinsic_delta_threshold(
     )
 
     assert result == 300.0
+
+
+def test_unmeasured_metrics_require_offline_scope_and_thresholds() -> None:
+    module = _load_script_module()
+    metrics = ["intrinsic_delta_p90_abs"]
+
+    with pytest.raises(TypeError, match="only valid for offline_fixture_contract"):
+        module._resolve_unmeasured_metrics(
+            config={"allow_unmeasured_metrics": metrics},
+            gate_scope="release_evidence",
+            configured_thresholds={"intrinsic_delta_p90_abs": 1000.0},
+        )
+
+    with pytest.raises(TypeError, match="require configured thresholds"):
+        module._resolve_unmeasured_metrics(
+            config={"allow_unmeasured_metrics": metrics},
+            gate_scope="offline_fixture_contract",
+            configured_thresholds={"intrinsic_delta_p90_abs": None},
+        )
+
+    assert (
+        module._resolve_unmeasured_metrics(
+            config={"allow_unmeasured_metrics": metrics},
+            gate_scope="offline_fixture_contract",
+            configured_thresholds={"intrinsic_delta_p90_abs": 1000.0},
+        )
+        == metrics
+    )
 
 
 def test_build_prewarm_requests_from_manifest_aggregates_tickers(

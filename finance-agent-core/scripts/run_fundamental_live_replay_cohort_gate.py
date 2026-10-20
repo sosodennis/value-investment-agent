@@ -13,6 +13,13 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG_PATH = (
     PROJECT_ROOT / "config" / "fundamental_live_replay_cohort_config.json"
 )
+ALLOWED_GATE_SCOPES = {"release_evidence", "offline_fixture_contract"}
+UNMEASURED_REPLAY_METRICS = {
+    "intrinsic_delta_p90_abs",
+    "warm_latency_p90_ms",
+    "arelle_parse_latency_p90_ms",
+    "arelle_runtime_lock_wait_p90_ms",
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -109,6 +116,19 @@ def main() -> int:
     stage_prefix = _coerce_text(config, key="stage_prefix")
     require_relative = _coerce_bool(config, key="require_relative_input_paths")
     profile = _coerce_text(config, key="profile")
+    gate_scope = _optional_text(config, key="gate_scope") or "release_evidence"
+    if gate_scope not in ALLOWED_GATE_SCOPES:
+        raise TypeError(f"unsupported gate_scope: {gate_scope!r}")
+    allow_unmeasured_metrics = _resolve_unmeasured_metrics(
+        config=config,
+        gate_scope=gate_scope,
+        configured_thresholds={
+            "intrinsic_delta_p90_abs": max_intrinsic_delta_p90_abs,
+            "warm_latency_p90_ms": max_warm_latency_p90_ms,
+            "arelle_parse_latency_p90_ms": max_arelle_parse_latency_p90_ms,
+            "arelle_runtime_lock_wait_p90_ms": (max_arelle_runtime_lock_wait_p90_ms),
+        },
+    )
     enable_prewarm = _resolve_prewarm_enabled(config)
     prewarm_default_years = _resolve_prewarm_default_years(config)
 
@@ -232,12 +252,15 @@ def main() -> int:
                 str(max_validation_rule_drift_count),
             ]
         )
+    for metric in allow_unmeasured_metrics:
+        cohort_gate_cmd.extend(["--allow-unmeasured-metric", metric])
     gate_output = _run_command(cohort_gate_cmd, capture_stdout=True)
     cohort_gate_path.write_text(gate_output + "\n", encoding="utf-8")
 
     gate_payload = json.loads(gate_output)
     result = {
         "profile": profile,
+        "gate_scope": gate_scope,
         "cycle_tag": cycle_tag,
         "discover_root": str(discover_root),
         "discover_glob": discover_glob,
@@ -247,6 +270,9 @@ def main() -> int:
         "cohort_gate_path": str(cohort_gate_path),
         "issues": list(gate_payload.get("issues", []))
         if isinstance(gate_payload.get("issues"), list)
+        else [],
+        "unmeasured_metrics": list(gate_payload.get("unmeasured_metrics", []))
+        if isinstance(gate_payload.get("unmeasured_metrics"), list)
         else [],
         "gate_passed": bool(gate_payload.get("gate_passed")),
         "max_intrinsic_delta_p90_abs": max_intrinsic_delta_p90_abs,
@@ -300,6 +326,37 @@ def _load_config(path: Path) -> Mapping[str, object]:
             f"{schema_version!r}, expected 'fundamental_live_replay_cohort_config_v1'"
         )
     return payload
+
+
+def _resolve_unmeasured_metrics(
+    *,
+    config: Mapping[str, object],
+    gate_scope: str,
+    configured_thresholds: Mapping[str, float | None],
+) -> list[str]:
+    raw = config.get("allow_unmeasured_metrics", [])
+    if not isinstance(raw, list) or any(not isinstance(item, str) for item in raw):
+        raise TypeError("allow_unmeasured_metrics must be a list of strings")
+    metrics = list(dict.fromkeys(item.strip() for item in raw if item.strip()))
+    unknown_metrics = sorted(set(metrics) - UNMEASURED_REPLAY_METRICS)
+    if unknown_metrics:
+        raise TypeError(
+            "unsupported allow_unmeasured_metrics: " + ", ".join(unknown_metrics)
+        )
+    if metrics and gate_scope != "offline_fixture_contract":
+        raise TypeError(
+            "allow_unmeasured_metrics is only valid for "
+            "offline_fixture_contract cohorts"
+        )
+    missing_thresholds = sorted(
+        metric for metric in metrics if configured_thresholds.get(metric) is None
+    )
+    if missing_thresholds:
+        raise TypeError(
+            "allow_unmeasured_metrics require configured thresholds: "
+            + ", ".join(missing_thresholds)
+        )
+    return metrics
 
 
 def _resolve_path(path: Path) -> Path:

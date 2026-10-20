@@ -53,6 +53,7 @@ reinvestment_profile_validation_report_path="${FUNDAMENTAL_REINVESTMENT_CLAMP_PR
 export FUNDAMENTAL_REINVESTMENT_CLAMP_PROFILE_VALIDATION_REPORT_PATH="${reinvestment_profile_validation_report_path}"
 uv run python scripts/validate_fundamental_reinvestment_clamp_profile.py \
   --path "${reinvestment_profile_path}" \
+  --scope release_evidence \
   --max-age-days "${FUNDAMENTAL_REINVESTMENT_CLAMP_PROFILE_MAX_AGE_DAYS:-21}" \
   --min-evidence-refs "${FUNDAMENTAL_REINVESTMENT_CLAMP_PROFILE_MIN_EVIDENCE_REFS:-1}" \
   --output "${reinvestment_profile_validation_report_path}" \

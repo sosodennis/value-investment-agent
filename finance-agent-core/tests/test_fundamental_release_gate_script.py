@@ -4,12 +4,33 @@ import json
 import os
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 
 def _base_env(*, project_root: Path, tmp_path: Path) -> dict[str, str]:
     env = os.environ.copy()
     env["UV_CACHE_DIR"] = "/tmp/.uv-cache"
+    clamp_profile_path = tmp_path / "reinvestment_clamp_profile.json"
+    clamp_profile_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "fundamental_reinvestment_clamp_profile_v1",
+                "profile_version": "reinvestment_clamp_profile_v1_test",
+                "as_of_date": datetime.now(timezone.utc).date().isoformat(),
+                "dcf_growth": {
+                    "severe_scope_mismatch_ratio_threshold": 0.45,
+                    "severe_mismatch_capex_terminal_lower_min": 0.14,
+                    "severe_mismatch_capex_terminal_lower_year1_ratio": 1.25,
+                    "severe_mismatch_wc_terminal_lower_min": 0.025,
+                    "severe_mismatch_wc_terminal_lower_year1_ratio": 0.35,
+                },
+                "evidence_refs": ["https://example.com/test-evidence"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    env["FUNDAMENTAL_REINVESTMENT_CLAMP_PROFILE_PATH"] = str(clamp_profile_path)
     env["FUNDAMENTAL_LIVE_REPLAY_COHORT_CONFIG_PATH"] = str(
         project_root / "config" / "fundamental_live_replay_cohort_config_ci.json"
     )
@@ -31,7 +52,6 @@ def _base_env(*, project_root: Path, tmp_path: Path) -> dict[str, str]:
     env.pop("FUNDAMENTAL_MAX_REPLAY_ARELLE_RUNTIME_LOCK_WAIT_P90_MS", None)
     env.pop("FUNDAMENTAL_MAX_REPLAY_VALIDATION_RULE_DRIFT_COUNT", None)
     env.pop("FUNDAMENTAL_XBRL_EXPECTED_RULE_SIGNATURE", None)
-    env.pop("FUNDAMENTAL_REINVESTMENT_CLAMP_PROFILE_PATH", None)
     env.pop("FUNDAMENTAL_REINVESTMENT_CLAMP_PROFILE_MAX_AGE_DAYS", None)
     env.pop("FUNDAMENTAL_REINVESTMENT_CLAMP_PROFILE_MIN_EVIDENCE_REFS", None)
     env.pop("FUNDAMENTAL_REINVESTMENT_CLAMP_PROFILE_VALIDATION_REPORT_PATH", None)
