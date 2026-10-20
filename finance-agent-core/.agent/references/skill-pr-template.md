@@ -1,6 +1,6 @@
 # Skill Update PR Template
 
-Use this template in PR descriptions when changing any files under `.agent/` skills.
+Use this template in PR descriptions when changing project skill files under `.agent/` or `.agents/skills/`.
 
 ## Summary
 - What skill(s) were updated:
@@ -14,6 +14,7 @@ Use this template in PR descriptions when changing any files under `.agent/` ski
   - [ ] Planner
   - [ ] Executor
   - [ ] Debug/Review
+  - [ ] Skill governance/maintenance
 - Any `agents/openai.yaml` updates:
 
 ## Trigger and Generalization

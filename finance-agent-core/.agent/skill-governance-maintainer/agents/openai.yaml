@@ -1,4 +1,4 @@
 interface:
   display_name: "Skill Governance Maintainer"
   short_description: "Govern skill updates with SCR and PR templates"
-  default_prompt: "Use $skill-governance-maintainer to decide update-vs-create for skill changes, prepare SCR/PR checklists, and provide the sync command to keep codex/project skill copies aligned."
+  default_prompt: "Use $skill-governance-maintainer to decide update-vs-create for skill changes, prepare SCR/PR checklists, and distinguish mirrored skills from project-local skills that must not be synced globally."

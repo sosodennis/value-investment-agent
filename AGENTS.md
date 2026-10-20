@@ -138,3 +138,12 @@ class TraceableField(BaseModel, Generic[T]):
 *   **Separation of Concerns**: Keep "Thinking" (Agents) separate from "Math" (Calculations).
 *   **Tool Usage**: Agents should rely on tools (e.g., `edgartools`, `yfinance`) rather than internal knowledge.
 *   **Error Handling**: Fail gracefully with explicit error messages in the Agent State.
+
+## **Part 3: Project Skill Routing**
+
+*   **Task tracking**: Use Codex's task plan/checklist for multi-step work. Do not add or use a separate task-management protocol or project-local task-tracking artifacts in this repository.
+*   **Pstack**: Use pstack as the general workflow for exploration, design, implementation, and review. The finance-agent skills below are project-specific supplements, not competing general workflows. Load only the relevant supplement for a task.
+*   **Agent implementation detail**: Use `agent-implementation-extractor` for evidence-backed deep dives into `finance-agent-core/src/agents/*`, including state, LangGraph flow, and agent boundaries. Use pstack `how` for broader or non-agent subsystem walkthroughs.
+*   **Agent failures and regressions**: Use `agent-debug-review-playbook` when diagnosing failures, degraded paths, regressions, or agent-specific quality risks; use pstack's general debugging skills for other work.
+*   **Architecture compliance**: `architecture-standard-enforcer` is the single project entry point for checking agent architecture rules. The referenced architecture standard is the source of hard rules.
+*   **Skill upkeep after architecture changes**: After completing a change that materially changes agent layer topology, subdomain ownership, workflow/state contracts, runtime boundaries, or cross-agent responsibilities, run `architecture-skill-maintainer`. It checks all three project-specific skills and updates only the guidance made stale by the change. A design proposal without an implemented architecture change does not trigger this step.

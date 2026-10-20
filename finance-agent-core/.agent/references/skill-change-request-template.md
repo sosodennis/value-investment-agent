@@ -25,6 +25,7 @@ Use this template when proposing updates to skills, standards, or playbooks.
   - [ ] Planner (`architecture-modification-planner`)
   - [ ] Executor (`agent-refactor-executor`)
   - [ ] Debug/Review (`agent-debug-review-playbook`)
+  - [ ] Skill governance/maintenance (`architecture-skill-maintainer`)
 - Proposed update summary:
 - Exact file(s) to change:
 - Why this is generalizable (not case-specific):

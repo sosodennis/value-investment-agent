@@ -22,8 +22,8 @@ Do not duplicate these templates into individual skills unless portability is ex
 ## Canonical Source and Sync
 
 Use one canonical editing source per team workflow:
-- Recommended canonical source: `~/.codex/skills`
-- Project mirror: `finance-agent-core/.agent`
+- General user-level skills: `~/.codex/skills` is canonical; `finance-agent-core/.agent` is the optional project mirror.
+- Finance-agent architecture skills: the project-local `.agents/skills/` copies are canonical and intentionally are not mirrored globally. See the project routing instructions in the repository-root `AGENTS.md`.
 
 When both locations are used, synchronize explicitly with:
 - `finance-agent-core/scripts/sync_skills.sh`
@@ -38,6 +38,8 @@ Reverse sync (project -> codex):
 - `bash finance-agent-core/scripts/sync_skills.sh --reverse`
 
 Never assume automatic sync between the two locations.
+
+Do not sync `agent-implementation-extractor`, `agent-debug-review-playbook`, `architecture-standard-enforcer`, or `architecture-skill-maintainer` to `~/.codex/skills` or `finance-agent-core/.agent`. They are project-scoped skills under the repository-root `.agents/skills/` so they cannot affect unrelated projects.
 
 ## Update-First Decision Gate (Hard Rule)
 
@@ -75,6 +77,7 @@ Create a new skill only if all three checks pass.
   - `architecture-modification-planner` for planning structure and sequencing guidance.
   - `agent-refactor-executor` for implementation slice policy and execution gates.
   - `agent-debug-review-playbook` for debugging/review methodology and findings quality.
+  - `architecture-skill-maintainer` for reconciling project-specific architecture skills after material topology changes.
 
 3. Create SCR.
 - Fill `.agent/references/skill-change-request-template.md` completely.
@@ -100,7 +103,7 @@ Create a new skill only if all three checks pass.
 - Ensure at least one representative dogfooding run is documented.
 
 8. Sync and post-merge governance check.
-- Run skill sync to keep codex/project copies aligned.
+- Run skill sync only for skills with an intentional Codex/project mirror. For repository-local architecture skills, do not sync; verify the canonical copy remains under repository-root `.agents/skills/`.
 - Confirm no stale references or conflicting duplicate rules remain.
 - Record follow-up signals for next governance triage.
 
@@ -113,7 +116,7 @@ For each governance run, output:
 - `Topology Impact`: yes/no and affected rules.
 - `Change Plan`: exact skill files to modify.
 - `Validation Plan`: commands and expected pass criteria.
-- `Sync Plan`: direction and command to keep mirrors aligned.
+- `Sync Plan`: direction and command for mirrored skills, or explicitly state that a repository-local skill must not be synced.
 - `Merge Readiness`: blockers and next action.
 
 ## Guardrails
@@ -122,4 +125,5 @@ For each governance run, output:
 - Reject case-specific rules that do not generalize.
 - Prefer edits over new skills unless capability boundaries truly differ.
 - Do not let codex/project skill copies drift; sync after governance updates.
+- Preserve intentional repository-local skills as local; do not create global copies for them.
 - Keep governance artifacts implementation-oriented and concise.
