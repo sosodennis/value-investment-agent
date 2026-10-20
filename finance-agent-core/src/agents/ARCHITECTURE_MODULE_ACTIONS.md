@@ -268,15 +268,9 @@ Current documented findings: 126.
 
 #### `src.interface.artifacts.artifact_contract_specs`
 
-- `SHARED_IMPORTS_AGENT` -> `src.agents.debate.interface.contracts` at `finance-agent-core/src/interface/artifacts/artifact_contract_specs.py:7`. Move the shared contract out of the agent package or invert the dependency.
-- `SHARED_IMPORTS_AGENT` -> `src.agents.news.interface.contracts` at `finance-agent-core/src/interface/artifacts/artifact_contract_specs.py:8`. Move the shared contract out of the agent package or invert the dependency.
-- `SHARED_IMPORTS_AGENT` -> `src.agents.technical.interface.contracts` at `finance-agent-core/src/interface/artifacts/artifact_contract_specs.py:9`. Move the shared contract out of the agent package or invert the dependency.
 
 #### `src.interface.artifacts.artifact_data_models`
 
-- `SHARED_IMPORTS_AGENT` -> `src.agents.debate.interface.contracts` at `finance-agent-core/src/interface/artifacts/artifact_data_models.py:7`. Move the shared contract out of the agent package or invert the dependency.
-- `SHARED_IMPORTS_AGENT` -> `src.agents.fundamental.subdomains.financial_statements.interface.contracts` at `finance-agent-core/src/interface/artifacts/artifact_data_models.py:8`. Move the shared contract out of the agent package or invert the dependency.
-- `SHARED_IMPORTS_AGENT` -> `src.agents.news.interface.contracts` at `finance-agent-core/src/interface/artifacts/artifact_data_models.py:11`. Move the shared contract out of the agent package or invert the dependency.
 
 
 ### [TECHNICAL-CAP-DECISION-OBSERVABILITY] Module remediation

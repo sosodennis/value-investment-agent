@@ -4,10 +4,7 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel
 
-from src.agents.debate.interface.contracts import DebateArtifactModel
-from src.agents.news.interface.contracts import NewsArtifactModel
-from src.agents.technical.interface.contracts import TechnicalArtifactModel
-from src.interface.artifacts.artifact_data_models import (
+from src.shared.artifacts.artifact_data_models import (
     DebateFactsArtifactData,
     FinancialReportsArtifactData,
     NewsArticleArtifactData,
@@ -26,6 +23,9 @@ from src.interface.artifacts.artifact_data_models import (
     TechnicalTimeseriesBundleArtifactData,
     TechnicalVerificationReportArtifactData,
 )
+from src.shared.artifacts.debate_contracts import DebateArtifactModel
+from src.shared.artifacts.news_contracts import NewsArtifactModel
+from src.shared.artifacts.technical_contracts import TechnicalArtifactModel
 from src.shared.kernel.contracts import (
     ARTIFACT_KIND_DEBATE_FACTS,
     ARTIFACT_KIND_DEBATE_FINAL_REPORT,
