@@ -36,7 +36,7 @@ from src.agents.technical.interface.serializers import (
     build_fusion_compute_preview,
     build_fusion_report_artifact_payload,
 )
-from src.agents.technical.subdomains.calibration.domain import (
+from src.agents.technical.subdomains.calibration.public import (
     calibrate_direction_confidence,
     load_technical_direction_calibration_mapping,
     resolve_direction_family,

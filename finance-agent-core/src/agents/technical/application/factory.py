@@ -21,9 +21,7 @@ from src.agents.technical.subdomains.features import (
     FeatureRuntimeService,
     IndicatorSeriesRuntimeService,
 )
-from src.agents.technical.subdomains.market_data.application.ports import (
-    IMarketDataProvider,
-)
+from src.agents.technical.subdomains.market_data.public import IMarketDataProvider
 from src.agents.technical.subdomains.patterns import PatternRuntimeService
 from src.agents.technical.subdomains.regime import RegimeRuntimeService
 from src.agents.technical.subdomains.signal_fusion import (

@@ -12,7 +12,7 @@ from src.agents.technical.application.fracdiff_runtime_contracts import (
     ObvInput,
     StatisticalStrengthInput,
 )
-from src.agents.technical.subdomains.features.domain import (
+from src.agents.technical.subdomains.features.public import (
     MacdIndicator,
     RollingFracdiffOutput,
     calculate_fd_bollinger,

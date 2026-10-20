@@ -27,7 +27,7 @@ Produce actionable findings, not broad speculative rewrites.
 - Validate whether degraded behavior is typed and observable.
 - Check for import cycles and new architecture-guard violations. Existing exact exceptions are migration work, not approval for new edges; use their action IDs in `src/agents/ARCHITECTURE_MODULE_ACTIONS.md`.
 - Sweep for private capability imports, cross-agent internals, and root workflow imports that bypass `entrypoint.py`.
-- For graph changes, run the focused fake-adapter entrypoint test and confirm graph input/output schemas.
+- For graph changes, run the focused fake-adapter entrypoint test and confirm graph input/output schemas. Build through the public entrypoint with an injected runner; test a temporary `application/subgraph.py` bridge separately only while a root caller still depends on it.
 - For runtime quality checks (similarity/scoring/consensus detectors), verify input provenance:
   - confirm reader path matches writer path in workflow state.
   - confirm logs expose bounded input diagnostics (for example text length/hash) to detect empty/wrong-source inputs.

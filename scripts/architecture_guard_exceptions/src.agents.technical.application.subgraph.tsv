@@ -1,2 +1,2 @@
-LAYER_DIRECTION|src.agents.technical.application.subgraph|src.workflow.nodes.technical_analysis.nodes|TECHNICAL-CORE
-LAYER_DIRECTION|src.agents.technical.application.subgraph|src.workflow.nodes.technical_analysis.subgraph_state|TECHNICAL-CORE
+LAYER_DIRECTION|src.agents.technical.application.subgraph|src.agents.technical.entrypoint|TECHNICAL-CORE
+LAYER_DIRECTION|src.agents.technical.application.subgraph|src.agents.technical.application.wiring|TECHNICAL-CORE

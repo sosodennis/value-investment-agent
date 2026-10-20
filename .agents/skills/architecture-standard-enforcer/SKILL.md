@@ -19,7 +19,7 @@ Read `references/cross-agent-architecture-standard.md` before analysis. It is th
    - A public entrypoint may use only its own `application.wiring` factory for default graph construction and should retain runner injection for fake-adapter tests.
 4. Review relevant runtime contracts: typed ports, state normalization, async I/O and compute, persistence semantics, degraded outcomes, and structured diagnostics.
 5. For import-boundary changes, run `python3 scripts/architecture_guard.py` from the repository root. Use `finance-agent-core/src/agents/ARCHITECTURE_MODULE_ACTIONS.md` to locate documented legacy edges. An allowlisted edge is tracked migration debt, not a recommended dependency.
-6. For graph changes, run `uv run pytest tests/agents/*/test_subgraph_entrypoint.py -q` from `finance-agent-core`; confirm fake adapters are reached and input/output schemas remain defined. If a migrated agent has its own focused test, run that test directly as well.
+6. For graph changes, run `uv run pytest tests/agents/*/test_subgraph_entrypoint.py -q` from `finance-agent-core`; confirm fake adapters are reached and input/output schemas remain defined. For migrated agents, build through the public entrypoint with an injected runner. If a temporary `application/subgraph.py` bridge still serves a root caller, test its delegation and keep its migration exception explicit until root composition migrates. Run any additional focused agent test directly as well.
 7. Report severity-ranked findings with file/line, impact, the smallest remediation, validation, and remaining coverage gaps. Say explicitly when no findings remain.
 
 ## Review Focus

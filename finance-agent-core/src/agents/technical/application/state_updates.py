@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
-from src.workflow.state import find_state_hygiene_violations
 
 logger = get_logger(__name__)
 
@@ -436,7 +436,7 @@ def build_semantic_error_update(error_message: str) -> SemanticCommandUpdateResu
 
 
 def _guard_state_update(node: str, update: JSONObject) -> JSONObject:
-    violations = find_state_hygiene_violations(update)
+    violations = _find_state_hygiene_violations(update)
     if not violations:
         return update
 
@@ -467,3 +467,40 @@ def _guard_state_update(node: str, update: JSONObject) -> JSONObject:
             }
         ],
     }
+
+
+def _find_state_hygiene_violations(
+    value: object,
+    *,
+    path: str = "",
+) -> list[str]:
+    if _is_pandas_frame_or_series(value):
+        return [path or "<root>"]
+
+    if isinstance(value, Mapping):
+        violations: list[str] = []
+        for key, item in value.items():
+            key_text = str(key)
+            next_path = f"{path}.{key_text}" if path else key_text
+            violations.extend(_find_state_hygiene_violations(item, path=next_path))
+        return violations
+
+    if isinstance(value, list | tuple | set):
+        violations = []
+        for idx, item in enumerate(value):
+            next_path = f"{path}[{idx}]" if path else f"[{idx}]"
+            violations.extend(_find_state_hygiene_violations(item, path=next_path))
+        return violations
+
+    return []
+
+
+def _is_pandas_frame_or_series(value: object) -> bool:
+    if value is None:
+        return False
+    value_type = type(value)
+    module = getattr(value_type, "__module__", "")
+    name = getattr(value_type, "__name__", "")
+    return (module == "pandas.core.frame" and name == "DataFrame") or (
+        module == "pandas.core.series" and name == "Series"
+    )

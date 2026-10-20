@@ -29,7 +29,7 @@ from src.agents.technical.application.semantic_verification_context_service impo
 from src.agents.technical.interface.evidence_bundle_projection_service import (
     serialize_evidence_bundle,
 )
-from src.agents.technical.subdomains.interpretation.domain import (
+from src.agents.technical.subdomains.interpretation.public import (
     apply_interpretation_guardrail,
 )
 from src.agents.technical.subdomains.signal_fusion import (
