@@ -7,10 +7,10 @@ keys, LiteLLM, HTTP clients, or provider SDK exception classes.
 
 ## MVP boundary
 
-OpenRouter is the only upstream provider for the first production path at
-`https://openrouter.ai/api/v1`. LiteLLM may implement the internal gateway in a
-later slice, but it is replaceable behind this contract. Direct OpenAI fallback
-is legacy behavior and is not part of the production contract.
+OpenRouter is the only upstream provider, reached through the internal LiteLLM
+gateway at `https://openrouter.ai/api/v1`. LiteLLM implements the gateway and is
+replaceable behind this contract. Direct OpenAI fallback is not part of the
+production contract.
 
 The first delivery is platform-admin scoped. Multi-tenant ownership and Vault
 or another secret manager are deferred composition concerns; adding them later
@@ -52,12 +52,9 @@ partial output instead of replaying the request.
 
 ## Migration shape
 
-The current LangChain-based agents will first receive a LangChain compatibility
-adapter over `LLMProviderPort`. This preserves prompt composition and
-LangGraph callbacks while intent, technical interpretation, news, and debate
-move to typed requests. Once migration is complete, `get_llm()` and duplicated
-agent retry loops can be removed. A LiteLLM HTTP adapter can then be tested
-against the same port without changing agent code.
+Agent application services consume `LLMProviderPort` through typed completion
+and structured requests. LangGraph still owns workflow state and callbacks;
+model requests no longer depend on the LangChain chat-model compatibility API.
 
 The current HTTP adapter is `LiteLLMGatewayProvider`. It sends the project
 model alias to the gateway's `/v1/chat/completions` endpoint, translates
@@ -70,9 +67,5 @@ The project adapter does not receive, rotate, or persist OpenRouter keys. A
 larger key pool, distributed coordination, and tenant-scoped ownership remain
 follow-up work under #91.
 
-During migration, `get_llm()` constructs one shared gateway provider and wraps
-it with `LangChainGatewayModelAdapter` whenever `LLM_GATEWAY_BASE_URL` is set.
-This keeps existing LangChain prompt composition working while the call sites
-move to typed requests. The local compatibility path is OpenRouter-only; a
-missing OpenRouter key is an explicit configuration error and never falls back
-to direct OpenAI.
+The application constructs one shared gateway provider. Local development also
+uses the gateway; it does not create a direct OpenRouter or OpenAI client.
