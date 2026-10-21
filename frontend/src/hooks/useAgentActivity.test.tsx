@@ -53,7 +53,6 @@ describe('useAgentActivity', () => {
             expect(result.current.events).toHaveLength(2);
         });
 
-        expect(result.current.events).toHaveLength(2);
         expect(result.current.events[0]?.agentId).toBe('intent_extraction');
         expect(result.current.events[0]?.runId).toBe('run_1');
         expect(result.current.events[0]?.isCurrent).toBe(true);

@@ -1,6 +1,6 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { FundamentalAnalysisOutput } from './FundamentalAnalysisOutput';
 import { ParsedFinancialPreview } from '@/types/agents/fundamental-preview-parser';
 
@@ -13,13 +13,6 @@ vi.mock('../../../hooks/useArtifact', () => ({
 vi.mock('./FinancialTable', () => ({
     FinancialTable: () => <div data-testid="financial-table">financial-table</div>,
 }));
-
-const expectSummaryValue = (label: string, value: string) => {
-    const matchingLabel = screen.getAllByText(label, { exact: true }).find(
-        (element) => element.nextElementSibling?.textContent === value
-    );
-    expect(matchingLabel).toBeDefined();
-};
 
 describe('FundamentalAnalysisOutput', () => {
     afterEach(() => {
@@ -51,10 +44,10 @@ describe('FundamentalAnalysisOutput', () => {
             },
         });
 
-        expect(screen.queryByText('Intrinsic Value')).not.toBeNull();
-        expect(screen.queryByText('Equity Value')).not.toBeNull();
-        expect(screen.queryByText('Upside Potential')).not.toBeNull();
-        expectSummaryValue('Monte Carlo', 'Disabled');
+        screen.getByText('Intrinsic Value');
+        screen.getByText('Equity Value');
+        screen.getByText('Upside Potential');
+        screen.getByText('Disabled', { exact: true });
     });
 
     it('renders MC diagnostics and quality signals when MC is enabled', () => {
@@ -91,39 +84,31 @@ describe('FundamentalAnalysisOutput', () => {
             },
         });
 
-        expectSummaryValue('Monte Carlo', 'Enabled');
-        expect(screen.queryByText('Executed: 300')).not.toBeNull();
-        expect(screen.queryByText('Window: 100')).not.toBeNull();
-        expect(screen.queryByText('Early Stop: No')).not.toBeNull();
-        expect(screen.queryByText('PSD Repair: Yes')).not.toBeNull();
-        expect(screen.queryByText('Converged: No')).not.toBeNull();
-        expect(screen.queryByText('Median Δ: 0.32% / 0.20% tol')).not.toBeNull();
-        expect(screen.queryByText('Risk: High')).not.toBeNull();
-        expect(screen.queryByText('defaults_present')).not.toBeNull();
-        expect(screen.queryByText('time_alignment:high_risk')).not.toBeNull();
-        expectSummaryValue('Time Alignment', 'high_risk');
-        expect(screen.queryAllByText('Forward Signal Policy').length).toBeGreaterThan(0);
-        expect(screen.queryByText('Signals: 3')).not.toBeNull();
-        expect(screen.queryByText('Accepted: 2')).not.toBeNull();
-        expect(screen.queryByText('Rejected: 1')).not.toBeNull();
-        expect(screen.queryByText('Evidence: 4')).not.toBeNull();
-        expect(
-            screen.queryByText('Growth adjustment: +45.5 basis points')
-        ).not.toBeNull();
-        expect(
-            screen.queryByText('Margin adjustment: -20.0 basis points')
-        ).not.toBeNull();
-        expect(screen.queryAllByText('Calibration: Applied').length).toBeGreaterThan(0);
-        expect(
-            screen.getAllByText('Mapping:', { exact: true }).length
-        ).toBeGreaterThan(0);
-        expect(
-            screen.getAllByText('forward_signal_calibration_v2_2026_03_05', {
-                exact: true,
-            }).length
-        ).toBeGreaterThan(0);
-        expect(screen.queryByText('Forward Risk: medium')).not.toBeNull();
-        expect(screen.queryByText('Source: mda')).not.toBeNull();
+        screen.getByText('Enabled', { exact: true });
+        screen.getByText('Executed: 300');
+        screen.getByText('Window: 100');
+        screen.getByText('Early Stop: No');
+        screen.getByText('PSD Repair: Yes');
+        screen.getByText('Converged: No');
+        screen.getByText('Median Δ: 0.32% / 0.20% tol');
+        screen.getByText('Risk: High');
+        screen.getByText('defaults_present');
+        screen.getByText('time_alignment:high_risk');
+        screen.getByText('high_risk', { exact: true });
+        screen.getAllByText('Forward Signal Policy');
+        screen.getByText('Signals: 3');
+        screen.getByText('Accepted: 2');
+        screen.getByText('Rejected: 1');
+        screen.getByText('Evidence: 4');
+        screen.getByText('Growth adjustment: +45.5 basis points');
+        screen.getByText('Margin adjustment: -20.0 basis points');
+        screen.getAllByText('Calibration: Applied');
+        screen.getAllByText('Mapping:', { exact: true });
+        screen.getAllByText('forward_signal_calibration_v2_2026_03_05', {
+            exact: true,
+        });
+        screen.getByText('Forward Risk: medium');
+        screen.getByText('Source: mda');
     });
 
     it('renders forward signal cards and evidence table from artifact data', () => {
@@ -185,22 +170,20 @@ describe('FundamentalAnalysisOutput', () => {
             />
         );
 
-        expect(screen.queryByText('Forward Signals')).not.toBeNull();
-        expect(screen.queryByText('Model: DCF (dcf)')).not.toBeNull();
-        expect(screen.queryByText('Growth Outlook')).not.toBeNull();
-        expect(screen.getAllByText('Source: mda').length).toBeGreaterThan(0);
-        const growthAnchorPolicy = screen.getByText('Growth / Anchor Policy').parentElement!;
-        expect(within(growthAnchorPolicy).getByText('Calibration:', { exact: true })).not.toBeNull();
-        expect(within(growthAnchorPolicy).getByText('Applied', { exact: true })).not.toBeNull();
-        expect(within(growthAnchorPolicy).getByText(/Mapping:/)).not.toBeNull();
-        expect(
-            within(growthAnchorPolicy).getByText(
-                'forward_signal_calibration_v2_2026_03_05',
-                { exact: true }
-            )
-        ).not.toBeNull();
-        expect(screen.queryByText('2025-11-03')).not.toBeNull();
-        expect(screen.queryByText('0000320193-25-000073')).not.toBeNull();
+        screen.getByText('Forward Signals');
+        screen.getByText('Model: DCF (dcf)');
+        screen.getByText('Growth Outlook');
+        screen.getAllByText('Source: mda');
+        screen.getByText('Growth / Anchor Policy');
+        screen.getByText('Calibration:', { exact: true });
+        screen.getByText('Applied', { exact: true });
+        screen.getAllByText(/Mapping:/);
+        screen.getAllByText(
+            'forward_signal_calibration_v2_2026_03_05',
+            { exact: true }
+        );
+        screen.getByText('2025-11-03');
+        screen.getByText('0000320193-25-000073');
         expect(
             screen
                 .getByRole('link', { name: /open filing/i })
@@ -241,31 +224,26 @@ describe('FundamentalAnalysisOutput', () => {
             },
         });
 
-        expect(screen.queryByText('Sensitivity (One-Way)')).not.toBeNull();
-        expect(screen.queryByText('Enabled: Yes')).not.toBeNull();
-        expect(screen.queryByText('Scenarios: 16')).not.toBeNull();
-        expect(screen.queryByText('Max Upside: +22.0%')).not.toBeNull();
-        expect(screen.queryByText('Max Downside: -19.0%')).not.toBeNull();
-        expect(screen.queryByText(/wacc -100bp -> \+22.0%/i)).not.toBeNull();
-        expect(screen.queryAllByText('Forward Signal Policy').length).toBeGreaterThan(0);
-        expect(screen.queryAllByText('Calibration: Applied').length).toBeGreaterThan(0);
-        const growthAnchorPolicy = screen.getByText('Growth / Anchor Policy').parentElement!;
-        expect(within(growthAnchorPolicy).getByText('Calibration:', { exact: true })).not.toBeNull();
-        expect(within(growthAnchorPolicy).getByText('Applied', { exact: true })).not.toBeNull();
-        expect(within(growthAnchorPolicy).getByText(/Mapping:/)).not.toBeNull();
-        expect(
-            within(growthAnchorPolicy).getByText(
-                'forward_signal_calibration_v2_2026_03_05',
-                { exact: true }
-            )
-        ).not.toBeNull();
-        expect(screen.queryAllByText('Consensus: Ignored').length).toBeGreaterThan(0);
-        expect(screen.queryAllByText('Horizon: short_term').length).toBeGreaterThan(0);
-        expect(
-            screen.queryAllByText('Terminal Anchor: Policy Default (Market Stale)')
-                .length
-        ).toBeGreaterThan(0);
-        expect(screen.queryAllByText('Stale Fallback: Yes').length).toBeGreaterThan(0);
+        screen.getByText('Sensitivity (One-Way)');
+        screen.getByText('Enabled: Yes');
+        screen.getByText('Scenarios: 16');
+        screen.getByText('Max Upside: +22.0%');
+        screen.getByText('Max Downside: -19.0%');
+        screen.getByText(/wacc -100bp -> \+22.0%/i);
+        screen.getAllByText('Forward Signal Policy');
+        screen.getAllByText('Calibration: Applied');
+        screen.getByText('Growth / Anchor Policy');
+        screen.getByText('Calibration:', { exact: true });
+        screen.getByText('Applied', { exact: true });
+        screen.getAllByText(/Mapping:/);
+        screen.getAllByText(
+            'forward_signal_calibration_v2_2026_03_05',
+            { exact: true }
+        );
+        screen.getAllByText('Consensus: Ignored');
+        screen.getAllByText('Horizon: short_term');
+        screen.getAllByText('Terminal Anchor: Policy Default (Market Stale)');
+        screen.getAllByText('Stale Fallback: Yes');
     });
 
     it('renders base assumption guardrail summary from diagnostics and assumption breakdown fallback', () => {
@@ -296,35 +274,20 @@ describe('FundamentalAnalysisOutput', () => {
             },
         });
 
-        expect(screen.queryByText('Base Assumption Guardrail')).not.toBeNull();
-        const growthGuardrail = screen.getByText('Growth', { exact: true }).parentElement!
-            .parentElement!;
-        expect(within(growthGuardrail).getByText('Applied')).not.toBeNull();
-        expect(
-            within(growthGuardrail).getByText(
-                'Version: base_assumption_guardrail_v1_2026_03_05'
-            )
-        ).not.toBeNull();
-        expect(within(growthGuardrail).getByText('Y1 Raw: 66.8%')).not.toBeNull();
-        expect(within(growthGuardrail).getByText('Y1 Guarded: 42.0%')).not.toBeNull();
-        expect(within(growthGuardrail).getByText('YN Raw: 4.0%')).not.toBeNull();
-        expect(within(growthGuardrail).getByText('YN Guarded: 3.0%')).not.toBeNull();
-
-        const marginGuardrail = screen.getByText('Margin', { exact: true }).parentElement!
-            .parentElement!;
-        expect(within(marginGuardrail).getByText('Applied')).not.toBeNull();
-        expect(
-            within(marginGuardrail).getByText(
-                'Version: base_assumption_guardrail_v1_2026_03_05'
-            )
-        ).not.toBeNull();
-        expect(within(marginGuardrail).getByText('Y1 Raw: 59.4%')).not.toBeNull();
-        expect(within(marginGuardrail).getByText('Y1 Guarded: 45.0%')).not.toBeNull();
-        expect(within(marginGuardrail).getByText('YN Raw: 59.4%')).not.toBeNull();
-        expect(within(marginGuardrail).getByText('YN Guarded: 35.0%')).not.toBeNull();
-        expect(
-            within(marginGuardrail).getByText('Reasons: margin_ceiling_clamp')
-        ).not.toBeNull();
+        screen.getByText('Base Assumption Guardrail');
+        screen.getByText('Growth', { exact: true });
+        screen.getByText('Margin', { exact: true });
+        screen.getAllByText('Applied');
+        screen.getAllByText('Version: base_assumption_guardrail_v1_2026_03_05');
+        screen.getByText('Y1 Raw: 66.8%');
+        screen.getByText('Y1 Guarded: 42.0%');
+        screen.getByText('YN Raw: 4.0%');
+        screen.getByText('YN Guarded: 3.0%');
+        screen.getByText('Y1 Raw: 59.4%');
+        screen.getByText('Y1 Guarded: 45.0%');
+        screen.getByText('YN Raw: 59.4%');
+        screen.getByText('YN Guarded: 35.0%');
+        screen.getByText('Reasons: margin_ceiling_clamp');
     });
 
     it('toggles evidence preview and full text', () => {
@@ -371,17 +334,13 @@ describe('FundamentalAnalysisOutput', () => {
             />
         );
 
-        expect(
-            screen.queryByText('We expect supply constraints to be a headwind…')
-        ).not.toBeNull();
-        expect(screen.queryByText('Model: DCF (Growth) (dcf_growth)')).not.toBeNull();
+        screen.getByText('We expect supply constraints to be a headwind…');
+        screen.getByText('Model: DCF (Growth) (dcf_growth)');
         const expandButton = screen.getByRole('button', { name: 'Expand' });
         fireEvent.click(expandButton);
-        expect(
-            screen.queryByText(
-                'We expect supply constraints to be a headwind to Gaming in the first quarter of fiscal 2027 and beyond.'
-            )
-        ).not.toBeNull();
-        expect(screen.getByRole('button', { name: 'Collapse' })).not.toBeNull();
+        screen.getByText(
+            'We expect supply constraints to be a headwind to Gaming in the first quarter of fiscal 2027 and beyond.'
+        );
+        screen.getByRole('button', { name: 'Collapse' });
     });
 });

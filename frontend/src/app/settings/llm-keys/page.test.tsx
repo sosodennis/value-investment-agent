@@ -69,7 +69,7 @@ describe('OpenRouter key settings', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Test and add key' }));
 
         await screen.findByText('Primary key');
-        expect(screen.getByText('Configured')).toBeTruthy();
+        screen.getByText('Configured');
         expect(api.addOpenRouterKey).toHaveBeenCalledWith({
             label: 'Primary key',
             api_key: 'sk-or-v1-test-openrouter-secret',
@@ -88,7 +88,7 @@ describe('OpenRouter key settings', () => {
         await screen.findByText(existingKey.label);
         fireEvent.click(screen.getByRole('button', { name: 'Test' }));
 
-        expect(await screen.findByText('Primary key is healthy.')).toBeTruthy();
+        await screen.findByText('Primary key is healthy.');
         expect(api.testOpenRouterKey).toHaveBeenCalledWith(existingKey.id);
     });
 
@@ -100,7 +100,7 @@ describe('OpenRouter key settings', () => {
         await screen.findByText(existingKey.label);
         fireEvent.click(screen.getByRole('button', { name: 'Delete Primary key' }));
 
-        expect(await screen.findByText('Primary key was deleted.')).toBeTruthy();
+        await screen.findByText('Primary key was deleted.');
         expect(api.deleteOpenRouterKey).toHaveBeenCalledWith(existingKey.id);
         expect(confirm).toHaveBeenCalledOnce();
         expect(screen.queryByText(existingKey.label)).toBeNull();
@@ -150,6 +150,6 @@ describe('OpenRouter key settings', () => {
         fireEvent.click(await screen.findByRole('option', { name: /Example Free Model/ }));
 
         await waitFor(() => expect(api.updateLlmSettings).toHaveBeenCalledWith('provider/example:free'));
-        expect(await screen.findByText('Default model changed to provider/example:free.')).toBeTruthy();
+        await screen.findByText('Default model changed to provider/example:free.');
     });
 });

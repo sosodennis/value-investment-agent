@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, vi } from 'vitest';
 
 import { TechnicalObservabilityWorkspace } from './TechnicalObservabilityWorkspace';
 
@@ -135,27 +135,23 @@ describe('TechnicalObservabilityWorkspace', () => {
     it('renders overview KPI and backlog summary content', () => {
         render(<TechnicalObservabilityWorkspace />);
 
-        expect(
-            screen.getByRole('heading', { name: 'Technical Observability' }),
-        ).not.toBeNull();
-        expect(screen.getByLabelText('Tickers')).not.toBeNull();
-        expect(screen.getAllByText('Label Coverage').length).toBeGreaterThan(0);
-        expect(screen.getAllByText('70%').length).toBeGreaterThan(0);
-        expect(screen.getByText('Outcome collection pressure points')).not.toBeNull();
-        expect(screen.getByText('AAPL · bullish')).not.toBeNull();
+        screen.getByRole('heading', { name: 'Technical Observability' });
+        screen.getByLabelText('Tickers');
+        screen.getAllByText('Label Coverage');
+        screen.getAllByText('70%');
+        screen.getByText('Outcome collection pressure points');
+        screen.getByText('AAPL · bullish');
     });
 
     it('switches to event explorer and opens the event detail drill-down', () => {
         render(<TechnicalObservabilityWorkspace />);
 
-        fireEvent.click(
-            screen.getAllByRole('button', { name: 'Event Explorer' })[0],
-        );
+        fireEvent.click(screen.getByRole('button', { name: 'Event Explorer' }));
         fireEvent.click(screen.getByRole('button', { name: 'Inspect evt-1' }));
 
-        expect(screen.getByText('Artifact References')).not.toBeNull();
-        expect(screen.getByText('art-1')).not.toBeNull();
-        expect(screen.getByText('setup quality')).not.toBeNull();
+        screen.getByText('Artifact References');
+        screen.getByText('art-1');
+        screen.getByText('setup quality');
     });
 
     it('shows loading copy when the overview is still refreshing', () => {
@@ -169,7 +165,7 @@ describe('TechnicalObservabilityWorkspace', () => {
 
         render(<TechnicalObservabilityWorkspace />);
 
-        expect(screen.getByText('Refreshing monitoring summary')).not.toBeNull();
+        screen.getByText('Refreshing monitoring summary');
     });
 
     it('shows an empty state when no observability rows match the filters', () => {
@@ -183,9 +179,7 @@ describe('TechnicalObservabilityWorkspace', () => {
 
         render(<TechnicalObservabilityWorkspace />);
 
-        expect(
-            screen.getByText('No observability data matches the current scope'),
-        ).not.toBeNull();
+        screen.getByText('No observability data matches the current scope');
     });
 
     it('shows a degraded banner when the read model responds with an error', () => {
@@ -199,50 +193,38 @@ describe('TechnicalObservabilityWorkspace', () => {
 
         render(<TechnicalObservabilityWorkspace />);
 
-        expect(
-            screen.getByText('Read model returned a degraded response'),
-        ).not.toBeNull();
-        expect(screen.getByText('backend unavailable')).not.toBeNull();
+        screen.getByText('Read model returned a degraded response');
+        screen.getByText('backend unavailable');
     });
 
     it('renders cohort analysis slices under the raw outcomes lens', () => {
         render(<TechnicalObservabilityWorkspace />);
 
-        fireEvent.click(
-            screen.getAllByRole('button', { name: 'Cohort Analysis' })[0],
-        );
+        fireEvent.click(screen.getByRole('button', { name: 'Cohort Analysis' }));
 
-        expect(screen.getByText('Cohort Slices')).not.toBeNull();
-        expect(screen.getByText('1D timeframe')).not.toBeNull();
-        expect(screen.getByText('1WK timeframe')).not.toBeNull();
-        expect(screen.getAllByText('Avg Forward Return').length).toBeGreaterThan(0);
+        screen.getByText('Cohort Slices');
+        screen.getByText('1D timeframe');
+        screen.getByText('1WK timeframe');
+        screen.getAllByText('Avg Forward Return');
     });
 
     it('keeps approved snapshots separate from raw cohort truth', () => {
         render(<TechnicalObservabilityWorkspace />);
 
-        fireEvent.click(
-            screen.getAllByRole('button', { name: 'Cohort Analysis' })[0],
-        );
+        fireEvent.click(screen.getByRole('button', { name: 'Cohort Analysis' }));
         fireEvent.click(screen.getByRole('button', { name: 'Approved Snapshots' }));
 
-        expect(
-            screen.getByText(
-                'Approved snapshots stay separate from raw cohort truth'
-            ),
-        ).not.toBeNull();
+        screen.getByText('Approved snapshots stay separate from raw cohort truth');
     });
 
     it('renders calibration readiness sample sufficiency and drop reasons', () => {
         render(<TechnicalObservabilityWorkspace />);
 
-        fireEvent.click(
-            screen.getAllByRole('button', { name: 'Calibration Readiness' })[0],
-        );
+        fireEvent.click(screen.getByRole('button', { name: 'Calibration Readiness' }));
 
-        expect(screen.getByText('Candidate Rows')).not.toBeNull();
-        expect(screen.getByText('Readiness Ratio')).not.toBeNull();
-        expect(screen.getByText('Builder-ready calibration depth')).not.toBeNull();
-        expect(screen.getByText('missing outcome path')).not.toBeNull();
+        screen.getByText('Candidate Rows');
+        screen.getByText('Readiness Ratio');
+        screen.getByText('Builder-ready calibration depth');
+        screen.getByText('missing outcome path');
     });
 });
