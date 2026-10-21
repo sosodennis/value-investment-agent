@@ -34,21 +34,22 @@ model listing. It never prints or sends a key to the browser.
 - A request with a syntactically valid disposable OpenRouter key reached
   `https://openrouter.ai/api/v1` and returned OpenRouter's `401 User not found`.
   This proves the OpenRouter route and authorization header path are active.
-- The same 401 response reported `No fallback was attempted`, despite two
-  deployments under one model alias. LiteLLM's default behavior therefore does
-  not yet prove the credential rotation requirement for this project.
+- With an explicit `openrouter-default` -> `openrouter-fallback` fallback map,
+  the same 401 caused LiteLLM to attempt the second OpenRouter credential. The
+  response identified both upstream attempts. This proves bounded explicit
+  failover, but not fair rotation or recovery for a larger key pool.
 - The authenticated model metadata response masked the provider credentials;
   no upstream key was returned by `/model/info`.
 
 ## Decision
 
 **Go for an isolated POC and adapter contract work. No-go for production
-cutover yet.** Before #92 can be closed, a staging run with disposable real
-OpenRouter keys must prove: key selection across successful requests, 401/429
-cooldown and replacement behavior, bounded retry, pre-first-byte stream
-fallback, post-first-byte terminal errors, and behavior after gateway/Postgres
-degradation. The gateway image must also move from a mutable tag to a reviewed
-version or digest.
+cutover yet.** The explicit fallback path is suitable for the simplified MVP,
+but a staging run with disposable real OpenRouter keys must still prove: key
+selection across successful requests, 401/429 cooldown and replacement
+behavior, bounded retry, pre-first-byte stream fallback, post-first-byte
+terminal errors, and behavior after gateway/Postgres degradation. The gateway
+image must also move from a mutable tag to a reviewed version or digest.
 
 The project-owned provider contract remains the compatibility boundary. If
 LiteLLM cannot provide the required key and streaming semantics, #91 can own a

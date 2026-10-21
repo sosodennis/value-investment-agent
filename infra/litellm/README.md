@@ -2,8 +2,8 @@
 
 This is the single-instance gateway experiment for issue #92. It routes the
 project's `openrouter-default` alias to OpenRouter's OpenAI-compatible API and
-registers two credential slots so key selection and cooldown behavior can be
-observed without changing agent code.
+registers a default credential and an explicit fallback credential so key
+selection and cooldown behavior can be observed without changing agent code.
 
 Run it from the repository root:
 
@@ -26,7 +26,8 @@ coordination. The project backend should later call the internal URL with
 OpenRouter key.
 
 The model alias is `openrouter-default` and currently targets OpenRouter's
-`auto` route. A real staging run must verify model IDs, `HTTP-Referer`,
+`auto` route. `openrouter-fallback` is used after a configured default-route
+failure. A real staging run must verify model IDs, `HTTP-Referer`,
 `X-Title`, usage, 401/429/5xx mapping, and streaming behavior with disposable
 OpenRouter credentials. The two configured slots are request-time failover;
 they do not create, rotate, or revoke OpenRouter credentials.

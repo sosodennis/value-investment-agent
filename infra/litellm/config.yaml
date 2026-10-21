@@ -9,7 +9,7 @@ model_list:
       headers:
         HTTP-Referer: os.environ/OPENROUTER_HTTP_REFERER
         X-Title: os.environ/OPENROUTER_X_TITLE
-  - model_name: openrouter-default
+  - model_name: openrouter-fallback
     litellm_params:
       model: openrouter/auto
       api_base: os.environ/OPENROUTER_BASE_URL
@@ -30,4 +30,6 @@ general_settings:
   database_url: os.environ/DATABASE_URL
 
 litellm_settings:
+  fallbacks:
+    - {"openrouter-default": ["openrouter-fallback"]}
   drop_params: true

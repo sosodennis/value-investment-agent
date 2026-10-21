@@ -10,13 +10,19 @@ def test_litellm_poc_targets_openrouter_with_two_credential_slots() -> None:
     models = config["model_list"]
 
     assert len(models) == 2
-    assert {item["model_name"] for item in models} == {"openrouter-default"}
+    assert [item["model_name"] for item in models] == [
+        "openrouter-default",
+        "openrouter-fallback",
+    ]
     assert all(item["litellm_params"]["model"] == "openrouter/auto" for item in models)
     assert [item["litellm_params"]["api_key"] for item in models] == [
         "os.environ/OPENROUTER_API_KEY_1",
         "os.environ/OPENROUTER_API_KEY_2",
     ]
     assert config["router_settings"]["num_retries"] == 1
+    assert config["litellm_settings"]["fallbacks"] == [
+        {"openrouter-default": ["openrouter-fallback"]}
+    ]
 
 
 def test_poc_does_not_store_literal_provider_credentials() -> None:
