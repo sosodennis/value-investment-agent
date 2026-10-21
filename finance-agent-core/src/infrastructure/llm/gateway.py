@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import time
 from collections.abc import AsyncIterator, Iterator, Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from json import JSONDecodeError
 from typing import TypeVar, cast
 
@@ -29,6 +32,26 @@ _RETRYABLE_STATUS_CODES = frozenset({408, 429, 500, 502, 503, 504})
 _MAX_ERROR_TEXT = 500
 
 
+def _env_int(name: str, default: int, *, minimum: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return max(minimum, int(raw))
+    except ValueError:
+        return default
+
+
+def _env_float(name: str, default: float, *, minimum: float) -> float:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return max(minimum, float(raw))
+    except ValueError:
+        return default
+
+
 @dataclass(frozen=True)
 class LiteLLMGatewayConfig:
     """Runtime settings for the project-to-gateway data plane."""
@@ -37,12 +60,25 @@ class LiteLLMGatewayConfig:
     api_key: str
     max_attempts: int = 2
     backoff_seconds: float = 0.25
+    max_backoff_seconds: float = 8.0
+    jitter_seconds: float = 0.0
 
     @classmethod
     def from_env(cls) -> LiteLLMGatewayConfig:
         base_url = os.getenv("LLM_GATEWAY_BASE_URL", "http://localhost:4000")
         api_key = os.getenv("LLM_GATEWAY_API_KEY", "")
-        return cls(base_url=base_url, api_key=api_key)
+        return cls(
+            base_url=base_url,
+            api_key=api_key,
+            max_attempts=_env_int("LLM_GATEWAY_MAX_ATTEMPTS", 2, minimum=1),
+            backoff_seconds=_env_float(
+                "LLM_GATEWAY_BACKOFF_SECONDS", 0.25, minimum=0.0
+            ),
+            max_backoff_seconds=_env_float(
+                "LLM_GATEWAY_MAX_BACKOFF_SECONDS", 8.0, minimum=0.0
+            ),
+            jitter_seconds=_env_float("LLM_GATEWAY_JITTER_SECONDS", 0.0, minimum=0.0),
+        )
 
 
 class LiteLLMGatewayProvider:
@@ -91,17 +127,17 @@ class LiteLLMGatewayProvider:
                     if exc.retryable and attempt >= self._config.max_attempts:
                         raise self._terminal_error(exc) from exc
                     raise
-                self._sleep(attempt)
+                self._sleep(attempt, exc)
             except httpx.TimeoutException as exc:
                 error = self._transport_error(request, attempt, exc, timeout=True)
                 if attempt >= self._config.max_attempts:
                     raise self._terminal_error(error) from exc
-                self._sleep(attempt)
+                self._sleep(attempt, error)
             except httpx.RequestError as exc:
                 error = self._transport_error(request, attempt, exc, timeout=False)
                 if attempt >= self._config.max_attempts:
                     raise self._terminal_error(error) from exc
-                self._sleep(attempt)
+                self._sleep(attempt, error)
             except (JSONDecodeError, TypeError, ValueError) as exc:
                 raise self._malformed_response(request, attempt, str(exc)) from exc
         raise RuntimeError("gateway completion retry loop reached unreachable state")
@@ -133,17 +169,17 @@ class LiteLLMGatewayProvider:
                     if exc.retryable and attempt >= self._config.max_attempts:
                         raise self._terminal_error(exc) from exc
                     raise
-                await self._async_sleep(attempt)
+                await self._async_sleep(attempt, exc)
             except httpx.TimeoutException as exc:
                 error = self._transport_error(request, attempt, exc, timeout=True)
                 if attempt >= self._config.max_attempts:
                     raise self._terminal_error(error) from exc
-                await self._async_sleep(attempt)
+                await self._async_sleep(attempt, error)
             except httpx.RequestError as exc:
                 error = self._transport_error(request, attempt, exc, timeout=False)
                 if attempt >= self._config.max_attempts:
                     raise self._terminal_error(error) from exc
-                await self._async_sleep(attempt)
+                await self._async_sleep(attempt, error)
             except (JSONDecodeError, TypeError, ValueError) as exc:
                 raise self._malformed_response(request, attempt, str(exc)) from exc
         raise RuntimeError("gateway completion retry loop reached unreachable state")
@@ -240,7 +276,7 @@ class LiteLLMGatewayProvider:
                     if exc.retryable and attempt >= self._config.max_attempts:
                         raise self._terminal_error(exc) from exc
                     raise
-                self._sleep(attempt)
+                self._sleep(attempt, exc)
             except (httpx.TimeoutException, httpx.RequestError) as exc:
                 if emitted:
                     raise self._stream_interrupted(
@@ -255,7 +291,15 @@ class LiteLLMGatewayProvider:
                             timeout=isinstance(exc, httpx.TimeoutException),
                         )
                     ) from exc
-                self._sleep(attempt)
+                self._sleep(
+                    attempt,
+                    self._transport_error(
+                        request,
+                        attempt,
+                        exc,
+                        timeout=isinstance(exc, httpx.TimeoutException),
+                    ),
+                )
             except (JSONDecodeError, TypeError, ValueError) as exc:
                 if emitted:
                     raise self._stream_interrupted(
@@ -333,7 +377,7 @@ class LiteLLMGatewayProvider:
                     if exc.retryable and attempt >= self._config.max_attempts:
                         raise self._terminal_error(exc) from exc
                     raise
-                await self._async_sleep(attempt)
+                await self._async_sleep(attempt, exc)
             except (httpx.TimeoutException, httpx.RequestError) as exc:
                 if emitted:
                     raise self._stream_interrupted(
@@ -348,7 +392,15 @@ class LiteLLMGatewayProvider:
                             timeout=isinstance(exc, httpx.TimeoutException),
                         )
                     ) from exc
-                await self._async_sleep(attempt)
+                await self._async_sleep(
+                    attempt,
+                    self._transport_error(
+                        request,
+                        attempt,
+                        exc,
+                        timeout=isinstance(exc, httpx.TimeoutException),
+                    ),
+                )
             except (JSONDecodeError, TypeError, ValueError) as exc:
                 if emitted:
                     raise self._stream_interrupted(
@@ -456,6 +508,7 @@ class LiteLLMGatewayProvider:
             reason=reason,
             retryable=status in _RETRYABLE_STATUS_CODES,
             http_status=status,
+            retry_after_seconds=_retry_after_seconds(response.headers),
             attempt=attempt,
         )
 
@@ -491,6 +544,7 @@ class LiteLLMGatewayProvider:
             reason=error.reason,
             retryable=False,
             http_status=error.http_status,
+            retry_after_seconds=error.retry_after_seconds,
             attempt=error.attempt,
             partial_output=error.partial_output,
             partial_tool_calls=error.partial_tool_calls,
@@ -532,15 +586,28 @@ class LiteLLMGatewayProvider:
     def _should_retry(self, error: LLMProviderError, attempt: int) -> bool:
         return error.retryable and attempt < self._config.max_attempts
 
-    def _sleep(self, attempt: int) -> None:
-        if self._config.backoff_seconds > 0:
-            time.sleep(self._config.backoff_seconds * attempt)
+    def _sleep(self, attempt: int, error: LLMProviderError | None = None) -> None:
+        delay = self._retry_delay(attempt, error)
+        if delay > 0:
+            time.sleep(delay)
 
-    async def _async_sleep(self, attempt: int) -> None:
-        if self._config.backoff_seconds > 0:
+    async def _async_sleep(
+        self, attempt: int, error: LLMProviderError | None = None
+    ) -> None:
+        delay = self._retry_delay(attempt, error)
+        if delay > 0:
             import asyncio
 
-            await asyncio.sleep(self._config.backoff_seconds * attempt)
+            await asyncio.sleep(delay)
+
+    def _retry_delay(self, attempt: int, error: LLMProviderError | None) -> float:
+        retry_after = error.retry_after_seconds if error is not None else None
+        if retry_after is not None:
+            return min(self._config.max_backoff_seconds, max(0.0, retry_after))
+        exponential = self._config.backoff_seconds * (2 ** max(0, attempt - 1))
+        capped = min(self._config.max_backoff_seconds, exponential)
+        jitter = random.uniform(0.0, self._config.jitter_seconds)
+        return min(self._config.max_backoff_seconds, capped + jitter)
 
     def _parse_completion(
         self, raw: object, request: CompletionRequest, attempt: int
@@ -675,3 +742,20 @@ def _response_reason(response: httpx.Response) -> str:
     except (JSONDecodeError, ValueError, TypeError):
         pass
     return response.text[:_MAX_ERROR_TEXT] or "gateway request failed"
+
+
+def _retry_after_seconds(headers: Mapping[str, str]) -> float | None:
+    value = headers.get("retry-after")
+    if not value:
+        return None
+    try:
+        return max(0.0, float(value))
+    except ValueError:
+        pass
+    try:
+        retry_at = parsedate_to_datetime(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if retry_at.tzinfo is None:
+        retry_at = retry_at.replace(tzinfo=UTC)
+    return max(0.0, (retry_at - datetime.now(UTC)).total_seconds())

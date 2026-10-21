@@ -35,7 +35,12 @@ Adapters map SDK and HTTP failures to `LLMProviderError` and
 bounded partial output are available for application error mapping. Provider
 keys, prompts, raw provider errors, and SDK objects never cross this boundary.
 
-Bounded retry and model failover belong to the adapter/gateway. Invalid
+Bounded retry and model failover belong to the adapter/gateway. The MVP gateway
+defaults to two attempts, exponential backoff from `0.25s`, an `8s` maximum,
+and no jitter; `LLM_GATEWAY_MAX_ATTEMPTS`,
+`LLM_GATEWAY_BACKOFF_SECONDS`, `LLM_GATEWAY_MAX_BACKOFF_SECONDS`, and
+`LLM_GATEWAY_JITTER_SECONDS` make those limits explicit. A numeric or HTTP-date
+`Retry-After` header is honored and capped by the maximum delay. Invalid
 requests, policy rejections, schema failures, and cancellation are terminal.
 Transient timeout, rate-limit, and selected upstream failures may be retried.
 Streaming may fail over only before the first delta or tool side effect. After
@@ -55,9 +60,12 @@ The current HTTP adapter is `LiteLLMGatewayProvider`. It sends the project
 model alias to the gateway's `/v1/chat/completions` endpoint, translates
 OpenAI-compatible usage and tool-call data, sends Pydantic JSON Schema for
 structured requests, and adds request/idempotency headers. Its retry budget is
-bounded and its terminal errors are non-retryable after exhaustion. The adapter
-does not implement credential selection; that remains an explicit gateway or
-key-pool policy until the OpenRouter POC proves which layer owns it.
+bounded and its terminal errors are non-retryable after exhaustion. For the
+simplified MVP, LiteLLM owns credential selection through the explicit
+`openrouter-default` -> `openrouter-fallback` route and its cooldown settings.
+The project adapter does not receive, rotate, or persist OpenRouter keys. A
+larger key pool, distributed coordination, and tenant-scoped ownership remain
+follow-up work under #91.
 
 During migration, `get_llm()` constructs one shared gateway provider and wraps
 it with `LangChainGatewayModelAdapter` whenever `LLM_GATEWAY_BASE_URL` is set.

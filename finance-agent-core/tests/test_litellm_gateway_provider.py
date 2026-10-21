@@ -2,6 +2,7 @@ import httpx
 import pytest
 from pydantic import BaseModel
 
+import src.infrastructure.llm.gateway as gateway_module
 from src.infrastructure.llm.gateway import LiteLLMGatewayConfig, LiteLLMGatewayProvider
 from src.shared.llm.contracts import (
     ChatMessage,
@@ -101,6 +102,52 @@ def test_complete_retries_transient_gateway_failure_once() -> None:
 
     assert provider.complete(_request()).text == "ok"
     assert attempts == 2
+
+
+def test_complete_honors_bounded_retry_after_delay(monkeypatch) -> None:
+    attempts = 0
+    delays: list[float] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            return httpx.Response(
+                429,
+                headers={"Retry-After": "30"},
+                json={"error": {"message": "rate limited"}},
+                request=request,
+            )
+        return httpx.Response(
+            200,
+            json={
+                "model": "openrouter/auto",
+                "choices": [{"message": {"content": "ok"}}],
+            },
+            request=request,
+        )
+
+    monkeypatch.setattr(gateway_module.time, "sleep", delays.append)
+    client = httpx.Client(
+        transport=httpx.MockTransport(handler), base_url="http://gateway/v1"
+    )
+    provider = LiteLLMGatewayProvider(
+        LiteLLMGatewayConfig(
+            base_url="http://gateway",
+            api_key="gateway-key",
+            max_attempts=2,
+            backoff_seconds=0.25,
+            max_backoff_seconds=2.0,
+        ),
+        client=client,
+        async_client=httpx.AsyncClient(
+            transport=httpx.MockTransport(handler), base_url="http://gateway/v1"
+        ),
+    )
+
+    assert provider.complete(_request()).text == "ok"
+    assert attempts == 2
+    assert delays == [2.0]
 
 
 def test_complete_does_not_retry_authentication_failure() -> None:

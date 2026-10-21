@@ -145,6 +145,7 @@ class LLMProviderError(RuntimeError):
         reason: str,
         retryable: bool,
         http_status: int | None = None,
+        retry_after_seconds: float | None = None,
         attempt: int = 1,
         partial_output: str = "",
         partial_tool_calls: tuple[dict[str, object], ...] = (),
@@ -156,6 +157,7 @@ class LLMProviderError(RuntimeError):
         self.reason = reason
         self.retryable = retryable
         self.http_status = http_status
+        self.retry_after_seconds = retry_after_seconds
         self.attempt = attempt
         self.partial_output = partial_output
         self.partial_tool_calls = partial_tool_calls

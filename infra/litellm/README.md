@@ -27,7 +27,17 @@ OpenRouter key.
 
 The model alias is `openrouter-default` and currently targets OpenRouter's
 `auto` route. `openrouter-fallback` is used after a configured default-route
-failure. A real staging run must verify model IDs, `HTTP-Referer`,
-`X-Title`, usage, 401/429/5xx mapping, and streaming behavior with disposable
-OpenRouter credentials. The two configured slots are request-time failover;
-they do not create, rotate, or revoke OpenRouter credentials.
+failure. LiteLLM's `allowed_fails`, `cooldown_time`, and explicit fallback map
+provide the simplified MVP policy. The two configured slots are request-time
+failover; they do not create, rotate, or revoke OpenRouter credentials.
+
+The application adapter owns only its bounded gateway retry policy. It honors a
+gateway `Retry-After` header and caps the delay. Configure that policy with
+`LLM_GATEWAY_MAX_ATTEMPTS`, `LLM_GATEWAY_BACKOFF_SECONDS`,
+`LLM_GATEWAY_MAX_BACKOFF_SECONDS`, and `LLM_GATEWAY_JITTER_SECONDS`.
+
+A real staging run must verify model IDs, `HTTP-Referer`, `X-Title`, usage,
+401/429/5xx mapping, and streaming behavior with disposable OpenRouter
+credentials. Larger key pools, distributed coordination, and Vault remain
+outside this MVP and require a follow-up issue if operational evidence shows
+the two-slot route is insufficient.

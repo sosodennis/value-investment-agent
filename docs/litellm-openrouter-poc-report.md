@@ -40,16 +40,20 @@ model listing. It never prints or sends a key to the browser.
   failover, but not fair rotation or recovery for a larger key pool.
 - The authenticated model metadata response masked the provider credentials;
   no upstream key was returned by `/model/info`.
+- The project adapter now honors a gateway `Retry-After` value and applies a
+  bounded exponential retry policy. Compose exposes the policy limits so the
+  backend and contract use the same settings.
 
 ## Decision
 
 **Go for an isolated POC and adapter contract work. No-go for production
-cutover yet.** The explicit fallback path is suitable for the simplified MVP,
-but a staging run with disposable real OpenRouter keys must still prove: key
-selection across successful requests, 401/429 cooldown and replacement
-behavior, bounded retry, pre-first-byte stream fallback, post-first-byte
-terminal errors, and behavior after gateway/Postgres degradation. The gateway
-image must also move from a mutable tag to a reviewed version or digest.
+cutover yet.** The explicit two-slot fallback path is suitable for the
+simplified MVP, with LiteLLM owning key selection and cooldown. A staging run
+with disposable real OpenRouter keys must still prove: key selection across
+successful requests, 401/429 cooldown and replacement behavior, bounded retry,
+pre-first-byte stream fallback, post-first-byte terminal errors, and behavior
+after gateway/Postgres degradation. The gateway image must also move from a
+mutable tag to a reviewed version or digest.
 
 The project-owned provider contract remains the compatibility boundary. If
 LiteLLM cannot provide the required key and streaming semantics, #91 can own a
