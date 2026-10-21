@@ -29,6 +29,59 @@ services:
       timeout: 5s
       retries: 5
 
+  # Optional single-instance LLM gateway POC. Start it with:
+  # docker compose --profile llm-gateway up -d llm-gateway
+  llm-gateway:
+    image: docker.litellm.ai/berriai/litellm:main-stable
+    platform: linux/arm64
+    profiles:
+      - llm-gateway
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/litellm
+      STORE_MODEL_IN_DB: "True"
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?set LITELLM_MASTER_KEY for the LLM gateway}
+      OPENROUTER_API_KEY_1: ${OPENROUTER_API_KEY_1:-}
+      OPENROUTER_API_KEY_2: ${OPENROUTER_API_KEY_2:-}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      OPENROUTER_HTTP_REFERER: ${OPENROUTER_HTTP_REFERER:-}
+      OPENROUTER_X_TITLE: ${OPENROUTER_X_TITLE:-Value Investment Agent}
+    volumes:
+      - ./infra/litellm/config.yaml:/app/config.yaml:ro
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      llm-gateway-db-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
+  llm-gateway-db-init:
+    image: postgres:16-alpine
+    platform: linux/arm64
+    profiles:
+      - llm-gateway
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER:-postgres}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    command:
+      ["sh", "/opt/init/create-litellm-database.sh"]
+    volumes:
+      - ./infra/litellm/create-litellm-database.sh:/opt/init/create-litellm-database.sh:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   backend:
     build:
       context: ./finance-agent-core
@@ -59,6 +112,8 @@ services:
       - SEC_TEXT_DEBUG_RETRIEVAL_SENTENCE_CHARS=220
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - OPENROUTER_BASE_URL=${OPENROUTER_BASE_URL}
+      - LLM_GATEWAY_BASE_URL=${LLM_GATEWAY_BASE_URL:-http://llm-gateway:4000}
+      - LLM_GATEWAY_API_KEY=${LITELLM_MASTER_KEY}
       - FRED_API_KEY=${FRED_API_KEY}
       # Add other necessary env vars here
     volumes:

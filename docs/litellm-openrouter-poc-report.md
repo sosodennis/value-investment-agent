@@ -1,0 +1,56 @@
+# LiteLLM OpenRouter POC report
+
+Date: 2026-10-21
+
+## Scope
+
+This POC checks whether a single LiteLLM container can expose the project's
+`openrouter-default` alias, use two OpenRouter credential slots, persist its
+own metadata, and remain behind an internal admin key. It does not claim that
+key rotation, streaming failover, or production image pinning are complete.
+
+## Reproduction
+
+```bash
+export LITELLM_MASTER_KEY='local-gateway-key'
+export OPENROUTER_API_KEY_1='sk-or-v1-disposable-key-1'
+export OPENROUTER_API_KEY_2='sk-or-v1-disposable-key-2'
+docker compose --profile llm-gateway up -d postgres llm-gateway-db-init llm-gateway
+./scripts/litellm_poc_smoke.sh
+```
+
+The smoke check only calls the gateway liveness endpoint and authenticated
+model listing. It never prints or sends a key to the browser.
+
+## Observed results
+
+- `docker.litellm.ai/berriai/litellm:main-stable` started on the ARM64 Docker
+  host and served `/health/liveliness` with HTTP 200.
+- `/v1/models` required the LiteLLM master key and exposed the configured
+  `openrouter-default` alias.
+- Reusing the LangGraph `langgraph` database failed LiteLLM's Prisma migration
+  baseline check. A dedicated `litellm` database on the same Postgres service
+  completed migrations successfully.
+- A request with a syntactically valid disposable OpenRouter key reached
+  `https://openrouter.ai/api/v1` and returned OpenRouter's `401 User not found`.
+  This proves the OpenRouter route and authorization header path are active.
+- The same 401 response reported `No fallback was attempted`, despite two
+  deployments under one model alias. LiteLLM's default behavior therefore does
+  not yet prove the credential rotation requirement for this project.
+- The authenticated model metadata response masked the provider credentials;
+  no upstream key was returned by `/model/info`.
+
+## Decision
+
+**Go for an isolated POC and adapter contract work. No-go for production
+cutover yet.** Before #92 can be closed, a staging run with disposable real
+OpenRouter keys must prove: key selection across successful requests, 401/429
+cooldown and replacement behavior, bounded retry, pre-first-byte stream
+fallback, post-first-byte terminal errors, and behavior after gateway/Postgres
+degradation. The gateway image must also move from a mutable tag to a reviewed
+version or digest.
+
+The project-owned provider contract remains the compatibility boundary. If
+LiteLLM cannot provide the required key and streaming semantics, #91 can own a
+small project adapter or the gateway implementation can be replaced without
+changing agent/domain code.

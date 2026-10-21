@@ -1,0 +1,33 @@
+# Single-instance POC configuration. Upstream credentials are injected through
+# environment variables and are never committed to this file.
+model_list:
+  - model_name: openrouter-default
+    litellm_params:
+      model: openrouter/auto
+      api_base: os.environ/OPENROUTER_BASE_URL
+      api_key: os.environ/OPENROUTER_API_KEY_1
+      headers:
+        HTTP-Referer: os.environ/OPENROUTER_HTTP_REFERER
+        X-Title: os.environ/OPENROUTER_X_TITLE
+  - model_name: openrouter-default
+    litellm_params:
+      model: openrouter/auto
+      api_base: os.environ/OPENROUTER_BASE_URL
+      api_key: os.environ/OPENROUTER_API_KEY_2
+      headers:
+        HTTP-Referer: os.environ/OPENROUTER_HTTP_REFERER
+        X-Title: os.environ/OPENROUTER_X_TITLE
+
+router_settings:
+  routing_strategy: simple-shuffle
+  num_retries: 1
+  retry_after: 1
+  allowed_fails: 2
+  cooldown_time: 30
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL
+
+litellm_settings:
+  drop_params: true
