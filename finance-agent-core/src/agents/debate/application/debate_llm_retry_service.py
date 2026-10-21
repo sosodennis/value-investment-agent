@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import TypeVar
 
 from src.shared.kernel.tools.logger import bounded_text, get_logger, log_event
+from src.shared.llm.contracts import LLMProviderError
 
 logger = get_logger(__name__)
 
@@ -103,6 +104,11 @@ async def call_with_debate_llm_retry(
         attempt += 1
         try:
             return await execute()
+        except LLMProviderError:
+            # The provider port owns gateway retry and failover. Repeating a
+            # normalized provider failure here would multiply the request
+            # budget and can replay a non-idempotent agent operation.
+            raise
         except Exception as exc:
             retryable = _is_retryable_llm_error(exc)
             if (not retryable) or attempt >= policy.max_attempts:

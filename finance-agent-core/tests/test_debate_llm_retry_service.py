@@ -6,6 +6,7 @@ from src.agents.debate.application.debate_llm_retry_service import (
     DebateLLMRetryPolicy,
     call_with_debate_llm_retry,
 )
+from src.shared.llm.contracts import LLMErrorCode, LLMProviderError
 
 
 @pytest.mark.asyncio
@@ -50,6 +51,39 @@ async def test_call_with_debate_llm_retry_does_not_retry_non_retryable_error() -
             operation="unit_test_non_retryable",
             agent="VERDICT",
             round_num=3,
+            execute=_execute,
+            policy=DebateLLMRetryPolicy(
+                max_attempts=3,
+                base_delay_seconds=0.0,
+                max_delay_seconds=0.0,
+                jitter_seconds=0.0,
+            ),
+        )
+
+    assert attempts["count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_call_with_debate_llm_retry_does_not_duplicate_provider_retry() -> None:
+    attempts = {"count": 0}
+
+    async def _execute() -> str:
+        attempts["count"] += 1
+        raise LLMProviderError(
+            code=LLMErrorCode.RATE_LIMITED,
+            provider="litellm-gateway",
+            model="openrouter/auto",
+            request_id="req-1",
+            reason="gateway exhausted its retry budget",
+            retryable=False,
+            attempt=2,
+        )
+
+    with pytest.raises(LLMProviderError):
+        await call_with_debate_llm_retry(
+            operation="unit_test_provider_error",
+            agent="BULL_AGENT",
+            round_num=1,
             execute=_execute,
             policy=DebateLLMRetryPolicy(
                 max_attempts=3,
