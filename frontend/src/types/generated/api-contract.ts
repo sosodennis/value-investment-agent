@@ -24,6 +24,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/local-admin/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Local Admin Session
+         * @description Create the temporary loopback-only admin session used in development.
+         */
+        post: operations["create_local_admin_session_api_auth_local_admin_session_post"];
+        /** Delete Local Admin Session */
+        delete: operations["delete_local_admin_session_api_auth_local_admin_session_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/observability/calibration/direction-readiness": {
         parameters: {
             query?: never;
@@ -92,6 +113,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/settings/llm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Llm Settings */
+        get: operations["read_llm_settings_api_settings_llm_get"];
+        /** Update Llm Settings */
+        put: operations["update_llm_settings_api_settings_llm_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/openrouter-keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Openrouter Keys */
+        get: operations["list_openrouter_keys_api_settings_openrouter_keys_get"];
+        put?: never;
+        /** Add Openrouter Key */
+        post: operations["add_openrouter_key_api_settings_openrouter_keys_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/openrouter-keys/{key_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Openrouter Key */
+        delete: operations["delete_openrouter_key_api_settings_openrouter_keys__key_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/openrouter-keys/{key_id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test Openrouter Key Route */
+        post: operations["test_openrouter_key_route_api_settings_openrouter_keys__key_id__test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Health */
+        get: operations["health_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/history/{thread_id}": {
         parameters: {
             query?: never;
@@ -104,6 +212,23 @@ export interface paths {
          * @description Retrieve persistent history with cursor pagination.
          */
         get: operations["get_history_history__thread_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ready": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ready */
+        get: operations["ready_ready_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -929,6 +1054,31 @@ export interface components {
              */
             sentiment: "bullish" | "bearish" | "neutral";
         };
+        /** LlmModelOptionResponse */
+        LlmModelOptionResponse: {
+            /** Context Length */
+            context_length?: number | null;
+            /** Description */
+            description?: string | null;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /** LlmSettingsResponse */
+        LlmSettingsResponse: {
+            /** Default Model */
+            default_model: string;
+            /** Models */
+            models: components["schemas"]["LlmModelOptionResponse"][];
+            /** Selected Model */
+            selected_model: string;
+        };
+        /** LlmSettingsUpdateRequest */
+        LlmSettingsUpdateRequest: {
+            /** Selected Model */
+            selected_model: string;
+        };
         /** MessageResponse */
         MessageResponse: {
             /** Agentid */
@@ -1116,6 +1266,44 @@ export interface components {
             /** Primary Timeframe */
             primary_timeframe?: string | null;
         };
+        /** OpenRouterKeyCreateRequest */
+        OpenRouterKeyCreateRequest: {
+            /**
+             * Api Key
+             * Format: password
+             */
+            api_key: string;
+            /**
+             * Label
+             * @default OpenRouter key
+             */
+            label: string;
+        };
+        /** OpenRouterKeyResponse */
+        OpenRouterKeyResponse: {
+            /** Created At */
+            created_at?: string | null;
+            /** Fingerprint */
+            fingerprint: string;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Suffix */
+            suffix: string;
+        };
+        /** OpenRouterKeyTestResponse */
+        OpenRouterKeyTestResponse: {
+            /** Id */
+            id: string;
+            /** Passed */
+            passed: boolean;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "healthy" | "invalid_key" | "rate_limited" | "unavailable";
+        };
         /** PriceSeriesArtifactData */
         PriceSeriesArtifactData: {
             /** Price Series */
@@ -1144,6 +1332,18 @@ export interface components {
              * @constant
              */
             version: "v1";
+        };
+        /**
+         * Principal
+         * @description The minimal identity contract shared by admin-only routes.
+         */
+        Principal: {
+            /** Auth Type */
+            auth_type: string;
+            /** Role */
+            role: string;
+            /** Subject */
+            subject: string;
         };
         /** QualitySummaryModel */
         QualitySummaryModel: {
@@ -2743,6 +2943,44 @@ export interface operations {
             };
         };
     };
+    create_local_admin_session_api_auth_local_admin_session_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Principal"];
+                };
+            };
+        };
+    };
+    delete_local_admin_session_api_auth_local_admin_session_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     get_direction_calibration_readiness_api_observability_calibration_direction_readiness_get: {
         parameters: {
             query?: {
@@ -2909,6 +3147,224 @@ export interface operations {
             };
         };
     };
+    read_llm_settings_api_settings_llm_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_llm_settings_api_settings_llm_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LlmSettingsUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_openrouter_keys_api_settings_openrouter_keys_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpenRouterKeyResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_openrouter_key_api_settings_openrouter_keys_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpenRouterKeyCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpenRouterKeyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_openrouter_key_api_settings_openrouter_keys__key_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                key_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_openrouter_key_route_api_settings_openrouter_keys__key_id__test_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                key_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpenRouterKeyTestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    health_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+        };
+    };
     get_history_history__thread_id__get: {
         parameters: {
             query?: {
@@ -2939,6 +3395,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ready_ready_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
                 };
             };
         };

@@ -96,7 +96,7 @@ async def test_interpretation_provider_uses_injected_llm_factory() -> None:
             )
 
     fake_provider = FakeProvider()
-    route = ModelRoute(alias="openrouter-default", candidates=("openrouter/auto",))
+    route = ModelRoute(alias="openrouter-default")
     provider = TechnicalInterpretationProvider(
         llm_provider=fake_provider,  # type: ignore[arg-type]
         llm_route=route,

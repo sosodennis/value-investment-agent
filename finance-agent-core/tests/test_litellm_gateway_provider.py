@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 import src.infrastructure.llm.gateway as gateway_module
 from src.infrastructure.llm.gateway import LiteLLMGatewayConfig, LiteLLMGatewayProvider
+from src.infrastructure.llm.provider import get_default_model_route
 from src.shared.llm.contracts import (
     ChatMessage,
     ChatRole,
@@ -22,7 +23,7 @@ class _Answer(BaseModel):
 def _request() -> CompletionRequest:
     return CompletionRequest(
         messages=(ChatMessage(role=ChatRole.USER, content="hello"),),
-        route=ModelRoute(alias="openrouter-default", candidates=("openrouter/auto",)),
+        route=ModelRoute(alias="openrouter-default"),
         request_id="req-1",
         operation="test",
     )
@@ -41,6 +42,13 @@ def _provider(handler: httpx.MockTransport) -> LiteLLMGatewayProvider:
         client=client,
         async_client=async_client,
     )
+
+
+def test_default_route_is_not_changed_by_legacy_model_environment(monkeypatch) -> None:
+    monkeypatch.setenv("DEFAULT_LLM_MODEL", "openrouter/some-paid-model")
+    monkeypatch.setenv("LLM_MODEL_ALIAS", "caller-controlled-alias")
+
+    assert get_default_model_route().alias == "openrouter-default"
 
 
 def test_complete_maps_openai_response_and_usage() -> None:

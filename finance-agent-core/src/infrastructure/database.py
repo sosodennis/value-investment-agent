@@ -32,7 +32,7 @@ Base = declarative_base()
 async def init_db():
     async with engine.begin() as conn:
         # We'll import models here or at the top level to ensure they are registered
-        from .models import Artifact, ChatMessage  # noqa
+        from .models import AppSetting, Artifact, ChatMessage  # noqa: F401
 
         await conn.run_sync(Base.metadata.create_all)
 

@@ -33,12 +33,16 @@ class ChatMessage(BaseModel):
 
 
 class ModelRoute(BaseModel):
-    """An ordered model route resolved by an adapter or gateway."""
+    """The server-owned gateway route for every application LLM request.
+
+    The alias identifies a managed LiteLLM deployment group. The selected
+    OpenRouter model is an administrative setting and is deliberately absent
+    from this data-plane contract so agent callers cannot override it.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     alias: str = Field(min_length=1)
-    candidates: tuple[str, ...] = Field(min_length=1)
 
 
 class CompletionRequest(BaseModel):

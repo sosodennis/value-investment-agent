@@ -24,6 +24,10 @@ ENV HF_HUB_CACHE=/opt/hf-cache/hub
 ENV SENTENCE_TRANSFORMERS_HOME=/opt/hf-cache/hub
 ENV FASTEMBED_CACHE_PATH=/opt/hf-cache/hub
 
+# Development/CI builds can skip the large model layer and rely on a mounted
+# cache. Production builds keep the baked-cache default.
+ARG BAKE_HF_MODELS=1
+
 # Copy dependency files
 COPY pyproject.toml uv.lock ./
 
@@ -41,7 +45,8 @@ RUN mkdir -p "${HF_BAKED_CACHE}" "${HF_HOME}"
 RUN HF_HOME="${HF_BAKED_CACHE}" \
     HF_HUB_CACHE="${HF_BAKED_CACHE}/hub" \
     SENTENCE_TRANSFORMERS_HOME="${HF_BAKED_CACHE}/hub" \
-    python - <<'PY'
+    BAKE_HF_MODELS="${BAKE_HF_MODELS}" python - <<'PY'
+import os
 from huggingface_hub import snapshot_download
 
 model_repos = [
@@ -51,9 +56,10 @@ model_repos = [
     "qdrant/all-MiniLM-L6-v2-onnx",
 ]
 
-for repo_id in model_repos:
-    print(f"Pre-downloading Hugging Face repo: {repo_id}", flush=True)
-    snapshot_download(repo_id=repo_id)
+if os.environ.get("BAKE_HF_MODELS", "1") == "1":
+    for repo_id in model_repos:
+        print(f"Pre-downloading Hugging Face repo: {repo_id}", flush=True)
+        snapshot_download(repo_id=repo_id)
 PY
 
 RUN set -eux; \

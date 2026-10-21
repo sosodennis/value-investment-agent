@@ -2479,6 +2479,7 @@
         "type": "object"
       },
       "InterruptResumePayload": {
+        "additionalProperties": false,
         "properties": {
           "selected_symbol": {
             "title": "Selected Symbol",
@@ -2529,6 +2530,87 @@
           "sentiment"
         ],
         "title": "KeyFactModel",
+        "type": "object"
+      },
+      "LlmModelOptionResponse": {
+        "properties": {
+          "context_length": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Length"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "LlmModelOptionResponse",
+        "type": "object"
+      },
+      "LlmSettingsResponse": {
+        "properties": {
+          "default_model": {
+            "title": "Default Model",
+            "type": "string"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/LlmModelOptionResponse"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "selected_model": {
+            "title": "Selected Model",
+            "type": "string"
+          }
+        },
+        "required": [
+          "selected_model",
+          "default_model",
+          "models"
+        ],
+        "title": "LlmSettingsResponse",
+        "type": "object"
+      },
+      "LlmSettingsUpdateRequest": {
+        "properties": {
+          "selected_model": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Selected Model",
+            "type": "string"
+          }
+        },
+        "required": [
+          "selected_model"
+        ],
+        "title": "LlmSettingsUpdateRequest",
         "type": "object"
       },
       "MessageResponse": {
@@ -3122,6 +3204,98 @@
         "title": "ObservabilitySummaryModel",
         "type": "object"
       },
+      "OpenRouterKeyCreateRequest": {
+        "properties": {
+          "api_key": {
+            "format": "password",
+            "maxLength": 500,
+            "minLength": 20,
+            "title": "Api Key",
+            "type": "string",
+            "writeOnly": true
+          },
+          "label": {
+            "default": "OpenRouter key",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_key"
+        ],
+        "title": "OpenRouterKeyCreateRequest",
+        "type": "object"
+      },
+      "OpenRouterKeyResponse": {
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "fingerprint": {
+            "title": "Fingerprint",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "suffix": {
+            "title": "Suffix",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "suffix",
+          "fingerprint"
+        ],
+        "title": "OpenRouterKeyResponse",
+        "type": "object"
+      },
+      "OpenRouterKeyTestResponse": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "healthy",
+              "invalid_key",
+              "rate_limited",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "passed",
+          "status"
+        ],
+        "title": "OpenRouterKeyTestResponse",
+        "type": "object"
+      },
       "PriceSeriesArtifactData": {
         "additionalProperties": false,
         "properties": {
@@ -3193,6 +3367,30 @@
           "data"
         ],
         "title": "PriceSeriesEnvelope",
+        "type": "object"
+      },
+      "Principal": {
+        "description": "The minimal identity contract shared by admin-only routes.",
+        "properties": {
+          "auth_type": {
+            "title": "Auth Type",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject",
+          "role",
+          "auth_type"
+        ],
+        "title": "Principal",
         "type": "object"
       },
       "QualitySummaryModel": {
@@ -3550,6 +3748,7 @@
         "type": "object"
       },
       "RequestSchema": {
+        "additionalProperties": false,
         "properties": {
           "message": {
             "anyOf": [
@@ -9014,6 +9213,40 @@
         "summary": "Get Artifact"
       }
     },
+    "/api/auth/local-admin/session": {
+      "delete": {
+        "operationId": "delete_local_admin_session_api_auth_local_admin_session_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Delete Local Admin Session",
+        "tags": [
+          "Authentication"
+        ]
+      },
+      "post": {
+        "description": "Create the temporary loopback-only admin session used in development.",
+        "operationId": "create_local_admin_session_api_auth_local_admin_session_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Principal"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Create Local Admin Session",
+        "tags": [
+          "Authentication"
+        ]
+      }
+    },
     "/api/observability/calibration/direction-readiness": {
       "get": {
         "operationId": "get_direction_calibration_readiness_api_observability_calibration_direction_readiness_get",
@@ -9759,6 +9992,356 @@
         ]
       }
     },
+    "/api/settings/llm": {
+      "get": {
+        "operationId": "read_llm_settings_api_settings_llm_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Llm Settings",
+        "tags": [
+          "LLM provider settings"
+        ]
+      },
+      "put": {
+        "operationId": "update_llm_settings_api_settings_llm_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LlmSettingsUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Llm Settings",
+        "tags": [
+          "LLM provider settings"
+        ]
+      }
+    },
+    "/api/settings/openrouter-keys": {
+      "get": {
+        "operationId": "list_openrouter_keys_api_settings_openrouter_keys_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/OpenRouterKeyResponse"
+                  },
+                  "title": "Response List Openrouter Keys Api Settings Openrouter Keys Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Openrouter Keys",
+        "tags": [
+          "LLM provider settings"
+        ]
+      },
+      "post": {
+        "operationId": "add_openrouter_key_api_settings_openrouter_keys_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenRouterKeyCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenRouterKeyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Openrouter Key",
+        "tags": [
+          "LLM provider settings"
+        ]
+      }
+    },
+    "/api/settings/openrouter-keys/{key_id}": {
+      "delete": {
+        "operationId": "delete_openrouter_key_api_settings_openrouter_keys__key_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key_id",
+            "required": true,
+            "schema": {
+              "title": "Key Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Openrouter Key",
+        "tags": [
+          "LLM provider settings"
+        ]
+      }
+    },
+    "/api/settings/openrouter-keys/{key_id}/test": {
+      "post": {
+        "operationId": "test_openrouter_key_route_api_settings_openrouter_keys__key_id__test_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key_id",
+            "required": true,
+            "schema": {
+              "title": "Key Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenRouterKeyTestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Test Openrouter Key Route",
+        "tags": [
+          "LLM provider settings"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Health Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health",
+        "tags": [
+          "Operations"
+        ]
+      }
+    },
     "/history/{thread_id}": {
       "get": {
         "description": "Retrieve persistent history with cursor pagination.",
@@ -9827,6 +10410,31 @@
           }
         },
         "summary": "Get History"
+      }
+    },
+    "/ready": {
+      "get": {
+        "operationId": "ready_ready_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Ready Ready Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Ready",
+        "tags": [
+          "Operations"
+        ]
       }
     },
     "/stream": {

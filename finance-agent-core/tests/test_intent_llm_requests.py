@@ -28,7 +28,7 @@ class _FakeProvider:
 
 
 def _route() -> ModelRoute:
-    return ModelRoute(alias="openrouter-default", candidates=("openrouter/auto",))
+    return ModelRoute(alias="openrouter-default")
 
 
 def test_extract_intent_sends_typed_structured_request() -> None:

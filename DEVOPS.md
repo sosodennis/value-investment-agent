@@ -87,3 +87,16 @@ docker-compose down -v
 
 - **Port Conflicts**: If port 8000, 3000, 5432, or 6379 is already in use on your host, you may need to change the mappings in `docker-compose.yml`.
 - **Environment Variables**: Make sure the `.env` file is in the same directory as `docker-compose.yml`.
+
+### Clean old dangling images
+
+Run the repository script periodically from a host scheduler or before a local
+rebuild:
+
+```bash
+./scripts/cleanup-docker-images.sh
+```
+
+It removes only dangling images older than seven days by default. Set
+`DOCKER_DANGLING_IMAGE_RETENTION_HOURS` to change that window. It does not
+remove tagged images, container data, or volumes.

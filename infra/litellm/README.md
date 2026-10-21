@@ -1,16 +1,14 @@
 # LiteLLM OpenRouter POC
 
 This is the single-instance gateway experiment for issue #92. It routes the
-project's `openrouter-default` alias to OpenRouter's OpenAI-compatible API and
-registers a default credential and an explicit fallback credential so key
-selection and cooldown behavior can be observed without changing agent code.
+project's `openrouter-default` alias to OpenRouter's OpenAI-compatible API. The
+project settings API adds database-backed LiteLLM deployments after testing a
+key, so the gateway database is the only source of OpenRouter credentials.
 
 Run it from the repository root:
 
 ```bash
 export LITELLM_MASTER_KEY='replace-with-a-local-gateway-key'
-export OPENROUTER_API_KEY_1='replace-with-the-first-openrouter-key'
-export OPENROUTER_API_KEY_2='replace-with-the-second-openrouter-key'
 export LLM_GATEWAY_BASE_URL='http://llm-gateway:4000'
 docker compose --profile llm-gateway up -d postgres llm-gateway
 curl -fsS http://localhost:4000/health/liveliness
@@ -25,11 +23,20 @@ coordination. The project backend should later call the internal URL with
 `LLM_GATEWAY_API_KEY`; the browser must never call this port or receive an
 OpenRouter key.
 
-The model alias is `openrouter-default` and currently targets OpenRouter's
-`auto` route. `openrouter-fallback` is used after a configured default-route
-failure. LiteLLM's `allowed_fails`, `cooldown_time`, and explicit fallback map
-provide the simplified MVP policy. The two configured slots are request-time
-failover; they do not create, rotate, or revoke OpenRouter credentials.
+For local development, the backend exposes the provider settings routes through
+a loopback-only local-admin session. The settings page creates this session
+automatically; it does not require `LLM_PROVIDER_ADMIN_TOKEN`. Set
+`APP_ENV=production` to disable the local session. Keep
+`CORS_ALLOWED_ORIGINS` and `LOCAL_ADMIN_ALLOWED_ORIGINS` restricted to the
+actual frontend origins when using a non-default port.
+
+The model alias is `openrouter-default` and is the stable key-pool route. Each
+tested key is registered as a database deployment in that model group. The
+application settings page selects a zero-cost OpenRouter model (default:
+`openrouter/free`) and synchronizes that upstream model into every managed
+deployment. LiteLLM's `allowed_fails`, `cooldown_time`, and model-group routing
+provide the simplified MVP policy. The settings page controls which
+deployments exist and which free upstream model they use.
 
 The application adapter owns only its bounded gateway retry policy. It honors a
 gateway `Retry-After` header and caps the delay. Configure that policy with
@@ -43,4 +50,4 @@ A real staging run must verify model IDs, `HTTP-Referer`, `X-Title`, usage,
 401/429/5xx mapping, and streaming behavior with disposable OpenRouter
 credentials. Larger key pools, distributed coordination, and Vault remain
 outside this MVP and require a follow-up issue if operational evidence shows
-the two-slot route is insufficient.
+the database-backed pool is insufficient.

@@ -24,6 +24,8 @@ RUN npm ci
 # Build the application
 # This creates .next/standalone with minimal footprint
 ENV NEXT_TELEMETRY_DISABLED=1
+ARG NEXT_PUBLIC_LANGGRAPH_URL=http://127.0.0.1:8000
+ENV NEXT_PUBLIC_LANGGRAPH_URL=${NEXT_PUBLIC_LANGGRAPH_URL}
 RUN npm run build
 
 # ==========================================

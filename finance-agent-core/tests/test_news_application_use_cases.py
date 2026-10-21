@@ -338,7 +338,7 @@ class _FakeSelectorProvider:
 
 
 def _selector_route() -> ModelRoute:
-    return ModelRoute(alias="openrouter-default", candidates=("openrouter/auto",))
+    return ModelRoute(alias="openrouter-default")
 
 
 def test_run_selector_with_resilience_parses_selected_urls() -> None:

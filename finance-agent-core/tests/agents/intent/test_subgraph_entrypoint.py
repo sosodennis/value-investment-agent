@@ -27,9 +27,7 @@ async def test_intent_subgraph_entrypoint_builds_and_invokes_with_fake_orchestra
     fake_orchestrator = _FakeIntentOrchestrator()
     runtime_ports = IntentRuntimePorts(
         llm_provider=None,  # type: ignore[arg-type]
-        llm_route=ModelRoute(
-            alias="openrouter-default", candidates=("openrouter/auto",)
-        ),
+        llm_route=ModelRoute(alias="openrouter-default"),
         search_ticker=lambda query: None,  # type: ignore[arg-type]
         web_search=lambda query: None,  # type: ignore[arg-type]
         company_profile=lambda ticker: None,  # type: ignore[arg-type]

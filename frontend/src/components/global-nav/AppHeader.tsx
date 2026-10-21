@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import { GlobalNav } from './index';
 // Next.js automatically optimizes these via optmizePackageImports in next.config.ts
 import { Bell, Settings, User } from 'lucide-react';
@@ -24,12 +25,13 @@ export function AppHeader() {
                 >
                     <Bell size={18} />
                 </button>
-                <button
+                <Link
+                    href="/settings/llm-keys"
                     className="p-2 text-on-surface-variant hover:text-on-surface transition-colors duration-200 focus:ring-2 focus:ring-primary-container focus:outline-none rounded"
                     aria-label="Settings"
                 >
                     <Settings size={18} />
-                </button>
+                </Link>
                 <div className="h-8 w-8 rounded-full overflow-hidden border border-outline-variant flex items-center justify-center text-on-surface-variant">
                     <User size={16} />
                 </div>

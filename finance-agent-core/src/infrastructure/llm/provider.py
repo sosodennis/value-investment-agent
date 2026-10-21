@@ -1,12 +1,8 @@
-import os
-
 from src.shared.llm.contracts import LLMProviderPort, ModelRoute
 
-from ...config.llm_config import (
-    DEFAULT_MODEL,
-)
 from .gateway import LiteLLMGatewayConfig, LiteLLMGatewayProvider
 
+MODEL_ROUTE_ALIAS = "openrouter-default"
 _gateway_provider: LiteLLMGatewayProvider | None = None
 
 
@@ -22,12 +18,13 @@ def get_llm_provider() -> LLMProviderPort:
     return _get_gateway_provider()
 
 
-def get_default_model_route(model: str = DEFAULT_MODEL) -> ModelRoute:
-    """Resolve the configured gateway alias and its default upstream model."""
-    return ModelRoute(
-        alias=os.getenv("LLM_MODEL_ALIAS", "openrouter-default"),
-        candidates=(model,),
-    )
+def get_default_model_route() -> ModelRoute:
+    """Return the only application data-plane route.
+
+    OpenRouter model selection belongs to the protected settings control plane
+    and LiteLLM deployment projection. No agent or request may supply it here.
+    """
+    return ModelRoute(alias=MODEL_ROUTE_ALIAS)
 
 
 async def close_llm_provider() -> None:

@@ -91,7 +91,7 @@ Currently supported models:
 
 ### Prerequisites
 *   [Docker](https://www.docker.com/) and [Docker Compose](https://docs.docker.com/compose/)
-*   An API key for [OpenRouter](https://openrouter.ai/) (to access LLMs like GPT-4, Claude, etc.)
+*   An [OpenRouter](https://openrouter.ai/) API key for the provider settings page
 
 ### 1. Environment Setup
 Create a `.env` file in the root directory:
@@ -100,11 +100,11 @@ Create a `.env` file in the root directory:
 touch .env
 ```
 
-Add your OpenRouter API key and base URL:
+Add the internal gateway key. OpenRouter keys are added and tested later from
+the local settings page; they are not stored in this file:
 
 ```env
-OPENROUTER_API_KEY=your_openrouter_api_key_here
-OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+LITELLM_MASTER_KEY=replace-with-a-local-gateway-key
 # Optional: Database overrides (defaults provided in docker-compose)
 # POSTGRES_USER=postgres
 # POSTGRES_PASSWORD=postgres
@@ -115,13 +115,18 @@ OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 Build and start the entire stack:
 
 ```bash
-docker-compose up --build
+docker compose --profile llm-gateway up --build
 ```
 
 Access the application:
 *   **Frontend**: [http://localhost:3000](http://localhost:3000)
 *   **Backend API**: [http://localhost:8000](http://localhost:8000)
 *   **API Documentation**: [http://localhost:8000/docs](http://localhost:8000/docs)
+*   **Provider settings**: [http://localhost:3000/settings/llm-keys](http://localhost:3000/settings/llm-keys)
+
+Open the provider settings page, add one or more OpenRouter keys, and select a
+free model. The backend sends all application requests through the internal
+`openrouter-default` LiteLLM route.
 
 ### 3. Manual Development (Optional)
 

@@ -17,6 +17,15 @@ from sqlalchemy import (
 from .database import Base
 
 
+class AppSetting(Base):
+    __tablename__ = "app_settings"
+
+    id = Column(String, primary_key=True)
+    value = Column(String, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_by = Column(String, nullable=False)
+
+
 class ChatMessage(Base):
     __tablename__ = "chat_history"
 

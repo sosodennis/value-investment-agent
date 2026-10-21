@@ -1,4 +1,5 @@
 import asyncio
+import hmac
 import os
 import sys
 import time
@@ -11,10 +12,21 @@ from functools import lru_cache
 from typing import Literal
 
 import uvicorn
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request
+from fastapi import (
+    APIRouter,
+    Depends,
+    FastAPI,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+)
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 # Add the project root to sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -43,11 +55,35 @@ from src.agents.technical.subdomains.decision_observability import (
     build_technical_monitoring_row_model,
 )
 from src.infrastructure.database import init_db
+from src.infrastructure.llm.litellm_admin import (
+    LiteLLMAdminClient,
+    LiteLLMAdminError,
+    ManagedKey,
+    validate_model_id,
+)
+from src.infrastructure.llm.openrouter_key_test import (
+    OpenRouterKeyTestError,
+    test_openrouter_key,
+)
+from src.infrastructure.llm.openrouter_models import (
+    OpenRouterModelsError,
+    list_free_models,
+    validate_free_model,
+)
 from src.infrastructure.llm.provider import close_llm_provider
 from src.infrastructure.sentiment import get_finbert_analyzer
 from src.interface.artifacts.artifact_api_models import (
     ArtifactApiResponse,
     validate_artifact_api_response,
+)
+from src.interface.auth.local_admin import (
+    Principal,
+    issue_local_admin_session,
+    require_local_admin,
+    validate_local_admin_request,
+)
+from src.interface.auth.local_admin import (
+    settings as local_admin_settings,
 )
 from src.interface.events.adapters import adapt_langgraph_event, create_interrupt_event
 from src.interface.events.protocol import AgentEvent
@@ -62,6 +98,7 @@ from src.runtime.workspace_runtime_projection import (
 )
 from src.services.artifact_manager import artifact_manager
 from src.services.history import history_service
+from src.services.llm_settings import get_selected_model, set_selected_model
 from src.shared.kernel.tools.logger import (
     bind_log_context,
     clear_log_context,
@@ -83,6 +120,15 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 [Lifespan] Initializing application resources...")
     # Initialize DB
     await init_db()
+    selected_model = await get_selected_model()
+    try:
+        gateway_admin = get_litellm_admin_client()
+        await gateway_admin.update_model(selected_model)
+    except (HTTPException, LiteLLMAdminError) as exc:
+        logger.warning("LLM model synchronization skipped: %s", str(exc))
+    finally:
+        if "gateway_admin" in locals():
+            await gateway_admin.close()
 
     # Initialize Graph
     logger.info("🚀 [Lifespan] Building workflow graph...")
@@ -189,14 +235,322 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS Middleware
+
+@app.exception_handler(RequestValidationError)
+async def handle_request_validation_error(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    if request.url.path == "/api/settings/openrouter-keys" and request.method == "POST":
+        detail = [
+            {key: error[key] for key in ("loc", "msg", "type") if key in error}
+            for error in exc.errors()
+        ]
+        return JSONResponse(status_code=422, content={"detail": detail})
+    return await request_validation_exception_handler(request, exc)
+
+
+def _cors_origins() -> list[str]:
+    configured = os.getenv("CORS_ALLOWED_ORIGINS", "").strip()
+    if configured:
+        return [
+            origin.strip().rstrip("/")
+            for origin in configured.split(",")
+            if origin.strip()
+        ]
+    return [
+        "http://127.0.0.1:3000",
+        "http://localhost:3000",
+        "http://127.0.0.1:3001",
+        "http://localhost:3001",
+    ]
+
+
+# Browser credentials require an explicit origin allowlist.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/health", tags=["Operations"])
+async def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/ready", tags=["Operations"])
+async def ready(request: Request) -> dict[str, str]:
+    if not hasattr(request.app.state, "graph"):
+        raise HTTPException(status_code=503, detail="application is still starting")
+    return {"status": "ready"}
+
+
+class OpenRouterKeyCreateRequest(BaseModel):
+    label: str = Field(default="OpenRouter key", min_length=1, max_length=80)
+    api_key: SecretStr = Field(min_length=20, max_length=500)
+
+
+class OpenRouterKeyResponse(BaseModel):
+    id: str
+    label: str
+    suffix: str
+    fingerprint: str
+    created_at: str | None = None
+
+
+class OpenRouterKeyTestResponse(BaseModel):
+    id: str
+    passed: bool
+    status: Literal["healthy", "invalid_key", "rate_limited", "unavailable"]
+
+
+class LlmModelOptionResponse(BaseModel):
+    id: str
+    name: str
+    description: str | None = None
+    context_length: int | None = None
+
+
+class LlmSettingsResponse(BaseModel):
+    selected_model: str
+    default_model: str
+    models: list[LlmModelOptionResponse]
+
+
+class LlmSettingsUpdateRequest(BaseModel):
+    selected_model: str = Field(min_length=1, max_length=200)
+
+
+@app.post(
+    "/api/auth/local-admin/session", response_model=Principal, tags=["Authentication"]
+)
+async def create_local_admin_session(request: Request, response: Response) -> Principal:
+    """Create the temporary loopback-only admin session used in development."""
+    validate_local_admin_request(request)
+    return issue_local_admin_session(response)
+
+
+@app.delete("/api/auth/local-admin/session", status_code=204, tags=["Authentication"])
+async def delete_local_admin_session(request: Request, response: Response) -> None:
+    validate_local_admin_request(request)
+    response.delete_cookie(key="local_admin_session", path="/")
+
+
+def require_llm_admin_token(
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> Principal:
+    if local_admin_settings().enabled:
+        try:
+            return require_local_admin(request)
+        except HTTPException as local_error:
+            if local_error.status_code not in {401, 404}:
+                raise
+
+    expected = os.getenv("LLM_PROVIDER_ADMIN_TOKEN", "").strip()
+    if not expected:
+        if local_admin_settings().enabled:
+            raise HTTPException(
+                status_code=401, detail="local admin session is required"
+            )
+        raise HTTPException(
+            status_code=503, detail="LLM provider administration is disabled"
+        )
+    supplied = authorization.removeprefix("Bearer ").strip() if authorization else ""
+    if not supplied or not hmac.compare_digest(supplied, expected):
+        raise HTTPException(
+            status_code=403, detail="LLM provider administration is not authorized"
+        )
+    return Principal(
+        subject="configured-admin", role="platform_admin", auth_type="bearer"
+    )
+
+
+def get_litellm_admin_client() -> LiteLLMAdminClient:
+    base_url = os.getenv("LLM_GATEWAY_BASE_URL", "http://localhost:4000").strip()
+    token = os.getenv("LLM_GATEWAY_API_KEY", "").strip()
+    if not base_url or not token:
+        raise HTTPException(
+            status_code=503, detail="LLM gateway administration is unavailable"
+        )
+    openrouter_headers = {
+        "X-Title": os.getenv("OPENROUTER_X_TITLE", "Value Investment Agent")
+    }
+    referer = os.getenv("OPENROUTER_HTTP_REFERER", "").strip()
+    if referer:
+        openrouter_headers["HTTP-Referer"] = referer
+    return LiteLLMAdminClient(
+        base_url=base_url,
+        admin_token=token,
+        openrouter_headers=openrouter_headers,
+    )
+
+
+def _managed_key_response(key: ManagedKey) -> OpenRouterKeyResponse:
+    return OpenRouterKeyResponse(
+        id=key.id,
+        label=key.label,
+        suffix=key.suffix,
+        fingerprint=key.fingerprint,
+        created_at=key.created_at,
+    )
+
+
+llm_keys_router = APIRouter(
+    prefix="/api/settings/openrouter-keys",
+    tags=["LLM provider settings"],
+    dependencies=[Depends(require_llm_admin_token)],
+)
+
+
+@llm_keys_router.get("", response_model=list[OpenRouterKeyResponse])
+async def list_openrouter_keys(
+    client: LiteLLMAdminClient = Depends(get_litellm_admin_client),
+) -> list[OpenRouterKeyResponse]:
+    try:
+        return [_managed_key_response(key) for key in await client.list_managed()]
+    except LiteLLMAdminError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@llm_keys_router.post("", response_model=OpenRouterKeyResponse, status_code=201)
+async def add_openrouter_key(
+    request: OpenRouterKeyCreateRequest,
+    client: LiteLLMAdminClient = Depends(get_litellm_admin_client),
+) -> OpenRouterKeyResponse:
+    raw_key = request.api_key.get_secret_value()
+    try:
+        await test_openrouter_key(raw_key)
+    except OpenRouterKeyTestError as exc:
+        status = str(exc)
+        code = 429 if status == "rate_limited" else 502
+        if status == "invalid_key":
+            code = 400
+        raise HTTPException(status_code=code, detail=status) from exc
+    try:
+        selected_model = await get_selected_model()
+        return _managed_key_response(
+            await client.add_key(
+                key=raw_key,
+                label=request.label,
+                model=selected_model,
+            )
+        )
+    except LiteLLMAdminError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@llm_keys_router.post("/{key_id}/test", response_model=OpenRouterKeyTestResponse)
+async def test_openrouter_key_route(
+    key_id: str,
+    client: LiteLLMAdminClient = Depends(get_litellm_admin_client),
+) -> OpenRouterKeyTestResponse:
+    try:
+        key_id = validate_model_id(key_id)
+        await client.test_key(key_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="invalid managed key id") from exc
+    except LiteLLMAdminError as exc:
+        reason = str(exc)
+        if reason == "not_found":
+            raise HTTPException(
+                status_code=404, detail="managed key was not found"
+            ) from exc
+        status = (
+            reason
+            if reason in {"invalid_key", "rate_limited", "unavailable"}
+            else "unavailable"
+        )
+        return OpenRouterKeyTestResponse(id=key_id, passed=False, status=status)
+    return OpenRouterKeyTestResponse(id=key_id, passed=True, status="healthy")
+
+
+@llm_keys_router.delete("/{key_id}", status_code=204)
+async def delete_openrouter_key(
+    key_id: str,
+    client: LiteLLMAdminClient = Depends(get_litellm_admin_client),
+) -> None:
+    try:
+        await client.delete_key(validate_model_id(key_id))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="invalid managed key id") from exc
+    except LiteLLMAdminError as exc:
+        if str(exc) == "managed key was not found":
+            raise HTTPException(
+                status_code=404, detail="managed key was not found"
+            ) from exc
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+app.include_router(llm_keys_router)
+
+
+llm_settings_router = APIRouter(
+    prefix="/api/settings/llm",
+    tags=["LLM provider settings"],
+    dependencies=[Depends(require_llm_admin_token)],
+)
+
+
+async def _llm_settings_response() -> LlmSettingsResponse:
+    try:
+        models = await list_free_models()
+    except OpenRouterModelsError as exc:
+        raise HTTPException(
+            status_code=502, detail="OpenRouter model catalogue is unavailable"
+        ) from exc
+    selected = await get_selected_model()
+    if not any(model.id == selected for model in models):
+        selected = "openrouter/free"
+    return LlmSettingsResponse(
+        selected_model=selected,
+        default_model="openrouter/free",
+        models=[
+            LlmModelOptionResponse(
+                id=model.id,
+                name=model.name,
+                description=model.description,
+                context_length=model.context_length,
+            )
+            for model in models
+        ],
+    )
+
+
+@llm_settings_router.get("", response_model=LlmSettingsResponse)
+async def read_llm_settings() -> LlmSettingsResponse:
+    return await _llm_settings_response()
+
+
+@llm_settings_router.put("", response_model=LlmSettingsResponse)
+async def update_llm_settings(
+    request: LlmSettingsUpdateRequest,
+    principal: Principal = Depends(require_llm_admin_token),
+) -> LlmSettingsResponse:
+    try:
+        valid = await validate_free_model(request.selected_model)
+    except OpenRouterModelsError as exc:
+        raise HTTPException(
+            status_code=502, detail="OpenRouter model catalogue is unavailable"
+        ) from exc
+    if not valid:
+        raise HTTPException(
+            status_code=400, detail="selected model is not a free OpenRouter model"
+        )
+    client = get_litellm_admin_client()
+    try:
+        await client.update_model(request.selected_model)
+    except LiteLLMAdminError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    finally:
+        await client.close()
+    await set_selected_model(request.selected_model, updated_by=principal.subject)
+    return await _llm_settings_response()
+
+
+app.include_router(llm_settings_router)
 
 
 @lru_cache
@@ -396,6 +750,8 @@ app.include_router(observability_router)
 
 
 class RequestSchema(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     thread_id: str
     message: str | None = None
     resume_payload: InterruptResumePayload | None = None
