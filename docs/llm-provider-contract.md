@@ -50,3 +50,11 @@ LangGraph callbacks while intent, technical interpretation, news, and debate
 move to typed requests. Once migration is complete, `get_llm()` and duplicated
 agent retry loops can be removed. A LiteLLM HTTP adapter can then be tested
 against the same port without changing agent code.
+
+The current HTTP adapter is `LiteLLMGatewayProvider`. It sends the project
+model alias to the gateway's `/v1/chat/completions` endpoint, translates
+OpenAI-compatible usage and tool-call data, sends Pydantic JSON Schema for
+structured requests, and adds request/idempotency headers. Its retry budget is
+bounded and its terminal errors are non-retryable after exhaustion. The adapter
+does not implement credential selection; that remains an explicit gateway or
+key-pool policy until the OpenRouter POC proves which layer owns it.

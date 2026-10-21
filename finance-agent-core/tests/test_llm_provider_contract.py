@@ -51,6 +51,7 @@ class _FakeProvider:
             sequence=1,
             model=request.route.candidates[0],
             text="ok",
+            tool_calls=({"id": "call-1", "name": "lookup"},),
         )
         yield StreamEvent(
             kind="completed",
@@ -101,6 +102,7 @@ def test_stream_contract_has_monotonic_sequence_and_terminal_usage() -> None:
 
     assert [event.kind for event in events] == ["started", "delta", "completed"]
     assert [event.sequence for event in events] == [0, 1, 2]
+    assert events[1].tool_calls == ({"id": "call-1", "name": "lookup"},)
     assert events[-1].usage == Usage(total_tokens=1)
 
 

@@ -29,6 +29,7 @@ class ChatMessage(BaseModel):
     content: str
     name: str | None = None
     tool_call_id: str | None = None
+    tool_calls: tuple[dict[str, object], ...] = ()
 
 
 class ModelRoute(BaseModel):
@@ -78,6 +79,7 @@ class CompletionResult(BaseModel):
     finish_reason: str | None = None
     usage: Usage | None = None
     attempt: int = Field(default=1, ge=1)
+    tool_calls: tuple[dict[str, object], ...] = ()
 
 
 class StreamEvent(BaseModel):
@@ -96,6 +98,7 @@ class StreamEvent(BaseModel):
     model: str = Field(min_length=1)
     text: str = ""
     usage: Usage | None = None
+    tool_calls: tuple[dict[str, object], ...] = ()
     error_code: str | None = None
     error_reason: str | None = None
     attempt: int = Field(default=1, ge=1)
@@ -121,6 +124,7 @@ class LLMErrorCode(str, Enum):
     BAD_REQUEST = "bad_request"
     POLICY_REJECTED = "policy_rejected"
     SCHEMA_VALIDATION_FAILED = "schema_validation_failed"
+    MALFORMED_RESPONSE = "malformed_response"
     STREAM_INTERRUPTED = "stream_interrupted"
     CANCELLED = "cancelled"
     FAILOVER_EXHAUSTED = "failover_exhausted"
@@ -141,6 +145,7 @@ class LLMProviderError(RuntimeError):
         http_status: int | None = None,
         attempt: int = 1,
         partial_output: str = "",
+        partial_tool_calls: tuple[dict[str, object], ...] = (),
     ) -> None:
         self.code = code
         self.provider = provider
@@ -151,6 +156,7 @@ class LLMProviderError(RuntimeError):
         self.http_status = http_status
         self.attempt = attempt
         self.partial_output = partial_output
+        self.partial_tool_calls = partial_tool_calls
         super().__init__(reason)
 
 
