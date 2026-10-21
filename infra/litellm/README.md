@@ -5,6 +5,10 @@ project's `openrouter-default` alias to OpenRouter's OpenAI-compatible API. The
 project settings API adds database-backed LiteLLM deployments after testing a
 key, so the gateway database is the only source of OpenRouter credentials.
 
+The Compose service is pinned to a reviewed image digest. Update the digest
+only after validating a new LiteLLM release against the POC smoke and contract
+tests.
+
 Run it from the repository root:
 
 ```bash

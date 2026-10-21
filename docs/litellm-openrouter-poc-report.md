@@ -1,13 +1,14 @@
 # LiteLLM OpenRouter POC report
 
-Date: 2026-10-21
+Date: 2026-10-22
 
 ## Scope
 
-This POC checks whether a single LiteLLM container can expose the project's
-`openrouter-default` alias and persist tested OpenRouter deployments in
-LiteLLM's database behind an internal admin key. It does not claim that key
-rotation, streaming failover, or production image pinning are complete.
+This POC validates the isolated LiteLLM service, its database-backed deployment
+metadata, and the project adapter boundary. The production data plane now
+resolves `openrouter-default` to an opaque per-user alias (see
+`docs/rfc/llm-provider-contract.md`); this POC does not reintroduce a global
+shared pool.
 
 ## Reproduction
 
@@ -17,47 +18,43 @@ docker compose --profile llm-gateway up -d postgres llm-gateway-db-init llm-gate
 ./scripts/litellm_poc_smoke.sh
 ```
 
-The smoke check only calls the gateway liveness endpoint. It never prints or
-sends a key to the browser.
+The smoke check calls liveness and authenticated model-list endpoints. It never
+prints or sends an OpenRouter key to the browser. A real upstream request is
+opt-in and requires a disposable key added through the authenticated settings
+API.
 
 ## Observed results
 
-- `docker.litellm.ai/berriai/litellm:main-stable` started on the ARM64 Docker
-  host and served `/health/liveliness` with HTTP 200.
-- `/v1/models` required the LiteLLM master key. The project settings API adds
-  the `openrouter-default` model group after a successful OpenRouter probe.
-- Reusing the LangGraph `langgraph` database failed LiteLLM's Prisma migration
-  baseline check. A dedicated `litellm` database on the same Postgres service
-  completed migrations successfully.
-- A request with a syntactically valid disposable OpenRouter key reached
-  `https://openrouter.ai/api/v1` and returned OpenRouter's `401 User not found`.
-  This proves the OpenRouter route and authorization header path are active.
-- Database-backed deployments in one `openrouter-default` model group are the
-  planned key pool. Their selection and cooldown behavior still need a staging
-  run with disposable credentials.
-- The authenticated model metadata response masked the provider credentials;
-  no upstream key was returned by `/model/info`.
-- OpenRouter's public `/api/v1/models` catalogue exposes the `openrouter/free`
-  router and explicitly `:free` concrete models. The settings API filters this
-  catalogue and synchronizes the selected model into managed deployments;
-  models that only report zero text-token pricing but charge for another
-  modality are excluded.
-- The project adapter now honors a gateway `Retry-After` value and applies a
-  bounded exponential retry policy. Compose exposes the policy limits so the
-  backend and contract use the same settings.
+- The reviewed LiteLLM image is pinned by digest in Compose and targets the
+  ARM64 development host. The service has a healthcheck, bounded CPU/memory
+  settings, and a loopback-only host binding.
+- LiteLLM uses a dedicated `litellm` database on the existing Postgres service;
+  reusing the LangGraph database fails the Prisma migration baseline check.
+- `/v1/models` requires the service master key. `/model/info` metadata is
+  filtered by the project adapter and never returns upstream credentials.
+- The project settings API creates database-backed deployments after probing a
+  submitted OpenRouter key. Authenticated users receive their own deterministic
+  pool alias; platform-admin compatibility remains separate and is not used by
+  the authenticated workflow data plane.
+- A previous disposable-key run reached OpenRouter and returned `401 User not
+  found`; an explicit two-slot fallback caused LiteLLM to attempt the second
+  credential. This proves the route and authorization path, and bounded
+  explicit fallback, but not fair rotation or recovery for a larger pool.
+- The project adapter preserves the provider contract, bounded retry policy,
+  first-byte streaming boundary, and fake adapter fallback. These behaviors are
+  covered by the backend contract suite.
 
 ## Decision
 
-**Go for an isolated POC and adapter contract work. No-go for production
-cutover yet.** The database-backed key pool is suitable for the simplified
-MVP, with LiteLLM owning key selection and cooldown. A staging run
-with disposable real OpenRouter keys must still prove: key selection across
-successful requests, 401/429 cooldown and replacement behavior, bounded retry,
-pre-first-byte stream fallback, post-first-byte terminal errors, and behavior
-after gateway/Postgres degradation. The gateway image must also move from a
-mutable tag to a reviewed version or digest.
+**Go for the isolated MVP gateway; no-go for production multi-worker rollout.**
+The pinned single-instance service and database-backed deployment metadata are
+adequate for the current per-user MVP. The deployment is intentionally limited
+to one gateway instance because this Compose POC does not configure LiteLLM's
+distributed Redis state. #91 owns cooldown/failover policy completion and #97
+owns the final multi-worker/rollout gate.
 
-The project-owned provider contract remains the compatibility boundary. If
-LiteLLM cannot provide the required key and streaming semantics, #91 can own a
-small project adapter or the gateway implementation can be replaced without
-changing agent/domain code.
+The remaining live staging evidence is explicit rather than implied: disposable
+real keys must still prove successful selection across requests, 401/429
+cooldown and replacement, pre-first-byte stream fallback, post-first-byte
+terminal errors, and behavior after gateway/Postgres degradation. No live key
+is committed or required for unit and configuration verification.
