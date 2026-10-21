@@ -695,6 +695,8 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                             {assumptionSummaryItems.map((item) => (
                                                 <div
                                                     key={item.label}
+                                                    role="group"
+                                                    aria-label={`${item.label}: ${item.value}`}
                                                     className="rounded-lg border border-outline-variant/20 bg-surface-container-low px-2 py-1"
                                                 >
                                                     <div className="text-[10px] text-outline uppercase tracking-wider">
@@ -940,7 +942,11 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                                 typeof terminalAnchorStaleFallback === 'boolean' ||
                                                 forwardSignalMappingVersion ||
                                                 typeof forwardSignalCalibrationApplied === 'boolean') && (
-                                                <div className="rounded-lg border border-outline-variant/20 bg-surface-container-low p-3 space-y-2">
+                                                <div
+                                                    role="group"
+                                                    aria-label="Growth / Anchor Policy"
+                                                    className="rounded-lg border border-outline-variant/20 bg-surface-container-low p-3 space-y-2"
+                                                >
                                                     <div className="text-[11px] uppercase tracking-wider text-on-surface-variant">
                                                         Growth / Anchor Policy
                                                     </div>
@@ -999,7 +1005,11 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                                     </div>
                                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                                         {hasBaseGrowthGuardrail && (
-                                                            <div className="rounded border border-cyan-400/30 bg-cyan-500/10 px-2 py-2 text-[11px] text-cyan-100 space-y-1 min-w-0">
+                                                            <div
+                                                                role="group"
+                                                                aria-label="Growth base assumption guardrail"
+                                                                className="rounded border border-cyan-400/30 bg-cyan-500/10 px-2 py-2 text-[11px] text-cyan-100 space-y-1 min-w-0"
+                                                            >
                                                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                                                     <span className="font-semibold">Growth</span>
                                                                     {typeof baseGrowthGuardrailApplied === 'boolean' && (
@@ -1038,7 +1048,11 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                                             </div>
                                                         )}
                                                         {hasBaseMarginGuardrail && (
-                                                            <div className="rounded border border-amber-400/30 bg-amber-500/10 px-2 py-2 text-[11px] text-amber-100 space-y-1 min-w-0">
+                                                            <div
+                                                                role="group"
+                                                                aria-label="Margin base assumption guardrail"
+                                                                className="rounded border border-amber-400/30 bg-amber-500/10 px-2 py-2 text-[11px] text-amber-100 space-y-1 min-w-0"
+                                                            >
                                                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                                                     <span className="font-semibold">Margin</span>
                                                                     {typeof baseMarginGuardrailApplied === 'boolean' && (

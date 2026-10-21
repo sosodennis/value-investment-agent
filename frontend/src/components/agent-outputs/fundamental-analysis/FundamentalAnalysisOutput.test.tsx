@@ -1,6 +1,6 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { FundamentalAnalysisOutput } from './FundamentalAnalysisOutput';
 import { ParsedFinancialPreview } from '@/types/agents/fundamental-preview-parser';
 
@@ -47,7 +47,7 @@ describe('FundamentalAnalysisOutput', () => {
         screen.getByText('Intrinsic Value');
         screen.getByText('Equity Value');
         screen.getByText('Upside Potential');
-        screen.getByText('Disabled', { exact: true });
+        screen.getByRole('group', { name: 'Monte Carlo: Disabled' });
     });
 
     it('renders MC diagnostics and quality signals when MC is enabled', () => {
@@ -84,7 +84,7 @@ describe('FundamentalAnalysisOutput', () => {
             },
         });
 
-        screen.getByText('Enabled', { exact: true });
+        screen.getByRole('group', { name: 'Monte Carlo: Enabled' });
         screen.getByText('Executed: 300');
         screen.getByText('Window: 100');
         screen.getByText('Early Stop: No');
@@ -94,7 +94,7 @@ describe('FundamentalAnalysisOutput', () => {
         screen.getByText('Risk: High');
         screen.getByText('defaults_present');
         screen.getByText('time_alignment:high_risk');
-        screen.getByText('high_risk', { exact: true });
+        screen.getByRole('group', { name: 'Time Alignment: high_risk' });
         screen.getAllByText('Forward Signal Policy');
         screen.getByText('Signals: 3');
         screen.getByText('Accepted: 2');
@@ -174,11 +174,13 @@ describe('FundamentalAnalysisOutput', () => {
         screen.getByText('Model: DCF (dcf)');
         screen.getByText('Growth Outlook');
         screen.getAllByText('Source: mda');
-        screen.getByText('Growth / Anchor Policy');
-        screen.getByText('Calibration:', { exact: true });
-        screen.getByText('Applied', { exact: true });
-        screen.getAllByText(/Mapping:/);
-        screen.getAllByText(
+        const growthAnchorPolicy = screen.getByRole('group', {
+            name: 'Growth / Anchor Policy',
+        });
+        within(growthAnchorPolicy).getByText('Calibration:', { exact: true });
+        within(growthAnchorPolicy).getByText('Applied', { exact: true });
+        within(growthAnchorPolicy).getByText(/Mapping:/);
+        within(growthAnchorPolicy).getByText(
             'forward_signal_calibration_v2_2026_03_05',
             { exact: true }
         );
@@ -232,11 +234,13 @@ describe('FundamentalAnalysisOutput', () => {
         screen.getByText(/wacc -100bp -> \+22.0%/i);
         screen.getAllByText('Forward Signal Policy');
         screen.getAllByText('Calibration: Applied');
-        screen.getByText('Growth / Anchor Policy');
-        screen.getByText('Calibration:', { exact: true });
-        screen.getByText('Applied', { exact: true });
-        screen.getAllByText(/Mapping:/);
-        screen.getAllByText(
+        const growthAnchorPolicy = screen.getByRole('group', {
+            name: 'Growth / Anchor Policy',
+        });
+        within(growthAnchorPolicy).getByText('Calibration:', { exact: true });
+        within(growthAnchorPolicy).getByText('Applied', { exact: true });
+        within(growthAnchorPolicy).getByText(/Mapping:/);
+        within(growthAnchorPolicy).getByText(
             'forward_signal_calibration_v2_2026_03_05',
             { exact: true }
         );
@@ -275,19 +279,32 @@ describe('FundamentalAnalysisOutput', () => {
         });
 
         screen.getByText('Base Assumption Guardrail');
-        screen.getByText('Growth', { exact: true });
-        screen.getByText('Margin', { exact: true });
-        screen.getAllByText('Applied');
-        screen.getAllByText('Version: base_assumption_guardrail_v1_2026_03_05');
-        screen.getByText('Y1 Raw: 66.8%');
-        screen.getByText('Y1 Guarded: 42.0%');
-        screen.getByText('YN Raw: 4.0%');
-        screen.getByText('YN Guarded: 3.0%');
-        screen.getByText('Y1 Raw: 59.4%');
-        screen.getByText('Y1 Guarded: 45.0%');
-        screen.getByText('YN Raw: 59.4%');
-        screen.getByText('YN Guarded: 35.0%');
-        screen.getByText('Reasons: margin_ceiling_clamp');
+        const growthGuardrail = screen.getByRole('group', {
+            name: 'Growth base assumption guardrail',
+        });
+        within(growthGuardrail).getByText('Growth', { exact: true });
+        within(growthGuardrail).getByText('Applied');
+        within(growthGuardrail).getByText(
+            'Version: base_assumption_guardrail_v1_2026_03_05'
+        );
+        within(growthGuardrail).getByText('Y1 Raw: 66.8%');
+        within(growthGuardrail).getByText('Y1 Guarded: 42.0%');
+        within(growthGuardrail).getByText('YN Raw: 4.0%');
+        within(growthGuardrail).getByText('YN Guarded: 3.0%');
+
+        const marginGuardrail = screen.getByRole('group', {
+            name: 'Margin base assumption guardrail',
+        });
+        within(marginGuardrail).getByText('Margin', { exact: true });
+        within(marginGuardrail).getByText('Applied');
+        within(marginGuardrail).getByText(
+            'Version: base_assumption_guardrail_v1_2026_03_05'
+        );
+        within(marginGuardrail).getByText('Y1 Raw: 59.4%');
+        within(marginGuardrail).getByText('Y1 Guarded: 45.0%');
+        within(marginGuardrail).getByText('YN Raw: 59.4%');
+        within(marginGuardrail).getByText('YN Guarded: 35.0%');
+        within(marginGuardrail).getByText('Reasons: margin_ceiling_clamp');
     });
 
     it('toggles evidence preview and full text', () => {
