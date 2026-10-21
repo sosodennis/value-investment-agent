@@ -16,6 +16,8 @@ from src.shared.llm.contracts import (
     LLMProviderError,
     ModelRoute,
     ProviderPrincipal,
+    ResolvedModelRoute,
+    StreamEvent,
     StructuredRequest,
 )
 
@@ -157,6 +159,94 @@ def test_complete_retries_transient_gateway_failure_once() -> None:
 
     assert provider.complete(_request()).text == "ok"
     assert attempts == 2
+
+
+def test_complete_records_sanitized_attempt_attribution() -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(
+                503,
+                headers={
+                    "x-litellm-model-id": "deployment-1",
+                    "x-key-fingerprint": "sha256:0123456789abcdef",
+                },
+                json={"error": {"message": "temporary failure"}},
+                request=request,
+            )
+        return httpx.Response(
+            200,
+            headers={
+                "x-litellm-model-id": "deployment-2",
+                "x-key-fingerprint": "sha256:fedcba9876543210",
+            },
+            json={
+                "model": "openrouter/free",
+                "choices": [{"message": {"content": "ok"}}],
+            },
+            request=request,
+        )
+
+    result = _provider(httpx.MockTransport(handler)).complete(_request())
+
+    assert [item.attempt for item in result.attempts] == [1, 2]
+    assert result.attempts[0].deployment_id == "deployment-1"
+    assert result.attempts[0].error_code == "upstream_unavailable"
+    assert result.attempts[1].deployment_id == "deployment-2"
+    assert result.attempts[1].error_code is None
+    assert result.attribution is not None
+    assert result.attribution.key_fingerprint == "sha256:fedcba9876543210"
+
+
+def test_exhausted_gateway_retries_return_attempted_metadata_without_secrets() -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(
+            429,
+            headers={
+                "x-litellm-model-id": f"deployment-{calls}",
+                "x-key-fingerprint": "sha256:0123456789abcdef",
+            },
+            json={"error": {"message": "key sk-or-v1-secret"}},
+            request=request,
+        )
+
+    provider = LiteLLMGatewayProvider(
+        LiteLLMGatewayConfig(
+            base_url="http://gateway",
+            api_key="gateway-key",
+            max_attempts=2,
+            backoff_seconds=0,
+            jitter_seconds=0,
+        ),
+        client=httpx.Client(
+            transport=httpx.MockTransport(handler), base_url="http://gateway/v1"
+        ),
+        async_client=httpx.AsyncClient(
+            transport=httpx.MockTransport(handler), base_url="http://gateway/v1"
+        ),
+    )
+
+    with pytest.raises(LLMProviderError) as raised:
+        provider.complete(_request())
+
+    assert calls == 2
+    assert raised.value.attempt == 2
+    assert [item.deployment_id for item in raised.value.attempts] == [
+        "deployment-1",
+        "deployment-2",
+    ]
+    assert all(
+        item.key_fingerprint == "sha256:0123456789abcdef"
+        for item in raised.value.attempts
+    )
+    assert "sk-or-v1-secret" not in str(raised.value)
 
 
 def test_complete_honors_bounded_retry_after_delay(monkeypatch) -> None:
@@ -359,6 +449,7 @@ def test_stream_does_not_retry_after_first_delta() -> None:
 
     assert raised.value.code is LLMErrorCode.STREAM_INTERRUPTED
     assert raised.value.partial_output == "partial"
+    assert [item.attempt for item in raised.value.attempts] == [1]
 
 
 def test_stream_error_preserves_delivered_tool_calls() -> None:
@@ -377,6 +468,59 @@ def test_stream_error_preserves_delivered_tool_calls() -> None:
 
     assert raised.value.code is LLMErrorCode.STREAM_INTERRUPTED
     assert raised.value.partial_tool_calls == ({"id": "call-1"},)
+    assert [item.attempt for item in raised.value.attempts] == [1]
+
+
+def test_stream_provider_error_after_first_delta_has_one_terminal_attempt(
+    monkeypatch,
+) -> None:
+    stream = (
+        'data: {"model":"openrouter/auto","choices":[{"delta":{"content":"partial"}}]}\n\n'
+        "data: [DONE]\n\n"
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=stream, request=request)
+
+    original = gateway_module.LiteLLMGatewayProvider._stream_event_from_line
+    calls = 0
+
+    def fail_after_delta(
+        self: LiteLLMGatewayProvider,
+        line: str,
+        request: CompletionRequest,
+        attempt: int,
+        model: str,
+        sequence: int,
+        resolved_route: ResolvedModelRoute,
+    ) -> StreamEvent | None:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise LLMProviderError(
+                code=LLMErrorCode.UPSTREAM_UNAVAILABLE,
+                provider="litellm-gateway",
+                model=model,
+                request_id=request.request_id,
+                reason="synthetic stream failure",
+                retryable=False,
+                attempt=attempt,
+            )
+        return original(self, line, request, attempt, model, sequence, resolved_route)
+
+    monkeypatch.setattr(
+        gateway_module.LiteLLMGatewayProvider,
+        "_stream_event_from_line",
+        fail_after_delta,
+    )
+
+    provider = _provider(httpx.MockTransport(handler))
+
+    with pytest.raises(LLMProviderError) as raised:
+        list(provider.stream(_request()))
+
+    assert raised.value.code is LLMErrorCode.STREAM_INTERRUPTED
+    assert [item.attempt for item in raised.value.attempts] == [1]
 
 
 def test_stream_can_retry_before_first_delta() -> None:

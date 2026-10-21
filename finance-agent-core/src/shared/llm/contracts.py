@@ -67,6 +67,17 @@ class LLMAttribution(BaseModel):
     key_fingerprint: str | None = Field(default=None, min_length=1)
 
 
+class LLMAttempt(BaseModel):
+    """Sanitized record for one gateway attempt."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    attempt: int = Field(ge=1)
+    deployment_id: str | None = Field(default=None, min_length=1)
+    key_fingerprint: str | None = Field(default=None, min_length=1)
+    error_code: str | None = Field(default=None, min_length=1)
+
+
 class ResolvedModelRoute(BaseModel):
     """Server-resolved route used by an infrastructure adapter.
 
@@ -134,6 +145,7 @@ class CompletionResult(BaseModel):
     attempt: int = Field(default=1, ge=1)
     tool_calls: tuple[dict[str, object], ...] = ()
     attribution: LLMAttribution | None = None
+    attempts: tuple[LLMAttempt, ...] = ()
 
 
 class StreamEvent(BaseModel):
@@ -204,6 +216,7 @@ class LLMProviderError(RuntimeError):
         partial_output: str = "",
         partial_tool_calls: tuple[dict[str, object], ...] = (),
         attribution: LLMAttribution | None = None,
+        attempts: tuple[LLMAttempt, ...] = (),
     ) -> None:
         self.code = code
         self.provider = provider
@@ -217,6 +230,7 @@ class LLMProviderError(RuntimeError):
         self.partial_output = partial_output
         self.partial_tool_calls = partial_tool_calls
         self.attribution = attribution
+        self.attempts = attempts
         super().__init__(reason)
 
 

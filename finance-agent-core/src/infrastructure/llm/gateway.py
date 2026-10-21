@@ -6,6 +6,7 @@ import json
 import math
 import os
 import random
+import re
 import time
 from collections.abc import AsyncIterator, Iterator, Mapping
 from dataclasses import dataclass
@@ -22,6 +23,8 @@ from src.shared.llm.contracts import (
     ChatMessage,
     CompletionRequest,
     CompletionResult,
+    LLMAttempt,
+    LLMAttribution,
     LLMErrorCode,
     LLMProviderError,
     LLMRouteResolver,
@@ -36,6 +39,12 @@ _ResponseModel = TypeVar("_ResponseModel", bound=BaseModel)
 _RETRYABLE_STATUS_CODES = frozenset({408, 429, 500, 502, 503, 504})
 _MAX_ERROR_TEXT = 500
 _MAX_RETRY_ATTEMPTS = 3
+_MAX_METADATA_LENGTH = 128
+_SAFE_FINGERPRINT_PATTERN = re.compile(r"(?:sha256:)?[0-9a-fA-F]{12,128}")
+_SAFE_DEPLOYMENT_ID_PATTERN = re.compile(
+    r"(?:[0-9]{1,20}|deployment-[A-Za-z0-9_-]{1,64}|"
+    r"[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12})"
+)
 
 
 def _env_int(name: str, default: int, *, minimum: int) -> int:
@@ -169,6 +178,61 @@ class LiteLLMGatewayProvider:
                 retryable=False,
             ) from exc
 
+    @staticmethod
+    def _response_attribution(
+        headers: Mapping[str, str], resolved_route: ResolvedModelRoute
+    ) -> LLMAttribution | None:
+        deployment_id = _safe_metadata_header(
+            headers, "x-litellm-model-id"
+        ) or _safe_metadata_header(headers, "x-deployment-id")
+        if deployment_id is not None and not _SAFE_DEPLOYMENT_ID_PATTERN.fullmatch(
+            deployment_id
+        ):
+            deployment_id = None
+        key_fingerprint = _safe_metadata_header(
+            headers, "x-litellm-key-fingerprint"
+        ) or _safe_metadata_header(headers, "x-key-fingerprint")
+        if key_fingerprint is not None and not _SAFE_FINGERPRINT_PATTERN.fullmatch(
+            key_fingerprint
+        ):
+            key_fingerprint = None
+        if deployment_id is None and key_fingerprint is None:
+            return resolved_route.attribution
+        return LLMAttribution(
+            deployment_id=deployment_id,
+            key_fingerprint=key_fingerprint,
+        )
+
+    @staticmethod
+    def _attempt_record(
+        *,
+        attempt: int,
+        attribution: LLMAttribution | None,
+        error_code: str | None = None,
+    ) -> LLMAttempt:
+        return LLMAttempt(
+            attempt=attempt,
+            deployment_id=attribution.deployment_id if attribution else None,
+            key_fingerprint=attribution.key_fingerprint if attribution else None,
+            error_code=error_code,
+        )
+
+    @classmethod
+    def _record_error_attempt(
+        cls,
+        error: LLMProviderError,
+        attempts: list[LLMAttempt],
+    ) -> LLMProviderError:
+        attempts.append(
+            cls._attempt_record(
+                attempt=error.attempt,
+                attribution=error.attribution,
+                error_code=error.code.value,
+            )
+        )
+        error.attempts = tuple(attempts)
+        return error
+
     def complete(self, request: CompletionRequest) -> CompletionResult:
         return self._complete(request)
 
@@ -179,6 +243,7 @@ class LiteLLMGatewayProvider:
         response_schema: type[BaseModel] | None = None,
     ) -> CompletionResult:
         resolved_route = self._resolve_route(request)
+        attempts: list[LLMAttempt] = []
         for attempt in range(1, self._config.max_attempts + 1):
             try:
                 response = self._client.post(
@@ -194,10 +259,22 @@ class LiteLLMGatewayProvider:
                 )
                 if response.status_code >= 400:
                     self._raise_status(response, request, attempt, resolved_route)
+                attribution = self._response_attribution(
+                    response.headers, resolved_route
+                )
+                attempts.append(
+                    self._attempt_record(attempt=attempt, attribution=attribution)
+                )
                 return self._parse_completion(
-                    response.json(), request, attempt, resolved_route
+                    response.json(),
+                    request,
+                    attempt,
+                    resolved_route,
+                    attribution,
+                    tuple(attempts),
                 )
             except LLMProviderError as exc:
+                self._record_error_attempt(exc, attempts)
                 if not self._should_retry(exc, attempt):
                     if exc.retryable and attempt >= self._config.max_attempts:
                         raise self._terminal_error(exc) from exc
@@ -211,6 +288,7 @@ class LiteLLMGatewayProvider:
                     timeout=True,
                     resolved_route=resolved_route,
                 )
+                self._record_error_attempt(error, attempts)
                 if attempt >= self._config.max_attempts:
                     raise self._terminal_error(error) from exc
                 self._sleep(attempt, error)
@@ -222,13 +300,16 @@ class LiteLLMGatewayProvider:
                     timeout=False,
                     resolved_route=resolved_route,
                 )
+                self._record_error_attempt(error, attempts)
                 if attempt >= self._config.max_attempts:
                     raise self._terminal_error(error) from exc
                 self._sleep(attempt, error)
             except (JSONDecodeError, TypeError, ValueError) as exc:
-                raise self._malformed_response(
+                error = self._malformed_response(
                     request, attempt, str(exc), resolved_route
-                ) from exc
+                )
+                self._record_error_attempt(error, attempts)
+                raise error from exc
         raise RuntimeError("gateway completion retry loop reached unreachable state")
 
     def complete_structured(
@@ -250,6 +331,7 @@ class LiteLLMGatewayProvider:
         response_schema: type[BaseModel] | None = None,
     ) -> CompletionResult:
         resolved_route = self._resolve_route(request)
+        attempts: list[LLMAttempt] = []
         for attempt in range(1, self._config.max_attempts + 1):
             try:
                 response = await self._async_client.post(
@@ -265,10 +347,22 @@ class LiteLLMGatewayProvider:
                 )
                 if response.status_code >= 400:
                     self._raise_status(response, request, attempt, resolved_route)
+                attribution = self._response_attribution(
+                    response.headers, resolved_route
+                )
+                attempts.append(
+                    self._attempt_record(attempt=attempt, attribution=attribution)
+                )
                 return self._parse_completion(
-                    response.json(), request, attempt, resolved_route
+                    response.json(),
+                    request,
+                    attempt,
+                    resolved_route,
+                    attribution,
+                    tuple(attempts),
                 )
             except LLMProviderError as exc:
+                self._record_error_attempt(exc, attempts)
                 if not self._should_retry(exc, attempt):
                     if exc.retryable and attempt >= self._config.max_attempts:
                         raise self._terminal_error(exc) from exc
@@ -282,6 +376,7 @@ class LiteLLMGatewayProvider:
                     timeout=True,
                     resolved_route=resolved_route,
                 )
+                self._record_error_attempt(error, attempts)
                 if attempt >= self._config.max_attempts:
                     raise self._terminal_error(error) from exc
                 await self._async_sleep(attempt, error)
@@ -293,13 +388,16 @@ class LiteLLMGatewayProvider:
                     timeout=False,
                     resolved_route=resolved_route,
                 )
+                self._record_error_attempt(error, attempts)
                 if attempt >= self._config.max_attempts:
                     raise self._terminal_error(error) from exc
                 await self._async_sleep(attempt, error)
             except (JSONDecodeError, TypeError, ValueError) as exc:
-                raise self._malformed_response(
+                error = self._malformed_response(
                     request, attempt, str(exc), resolved_route
-                ) from exc
+                )
+                self._record_error_attempt(error, attempts)
+                raise error from exc
         raise RuntimeError("gateway completion retry loop reached unreachable state")
 
     async def acomplete_structured(
@@ -331,10 +429,12 @@ class LiteLLMGatewayProvider:
                 retryable=False,
                 attempt=result.attempt,
                 attribution=result.attribution,
+                attempts=result.attempts,
             ) from exc
 
     def stream(self, request: CompletionRequest) -> Iterator[StreamEvent]:
         resolved_route = self._resolve_route(request)
+        attempts: list[LLMAttempt] = []
         for attempt in range(1, self._config.max_attempts + 1):
             emitted = False
             partial_output = ""
@@ -407,62 +507,64 @@ class LiteLLMGatewayProvider:
             except LLMProviderError as exc:
                 if emitted or not self._should_retry(exc, attempt):
                     if emitted and exc.code != LLMErrorCode.STREAM_INTERRUPTED:
-                        raise self._stream_interrupted(
+                        error = self._stream_interrupted(
                             request,
                             attempt,
                             partial_output,
                             partial_tool_calls=partial_tool_calls,
                             resolved_route=resolved_route,
-                        ) from exc
+                        )
+                        self._record_error_attempt(error, attempts)
+                        raise error from exc
+                    self._record_error_attempt(exc, attempts)
                     if exc.retryable and attempt >= self._config.max_attempts:
                         raise self._terminal_error(exc) from exc
                     raise
+                self._record_error_attempt(exc, attempts)
                 self._sleep(attempt, exc)
             except (httpx.TimeoutException, httpx.RequestError) as exc:
                 if emitted:
-                    raise self._stream_interrupted(
+                    error = self._stream_interrupted(
                         request,
                         attempt,
                         partial_output,
                         partial_tool_calls=partial_tool_calls,
                         resolved_route=resolved_route,
-                    ) from exc
-                if attempt >= self._config.max_attempts:
-                    raise self._terminal_error(
-                        self._transport_error(
-                            request,
-                            attempt,
-                            exc,
-                            timeout=isinstance(exc, httpx.TimeoutException),
-                            resolved_route=resolved_route,
-                        )
-                    ) from exc
-                self._sleep(
+                    )
+                    self._record_error_attempt(error, attempts)
+                    raise error from exc
+                error = self._transport_error(
+                    request,
                     attempt,
-                    self._transport_error(
-                        request,
-                        attempt,
-                        exc,
-                        timeout=isinstance(exc, httpx.TimeoutException),
-                        resolved_route=resolved_route,
-                    ),
+                    exc,
+                    timeout=isinstance(exc, httpx.TimeoutException),
+                    resolved_route=resolved_route,
                 )
+                self._record_error_attempt(error, attempts)
+                if attempt >= self._config.max_attempts:
+                    raise self._terminal_error(error) from exc
+                self._sleep(attempt, error)
             except (JSONDecodeError, TypeError, ValueError) as exc:
                 if emitted:
-                    raise self._stream_interrupted(
+                    error = self._stream_interrupted(
                         request,
                         attempt,
                         partial_output,
                         partial_tool_calls=partial_tool_calls,
                         resolved_route=resolved_route,
-                    ) from exc
-                raise self._malformed_response(
+                    )
+                    self._record_error_attempt(error, attempts)
+                    raise error from exc
+                error = self._malformed_response(
                     request, attempt, str(exc), resolved_route
-                ) from exc
+                )
+                self._record_error_attempt(error, attempts)
+                raise error from exc
         raise RuntimeError("gateway stream retry loop reached unreachable state")
 
     async def astream(self, request: CompletionRequest) -> AsyncIterator[StreamEvent]:
         resolved_route = self._resolve_route(request)
+        attempts: list[LLMAttempt] = []
         for attempt in range(1, self._config.max_attempts + 1):
             emitted = False
             partial_output = ""
@@ -537,58 +639,59 @@ class LiteLLMGatewayProvider:
             except LLMProviderError as exc:
                 if emitted or not self._should_retry(exc, attempt):
                     if emitted and exc.code != LLMErrorCode.STREAM_INTERRUPTED:
-                        raise self._stream_interrupted(
+                        error = self._stream_interrupted(
                             request,
                             attempt,
                             partial_output,
                             partial_tool_calls=partial_tool_calls,
                             resolved_route=resolved_route,
-                        ) from exc
+                        )
+                        self._record_error_attempt(error, attempts)
+                        raise error from exc
+                    self._record_error_attempt(exc, attempts)
                     if exc.retryable and attempt >= self._config.max_attempts:
                         raise self._terminal_error(exc) from exc
                     raise
+                self._record_error_attempt(exc, attempts)
                 await self._async_sleep(attempt, exc)
             except (httpx.TimeoutException, httpx.RequestError) as exc:
                 if emitted:
-                    raise self._stream_interrupted(
+                    error = self._stream_interrupted(
                         request,
                         attempt,
                         partial_output,
                         partial_tool_calls=partial_tool_calls,
                         resolved_route=resolved_route,
-                    ) from exc
-                if attempt >= self._config.max_attempts:
-                    raise self._terminal_error(
-                        self._transport_error(
-                            request,
-                            attempt,
-                            exc,
-                            timeout=isinstance(exc, httpx.TimeoutException),
-                            resolved_route=resolved_route,
-                        )
-                    ) from exc
-                await self._async_sleep(
+                    )
+                    self._record_error_attempt(error, attempts)
+                    raise error from exc
+                error = self._transport_error(
+                    request,
                     attempt,
-                    self._transport_error(
-                        request,
-                        attempt,
-                        exc,
-                        timeout=isinstance(exc, httpx.TimeoutException),
-                        resolved_route=resolved_route,
-                    ),
+                    exc,
+                    timeout=isinstance(exc, httpx.TimeoutException),
+                    resolved_route=resolved_route,
                 )
+                self._record_error_attempt(error, attempts)
+                if attempt >= self._config.max_attempts:
+                    raise self._terminal_error(error) from exc
+                await self._async_sleep(attempt, error)
             except (JSONDecodeError, TypeError, ValueError) as exc:
                 if emitted:
-                    raise self._stream_interrupted(
+                    error = self._stream_interrupted(
                         request,
                         attempt,
                         partial_output,
                         partial_tool_calls=partial_tool_calls,
                         resolved_route=resolved_route,
-                    ) from exc
-                raise self._malformed_response(
+                    )
+                    self._record_error_attempt(error, attempts)
+                    raise error from exc
+                error = self._malformed_response(
                     request, attempt, str(exc), resolved_route
-                ) from exc
+                )
+                self._record_error_attempt(error, attempts)
+                raise error from exc
         raise RuntimeError("gateway stream retry loop reached unreachable state")
 
     def close(self) -> None:
@@ -713,7 +816,7 @@ class LiteLLMGatewayProvider:
             http_status=status,
             retry_after_seconds=_retry_after_seconds(response.headers),
             attempt=attempt,
-            attribution=resolved_route.attribution,
+            attribution=self._response_attribution(response.headers, resolved_route),
         )
 
     def _transport_error(
@@ -755,6 +858,7 @@ class LiteLLMGatewayProvider:
             partial_output=error.partial_output,
             partial_tool_calls=error.partial_tool_calls,
             attribution=error.attribution,
+            attempts=error.attempts,
         )
 
     @staticmethod
@@ -829,6 +933,8 @@ class LiteLLMGatewayProvider:
         request: CompletionRequest,
         attempt: int,
         resolved_route: ResolvedModelRoute,
+        attribution: LLMAttribution | None,
+        attempts: tuple[LLMAttempt, ...],
     ) -> CompletionResult:
         root = _mapping(raw)
         choices = _sequence(root.get("choices"))
@@ -847,7 +953,8 @@ class LiteLLMGatewayProvider:
             usage=usage,
             attempt=attempt,
             tool_calls=_tool_calls(message.get("tool_calls")),
-            attribution=resolved_route.attribution,
+            attribution=attribution or resolved_route.attribution,
+            attempts=attempts,
         )
 
     def _stream_event_from_line(
@@ -923,6 +1030,18 @@ def _string(value: object, default: str) -> str:
 
 def _optional_string(value: object) -> str | None:
     return value if isinstance(value, str) else None
+
+
+def _safe_metadata_header(headers: Mapping[str, str], name: str) -> str | None:
+    value = headers.get(name)
+    if value is None:
+        return None
+    normalized = value.strip()
+    if not normalized or len(normalized) > _MAX_METADATA_LENGTH:
+        return None
+    if any(ord(character) < 32 or ord(character) > 126 for character in normalized):
+        return None
+    return normalized
 
 
 def _content_text(value: object) -> str:
