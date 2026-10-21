@@ -1,19 +1,21 @@
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
-from typing import Protocol, cast
+from uuid import uuid4
 
-from src.agents.news.application.ports import SelectorChainLike, SelectorResponseLike
-from src.agents.news.interface.parsers import parse_selector_selected_urls
+from src.agents.news.interface.contracts import SelectorResponseModel
 from src.agents.news.interface.prompt_renderers import (
     format_selector_input as format_selector_input_interface,
 )
 from src.shared.kernel.types import JSONObject
-
-
-class AsyncSelectorChainLike(Protocol):
-    async def ainvoke(self, payload: JSONObject) -> SelectorResponseLike: ...
+from src.shared.llm.contracts import (
+    ChatMessage,
+    ChatRole,
+    CompletionRequest,
+    LLMProviderPort,
+    ModelRoute,
+    StructuredRequest,
+)
 
 
 @dataclass(frozen=True)
@@ -37,38 +39,49 @@ def format_selector_input(cleaned_results: list[JSONObject]) -> str:
     return format_selector_input_interface(cleaned_results)
 
 
-async def _invoke_selector_chain_non_blocking(
-    chain: SelectorChainLike,
-    payload: JSONObject,
-) -> SelectorResponseLike:
-    if hasattr(chain, "ainvoke"):
-        async_chain = cast(AsyncSelectorChainLike, chain)
-        return await async_chain.ainvoke(payload)
-    return await asyncio.to_thread(chain.invoke, payload)
-
-
 async def run_selector_with_resilience(
     *,
-    chain: SelectorChainLike,
+    llm_provider: LLMProviderPort,
+    llm_route: ModelRoute,
     ticker: str | None,
     formatted_results: str,
     raw_results: list[JSONObject],
+    system_prompt: str,
+    user_prompt: str,
 ) -> SelectorExecutionResult:
     try:
-        response = await _invoke_selector_chain_non_blocking(
-            chain,
-            {"ticker": ticker, "search_results": formatted_results},
+        request = CompletionRequest(
+            messages=(
+                ChatMessage(role=ChatRole.SYSTEM, content=system_prompt),
+                ChatMessage(
+                    role=ChatRole.USER,
+                    content=user_prompt.format(
+                        ticker=ticker or "UNKNOWN",
+                        search_results=formatted_results,
+                    ),
+                ),
+            ),
+            route=llm_route,
+            request_id=f"news-selector-{uuid4().hex}",
+            operation="news.select_articles",
+            timeout_seconds=60.0,
         )
-        selected_urls = parse_selector_selected_urls(
-            str(response.content),
-            context="news selector response",
+        response = await llm_provider.acomplete_structured(
+            StructuredRequest[SelectorResponseModel](
+                completion=request,
+                response_schema=SelectorResponseModel,
+            )
         )
         url_to_index = {
             result.get("link"): index
             for index, result in enumerate(raw_results)
             if result.get("link")
         }
-        indices = [url_to_index[url] for url in selected_urls if url in url_to_index]
+        indices = [
+            url_to_index[article.url]
+            for article in response.selected_articles
+            if article.url in url_to_index
+        ]
         return SelectorExecutionResult(
             selected_indices=normalize_selected_indices(indices),
             is_degraded=False,

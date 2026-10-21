@@ -3,13 +3,10 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 
-from pydantic import BaseModel
-
 from src.agents.news.application.ports import (
     FetchContentResult,
     FinbertAnalyzerLike,
     INewsArtifactRepository,
-    LLMLike,
     NewsItemFactoryLike,
     SourceFactoryLike,
 )
@@ -31,6 +28,7 @@ from src.agents.news.application.use_cases.run_selector_node_use_case import (
 from src.agents.news.domain.aggregation.contracts import NewsAggregationResult
 from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
 from src.shared.kernel.workflow_contracts import WorkflowNodeResult
+from src.shared.llm.contracts import LLMProviderPort, ModelRoute
 
 NewsNodeResult = WorkflowNodeResult
 
@@ -65,14 +63,16 @@ class NewsOrchestrator:
         self,
         state: Mapping[str, object],
         *,
-        get_llm_fn: Callable[[], LLMLike],
+        llm_provider: LLMProviderPort,
+        llm_route: ModelRoute,
         selector_system_prompt: str,
         selector_user_prompt: str,
     ) -> NewsNodeResult:
         return await run_selector_node_use_case(
             state=state,
             port=self.port,
-            get_llm_fn=get_llm_fn,
+            llm_provider=llm_provider,
+            llm_route=llm_route,
             selector_system_prompt=selector_system_prompt,
             selector_user_prompt=selector_user_prompt,
         )
@@ -101,22 +101,22 @@ class NewsOrchestrator:
         self,
         state: Mapping[str, object],
         *,
-        get_llm_fn: Callable[[], LLMLike],
+        llm_provider: LLMProviderPort,
+        llm_route: ModelRoute,
         get_finbert_analyzer_fn: Callable[[], FinbertAnalyzerLike],
         analyst_system_prompt: str,
         analyst_user_prompt_basic: str,
         analyst_user_prompt_with_finbert: str,
-        analysis_model_type: type[BaseModel],
     ) -> NewsNodeResult:
         return await run_analyst_node_use_case(
             state=state,
             port=self.port,
-            get_llm_fn=get_llm_fn,
+            llm_provider=llm_provider,
+            llm_route=llm_route,
             get_finbert_analyzer_fn=get_finbert_analyzer_fn,
             analyst_system_prompt=analyst_system_prompt,
             analyst_user_prompt_basic=analyst_user_prompt_basic,
             analyst_user_prompt_with_finbert=analyst_user_prompt_with_finbert,
-            analysis_model_type=analysis_model_type,
         )
 
     async def run_aggregator(

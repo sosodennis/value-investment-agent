@@ -52,24 +52,6 @@ class ModelDumpLike(Protocol):
     def model_dump(self, *, mode: str) -> JSONObject: ...
 
 
-class SelectorResponseLike(Protocol):
-    content: object
-
-
-class SelectorChainLike(Protocol):
-    def invoke(self, payload: JSONObject) -> SelectorResponseLike: ...
-
-
-class StructuredChainLike(Protocol):
-    def invoke(self, payload: JSONObject) -> ModelDumpLike: ...
-
-
-class LLMLike(Protocol):
-    def with_structured_output(
-        self, schema: type[BaseModel]
-    ) -> StructuredChainLike: ...
-
-
 class FinbertResultLike(Protocol):
     label: str
     score: float

@@ -3,35 +3,36 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Protocol, cast
-
-from langchain_core.prompts import ChatPromptTemplate
-from pydantic import BaseModel
+from uuid import uuid4
 
 from src.agents.news.application.ports import (
     FinbertAnalyzerLike,
     FinbertResultLike,
-    LLMLike,
-    ModelDumpLike,
     NewsArtifactTextReaderPort,
-    StructuredChainLike,
 )
-from src.agents.news.interface.parsers import parse_structured_llm_output
+from src.agents.news.interface.contracts import AIAnalysisModel
 from src.agents.news.interface.prompt_renderers import build_analysis_chain_payload
 from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import JSONObject
+from src.shared.llm.contracts import (
+    ChatMessage,
+    ChatRole,
+    CompletionRequest,
+    LLMProviderPort,
+    ModelRoute,
+    StructuredRequest,
+)
 
 logger = get_logger(__name__)
 
 
-class AsyncChainLike(Protocol):
-    async def ainvoke(self, payload: JSONObject) -> ModelDumpLike: ...
-
-
 @dataclass(frozen=True)
-class AnalysisChains:
-    basic: StructuredChainLike
-    finbert: StructuredChainLike
+class AnalysisRuntime:
+    provider: LLMProviderPort
+    route: ModelRoute
+    system_prompt: str
+    basic_user_prompt: str
+    finbert_user_prompt: str
 
 
 @dataclass(frozen=True)
@@ -40,51 +41,83 @@ class AnalystExecutionResult:
     article_errors: list[str]
 
 
-async def invoke_chain_non_blocking(
-    chain: StructuredChainLike,
-    payload: JSONObject,
-) -> ModelDumpLike:
-    if hasattr(chain, "ainvoke"):
-        async_chain = cast(AsyncChainLike, chain)
-        return await async_chain.ainvoke(payload)
-    return await asyncio.to_thread(chain.invoke, payload)
-
-
 def build_analysis_chains(
     *,
-    llm: LLMLike,
-    prompt_basic: ChatPromptTemplate,
-    prompt_finbert: ChatPromptTemplate,
-    analysis_model_type: type[BaseModel],
-) -> AnalysisChains:
-    basic_structured = llm.with_structured_output(analysis_model_type)
-    finbert_structured = llm.with_structured_output(analysis_model_type)
-    basic_chain = prompt_basic | basic_structured
-    finbert_chain = prompt_finbert | finbert_structured
-    return AnalysisChains(basic=basic_chain, finbert=finbert_chain)
+    llm_provider: LLMProviderPort,
+    llm_route: ModelRoute,
+    system_prompt: str,
+    user_prompt_basic: str,
+    user_prompt_with_finbert: str,
+) -> AnalysisRuntime:
+    return AnalysisRuntime(
+        provider=llm_provider,
+        route=llm_route,
+        system_prompt=system_prompt,
+        basic_user_prompt=user_prompt_basic,
+        finbert_user_prompt=user_prompt_with_finbert,
+    )
+
+
+async def _invoke_analysis(
+    *, chains: AnalysisRuntime, payload: JSONObject, user_prompt: str
+) -> JSONObject:
+    prompt_values = {
+        "ticker": payload.get("ticker", "UNKNOWN"),
+        "title": payload.get("title", "Unknown"),
+        "source": payload.get("source", "Unknown"),
+        "published_at": payload.get("published_at", "N/A"),
+        "content": payload.get("content", ""),
+        "search_tag": payload.get("search_tag", ""),
+        "finbert_sentiment": payload.get("finbert_sentiment", ""),
+        "finbert_confidence": payload.get("finbert_confidence", ""),
+        "finbert_has_numbers": payload.get("finbert_has_numbers", ""),
+    }
+    request = CompletionRequest(
+        messages=(
+            ChatMessage(role=ChatRole.SYSTEM, content=chains.system_prompt),
+            ChatMessage(
+                role=ChatRole.USER,
+                content=user_prompt.format(**prompt_values),
+            ),
+        ),
+        route=chains.route,
+        request_id=f"news-analysis-{uuid4().hex}",
+        operation="news.analyze_article",
+        timeout_seconds=60.0,
+    )
+    result = await chains.provider.acomplete_structured(
+        StructuredRequest[AIAnalysisModel](
+            completion=request,
+            response_schema=AIAnalysisModel,
+        )
+    )
+    return result.model_dump(mode="json")
 
 
 async def run_analysis_with_resilience(
     *,
-    chains: AnalysisChains,
+    chains: AnalysisRuntime,
     chain_payload: JSONObject,
     prefer_finbert_chain: bool,
 ) -> tuple[JSONObject, bool]:
     if prefer_finbert_chain:
         try:
-            result = await invoke_chain_non_blocking(chains.finbert, chain_payload)
-            return parse_structured_llm_output(
-                result, context="news finbert analysis response"
+            return await _invoke_analysis(
+                chains=chains,
+                payload=chain_payload,
+                user_prompt=chains.finbert_user_prompt,
             ), False
         except Exception:
-            result = await invoke_chain_non_blocking(chains.basic, chain_payload)
-            return parse_structured_llm_output(
-                result, context="news basic analysis degraded-path response"
+            return await _invoke_analysis(
+                chains=chains,
+                payload=chain_payload,
+                user_prompt=chains.basic_user_prompt,
             ), True
 
-    result = await invoke_chain_non_blocking(chains.basic, chain_payload)
-    return parse_structured_llm_output(
-        result, context="news basic analysis response"
+    return await _invoke_analysis(
+        chains=chains,
+        payload=chain_payload,
+        user_prompt=chains.basic_user_prompt,
     ), False
 
 
@@ -94,7 +127,7 @@ async def analyze_news_items(
     ticker: str | None,
     port: NewsArtifactTextReaderPort,
     finbert_analyzer: FinbertAnalyzerLike,
-    chains: AnalysisChains,
+    chains: AnalysisRuntime,
 ) -> AnalystExecutionResult:
     article_errors: list[str] = []
     ticker_value = ticker or "UNKNOWN"

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from langchain_core.prompts import ChatPromptTemplate
-
 from src.shared.kernel.types import JSONObject
 
 
@@ -12,10 +10,10 @@ def format_selector_input(cleaned_results: list[JSONObject]) -> str:
         categories_str = ", ".join([str(value).upper() for value in categories])
         formatted_list.append(
             f"""
-Source: {result.get('source')} | [TAGS: {categories_str}] | Date: {result.get('date')}
-Title: {result.get('title')}
-Snippet: {result.get('snippet')}
-URL: {result.get('link')}
+Source: {result.get("source")} | [TAGS: {categories_str}] | Date: {result.get("date")}
+Title: {result.get("title")}
+Snippet: {result.get("snippet")}
+URL: {result.get("link")}
 --------------------------------------------------
 """
         )
@@ -54,26 +52,3 @@ def build_analysis_chain_payload(
             "Yes" if bool(finbert_summary.get("has_numbers")) else "No"
         )
     return base_payload
-
-
-def build_selector_chat_prompt(
-    *, system_prompt: str, user_prompt: str
-) -> ChatPromptTemplate:
-    return ChatPromptTemplate.from_messages(
-        [("system", system_prompt), ("user", user_prompt)]
-    )
-
-
-def build_analyst_chat_prompts(
-    *,
-    system_prompt: str,
-    user_prompt_basic: str,
-    user_prompt_with_finbert: str,
-) -> tuple[ChatPromptTemplate, ChatPromptTemplate]:
-    prompt_basic = ChatPromptTemplate.from_messages(
-        [("system", system_prompt), ("user", user_prompt_basic)]
-    )
-    prompt_finbert = ChatPromptTemplate.from_messages(
-        [("system", system_prompt), ("user", user_prompt_with_finbert)]
-    )
-    return prompt_basic, prompt_finbert

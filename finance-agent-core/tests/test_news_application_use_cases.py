@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 
 from src.agents.news.application.analysis_service import (
-    AnalysisChains,
+    AnalysisRuntime,
     analyze_news_items,
     build_analysis_chains,
     run_analysis_with_resilience,
@@ -59,11 +59,15 @@ from src.agents.news.infrastructure.ids.news_id_generator_service import (
     generate_news_id,
 )
 from src.agents.news.interface.contracts import (
+    AIAnalysisModel,
     FinancialNewsItemModel,
     NewsSearchResultItemModel,
+    SelectedArticleModel,
+    SelectorResponseModel,
     SourceInfoModel,
 )
 from src.agents.news.interface.prompt_renderers import build_analysis_chain_payload
+from src.shared.llm.contracts import ModelRoute, StructuredRequest
 
 
 def test_aggregate_news_items_computes_weighted_sentiment_and_themes() -> None:
@@ -246,57 +250,60 @@ def test_normalize_selected_indices_deduplicates_and_limits() -> None:
     assert normalized == [3, 1, 2]
 
 
-class _FakeModel:
-    def __init__(self, payload: dict[str, object]) -> None:
-        self._payload = payload
+class _FakeAnalysisProvider:
+    def __init__(self, *results: AIAnalysisModel | Exception) -> None:
+        self.results = list(results)
+        self.requests: list[StructuredRequest[AIAnalysisModel]] = []
 
-    def model_dump(self, *, mode: str) -> dict[str, object]:
-        assert mode == "json"
-        return self._payload
-
-
-class _GoodChain:
-    def __init__(self, payload: dict[str, object]) -> None:
-        self._payload = payload
-
-    def invoke(self, payload: object) -> _FakeModel:
-        _ = payload
-        return _FakeModel(self._payload)
+    async def acomplete_structured(
+        self, request: StructuredRequest[AIAnalysisModel]
+    ) -> AIAnalysisModel:
+        self.requests.append(request)
+        result = self.results.pop(0)
+        if isinstance(result, Exception):
+            raise result
+        return result
 
 
-class _FailingChain:
-    def invoke(self, payload: object) -> _FakeModel:
-        _ = payload
-        raise RuntimeError("chain failed")
-
-
-class _FakePrompt:
-    def __or__(self, rhs: object) -> object:
-        return rhs
-
-
-class _FakeLLM:
-    def with_structured_output(self, schema: type[object]) -> object:
-        _ = schema
-        return _GoodChain({"summary": "ok"})
-
-
-def test_build_analysis_chains_returns_two_invokable_chains() -> None:
-    chains = build_analysis_chains(
-        llm=_FakeLLM(),
-        prompt_basic=_FakePrompt(),
-        prompt_finbert=_FakePrompt(),
-        analysis_model_type=object,
+def _analysis_model(summary: str) -> AIAnalysisModel:
+    return AIAnalysisModel(
+        summary=summary,
+        sentiment="NEUTRAL",
+        sentiment_score=0.5,
+        impact_level="Low",
+        reasoning="Evidence is mixed.",
     )
-    assert isinstance(chains, AnalysisChains)
-    assert chains.basic.invoke({}).model_dump(mode="json")["summary"] == "ok"
-    assert chains.finbert.invoke({}).model_dump(mode="json")["summary"] == "ok"
+
+
+def test_build_analysis_chains_keeps_provider_route_and_prompt_specs() -> None:
+    provider = _FakeAnalysisProvider(_analysis_model("ok"))
+    route = _selector_route()
+    chains = build_analysis_chains(
+        llm_provider=provider,  # type: ignore[arg-type]
+        llm_route=route,
+        system_prompt="system",
+        user_prompt_basic="basic {ticker}",
+        user_prompt_with_finbert="finbert {ticker}",
+    )
+    assert isinstance(chains, AnalysisRuntime)
+    assert chains.provider is provider
+    assert chains.route == route
+    assert chains.system_prompt == "system"
+    assert chains.basic_user_prompt == "basic {ticker}"
+    assert chains.finbert_user_prompt == "finbert {ticker}"
 
 
 def test_run_analysis_with_resilience_uses_basic_when_finbert_chain_fails() -> None:
-    chains = AnalysisChains(
-        basic=_GoodChain({"source_chain": "basic"}),
-        finbert=_FailingChain(),
+    provider = _FakeAnalysisProvider(
+        RuntimeError("FinBERT analysis failed"),
+        _analysis_model("basic result"),
+    )
+    chains = build_analysis_chains(
+        llm_provider=provider,  # type: ignore[arg-type]
+        llm_route=_selector_route(),
+        system_prompt="system",
+        user_prompt_basic="basic {ticker}",
+        user_prompt_with_finbert="finbert {ticker}",
     )
     payload, used_degraded_path = asyncio.run(
         run_analysis_with_resilience(
@@ -306,30 +313,51 @@ def test_run_analysis_with_resilience_uses_basic_when_finbert_chain_fails() -> N
         )
     )
     assert used_degraded_path is True
-    assert payload["source_chain"] == "basic"
+    assert payload["summary"] == "basic result"
+    assert len(provider.requests) == 2
+    assert "finbert" in provider.requests[0].completion.messages[1].content
+    assert "basic" in provider.requests[1].completion.messages[1].content
+    assert provider.requests[0].completion.operation == "news.analyze_article"
+    assert provider.requests[0].completion.route == _selector_route()
+    assert provider.requests[0].completion.timeout_seconds == 60.0
+    assert provider.requests[0].response_schema is AIAnalysisModel
 
 
-class _SelectorResponse:
-    def __init__(self, content: str) -> None:
-        self.content = content
+class _FakeSelectorProvider:
+    def __init__(self, response: SelectorResponseModel | None = None) -> None:
+        self.response = response
+        self.requests: list[StructuredRequest[SelectorResponseModel]] = []
+
+    async def acomplete_structured(
+        self, request: StructuredRequest[SelectorResponseModel]
+    ) -> SelectorResponseModel:
+        self.requests.append(request)
+        if self.response is None:
+            raise RuntimeError("provider unavailable")
+        return self.response
 
 
-class _SelectorChain:
-    def __init__(self, content: str) -> None:
-        self._content = content
-
-    def invoke(self, payload: object) -> _SelectorResponse:
-        _ = payload
-        return _SelectorResponse(self._content)
+def _selector_route() -> ModelRoute:
+    return ModelRoute(alias="openrouter-default", candidates=("openrouter/auto",))
 
 
 def test_run_selector_with_resilience_parses_selected_urls() -> None:
-    chain = _SelectorChain(
-        '{"selected_articles":[{"url":"https://x.com/a"},{"url":"https://x.com/c"}]}'
+    provider = _FakeSelectorProvider(
+        SelectorResponseModel(
+            selected_articles=[
+                SelectedArticleModel(
+                    url="https://x.com/a", reason="earnings", priority="High"
+                ),
+                SelectedArticleModel(
+                    url="https://x.com/c", reason="lawsuit", priority="High"
+                ),
+            ]
+        )
     )
     result = asyncio.run(
         run_selector_with_resilience(
-            chain=chain,
+            llm_provider=provider,  # type: ignore[arg-type]
+            llm_route=_selector_route(),
             ticker="GME",
             formatted_results="...",
             raw_results=[
@@ -337,47 +365,40 @@ def test_run_selector_with_resilience_parses_selected_urls() -> None:
                 {"link": "https://x.com/b"},
                 {"link": "https://x.com/c"},
             ],
+            system_prompt="system",
+            user_prompt="Ticker {ticker}: {search_results}",
         )
     )
     assert result.selected_indices == [0, 2]
     assert result.is_degraded is False
+    request = provider.requests[0]
+    assert request.completion.operation == "news.select_articles"
+    assert request.completion.route == _selector_route()
+    assert request.response_schema is SelectorResponseModel
+    assert "Ticker GME" in request.completion.messages[1].content
+    assert request.completion.timeout_seconds == 60.0
 
 
-class _AsyncSelectorChain:
-    def __init__(self, content: str) -> None:
-        self._content = content
-        self.ainvoke_called = False
-        self.invoke_called = False
-
-    async def ainvoke(self, payload: object) -> _SelectorResponse:
-        _ = payload
-        self.ainvoke_called = True
-        return _SelectorResponse(self._content)
-
-    def invoke(self, payload: object) -> _SelectorResponse:
-        _ = payload
-        self.invoke_called = True
-        return _SelectorResponse(self._content)
-
-
-def test_run_selector_with_resilience_prefers_ainvoke_when_available() -> None:
-    chain = _AsyncSelectorChain(
-        '{"selected_articles":[{"url":"https://x.com/a"},{"url":"https://x.com/b"}]}'
-    )
+def test_run_selector_with_resilience_degrades_to_top_results_on_provider_failure() -> (
+    None
+):
+    provider = _FakeSelectorProvider()
     result = asyncio.run(
         run_selector_with_resilience(
-            chain=chain,
+            llm_provider=provider,  # type: ignore[arg-type]
+            llm_route=_selector_route(),
             ticker="GME",
             formatted_results="...",
             raw_results=[
                 {"link": "https://x.com/a"},
                 {"link": "https://x.com/b"},
             ],
+            system_prompt="system",
+            user_prompt="Ticker {ticker}: {search_results}",
         )
     )
     assert result.selected_indices == [0, 1]
-    assert chain.ainvoke_called is True
-    assert chain.invoke_called is False
+    assert result.is_degraded is True
 
 
 class _FakeNewsPort:
@@ -445,9 +466,12 @@ def test_analyze_news_items_sets_analysis_payload() -> None:
             ticker="GME",
             port=_FakeNewsPort(),
             finbert_analyzer=_NoFinbert(),
-            chains=AnalysisChains(
-                basic=_GoodChain({"summary": "ok"}),
-                finbert=_GoodChain({"summary": "ok"}),
+            chains=build_analysis_chains(
+                llm_provider=_FakeAnalysisProvider(_analysis_model("ok")),  # type: ignore[arg-type]
+                llm_route=_selector_route(),
+                system_prompt="system",
+                user_prompt_basic="basic {ticker}",
+                user_prompt_with_finbert="finbert {ticker}",
             ),
         )
     )
@@ -633,12 +657,7 @@ class _SelectorContextFailPort:
 
 
 def test_run_selector_node_use_case_marks_degraded_when_context_load_fails() -> None:
-    llm_called = False
-
-    def _get_llm() -> object:
-        nonlocal llm_called
-        llm_called = True
-        raise AssertionError("LLM must not be called when selector context load fails")
+    provider = _FakeSelectorProvider()
 
     result = asyncio.run(
         run_selector_node_use_case(
@@ -647,13 +666,14 @@ def test_run_selector_node_use_case_marks_degraded_when_context_load_fails() -> 
                 "financial_news_research": {"search_artifact_id": "search-1"},
             },
             port=_SelectorContextFailPort(),
-            get_llm_fn=_get_llm,
+            llm_provider=provider,  # type: ignore[arg-type]
+            llm_route=_selector_route(),
             selector_system_prompt="system",
             selector_user_prompt="user",
         )
     )
 
-    assert llm_called is False
+    assert provider.requests == []
     assert result.goto == "END"
     assert result.update["internal_progress"]["selector_node"] == "error"
     assert "selector context" in result.update["error_logs"][0]["error"]

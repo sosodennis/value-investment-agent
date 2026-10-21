@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 
-from src.agents.news.application.ports import INewsArtifactRepository, LLMLike
+from src.agents.news.application.ports import INewsArtifactRepository
 from src.agents.news.application.selection_service import run_selector_with_resilience
 from src.agents.news.application.state_readers import (
     resolved_ticker_from_state,
@@ -15,10 +15,10 @@ from src.agents.news.application.state_updates import (
     build_selector_node_update,
 )
 from src.agents.news.interface.parsers import parse_news_search_result_items
-from src.agents.news.interface.prompt_renderers import build_selector_chat_prompt
 from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import JSONObject
 from src.shared.kernel.workflow_contracts import WorkflowNodeResult
+from src.shared.llm.contracts import LLMProviderPort, ModelRoute
 
 logger = get_logger(__name__)
 
@@ -33,7 +33,8 @@ async def run_selector_node_use_case(
     *,
     state: Mapping[str, object],
     port: INewsArtifactRepository,
-    get_llm_fn: Callable[[], LLMLike],
+    llm_provider: LLMProviderPort,
+    llm_route: ModelRoute,
     selector_system_prompt: str,
     selector_user_prompt: str,
 ) -> WorkflowNodeResult:
@@ -82,17 +83,14 @@ async def run_selector_node_use_case(
         message="news selector started",
         fields={"ticker": ticker, "raw_result_count": len(raw_results)},
     )
-    llm = get_llm_fn()
-    prompt = build_selector_chat_prompt(
-        system_prompt=selector_system_prompt,
-        user_prompt=selector_user_prompt,
-    )
-    chain = prompt | llm
     selector_result = await run_selector_with_resilience(
-        chain=chain,
+        llm_provider=llm_provider,
+        llm_route=llm_route,
         ticker=ticker,
         formatted_results=formatted_results,
         raw_results=raw_results,
+        system_prompt=selector_system_prompt,
+        user_prompt=selector_user_prompt,
     )
     selected_indices = selector_result.selected_indices
     if selector_result.is_degraded:

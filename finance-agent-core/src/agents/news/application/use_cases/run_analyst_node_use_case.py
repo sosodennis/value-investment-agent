@@ -4,8 +4,6 @@ import logging
 import time
 from collections.abc import Callable, Mapping
 
-from pydantic import BaseModel
-
 from src.agents.news.application.analysis_service import (
     analyze_news_items,
     build_analysis_chains,
@@ -13,7 +11,6 @@ from src.agents.news.application.analysis_service import (
 from src.agents.news.application.ports import (
     FinbertAnalyzerLike,
     INewsArtifactRepository,
-    LLMLike,
 )
 from src.agents.news.application.state_readers import (
     news_items_artifact_id_from_state,
@@ -25,10 +22,10 @@ from src.agents.news.application.state_updates import (
     build_analyst_node_update,
 )
 from src.agents.news.interface.parsers import parse_news_items
-from src.agents.news.interface.prompt_renderers import build_analyst_chat_prompts
 from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import JSONObject
 from src.shared.kernel.workflow_contracts import WorkflowNodeResult
+from src.shared.llm.contracts import LLMProviderPort, ModelRoute
 
 logger = get_logger(__name__)
 
@@ -48,12 +45,12 @@ async def run_analyst_node_use_case(
     *,
     state: Mapping[str, object],
     port: INewsArtifactRepository,
-    get_llm_fn: Callable[[], LLMLike],
+    llm_provider: LLMProviderPort,
+    llm_route: ModelRoute,
     get_finbert_analyzer_fn: Callable[[], FinbertAnalyzerLike],
     analyst_system_prompt: str,
     analyst_user_prompt_basic: str,
     analyst_user_prompt_with_finbert: str,
-    analysis_model_type: type[BaseModel],
 ) -> WorkflowNodeResult:
     news_items_id = news_items_artifact_id_from_state(state)
 
@@ -93,26 +90,19 @@ async def run_analyst_node_use_case(
     )
 
     finbert_analyzer = get_finbert_analyzer_fn()
-    llm = get_llm_fn()
-
-    prompt_basic, prompt_finbert = build_analyst_chat_prompts(
-        system_prompt=analyst_system_prompt,
-        user_prompt_basic=analyst_user_prompt_basic,
-        user_prompt_with_finbert=analyst_user_prompt_with_finbert,
-    )
-
     try:
         analysis_chains = build_analysis_chains(
-            llm=llm,
-            prompt_basic=prompt_basic,
-            prompt_finbert=prompt_finbert,
-            analysis_model_type=analysis_model_type,
+            llm_provider=llm_provider,
+            llm_route=llm_route,
+            system_prompt=analyst_system_prompt,
+            user_prompt_basic=analyst_user_prompt_basic,
+            user_prompt_with_finbert=analyst_user_prompt_with_finbert,
         )
     except Exception as exc:
         log_event(
             logger,
-            event="news_analyst_chain_build_failed",
-            message="failed to build analyst chains",
+            event="news_analyst_runtime_build_failed",
+            message="failed to build analyst runtime",
             level=logging.ERROR,
             error_code="NEWS_ANALYST_CHAIN_BUILD_FAILED",
             fields={"ticker": ticker, "exception": str(exc)},

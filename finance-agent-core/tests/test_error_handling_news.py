@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -49,12 +49,12 @@ async def test_selector_node_error_log():
             "src.services.artifact_manager.artifact_manager.save_artifact",
             new=AsyncMock(return_value="selection-artifact-1"),
         ):
-            with patch("src.agents.news.application.wiring.get_llm") as mock_llm:
-                # Simulate LLM failure
-                mock_chain = MagicMock()
-                mock_chain.invoke.side_effect = Exception("LLM Timeout")
-                mock_llm.return_value = mock_chain
-
+            provider = get_news_workflow_runner().deps.llm_provider
+            with patch.object(
+                provider,
+                "acomplete_structured",
+                new=AsyncMock(side_effect=Exception("LLM Timeout")),
+            ):
                 command = await selector_node(state)
 
                 assert command.update["internal_progress"]["selector_node"] == "done"
@@ -121,26 +121,17 @@ async def test_analyst_node_error_log():
         "src.services.artifact_manager.artifact_manager.get_artifact_data",
         side_effect=mock_get_artifact_data,
     ):
-        with patch("src.agents.news.application.wiring.get_llm") as mock_llm:
+        provider = get_news_workflow_runner().deps.llm_provider
+        with patch.object(
+            provider,
+            "acomplete_structured",
+            new=AsyncMock(side_effect=Exception("Analysis Error")),
+        ):
             with patch(
                 "src.agents.news.application.wiring.get_finbert_analyzer"
             ) as mock_finbert:
                 # Ensure finbert doesn't crash test
                 mock_finbert.return_value.is_available.return_value = False
-
-                # Simulate chain failure
-                # We need to mock the object returned by llm.with_structured_output
-                mock_struct_llm = MagicMock()
-                error = Exception("Analysis Error")
-                mock_struct_llm.invoke.side_effect = error
-                mock_struct_llm.batch.side_effect = error
-                mock_struct_llm.stream.side_effect = error
-                mock_struct_llm.side_effect = error  # Cover __call__
-
-                mock_llm_instance = MagicMock()
-                mock_llm_instance.with_structured_output.return_value = mock_struct_llm
-
-                mock_llm.return_value = mock_llm_instance
 
                 command = await analyst_node(state)
 
