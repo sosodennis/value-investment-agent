@@ -43,6 +43,7 @@ from src.agents.technical.subdomains.decision_observability import (
     build_technical_monitoring_row_model,
 )
 from src.infrastructure.database import init_db
+from src.infrastructure.llm.provider import close_llm_provider
 from src.infrastructure.sentiment import get_finbert_analyzer
 from src.interface.artifacts.artifact_api_models import (
     ArtifactApiResponse,
@@ -173,9 +174,12 @@ async def lifespan(app: FastAPI):
             )
 
     logger.info("✅ [Lifespan] Initialization complete.")
-    yield
-    await close_shared_async_client()
-    logger.info("🛑 [Lifespan] Shutting down...")
+    try:
+        yield
+    finally:
+        await close_llm_provider()
+        await close_shared_async_client()
+        logger.info("🛑 [Lifespan] Shutting down...")
 
 
 app = FastAPI(
@@ -643,7 +647,7 @@ def _derive_current_status(
 
 def _format_sse_event(event: AgentEvent) -> str:
     payload = event.model_dump_json()
-    return f"id: {event.seq_id}\n" f"event: {event.type}\n" f"data: {payload}\n\n"
+    return f"id: {event.seq_id}\nevent: {event.type}\ndata: {payload}\n\n"
 
 
 def _parse_after_seq(

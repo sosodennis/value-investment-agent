@@ -1,5 +1,6 @@
 import os
 
+from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_openai import ChatOpenAI
 
 from src.shared.llm.contracts import ModelRoute
@@ -24,7 +25,7 @@ def _get_gateway_provider() -> LiteLLMGatewayProvider:
 
 def get_llm(
     model: str = DEFAULT_MODEL, temperature: float = 0, timeout: float = LLM_TIMEOUT
-):
+) -> BaseChatModel:
     """
     Return the LangChain compatibility model used during agent migration.
 
@@ -56,3 +57,12 @@ def get_llm(
         timeout=timeout,
         max_retries=0,
     )
+
+
+async def close_llm_provider() -> None:
+    """Close the process-shared gateway clients during application shutdown."""
+    global _gateway_provider
+    provider = _gateway_provider
+    _gateway_provider = None
+    if provider is not None:
+        await provider.aclose()
