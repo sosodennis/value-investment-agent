@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Callable, Mapping
-from typing import Protocol
+from collections.abc import Mapping
+from uuid import uuid4
 
 from src.agents.technical.application.ports import (
     TechnicalInterpretationInput,
@@ -25,26 +25,25 @@ from src.agents.technical.interface.contracts import (
 from src.agents.technical.interface.interpretation_prompt_spec import (
     build_interpretation_prompt_spec,
 )
-from src.agents.technical.interface.prompt_renderers import (
-    build_interpretation_chat_prompt,
-)
 from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import JSONObject
+from src.shared.llm.contracts import (
+    ChatMessage,
+    ChatRole,
+    CompletionRequest,
+    LLMProviderPort,
+    ModelRoute,
+    StructuredRequest,
+)
 
 logger = get_logger(__name__)
-
-
-class _TechnicalLLM(Protocol):
-    def with_structured_output(self, schema: type[object]) -> object: ...
-
-
-TechnicalLLMProvider = Callable[[], _TechnicalLLM]
 
 
 async def generate_interpretation(
     payload: TechnicalInterpretationInput,
     *,
-    llm_provider: TechnicalLLMProvider,
+    llm_provider: LLMProviderPort,
+    llm_route: ModelRoute,
 ) -> TechnicalInterpretationResult:
     risk_level = payload.risk_level
     try:
@@ -55,31 +54,37 @@ async def generate_interpretation(
             fields={"ticker": payload.ticker},
         )
         prompt_spec = build_interpretation_prompt_spec()
-
-        prompt = build_interpretation_chat_prompt(
-            system_prompt=prompt_spec.system,
-            user_prompt=prompt_spec.user,
-        )
-        llm = llm_provider()
-        structured_llm = llm.with_structured_output(AnalystPerspectiveModel)
-        chain = prompt | structured_llm
-
-        response = await chain.ainvoke(
-            {
-                "ticker": payload.ticker,
-                "direction": payload.direction,
-                "risk_level": risk_level,
-                "confidence": payload.confidence_calibrated,
-                "summary_tags": json.dumps(
-                    list(payload.summary_tags), ensure_ascii=True
+        prompt_values = {
+            "ticker": payload.ticker,
+            "direction": payload.direction,
+            "risk_level": risk_level,
+            "confidence": payload.confidence_calibrated,
+            "summary_tags": json.dumps(list(payload.summary_tags), ensure_ascii=True),
+            "momentum_extremes": _dump_json(payload.momentum_extremes),
+            "setup_context": _dump_json(payload.setup_context),
+            "signal_explainer_context": _dump_signal_explainer_context(payload),
+            "validation_context": _dump_json(payload.validation_context),
+            "diagnostics_context": _dump_json(payload.diagnostics_context),
+            "evidence": _dump_json(list(payload.evidence_items)),
+        }
+        request = CompletionRequest(
+            messages=(
+                ChatMessage(role=ChatRole.SYSTEM, content=prompt_spec.system),
+                ChatMessage(
+                    role=ChatRole.USER,
+                    content=prompt_spec.user.format(**prompt_values),
                 ),
-                "momentum_extremes": _dump_json(payload.momentum_extremes),
-                "setup_context": _dump_json(payload.setup_context),
-                "signal_explainer_context": _dump_signal_explainer_context(payload),
-                "validation_context": _dump_json(payload.validation_context),
-                "diagnostics_context": _dump_json(payload.diagnostics_context),
-                "evidence": _dump_json(list(payload.evidence_items)),
-            }
+            ),
+            route=llm_route,
+            request_id=f"technical-interpretation-{uuid4().hex}",
+            operation="technical.interpretation",
+            timeout_seconds=60.0,
+        )
+        response = await llm_provider.acomplete_structured(
+            StructuredRequest[AnalystPerspectiveModel](
+                completion=request,
+                response_schema=AnalystPerspectiveModel,
+            )
         )
         response = _finalize_perspective(response, payload)
 
@@ -118,8 +123,9 @@ async def generate_interpretation(
 
 
 class TechnicalInterpretationProvider:
-    def __init__(self, llm_provider: TechnicalLLMProvider) -> None:
+    def __init__(self, llm_provider: LLMProviderPort, llm_route: ModelRoute) -> None:
         self._llm_provider = llm_provider
+        self._llm_route = llm_route
 
     async def generate_interpretation(
         self,
@@ -128,6 +134,7 @@ class TechnicalInterpretationProvider:
         return await generate_interpretation(
             payload,
             llm_provider=self._llm_provider,
+            llm_route=self._llm_route,
         )
 
 

@@ -1,5 +1,5 @@
 import pytest
-from langchain_core.runnables import RunnableLambda
+from pydantic import BaseModel
 
 from src.agents.technical.application.ports import (
     TechnicalInterpretationInput,
@@ -11,6 +11,7 @@ from src.agents.technical.subdomains.interpretation.infrastructure.technical_int
     _build_fallback_perspective,
     _finalize_perspective,
 )
+from src.shared.llm.contracts import ModelRoute, StructuredRequest
 
 
 def _sample_payload() -> TechnicalInterpretationInput:
@@ -80,25 +81,34 @@ def test_finalize_perspective_backfills_missing_humanized_fields() -> None:
 
 @pytest.mark.asyncio
 async def test_interpretation_provider_uses_injected_llm_factory() -> None:
-    class FakeLLM:
+    class FakeProvider:
         def __init__(self) -> None:
-            self.requested_schema: type[object] | None = None
+            self.requests: list[StructuredRequest[BaseModel]] = []
 
-        def with_structured_output(self, schema: type[object]) -> RunnableLambda:
-            self.requested_schema = schema
-            return RunnableLambda(
-                lambda _: AnalystPerspectiveModel(
-                    stance="BULLISH_WATCH",
-                    stance_summary="Bullish watch.",
-                    rationale_summary="Signals are constructive.",
-                )
+        async def acomplete_structured(
+            self, request: StructuredRequest[BaseModel]
+        ) -> AnalystPerspectiveModel:
+            self.requests.append(request)
+            return AnalystPerspectiveModel(
+                stance="BULLISH_WATCH",
+                stance_summary="Bullish watch.",
+                rationale_summary="Signals are constructive.",
             )
 
-    fake_llm = FakeLLM()
-    provider = TechnicalInterpretationProvider(llm_provider=lambda: fake_llm)
+    fake_provider = FakeProvider()
+    route = ModelRoute(alias="openrouter-default", candidates=("openrouter/auto",))
+    provider = TechnicalInterpretationProvider(
+        llm_provider=fake_provider,  # type: ignore[arg-type]
+        llm_route=route,
+    )
 
     result = await provider.generate_interpretation(_sample_payload())
 
-    assert fake_llm.requested_schema is AnalystPerspectiveModel
+    request = fake_provider.requests[0]
+    assert request.response_schema is AnalystPerspectiveModel
+    assert request.completion.operation == "technical.interpretation"
+    assert request.completion.route == route
+    assert request.completion.timeout_seconds == 60.0
+    assert "AAPL" in request.completion.messages[1].content
     assert result.is_fallback is False
     assert result.perspective.rationale_summary == "Signals are constructive."
