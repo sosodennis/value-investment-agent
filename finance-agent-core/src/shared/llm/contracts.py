@@ -55,6 +55,8 @@ class CompletionRequest(BaseModel):
     timeout_seconds: float = Field(default=60.0, gt=0.0)
     idempotency_key: str | None = Field(default=None, min_length=1)
     metadata: dict[str, str] = Field(default_factory=dict)
+    tools: tuple[dict[str, object], ...] = ()
+    tool_choice: str | dict[str, object] | None = None
 
 
 class Usage(BaseModel):

@@ -58,3 +58,10 @@ structured requests, and adds request/idempotency headers. Its retry budget is
 bounded and its terminal errors are non-retryable after exhaustion. The adapter
 does not implement credential selection; that remains an explicit gateway or
 key-pool policy until the OpenRouter POC proves which layer owns it.
+
+During migration, `get_llm()` constructs one shared gateway provider and wraps
+it with `LangChainGatewayModelAdapter` whenever `LLM_GATEWAY_BASE_URL` is set.
+This keeps existing LangChain prompt composition working while the call sites
+move to typed requests. The local compatibility path is OpenRouter-only; a
+missing OpenRouter key is an explicit configuration error and never falls back
+to direct OpenAI.

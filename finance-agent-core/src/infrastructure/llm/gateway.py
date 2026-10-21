@@ -392,6 +392,10 @@ class LiteLLMGatewayProvider:
                     "strict": True,
                 },
             }
+        if request.tools:
+            payload["tools"] = list(request.tools)
+        if request.tool_choice is not None:
+            payload["tool_choice"] = request.tool_choice
         return payload
 
     @staticmethod

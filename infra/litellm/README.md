@@ -11,6 +11,7 @@ Run it from the repository root:
 export LITELLM_MASTER_KEY='replace-with-a-local-gateway-key'
 export OPENROUTER_API_KEY_1='replace-with-the-first-openrouter-key'
 export OPENROUTER_API_KEY_2='replace-with-the-second-openrouter-key'
+export LLM_GATEWAY_BASE_URL='http://llm-gateway:4000'
 docker compose --profile llm-gateway up -d postgres llm-gateway
 curl -fsS http://localhost:4000/health/liveliness
 ./scripts/litellm_poc_smoke.sh
