@@ -15,7 +15,6 @@ import {
 
 import {
     addOpenRouterKey,
-    createLocalAdminSession,
     deleteOpenRouterKey,
     getLlmSettings,
     listOpenRouterKeys,
@@ -87,10 +86,9 @@ export default function LlmKeysPage() {
             setLoading(true);
             setError(null);
             try {
-                await createLocalAdminSession();
                 await Promise.all([loadKeys(), loadModelSettings()]);
             } catch (cause) {
-                setError(errorMessage(cause, 'Could not start the local admin session.'));
+                setError(errorMessage(cause, 'Could not load provider settings.'));
                 setLoading(false);
             }
         })();
@@ -187,7 +185,7 @@ export default function LlmKeysPage() {
 
                 <div className="mb-6 flex items-center gap-3 rounded-lg border border-outline-variant/50 bg-surface-container-low px-5 py-4 text-sm text-on-surface-variant">
                     <ShieldCheck size={17} className="text-secondary" />
-                    Local development admin session
+                    Signed-in account session
                 </div>
 
                 <section className="mb-6 rounded-lg border border-outline-variant/50 bg-surface-container-low p-5" aria-labelledby="model-heading">

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
 
+import api.server as server
 from api.server import app
 from src.agents.debate.interface.contracts import parse_debate_artifact_model
 from src.agents.fundamental.subdomains.artifacts_provenance.interface.contracts import (
@@ -14,7 +16,26 @@ from src.agents.news.interface.contracts import parse_news_artifact_model
 from src.agents.technical.interface.contracts import (
     parse_technical_artifact_model,
 )
+from src.auth.interface.contracts import Principal
+from src.auth.interface.dependencies import require_current_user
 from src.interface.artifacts.artifact_envelope import build_artifact_envelope
+
+
+@pytest.fixture(autouse=True)
+def authenticated_api(monkeypatch: pytest.MonkeyPatch) -> None:
+    app.dependency_overrides[require_current_user] = lambda: Principal(
+        user_id="test-user",
+        subject="test-user",
+        email="test@example.com",
+    )
+    monkeypatch.setattr(server, "_require_thread_owner", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        server.artifact_manager,
+        "get_artifact",
+        AsyncMock(return_value=SimpleNamespace(thread_id="test-thread")),
+    )
+    yield
+    app.dependency_overrides.clear()
 
 
 @pytest.mark.asyncio

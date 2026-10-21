@@ -5,7 +5,6 @@ import LlmKeysPage from './page';
 
 const api = vi.hoisted(() => ({
     addOpenRouterKey: vi.fn(),
-    createLocalAdminSession: vi.fn(),
     deleteOpenRouterKey: vi.fn(),
     getLlmSettings: vi.fn(),
     listOpenRouterKeys: vi.fn(),
@@ -34,7 +33,6 @@ describe('OpenRouter key settings', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        api.createLocalAdminSession.mockResolvedValue(undefined);
         api.listOpenRouterKeys.mockResolvedValue([]);
         api.getLlmSettings.mockResolvedValue({
             selected_model: 'openrouter/free',
@@ -55,9 +53,8 @@ describe('OpenRouter key settings', () => {
         });
     });
 
-    it('starts a local admin session and clears the one-time key after adding', async () => {
+    it('loads the signed-in settings session and clears the one-time key after adding', async () => {
         render(<LlmKeysPage />);
-        await waitFor(() => expect(api.createLocalAdminSession).toHaveBeenCalledOnce());
         await waitFor(() => expect(api.listOpenRouterKeys).toHaveBeenCalledWith());
 
         fireEvent.change(screen.getByLabelText('Label'), {

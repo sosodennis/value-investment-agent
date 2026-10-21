@@ -34,7 +34,7 @@ const readErrorMessage = async (response: Response): Promise<string> => {
 async function fetchTypedJson<T>(url: string, context: string): Promise<T> {
     clientLogger.debug('technical_observability.fetch.start', { url, context });
     try {
-        const response = await fetch(url);
+        const response = await fetch(url, { credentials: 'include' });
         if (!response.ok) {
             clientLogger.error('technical_observability.fetch.http_error', {
                 url,

@@ -12,6 +12,7 @@ import {
 } from '../types/protocol';
 import { useAgentReducer } from './useAgentReducer';
 import { deriveActiveAgentId } from '@/lib/agent-session-state';
+import { csrfHeaders } from '@/lib/auth-api';
 
 const API_URL = process.env.NEXT_PUBLIC_LANGGRAPH_URL || 'http://localhost:8000';
 
@@ -68,7 +69,9 @@ export function useAgent(assistantId: string = 'agent') {
                 ) {
                     streamUrl.searchParams.set('after_seq', String(afterSeq));
                 }
-                const response = await fetch(streamUrl.toString());
+                const response = await fetch(streamUrl.toString(), {
+                    credentials: 'include',
+                });
                 if (!response.ok) {
                     throw new Error(
                         await readErrorMessage(response, 'Failed to attach to stream')
@@ -152,7 +155,8 @@ export function useAgent(assistantId: string = 'agent') {
                 };
                 const res = await fetch(`${API_URL}/stream`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
                     body: JSON.stringify(payload),
                 });
 
@@ -213,7 +217,8 @@ export function useAgent(assistantId: string = 'agent') {
                 };
                 const res = await fetch(`${API_URL}/stream`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
                     body: JSON.stringify(requestPayload),
                 });
                 if (!res.ok) {
@@ -241,7 +246,9 @@ export function useAgent(assistantId: string = 'agent') {
                 if (before) {
                     const historyUrl = new URL(`${API_URL}/history/${id}`);
                     historyUrl.searchParams.append('before', before);
-                    const historyResponse = await fetch(historyUrl.toString());
+                    const historyResponse = await fetch(historyUrl.toString(), {
+                        credentials: 'include',
+                    });
                     if (!historyResponse.ok) {
                         throw new Error(
                             await readErrorMessage(historyResponse, 'History fetch failed')
@@ -255,7 +262,9 @@ export function useAgent(assistantId: string = 'agent') {
                     return;
                 }
 
-                const stateResponse = await fetch(`${API_URL}/thread/${id}`);
+                const stateResponse = await fetch(`${API_URL}/thread/${id}`, {
+                    credentials: 'include',
+                });
                 if (!stateResponse.ok) {
                     throw new Error(
                         await readErrorMessage(stateResponse, 'Thread state fetch failed')

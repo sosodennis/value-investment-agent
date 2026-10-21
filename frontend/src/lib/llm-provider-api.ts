@@ -1,5 +1,6 @@
 import type { components } from '@/types/generated/api-contract';
 import { parseApiErrorMessage } from '@/types/protocol';
+import { csrfHeaders } from '@/lib/auth-api';
 
 const API_URL = process.env.NEXT_PUBLIC_LANGGRAPH_URL || 'http://localhost:8000';
 
@@ -126,6 +127,7 @@ async function request<T>(
         credentials: 'include',
         headers: {
             'Content-Type': 'application/json',
+            ...csrfHeaders(),
             ...init?.headers,
         },
     });

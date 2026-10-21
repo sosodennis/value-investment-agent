@@ -7,13 +7,32 @@ import httpx
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
+import api.server as server
 from api.server import active_tasks, app
+from src.auth.interface.contracts import Principal
+from src.auth.interface.dependencies import require_current_user
 from src.runtime.workspace_runtime_projection.domain.contracts import (
     WorkspaceRuntimeActivityRecord,
     WorkspaceRuntimeActivitySegmentRecord,
     WorkspaceRuntimeCursorRecord,
     WorkspaceRuntimeRunStatusRecord,
 )
+
+
+@pytest.fixture(autouse=True)
+def authenticated_api(monkeypatch: pytest.MonkeyPatch) -> None:
+    app.dependency_overrides[require_current_user] = lambda: Principal(
+        user_id="test-user",
+        subject="test-user",
+        email="test@example.com",
+    )
+
+    async def allow_test_thread(*, user_id: str, thread_id: str) -> None:
+        return None
+
+    monkeypatch.setattr(server, "_require_thread_owner", allow_test_thread)
+    yield
+    app.dependency_overrides.clear()
 
 
 @pytest.mark.asyncio

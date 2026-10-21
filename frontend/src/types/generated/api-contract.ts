@@ -45,6 +45,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Login */
+        post: operations["login_api_auth_login_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Logout */
+        post: operations["logout_api_auth_logout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Me */
+        get: operations["me_api_auth_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Register */
+        post: operations["register_api_auth_register_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/observability/calibration/direction-readiness": {
         parameters: {
             query?: never;
@@ -1079,6 +1147,13 @@ export interface components {
             /** Selected Model */
             selected_model: string;
         };
+        /** LoginRequest */
+        LoginRequest: {
+            /** Email */
+            email: string;
+            /** Password */
+            password: string;
+        };
         /** MessageResponse */
         MessageResponse: {
             /** Agentid */
@@ -1333,18 +1408,6 @@ export interface components {
              */
             version: "v1";
         };
-        /**
-         * Principal
-         * @description The minimal identity contract shared by admin-only routes.
-         */
-        Principal: {
-            /** Auth Type */
-            auth_type: string;
-            /** Role */
-            role: string;
-            /** Subject */
-            subject: string;
-        };
         /** QualitySummaryModel */
         QualitySummaryModel: {
             /** Alert Quality Gate Counts */
@@ -1413,6 +1476,13 @@ export interface components {
             dominant_regime?: string | null;
             /** Timeframe Count */
             timeframe_count?: number | null;
+        };
+        /** RegisterRequest */
+        RegisterRequest: {
+            /** Email */
+            email: string;
+            /** Password */
+            password: string;
         };
         /** RequestSchema */
         RequestSchema: {
@@ -2903,6 +2973,39 @@ export interface components {
             /** Value Area Coverage */
             value_area_coverage?: number | null;
         };
+        /** Principal */
+        src__auth__interface__contracts__Principal: {
+            /**
+             * Auth Type
+             * @default session
+             * @constant
+             */
+            auth_type: "session";
+            /** Email */
+            email: string;
+            /**
+             * Role
+             * @default user
+             * @constant
+             */
+            role: "user";
+            /** Subject */
+            subject: string;
+            /** User Id */
+            user_id: string;
+        };
+        /**
+         * Principal
+         * @description The minimal identity contract shared by admin-only routes.
+         */
+        src__interface__auth__local_admin__Principal: {
+            /** Auth Type */
+            auth_type: string;
+            /** Role */
+            role: string;
+            /** Subject */
+            subject: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -2958,7 +3061,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Principal"];
+                    "application/json": components["schemas"]["src__interface__auth__local_admin__Principal"];
                 };
             };
         };
@@ -2978,6 +3081,110 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    login_api_auth_login_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["src__auth__interface__contracts__Principal"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    logout_api_auth_logout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    me_api_auth_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["src__auth__interface__contracts__Principal"];
+                };
+            };
+        };
+    };
+    register_api_auth_register_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["src__auth__interface__contracts__Principal"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
@@ -3150,9 +3357,7 @@ export interface operations {
     read_llm_settings_api_settings_llm_get: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -3167,23 +3372,12 @@ export interface operations {
                     "application/json": components["schemas"]["LlmSettingsResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
         };
     };
     update_llm_settings_api_settings_llm_put: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -3216,9 +3410,7 @@ export interface operations {
     list_openrouter_keys_api_settings_openrouter_keys_get: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -3233,23 +3425,12 @@ export interface operations {
                     "application/json": components["schemas"]["OpenRouterKeyResponse"][];
                 };
             };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
         };
     };
     add_openrouter_key_api_settings_openrouter_keys_post: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -3282,9 +3463,7 @@ export interface operations {
     delete_openrouter_key_api_settings_openrouter_keys__key_id__delete: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 key_id: string;
             };
@@ -3313,9 +3492,7 @@ export interface operations {
     test_openrouter_key_route_api_settings_openrouter_keys__key_id__test_post: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 key_id: string;
             };

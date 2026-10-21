@@ -1,12 +1,23 @@
 'use client';
 
 import React from 'react';
-import Link from 'next/link';
 import { GlobalNav } from './index';
 // Next.js automatically optimizes these via optmizePackageImports in next.config.ts
 import { Bell, Settings, User } from 'lucide-react';
+import Link from 'next/link';
+import { useAuth } from '@/components/auth/AuthProvider';
+import { usePathname, useRouter } from 'next/navigation';
 
 export function AppHeader() {
+    const { user, loading, signOut } = useAuth();
+    const pathname = usePathname();
+    const router = useRouter();
+
+    async function handleSignOut() {
+        await signOut();
+        router.replace('/login');
+    }
+
     return (
         <GlobalNav.Root>
             <div className="flex items-center">
@@ -25,16 +36,26 @@ export function AppHeader() {
                 >
                     <Bell size={18} />
                 </button>
-                <Link
+                {user ? <Link
                     href="/settings/llm-keys"
                     className="p-2 text-on-surface-variant hover:text-on-surface transition-colors duration-200 focus:ring-2 focus:ring-primary-container focus:outline-none rounded"
                     aria-label="Settings"
                 >
                     <Settings size={18} />
-                </Link>
-                <div className="h-8 w-8 rounded-full overflow-hidden border border-outline-variant flex items-center justify-center text-on-surface-variant">
-                    <User size={16} />
-                </div>
+                </Link> : null}
+                {user ? (
+                    <button
+                        type="button"
+                        onClick={() => void handleSignOut()}
+                        className="flex items-center gap-2 rounded px-2 py-1 text-xs text-on-surface-variant hover:text-on-surface"
+                        title="Sign out"
+                    >
+                        <span className="max-w-32 truncate">{user.email}</span>
+                        <User size={16} />
+                    </button>
+                ) : loading || pathname === '/login' || pathname === '/register' ? null : (
+                    <Link href="/login" className="rounded px-3 py-1.5 text-xs font-semibold text-on-surface-variant hover:text-on-surface">Sign in</Link>
+                )}
             </GlobalNav.Actions>
         </GlobalNav.Root>
     );

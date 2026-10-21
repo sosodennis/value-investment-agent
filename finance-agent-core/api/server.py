@@ -54,6 +54,12 @@ from src.agents.technical.subdomains.decision_observability import (
     build_technical_monitoring_event_detail_model,
     build_technical_monitoring_row_model,
 )
+from src.auth.entrypoint import auth_router, get_ownership_service
+from src.auth.interface.contracts import Principal as AuthPrincipal
+from src.auth.interface.dependencies import (
+    require_current_user,
+    require_current_user_mutation,
+)
 from src.infrastructure.database import init_db
 from src.infrastructure.llm.litellm_admin import (
     LiteLLMAdminClient,
@@ -77,7 +83,9 @@ from src.interface.artifacts.artifact_api_models import (
     validate_artifact_api_response,
 )
 from src.interface.auth.local_admin import (
-    Principal,
+    Principal as LocalPrincipal,
+)
+from src.interface.auth.local_admin import (
     issue_local_admin_session,
     require_local_admin,
     validate_local_admin_request,
@@ -235,6 +243,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.include_router(auth_router)
+
 
 @app.exception_handler(RequestValidationError)
 async def handle_request_validation_error(
@@ -324,9 +334,13 @@ class LlmSettingsUpdateRequest(BaseModel):
 
 
 @app.post(
-    "/api/auth/local-admin/session", response_model=Principal, tags=["Authentication"]
+    "/api/auth/local-admin/session",
+    response_model=LocalPrincipal,
+    tags=["Authentication"],
 )
-async def create_local_admin_session(request: Request, response: Response) -> Principal:
+async def create_local_admin_session(
+    request: Request, response: Response
+) -> LocalPrincipal:
     """Create the temporary loopback-only admin session used in development."""
     validate_local_admin_request(request)
     return issue_local_admin_session(response)
@@ -341,7 +355,7 @@ async def delete_local_admin_session(request: Request, response: Response) -> No
 def require_llm_admin_token(
     request: Request,
     authorization: str | None = Header(default=None),
-) -> Principal:
+) -> LocalPrincipal:
     if local_admin_settings().enabled:
         try:
             return require_local_admin(request)
@@ -363,8 +377,43 @@ def require_llm_admin_token(
         raise HTTPException(
             status_code=403, detail="LLM provider administration is not authorized"
         )
-    return Principal(
+    return LocalPrincipal(
         subject="configured-admin", role="platform_admin", auth_type="bearer"
+    )
+
+
+SettingsPrincipal = AuthPrincipal | LocalPrincipal
+
+
+async def require_settings_principal(request: Request) -> SettingsPrincipal:
+    try:
+        return await require_current_user(request)
+    except HTTPException as exc:
+        if exc.status_code != 401:
+            raise
+        return require_llm_admin_token(
+            request, authorization=request.headers.get("Authorization")
+        )
+
+
+async def require_settings_mutation(request: Request) -> SettingsPrincipal:
+    try:
+        return await require_current_user_mutation(request)
+    except HTTPException as exc:
+        if exc.status_code != 401:
+            raise
+        return require_llm_admin_token(
+            request, authorization=request.headers.get("Authorization")
+        )
+
+
+def _is_platform_admin(principal: SettingsPrincipal) -> bool:
+    return principal.role == "platform_admin"
+
+
+def _user_id(principal: SettingsPrincipal) -> str:
+    return (
+        principal.user_id if isinstance(principal, AuthPrincipal) else principal.subject
     )
 
 
@@ -401,16 +450,27 @@ def _managed_key_response(key: ManagedKey) -> OpenRouterKeyResponse:
 llm_keys_router = APIRouter(
     prefix="/api/settings/openrouter-keys",
     tags=["LLM provider settings"],
-    dependencies=[Depends(require_llm_admin_token)],
 )
 
 
 @llm_keys_router.get("", response_model=list[OpenRouterKeyResponse])
 async def list_openrouter_keys(
+    principal: SettingsPrincipal = Depends(require_settings_principal),
     client: LiteLLMAdminClient = Depends(get_litellm_admin_client),
 ) -> list[OpenRouterKeyResponse]:
     try:
-        return [_managed_key_response(key) for key in await client.list_managed()]
+        owned_ids = (
+            None
+            if _is_platform_admin(principal)
+            else await get_ownership_service().owned_ids(
+                user_id=_user_id(principal), resource_type="provider_key"
+            )
+        )
+        return [
+            _managed_key_response(key)
+            for key in await client.list_managed()
+            if owned_ids is None or key.id in owned_ids
+        ]
     except LiteLLMAdminError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -418,6 +478,7 @@ async def list_openrouter_keys(
 @llm_keys_router.post("", response_model=OpenRouterKeyResponse, status_code=201)
 async def add_openrouter_key(
     request: OpenRouterKeyCreateRequest,
+    principal: SettingsPrincipal = Depends(require_settings_mutation),
     client: LiteLLMAdminClient = Depends(get_litellm_admin_client),
 ) -> OpenRouterKeyResponse:
     raw_key = request.api_key.get_secret_value()
@@ -431,13 +492,20 @@ async def add_openrouter_key(
         raise HTTPException(status_code=code, detail=status) from exc
     try:
         selected_model = await get_selected_model()
-        return _managed_key_response(
-            await client.add_key(
-                key=raw_key,
-                label=request.label,
-                model=selected_model,
-            )
+        managed = await client.add_key(
+            key=raw_key,
+            label=request.label,
+            model=selected_model,
         )
+        claimed = _is_platform_admin(principal) or await get_ownership_service().claim(
+            user_id=_user_id(principal),
+            resource_type="provider_key",
+            resource_id=managed.id,
+        )
+        if not claimed:
+            await client.delete_key(managed.id)
+            raise HTTPException(status_code=409, detail="managed key is already owned")
+        return _managed_key_response(managed)
     except LiteLLMAdminError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -445,10 +513,17 @@ async def add_openrouter_key(
 @llm_keys_router.post("/{key_id}/test", response_model=OpenRouterKeyTestResponse)
 async def test_openrouter_key_route(
     key_id: str,
+    principal: SettingsPrincipal = Depends(require_settings_mutation),
     client: LiteLLMAdminClient = Depends(get_litellm_admin_client),
 ) -> OpenRouterKeyTestResponse:
     try:
         key_id = validate_model_id(key_id)
+        if not _is_platform_admin(principal) and not await get_ownership_service().owns(
+            user_id=_user_id(principal),
+            resource_type="provider_key",
+            resource_id=key_id,
+        ):
+            raise HTTPException(status_code=404, detail="managed key was not found")
         await client.test_key(key_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="invalid managed key id") from exc
@@ -470,10 +545,18 @@ async def test_openrouter_key_route(
 @llm_keys_router.delete("/{key_id}", status_code=204)
 async def delete_openrouter_key(
     key_id: str,
+    principal: SettingsPrincipal = Depends(require_settings_mutation),
     client: LiteLLMAdminClient = Depends(get_litellm_admin_client),
 ) -> None:
     try:
-        await client.delete_key(validate_model_id(key_id))
+        key_id = validate_model_id(key_id)
+        if not _is_platform_admin(principal) and not await get_ownership_service().owns(
+            user_id=_user_id(principal),
+            resource_type="provider_key",
+            resource_id=key_id,
+        ):
+            raise HTTPException(status_code=404, detail="managed key was not found")
+        await client.delete_key(key_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="invalid managed key id") from exc
     except LiteLLMAdminError as exc:
@@ -490,7 +573,6 @@ app.include_router(llm_keys_router)
 llm_settings_router = APIRouter(
     prefix="/api/settings/llm",
     tags=["LLM provider settings"],
-    dependencies=[Depends(require_llm_admin_token)],
 )
 
 
@@ -520,14 +602,16 @@ async def _llm_settings_response() -> LlmSettingsResponse:
 
 
 @llm_settings_router.get("", response_model=LlmSettingsResponse)
-async def read_llm_settings() -> LlmSettingsResponse:
+async def read_llm_settings(
+    _principal: SettingsPrincipal = Depends(require_settings_principal),
+) -> LlmSettingsResponse:
     return await _llm_settings_response()
 
 
 @llm_settings_router.put("", response_model=LlmSettingsResponse)
 async def update_llm_settings(
     request: LlmSettingsUpdateRequest,
-    principal: Principal = Depends(require_llm_admin_token),
+    principal: SettingsPrincipal = Depends(require_settings_mutation),
 ) -> LlmSettingsResponse:
     try:
         valid = await validate_free_model(request.selected_model)
@@ -844,6 +928,14 @@ class StreamStartResponse(BaseModel):
     status: Literal["started", "running"]
     thread_id: str
     run_id: str
+
+
+async def _require_thread_owner(*, user_id: str, thread_id: str) -> None:
+    owned = await get_ownership_service().owns(
+        user_id=user_id, resource_type="thread", resource_id=thread_id
+    )
+    if not owned:
+        raise HTTPException(status_code=404, detail="thread was not found")
 
 
 # Track active tasks, running queues, and sequence counters
@@ -1326,9 +1418,15 @@ async def event_generator(
 
 
 @app.get("/history/{thread_id}", response_model=list[MessageResponse])
-async def get_history(thread_id: str, limit: int = 20, before: str | None = None):
+async def get_history(
+    thread_id: str,
+    limit: int = 20,
+    before: str | None = None,
+    principal: AuthPrincipal = Depends(require_current_user),
+):
     """Retrieve persistent history with cursor pagination."""
     try:
+        await _require_thread_owner(user_id=principal.user_id, thread_id=thread_id)
         before_dt = None
         if before:
             from datetime import datetime
@@ -1337,15 +1435,22 @@ async def get_history(thread_id: str, limit: int = 20, before: str | None = None
 
         messages = await history_service.get_history(thread_id, limit, before_dt)
         return [m.to_dict() for m in messages]
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/thread/{thread_id}", response_model=ThreadStateResponse)
-async def get_thread_history(request: Request, thread_id: str):
+async def get_thread_history(
+    request: Request,
+    thread_id: str,
+    principal: AuthPrincipal = Depends(require_current_user),
+):
     """Retrieve history and job status."""
     config = {"configurable": {"thread_id": thread_id}}
     try:
+        await _require_thread_owner(user_id=principal.user_id, thread_id=thread_id)
         graph = request.app.state.graph
         snapshot = await graph.aget_state(config)
 
@@ -1483,16 +1588,23 @@ async def get_thread_history(request: Request, thread_id: str):
             active_agent_id=active_agent_id,
             run=run_payload,
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"❌ [Server] get_thread_history failed: {e}")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/thread/{thread_id}/agents", response_model=AgentStatusesResponse)
-async def get_agent_statuses(request: Request, thread_id: str):
+async def get_agent_statuses(
+    request: Request,
+    thread_id: str,
+    principal: AuthPrincipal = Depends(require_current_user),
+):
     """Retrieve node statuses and financial reports for the dashboard."""
     config = {"configurable": {"thread_id": thread_id}}
     try:
+        await _require_thread_owner(user_id=principal.user_id, thread_id=thread_id)
         graph = request.app.state.graph
         snapshot = await graph.aget_state(config)
         from src.interface.events.mappers import NodeOutputMapper
@@ -1518,6 +1630,8 @@ async def get_agent_statuses(request: Request, thread_id: str):
             current_node=current_node,
             agent_outputs=agent_outputs,
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -1526,12 +1640,14 @@ async def get_agent_statuses(request: Request, thread_id: str):
 async def get_agent_activity(
     request: Request,
     thread_id: str,
+    principal: AuthPrincipal = Depends(require_current_user),
     agent_id: str = Query(..., min_length=1),
     limit: int = Query(5, ge=1, le=200),
     before_updated_at: datetime | None = Query(None),
 ):
     """Retrieve per-agent activity segments with cursor pagination."""
     try:
+        await _require_thread_owner(user_id=principal.user_id, thread_id=thread_id)
         runtime_projection = getattr(request.app.state, "runtime_projection", None)
         if runtime_projection is None:
             raise RuntimeError("runtime_projection is required for agent activity")
@@ -1551,18 +1667,27 @@ async def get_agent_activity(
         return _build_activity_segment_entries(
             records, mark_current=before_updated_at is None
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/api/artifacts/{artifact_id}", response_model=ArtifactApiResponse)
-async def get_artifact(artifact_id: str):
+async def get_artifact(
+    artifact_id: str,
+    principal: AuthPrincipal = Depends(require_current_user),
+):
     """Retrieve artifact data with HTTP caching."""
     from fastapi.responses import JSONResponse
 
     envelope = await artifact_manager.get_artifact_envelope(artifact_id)
     if envelope is None:
         raise HTTPException(status_code=404, detail="Artifact not found")
+    artifact = await artifact_manager.get_artifact(artifact_id)
+    if artifact is None or artifact.thread_id is None:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+    await _require_thread_owner(user_id=principal.user_id, thread_id=artifact.thread_id)
 
     validated = validate_artifact_api_response(
         envelope.model_dump(mode="json"),
@@ -1582,6 +1707,7 @@ async def get_artifact(artifact_id: str):
 async def attach_stream(
     request: Request,
     thread_id: str,
+    _principal: AuthPrincipal = Depends(require_current_user),
     after_seq: int | None = Query(default=None, ge=0),
 ):
     """Attach to an existing background job's event stream."""
@@ -1642,9 +1768,17 @@ async def attach_stream(
 
 
 @app.post("/stream", response_model=StreamStartResponse)
-async def stream_agent(request: Request, body: RequestSchema):
+async def stream_agent(
+    request: Request,
+    body: RequestSchema,
+    principal: AuthPrincipal = Depends(require_current_user_mutation),
+):
     """Start or resume a job."""
     thread_id = body.thread_id
+    if not await get_ownership_service().claim(
+        user_id=principal.user_id, resource_type="thread", resource_id=thread_id
+    ):
+        raise HTTPException(status_code=404, detail="thread was not found")
     config = {"configurable": {"thread_id": thread_id}}
     runtime_projection = getattr(request.app.state, "runtime_projection", None)
 

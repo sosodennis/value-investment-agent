@@ -106,7 +106,7 @@ export const useAgentActivity = (
             if (beforeTs) {
                 url.searchParams.set('before_updated_at', beforeTs);
             }
-            const response = await fetch(url.toString());
+            const response = await fetch(url.toString(), { credentials: 'include' });
             if (!response.ok) {
                 throw new Error(
                     await readErrorMessage(response, 'Failed to fetch activity')

@@ -34,7 +34,7 @@ const fetchArtifact = async <T>(
 ): Promise<T> => {
     clientLogger.debug('artifact.fetch.start', { url, context, expectedKind });
     try {
-        const res = await fetch(url);
+        const res = await fetch(url, { credentials: 'include' });
         if (!res.ok) {
             clientLogger.error('artifact.fetch.http_error', {
                 url,

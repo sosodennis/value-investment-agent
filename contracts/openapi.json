@@ -2613,6 +2613,28 @@
         "title": "LlmSettingsUpdateRequest",
         "type": "object"
       },
+      "LoginRequest": {
+        "properties": {
+          "email": {
+            "maxLength": 320,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 200,
+            "minLength": 8,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "LoginRequest",
+        "type": "object"
+      },
       "MessageResponse": {
         "properties": {
           "agentId": {
@@ -3369,30 +3391,6 @@
         "title": "PriceSeriesEnvelope",
         "type": "object"
       },
-      "Principal": {
-        "description": "The minimal identity contract shared by admin-only routes.",
-        "properties": {
-          "auth_type": {
-            "title": "Auth Type",
-            "type": "string"
-          },
-          "role": {
-            "title": "Role",
-            "type": "string"
-          },
-          "subject": {
-            "title": "Subject",
-            "type": "string"
-          }
-        },
-        "required": [
-          "subject",
-          "role",
-          "auth_type"
-        ],
-        "title": "Principal",
-        "type": "object"
-      },
       "QualitySummaryModel": {
         "properties": {
           "alert_quality_gate_counts": {
@@ -3745,6 +3743,28 @@
           }
         },
         "title": "RegimeSummaryModel",
+        "type": "object"
+      },
+      "RegisterRequest": {
+        "properties": {
+          "email": {
+            "maxLength": 320,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 200,
+            "minLength": 8,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "RegisterRequest",
         "type": "object"
       },
       "RequestSchema": {
@@ -9076,6 +9096,66 @@
         },
         "title": "VolumeProfileSummaryModel",
         "type": "object"
+      },
+      "src__auth__interface__contracts__Principal": {
+        "additionalProperties": false,
+        "properties": {
+          "auth_type": {
+            "const": "session",
+            "default": "session",
+            "title": "Auth Type",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "role": {
+            "const": "user",
+            "default": "user",
+            "title": "Role",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "subject",
+          "email"
+        ],
+        "title": "Principal",
+        "type": "object"
+      },
+      "src__interface__auth__local_admin__Principal": {
+        "description": "The minimal identity contract shared by admin-only routes.",
+        "properties": {
+          "auth_type": {
+            "title": "Auth Type",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject",
+          "role",
+          "auth_type"
+        ],
+        "title": "Principal",
+        "type": "object"
       }
     }
   },
@@ -9234,7 +9314,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Principal"
+                  "$ref": "#/components/schemas/src__interface__auth__local_admin__Principal"
                 }
               }
             },
@@ -9242,6 +9322,123 @@
           }
         },
         "summary": "Create Local Admin Session",
+        "tags": [
+          "Authentication"
+        ]
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "operationId": "login_api_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/src__auth__interface__contracts__Principal"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Login",
+        "tags": [
+          "Authentication"
+        ]
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "operationId": "logout_api_auth_logout_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Logout",
+        "tags": [
+          "Authentication"
+        ]
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "operationId": "me_api_auth_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/src__auth__interface__contracts__Principal"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Me",
+        "tags": [
+          "Authentication"
+        ]
+      }
+    },
+    "/api/auth/register": {
+      "post": {
+        "operationId": "register_api_auth_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/src__auth__interface__contracts__Principal"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Register",
         "tags": [
           "Authentication"
         ]
@@ -9995,24 +10192,6 @@
     "/api/settings/llm": {
       "get": {
         "operationId": "read_llm_settings_api_settings_llm_get",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "content": {
@@ -10023,16 +10202,6 @@
               }
             },
             "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
           }
         },
         "summary": "Read Llm Settings",
@@ -10042,24 +10211,6 @@
       },
       "put": {
         "operationId": "update_llm_settings_api_settings_llm_put",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -10101,24 +10252,6 @@
     "/api/settings/openrouter-keys": {
       "get": {
         "operationId": "list_openrouter_keys_api_settings_openrouter_keys_get",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "content": {
@@ -10133,16 +10266,6 @@
               }
             },
             "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
           }
         },
         "summary": "List Openrouter Keys",
@@ -10152,24 +10275,6 @@
       },
       "post": {
         "operationId": "add_openrouter_key_api_settings_openrouter_keys_post",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -10220,22 +10325,6 @@
               "title": "Key Id",
               "type": "string"
             }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
           }
         ],
         "responses": {
@@ -10270,22 +10359,6 @@
             "schema": {
               "title": "Key Id",
               "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
