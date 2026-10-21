@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from typing import Protocol
 
 from src.agents.technical.application.ports import (
     TechnicalInterpretationInput,
@@ -27,15 +28,23 @@ from src.agents.technical.interface.interpretation_prompt_spec import (
 from src.agents.technical.interface.prompt_renderers import (
     build_interpretation_chat_prompt,
 )
-from src.infrastructure.llm.provider import get_llm
 from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import JSONObject
 
 logger = get_logger(__name__)
 
 
+class _TechnicalLLM(Protocol):
+    def with_structured_output(self, schema: type[object]) -> object: ...
+
+
+TechnicalLLMProvider = Callable[[], _TechnicalLLM]
+
+
 async def generate_interpretation(
     payload: TechnicalInterpretationInput,
+    *,
+    llm_provider: TechnicalLLMProvider,
 ) -> TechnicalInterpretationResult:
     risk_level = payload.risk_level
     try:
@@ -51,7 +60,7 @@ async def generate_interpretation(
             system_prompt=prompt_spec.system,
             user_prompt=prompt_spec.user,
         )
-        llm = get_llm()
+        llm = llm_provider()
         structured_llm = llm.with_structured_output(AnalystPerspectiveModel)
         chain = prompt | structured_llm
 
@@ -109,11 +118,17 @@ async def generate_interpretation(
 
 
 class TechnicalInterpretationProvider:
+    def __init__(self, llm_provider: TechnicalLLMProvider) -> None:
+        self._llm_provider = llm_provider
+
     async def generate_interpretation(
         self,
         payload: TechnicalInterpretationInput,
     ) -> TechnicalInterpretationResult:
-        return await generate_interpretation(payload)
+        return await generate_interpretation(
+            payload,
+            llm_provider=self._llm_provider,
+        )
 
 
 def _dump_json(value: object) -> str:

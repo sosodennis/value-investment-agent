@@ -1,9 +1,13 @@
+import pytest
+from langchain_core.runnables import RunnableLambda
+
 from src.agents.technical.application.ports import (
     TechnicalInterpretationInput,
     TechnicalSignalExplainerInput,
 )
 from src.agents.technical.interface.contracts import AnalystPerspectiveModel
 from src.agents.technical.subdomains.interpretation.infrastructure.technical_interpretation_provider import (
+    TechnicalInterpretationProvider,
     _build_fallback_perspective,
     _finalize_perspective,
 )
@@ -72,3 +76,29 @@ def test_finalize_perspective_backfills_missing_humanized_fields() -> None:
     assert perspective.signal_explainers[1].what_it_means_now == (
         "The current reading suggests the market is not in a particularly strong trend."
     )
+
+
+@pytest.mark.asyncio
+async def test_interpretation_provider_uses_injected_llm_factory() -> None:
+    class FakeLLM:
+        def __init__(self) -> None:
+            self.requested_schema: type[object] | None = None
+
+        def with_structured_output(self, schema: type[object]) -> RunnableLambda:
+            self.requested_schema = schema
+            return RunnableLambda(
+                lambda _: AnalystPerspectiveModel(
+                    stance="BULLISH_WATCH",
+                    stance_summary="Bullish watch.",
+                    rationale_summary="Signals are constructive.",
+                )
+            )
+
+    fake_llm = FakeLLM()
+    provider = TechnicalInterpretationProvider(llm_provider=lambda: fake_llm)
+
+    result = await provider.generate_interpretation(_sample_payload())
+
+    assert fake_llm.requested_schema is AnalystPerspectiveModel
+    assert result.is_fallback is False
+    assert result.perspective.rationale_summary == "Signals are constructive."

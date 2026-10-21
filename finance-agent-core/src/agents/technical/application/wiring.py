@@ -31,6 +31,7 @@ from src.agents.technical.subdomains.signal_fusion import (
     assemble_semantic_tags,
 )
 from src.agents.technical.subdomains.verification import VerificationRuntimeService
+from src.infrastructure.llm.provider import get_llm
 
 
 def _assemble_semantic_tags_default(*args, **kwargs):
@@ -47,7 +48,7 @@ def build_default_technical_workflow_runner() -> TechnicalWorkflowRunner:
         decision_observability=decision_observability,
     )
     market_data_provider = build_default_market_data_provider()
-    interpretation_provider = TechnicalInterpretationProvider()
+    interpretation_provider = TechnicalInterpretationProvider(llm_provider=get_llm)
     indicator_engine = PandasTaIndicatorEngine()
     if not indicator_engine.availability().available:
         indicator_engine = None
