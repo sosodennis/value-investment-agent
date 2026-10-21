@@ -1,8 +1,9 @@
 from src.shared.llm.contracts import LLMProviderPort, ModelRoute
+from src.shared.llm.routes import DEFAULT_MODEL_ALIAS
 
 from .gateway import LiteLLMGatewayConfig, LiteLLMGatewayProvider
 
-MODEL_ROUTE_ALIAS = "openrouter-default"
+MODEL_ROUTE_ALIAS = DEFAULT_MODEL_ALIAS
 _gateway_provider: LiteLLMGatewayProvider | None = None
 
 

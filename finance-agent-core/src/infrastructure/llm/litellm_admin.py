@@ -11,8 +11,9 @@ from uuid import uuid4
 
 import httpx
 
+from src.shared.llm.routes import DEFAULT_MODEL_ALIAS
+
 MANAGED_MARKER: Final = "value_investment_agent_managed"
-DEFAULT_MODEL_ALIAS: Final = "openrouter-default"
 OPENROUTER_BASE_URL: Final = "https://openrouter.ai/api/v1"
 
 
@@ -92,8 +93,15 @@ class LiteLLMAdminClient:
             )
         return result
 
-    async def add_key(self, *, key: str, label: str, model: str) -> ManagedKey:
-        """Register a key using the already validated global model setting."""
+    async def add_key(
+        self,
+        *,
+        key: str,
+        label: str,
+        model: str,
+        model_name: str = DEFAULT_MODEL_ALIAS,
+    ) -> ManagedKey:
+        """Register a key in a server-selected LiteLLM deployment pool."""
         now = datetime.now(timezone.utc).isoformat()
         key_id = str(uuid4())
         fingerprint = key_fingerprint(key)
@@ -108,7 +116,7 @@ class LiteLLMAdminClient:
         if existing is not None:
             return existing
         payload = {
-            "model_name": DEFAULT_MODEL_ALIAS,
+            "model_name": model_name,
             "litellm_params": {
                 "model": model,
                 "api_base": OPENROUTER_BASE_URL,

@@ -114,6 +114,9 @@ from src.shared.kernel.tools.logger import (
     log_context,
 )
 from src.shared.kernel.types import InterruptResumePayload, JSONObject
+from src.shared.llm.context import reset_provider_principal, set_provider_principal
+from src.shared.llm.contracts import ProviderPrincipal
+from src.shared.llm.routes import DEFAULT_MODEL_ALIAS, user_route_alias
 from src.workflow.graph import get_graph
 
 logger = get_logger(__name__)
@@ -496,6 +499,11 @@ async def add_openrouter_key(
             key=raw_key,
             label=request.label,
             model=selected_model,
+            model_name=(
+                DEFAULT_MODEL_ALIAS
+                if _is_platform_admin(principal)
+                else user_route_alias(_user_id(principal))
+            ),
         )
         claimed = _is_platform_admin(principal) or await get_ownership_service().claim(
             user_id=_user_id(principal),
@@ -1155,6 +1163,7 @@ async def event_generator(
     graph: CompiledStateGraph,
     *,
     run_id: str,
+    principal: AuthPrincipal,
     agent_lookup: dict[str, str] | None = None,
     runtime_projection: WorkspaceRuntimeProjectionService | None = None,
 ):
@@ -1165,6 +1174,9 @@ async def event_generator(
     seq_counter = thread_sequences[thread_id]
     logger.info(
         "server_event_generator_started thread_id=%s seq=%d", thread_id, seq_counter
+    )
+    provider_context_token = set_provider_principal(
+        ProviderPrincipal(user_id=principal.user_id)
     )
 
     with log_context(
@@ -1405,6 +1417,7 @@ async def event_generator(
             for q in running_queues[thread_id][:]:
                 await q.put(msg)
         finally:
+            reset_provider_principal(provider_context_token)
             # Signal EOF to all queues.
             for q in running_queues[thread_id][:]:
                 await q.put(None)
@@ -1855,6 +1868,7 @@ async def stream_agent(
             config,
             request.app.state.graph,
             run_id=run_id,
+            principal=principal,
             agent_lookup=request.app.state.agent_lookup,
             runtime_projection=runtime_projection,
         )

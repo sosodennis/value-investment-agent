@@ -45,6 +45,53 @@ class ModelRoute(BaseModel):
     alias: str = Field(min_length=1)
 
 
+class ProviderPrincipal(BaseModel):
+    """Authenticated identity supplied by the application boundary.
+
+    This is intentionally smaller than the auth capability's session model.
+    Provider adapters only need a stable user identifier and must never receive
+    cookies, bearer tokens, or provider credentials.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    user_id: str = Field(min_length=1)
+
+
+class LLMAttribution(BaseModel):
+    """Non-secret attribution attached to provider outcomes."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    deployment_id: str | None = Field(default=None, min_length=1)
+    key_fingerprint: str | None = Field(default=None, min_length=1)
+
+
+class ResolvedModelRoute(BaseModel):
+    """Server-resolved route used by an infrastructure adapter.
+
+    ``gateway_alias`` is never accepted from a browser or agent request. It is
+    derived from the authenticated principal at the provider boundary.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    logical_alias: str = Field(min_length=1)
+    gateway_alias: str = Field(min_length=1)
+    attribution: LLMAttribution | None = None
+
+
+class LLMRouteResolver(Protocol):
+    """Resolve a logical route for an authenticated provider principal."""
+
+    def resolve(
+        self,
+        *,
+        route: ModelRoute,
+        principal: ProviderPrincipal | None,
+    ) -> ResolvedModelRoute: ...
+
+
 class CompletionRequest(BaseModel):
     """Input shared by non-streaming and streaming model calls."""
 
@@ -86,6 +133,7 @@ class CompletionResult(BaseModel):
     usage: Usage | None = None
     attempt: int = Field(default=1, ge=1)
     tool_calls: tuple[dict[str, object], ...] = ()
+    attribution: LLMAttribution | None = None
 
 
 class StreamEvent(BaseModel):
@@ -108,6 +156,7 @@ class StreamEvent(BaseModel):
     error_code: str | None = None
     error_reason: str | None = None
     attempt: int = Field(default=1, ge=1)
+    attribution: LLMAttribution | None = None
 
 
 _StructuredModel = TypeVar("_StructuredModel", bound=BaseModel)
@@ -134,6 +183,7 @@ class LLMErrorCode(str, Enum):
     STREAM_INTERRUPTED = "stream_interrupted"
     CANCELLED = "cancelled"
     FAILOVER_EXHAUSTED = "failover_exhausted"
+    PROVIDER_CONTEXT_MISSING = "provider_context_missing"
 
 
 class LLMProviderError(RuntimeError):
@@ -153,6 +203,7 @@ class LLMProviderError(RuntimeError):
         attempt: int = 1,
         partial_output: str = "",
         partial_tool_calls: tuple[dict[str, object], ...] = (),
+        attribution: LLMAttribution | None = None,
     ) -> None:
         self.code = code
         self.provider = provider
@@ -165,6 +216,7 @@ class LLMProviderError(RuntimeError):
         self.attempt = attempt
         self.partial_output = partial_output
         self.partial_tool_calls = partial_tool_calls
+        self.attribution = attribution
         super().__init__(reason)
 
 

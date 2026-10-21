@@ -1,3 +1,5 @@
+import json
+
 import httpx
 import pytest
 from pydantic import BaseModel
@@ -5,6 +7,7 @@ from pydantic import BaseModel
 import src.infrastructure.llm.gateway as gateway_module
 from src.infrastructure.llm.gateway import LiteLLMGatewayConfig, LiteLLMGatewayProvider
 from src.infrastructure.llm.provider import get_default_model_route
+from src.shared.llm.context import reset_provider_principal, set_provider_principal
 from src.shared.llm.contracts import (
     ChatMessage,
     ChatRole,
@@ -12,6 +15,7 @@ from src.shared.llm.contracts import (
     LLMErrorCode,
     LLMProviderError,
     ModelRoute,
+    ProviderPrincipal,
     StructuredRequest,
 )
 
@@ -29,7 +33,9 @@ def _request() -> CompletionRequest:
     )
 
 
-def _provider(handler: httpx.MockTransport) -> LiteLLMGatewayProvider:
+def _provider(
+    handler: httpx.MockTransport, *, require_principal: bool = False
+) -> LiteLLMGatewayProvider:
     client = httpx.Client(transport=handler, base_url="http://gateway/v1")
     async_client = httpx.AsyncClient(transport=handler, base_url="http://gateway/v1")
     return LiteLLMGatewayProvider(
@@ -38,6 +44,7 @@ def _provider(handler: httpx.MockTransport) -> LiteLLMGatewayProvider:
             api_key="gateway-key",
             max_attempts=2,
             backoff_seconds=0,
+            require_principal=require_principal,
         ),
         client=client,
         async_client=async_client,
@@ -49,6 +56,46 @@ def test_default_route_is_not_changed_by_legacy_model_environment(monkeypatch) -
     monkeypatch.setenv("LLM_MODEL_ALIAS", "caller-controlled-alias")
 
     assert get_default_model_route().alias == "openrouter-default"
+
+
+def test_production_adapter_requires_an_authenticated_provider_principal() -> None:
+    provider = _provider(
+        httpx.MockTransport(lambda request: httpx.Response(500)),
+        require_principal=True,
+    )
+
+    with pytest.raises(LLMProviderError) as error:
+        provider.complete(_request())
+
+    assert error.value.code is LLMErrorCode.PROVIDER_CONTEXT_MISSING
+
+
+def test_authenticated_users_resolve_to_distinct_gateway_pools() -> None:
+    models: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.read())
+        models.append(payload["model"])
+        return httpx.Response(
+            200,
+            json={
+                "model": "openrouter/free",
+                "choices": [{"message": {"content": "ok"}}],
+            },
+            request=request,
+        )
+
+    provider = _provider(httpx.MockTransport(handler), require_principal=True)
+    for user_id in ("user-a", "user-b"):
+        token = set_provider_principal(ProviderPrincipal(user_id=user_id))
+        try:
+            provider.complete(_request())
+        finally:
+            reset_provider_principal(token)
+
+    assert len(models) == 2
+    assert models[0].startswith("openrouter-user-")
+    assert models[0] != models[1]
 
 
 def test_complete_maps_openai_response_and_usage() -> None:
