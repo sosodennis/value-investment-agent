@@ -10,12 +10,16 @@ from src.agents.intent.infrastructure.market_data.yahoo_ticker_search_provider i
     search_ticker,
 )
 from src.agents.intent.infrastructure.search.ddg_web_search_provider import web_search
-from src.infrastructure.llm.provider import get_llm
+from src.infrastructure.llm.provider import (
+    get_default_model_route,
+    get_llm_provider,
+)
 
 
 def build_default_intent_orchestrator() -> IntentOrchestrator:
     runtime_ports = IntentRuntimePorts(
-        llm_provider=lambda timeout: get_llm(timeout=timeout),
+        llm_provider=get_llm_provider(),
+        llm_route=get_default_model_route(),
         search_ticker=search_ticker,
         web_search=web_search,
         company_profile=get_company_profile,

@@ -188,6 +188,28 @@ def test_complete_does_not_retry_authentication_failure() -> None:
     assert attempts == 1
 
 
+def test_sync_structured_completion_validates_and_sends_schema() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = request.read().decode()
+        assert '"response_format"' in body
+        assert '"name":"_Answer"' in body
+        return httpx.Response(
+            200,
+            json={
+                "model": "openrouter/auto",
+                "choices": [{"message": {"content": '{"answer":"ok"}'}}],
+            },
+            request=request,
+        )
+
+    provider = _provider(httpx.MockTransport(handler))
+    result = provider.complete_structured(
+        StructuredRequest[_Answer](completion=_request(), response_schema=_Answer)
+    )
+
+    assert result.answer == "ok"
+
+
 @pytest.mark.asyncio
 async def test_structured_completion_validates_pydantic_response() -> None:
     def handler(request: httpx.Request) -> httpx.Response:

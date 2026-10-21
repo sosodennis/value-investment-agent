@@ -172,6 +172,10 @@ class LLMProviderPort(Protocol):
 
     def complete(self, request: CompletionRequest) -> CompletionResult: ...
 
+    def complete_structured(
+        self, request: StructuredRequest[_ResponseModel]
+    ) -> _ResponseModel: ...
+
     async def acomplete(self, request: CompletionRequest) -> CompletionResult: ...
 
     async def acomplete_structured(

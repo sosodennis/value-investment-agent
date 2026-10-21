@@ -67,7 +67,8 @@ class IntentOrchestrator:
         return extract_intent_service(
             user_query,
             intent_model_type=IntentExtraction,
-            llm_provider_fn=self.runtime_ports.llm_provider,
+            llm_provider=self.runtime_ports.llm_provider,
+            llm_route=self.runtime_ports.llm_route,
         )
 
     def build_search_queries(
@@ -130,7 +131,8 @@ class IntentOrchestrator:
                 web_search_result.content,
                 search_extraction_model_type=SearchExtraction,
                 to_ticker_candidate_fn=to_ticker_candidate,
-                llm_provider_fn=self.runtime_ports.llm_provider,
+                llm_provider=self.runtime_ports.llm_provider,
+                llm_route=self.runtime_ports.llm_route,
             )
         for candidate in web_candidates:
             existing = candidate_map.get(candidate.symbol)
@@ -383,8 +385,7 @@ class IntentOrchestrator:
                         {
                             "node": "extraction",
                             "error": (
-                                "Model failed to extract intent: "
-                                f"{bounded_text(exc)}"
+                                f"Model failed to extract intent: {bounded_text(exc)}"
                             ),
                             "severity": "error",
                         }

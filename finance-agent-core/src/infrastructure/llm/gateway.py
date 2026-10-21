@@ -129,12 +129,22 @@ class LiteLLMGatewayProvider:
         self._owns_async_client = async_client is None
 
     def complete(self, request: CompletionRequest) -> CompletionResult:
+        return self._complete(request)
+
+    def _complete(
+        self,
+        request: CompletionRequest,
+        *,
+        response_schema: type[BaseModel] | None = None,
+    ) -> CompletionResult:
         for attempt in range(1, self._config.max_attempts + 1):
             try:
                 response = self._client.post(
                     "/chat/completions",
                     headers=self._request_headers(request),
-                    json=self._payload(request, stream=False),
+                    json=self._payload(
+                        request, stream=False, response_schema=response_schema
+                    ),
                     timeout=request.timeout_seconds,
                 )
                 if response.status_code >= 400:
@@ -159,6 +169,15 @@ class LiteLLMGatewayProvider:
             except (JSONDecodeError, TypeError, ValueError) as exc:
                 raise self._malformed_response(request, attempt, str(exc)) from exc
         raise RuntimeError("gateway completion retry loop reached unreachable state")
+
+    def complete_structured(
+        self, request: StructuredRequest[_ResponseModel]
+    ) -> _ResponseModel:
+        completion = request.completion.model_copy(
+            update={"metadata": {**request.completion.metadata, "structured": "true"}}
+        )
+        result = self._complete(completion, response_schema=request.response_schema)
+        return self._decode_structured_response(result, request)
 
     async def acomplete(self, request: CompletionRequest) -> CompletionResult:
         return await self._acomplete(request)
@@ -211,6 +230,13 @@ class LiteLLMGatewayProvider:
         result = await self._acomplete(
             completion, response_schema=request.response_schema
         )
+        return self._decode_structured_response(result, request)
+
+    def _decode_structured_response(
+        self,
+        result: CompletionResult,
+        request: StructuredRequest[_ResponseModel],
+    ) -> _ResponseModel:
         try:
             decoded: object = json.loads(result.text)
             return request.response_schema.model_validate(decoded)

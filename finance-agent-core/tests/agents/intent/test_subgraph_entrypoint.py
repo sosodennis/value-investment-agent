@@ -8,6 +8,7 @@ from src.agents.intent.workflow.state import (
     IntentExtractionOutput,
 )
 from src.shared.kernel.workflow_contracts import WorkflowNodeResult
+from src.shared.llm.contracts import ModelRoute
 
 
 class _FakeIntentOrchestrator:
@@ -25,7 +26,10 @@ async def test_intent_subgraph_entrypoint_builds_and_invokes_with_fake_orchestra
 ) -> None:
     fake_orchestrator = _FakeIntentOrchestrator()
     runtime_ports = IntentRuntimePorts(
-        llm_provider=lambda timeout: None,  # type: ignore[arg-type]
+        llm_provider=None,  # type: ignore[arg-type]
+        llm_route=ModelRoute(
+            alias="openrouter-default", candidates=("openrouter/auto",)
+        ),
         search_ticker=lambda query: None,  # type: ignore[arg-type]
         web_search=lambda query: None,  # type: ignore[arg-type]
         company_profile=lambda ticker: None,  # type: ignore[arg-type]

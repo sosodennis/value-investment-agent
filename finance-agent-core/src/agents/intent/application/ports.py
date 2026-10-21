@@ -5,20 +5,7 @@ from typing import Protocol
 
 from src.agents.intent.domain.ticker_candidate import TickerCandidate
 from src.shared.cross_agent.domain.market_identity import CompanyProfile
-
-
-class IIntentStructuredChain(Protocol):
-    def invoke(self, payload: dict[str, str]) -> object: ...
-
-
-class IIntentStructuredOutputModel(Protocol):
-    def with_structured_output(
-        self, schema: type[object]
-    ) -> IIntentStructuredChain: ...
-
-
-class IIntentLlmProvider(Protocol):
-    def __call__(self, timeout: int) -> IIntentStructuredOutputModel: ...
+from src.shared.llm.contracts import LLMProviderPort, ModelRoute
 
 
 class IIntentTickerSearchProvider(Protocol):
@@ -58,7 +45,8 @@ class IntentCompanyProfileLookup:
 
 @dataclass(frozen=True)
 class IntentRuntimePorts:
-    llm_provider: IIntentLlmProvider
+    llm_provider: LLMProviderPort
+    llm_route: ModelRoute
     search_ticker: IIntentTickerSearchProvider
     web_search: IIntentWebSearchProvider
     company_profile: IIntentCompanyProfileProvider

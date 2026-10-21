@@ -3,7 +3,7 @@ import os
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_openai import ChatOpenAI
 
-from src.shared.llm.contracts import ModelRoute
+from src.shared.llm.contracts import LLMProviderPort, ModelRoute
 
 from ...config.llm_config import (
     DEFAULT_MODEL,
@@ -23,6 +23,19 @@ def _get_gateway_provider() -> LiteLLMGatewayProvider:
     return _gateway_provider
 
 
+def get_llm_provider() -> LLMProviderPort:
+    """Return the shared project-owned provider backed by the internal gateway."""
+    return _get_gateway_provider()
+
+
+def get_default_model_route(model: str = DEFAULT_MODEL) -> ModelRoute:
+    """Resolve the configured gateway alias and its default upstream model."""
+    return ModelRoute(
+        alias=os.getenv("LLM_MODEL_ALIAS", "openrouter-default"),
+        candidates=(model,),
+    )
+
+
 def get_llm(
     model: str = DEFAULT_MODEL, temperature: float = 0, timeout: float = LLM_TIMEOUT
 ) -> BaseChatModel:
@@ -35,11 +48,8 @@ def get_llm(
     """
     if os.getenv("LLM_GATEWAY_BASE_URL"):
         return LangChainGatewayModelAdapter(
-            provider=_get_gateway_provider(),
-            route=ModelRoute(
-                alias=os.getenv("LLM_MODEL_ALIAS", "openrouter-default"),
-                candidates=(model,),
-            ),
+            provider=get_llm_provider(),
+            route=get_default_model_route(model),
             temperature=temperature,
             timeout_seconds=timeout,
         )
