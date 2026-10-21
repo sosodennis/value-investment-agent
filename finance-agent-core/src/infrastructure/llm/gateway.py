@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import random
 import time
@@ -30,6 +31,7 @@ from src.shared.llm.contracts import (
 _ResponseModel = TypeVar("_ResponseModel", bound=BaseModel)
 _RETRYABLE_STATUS_CODES = frozenset({408, 429, 500, 502, 503, 504})
 _MAX_ERROR_TEXT = 500
+_MAX_RETRY_ATTEMPTS = 3
 
 
 def _env_int(name: str, default: int, *, minimum: int) -> int:
@@ -61,7 +63,20 @@ class LiteLLMGatewayConfig:
     max_attempts: int = 2
     backoff_seconds: float = 0.25
     max_backoff_seconds: float = 8.0
-    jitter_seconds: float = 0.0
+    jitter_seconds: float = 0.25
+
+    def __post_init__(self) -> None:
+        if not 1 <= self.max_attempts <= _MAX_RETRY_ATTEMPTS:
+            raise ValueError(
+                f"max_attempts must be between 1 and {_MAX_RETRY_ATTEMPTS}"
+            )
+        for name, value in (
+            ("backoff_seconds", self.backoff_seconds),
+            ("max_backoff_seconds", self.max_backoff_seconds),
+            ("jitter_seconds", self.jitter_seconds),
+        ):
+            if not math.isfinite(value) or value < 0:
+                raise ValueError(f"{name} must be a finite non-negative number")
 
     @classmethod
     def from_env(cls) -> LiteLLMGatewayConfig:
@@ -70,14 +85,17 @@ class LiteLLMGatewayConfig:
         return cls(
             base_url=base_url,
             api_key=api_key,
-            max_attempts=_env_int("LLM_GATEWAY_MAX_ATTEMPTS", 2, minimum=1),
+            max_attempts=min(
+                _MAX_RETRY_ATTEMPTS,
+                _env_int("LLM_GATEWAY_MAX_ATTEMPTS", 2, minimum=1),
+            ),
             backoff_seconds=_env_float(
                 "LLM_GATEWAY_BACKOFF_SECONDS", 0.25, minimum=0.0
             ),
             max_backoff_seconds=_env_float(
                 "LLM_GATEWAY_MAX_BACKOFF_SECONDS", 8.0, minimum=0.0
             ),
-            jitter_seconds=_env_float("LLM_GATEWAY_JITTER_SECONDS", 0.0, minimum=0.0),
+            jitter_seconds=_env_float("LLM_GATEWAY_JITTER_SECONDS", 0.25, minimum=0.0),
         )
 
 
@@ -487,19 +505,24 @@ class LiteLLMGatewayProvider:
         self, response: httpx.Response, request: CompletionRequest, attempt: int
     ) -> LLMProviderError:
         status = response.status_code
-        reason = _response_reason(response)
         if status in {401, 403}:
             code = LLMErrorCode.AUTHENTICATION_FAILED
+            reason = "gateway authentication failed"
         elif status == 429:
             code = LLMErrorCode.RATE_LIMITED
+            reason = "gateway rate limited the request"
         elif status == 408:
             code = LLMErrorCode.UPSTREAM_TIMEOUT
+            reason = "gateway request timed out"
         elif status in {400, 422}:
             code = LLMErrorCode.BAD_REQUEST
+            reason = "gateway rejected the request"
         elif status >= 500:
             code = LLMErrorCode.UPSTREAM_UNAVAILABLE
+            reason = "gateway upstream is unavailable"
         else:
             code = LLMErrorCode.UPSTREAM_UNAVAILABLE
+            reason = "gateway request failed"
         return LLMProviderError(
             code=code,
             provider=self.provider_name,
@@ -730,18 +753,6 @@ def _usage(value: object) -> Usage | None:
 
 def _int_or_none(value: object) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) else None
-
-
-def _response_reason(response: httpx.Response) -> str:
-    try:
-        raw: object = response.json()
-        root = _mapping(raw)
-        error = root.get("error")
-        if isinstance(error, Mapping):
-            return str(error.get("message", "gateway request failed"))[:_MAX_ERROR_TEXT]
-    except (JSONDecodeError, ValueError, TypeError):
-        pass
-    return response.text[:_MAX_ERROR_TEXT] or "gateway request failed"
 
 
 def _retry_after_seconds(headers: Mapping[str, str]) -> float | None:

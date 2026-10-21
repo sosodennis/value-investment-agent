@@ -35,6 +35,9 @@ The application adapter owns only its bounded gateway retry policy. It honors a
 gateway `Retry-After` header and caps the delay. Configure that policy with
 `LLM_GATEWAY_MAX_ATTEMPTS`, `LLM_GATEWAY_BACKOFF_SECONDS`,
 `LLM_GATEWAY_MAX_BACKOFF_SECONDS`, and `LLM_GATEWAY_JITTER_SECONDS`.
+Attempts are hard-capped at three and the default policy adds up to `0.25s`
+jitter to the exponential delay. Upstream response bodies are not copied into
+the project error contract.
 
 A real staging run must verify model IDs, `HTTP-Referer`, `X-Title`, usage,
 401/429/5xx mapping, and streaming behavior with disposable OpenRouter

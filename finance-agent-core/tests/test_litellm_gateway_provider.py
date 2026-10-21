@@ -150,6 +150,20 @@ def test_complete_honors_bounded_retry_after_delay(monkeypatch) -> None:
     assert delays == [2.0]
 
 
+def test_gateway_retry_configuration_has_a_hard_attempt_ceiling(monkeypatch) -> None:
+    monkeypatch.setenv("LLM_GATEWAY_MAX_ATTEMPTS", "99")
+
+    config = LiteLLMGatewayConfig.from_env()
+
+    assert config.max_attempts == 3
+    with pytest.raises(ValueError, match="between 1 and 3"):
+        LiteLLMGatewayConfig(
+            base_url="http://gateway",
+            api_key="gateway-key",
+            max_attempts=4,
+        )
+
+
 def test_complete_does_not_retry_authentication_failure() -> None:
     attempts = 0
 
@@ -169,6 +183,8 @@ def test_complete_does_not_retry_authentication_failure() -> None:
 
     assert raised.value.code is LLMErrorCode.AUTHENTICATION_FAILED
     assert raised.value.retryable is False
+    assert raised.value.reason == "gateway authentication failed"
+    assert "invalid gateway key" not in raised.value.reason
     assert attempts == 1
 
 

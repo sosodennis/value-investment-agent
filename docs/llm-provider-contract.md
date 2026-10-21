@@ -36,11 +36,14 @@ bounded partial output are available for application error mapping. Provider
 keys, prompts, raw provider errors, and SDK objects never cross this boundary.
 
 Bounded retry and model failover belong to the adapter/gateway. The MVP gateway
-defaults to two attempts, exponential backoff from `0.25s`, an `8s` maximum,
-and no jitter; `LLM_GATEWAY_MAX_ATTEMPTS`,
+defaults to two attempts (hard-capped at three), exponential backoff from
+`0.25s`, an `8s` maximum, and up to `0.25s` additive jitter;
+`LLM_GATEWAY_MAX_ATTEMPTS`,
 `LLM_GATEWAY_BACKOFF_SECONDS`, `LLM_GATEWAY_MAX_BACKOFF_SECONDS`, and
 `LLM_GATEWAY_JITTER_SECONDS` make those limits explicit. A numeric or HTTP-date
-`Retry-After` header is honored and capped by the maximum delay. Invalid
+`Retry-After` header is honored and capped by the maximum delay. Upstream
+response bodies are reduced to stable status-based reasons before they cross
+the contract. Invalid
 requests, policy rejections, schema failures, and cancellation are terminal.
 Transient timeout, rate-limit, and selected upstream failures may be retried.
 Streaming may fail over only before the first delta or tool side effect. After
