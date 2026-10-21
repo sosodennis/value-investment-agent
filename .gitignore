@@ -15,6 +15,9 @@ downloads/
 eggs/
 .eggs/
 lib/
+# `frontend/src/lib` contains source modules, not Python build output.
+!frontend/src/lib/
+!frontend/src/lib/**
 lib64/
 parts/
 sdist/
