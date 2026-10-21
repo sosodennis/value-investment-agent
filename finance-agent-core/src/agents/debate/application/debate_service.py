@@ -5,16 +5,13 @@ import hashlib
 import json
 from collections.abc import Mapping
 from datetime import datetime
-from typing import Protocol
+from uuid import uuid4
 
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
 from src.agents.debate.application.debate_context import (
     build_debate_artifact_context,
     build_debate_conversation_context,
-)
-from src.agents.debate.application.debate_llm_retry_service import (
-    call_with_debate_llm_retry,
 )
 from src.agents.debate.application.dto import DebateFactExtractionResult
 from src.agents.debate.application.ports import (
@@ -47,18 +44,18 @@ from src.agents.debate.domain.fact_builders import (
     summarize_facts_by_source,
 )
 from src.shared.kernel.tools.logger import get_logger, log_event
+from src.shared.llm.contracts import (
+    ChatMessage,
+    ChatRole,
+    CompletionRequest,
+    CompletionResult,
+    LLMProviderPort,
+    ModelRoute,
+)
 
 logger = get_logger(__name__)
 
 MAX_CHAR_HISTORY = PROMPT_MAX_CHAR_HISTORY
-
-
-class _LLMLike(Protocol):
-    async def ainvoke(self, messages: object) -> _LLMResponseLike: ...
-
-
-class _LLMResponseLike(Protocol):
-    content: object
 
 
 async def extract_debate_facts(
@@ -129,7 +126,8 @@ async def execute_bull_round(
     round_num: int,
     adversarial_rule: str,
     system_prompt_template: str,
-    llm: _LLMLike,
+    llm_provider: LLMProviderPort,
+    llm_route: ModelRoute,
     source_reader: DebateSourceReaderPort,
 ) -> dict[str, object]:
     conversation_context = build_debate_conversation_context(state)
@@ -137,7 +135,7 @@ async def execute_bull_round(
     if ticker is None:
         raise ValueError("Missing intent_extraction.resolved_ticker for bull agent")
 
-    log_llm_config("BULL_AGENT", round_num, llm)
+    log_llm_config("BULL_AGENT", round_num, llm_route)
     prompt_context = await get_debate_prompt_context_text(
         state, stage=f"bull_r{round_num}", ticker=ticker, source_reader=source_reader
     )
@@ -166,13 +164,13 @@ async def execute_bull_round(
         )
 
     log_messages(messages, "BULL_AGENT", round_num)
-    response = await call_with_debate_llm_retry(
-        operation="debate_bull_round",
-        agent="BULL_AGENT",
-        round_num=round_num,
-        execute=lambda: llm.ainvoke(messages),
+    response = await _complete_debate_messages(
+        provider=llm_provider,
+        route=llm_route,
+        operation="debate.bull_round",
+        messages=messages,
     )
-    response_text = str(response.content)
+    response_text = response.text
     log_llm_response("BULL_AGENT", round_num, response_text)
 
     return {
@@ -187,7 +185,8 @@ async def execute_bear_round(
     round_num: int,
     adversarial_rule: str,
     system_prompt_template: str,
-    llm: _LLMLike,
+    llm_provider: LLMProviderPort,
+    llm_route: ModelRoute,
     source_reader: DebateSourceReaderPort,
 ) -> dict[str, object]:
     conversation_context = build_debate_conversation_context(state)
@@ -195,7 +194,7 @@ async def execute_bear_round(
     if ticker is None:
         raise ValueError("Missing intent_extraction.resolved_ticker for bear agent")
 
-    log_llm_config("BEAR_AGENT", round_num, llm)
+    log_llm_config("BEAR_AGENT", round_num, llm_route)
     prompt_context = await get_debate_prompt_context_text(
         state, stage=f"bear_r{round_num}", ticker=ticker, source_reader=source_reader
     )
@@ -224,13 +223,13 @@ async def execute_bear_round(
         )
 
     log_messages(messages, "BEAR_AGENT", round_num)
-    response = await call_with_debate_llm_retry(
-        operation="debate_bear_round",
-        agent="BEAR_AGENT",
-        round_num=round_num,
-        execute=lambda: llm.ainvoke(messages),
+    response = await _complete_debate_messages(
+        provider=llm_provider,
+        route=llm_route,
+        operation="debate.bear_round",
+        messages=messages,
     )
-    response_text = str(response.content)
+    response_text = response.text
     log_llm_response("BEAR_AGENT", round_num, response_text)
 
     return {
@@ -244,7 +243,8 @@ async def execute_moderator_round(
     state: Mapping[str, object],
     round_num: int,
     system_prompt_template: str,
-    llm: _LLMLike,
+    llm_provider: LLMProviderPort,
+    llm_route: ModelRoute,
     detector: SycophancyDetectorPort,
     source_reader: DebateSourceReaderPort,
 ) -> dict[str, object]:
@@ -253,7 +253,7 @@ async def execute_moderator_round(
     if ticker is None:
         raise ValueError("Missing intent_extraction.resolved_ticker for moderator")
 
-    log_llm_config("MODERATOR", round_num, llm)
+    log_llm_config("MODERATOR", round_num, llm_route)
 
     bull_thesis = conversation_context.bull_thesis or ""
     bear_thesis = conversation_context.bear_thesis or ""
@@ -325,16 +325,43 @@ async def execute_moderator_round(
     messages = build_moderator_messages(system_content=system_content, history=history)
 
     log_messages(messages, "MODERATOR_CRITIQUE", round_num)
-    response = await call_with_debate_llm_retry(
-        operation="debate_moderator_round",
-        agent="MODERATOR",
-        round_num=round_num,
-        execute=lambda: llm.ainvoke(messages),
+    response = await _complete_debate_messages(
+        provider=llm_provider,
+        route=llm_route,
+        operation="debate.moderator_round",
+        messages=messages,
     )
-    response_text = str(response.content)
+    response_text = response.text
     log_llm_response("MODERATOR_CRITIQUE", round_num, response_text)
 
     return {
         "history": [AIMessage(content=response_text, name="Judge")],
         "current_round": round_num,
     }
+
+
+async def _complete_debate_messages(
+    *,
+    provider: LLMProviderPort,
+    route: ModelRoute,
+    operation: str,
+    messages: list[BaseMessage],
+) -> CompletionResult:
+    request = CompletionRequest(
+        messages=tuple(_to_chat_message(message) for message in messages),
+        route=route,
+        request_id=f"{operation.replace('.', '-')}-{uuid4().hex}",
+        operation=operation,
+        timeout_seconds=60.0,
+    )
+    return await provider.acomplete(request)
+
+
+def _to_chat_message(message: BaseMessage) -> ChatMessage:
+    if isinstance(message, SystemMessage):
+        role = ChatRole.SYSTEM
+    elif isinstance(message, HumanMessage):
+        role = ChatRole.USER
+    else:
+        role = ChatRole.ASSISTANT
+    return ChatMessage(role=role, content=str(message.content), name=message.name)

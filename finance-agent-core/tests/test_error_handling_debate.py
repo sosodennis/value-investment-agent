@@ -1,12 +1,14 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from langchain_core.messages import AIMessage
 
 from src.agents.debate.application.wiring import get_debate_workflow_runner
 from src.agents.debate.workflow.nodes import build_debate_nodes
+from src.shared.llm.contracts import LLMErrorCode, LLMProviderError
 
-debate_nodes = build_debate_nodes(get_debate_workflow_runner())
+debate_runner = get_debate_workflow_runner()
+debate_nodes = build_debate_nodes(debate_runner)
 r1_bull_node = debate_nodes["r1_bull"]
 verdict_node = debate_nodes["verdict"]
 
@@ -44,15 +46,20 @@ async def test_verdict_node_error_log():
         "history": [AIMessage(content="Arg1", name="GrowthHunter")],
     }
 
-    with patch("src.agents.debate.application.wiring.get_llm") as mock_llm:
-        # Simulate LLM failure
-        mock_chain = MagicMock()
-        mock_chain.ainvoke.side_effect = Exception("Verdict Generation Error")
-
-        mock_struct_llm = MagicMock()
-        mock_struct_llm.ainvoke.side_effect = Exception("Verdict Generation Error")
-        mock_llm.return_value.with_structured_output.return_value = mock_struct_llm
-
+    error = LLMProviderError(
+        code=LLMErrorCode.UPSTREAM_UNAVAILABLE,
+        provider="litellm-gateway",
+        model="openrouter-default",
+        request_id="verdict-test",
+        reason="gateway request failed",
+        retryable=False,
+        attempt=2,
+    )
+    with patch.object(
+        debate_runner.orchestrator.llm_provider,
+        "acomplete_structured",
+        new=AsyncMock(side_effect=error),
+    ):
         command = await verdict_node(state)
 
         # Should end workflow

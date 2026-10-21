@@ -6,15 +6,13 @@ import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Protocol
+from uuid import uuid4
 
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
 
 from src.agents.debate.application.debate_history_service import (
     build_citation_audit_payload,
     build_verdict_history_text,
-)
-from src.agents.debate.application.debate_llm_retry_service import (
-    call_with_debate_llm_retry,
 )
 from src.agents.debate.application.debate_service import (
     MAX_CHAR_HISTORY,
@@ -53,24 +51,16 @@ from src.shared.kernel.tools.incident_logging import (
 from src.shared.kernel.tools.logger import bounded_text, get_logger, log_event
 from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
 from src.shared.kernel.workflow_contracts import WorkflowFanoutNodeResult
+from src.shared.llm.contracts import (
+    ChatMessage,
+    ChatRole,
+    CompletionRequest,
+    LLMProviderPort,
+    ModelRoute,
+    StructuredRequest,
+)
 
 logger = get_logger(__name__)
-
-
-class _StructuredVerdictOutputLike(Protocol):
-    def model_dump(self, *, mode: str) -> JSONObject: ...
-
-
-class _StructuredVerdictChainLike(Protocol):
-    async def ainvoke(self, value: str) -> _StructuredVerdictOutputLike: ...
-
-
-class _DebateLLMLike(Protocol):
-    async def ainvoke(self, messages: object) -> object: ...
-
-    def with_structured_output(
-        self, schema: type[DebateConclusion]
-    ) -> _StructuredVerdictChainLike: ...
 
 
 class _RiskFreeRateProvider(Protocol):
@@ -88,7 +78,8 @@ DebateNodeResult = WorkflowFanoutNodeResult
 class DebateOrchestrator:
     source_reader: DebateSourceReaderPort
     artifact_port: DebateArtifactRepositoryPort
-    get_llm_fn: Callable[[], _DebateLLMLike]
+    llm_provider: LLMProviderPort
+    llm_route: ModelRoute
     get_sycophancy_detector_fn: Callable[[], SycophancyDetectorPort]
     summarize_preview_fn: Callable[[JSONObject], JSONObject]
     build_output_artifact_fn: Callable[
@@ -301,13 +292,13 @@ class DebateOrchestrator:
             fields={"node": node_name, "round_num": round_num, "ticker": ticker},
         )
         try:
-            llm = self.get_llm_fn()
             result = await execute_bull_round(
                 state=state,
                 round_num=round_num,
                 adversarial_rule=adversarial_rule,
                 system_prompt_template=system_prompt_template,
-                llm=llm,
+                llm_provider=self.llm_provider,
+                llm_route=self.llm_route,
                 source_reader=self.source_reader,
             )
             log_event(
@@ -391,13 +382,13 @@ class DebateOrchestrator:
             fields={"node": node_name, "round_num": round_num, "ticker": ticker},
         )
         try:
-            llm = self.get_llm_fn()
             result = await execute_bear_round(
                 state=state,
                 round_num=round_num,
                 adversarial_rule=adversarial_rule,
                 system_prompt_template=system_prompt_template,
-                llm=llm,
+                llm_provider=self.llm_provider,
+                llm_route=self.llm_route,
                 source_reader=self.source_reader,
             )
             log_event(
@@ -484,12 +475,12 @@ class DebateOrchestrator:
             fields={"node": node_name, "round_num": round_num, "ticker": ticker},
         )
         try:
-            llm = self.get_llm_fn()
             result = await execute_moderator_round(
                 state=state,
                 round_num=round_num,
                 system_prompt_template=system_prompt_template,
-                llm=llm,
+                llm_provider=self.llm_provider,
+                llm_route=self.llm_route,
                 detector=self.get_sycophancy_detector_fn(),
                 source_reader=self.source_reader,
             )
@@ -593,8 +584,7 @@ class DebateOrchestrator:
                 message="debate verdict started",
                 fields={"ticker": ticker},
             )
-            llm = self.get_llm_fn()
-            log_llm_config("VERDICT", 3, llm)
+            log_llm_config("VERDICT", 3, self.llm_route)
 
             history_raw = state.get("history", [])
             history = (
@@ -612,13 +602,20 @@ class DebateOrchestrator:
                 history_text=history_text,
             )
 
-            log_messages([SystemMessage(content=verdict_system)], "VERDICT", 3)
-            structured_llm = llm.with_structured_output(DebateConclusion)
-            conclusion = await call_with_debate_llm_retry(
-                operation="debate_verdict_structured_output",
-                agent="VERDICT",
-                round_num=3,
-                execute=lambda: structured_llm.ainvoke(verdict_system),
+            verdict_messages = [SystemMessage(content=verdict_system)]
+            log_messages(verdict_messages, "VERDICT", 3)
+            conclusion_request = CompletionRequest(
+                messages=(ChatMessage(role=ChatRole.SYSTEM, content=verdict_system),),
+                route=self.llm_route,
+                request_id=f"debate-verdict-{uuid4().hex}",
+                operation="debate.verdict",
+                timeout_seconds=60.0,
+            )
+            conclusion = await self.llm_provider.acomplete_structured(
+                StructuredRequest[DebateConclusion](
+                    completion=conclusion_request,
+                    response_schema=DebateConclusion,
+                )
             )
             conclusion_data = conclusion.model_dump(mode="json")
             if not isinstance(conclusion_data, dict):

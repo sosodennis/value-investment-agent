@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -6,8 +6,10 @@ from src.agents.debate.application.dto import DebateSourceLoadIssue
 from src.agents.debate.application.report_service import PreparedDebateReports
 from src.agents.debate.application.wiring import get_debate_workflow_runner
 from src.agents.debate.workflow.nodes import build_debate_nodes
+from src.shared.llm.contracts import CompletionResult
 
-debate_nodes = build_debate_nodes(get_debate_workflow_runner())
+debate_runner = get_debate_workflow_runner()
+debate_nodes = build_debate_nodes(debate_runner)
 debate_aggregator_node = debate_nodes["debate_aggregator"]
 r1_bull_node = debate_nodes["r1_bull"]
 
@@ -98,12 +100,18 @@ async def test_agent_uses_cached_reports():
             "src.agents.debate.application.report_service.prepare_debate_reports",
             new=AsyncMock(),
         ) as mock_prepare,
-        patch("src.agents.debate.application.wiring.get_llm") as mock_get_llm,
+        patch.object(
+            debate_runner.orchestrator.llm_provider,
+            "acomplete",
+            new=AsyncMock(
+                return_value=CompletionResult(
+                    request_id="test-debate",
+                    text="thesis",
+                    model="openrouter/auto",
+                )
+            ),
+        ),
     ):
-        mock_llm = AsyncMock()
-        mock_llm.ainvoke.return_value = MagicMock(content="thesis")
-        mock_get_llm.return_value = mock_llm
-
         await r1_bull_node(state)
 
         # Should NOT call prepare_debate_reports if cache exists
@@ -129,11 +137,18 @@ async def test_agent_fallbacks_if_no_cache():
             "src.agents.debate.application.report_service.compress_reports",
             return_value="data",
         ) as mock_compress,
-        patch("src.agents.debate.application.wiring.get_llm") as mock_get_llm,
+        patch.object(
+            debate_runner.orchestrator.llm_provider,
+            "acomplete",
+            new=AsyncMock(
+                return_value=CompletionResult(
+                    request_id="test-debate",
+                    text="thesis",
+                    model="openrouter/auto",
+                )
+            ),
+        ),
     ):
-        mock_llm = AsyncMock()
-        mock_llm.ainvoke.return_value = MagicMock(content="thesis")
-        mock_get_llm.return_value = mock_llm
         mock_prepare.return_value = PreparedDebateReports(payload={}, load_issues=[])
 
         await r1_bull_node(state)

@@ -17,7 +17,7 @@ from src.agents.debate.infrastructure.sycophancy import get_sycophancy_detector_
 from src.agents.debate.interface.preview_projection_service import (
     summarize_debate_for_preview,
 )
-from src.infrastructure.llm.provider import get_llm
+from src.infrastructure.llm.provider import get_default_model_route, get_llm_provider
 from src.interface.events.schemas import ArtifactReference, build_artifact_payload
 from src.shared.kernel.contracts import (
     ARTIFACT_KIND_DEBATE_FINAL_REPORT,
@@ -51,7 +51,8 @@ def build_debate_orchestrator() -> DebateOrchestrator:
     return DebateOrchestrator(
         source_reader=debate_source_reader_repository,
         artifact_port=debate_artifact_repository,
-        get_llm_fn=lambda: get_llm(),
+        llm_provider=get_llm_provider(),
+        llm_route=get_default_model_route(),
         get_sycophancy_detector_fn=lambda: get_sycophancy_detector_provider(),
         summarize_preview_fn=summarize_debate_for_preview,
         build_output_artifact_fn=_build_debate_output_artifact,

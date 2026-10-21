@@ -127,7 +127,12 @@ def log_messages(
 
 
 def log_llm_config(agent_name: str, round_num: int, llm: object) -> None:
-    model = getattr(llm, "model_name", None) or getattr(llm, "model", None) or "unknown"
+    model = (
+        getattr(llm, "alias", None)
+        or getattr(llm, "model_name", None)
+        or getattr(llm, "model", None)
+        or "unknown"
+    )
     temperature = getattr(llm, "temperature", None)
     timeout = getattr(llm, "timeout", None)
     log_event(
