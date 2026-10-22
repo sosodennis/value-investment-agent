@@ -714,7 +714,16 @@ class LiteLLMGatewayProvider:
             self.telemetry.cancelled(request, started_at=started_at, stream=True)
             raise
         except LLMProviderError as exc:
-            self.telemetry.failed(request, exc, started_at=started_at, stream=True)
+            first_token_ms = (
+                (first_token_at - started_at) * 1000 if first_token_at else None
+            )
+            self.telemetry.failed(
+                request,
+                exc,
+                started_at=started_at,
+                first_token_ms=first_token_ms,
+                stream=True,
+            )
             raise
         else:
             result = CompletionResult(
@@ -727,7 +736,13 @@ class LiteLLMGatewayProvider:
                 attempts=(),
             )
             self.telemetry.succeeded(
-                request, result, started_at=started_at, stream=True
+                request,
+                result,
+                started_at=started_at,
+                first_token_ms=(
+                    (first_token_at - started_at) * 1000 if first_token_at else None
+                ),
+                stream=True,
             )
 
     async def _astream(self, request: CompletionRequest) -> AsyncIterator[StreamEvent]:
