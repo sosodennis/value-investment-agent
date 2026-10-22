@@ -1,0 +1,18 @@
+services:
+  backend:
+    image: ${ISSUE109_BACKEND_IMAGE:-via-llm-stage-backend:latest}
+    environment:
+      NEWS_FINBERT_WARMUP: "0"
+      SEC_TEXT_FLS_WARMUP: "0"
+  model-inference-news:
+    environment:
+      INFERENCE_SERVICE_TOKEN: ${INFERENCE_SERVICE_TOKEN:?set INFERENCE_SERVICE_TOKEN}
+      INFERENCE_ALLOW_INSECURE: "0"
+  model-inference-fls:
+    environment:
+      INFERENCE_SERVICE_TOKEN: ${INFERENCE_SERVICE_TOKEN:?set INFERENCE_SERVICE_TOKEN}
+      INFERENCE_ALLOW_INSECURE: "0"
+
+networks:
+  default:
+    internal: true

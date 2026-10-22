@@ -96,6 +96,7 @@ def main() -> None:
     parser.add_argument("--concurrency", type=int, nargs="+", default=[1, 2, 4, 8])
     parser.add_argument("--requests-per-level", type=int, default=8)
     parser.add_argument("--sentences-per-request", type=int, default=16)
+    parser.add_argument("--warmup-requests", type=int, default=0)
     args = parser.parse_args()
 
     sink = io.StringIO()
@@ -118,6 +119,10 @@ def main() -> None:
                 "rss_peak_mib": rss_mib(),
             }
         else:
+            warmup_inference = [
+                call(module, index, args.sentences_per_request)
+                for index in range(args.warmup_requests)
+            ]
             sequential = [
                 call(module, index, args.sentences_per_request)
                 for index in range(args.sequential)
@@ -127,6 +132,7 @@ def main() -> None:
                 "model": os.getenv("SEC_TEXT_FLS_MODEL", "yiyanghkust/finbert-fls"),
                 "load_ms": round(load_ms, 3),
                 "warmup": warmup,
+                "warmup_inference": summarize(warmup_inference),
                 "rss_after_load_mib": rss_mib(),
                 "sequential": summarize(sequential),
                 "concurrent": {},

@@ -126,6 +126,7 @@ def main() -> None:
     parser.add_argument("--sequential", type=int, default=8)
     parser.add_argument("--concurrency", type=int, nargs="+", default=[1, 2, 4, 8])
     parser.add_argument("--requests-per-level", type=int, default=8)
+    parser.add_argument("--warmup-requests", type=int, default=0)
     args = parser.parse_args()
 
     log_sink = io.StringIO()
@@ -168,10 +169,15 @@ def main() -> None:
         return
 
     with redirect_stdout(log_sink):
+        warmup_results = [
+            _call(analyzer, TEXTS[index % len(TEXTS)])
+            for index in range(args.warmup_requests)
+        ]
         sequential_results = [
             _call(analyzer, TEXTS[index % len(TEXTS)])
             for index in range(args.sequential)
         ]
+    output["warmup_inference"] = _summary(warmup_results)
     output["sequential"] = _summary(sequential_results)
     output["rss_after_sequential_mib"] = _rss_mib()
 

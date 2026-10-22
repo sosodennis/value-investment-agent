@@ -488,6 +488,86 @@ async def test_deadline_and_overload_are_stable() -> None:
 
 
 @pytest.mark.asyncio
+async def test_fls_admission_prefers_overload_before_queue_deadlines() -> None:
+    runner = FakeRunner("sec.fls", delay_seconds=0.03)
+    app = create_app(runners={"sec.fls": runner}, token="secret")
+    body = {
+        "schema_version": "inference.v1",
+        "operation": "sec.fls",
+        "deadline_ms": 750,
+        "input": {"sentences": ["Management expects revenue growth next year."]},
+    }
+    async with app.router.lifespan_context(app):  # type: ignore[attr-defined]
+        async with _client(app) as client:
+            responses = await asyncio.gather(
+                *(
+                    client.post(
+                        "/v1/inference",
+                        headers={
+                            "Authorization": "Bearer secret",
+                            "X-Request-ID": f"fls-capacity-{index}",
+                        },
+                        json=body,
+                    )
+                    for index in range(12)
+                )
+            )
+
+    success_count = sum(response.status_code == 200 for response in responses)
+    overload_responses = [
+        response for response in responses if response.status_code == 429
+    ]
+    assert 1 <= success_count <= 3
+    assert len(overload_responses) >= 9
+    assert success_count + len(overload_responses) == 12
+    assert all(
+        response.json()["error"]["code"] == "OVERLOADED"
+        for response in overload_responses
+    )
+    assert 1 <= runner.max_active_count <= 2
+
+
+@pytest.mark.asyncio
+async def test_news_admission_prefers_overload_before_queue_deadlines() -> None:
+    runner = FakeRunner("news.sentiment", delay_seconds=0.06)
+    app = create_app(runners={"news.sentiment": runner}, token="secret")
+    body = {
+        "schema_version": "inference.v1",
+        "operation": "news.sentiment",
+        "deadline_ms": 500,
+        "input": {"text": "Revenue growth improved during the quarter."},
+    }
+    async with app.router.lifespan_context(app):  # type: ignore[attr-defined]
+        async with _client(app) as client:
+            responses = await asyncio.gather(
+                *(
+                    client.post(
+                        "/v1/inference",
+                        headers={
+                            "Authorization": "Bearer secret",
+                            "X-Request-ID": f"news-capacity-{index}",
+                        },
+                        json=body,
+                    )
+                    for index in range(16)
+                )
+            )
+
+    success_count = sum(response.status_code == 200 for response in responses)
+    overload_responses = [
+        response for response in responses if response.status_code == 429
+    ]
+    assert 4 <= success_count <= 8
+    assert len(overload_responses) >= 8
+    assert success_count + len(overload_responses) == 16
+    assert all(
+        response.json()["error"]["code"] == "OVERLOADED"
+        for response in overload_responses
+    )
+    assert 1 <= runner.max_active_count <= 4
+
+
+@pytest.mark.asyncio
 async def test_model_inference_does_not_block_liveness() -> None:
     runner = FakeRunner("news.sentiment", delay_seconds=0.15)
     app = create_app(runners={"news.sentiment": runner}, token="secret")
