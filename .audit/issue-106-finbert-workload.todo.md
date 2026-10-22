@@ -11,5 +11,5 @@
 - [x] Run measurements and record raw results, errors, and limiter evidence.
 - [x] Draft the model inference service API and reliability/capacity contract.
 - [x] Run architecture and scope checks; confirm #107-#109 are untouched.
-- [ ] Commit the issue-106 artifacts on the isolated branch.
-- [ ] Update issue #106 with result, evidence, and recommended limits.
+- [x] Commit the issue-106 artifacts on the isolated branch.
+- [x] Update issue #106 with result, evidence, and recommended limits.
