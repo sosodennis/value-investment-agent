@@ -1,3 +1,5 @@
+import json
+
 import httpx
 import pytest
 from _llm_provider_test_helpers import _provider, _request
@@ -74,6 +76,40 @@ def test_stream_usage_only_chunk_is_recorded() -> None:
     assert events[-1].usage is not None
     assert events[-1].usage.total_tokens == 3
     assert provider.telemetry.snapshot().total_tokens == 3
+
+
+def test_stream_records_usage_and_attribution_after_finish_reason() -> None:
+    stream = (
+        'data: {"model":"openrouter/free","choices":[{"delta":{"content":"ok"}}]}\n\n'
+        'data: {"model":"openrouter/free","choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'
+        'data: {"model":"openrouter/free","choices":[],"usage":{"prompt_tokens":2,"completion_tokens":1,"total_tokens":3}}\n\n'
+        "data: [DONE]\n\n"
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert json.loads(request.content)["stream_options"] == {"include_usage": True}
+        return httpx.Response(
+            200,
+            text=stream,
+            headers={
+                "x-litellm-model-id": "deployment-1",
+                "x-key-fingerprint": "sha256:0123456789abcdef",
+            },
+            request=request,
+        )
+
+    provider = _provider(httpx.MockTransport(handler))
+    events = list(provider.stream(_request()))
+
+    assert [event.kind for event in events] == ["started", "delta", "completed"]
+    assert events[-1].usage is not None
+    assert events[-1].usage.total_tokens == 3
+    assert events[-1].attribution is not None
+    assert events[-1].attribution.deployment_id == "deployment-1"
+    assert events[-1].attribution.key_fingerprint == "sha256:0123456789abcdef"
+    snapshot = provider.telemetry.snapshot()
+    assert snapshot.total_tokens == 3
+    assert snapshot.total_time_to_first_token_ms > 0
 
 
 def test_stream_emits_ordered_events() -> None:
@@ -340,6 +376,42 @@ async def test_async_stream_records_time_to_first_token() -> None:
     assert [event.kind for event in events] == ["started", "delta", "completed"]
     snapshot = provider.telemetry.snapshot()
     assert snapshot.successes == 1
+    assert snapshot.total_time_to_first_token_ms > 0
+    await provider.aclose()
+
+
+@pytest.mark.asyncio
+async def test_async_stream_records_usage_and_attribution_after_finish_reason() -> None:
+    stream = (
+        'data: {"model":"openrouter/free","choices":[{"delta":{"content":"ok"}}]}\n\n'
+        'data: {"model":"openrouter/free","choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'
+        'data: {"model":"openrouter/free","choices":[],"usage":{"prompt_tokens":2,"completion_tokens":1,"total_tokens":3}}\n\n'
+        "data: [DONE]\n\n"
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert json.loads(request.content)["stream_options"] == {"include_usage": True}
+        return httpx.Response(
+            200,
+            text=stream,
+            headers={
+                "x-litellm-model-id": "deployment-2",
+                "x-key-fingerprint": "sha256:fedcba9876543210",
+            },
+            request=request,
+        )
+
+    provider = _provider(httpx.MockTransport(handler))
+    events = [event async for event in provider.astream(_request())]
+
+    assert [event.kind for event in events] == ["started", "delta", "completed"]
+    assert events[-1].usage is not None
+    assert events[-1].usage.total_tokens == 3
+    assert events[-1].attribution is not None
+    assert events[-1].attribution.deployment_id == "deployment-2"
+    assert events[-1].attribution.key_fingerprint == "sha256:fedcba9876543210"
+    snapshot = provider.telemetry.snapshot()
+    assert snapshot.total_tokens == 3
     assert snapshot.total_time_to_first_token_ms > 0
     await provider.aclose()
 

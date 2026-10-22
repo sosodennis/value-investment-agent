@@ -46,8 +46,12 @@ fingerprints only:
 - a transient failure before the first stream byte, which may fail over;
 - a failure after text or tool-call bytes, which must surface
   `stream_interrupted` without replaying the request;
-- gateway restart and Redis degradation, with the resulting terminal error
-  recorded and no secret in logs.
+- gateway restart, confirming the gateway becomes healthy and requests resume;
+- Redis degradation, recording whether a bounded request succeeds or fails.
+  The pinned gateway may continue serving while Redis is unavailable, but
+  cross-worker cooldown and coordination state cannot be relied on. Treat this
+  as degraded service, restore Redis promptly, and confirm recovery. Keep
+  secrets out of logs in both cases.
 
 The run is not a production approval until the same pool is exercised through
 two workers and the observed cooldown/recovery behavior matches the RFC.
