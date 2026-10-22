@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from hashlib import sha256
@@ -100,8 +100,15 @@ class LiteLLMAdminClient:
         label: str,
         model: str,
         model_name: str = DEFAULT_MODEL_ALIAS,
+        existing_ids: Collection[str] | None = None,
     ) -> ManagedKey:
-        """Register a key in a server-selected LiteLLM deployment pool."""
+        """Register a key in a server-selected LiteLLM deployment pool.
+
+        ``existing_ids`` scopes idempotent duplicate detection to the caller's
+        ownership set. Without it, the low-level client keeps its legacy global
+        behavior for operational callers; the user-facing API always supplies
+        the current user's IDs.
+        """
         now = datetime.now(timezone.utc).isoformat()
         key_id = str(uuid4())
         fingerprint = key_fingerprint(key)
@@ -110,6 +117,7 @@ class LiteLLMAdminClient:
                 item
                 for item in await self.list_managed()
                 if item.fingerprint == fingerprint
+                and (existing_ids is None or item.id in existing_ids)
             ),
             None,
         )

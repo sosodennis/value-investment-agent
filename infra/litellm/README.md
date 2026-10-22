@@ -35,10 +35,10 @@ browser must never call this port or receive an OpenRouter key. The master key
 is supplied through the deployment environment (or an external secret
 injector), never committed to Compose or the config file.
 
-For local development, the backend exposes the provider settings routes through
-a loopback-only local-admin session. The settings page creates this session
-automatically; it does not require `LLM_PROVIDER_ADMIN_TOKEN`. Set
-`APP_ENV=production` to disable the local session. Keep
+For local development, the backend still exposes a loopback-only local-admin
+session for diagnostics, but provider settings require a signed-in user session
+and are scoped to that user's gateway pool. Set `APP_ENV=production` to disable
+the local diagnostics session. Keep
 `CORS_ALLOWED_ORIGINS` and `LOCAL_ADMIN_ALLOWED_ORIGINS` restricted to the
 actual frontend origins when using a non-default port.
 

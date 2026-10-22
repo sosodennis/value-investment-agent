@@ -12,18 +12,18 @@ gateway at `https://openrouter.ai/api/v1`. LiteLLM implements the gateway and is
 replaceable behind this contract. Direct OpenAI fallback is not part of the
 production contract.
 
-The first delivery is platform-admin scoped. In a development deployment, the
-settings UI creates a short-lived, signed `HttpOnly` local-admin session on a
-loopback host. The session is accepted only for an explicit local origin
-allowlist and is disabled outside development/test environments. A configured
-`LLM_PROVIDER_ADMIN_TOKEN` remains available for non-browser operational calls;
-the browser does not collect or persist it. Multi-tenant ownership and Vault or
-another secret manager are deferred composition concerns; adding them later
-must not change `CompletionRequest`, `CompletionResult`, or stream semantics.
+Provider settings are user-scoped in the current delivery. Every settings
+request requires the shared `app_session` principal; the server derives the
+user id from that session and never accepts an owner id or provider admin token
+from the browser. A user can list, test, add, and delete only deployments
+claimed by that user. The development-only loopback local-admin endpoint still
+exists for local diagnostics, but it does not authorize provider settings.
 
-The production user login and signup model is tracked separately in issue #98.
-It will define the shared principal and role contract used by runs, SSE, and
-provider-key administration in #83, #95, and #96.
+The model picker remains a global free-model policy for the MVP. It is updated
+only by an authenticated session and is synchronized into managed deployments
+by the backend. Platform-admin roles, tenant delegation, Vault, and other
+secret-manager integrations remain deferred; adding them later must not change
+`CompletionRequest`, `CompletionResult`, or stream semantics.
 
 ## Request and response shape
 
@@ -71,14 +71,14 @@ OpenAI-compatible usage and tool-call data, sends Pydantic JSON Schema for
 structured requests, and adds request/idempotency headers. Its retry budget is
 bounded and its terminal errors are non-retryable after exhaustion. For the
 simplified MVP, LiteLLM owns credential selection among database-backed
-deployments registered under `openrouter-default`; router retry and cooldown
-settings apply to that model group. A separate fallback alias is not part of
-the MVP, and staging must still verify selection and recovery behavior. The
-project adapter does not receive, rotate, or persist OpenRouter keys. A larger
-key pool, distributed coordination, and tenant-scoped ownership remain
-follow-up work under #91.
+deployments registered under an opaque per-user route alias; router retry and
+cooldown settings apply to that user's model group. A separate fallback alias
+is not part of the MVP, and staging must still verify selection and recovery
+behavior. The project adapter does not receive, rotate, or persist OpenRouter
+keys. A larger key pool, distributed coordination, and delegated roles remain
+follow-up work under #91 and #97.
 
 The application constructs one shared gateway provider. Local development also
 uses the gateway; it does not create a direct OpenRouter or OpenAI client.
-The gateway model group is `openrouter-default`; its database deployments are
-the source of truth for configured OpenRouter keys.
+The gateway model group is derived from the authenticated user id; its database
+deployments are the source of truth for that user's configured OpenRouter keys.

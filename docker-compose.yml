@@ -114,7 +114,6 @@ services:
       # Override this when running the backend outside this stack.
       - LLM_GATEWAY_BASE_URL=${LLM_GATEWAY_BASE_URL:-http://llm-gateway:4000}
       - LLM_GATEWAY_API_KEY=${LITELLM_MASTER_KEY}
-      - LLM_PROVIDER_ADMIN_TOKEN=${LLM_PROVIDER_ADMIN_TOKEN:-}
       - OPENROUTER_HTTP_REFERER=${OPENROUTER_HTTP_REFERER:-}
       - OPENROUTER_X_TITLE=${OPENROUTER_X_TITLE:-Value Investment Agent}
       - LLM_GATEWAY_MAX_ATTEMPTS=${LLM_GATEWAY_MAX_ATTEMPTS:-2}

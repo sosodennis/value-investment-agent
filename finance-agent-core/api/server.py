@@ -1,5 +1,4 @@
 import asyncio
-import hmac
 import os
 import sys
 import time
@@ -16,7 +15,6 @@ from fastapi import (
     APIRouter,
     Depends,
     FastAPI,
-    Header,
     HTTPException,
     Query,
     Request,
@@ -65,6 +63,7 @@ from src.infrastructure.llm.litellm_admin import (
     LiteLLMAdminClient,
     LiteLLMAdminError,
     ManagedKey,
+    key_fingerprint,
     validate_model_id,
 )
 from src.infrastructure.llm.openrouter_key_test import (
@@ -87,11 +86,7 @@ from src.interface.auth.local_admin import (
 )
 from src.interface.auth.local_admin import (
     issue_local_admin_session,
-    require_local_admin,
     validate_local_admin_request,
-)
-from src.interface.auth.local_admin import (
-    settings as local_admin_settings,
 )
 from src.interface.events.adapters import adapt_langgraph_event, create_interrupt_event
 from src.interface.events.protocol import AgentEvent
@@ -116,7 +111,7 @@ from src.shared.kernel.tools.logger import (
 from src.shared.kernel.types import InterruptResumePayload, JSONObject
 from src.shared.llm.context import reset_provider_principal, set_provider_principal
 from src.shared.llm.contracts import ProviderPrincipal
-from src.shared.llm.routes import DEFAULT_MODEL_ALIAS, user_route_alias
+from src.shared.llm.routes import user_route_alias
 from src.workflow.graph import get_graph
 
 logger = get_logger(__name__)
@@ -355,69 +350,8 @@ async def delete_local_admin_session(request: Request, response: Response) -> No
     response.delete_cookie(key="local_admin_session", path="/")
 
 
-def require_llm_admin_token(
-    request: Request,
-    authorization: str | None = Header(default=None),
-) -> LocalPrincipal:
-    if local_admin_settings().enabled:
-        try:
-            return require_local_admin(request)
-        except HTTPException as local_error:
-            if local_error.status_code not in {401, 404}:
-                raise
-
-    expected = os.getenv("LLM_PROVIDER_ADMIN_TOKEN", "").strip()
-    if not expected:
-        if local_admin_settings().enabled:
-            raise HTTPException(
-                status_code=401, detail="local admin session is required"
-            )
-        raise HTTPException(
-            status_code=503, detail="LLM provider administration is disabled"
-        )
-    supplied = authorization.removeprefix("Bearer ").strip() if authorization else ""
-    if not supplied or not hmac.compare_digest(supplied, expected):
-        raise HTTPException(
-            status_code=403, detail="LLM provider administration is not authorized"
-        )
-    return LocalPrincipal(
-        subject="configured-admin", role="platform_admin", auth_type="bearer"
-    )
-
-
-SettingsPrincipal = AuthPrincipal | LocalPrincipal
-
-
-async def require_settings_principal(request: Request) -> SettingsPrincipal:
-    try:
-        return await require_current_user(request)
-    except HTTPException as exc:
-        if exc.status_code != 401:
-            raise
-        return require_llm_admin_token(
-            request, authorization=request.headers.get("Authorization")
-        )
-
-
-async def require_settings_mutation(request: Request) -> SettingsPrincipal:
-    try:
-        return await require_current_user_mutation(request)
-    except HTTPException as exc:
-        if exc.status_code != 401:
-            raise
-        return require_llm_admin_token(
-            request, authorization=request.headers.get("Authorization")
-        )
-
-
-def _is_platform_admin(principal: SettingsPrincipal) -> bool:
-    return principal.role == "platform_admin"
-
-
-def _user_id(principal: SettingsPrincipal) -> str:
-    return (
-        principal.user_id if isinstance(principal, AuthPrincipal) else principal.subject
-    )
+def _user_id(principal: AuthPrincipal) -> str:
+    return principal.user_id
 
 
 def get_litellm_admin_client() -> LiteLLMAdminClient:
@@ -458,21 +392,17 @@ llm_keys_router = APIRouter(
 
 @llm_keys_router.get("", response_model=list[OpenRouterKeyResponse])
 async def list_openrouter_keys(
-    principal: SettingsPrincipal = Depends(require_settings_principal),
+    principal: AuthPrincipal = Depends(require_current_user),
     client: LiteLLMAdminClient = Depends(get_litellm_admin_client),
 ) -> list[OpenRouterKeyResponse]:
     try:
-        owned_ids = (
-            None
-            if _is_platform_admin(principal)
-            else await get_ownership_service().owned_ids(
-                user_id=_user_id(principal), resource_type="provider_key"
-            )
+        owned_ids = await get_ownership_service().owned_ids(
+            user_id=_user_id(principal), resource_type="provider_key"
         )
         return [
             _managed_key_response(key)
             for key in await client.list_managed()
-            if owned_ids is None or key.id in owned_ids
+            if key.id in owned_ids
         ]
     except LiteLLMAdminError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
@@ -481,7 +411,7 @@ async def list_openrouter_keys(
 @llm_keys_router.post("", response_model=OpenRouterKeyResponse, status_code=201)
 async def add_openrouter_key(
     request: OpenRouterKeyCreateRequest,
-    principal: SettingsPrincipal = Depends(require_settings_mutation),
+    principal: AuthPrincipal = Depends(require_current_user_mutation),
     client: LiteLLMAdminClient = Depends(get_litellm_admin_client),
 ) -> OpenRouterKeyResponse:
     raw_key = request.api_key.get_secret_value()
@@ -494,18 +424,28 @@ async def add_openrouter_key(
             code = 400
         raise HTTPException(status_code=code, detail=status) from exc
     try:
+        owned_ids = await get_ownership_service().owned_ids(
+            user_id=_user_id(principal), resource_type="provider_key"
+        )
+        existing = next(
+            (
+                item
+                for item in await client.list_managed()
+                if item.id in owned_ids and item.fingerprint == key_fingerprint(raw_key)
+            ),
+            None,
+        )
+        if existing is not None:
+            return _managed_key_response(existing)
         selected_model = await get_selected_model()
         managed = await client.add_key(
             key=raw_key,
             label=request.label,
             model=selected_model,
-            model_name=(
-                DEFAULT_MODEL_ALIAS
-                if _is_platform_admin(principal)
-                else user_route_alias(_user_id(principal))
-            ),
+            model_name=user_route_alias(_user_id(principal)),
+            existing_ids=owned_ids,
         )
-        claimed = _is_platform_admin(principal) or await get_ownership_service().claim(
+        claimed = await get_ownership_service().claim(
             user_id=_user_id(principal),
             resource_type="provider_key",
             resource_id=managed.id,
@@ -521,12 +461,12 @@ async def add_openrouter_key(
 @llm_keys_router.post("/{key_id}/test", response_model=OpenRouterKeyTestResponse)
 async def test_openrouter_key_route(
     key_id: str,
-    principal: SettingsPrincipal = Depends(require_settings_mutation),
+    principal: AuthPrincipal = Depends(require_current_user_mutation),
     client: LiteLLMAdminClient = Depends(get_litellm_admin_client),
 ) -> OpenRouterKeyTestResponse:
     try:
         key_id = validate_model_id(key_id)
-        if not _is_platform_admin(principal) and not await get_ownership_service().owns(
+        if not await get_ownership_service().owns(
             user_id=_user_id(principal),
             resource_type="provider_key",
             resource_id=key_id,
@@ -553,12 +493,12 @@ async def test_openrouter_key_route(
 @llm_keys_router.delete("/{key_id}", status_code=204)
 async def delete_openrouter_key(
     key_id: str,
-    principal: SettingsPrincipal = Depends(require_settings_mutation),
+    principal: AuthPrincipal = Depends(require_current_user_mutation),
     client: LiteLLMAdminClient = Depends(get_litellm_admin_client),
 ) -> None:
     try:
         key_id = validate_model_id(key_id)
-        if not _is_platform_admin(principal) and not await get_ownership_service().owns(
+        if not await get_ownership_service().owns(
             user_id=_user_id(principal),
             resource_type="provider_key",
             resource_id=key_id,
@@ -611,7 +551,7 @@ async def _llm_settings_response() -> LlmSettingsResponse:
 
 @llm_settings_router.get("", response_model=LlmSettingsResponse)
 async def read_llm_settings(
-    _principal: SettingsPrincipal = Depends(require_settings_principal),
+    _principal: AuthPrincipal = Depends(require_current_user),
 ) -> LlmSettingsResponse:
     return await _llm_settings_response()
 
@@ -619,7 +559,7 @@ async def read_llm_settings(
 @llm_settings_router.put("", response_model=LlmSettingsResponse)
 async def update_llm_settings(
     request: LlmSettingsUpdateRequest,
-    principal: SettingsPrincipal = Depends(require_settings_mutation),
+    principal: AuthPrincipal = Depends(require_current_user_mutation),
 ) -> LlmSettingsResponse:
     try:
         valid = await validate_free_model(request.selected_model)
@@ -638,7 +578,7 @@ async def update_llm_settings(
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     finally:
         await client.close()
-    await set_selected_model(request.selected_model, updated_by=principal.subject)
+    await set_selected_model(request.selected_model, updated_by=principal.user_id)
     return await _llm_settings_response()
 
 
