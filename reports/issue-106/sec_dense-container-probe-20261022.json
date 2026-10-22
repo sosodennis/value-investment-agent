@@ -1,0 +1,1 @@
+{"available": true, "elapsed_ms": 11907.842, "error": null, "inference_ms": null, "load_ms": null, "model": "sentence-transformers/all-MiniLM-L6-v2", "rss_peak_mib": 577.805, "workload": "sec_dense"}
