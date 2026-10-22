@@ -39,7 +39,7 @@ from .telemetry import REQUESTS, metrics_app
 
 _DEFAULTS = {"news.sentiment": 500, "sec.fls": 750}
 _MAXIMUMS = {"news.sentiment": 1_000, "sec.fls": 1_500}
-_CAPACITY = {"news.sentiment": (4, 8), "sec.fls": (2, 8)}
+_CAPACITY = {"news.sentiment": (4, 4), "sec.fls": (2, 1)}
 _IDEMPOTENCY_TTL_SECONDS = 60.0
 
 

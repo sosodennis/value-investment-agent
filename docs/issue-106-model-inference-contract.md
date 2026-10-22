@@ -6,10 +6,21 @@ This document records the current backend workload and the proposed private infe
 
 The first service scope has two operations:
 
-| Operation | Current model | Initial worker limit | Initial queue | Memory reservation |
+| Operation | Current model | Worker limit | Queue limit | Memory reservation |
 | --- | --- | ---: | ---: | ---: |
-| `news.sentiment` | `project-aps/finbert-finetune` | 4 in flight | 8 | 1.25 GiB |
-| `sec.fls` | `yiyanghkust/finbert-fls` | 2 in flight | 8 | 1.25 GiB |
+| `news.sentiment` | `project-aps/finbert-finetune` | 4 in flight | 4 | 1.25 GiB |
+| `sec.fls` | `yiyanghkust/finbert-fls` | 2 in flight | 1 | 1.25 GiB |
+
+Issue #109 remeasured these limits through the deployed HTTP service. News
+uses `4 + 4`: five queue-four saturation runs had no deadline failures; a
+queue-eight run had four deadline failures, while another queue-eight run did
+not, so the larger queue was less consistent. FLS uses `2 + 1`: queue eight
+produced deadline errors at concurrency eight and twelve. Of two queue-two
+saturation probes, one had two deadline failures; five queue-one runs had no
+deadline failures and rejected excess work as `OVERLOADED`. These are observed
+results for the tested host and workload, not a guarantee for other deployment
+conditions. Raw alternating runs and saturation evidence are in
+`reports/issue-109/`.
 
 Run one model process per operation and replica. Each process owns its model copy. Start with one News worker and one FLS worker per 10-core host. Do not add worker processes until the service reruns the benchmark after setting a deliberate PyTorch thread count.
 
@@ -152,7 +163,7 @@ Current workflow fallbacks remain explicit during migration. News treats `MODEL_
 
 ## Capacity and operations
 
-Use one bounded queue per operation. News starts with four in-flight requests and eight queued requests. FLS starts with two in-flight requests and eight queued requests. Return `OVERLOADED` as soon as the queue is full. Do not allow an unbounded semaphore waiter list.
+Use one bounded queue per operation. News uses four in-flight requests and four queued requests. FLS uses two in-flight requests and one queued request, based on the #109 deadline and saturation measurements. Return `OVERLOADED` as soon as the queue is full. Do not allow an unbounded semaphore waiter list. See `reports/issue-109/verification-summary.md` for the measurement ranges and queue-size probe results.
 
 The worker count is a memory calculation. For each operation, reserve one full model process per worker and multiply the measured per-process reservation by the worker count. Keep at least 25 percent host memory for the backend, OS, and non-model work. A ten-core host starts with one News worker and one FLS worker. Scaling a model to two workers roughly duplicates its model memory even when the artifact is read from a shared cache.
 
