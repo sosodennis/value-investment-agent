@@ -328,15 +328,22 @@ async def test_llm_settings_lists_free_models_for_authenticated_user() -> None:
     assert response.json()["models"][0]["id"] == "openrouter/free"
 
 
+@pytest.mark.parametrize("selected_model", ["openrouter/free", "anthropic/model:free"])
 @pytest.mark.asyncio
 async def test_llm_settings_update_requires_free_model_and_authenticated_mutation(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, selected_model: str
 ) -> None:
     _as_user("user-a")
     models = (
         OpenRouterModel(
             id="openrouter/free",
             name="Free Models Router",
+            description=None,
+            context_length=None,
+        ),
+        OpenRouterModel(
+            id="anthropic/model:free",
+            name="Example Free Model",
             description=None,
             context_length=None,
         ),
@@ -363,7 +370,7 @@ async def test_llm_settings_update_requires_free_model_and_authenticated_mutatio
             "api.server._llm_settings_response",
             new=AsyncMock(
                 return_value={
-                    "selected_model": "openrouter/free",
+                    "selected_model": selected_model,
                     "default_model": "openrouter/free",
                     "models": [],
                 }
@@ -375,9 +382,10 @@ async def test_llm_settings_update_requires_free_model_and_authenticated_mutatio
         ) as client:
             response = await client.put(
                 "/api/llm/settings",
-                json={"selected_model": "openrouter/free"},
+                json={"selected_model": selected_model},
             )
     assert response.status_code == 200
-    set_model.assert_awaited_once_with("openrouter/free", updated_by="user-a")
-    gateway.update_model.assert_awaited_once_with("openrouter/free")
+    assert response.json()["selected_model"] == selected_model
+    set_model.assert_awaited_once_with(selected_model, updated_by="user-a")
+    gateway.update_model.assert_awaited_once_with(selected_model)
     gateway.close.assert_awaited_once_with()

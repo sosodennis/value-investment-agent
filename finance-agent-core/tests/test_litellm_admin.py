@@ -52,8 +52,17 @@ async def test_list_filters_unmanaged_models_and_redacts_key() -> None:
     assert "secret" not in repr(keys[0])
 
 
+@pytest.mark.parametrize(
+    ("model", "litellm_model"),
+    [
+        ("openrouter/free", "openrouter/openrouter/free"),
+        ("anthropic/model:free", "openrouter/anthropic/model:free"),
+    ],
+)
 @pytest.mark.asyncio
-async def test_add_key_sends_secret_only_to_gateway() -> None:
+async def test_add_key_sends_secret_only_to_gateway(
+    model: str, litellm_model: str
+) -> None:
     captured: dict[str, object] = {}
 
     async def handler(request: httpx.Request) -> httpx.Response:
@@ -70,13 +79,12 @@ async def test_add_key_sends_secret_only_to_gateway() -> None:
         openrouter_headers={"X-Title": "Tests"},
         http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
     )
-    managed = await client.add_key(
-        key="sk-or-v1-secret", label="test", model="openrouter/free"
-    )
+    managed = await client.add_key(key="sk-or-v1-secret", label="test", model=model)
     await client.close()
     assert managed.id == "created-id"
     assert captured["model_name"] == "openrouter-default"
     assert captured["litellm_params"]["api_key"] == "sk-or-v1-secret"
+    assert captured["litellm_params"]["model"] == litellm_model
     assert captured["litellm_params"]["headers"] == {"X-Title": "Tests"}
     assert managed.suffix == key_suffix("sk-or-v1-secret")
     assert managed.fingerprint == key_fingerprint("sk-or-v1-secret")
@@ -206,8 +214,17 @@ async def test_gateway_route_404_is_not_reported_as_missing_managed_key() -> Non
     await client.close()
 
 
+@pytest.mark.parametrize(
+    ("model", "litellm_model"),
+    [
+        ("openrouter/free", "openrouter/openrouter/free"),
+        ("anthropic/model:free", "openrouter/anthropic/model:free"),
+    ],
+)
 @pytest.mark.asyncio
-async def test_update_model_updates_only_project_managed_deployments() -> None:
+async def test_update_model_updates_only_project_managed_deployments(
+    model: str, litellm_model: str
+) -> None:
     requests: list[tuple[str, str, dict[str, object] | None]] = []
 
     async def handler(request: httpx.Request) -> httpx.Response:
@@ -231,7 +248,7 @@ async def test_update_model_updates_only_project_managed_deployments() -> None:
         openrouter_headers={},
         http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
     )
-    await client.update_model("openrouter/free")
+    await client.update_model(model)
     await client.close()
 
     assert requests == [
@@ -239,6 +256,6 @@ async def test_update_model_updates_only_project_managed_deployments() -> None:
         (
             "PATCH",
             "/model/managed-id/update",
-            {"litellm_params": {"model": "openrouter/free"}},
+            {"litellm_params": {"model": litellm_model}},
         ),
     ]
