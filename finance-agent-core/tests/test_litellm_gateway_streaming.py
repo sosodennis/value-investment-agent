@@ -321,3 +321,48 @@ async def test_async_stream_aclose_records_cancellation() -> None:
     assert snapshot.failures == 1
     assert snapshot.stream_interruptions == 1
     await provider.aclose()
+
+
+@pytest.mark.asyncio
+async def test_async_stream_records_time_to_first_token() -> None:
+    stream = (
+        'data: {"model":"openrouter/free","choices":[{"delta":{"content":"one"}}]}\n\n'
+        "data: [DONE]\n\n"
+    )
+    provider = _provider(
+        httpx.MockTransport(
+            lambda request: httpx.Response(200, text=stream, request=request)
+        )
+    )
+
+    events = [event async for event in provider.astream(_request())]
+
+    assert [event.kind for event in events] == ["started", "delta", "completed"]
+    snapshot = provider.telemetry.snapshot()
+    assert snapshot.successes == 1
+    assert snapshot.total_time_to_first_token_ms > 0
+    await provider.aclose()
+
+
+@pytest.mark.asyncio
+async def test_interrupted_async_stream_records_time_to_first_token() -> None:
+    stream = (
+        'data: {"model":"openrouter/free","choices":[{"delta":{"content":"partial"}}]}\n\n'
+        'data: {"broken":\n\n'
+    )
+    provider = _provider(
+        httpx.MockTransport(
+            lambda request: httpx.Response(200, text=stream, request=request)
+        )
+    )
+
+    with pytest.raises(LLMProviderError) as raised:
+        async for _ in provider.astream(_request()):
+            pass
+
+    assert raised.value.code is LLMErrorCode.STREAM_INTERRUPTED
+    assert raised.value.partial_output == "partial"
+    snapshot = provider.telemetry.snapshot()
+    assert snapshot.failures == 1
+    assert snapshot.total_time_to_first_token_ms > 0
+    await provider.aclose()
