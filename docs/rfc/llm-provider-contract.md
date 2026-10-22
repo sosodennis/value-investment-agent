@@ -49,7 +49,7 @@ outcomes without prompt, cookie, token, or key material.
 | `/stream` task creation | authenticated session ownership | migrated; principal is bound before LangGraph execution |
 | LiteLLM gateway adapter | OpenAI-compatible HTTP client | migrated; user-scoped route resolution and attribution fields |
 | key settings API | LiteLLM management client | migrated; authenticated users register into their opaque pool alias |
-| retry/cooldown and multi-worker selection | gateway reliability policy | follow-up issue #91 |
+| retry/cooldown and multi-worker selection | gateway reliability policy | bounded adapter policy merged; Redis coordination in #91; live proof in #97 |
 | pinned LiteLLM image and disposable OpenRouter evidence | deployment/POC | follow-up issue #92 |
 | authenticated key API ownership test matrix | control/data-plane integration | follow-up issue #95 |
 | frontend workflow acceptance | browser UX | follow-up issue #96 |
