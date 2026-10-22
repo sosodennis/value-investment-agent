@@ -17,8 +17,8 @@ from sqlalchemy import (
 from .database import Base
 
 
-class AppSetting(Base):
-    __tablename__ = "app_settings"
+class LlmSetting(Base):
+    __tablename__ = "llm_settings"
 
     id = Column(String, primary_key=True)
     value = Column(String, nullable=False)

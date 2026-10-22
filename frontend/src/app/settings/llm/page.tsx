@@ -15,16 +15,16 @@ import {
 } from 'lucide-react';
 
 import {
-    addOpenRouterKey,
-    deleteOpenRouterKey,
+    addLlmProviderKey,
+    deleteLlmProviderKey,
     getLlmSettings,
-    listOpenRouterKeys,
-    LlmProviderApiError,
-    type OpenRouterKey,
+    listLlmProviderKeys,
+    LlmSettingsApiError,
+    type LlmProviderKey,
     type LlmModelOption,
-    testOpenRouterKey,
+    testLlmProviderKey,
     updateLlmSettings,
-} from '@/lib/llm-provider-api';
+} from '@/lib/llm-settings-api';
 import { BeuiSelect } from '@/components/beui/BeuiSelect';
 
 function formatDate(value: string | null | undefined): string {
@@ -35,7 +35,7 @@ function formatDate(value: string | null | undefined): string {
 }
 
 function errorMessage(cause: unknown, fallback: string): string {
-    if (!(cause instanceof LlmProviderApiError)) return fallback;
+    if (!(cause instanceof LlmSettingsApiError)) return fallback;
     switch (cause.message) {
         case 'invalid_key':
             return 'OpenRouter rejected this API key.';
@@ -48,14 +48,14 @@ function errorMessage(cause: unknown, fallback: string): string {
     }
 }
 
-const LABEL_DRAFT_STORAGE_KEY = 'llm-provider-label-draft';
+const LABEL_DRAFT_STORAGE_KEY = 'llm-settings-label-draft';
 
-export default function LlmKeysPage() {
+export default function LlmSettingsPage() {
     const router = useRouter();
     const labelDraftRef = useRef('');
     const redirectingRef = useRef(false);
     const [authenticated, setAuthenticated] = useState(false);
-    const [keys, setKeys] = useState<OpenRouterKey[]>([]);
+    const [keys, setKeys] = useState<LlmProviderKey[]>([]);
     const [label, setLabel] = useState('');
     const [apiKey, setApiKey] = useState('');
     const [error, setError] = useState<string | null>(null);
@@ -68,7 +68,7 @@ export default function LlmKeysPage() {
     const [modelSaving, setModelSaving] = useState(false);
 
     const redirectToLogin = useCallback((cause: unknown): boolean => {
-        if (!(cause instanceof LlmProviderApiError) || cause.status !== 401) {
+        if (!(cause instanceof LlmSettingsApiError) || cause.status !== 401) {
             return false;
         }
         if (redirectingRef.current) return true;
@@ -81,7 +81,7 @@ export default function LlmKeysPage() {
             }
         }
         redirectingRef.current = true;
-        router.replace(`/login?next=${encodeURIComponent('/settings/llm-keys')}`);
+        router.replace(`/login?next=${encodeURIComponent('/settings/llm')}`);
         return true;
     }, [router]);
 
@@ -89,7 +89,7 @@ export default function LlmKeysPage() {
         setLoading(true);
         setError(null);
         try {
-            setKeys(await listOpenRouterKeys());
+            setKeys(await listLlmProviderKeys());
             setAuthenticated(true);
         } catch (cause) {
             if (!redirectToLogin(cause)) {
@@ -154,7 +154,7 @@ export default function LlmKeysPage() {
         setError(null);
         setNotice(null);
         try {
-            const created = await addOpenRouterKey({
+            const created = await addLlmProviderKey({
                 label: label.trim() || 'OpenRouter key',
                 api_key: apiKey,
             });
@@ -172,12 +172,12 @@ export default function LlmKeysPage() {
         }
     }
 
-    async function handleTest(item: OpenRouterKey) {
+    async function handleTest(item: LlmProviderKey) {
         setBusyId(item.id);
         setError(null);
         setNotice(null);
         try {
-            const result = await testOpenRouterKey(item.id);
+            const result = await testLlmProviderKey(item.id);
             setNotice(
                 result.passed
                     ? `${item.label} is healthy.`
@@ -192,7 +192,7 @@ export default function LlmKeysPage() {
         }
     }
 
-    async function handleDelete(item: OpenRouterKey) {
+    async function handleDelete(item: LlmProviderKey) {
         if (!window.confirm(`Delete ${item.label}? New requests will stop using this key.`)) {
             return;
         }
@@ -200,7 +200,7 @@ export default function LlmKeysPage() {
         setError(null);
         setNotice(null);
         try {
-            await deleteOpenRouterKey(item.id);
+            await deleteLlmProviderKey(item.id);
             setKeys((current) => current.filter((key) => key.id !== item.id));
             setNotice(`${item.label} was deleted.`);
         } catch (cause) {
@@ -217,8 +217,8 @@ export default function LlmKeysPage() {
             <div className="mx-auto max-w-5xl">
                 <header className="mb-10 flex flex-col gap-5 border-b border-outline-variant/40 pb-8 md:flex-row md:items-end md:justify-between">
                     <div>
-                        <p className="text-label mb-3">Developer settings</p>
-                        <h1 className="font-headline text-3xl">OpenRouter keys</h1>
+                        <p className="text-label mb-3">LLM settings</p>
+                        <h1 className="font-headline text-3xl">Provider configuration</h1>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-on-surface-variant">
                         <ShieldCheck size={16} className="text-secondary" />

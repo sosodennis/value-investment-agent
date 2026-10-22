@@ -122,9 +122,9 @@ Access the application:
 *   **Frontend**: [http://localhost:3000](http://localhost:3000)
 *   **Backend API**: [http://localhost:8000](http://localhost:8000)
 *   **API Documentation**: [http://localhost:8000/docs](http://localhost:8000/docs)
-*   **Provider settings**: [http://localhost:3000/settings/llm-keys](http://localhost:3000/settings/llm-keys)
+*   **LLM settings**: [http://localhost:3000/settings/llm](http://localhost:3000/settings/llm)
 
-Open the provider settings page, add one or more OpenRouter keys, and select a
+Open the LLM settings page, add one or more OpenRouter keys, and select a
 free model. The backend sends all application requests through the internal
 `openrouter-default` LiteLLM route.
 

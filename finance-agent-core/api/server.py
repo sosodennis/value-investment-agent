@@ -62,7 +62,7 @@ from src.infrastructure.database import init_db
 from src.infrastructure.llm.litellm_admin import (
     LiteLLMAdminClient,
     LiteLLMAdminError,
-    ManagedKey,
+    ManagedLlmKey,
     key_fingerprint,
     validate_model_id,
 )
@@ -248,7 +248,7 @@ app.include_router(auth_router)
 async def handle_request_validation_error(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
-    if request.url.path == "/api/settings/openrouter-keys" and request.method == "POST":
+    if request.url.path == "/api/llm/provider-keys" and request.method == "POST":
         detail = [
             {key: error[key] for key in ("loc", "msg", "type") if key in error}
             for error in exc.errors()
@@ -295,12 +295,12 @@ async def ready(request: Request) -> dict[str, str]:
     return {"status": "ready"}
 
 
-class OpenRouterKeyCreateRequest(BaseModel):
+class LlmProviderKeyCreateRequest(BaseModel):
     label: str = Field(default="OpenRouter key", min_length=1, max_length=80)
     api_key: SecretStr = Field(min_length=20, max_length=500)
 
 
-class OpenRouterKeyResponse(BaseModel):
+class LlmProviderKeyResponse(BaseModel):
     id: str
     label: str
     suffix: str
@@ -308,7 +308,7 @@ class OpenRouterKeyResponse(BaseModel):
     created_at: str | None = None
 
 
-class OpenRouterKeyTestResponse(BaseModel):
+class LlmProviderKeyTestResponse(BaseModel):
     id: str
     passed: bool
     status: Literal["healthy", "invalid_key", "rate_limited", "unavailable"]
@@ -374,8 +374,8 @@ def get_litellm_admin_client() -> LiteLLMAdminClient:
     )
 
 
-def _managed_key_response(key: ManagedKey) -> OpenRouterKeyResponse:
-    return OpenRouterKeyResponse(
+def _managed_key_response(key: ManagedLlmKey) -> LlmProviderKeyResponse:
+    return LlmProviderKeyResponse(
         id=key.id,
         label=key.label,
         suffix=key.suffix,
@@ -384,17 +384,17 @@ def _managed_key_response(key: ManagedKey) -> OpenRouterKeyResponse:
     )
 
 
-llm_keys_router = APIRouter(
-    prefix="/api/settings/openrouter-keys",
-    tags=["LLM provider settings"],
+llm_provider_keys_router = APIRouter(
+    prefix="/api/llm/provider-keys",
+    tags=["LLM settings"],
 )
 
 
-@llm_keys_router.get("", response_model=list[OpenRouterKeyResponse])
-async def list_openrouter_keys(
+@llm_provider_keys_router.get("", response_model=list[LlmProviderKeyResponse])
+async def list_llm_provider_keys(
     principal: AuthPrincipal = Depends(require_current_user),
     client: LiteLLMAdminClient = Depends(get_litellm_admin_client),
-) -> list[OpenRouterKeyResponse]:
+) -> list[LlmProviderKeyResponse]:
     try:
         owned_ids = await get_ownership_service().owned_ids(
             user_id=_user_id(principal), resource_type="provider_key"
@@ -408,12 +408,14 @@ async def list_openrouter_keys(
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
-@llm_keys_router.post("", response_model=OpenRouterKeyResponse, status_code=201)
-async def add_openrouter_key(
-    request: OpenRouterKeyCreateRequest,
+@llm_provider_keys_router.post(
+    "", response_model=LlmProviderKeyResponse, status_code=201
+)
+async def add_llm_provider_key(
+    request: LlmProviderKeyCreateRequest,
     principal: AuthPrincipal = Depends(require_current_user_mutation),
     client: LiteLLMAdminClient = Depends(get_litellm_admin_client),
-) -> OpenRouterKeyResponse:
+) -> LlmProviderKeyResponse:
     raw_key = request.api_key.get_secret_value()
     try:
         await test_openrouter_key(raw_key)
@@ -458,12 +460,14 @@ async def add_openrouter_key(
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
-@llm_keys_router.post("/{key_id}/test", response_model=OpenRouterKeyTestResponse)
-async def test_openrouter_key_route(
+@llm_provider_keys_router.post(
+    "/{key_id}/test", response_model=LlmProviderKeyTestResponse
+)
+async def test_llm_provider_key(
     key_id: str,
     principal: AuthPrincipal = Depends(require_current_user_mutation),
     client: LiteLLMAdminClient = Depends(get_litellm_admin_client),
-) -> OpenRouterKeyTestResponse:
+) -> LlmProviderKeyTestResponse:
     try:
         key_id = validate_model_id(key_id)
         if not await get_ownership_service().owns(
@@ -486,12 +490,12 @@ async def test_openrouter_key_route(
             if reason in {"invalid_key", "rate_limited", "unavailable"}
             else "unavailable"
         )
-        return OpenRouterKeyTestResponse(id=key_id, passed=False, status=status)
-    return OpenRouterKeyTestResponse(id=key_id, passed=True, status="healthy")
+        return LlmProviderKeyTestResponse(id=key_id, passed=False, status=status)
+    return LlmProviderKeyTestResponse(id=key_id, passed=True, status="healthy")
 
 
-@llm_keys_router.delete("/{key_id}", status_code=204)
-async def delete_openrouter_key(
+@llm_provider_keys_router.delete("/{key_id}", status_code=204)
+async def delete_llm_provider_key(
     key_id: str,
     principal: AuthPrincipal = Depends(require_current_user_mutation),
     client: LiteLLMAdminClient = Depends(get_litellm_admin_client),
@@ -515,12 +519,12 @@ async def delete_openrouter_key(
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
-app.include_router(llm_keys_router)
+app.include_router(llm_provider_keys_router)
 
 
 llm_settings_router = APIRouter(
-    prefix="/api/settings/llm",
-    tags=["LLM provider settings"],
+    prefix="/api/llm/settings",
+    tags=["LLM settings"],
 )
 
 

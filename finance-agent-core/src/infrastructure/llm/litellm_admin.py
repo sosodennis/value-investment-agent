@@ -22,7 +22,7 @@ class LiteLLMAdminError(RuntimeError):
 
 
 @dataclass(frozen=True)
-class ManagedKey:
+class ManagedLlmKey:
     id: str
     label: str
     suffix: str
@@ -64,13 +64,13 @@ class LiteLLMAdminClient:
             await self._http_client.aclose()
             self._http_client = None
 
-    async def list_managed(self) -> list[ManagedKey]:
+    async def list_managed(self) -> list[ManagedLlmKey]:
         payload = await self._request("GET", "/model/info")
         models = payload.get("data", payload) if isinstance(payload, Mapping) else []
         if not isinstance(models, list):
             return []
 
-        result: list[ManagedKey] = []
+        result: list[ManagedLlmKey] = []
         for model in models:
             if not isinstance(model, Mapping):
                 continue
@@ -81,7 +81,7 @@ class LiteLLMAdminClient:
             if not isinstance(model_id, str) or not model_id:
                 continue
             result.append(
-                ManagedKey(
+                ManagedLlmKey(
                     id=model_id,
                     label=str(info.get("label") or "OpenRouter key"),
                     suffix=str(info.get("suffix") or "****"),
@@ -101,7 +101,7 @@ class LiteLLMAdminClient:
         model: str,
         model_name: str = DEFAULT_MODEL_ALIAS,
         existing_ids: Collection[str] | None = None,
-    ) -> ManagedKey:
+    ) -> ManagedLlmKey:
         """Register a key in a server-selected LiteLLM deployment pool.
 
         ``existing_ids`` scopes idempotent duplicate detection to the caller's
@@ -151,7 +151,7 @@ class LiteLLMAdminClient:
             if match is None:
                 raise LiteLLMAdminError("gateway did not confirm key registration")
             model_id = match.id
-        return ManagedKey(
+        return ManagedLlmKey(
             id=model_id,
             label=label,
             suffix=key_suffix(key),

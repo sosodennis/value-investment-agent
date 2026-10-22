@@ -37,9 +37,10 @@ export function AppHeader() {
                     <Bell size={18} />
                 </button>
                 {user ? <Link
-                    href="/settings/llm-keys"
+                    href="/settings/llm"
                     className="p-2 text-on-surface-variant hover:text-on-surface transition-colors duration-200 focus:ring-2 focus:ring-primary-container focus:outline-none rounded"
-                    aria-label="Settings"
+                    aria-label="LLM settings"
+                    title="LLM settings"
                 >
                     <Settings size={18} />
                 </Link> : null}

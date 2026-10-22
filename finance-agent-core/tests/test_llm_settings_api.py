@@ -13,7 +13,7 @@ from src.auth.interface.dependencies import (
     require_current_user,
     require_current_user_mutation,
 )
-from src.infrastructure.llm.litellm_admin import ManagedKey, key_fingerprint
+from src.infrastructure.llm.litellm_admin import ManagedLlmKey, key_fingerprint
 from src.infrastructure.llm.openrouter_key_test import OpenRouterKeyTestError
 from src.infrastructure.llm.openrouter_models import OpenRouterModel
 from src.shared.llm.routes import user_route_alias
@@ -62,7 +62,7 @@ async def test_provider_settings_require_authenticated_user_even_with_admin_toke
         transport=httpx.ASGITransport(app=app), base_url="http://testserver"
     ) as client:
         response = await client.get(
-            "/api/settings/openrouter-keys",
+            "/api/llm/provider-keys",
             headers={"Authorization": "Bearer legacy-admin-token"},
         )
     assert response.status_code == 401
@@ -82,8 +82,8 @@ async def test_list_llm_keys_returns_only_current_users_owned_metadata(
     _as_user("user-a")
     ownership = _ownership(owned_ids={"managed-a"})
     managed = [
-        ManagedKey("managed-a", "primary", "9abc", "fingerprint-a", None),
-        ManagedKey("managed-b", "other user", "8def", "fingerprint-b", None),
+        ManagedLlmKey("managed-a", "primary", "9abc", "fingerprint-a", None),
+        ManagedLlmKey("managed-b", "other user", "8def", "fingerprint-b", None),
     ]
     with (
         patch("api.server.get_ownership_service", return_value=ownership),
@@ -95,7 +95,7 @@ async def test_list_llm_keys_returns_only_current_users_owned_metadata(
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://testserver"
         ) as client:
-            response = await client.get("/api/settings/openrouter-keys")
+            response = await client.get("/api/llm/provider-keys")
 
     assert response.status_code == 200
     assert response.json() == [
@@ -121,7 +121,7 @@ async def test_add_key_registers_in_current_users_gateway_pool(
     monkeypatch.setenv("LLM_GATEWAY_API_KEY", "gateway-admin")
     _as_user("user-a")
     ownership = _ownership()
-    managed = ManagedKey(
+    managed = ManagedLlmKey(
         "managed-a", "primary", "9abc", "fingerprint-a", "2026-10-21T00:00:00+00:00"
     )
     with (
@@ -140,7 +140,7 @@ async def test_add_key_registers_in_current_users_gateway_pool(
             transport=httpx.ASGITransport(app=app), base_url="http://testserver"
         ) as client:
             response = await client.post(
-                "/api/settings/openrouter-keys",
+                "/api/llm/provider-keys",
                 json={"label": "primary", "api_key": "sk-or-v1-test-openrouter-secret"},
             )
 
@@ -160,7 +160,9 @@ async def test_duplicate_key_is_idempotent_only_for_current_owner(
     monkeypatch.setenv("LLM_GATEWAY_API_KEY", "gateway-admin")
     _as_user("user-a")
     secret = "sk-or-v1-test-openrouter-secret"
-    existing = ManagedKey("managed-a", "primary", "9abc", key_fingerprint(secret), None)
+    existing = ManagedLlmKey(
+        "managed-a", "primary", "9abc", key_fingerprint(secret), None
+    )
     ownership = _ownership(owned_ids={"managed-a"})
     with (
         patch("api.server.get_ownership_service", return_value=ownership),
@@ -175,7 +177,7 @@ async def test_duplicate_key_is_idempotent_only_for_current_owner(
             transport=httpx.ASGITransport(app=app), base_url="http://testserver"
         ) as client:
             response = await client.post(
-                "/api/settings/openrouter-keys",
+                "/api/llm/provider-keys",
                 json={"label": "renamed", "api_key": secret},
             )
 
@@ -193,8 +195,12 @@ async def test_same_key_owned_by_another_user_is_registered_without_deleting_it(
     monkeypatch.setenv("LLM_GATEWAY_API_KEY", "gateway-admin")
     _as_user("user-b")
     secret = "sk-or-v1-test-openrouter-secret"
-    existing = ManagedKey("managed-a", "user a", "9abc", key_fingerprint(secret), None)
-    created = ManagedKey("managed-b", "user b", "9abc", key_fingerprint(secret), None)
+    existing = ManagedLlmKey(
+        "managed-a", "user a", "9abc", key_fingerprint(secret), None
+    )
+    created = ManagedLlmKey(
+        "managed-b", "user b", "9abc", key_fingerprint(secret), None
+    )
     ownership = _ownership(owned_ids=set())
     with (
         patch("api.server.get_ownership_service", return_value=ownership),
@@ -212,7 +218,7 @@ async def test_same_key_owned_by_another_user_is_registered_without_deleting_it(
             transport=httpx.ASGITransport(app=app), base_url="http://testserver"
         ) as client:
             response = await client.post(
-                "/api/settings/openrouter-keys",
+                "/api/llm/provider-keys",
                 json={"label": "user b", "api_key": secret},
             )
 
@@ -242,7 +248,7 @@ async def test_add_key_does_not_register_when_openrouter_probe_fails(
             transport=httpx.ASGITransport(app=app), base_url="http://testserver"
         ) as client:
             response = await client.post(
-                "/api/settings/openrouter-keys",
+                "/api/llm/provider-keys",
                 json={"label": "primary", "api_key": "sk-or-v1-test-secret"},
             )
     assert response.status_code == 400
@@ -261,7 +267,7 @@ async def test_validation_error_does_not_echo_submitted_key(
         transport=httpx.ASGITransport(app=app), base_url="http://testserver"
     ) as client:
         response = await client.post(
-            "/api/settings/openrouter-keys",
+            "/api/llm/provider-keys",
             json={"label": "primary", "api_key": secret},
         )
     assert response.status_code == 422
@@ -286,12 +292,8 @@ async def test_test_and_delete_reject_key_owned_by_another_user(
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://testserver"
         ) as client:
-            test_response = await client.post(
-                "/api/settings/openrouter-keys/managed-b/test"
-            )
-            delete_response = await client.delete(
-                "/api/settings/openrouter-keys/managed-b"
-            )
+            test_response = await client.post("/api/llm/provider-keys/managed-b/test")
+            delete_response = await client.delete("/api/llm/provider-keys/managed-b")
 
     assert test_response.status_code == 404
     assert delete_response.status_code == 404
@@ -320,7 +322,7 @@ async def test_llm_settings_lists_free_models_for_authenticated_user() -> None:
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://testserver"
         ) as client:
-            response = await client.get("/api/settings/llm")
+            response = await client.get("/api/llm/settings")
     assert response.status_code == 200
     assert response.json()["selected_model"] == "openrouter/free"
     assert response.json()["models"][0]["id"] == "openrouter/free"
@@ -344,7 +346,7 @@ async def test_llm_settings_update_requires_free_model_and_authenticated_mutatio
             transport=httpx.ASGITransport(app=app), base_url="http://testserver"
         ) as client:
             response = await client.put(
-                "/api/settings/llm",
+                "/api/llm/settings",
                 json={"selected_model": "openai/gpt-4o"},
             )
     assert response.status_code == 400
@@ -372,7 +374,7 @@ async def test_llm_settings_update_requires_free_model_and_authenticated_mutatio
             transport=httpx.ASGITransport(app=app), base_url="http://testserver"
         ) as client:
             response = await client.put(
-                "/api/settings/llm",
+                "/api/llm/settings",
                 json={"selected_model": "openrouter/free"},
             )
     assert response.status_code == 200

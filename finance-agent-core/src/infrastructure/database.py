@@ -38,7 +38,7 @@ async def init_db():
             UserModel,
         )
 
-        from .models import AppSetting, Artifact, ChatMessage  # noqa: F401
+        from .models import Artifact, ChatMessage, LlmSetting  # noqa: F401
 
         await conn.run_sync(Base.metadata.create_all)
 

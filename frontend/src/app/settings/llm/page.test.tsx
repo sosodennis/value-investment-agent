@@ -1,15 +1,15 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { LlmProviderApiError } from '@/lib/llm-provider-api';
-import LlmKeysPage from './page';
+import { LlmSettingsApiError } from '@/lib/llm-settings-api';
+import LlmSettingsPage from './page';
 
 const api = vi.hoisted(() => ({
-    addOpenRouterKey: vi.fn(),
-    deleteOpenRouterKey: vi.fn(),
+    addLlmProviderKey: vi.fn(),
+    deleteLlmProviderKey: vi.fn(),
     getLlmSettings: vi.fn(),
-    listOpenRouterKeys: vi.fn(),
-    testOpenRouterKey: vi.fn(),
+    listLlmProviderKeys: vi.fn(),
+    testLlmProviderKey: vi.fn(),
     updateLlmSettings: vi.fn(),
 }));
 
@@ -23,9 +23,9 @@ const existingKey = {
     created_at: '2026-10-21T00:00:00Z',
 };
 
-vi.mock('@/lib/llm-provider-api', () => ({
+vi.mock('@/lib/llm-settings-api', () => ({
     ...api,
-    LlmProviderApiError: class LlmProviderApiError extends Error {
+    LlmSettingsApiError: class LlmSettingsApiError extends Error {
         status: number;
 
         constructor(message: string, status: number) {
@@ -39,7 +39,7 @@ vi.mock('next/navigation', () => ({
     useRouter: () => router,
 }));
 
-describe('OpenRouter key settings', () => {
+describe('LLM settings', () => {
     afterEach(() => {
         cleanup();
         vi.restoreAllMocks();
@@ -48,7 +48,7 @@ describe('OpenRouter key settings', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         sessionStorage.clear();
-        api.listOpenRouterKeys.mockResolvedValue([]);
+        api.listLlmProviderKeys.mockResolvedValue([]);
         api.getLlmSettings.mockResolvedValue({
             selected_model: 'openrouter/free',
             default_model: 'openrouter/free',
@@ -59,7 +59,7 @@ describe('OpenRouter key settings', () => {
                 context_length: null,
             }],
         });
-        api.addOpenRouterKey.mockResolvedValue({
+        api.addLlmProviderKey.mockResolvedValue({
             id: 'managed-1',
             label: 'Primary key',
             suffix: 'cdef',
@@ -69,8 +69,8 @@ describe('OpenRouter key settings', () => {
     });
 
     it('loads the signed-in settings session and clears the one-time key after adding', async () => {
-        render(<LlmKeysPage />);
-        await waitFor(() => expect(api.listOpenRouterKeys).toHaveBeenCalledWith());
+        render(<LlmSettingsPage />);
+        await waitFor(() => expect(api.listLlmProviderKeys).toHaveBeenCalledWith());
 
         fireEvent.change(screen.getByLabelText('Label'), {
             target: { value: 'Primary key' },
@@ -82,7 +82,7 @@ describe('OpenRouter key settings', () => {
 
         await screen.findByText('Primary key');
         screen.getByText('Configured');
-        expect(api.addOpenRouterKey).toHaveBeenCalledWith({
+        expect(api.addLlmProviderKey).toHaveBeenCalledWith({
             label: 'Primary key',
             api_key: 'sk-or-v1-test-openrouter-secret',
         });
@@ -90,30 +90,30 @@ describe('OpenRouter key settings', () => {
     });
 
     it('tests a configured key and reports the result', async () => {
-        api.listOpenRouterKeys.mockResolvedValue([existingKey]);
-        api.testOpenRouterKey.mockResolvedValue({
+        api.listLlmProviderKeys.mockResolvedValue([existingKey]);
+        api.testLlmProviderKey.mockResolvedValue({
             id: existingKey.id,
             passed: true,
             status: 'healthy',
         });
-        render(<LlmKeysPage />);
+        render(<LlmSettingsPage />);
         await screen.findByText(existingKey.label);
         fireEvent.click(screen.getByRole('button', { name: 'Test' }));
 
         await screen.findByText('Primary key is healthy.');
-        expect(api.testOpenRouterKey).toHaveBeenCalledWith(existingKey.id);
+        expect(api.testLlmProviderKey).toHaveBeenCalledWith(existingKey.id);
     });
 
     it('deletes a configured key after confirmation', async () => {
-        api.listOpenRouterKeys.mockResolvedValue([existingKey]);
-        api.deleteOpenRouterKey.mockResolvedValue(undefined);
+        api.listLlmProviderKeys.mockResolvedValue([existingKey]);
+        api.deleteLlmProviderKey.mockResolvedValue(undefined);
         const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
-        render(<LlmKeysPage />);
+        render(<LlmSettingsPage />);
         await screen.findByText(existingKey.label);
         fireEvent.click(screen.getByRole('button', { name: 'Delete Primary key' }));
 
         await screen.findByText('Primary key was deleted.');
-        expect(api.deleteOpenRouterKey).toHaveBeenCalledWith(existingKey.id);
+        expect(api.deleteLlmProviderKey).toHaveBeenCalledWith(existingKey.id);
         expect(confirm).toHaveBeenCalledOnce();
         expect(screen.queryByText(existingKey.label)).toBeNull();
     });
@@ -156,7 +156,7 @@ describe('OpenRouter key settings', () => {
             ],
         });
 
-        render(<LlmKeysPage />);
+        render(<LlmSettingsPage />);
         const picker = await screen.findByRole('button', { name: 'Default OpenRouter model' });
         fireEvent.click(picker);
         fireEvent.click(await screen.findByRole('option', { name: /Example Free Model/ }));
@@ -166,34 +166,34 @@ describe('OpenRouter key settings', () => {
     });
 
     it('redirects expired sessions and preserves only the non-secret label draft', async () => {
-        const error = new LlmProviderApiError(
+        const error = new LlmSettingsApiError(
             'authentication is required',
             401,
         );
-        api.listOpenRouterKeys.mockRejectedValue(error);
-        const firstRender = render(<LlmKeysPage />);
+        api.listLlmProviderKeys.mockRejectedValue(error);
+        const firstRender = render(<LlmSettingsPage />);
         fireEvent.change(screen.getByLabelText('Label'), {
             target: { value: 'Keep this label' },
         });
 
         await waitFor(() =>
             expect(router.replace).toHaveBeenCalledWith(
-                '/login?next=%2Fsettings%2Fllm-keys',
+                '/login?next=%2Fsettings%2Fllm',
             ),
         );
-        expect(sessionStorage.getItem('llm-provider-label-draft')).toBe(
+        expect(sessionStorage.getItem('llm-settings-label-draft')).toBe(
             'Keep this label',
         );
         expect(sessionStorage.getItem('openrouter-api-key')).toBeNull();
 
         firstRender.unmount();
-        api.listOpenRouterKeys.mockResolvedValue([]);
-        render(<LlmKeysPage />);
+        api.listLlmProviderKeys.mockResolvedValue([]);
+        render(<LlmSettingsPage />);
         await waitFor(() =>
             expect(
                 (screen.getByLabelText('Label') as HTMLInputElement).value,
             ).toBe('Keep this label'),
         );
-        expect(sessionStorage.getItem('llm-provider-label-draft')).toBeNull();
+        expect(sessionStorage.getItem('llm-settings-label-draft')).toBeNull();
     });
 });

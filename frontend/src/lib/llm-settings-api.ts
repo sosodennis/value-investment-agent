@@ -4,18 +4,18 @@ import { csrfHeaders } from '@/lib/auth-api';
 
 const API_URL = process.env.NEXT_PUBLIC_LANGGRAPH_URL || 'http://localhost:8000';
 
-export type OpenRouterKey = components['schemas']['OpenRouterKeyResponse'];
-export type OpenRouterKeyTestResult =
-    components['schemas']['OpenRouterKeyTestResponse'];
+export type LlmProviderKey = components['schemas']['LlmProviderKeyResponse'];
+export type LlmProviderKeyTestResult =
+    components['schemas']['LlmProviderKeyTestResponse'];
 export type LlmModelOption = components['schemas']['LlmModelOptionResponse'];
 export type LlmSettings = components['schemas']['LlmSettingsResponse'];
 
-export class LlmProviderApiError extends Error {
+export class LlmSettingsApiError extends Error {
     readonly status: number;
 
     constructor(message: string, status: number) {
         super(message);
-        this.name = 'LlmProviderApiError';
+        this.name = 'LlmSettingsApiError';
         this.status = status;
     }
 }
@@ -44,7 +44,7 @@ function readRecord(value: unknown, context: string): UnknownRecord {
     return value;
 }
 
-function parseOpenRouterKey(value: unknown, context: string): OpenRouterKey {
+function parseLlmProviderKey(value: unknown, context: string): LlmProviderKey {
     const record = readRecord(value, context);
     return {
         id: readString(record.id, `${context}.id`),
@@ -55,12 +55,12 @@ function parseOpenRouterKey(value: unknown, context: string): OpenRouterKey {
     };
 }
 
-function parseOpenRouterKeys(value: unknown): OpenRouterKey[] {
+function parseLlmProviderKeys(value: unknown): LlmProviderKey[] {
     if (!Array.isArray(value)) {
-        throw new TypeError('openrouter_keys must be an array.');
+        throw new TypeError('llm_provider_keys must be an array.');
     }
     return value.map((entry, index) =>
-        parseOpenRouterKey(entry, `openrouter_keys[${index}]`)
+        parseLlmProviderKey(entry, `llm_provider_keys[${index}]`)
     );
 }
 
@@ -96,8 +96,8 @@ function parseLlmSettings(value: unknown): LlmSettings {
     };
 }
 
-function parseOpenRouterKeyTestResult(value: unknown): OpenRouterKeyTestResult {
-    const record = readRecord(value, 'openrouter_key_test');
+function parseLlmProviderKeyTestResult(value: unknown): LlmProviderKeyTestResult {
+    const record = readRecord(value, 'llm_provider_key_test');
     const status = record.status;
     if (
         status !== 'healthy' &&
@@ -105,13 +105,13 @@ function parseOpenRouterKeyTestResult(value: unknown): OpenRouterKeyTestResult {
         status !== 'rate_limited' &&
         status !== 'unavailable'
     ) {
-        throw new TypeError('openrouter_key_test.status has an unsupported value.');
+        throw new TypeError('llm_provider_key_test.status has an unsupported value.');
     }
     if (typeof record.passed !== 'boolean') {
-        throw new TypeError('openrouter_key_test.passed must be a boolean.');
+        throw new TypeError('llm_provider_key_test.passed must be a boolean.');
     }
     return {
-        id: readString(record.id, 'openrouter_key_test.id'),
+        id: readString(record.id, 'llm_provider_key_test.id'),
         passed: record.passed,
         status,
     };
@@ -133,12 +133,12 @@ async function request<T>(
     });
 
     if (!response.ok) {
-        let message = `LLM provider request failed (HTTP ${response.status}).`;
+        let message = `LLM settings request failed (HTTP ${response.status}).`;
         try {
             const payload: unknown = await response.json();
             message = parseApiErrorMessage(payload) ?? message;
         } catch {}
-        throw new LlmProviderApiError(message, response.status);
+        throw new LlmSettingsApiError(message, response.status);
     }
 
     if (response.status === 204) {
@@ -161,16 +161,16 @@ export async function deleteLocalAdminSession(): Promise<void> {
     });
 }
 
-export function listOpenRouterKeys(): Promise<OpenRouterKey[]> {
-    return request('/api/settings/openrouter-keys', parseOpenRouterKeys);
+export function listLlmProviderKeys(): Promise<LlmProviderKey[]> {
+    return request('/api/llm/provider-keys', parseLlmProviderKeys);
 }
 
-export function addOpenRouterKey(input: {
+export function addLlmProviderKey(input: {
     label: string;
     api_key: string;
-}): Promise<OpenRouterKey> {
-    return request('/api/settings/openrouter-keys', (value) =>
-        parseOpenRouterKey(value, 'openrouter_key'),
+}): Promise<LlmProviderKey> {
+    return request('/api/llm/provider-keys', (value) =>
+        parseLlmProviderKey(value, 'llm_provider_key'),
         {
             method: 'POST',
             body: JSON.stringify(input),
@@ -178,30 +178,30 @@ export function addOpenRouterKey(input: {
     );
 }
 
-export function testOpenRouterKey(
+export function testLlmProviderKey(
     keyId: string
-): Promise<OpenRouterKeyTestResult> {
+): Promise<LlmProviderKeyTestResult> {
     return request(
-        `/api/settings/openrouter-keys/${encodeURIComponent(keyId)}/test`,
-        parseOpenRouterKeyTestResult,
+        `/api/llm/provider-keys/${encodeURIComponent(keyId)}/test`,
+        parseLlmProviderKeyTestResult,
         { method: 'POST' }
     );
 }
 
-export function deleteOpenRouterKey(keyId: string): Promise<void> {
+export function deleteLlmProviderKey(keyId: string): Promise<void> {
     return request(
-        `/api/settings/openrouter-keys/${encodeURIComponent(keyId)}`,
+        `/api/llm/provider-keys/${encodeURIComponent(keyId)}`,
         () => undefined,
         { method: 'DELETE' }
     );
 }
 
 export function getLlmSettings(): Promise<LlmSettings> {
-    return request('/api/settings/llm', parseLlmSettings);
+    return request('/api/llm/settings', parseLlmSettings);
 }
 
 export function updateLlmSettings(selectedModel: string): Promise<LlmSettings> {
-    return request('/api/settings/llm', parseLlmSettings, {
+    return request('/api/llm/settings', parseLlmSettings, {
         method: 'PUT',
         body: JSON.stringify({ selected_model: selectedModel }),
     });

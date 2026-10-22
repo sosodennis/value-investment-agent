@@ -113,6 +113,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/llm/provider-keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Llm Provider Keys */
+        get: operations["list_llm_provider_keys_api_llm_provider_keys_get"];
+        put?: never;
+        /** Add Llm Provider Key */
+        post: operations["add_llm_provider_key_api_llm_provider_keys_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/llm/provider-keys/{key_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Llm Provider Key */
+        delete: operations["delete_llm_provider_key_api_llm_provider_keys__key_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/llm/provider-keys/{key_id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test Llm Provider Key */
+        post: operations["test_llm_provider_key_api_llm_provider_keys__key_id__test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/llm/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Llm Settings */
+        get: operations["read_llm_settings_api_llm_settings_get"];
+        /** Update Llm Settings */
+        put: operations["update_llm_settings_api_llm_settings_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/observability/calibration/direction-readiness": {
         parameters: {
             query?: never;
@@ -175,76 +245,6 @@ export interface paths {
         get: operations["get_monitoring_rows_api_observability_monitoring_rows_get"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/llm": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Read Llm Settings */
-        get: operations["read_llm_settings_api_settings_llm_get"];
-        /** Update Llm Settings */
-        put: operations["update_llm_settings_api_settings_llm_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/openrouter-keys": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Openrouter Keys */
-        get: operations["list_openrouter_keys_api_settings_openrouter_keys_get"];
-        put?: never;
-        /** Add Openrouter Key */
-        post: operations["add_openrouter_key_api_settings_openrouter_keys_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/openrouter-keys/{key_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Delete Openrouter Key */
-        delete: operations["delete_openrouter_key_api_settings_openrouter_keys__key_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/openrouter-keys/{key_id}/test": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Test Openrouter Key Route */
-        post: operations["test_openrouter_key_route_api_settings_openrouter_keys__key_id__test_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1133,6 +1133,44 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** LlmProviderKeyCreateRequest */
+        LlmProviderKeyCreateRequest: {
+            /**
+             * Api Key
+             * Format: password
+             */
+            api_key: string;
+            /**
+             * Label
+             * @default OpenRouter key
+             */
+            label: string;
+        };
+        /** LlmProviderKeyResponse */
+        LlmProviderKeyResponse: {
+            /** Created At */
+            created_at?: string | null;
+            /** Fingerprint */
+            fingerprint: string;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Suffix */
+            suffix: string;
+        };
+        /** LlmProviderKeyTestResponse */
+        LlmProviderKeyTestResponse: {
+            /** Id */
+            id: string;
+            /** Passed */
+            passed: boolean;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "healthy" | "invalid_key" | "rate_limited" | "unavailable";
+        };
         /** LlmSettingsResponse */
         LlmSettingsResponse: {
             /** Default Model */
@@ -1340,44 +1378,6 @@ export interface components {
             observed_timeframes?: string[] | null;
             /** Primary Timeframe */
             primary_timeframe?: string | null;
-        };
-        /** OpenRouterKeyCreateRequest */
-        OpenRouterKeyCreateRequest: {
-            /**
-             * Api Key
-             * Format: password
-             */
-            api_key: string;
-            /**
-             * Label
-             * @default OpenRouter key
-             */
-            label: string;
-        };
-        /** OpenRouterKeyResponse */
-        OpenRouterKeyResponse: {
-            /** Created At */
-            created_at?: string | null;
-            /** Fingerprint */
-            fingerprint: string;
-            /** Id */
-            id: string;
-            /** Label */
-            label: string;
-            /** Suffix */
-            suffix: string;
-        };
-        /** OpenRouterKeyTestResponse */
-        OpenRouterKeyTestResponse: {
-            /** Id */
-            id: string;
-            /** Passed */
-            passed: boolean;
-            /**
-             * Status
-             * @enum {string}
-             */
-            status: "healthy" | "invalid_key" | "rate_limited" | "unavailable";
         };
         /** PriceSeriesArtifactData */
         PriceSeriesArtifactData: {
@@ -3188,6 +3188,172 @@ export interface operations {
             };
         };
     };
+    list_llm_provider_keys_api_llm_provider_keys_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmProviderKeyResponse"][];
+                };
+            };
+        };
+    };
+    add_llm_provider_key_api_llm_provider_keys_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LlmProviderKeyCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmProviderKeyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_llm_provider_key_api_llm_provider_keys__key_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_llm_provider_key_api_llm_provider_keys__key_id__test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmProviderKeyTestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_llm_settings_api_llm_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmSettingsResponse"];
+                };
+            };
+        };
+    };
+    update_llm_settings_api_llm_settings_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LlmSettingsUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_direction_calibration_readiness_api_observability_calibration_direction_readiness_get: {
         parameters: {
             query?: {
@@ -3341,172 +3507,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TechnicalMonitoringRowModel"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    read_llm_settings_api_settings_llm_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LlmSettingsResponse"];
-                };
-            };
-        };
-    };
-    update_llm_settings_api_settings_llm_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LlmSettingsUpdateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LlmSettingsResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_openrouter_keys_api_settings_openrouter_keys_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OpenRouterKeyResponse"][];
-                };
-            };
-        };
-    };
-    add_openrouter_key_api_settings_openrouter_keys_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["OpenRouterKeyCreateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OpenRouterKeyResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_openrouter_key_api_settings_openrouter_keys__key_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                key_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    test_openrouter_key_route_api_settings_openrouter_keys__key_id__test_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                key_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OpenRouterKeyTestResponse"];
                 };
             };
             /** @description Validation Error */
