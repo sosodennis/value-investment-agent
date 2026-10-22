@@ -7,8 +7,8 @@ from src.agents.intent.workflow.state import (
     IntentExtractionInput,
     IntentExtractionOutput,
 )
+from src.llm_provider.entrypoint import ModelRoute
 from src.shared.kernel.workflow_contracts import WorkflowNodeResult
-from src.shared.llm.contracts import ModelRoute
 
 
 class _FakeIntentOrchestrator:

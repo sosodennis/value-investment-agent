@@ -31,7 +31,7 @@ from src.agents.technical.subdomains.signal_fusion import (
     assemble_semantic_tags,
 )
 from src.agents.technical.subdomains.verification import VerificationRuntimeService
-from src.infrastructure.llm.provider import get_default_model_route, get_llm_provider
+from src.llm_provider.entrypoint import get_default_model_route, get_llm_provider
 
 
 def _assemble_semantic_tags_default(*args, **kwargs):

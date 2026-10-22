@@ -10,8 +10,14 @@ def test_litellm_poc_uses_database_managed_openrouter_deployments() -> None:
     assert "model_list" not in config
     router_settings = config["router_settings"]
     assert router_settings["num_retries"] == 1
-    assert router_settings["allowed_fails"] == 2
-    assert router_settings["cooldown_time"] == 30
+    assert router_settings["allowed_fails"] == 0
+    assert (
+        router_settings["cooldown_time"]
+        == "os.environ/LLM_PROVIDER_KEY_COOLDOWN_SECONDS"
+    )
+    assert config["litellm_settings"]["callbacks"] == [
+        "provider_key_telemetry.provider_key_telemetry"
+    ]
 
 
 def test_litellm_cooldown_state_uses_shared_redis_configuration() -> None:
@@ -54,8 +60,41 @@ def test_compose_poc_is_pinned_bounded_and_loopback_only() -> None:
         gateway["environment"]["LITELLM_REDIS_PASSWORD"]
         == "${LITELLM_REDIS_PASSWORD:-}"
     )
+    assert (
+        gateway["environment"]["LLM_PROVIDER_KEY_COOLDOWN_SECONDS"]
+        == "${LLM_PROVIDER_KEY_COOLDOWN_SECONDS:-30}"
+    )
+    assert (
+        "./infra/litellm/provider_key_telemetry.py:/app/provider_key_telemetry.py:ro"
+        in gateway["volumes"]
+    )
     assert gateway["depends_on"]["redis"]["condition"] == "service_healthy"
     assert "healthcheck" in gateway
+
+    contract_test = compose["services"]["llm-gateway-contract-test"]
+    assert contract_test["image"] == gateway["image"]
+    assert contract_test["profiles"] == ["llm-gateway-contract-test"]
+    assert contract_test["entrypoint"] == [
+        "python3",
+        "/app/router_retry_contract.py",
+    ]
+    assert contract_test["environment"] == {
+        "LITELLM_REDIS_HOST": "llm-gateway-contract-redis",
+        "LITELLM_REDIS_PORT": 6379,
+        "LLM_PROVIDER_KEY_COOLDOWN_SECONDS": 1,
+    }
+    assert (
+        "./infra/litellm/provider_key_telemetry.py:/app/provider_key_telemetry.py:ro"
+        in contract_test["volumes"]
+    )
+    assert contract_test["depends_on"]["llm-gateway-contract-redis"]["condition"] == (
+        "service_healthy"
+    )
+    contract_redis = compose["services"]["llm-gateway-contract-redis"]
+    assert contract_redis["profiles"] == ["llm-gateway-contract-test"]
+    assert "volumes" not in contract_redis
+    assert "ports" not in contract_redis
+    assert "env_file" not in contract_test
 
 
 def test_backend_requires_request_principal_for_gateway_data_plane() -> None:
@@ -64,6 +103,15 @@ def test_backend_requires_request_principal_for_gateway_data_plane() -> None:
 
     assert (
         "LLM_GATEWAY_REQUIRE_PRINCIPAL=${LLM_GATEWAY_REQUIRE_PRINCIPAL:-true}"
+        in environment
+    )
+    assert "LLM_GATEWAY_MAX_ATTEMPTS=${LLM_GATEWAY_MAX_ATTEMPTS:-3}" in environment
+    assert (
+        "LLM_GATEWAY_MAX_ATTEMPTS_INTERACTIVE=${LLM_GATEWAY_MAX_ATTEMPTS_INTERACTIVE:-2}"
+        in environment
+    )
+    assert (
+        "LLM_GATEWAY_MAX_ATTEMPTS_BACKGROUND=${LLM_GATEWAY_MAX_ATTEMPTS_BACKGROUND:-3}"
         in environment
     )
 

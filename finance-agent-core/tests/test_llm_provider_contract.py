@@ -3,7 +3,7 @@ from collections.abc import AsyncIterator, Iterator
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from src.shared.llm.contracts import (
+from src.llm_provider.entrypoint import (
     ChatMessage,
     ChatRole,
     CompletionRequest,

@@ -18,13 +18,12 @@ from fastapi import (
     HTTPException,
     Query,
     Request,
-    Response,
 )
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field, SecretStr
+from pydantic import BaseModel, ConfigDict
 
 # Add the project root to sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -52,45 +51,35 @@ from src.agents.technical.subdomains.decision_observability import (
     build_technical_monitoring_event_detail_model,
     build_technical_monitoring_row_model,
 )
-from src.auth.entrypoint import auth_router, get_ownership_service
-from src.auth.interface.contracts import Principal as AuthPrincipal
-from src.auth.interface.dependencies import (
+from src.auth.entrypoint import (
+    Principal as AuthPrincipal,
+)
+from src.auth.entrypoint import (
+    auth_router,
+    get_ownership_service,
     require_current_user,
     require_current_user_mutation,
 )
 from src.infrastructure.database import init_db
-from src.infrastructure.llm.litellm_admin import (
-    LiteLLMAdminClient,
-    LiteLLMAdminError,
-    ManagedLlmKey,
-    key_fingerprint,
-    validate_model_id,
-)
-from src.infrastructure.llm.openrouter_key_test import (
-    OpenRouterKeyTestError,
-    test_openrouter_key,
-)
-from src.infrastructure.llm.openrouter_models import (
-    OpenRouterModelsError,
-    list_free_models,
-    validate_free_model,
-)
-from src.infrastructure.llm.provider import close_llm_provider
 from src.infrastructure.sentiment import get_finbert_analyzer
 from src.interface.artifacts.artifact_api_models import (
     ArtifactApiResponse,
     validate_artifact_api_response,
 )
-from src.interface.auth.local_admin import (
-    Principal as LocalPrincipal,
-)
-from src.interface.auth.local_admin import (
-    issue_local_admin_session,
-    validate_local_admin_request,
-)
 from src.interface.events.adapters import adapt_langgraph_event, create_interrupt_event
 from src.interface.events.protocol import AgentEvent
 from src.interface.events.schemas import AgentOutputArtifact
+from src.llm_provider.entrypoint import (
+    ProviderPrincipal,
+    ProviderSettingsError,
+    cleanup_expired_replacements,
+    close_llm_provider,
+    llm_settings_router,
+    provider_keys_router,
+    reset_provider_principal,
+    set_provider_principal,
+    synchronize_selected_model,
+)
 from src.runtime.workspace_runtime_projection import (
     WorkspaceRuntimeActivityRecord,
     WorkspaceRuntimeActivitySegmentRecord,
@@ -101,20 +90,35 @@ from src.runtime.workspace_runtime_projection import (
 )
 from src.services.artifact_manager import artifact_manager
 from src.services.history import history_service
-from src.services.llm_settings import get_selected_model, set_selected_model
 from src.shared.kernel.tools.logger import (
     bind_log_context,
     clear_log_context,
     get_logger,
     log_context,
+    log_event,
 )
 from src.shared.kernel.types import InterruptResumePayload, JSONObject
-from src.shared.llm.context import reset_provider_principal, set_provider_principal
-from src.shared.llm.contracts import ProviderPrincipal
-from src.shared.llm.routes import user_route_alias
 from src.workflow.graph import get_graph
 
 logger = get_logger(__name__)
+
+
+async def _provider_key_cleanup_loop() -> None:
+    while True:
+        try:
+            deleted = await cleanup_expired_replacements()
+            if deleted:
+                log_event(
+                    logger,
+                    event="llm_key_replacement_grace_expired",
+                    message="Expired replacement keys were removed from the gateway",
+                    fields={"deleted_count": deleted},
+                )
+        except asyncio.CancelledError:
+            raise
+        except (HTTPException, ProviderSettingsError):
+            logger.warning("LLM replacement cleanup could not reach the gateway")
+        await asyncio.sleep(60)
 
 
 @asynccontextmanager
@@ -126,15 +130,10 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 [Lifespan] Initializing application resources...")
     # Initialize DB
     await init_db()
-    selected_model = await get_selected_model()
     try:
-        gateway_admin = get_litellm_admin_client()
-        await gateway_admin.update_model(selected_model)
-    except (HTTPException, LiteLLMAdminError) as exc:
+        await synchronize_selected_model()
+    except (HTTPException, ProviderSettingsError) as exc:
         logger.warning("LLM model synchronization skipped: %s", str(exc))
-    finally:
-        if "gateway_admin" in locals():
-            await gateway_admin.close()
 
     # Initialize Graph
     logger.info("🚀 [Lifespan] Building workflow graph...")
@@ -225,10 +224,13 @@ async def lifespan(app: FastAPI):
                 "⚠️ [Lifespan] Dependency matcher warmup failed: %s", str(exc)
             )
 
+    provider_key_cleanup = asyncio.create_task(_provider_key_cleanup_loop())
     logger.info("✅ [Lifespan] Initialization complete.")
     try:
         yield
     finally:
+        provider_key_cleanup.cancel()
+        await asyncio.gather(provider_key_cleanup, return_exceptions=True)
         await close_llm_provider()
         await close_shared_async_client()
         logger.info("🛑 [Lifespan] Shutting down...")
@@ -242,6 +244,8 @@ app = FastAPI(
 )
 
 app.include_router(auth_router)
+app.include_router(provider_keys_router)
+app.include_router(llm_settings_router)
 
 
 @app.exception_handler(RequestValidationError)
@@ -293,300 +297,6 @@ async def ready(request: Request) -> dict[str, str]:
     if not hasattr(request.app.state, "graph"):
         raise HTTPException(status_code=503, detail="application is still starting")
     return {"status": "ready"}
-
-
-class LlmProviderKeyCreateRequest(BaseModel):
-    label: str = Field(default="OpenRouter key", min_length=1, max_length=80)
-    api_key: SecretStr = Field(min_length=20, max_length=500)
-
-
-class LlmProviderKeyResponse(BaseModel):
-    id: str
-    label: str
-    suffix: str
-    fingerprint: str
-    created_at: str | None = None
-
-
-class LlmProviderKeyTestResponse(BaseModel):
-    id: str
-    passed: bool
-    status: Literal["healthy", "invalid_key", "rate_limited", "unavailable"]
-
-
-class LlmModelOptionResponse(BaseModel):
-    id: str
-    name: str
-    description: str | None = None
-    context_length: int | None = None
-
-
-class LlmSettingsResponse(BaseModel):
-    selected_model: str
-    default_model: str
-    models: list[LlmModelOptionResponse]
-
-
-class LlmSettingsUpdateRequest(BaseModel):
-    selected_model: str = Field(min_length=1, max_length=200)
-
-
-@app.post(
-    "/api/auth/local-admin/session",
-    response_model=LocalPrincipal,
-    tags=["Authentication"],
-)
-async def create_local_admin_session(
-    request: Request, response: Response
-) -> LocalPrincipal:
-    """Create the temporary loopback-only admin session used in development."""
-    validate_local_admin_request(request)
-    return issue_local_admin_session(response)
-
-
-@app.delete("/api/auth/local-admin/session", status_code=204, tags=["Authentication"])
-async def delete_local_admin_session(request: Request, response: Response) -> None:
-    validate_local_admin_request(request)
-    response.delete_cookie(key="local_admin_session", path="/")
-
-
-def _user_id(principal: AuthPrincipal) -> str:
-    return principal.user_id
-
-
-def get_litellm_admin_client() -> LiteLLMAdminClient:
-    base_url = os.getenv("LLM_GATEWAY_BASE_URL", "http://localhost:4000").strip()
-    token = os.getenv("LLM_GATEWAY_API_KEY", "").strip()
-    if not base_url or not token:
-        raise HTTPException(
-            status_code=503, detail="LLM gateway administration is unavailable"
-        )
-    openrouter_headers = {
-        "X-Title": os.getenv("OPENROUTER_X_TITLE", "Value Investment Agent")
-    }
-    referer = os.getenv("OPENROUTER_HTTP_REFERER", "").strip()
-    if referer:
-        openrouter_headers["HTTP-Referer"] = referer
-    return LiteLLMAdminClient(
-        base_url=base_url,
-        admin_token=token,
-        openrouter_headers=openrouter_headers,
-    )
-
-
-def _managed_key_response(key: ManagedLlmKey) -> LlmProviderKeyResponse:
-    return LlmProviderKeyResponse(
-        id=key.id,
-        label=key.label,
-        suffix=key.suffix,
-        fingerprint=key.fingerprint,
-        created_at=key.created_at,
-    )
-
-
-llm_provider_keys_router = APIRouter(
-    prefix="/api/llm/provider-keys",
-    tags=["LLM settings"],
-)
-
-
-@llm_provider_keys_router.get("", response_model=list[LlmProviderKeyResponse])
-async def list_llm_provider_keys(
-    principal: AuthPrincipal = Depends(require_current_user),
-    client: LiteLLMAdminClient = Depends(get_litellm_admin_client),
-) -> list[LlmProviderKeyResponse]:
-    try:
-        owned_ids = await get_ownership_service().owned_ids(
-            user_id=_user_id(principal), resource_type="provider_key"
-        )
-        return [
-            _managed_key_response(key)
-            for key in await client.list_managed()
-            if key.id in owned_ids
-        ]
-    except LiteLLMAdminError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-
-
-@llm_provider_keys_router.post(
-    "", response_model=LlmProviderKeyResponse, status_code=201
-)
-async def add_llm_provider_key(
-    request: LlmProviderKeyCreateRequest,
-    principal: AuthPrincipal = Depends(require_current_user_mutation),
-    client: LiteLLMAdminClient = Depends(get_litellm_admin_client),
-) -> LlmProviderKeyResponse:
-    raw_key = request.api_key.get_secret_value()
-    try:
-        await test_openrouter_key(raw_key)
-    except OpenRouterKeyTestError as exc:
-        status = str(exc)
-        code = 429 if status == "rate_limited" else 502
-        if status == "invalid_key":
-            code = 400
-        raise HTTPException(status_code=code, detail=status) from exc
-    try:
-        owned_ids = await get_ownership_service().owned_ids(
-            user_id=_user_id(principal), resource_type="provider_key"
-        )
-        existing = next(
-            (
-                item
-                for item in await client.list_managed()
-                if item.id in owned_ids and item.fingerprint == key_fingerprint(raw_key)
-            ),
-            None,
-        )
-        if existing is not None:
-            return _managed_key_response(existing)
-        selected_model = await get_selected_model()
-        managed = await client.add_key(
-            key=raw_key,
-            label=request.label,
-            model=selected_model,
-            model_name=user_route_alias(_user_id(principal)),
-            existing_ids=owned_ids,
-        )
-        claimed = await get_ownership_service().claim(
-            user_id=_user_id(principal),
-            resource_type="provider_key",
-            resource_id=managed.id,
-        )
-        if not claimed:
-            await client.delete_key(managed.id)
-            raise HTTPException(status_code=409, detail="managed key is already owned")
-        return _managed_key_response(managed)
-    except LiteLLMAdminError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-
-
-@llm_provider_keys_router.post(
-    "/{key_id}/test", response_model=LlmProviderKeyTestResponse
-)
-async def test_llm_provider_key(
-    key_id: str,
-    principal: AuthPrincipal = Depends(require_current_user_mutation),
-    client: LiteLLMAdminClient = Depends(get_litellm_admin_client),
-) -> LlmProviderKeyTestResponse:
-    try:
-        key_id = validate_model_id(key_id)
-        if not await get_ownership_service().owns(
-            user_id=_user_id(principal),
-            resource_type="provider_key",
-            resource_id=key_id,
-        ):
-            raise HTTPException(status_code=404, detail="managed key was not found")
-        await client.test_key(key_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail="invalid managed key id") from exc
-    except LiteLLMAdminError as exc:
-        reason = str(exc)
-        if reason == "not_found":
-            raise HTTPException(
-                status_code=404, detail="managed key was not found"
-            ) from exc
-        status = (
-            reason
-            if reason in {"invalid_key", "rate_limited", "unavailable"}
-            else "unavailable"
-        )
-        return LlmProviderKeyTestResponse(id=key_id, passed=False, status=status)
-    return LlmProviderKeyTestResponse(id=key_id, passed=True, status="healthy")
-
-
-@llm_provider_keys_router.delete("/{key_id}", status_code=204)
-async def delete_llm_provider_key(
-    key_id: str,
-    principal: AuthPrincipal = Depends(require_current_user_mutation),
-    client: LiteLLMAdminClient = Depends(get_litellm_admin_client),
-) -> None:
-    try:
-        key_id = validate_model_id(key_id)
-        if not await get_ownership_service().owns(
-            user_id=_user_id(principal),
-            resource_type="provider_key",
-            resource_id=key_id,
-        ):
-            raise HTTPException(status_code=404, detail="managed key was not found")
-        await client.delete_key(key_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail="invalid managed key id") from exc
-    except LiteLLMAdminError as exc:
-        if str(exc) == "managed key was not found":
-            raise HTTPException(
-                status_code=404, detail="managed key was not found"
-            ) from exc
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-
-
-app.include_router(llm_provider_keys_router)
-
-
-llm_settings_router = APIRouter(
-    prefix="/api/llm/settings",
-    tags=["LLM settings"],
-)
-
-
-async def _llm_settings_response() -> LlmSettingsResponse:
-    try:
-        models = await list_free_models()
-    except OpenRouterModelsError as exc:
-        raise HTTPException(
-            status_code=502, detail="OpenRouter model catalogue is unavailable"
-        ) from exc
-    selected = await get_selected_model()
-    if not any(model.id == selected for model in models):
-        selected = "openrouter/free"
-    return LlmSettingsResponse(
-        selected_model=selected,
-        default_model="openrouter/free",
-        models=[
-            LlmModelOptionResponse(
-                id=model.id,
-                name=model.name,
-                description=model.description,
-                context_length=model.context_length,
-            )
-            for model in models
-        ],
-    )
-
-
-@llm_settings_router.get("", response_model=LlmSettingsResponse)
-async def read_llm_settings(
-    _principal: AuthPrincipal = Depends(require_current_user),
-) -> LlmSettingsResponse:
-    return await _llm_settings_response()
-
-
-@llm_settings_router.put("", response_model=LlmSettingsResponse)
-async def update_llm_settings(
-    request: LlmSettingsUpdateRequest,
-    principal: AuthPrincipal = Depends(require_current_user_mutation),
-) -> LlmSettingsResponse:
-    try:
-        valid = await validate_free_model(request.selected_model)
-    except OpenRouterModelsError as exc:
-        raise HTTPException(
-            status_code=502, detail="OpenRouter model catalogue is unavailable"
-        ) from exc
-    if not valid:
-        raise HTTPException(
-            status_code=400, detail="selected model is not a free OpenRouter model"
-        )
-    client = get_litellm_admin_client()
-    try:
-        await client.update_model(request.selected_model)
-    except LiteLLMAdminError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    finally:
-        await client.close()
-    await set_selected_model(request.selected_model, updated_by=principal.user_id)
-    return await _llm_settings_response()
-
-
-app.include_router(llm_settings_router)
 
 
 @lru_cache

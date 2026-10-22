@@ -25,9 +25,7 @@ from src.agents.technical.interface.contracts import (
 from src.agents.technical.interface.interpretation_prompt_spec import (
     build_interpretation_prompt_spec,
 )
-from src.shared.kernel.tools.logger import get_logger, log_event
-from src.shared.kernel.types import JSONObject
-from src.shared.llm.contracts import (
+from src.llm_provider.entrypoint import (
     ChatMessage,
     ChatRole,
     CompletionRequest,
@@ -35,6 +33,8 @@ from src.shared.llm.contracts import (
     ModelRoute,
     StructuredRequest,
 )
+from src.shared.kernel.tools.logger import get_logger, log_event
+from src.shared.kernel.types import JSONObject
 
 logger = get_logger(__name__)
 

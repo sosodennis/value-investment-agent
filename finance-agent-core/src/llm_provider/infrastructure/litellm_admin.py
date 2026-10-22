@@ -3,40 +3,42 @@
 from __future__ import annotations
 
 from collections.abc import Collection, Mapping
-from dataclasses import dataclass
 from datetime import datetime, timezone
-from hashlib import sha256
 from typing import Final
 from uuid import uuid4
 
 import httpx
 
-from src.shared.llm.routes import DEFAULT_MODEL_ALIAS
+from src.llm_provider.domain.errors import ProviderSettingsError
+from src.llm_provider.domain.key_metadata import (
+    key_fingerprint,
+    key_suffix,
+    validate_model_id,
+)
+from src.llm_provider.domain.provider_models import ManagedProviderKey
+from src.llm_provider.domain.routes import DEFAULT_MODEL_ALIAS
 
 MANAGED_MARKER: Final = "value_investment_agent_managed"
 OPENROUTER_BASE_URL: Final = "https://openrouter.ai/api/v1"
 OPENROUTER_LITELLM_PREFIX: Final = "openrouter/"
+_SAFE_KEY_STATUSES = frozenset(
+    {
+        "untested",
+        "healthy",
+        "cooldown",
+        "invalid_key",
+        "unavailable",
+        "replacement_grace",
+    }
+)
+_SAFE_KEY_ERRORS = frozenset({"invalid_key", "rate_limited", "unavailable"})
 
 
-class LiteLLMAdminError(RuntimeError):
+class LiteLLMAdminError(ProviderSettingsError):
     """A sanitized error raised for a failed management operation."""
 
 
-@dataclass(frozen=True)
-class ManagedLlmKey:
-    id: str
-    label: str
-    suffix: str
-    fingerprint: str
-    created_at: str | None
-
-
-def key_suffix(value: str) -> str:
-    return value[-4:] if len(value) >= 4 else "****"
-
-
-def key_fingerprint(value: str) -> str:
-    return sha256(value.encode("utf-8")).hexdigest()[:12]
+ManagedLlmKey = ManagedProviderKey
 
 
 def _to_litellm_model_id(public_model_id: str) -> str:
@@ -95,6 +97,44 @@ class LiteLLMAdminClient:
                     created_at=str(info.get("created_at"))
                     if info.get("created_at")
                     else None,
+                    status=(
+                        str(info.get("status"))
+                        if isinstance(info.get("status"), str)
+                        and info.get("status") in _SAFE_KEY_STATUSES
+                        else "untested"
+                    ),
+                    last_tested_at=(
+                        str(info.get("last_tested_at"))
+                        if info.get("last_tested_at")
+                        else None
+                    ),
+                    failure_count=(
+                        int(info.get("failure_count"))
+                        if isinstance(info.get("failure_count"), int)
+                        and info.get("failure_count") >= 0
+                        else 0
+                    ),
+                    cooldown_until=(
+                        str(info.get("cooldown_until"))
+                        if info.get("cooldown_until")
+                        else None
+                    ),
+                    last_error=(
+                        str(info.get("last_error"))
+                        if isinstance(info.get("last_error"), str)
+                        and info.get("last_error") in _SAFE_KEY_ERRORS
+                        else None
+                    ),
+                    last_used_at=(
+                        str(info.get("last_used_at"))
+                        if info.get("last_used_at")
+                        else None
+                    ),
+                    replacement_retire_at=(
+                        str(info.get("replacement_retire_at"))
+                        if info.get("replacement_retire_at")
+                        else None
+                    ),
                 )
             )
         return result
@@ -144,6 +184,9 @@ class LiteLLMAdminClient:
                 "suffix": key_suffix(key),
                 "fingerprint": fingerprint,
                 "created_at": now,
+                "status": "healthy",
+                "last_tested_at": now,
+                "failure_count": 0,
             },
         }
         response = await self._request("POST", "/model/new", json=payload)
@@ -151,7 +194,12 @@ class LiteLLMAdminClient:
         if model_id is None:
             registered = await self.list_managed()
             match = next(
-                (item for item in registered if item.fingerprint == fingerprint),
+                (
+                    item
+                    for item in registered
+                    if item.fingerprint == fingerprint
+                    and (existing_ids is None or item.id in existing_ids)
+                ),
                 None,
             )
             if match is None:
@@ -163,6 +211,8 @@ class LiteLLMAdminClient:
             suffix=key_suffix(key),
             fingerprint=fingerprint,
             created_at=now,
+            status="healthy",
+            last_tested_at=now,
         )
 
     async def update_model(self, model: str) -> None:
@@ -175,16 +225,95 @@ class LiteLLMAdminClient:
             )
 
     async def test_key(self, model_id: str) -> bool:
-        if model_id not in {item.id for item in await self.list_managed()}:
+        managed = next(
+            (item for item in await self.list_managed() if item.id == model_id),
+            None,
+        )
+        if managed is None:
             raise LiteLLMAdminError("managed key was not found")
         payload = await self._request("GET", "/health", params={"model_id": model_id})
         unhealthy = payload.get("unhealthy_endpoints")
         healthy = payload.get("healthy_endpoints")
         if isinstance(healthy, list) and healthy:
+            await self._record_health(
+                model_id,
+                status="healthy",
+                failure_count=0,
+                last_error=None,
+            )
             return True
         if isinstance(unhealthy, list) and unhealthy:
+            await self._record_health(
+                model_id,
+                status="invalid_key",
+                failure_count=managed.failure_count + 1,
+                last_error="invalid_key",
+            )
             raise LiteLLMAdminError("invalid_key")
+        await self._record_health(
+            model_id,
+            status="unavailable",
+            failure_count=managed.failure_count + 1,
+            last_error="unavailable",
+        )
         raise LiteLLMAdminError("unavailable")
+
+    async def _record_health(
+        self,
+        model_id: str,
+        *,
+        status: str,
+        failure_count: int,
+        last_error: str | None,
+    ) -> None:
+        await self._update_metadata(
+            model_id,
+            {
+                "status": status,
+                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "failure_count": failure_count,
+                "last_error": last_error,
+            },
+        )
+
+    async def mark_replacement_grace(
+        self, model_id: str, *, retire_at: datetime
+    ) -> None:
+        await self._update_metadata(
+            model_id,
+            {
+                "status": "replacement_grace",
+                "replacement_retire_at": retire_at.astimezone(timezone.utc).isoformat(),
+            },
+        )
+
+    async def cleanup_expired_replacements(self) -> int:
+        now = datetime.now(timezone.utc)
+        expired = [
+            item
+            for item in await self.list_managed()
+            if item.replacement_retire_at is not None
+            and _parse_utc(item.replacement_retire_at) <= now
+        ]
+        for item in expired:
+            await self.delete_key(item.id)
+        return len(expired)
+
+    async def _update_metadata(
+        self, model_id: str, values: Mapping[str, object]
+    ) -> None:
+        model_id = validate_model_id(model_id)
+        managed = next(
+            (item for item in await self.list_managed() if item.id == model_id),
+            None,
+        )
+        if managed is None:
+            raise LiteLLMAdminError("managed key was not found")
+        await self._request(
+            "PATCH",
+            f"/model/{model_id}/update",
+            json={"model_info": dict(values)},
+        )
 
     async def delete_key(self, model_id: str) -> None:
         managed = {item.id for item in await self.list_managed()}
@@ -208,13 +337,17 @@ class LiteLLMAdminClient:
             )
             if response.status_code >= 400:
                 if response.status_code in {401, 403}:
-                    reason = "invalid_key"
+                    reason = "unavailable"
                 elif response.status_code == 429:
                     reason = "rate_limited"
                 elif response.status_code >= 500:
                     reason = "unavailable"
                 elif response.status_code == 404:
-                    reason = "gateway management endpoint was not found"
+                    reason = (
+                        "not_found"
+                        if method == "POST" and path == "/model/delete"
+                        else "unavailable"
+                    )
                 else:
                     reason = "gateway management request failed"
                 raise LiteLLMAdminError(reason)
@@ -248,8 +381,11 @@ class LiteLLMAdminClient:
         return None
 
 
-def validate_model_id(value: str) -> str:
-    """Keep deployment identifiers opaque while rejecting empty path values."""
-    if not value.strip() or len(value) > 200:
-        raise ValueError("invalid managed key id")
-    return value
+def _parse_utc(value: str) -> datetime:
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise LiteLLMAdminError("gateway returned invalid lifecycle metadata") from exc
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)

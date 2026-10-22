@@ -12,7 +12,7 @@ from src.agents.intent.interface.contracts import (
     SearchExtraction,
     TickerCandidateModel,
 )
-from src.shared.llm.contracts import ModelRoute, StructuredRequest
+from src.llm_provider.entrypoint import ModelRoute, StructuredRequest
 
 
 class _FakeProvider:

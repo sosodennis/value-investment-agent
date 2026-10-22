@@ -12,9 +12,7 @@ from src.agents.news.application.ports import (
 )
 from src.agents.news.interface.contracts import AIAnalysisModel
 from src.agents.news.interface.prompt_renderers import build_analysis_chain_payload
-from src.shared.kernel.tools.logger import get_logger, log_event
-from src.shared.kernel.types import JSONObject
-from src.shared.llm.contracts import (
+from src.llm_provider.entrypoint import (
     ChatMessage,
     ChatRole,
     CompletionRequest,
@@ -22,6 +20,8 @@ from src.shared.llm.contracts import (
     ModelRoute,
     StructuredRequest,
 )
+from src.shared.kernel.tools.logger import get_logger, log_event
+from src.shared.kernel.types import JSONObject
 
 logger = get_logger(__name__)
 

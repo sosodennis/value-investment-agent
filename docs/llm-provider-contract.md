@@ -1,7 +1,7 @@
 # LLM provider contract
 
 The application owns the model-access contract in
-`finance-agent-core/src/shared/llm/contracts.py`. LangGraph nodes and
+`finance-agent-core/src/llm_provider/domain/contracts.py`. LangGraph nodes and
 application services consume that port; they do not know about OpenRouter API
 keys, LiteLLM, HTTP clients, or provider SDK exception classes.
 
@@ -44,15 +44,19 @@ Adapters map SDK and HTTP failures to `LLMProviderError` and
 bounded partial output are available for application error mapping. Provider
 keys, prompts, raw provider errors, and SDK objects never cross this boundary.
 
-Bounded retry and model failover belong to the adapter/gateway. The MVP gateway
-defaults to two attempts (hard-capped at three), exponential backoff from
-`0.25s`, an `8s` maximum, and up to `0.25s` additive jitter;
-`LLM_GATEWAY_MAX_ATTEMPTS`,
+The application adapter retries gateway requests. Interactive requests default
+to two attempts. Background requests default to three. A global cap limits both
+classes to three gateway requests. LiteLLM also retries a deployment once
+within each gateway request. The configured upstream-dispatch limits are four
+for interactive work and six for background work. `LLM_GATEWAY_MAX_ATTEMPTS`
+sets the global cap. `LLM_GATEWAY_MAX_ATTEMPTS_INTERACTIVE` and
+`LLM_GATEWAY_MAX_ATTEMPTS_BACKGROUND` set each class budget.
+
+Backoff starts at `0.25s`, stops at `8s`, and adds up to `0.25s` of jitter. Set
 `LLM_GATEWAY_BACKOFF_SECONDS`, `LLM_GATEWAY_MAX_BACKOFF_SECONDS`, and
-`LLM_GATEWAY_JITTER_SECONDS` make those limits explicit. A numeric or HTTP-date
-`Retry-After` header is honored and capped by the maximum delay. Upstream
-response bodies are reduced to stable status-based reasons before they cross
-the contract. Invalid
+`LLM_GATEWAY_JITTER_SECONDS` to change it. The adapter honors a numeric or
+HTTP-date `Retry-After` header and caps the delay. It reduces upstream response
+bodies to stable status-based reasons before returning errors. Invalid
 requests, policy rejections, schema failures, and cancellation are terminal.
 Transient timeout, rate-limit, and selected upstream failures may be retried.
 Streaming may fail over only before the first delta or tool side effect. After
@@ -76,11 +80,37 @@ cooldown settings apply to that user's model group. A separate fallback alias
 is not part of the MVP, and staging must still verify selection and recovery
 behavior. The project adapter does not receive, rotate, or persist OpenRouter
 keys. A larger key pool and delegated roles remain follow-up work under #90.
-Distributed Router cooldown and proxy coordination are now configured through
-the shared Compose Redis service; #97 still needs live multi-worker
-failure-injection evidence before production rollout.
+LiteLLM cools a deployment after its first retryable failure. The setting
+`allowed_fails: 0` sets this threshold, and `cooldown_time: 30` keeps the
+deployment unavailable for 30 seconds. Redis shares cooldown state between
+Router processes. The pinned-image contract test verifies cross-process
+cooldown and recovery against fake upstreams. Full proxy HTTP requests, backend
+concurrency, real OpenRouter behavior, and broader failure-injection evidence
+remain open under #91 and #97.
 
 The application constructs one shared gateway provider. Local development also
-uses the gateway; it does not create a direct OpenRouter or OpenAI client.
+uses the gateway. It does not create a direct OpenRouter or OpenAI client.
 The gateway model group is derived from the authenticated user id; its database
 deployments are the source of truth for that user's configured OpenRouter keys.
+
+The project database stores selected-model settings and key ownership metadata,
+not raw OpenRouter keys. The project backend sends submitted key material only
+to LiteLLM's internal model-management API. The pinned LiteLLM release encrypts
+stored credential values with its master key when `LITELLM_SALT_KEY` is unset;
+keep that master key stable while gateway deployments exist. Vault and cloud
+secret-manager integrations are deferred.
+
+Basic telemetry records request outcome, attempt/retry counts, latency,
+time-to-first-token, stream interruption, and token usage in bounded counters
+and structured logs. Prompts, raw provider errors, and credentials are excluded.
+Counters are process-local and reset on restart; durable metrics export,
+dashboards, budgets, quotas, and cost accounting are outside the MVP.
+
+Per-key operational health is separate from aggregate request telemetry. A
+pinned LiteLLM callback records only the managed deployment id, a bounded
+outcome/error code, timestamps, consecutive failures, and the configured
+cooldown expiry in a namespaced Redis hash. It runs after normal model dispatch
+and never sends an additional prompt. The settings API first applies the
+authenticated user's ownership filter, then reads health only for those key
+ids. Health is best-effort and expires after 90 days; LiteLLM's Router remains
+authoritative for actual deployment cooldown and selection.

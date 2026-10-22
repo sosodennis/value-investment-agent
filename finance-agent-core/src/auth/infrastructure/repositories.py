@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 
 from src.auth.application.errors import RegistrationConflictError
@@ -172,3 +172,12 @@ class SqlAlchemyOwnershipRepository:
                 .where(OwnedResourceModel.user_id == user_id)
             )
             return set(result.scalars().all())
+
+    async def release(self, *, resource_type: str, resource_id: str) -> None:
+        async with AsyncSessionLocal() as session:
+            await session.execute(
+                delete(OwnedResourceModel)
+                .where(OwnedResourceModel.resource_type == resource_type)
+                .where(OwnedResourceModel.resource_id == resource_id)
+            )
+            await session.commit()

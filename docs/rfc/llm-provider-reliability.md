@@ -26,8 +26,11 @@ Router Redis and proxy-wide `coordination_redis` with the shared Redis service.
 The latter keeps worker-shared auth/throttle and coordination state separate
 from response caching. `LLM_GATEWAY_WORKERS` can run multiple LiteLLM workers in
 one container; every worker uses the same Redis-backed cooldown and rate state.
-LiteLLM's `cooldown_time` expiry is the half-open recovery boundary: the next
-request probes the deployment and returns it to the healthy pool only after a
-successful request. The multi-worker and half-open behavior still needs staging
-evidence with disposable OpenRouter keys before #91/#97 can be closed; no
-process-local round-robin state is introduced as a substitute.
+LiteLLM stores each cooldown with a Redis TTL. After the TTL expires, the
+deployment can receive requests again. The router does not guarantee a single
+half-open probe across workers, so several requests can reach a recovering
+deployment at once. A pinned-image contract test with fake upstreams proves
+cross-process cooldown sharing and recovery after expiry. Staging with
+disposable OpenRouter keys must still verify real provider behavior before
+#91/#97 can close. No process-local round-robin state replaces LiteLLM's shared
+cooldown state.

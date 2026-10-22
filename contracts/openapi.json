@@ -2532,138 +2532,6 @@
         "title": "KeyFactModel",
         "type": "object"
       },
-      "LlmModelOptionResponse": {
-        "properties": {
-          "context_length": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Context Length"
-          },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "name"
-        ],
-        "title": "LlmModelOptionResponse",
-        "type": "object"
-      },
-      "LlmProviderKeyCreateRequest": {
-        "properties": {
-          "api_key": {
-            "format": "password",
-            "maxLength": 500,
-            "minLength": 20,
-            "title": "Api Key",
-            "type": "string",
-            "writeOnly": true
-          },
-          "label": {
-            "default": "OpenRouter key",
-            "maxLength": 80,
-            "minLength": 1,
-            "title": "Label",
-            "type": "string"
-          }
-        },
-        "required": [
-          "api_key"
-        ],
-        "title": "LlmProviderKeyCreateRequest",
-        "type": "object"
-      },
-      "LlmProviderKeyResponse": {
-        "properties": {
-          "created_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Created At"
-          },
-          "fingerprint": {
-            "title": "Fingerprint",
-            "type": "string"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "label": {
-            "title": "Label",
-            "type": "string"
-          },
-          "suffix": {
-            "title": "Suffix",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "label",
-          "suffix",
-          "fingerprint"
-        ],
-        "title": "LlmProviderKeyResponse",
-        "type": "object"
-      },
-      "LlmProviderKeyTestResponse": {
-        "properties": {
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "passed": {
-            "title": "Passed",
-            "type": "boolean"
-          },
-          "status": {
-            "enum": [
-              "healthy",
-              "invalid_key",
-              "rate_limited",
-              "unavailable"
-            ],
-            "title": "Status",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "passed",
-          "status"
-        ],
-        "title": "LlmProviderKeyTestResponse",
-        "type": "object"
-      },
       "LlmSettingsResponse": {
         "properties": {
           "default_model": {
@@ -2672,7 +2540,7 @@
           },
           "models": {
             "items": {
-              "$ref": "#/components/schemas/LlmModelOptionResponse"
+              "$ref": "#/components/schemas/ModelOptionResponse"
             },
             "title": "Models",
             "type": "array"
@@ -2809,6 +2677,46 @@
           "content"
         ],
         "title": "MessageResponse",
+        "type": "object"
+      },
+      "ModelOptionResponse": {
+        "properties": {
+          "context_length": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Length"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "ModelOptionResponse",
         "type": "object"
       },
       "MomentumExtremesModel": {
@@ -3389,6 +3297,199 @@
           "data"
         ],
         "title": "PriceSeriesEnvelope",
+        "type": "object"
+      },
+      "Principal": {
+        "additionalProperties": false,
+        "properties": {
+          "auth_type": {
+            "const": "session",
+            "default": "session",
+            "title": "Auth Type",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "role": {
+            "const": "user",
+            "default": "user",
+            "title": "Role",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "subject",
+          "email"
+        ],
+        "title": "Principal",
+        "type": "object"
+      },
+      "ProviderKeyCreateRequest": {
+        "properties": {
+          "api_key": {
+            "format": "password",
+            "maxLength": 500,
+            "minLength": 20,
+            "title": "Api Key",
+            "type": "string",
+            "writeOnly": true
+          },
+          "label": {
+            "default": "OpenRouter key",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_key"
+        ],
+        "title": "ProviderKeyCreateRequest",
+        "type": "object"
+      },
+      "ProviderKeyResponse": {
+        "properties": {
+          "cooldown_until": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cooldown Until"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "failure_count": {
+            "default": 0,
+            "title": "Failure Count",
+            "type": "integer"
+          },
+          "fingerprint": {
+            "title": "Fingerprint",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "last_tested_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Tested At"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "replacement_retire_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replacement Retire At"
+          },
+          "status": {
+            "default": "untested",
+            "title": "Status",
+            "type": "string"
+          },
+          "suffix": {
+            "title": "Suffix",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "suffix",
+          "fingerprint"
+        ],
+        "title": "ProviderKeyResponse",
+        "type": "object"
+      },
+      "ProviderKeyTestResponse": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "healthy",
+              "invalid_key",
+              "rate_limited",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "passed",
+          "status"
+        ],
+        "title": "ProviderKeyTestResponse",
         "type": "object"
       },
       "QualitySummaryModel": {
@@ -9096,66 +9197,6 @@
         },
         "title": "VolumeProfileSummaryModel",
         "type": "object"
-      },
-      "src__auth__interface__contracts__Principal": {
-        "additionalProperties": false,
-        "properties": {
-          "auth_type": {
-            "const": "session",
-            "default": "session",
-            "title": "Auth Type",
-            "type": "string"
-          },
-          "email": {
-            "title": "Email",
-            "type": "string"
-          },
-          "role": {
-            "const": "user",
-            "default": "user",
-            "title": "Role",
-            "type": "string"
-          },
-          "subject": {
-            "title": "Subject",
-            "type": "string"
-          },
-          "user_id": {
-            "title": "User Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "user_id",
-          "subject",
-          "email"
-        ],
-        "title": "Principal",
-        "type": "object"
-      },
-      "src__interface__auth__local_admin__Principal": {
-        "description": "The minimal identity contract shared by admin-only routes.",
-        "properties": {
-          "auth_type": {
-            "title": "Auth Type",
-            "type": "string"
-          },
-          "role": {
-            "title": "Role",
-            "type": "string"
-          },
-          "subject": {
-            "title": "Subject",
-            "type": "string"
-          }
-        },
-        "required": [
-          "subject",
-          "role",
-          "auth_type"
-        ],
-        "title": "Principal",
-        "type": "object"
       }
     }
   },
@@ -9293,40 +9334,6 @@
         "summary": "Get Artifact"
       }
     },
-    "/api/auth/local-admin/session": {
-      "delete": {
-        "operationId": "delete_local_admin_session_api_auth_local_admin_session_delete",
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Delete Local Admin Session",
-        "tags": [
-          "Authentication"
-        ]
-      },
-      "post": {
-        "description": "Create the temporary loopback-only admin session used in development.",
-        "operationId": "create_local_admin_session_api_auth_local_admin_session_post",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/src__interface__auth__local_admin__Principal"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Create Local Admin Session",
-        "tags": [
-          "Authentication"
-        ]
-      }
-    },
     "/api/auth/login": {
       "post": {
         "operationId": "login_api_auth_login_post",
@@ -9345,7 +9352,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/src__auth__interface__contracts__Principal"
+                  "$ref": "#/components/schemas/Principal"
                 }
               }
             },
@@ -9390,7 +9397,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/src__auth__interface__contracts__Principal"
+                  "$ref": "#/components/schemas/Principal"
                 }
               }
             },
@@ -9421,7 +9428,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/src__auth__interface__contracts__Principal"
+                  "$ref": "#/components/schemas/Principal"
                 }
               }
             },
@@ -9446,16 +9453,16 @@
     },
     "/api/llm/provider-keys": {
       "get": {
-        "operationId": "list_llm_provider_keys_api_llm_provider_keys_get",
+        "operationId": "list_provider_keys_api_llm_provider_keys_get",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/LlmProviderKeyResponse"
+                    "$ref": "#/components/schemas/ProviderKeyResponse"
                   },
-                  "title": "Response List Llm Provider Keys Api Llm Provider Keys Get",
+                  "title": "Response List Provider Keys Api Llm Provider Keys Get",
                   "type": "array"
                 }
               }
@@ -9463,18 +9470,18 @@
             "description": "Successful Response"
           }
         },
-        "summary": "List Llm Provider Keys",
+        "summary": "List Provider Keys",
         "tags": [
           "LLM settings"
         ]
       },
       "post": {
-        "operationId": "add_llm_provider_key_api_llm_provider_keys_post",
+        "operationId": "add_provider_key_api_llm_provider_keys_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/LlmProviderKeyCreateRequest"
+                "$ref": "#/components/schemas/ProviderKeyCreateRequest"
               }
             }
           },
@@ -9485,7 +9492,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/LlmProviderKeyResponse"
+                  "$ref": "#/components/schemas/ProviderKeyResponse"
                 }
               }
             },
@@ -9502,7 +9509,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Add Llm Provider Key",
+        "summary": "Add Provider Key",
         "tags": [
           "LLM settings"
         ]
@@ -9510,7 +9517,7 @@
     },
     "/api/llm/provider-keys/{key_id}": {
       "delete": {
-        "operationId": "delete_llm_provider_key_api_llm_provider_keys__key_id__delete",
+        "operationId": "delete_provider_key_api_llm_provider_keys__key_id__delete",
         "parameters": [
           {
             "in": "path",
@@ -9537,15 +9544,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Delete Llm Provider Key",
+        "summary": "Delete Provider Key",
         "tags": [
           "LLM settings"
         ]
       }
     },
-    "/api/llm/provider-keys/{key_id}/test": {
+    "/api/llm/provider-keys/{key_id}/replace": {
       "post": {
-        "operationId": "test_llm_provider_key_api_llm_provider_keys__key_id__test_post",
+        "operationId": "replace_provider_key_api_llm_provider_keys__key_id__replace_post",
         "parameters": [
           {
             "in": "path",
@@ -9557,12 +9564,22 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderKeyCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
-          "200": {
+          "201": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/LlmProviderKeyTestResponse"
+                  "$ref": "#/components/schemas/ProviderKeyResponse"
                 }
               }
             },
@@ -9579,7 +9596,49 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Test Llm Provider Key",
+        "summary": "Replace Provider Key",
+        "tags": [
+          "LLM settings"
+        ]
+      }
+    },
+    "/api/llm/provider-keys/{key_id}/test": {
+      "post": {
+        "operationId": "test_provider_key_api_llm_provider_keys__key_id__test_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key_id",
+            "required": true,
+            "schema": {
+              "title": "Key Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderKeyTestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Test Provider Key",
         "tags": [
           "LLM settings"
         ]

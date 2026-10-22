@@ -11,7 +11,7 @@ from src.agents.technical.subdomains.interpretation.infrastructure.technical_int
     _build_fallback_perspective,
     _finalize_perspective,
 )
-from src.shared.llm.contracts import ModelRoute, StructuredRequest
+from src.llm_provider.entrypoint import ModelRoute, StructuredRequest
 
 
 def _sample_payload() -> TechnicalInterpretationInput:

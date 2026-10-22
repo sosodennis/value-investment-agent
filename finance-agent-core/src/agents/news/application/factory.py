@@ -24,12 +24,12 @@ from src.agents.news.interface.prompt_specs import (
 )
 from src.agents.news.interface.serializers import build_news_report_payload
 from src.interface.events.schemas import ArtifactReference, build_artifact_payload
+from src.llm_provider.entrypoint import LLMProviderPort, ModelRoute
 from src.shared.kernel.contracts import (
     ARTIFACT_KIND_NEWS_ANALYSIS_REPORT,
     OUTPUT_KIND_FINANCIAL_NEWS_RESEARCH,
 )
 from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
-from src.shared.llm.contracts import LLMProviderPort, ModelRoute
 
 
 def _build_news_output_artifact(

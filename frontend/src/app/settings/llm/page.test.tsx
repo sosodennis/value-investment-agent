@@ -65,6 +65,8 @@ describe('LLM settings', () => {
             suffix: 'cdef',
             fingerprint: 'f00dbabe1234',
             created_at: '2026-10-21T00:00:00Z',
+            status: 'healthy',
+            failure_count: 0,
         });
     });
 
@@ -81,7 +83,7 @@ describe('LLM settings', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Test and add key' }));
 
         await screen.findByText('Primary key');
-        screen.getByText('Configured');
+        screen.getByText('Healthy');
         expect(api.addLlmProviderKey).toHaveBeenCalledWith({
             label: 'Primary key',
             api_key: 'sk-or-v1-test-openrouter-secret',
@@ -102,6 +104,22 @@ describe('LLM settings', () => {
 
         await screen.findByText('Primary key is healthy.');
         expect(api.testLlmProviderKey).toHaveBeenCalledWith(existingKey.id);
+    });
+
+    it('shows per-key cooldown and outcomes from normal agent requests', async () => {
+        api.listLlmProviderKeys.mockResolvedValue([{
+            ...existingKey,
+            status: 'cooldown',
+            failure_count: 2,
+            cooldown_until: '2099-10-21T00:00:00Z',
+            last_error: 'rate_limited',
+            last_used_at: '2026-10-21T00:00:00Z',
+        }]);
+        render(<LlmSettingsPage />);
+
+        await screen.findByText('Cooling down');
+        screen.getByText(/2 failures since last success/);
+        screen.getByText('The provider rate limited this key.');
     });
 
     it('deletes a configured key after confirmation', async () => {

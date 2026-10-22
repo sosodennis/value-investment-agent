@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
     Check,
+    CircleAlert,
     KeyRound,
     Loader2,
     Plus,
@@ -32,6 +33,41 @@ function formatDate(value: string | null | undefined): string {
     return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(
         new Date(value),
     );
+}
+
+function formatDateTime(value: string | null | undefined): string {
+    if (!value) return 'Never';
+    return new Intl.DateTimeFormat(undefined, {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+    }).format(new Date(value));
+}
+
+function keyStatusLabel(
+    status: string | undefined,
+    cooldownUntil: string | null | undefined,
+): string {
+    if (cooldownUntil && new Date(cooldownUntil).getTime() > Date.now()) {
+        return 'Cooling down';
+    }
+    switch (status) {
+        case 'healthy': return 'Healthy';
+        case 'invalid_key': return 'Invalid key';
+        case 'unavailable': return 'Unavailable';
+        case 'available': return 'Available';
+        case 'replacement_grace': return 'Replacing';
+        case 'cooldown': return 'Available';
+        default: return 'Not tested';
+    }
+}
+
+function keyErrorLabel(code: string | null | undefined): string | null {
+    switch (code) {
+        case 'invalid_key': return 'The provider rejected this key.';
+        case 'rate_limited': return 'The provider rate limited this key.';
+        case 'unavailable': return 'The provider request failed.';
+        default: return null;
+    }
 }
 
 function errorMessage(cause: unknown, fallback: string): string {
@@ -353,7 +389,12 @@ export default function LlmSettingsPage() {
                                                     {item.label}
                                                 </p>
                                                 <span className="inline-flex items-center gap-1 rounded-full bg-secondary/10 px-2 py-0.5 text-[10px] text-secondary">
-                                                    <Check size={11} /> Configured
+                                                    {item.status === 'healthy' ? (
+                                                        <Check size={11} />
+                                                    ) : (
+                                                        <CircleAlert size={11} />
+                                                    )}
+                                                    {keyStatusLabel(item.status, item.cooldown_until)}
                                                 </span>
                                             </div>
                                             <p className="mt-1 font-mono text-xs text-on-surface-variant">
@@ -361,6 +402,23 @@ export default function LlmSettingsPage() {
                                             </p>
                                             <p className="mt-1 text-[11px] text-on-surface-variant">
                                                 Added {formatDate(item.created_at)} · {item.fingerprint}
+                                            </p>
+                                            <p className="mt-1 text-[11px] text-on-surface-variant">
+                                                Last used {formatDateTime(item.last_used_at)} ·{' '}
+                                                {item.failure_count ?? 0} failures since last success
+                                            </p>
+                                            {item.cooldown_until && new Date(item.cooldown_until).getTime() > Date.now() && (
+                                                <p className="mt-1 text-[11px] text-amber-300">
+                                                    Cooldown ends {formatDateTime(item.cooldown_until)}
+                                                </p>
+                                            )}
+                                            {item.last_error && (
+                                                <p className="mt-1 text-[11px] text-error">
+                                                    {keyErrorLabel(item.last_error)}
+                                                </p>
+                                            )}
+                                            <p className="mt-1 text-[11px] text-on-surface-variant">
+                                                Last tested {formatDateTime(item.last_tested_at)}
                                             </p>
                                         </div>
                                         <div className="flex shrink-0 items-center gap-1">
