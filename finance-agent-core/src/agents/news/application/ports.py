@@ -52,20 +52,6 @@ class ModelDumpLike(Protocol):
     def model_dump(self, *, mode: str) -> JSONObject: ...
 
 
-class FinbertResultLike(Protocol):
-    label: str
-    score: float
-    has_numbers: bool
-
-    def to_dict(self) -> JSONObject: ...
-
-
-class FinbertAnalyzerLike(Protocol):
-    def is_available(self) -> bool: ...
-
-    def analyze(self, content: str) -> FinbertResultLike | None: ...
-
-
 class INewsArtifactRepository(Protocol):
     async def save_search_results(
         self,

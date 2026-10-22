@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 from dataclasses import dataclass
+from typing import Protocol
 from uuid import uuid4
 
 from src.agents.news.application.ports import (
-    FinbertAnalyzerLike,
-    FinbertResultLike,
     NewsArtifactTextReaderPort,
 )
 from src.agents.news.interface.contracts import AIAnalysisModel
@@ -16,9 +14,13 @@ from src.llm_provider.entrypoint import (
     ChatMessage,
     ChatRole,
     CompletionRequest,
-    LLMProviderPort,
     ModelRoute,
     StructuredRequest,
+)
+from src.model_inference.entrypoint import (
+    InferenceFailure,
+    ModelInference,
+    NewsSentimentResult,
 )
 from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import JSONObject
@@ -26,9 +28,15 @@ from src.shared.kernel.types import JSONObject
 logger = get_logger(__name__)
 
 
+class AnalysisModelProvider(Protocol):
+    async def acomplete_structured(
+        self, request: StructuredRequest[AIAnalysisModel]
+    ) -> AIAnalysisModel: ...
+
+
 @dataclass(frozen=True)
 class AnalysisRuntime:
-    provider: LLMProviderPort
+    provider: AnalysisModelProvider
     route: ModelRoute
     system_prompt: str
     basic_user_prompt: str
@@ -43,7 +51,7 @@ class AnalystExecutionResult:
 
 def build_analysis_chains(
     *,
-    llm_provider: LLMProviderPort,
+    llm_provider: AnalysisModelProvider,
     llm_route: ModelRoute,
     system_prompt: str,
     user_prompt_basic: str,
@@ -126,7 +134,7 @@ async def analyze_news_items(
     news_items: list[JSONObject],
     ticker: str | None,
     port: NewsArtifactTextReaderPort,
-    finbert_analyzer: FinbertAnalyzerLike,
+    model_inference: ModelInference,
     chains: AnalysisRuntime,
 ) -> AnalystExecutionResult:
     article_errors: list[str] = []
@@ -152,19 +160,32 @@ async def analyze_news_items(
                         fields={"content_id": content_id, "exception": str(exc)},
                     )
 
-            finbert_result: FinbertResultLike | None = None
+            finbert_result: NewsSentimentResult | None = None
             finbert_summary: JSONObject | None = None
-            if finbert_analyzer.is_available():
-                finbert_result = await asyncio.to_thread(
-                    finbert_analyzer.analyze, content_to_analyze
+            try:
+                finbert_result = await model_inference.news_sentiment(
+                    content_to_analyze
                 )
-                if finbert_result:
-                    item["finbert_analysis"] = finbert_result.to_dict()
-                    finbert_summary = {
-                        "label": finbert_result.label,
-                        "confidence": f"{finbert_result.score:.1%}",
-                        "has_numbers": finbert_result.has_numbers,
-                    }
+            except InferenceFailure as exc:
+                log_event(
+                    logger,
+                    event="news_analysis_model_inference_unavailable",
+                    message="news sentiment inference failed; basic prompt is active",
+                    level=logging.WARNING,
+                    fields={"code": exc.code.value, "request_id": exc.request_id},
+                )
+            if finbert_result is not None:
+                item["finbert_analysis"] = {
+                    "label": finbert_result.label,
+                    "score": finbert_result.confidence,
+                    "all_scores": dict(finbert_result.scores),
+                    "has_numbers": finbert_result.has_numbers,
+                }
+                finbert_summary = {
+                    "label": finbert_result.label,
+                    "confidence": f"{finbert_result.confidence:.1%}",
+                    "has_numbers": finbert_result.has_numbers,
+                }
 
             chain_payload = build_analysis_chain_payload(
                 ticker=ticker_value,

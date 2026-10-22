@@ -5,7 +5,6 @@ from dataclasses import dataclass
 
 from src.agents.news.application.ports import (
     FetchContentResult,
-    FinbertAnalyzerLike,
     INewsArtifactRepository,
     NewsItemFactoryLike,
     SourceFactoryLike,
@@ -27,6 +26,7 @@ from src.agents.news.application.use_cases.run_selector_node_use_case import (
 )
 from src.agents.news.domain.aggregation.contracts import NewsAggregationResult
 from src.llm_provider.entrypoint import LLMProviderPort, ModelRoute
+from src.model_inference.entrypoint import ModelInference
 from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
 from src.shared.kernel.workflow_contracts import WorkflowNodeResult
 
@@ -103,7 +103,7 @@ class NewsOrchestrator:
         *,
         llm_provider: LLMProviderPort,
         llm_route: ModelRoute,
-        get_finbert_analyzer_fn: Callable[[], FinbertAnalyzerLike],
+        model_inference: ModelInference,
         analyst_system_prompt: str,
         analyst_user_prompt_basic: str,
         analyst_user_prompt_with_finbert: str,
@@ -113,7 +113,7 @@ class NewsOrchestrator:
             port=self.port,
             llm_provider=llm_provider,
             llm_route=llm_route,
-            get_finbert_analyzer_fn=get_finbert_analyzer_fn,
+            model_inference=model_inference,
             analyst_system_prompt=analyst_system_prompt,
             analyst_user_prompt_basic=analyst_user_prompt_basic,
             analyst_user_prompt_with_finbert=analyst_user_prompt_with_finbert,

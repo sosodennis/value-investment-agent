@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from src.agents.news.application.orchestrator import NewsNodeResult, NewsOrchestrator
 from src.agents.news.application.ports import (
     FetchContentResult,
-    FinbertAnalyzerLike,
     INewsArtifactRepository,
     NewsItemFactoryLike,
     SourceFactoryLike,
@@ -25,6 +24,7 @@ from src.agents.news.interface.prompt_specs import (
 from src.agents.news.interface.serializers import build_news_report_payload
 from src.interface.events.schemas import ArtifactReference, build_artifact_payload
 from src.llm_provider.entrypoint import LLMProviderPort, ModelRoute
+from src.model_inference.entrypoint import ModelInference
 from src.shared.kernel.contracts import (
     ARTIFACT_KIND_NEWS_ANALYSIS_REPORT,
     OUTPUT_KIND_FINANCIAL_NEWS_RESEARCH,
@@ -69,7 +69,7 @@ class NewsWorkflowDependencies:
     fetch_clean_text_async_fn: Callable[[str], Awaitable[FetchContentResult]]
     generate_news_id_fn: Callable[[str | None, str | None], str]
     get_source_reliability_fn: Callable[[str], float]
-    get_finbert_analyzer_fn: Callable[[], FinbertAnalyzerLike]
+    model_inference: ModelInference
     item_factory: NewsItemFactoryLike = FinancialNewsItemModel
     source_factory: SourceFactoryLike = SourceInfoModel
 
@@ -111,7 +111,7 @@ class NewsWorkflowRunner:
             state,
             llm_provider=self.deps.llm_provider,
             llm_route=self.deps.llm_route,
-            get_finbert_analyzer_fn=self.deps.get_finbert_analyzer_fn,
+            model_inference=self.deps.model_inference,
             analyst_system_prompt=analyst_prompt.system,
             analyst_user_prompt_basic=analyst_prompt.user_basic,
             analyst_user_prompt_with_finbert=analyst_prompt.user_with_finbert,

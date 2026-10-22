@@ -7,7 +7,10 @@ from collections.abc import Callable
 from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import JSONObject
 
-from .filtering.fls_filter import filter_forward_looking_sentences_with_stats
+from .filtering.fls_filter import (
+    FilterWithStats,
+    filter_forward_looking_sentences_with_stats,
+)
 from .matching.matchers.dependency_signal_matcher import find_metric_dependency_hits
 from .matching.matchers.lemma_signal_matcher import find_metric_lemma_hits
 from .matching.matchers.regex_signal_extractor import (
@@ -131,6 +134,7 @@ def extract_forward_signals_from_sec_text(
     max_filings_per_form: int = 2,
     fetch_records_fn: Callable[[str, int], list[FilingTextRecord]] | None = None,
     rules_sector: str | None = None,
+    filter_forward_looking_sentences_with_stats_fn: FilterWithStats | None = None,
     review_signal_direction_with_finbert_fn: ReviewSignalDirectionWithFinbertFn
     | None = None,
 ) -> list[dict[str, object]]:
@@ -144,6 +148,10 @@ def extract_forward_signals_from_sec_text(
     if not records:
         return []
 
+    filter_fn = (
+        filter_forward_looking_sentences_with_stats_fn
+        or filter_forward_looking_sentences_with_stats
+    )
     runtime_signal_catalog = load_runtime_signal_catalog(sector=rules_sector)
     grouped, pipeline_diag = _process_records_for_signals(
         ticker=ticker,
@@ -161,9 +169,7 @@ def extract_forward_signals_from_sec_text(
             analysis_sentences,
             fls_skip_signal_phrases=runtime_signal_catalog.fls_skip_signal_phrases,
         ),
-        filter_forward_looking_sentences_with_stats_fn=(
-            filter_forward_looking_sentences_with_stats
-        ),
+        filter_forward_looking_sentences_with_stats_fn=filter_fn,
         as_float_fn=_as_float,
         as_int_fn=_as_int,
         build_doc_type_fn=_build_doc_type,

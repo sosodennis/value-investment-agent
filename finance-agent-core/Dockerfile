@@ -50,8 +50,6 @@ import os
 from huggingface_hub import snapshot_download
 
 model_repos = [
-    "project-aps/finbert-finetune",
-    "yiyanghkust/finbert-fls",
     "sentence-transformers/all-MiniLM-L6-v2",
     "qdrant/all-MiniLM-L6-v2-onnx",
 ]

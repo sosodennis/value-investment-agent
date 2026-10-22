@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 
 from src.agents.news.application.analysis_service import (
     analyze_news_items,
     build_analysis_chains,
 )
 from src.agents.news.application.ports import (
-    FinbertAnalyzerLike,
     INewsArtifactRepository,
 )
 from src.agents.news.application.state_readers import (
@@ -23,6 +22,7 @@ from src.agents.news.application.state_updates import (
 )
 from src.agents.news.interface.parsers import parse_news_items
 from src.llm_provider.entrypoint import LLMProviderPort, ModelRoute
+from src.model_inference.entrypoint import ModelInference
 from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import JSONObject
 from src.shared.kernel.workflow_contracts import WorkflowNodeResult
@@ -47,7 +47,7 @@ async def run_analyst_node_use_case(
     port: INewsArtifactRepository,
     llm_provider: LLMProviderPort,
     llm_route: ModelRoute,
-    get_finbert_analyzer_fn: Callable[[], FinbertAnalyzerLike],
+    model_inference: ModelInference,
     analyst_system_prompt: str,
     analyst_user_prompt_basic: str,
     analyst_user_prompt_with_finbert: str,
@@ -89,7 +89,6 @@ async def run_analyst_node_use_case(
         fields={"ticker": ticker, "article_count": len(news_items)},
     )
 
-    finbert_analyzer = get_finbert_analyzer_fn()
     try:
         analysis_chains = build_analysis_chains(
             llm_provider=llm_provider,
@@ -116,7 +115,7 @@ async def run_analyst_node_use_case(
         news_items=news_items,
         ticker=ticker,
         port=port,
-        finbert_analyzer=finbert_analyzer,
+        model_inference=model_inference,
         chains=analysis_chains,
     )
     news_items = analyst_result.news_items
