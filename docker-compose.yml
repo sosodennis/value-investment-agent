@@ -1,3 +1,45 @@
+x-model-inference-environment: &model-inference-environment
+  INFERENCE_SERVICE_TOKEN: ${INFERENCE_SERVICE_TOKEN:-}
+  INFERENCE_ALLOW_INSECURE: ${INFERENCE_ALLOW_INSECURE:-0}
+  NEWS_FINBERT_MODEL: ${NEWS_FINBERT_MODEL:-project-aps/finbert-finetune}
+  NEWS_FINBERT_REVISION: ${NEWS_FINBERT_REVISION:-2db55b5439cef6253c12a4973f3a9e823ff90b79}
+  SEC_FLS_MODEL: ${SEC_FLS_MODEL:-yiyanghkust/finbert-fls}
+  SEC_FLS_REVISION: ${SEC_FLS_REVISION:-443586dc31c765c0aaf1c4daaed8cf3643c92fa5}
+  HF_HOME: /opt/hf-cache
+  HF_BAKED_CACHE: /opt/hf-cache-baked
+  HF_HUB_CACHE: /opt/hf-cache/hub
+  HF_HUB_OFFLINE: "1"
+  TRANSFORMERS_OFFLINE: "1"
+  HF_LOCAL_FILES_ONLY: "1"
+  TORCH_NUM_THREADS: ${INFERENCE_TORCH_NUM_THREADS:-1}
+
+x-model-inference-common: &model-inference-common
+  build:
+    context: ./model-inference-service
+    dockerfile: Dockerfile
+    args:
+      BAKE_HF_MODELS: ${BAKE_INFERENCE_MODELS:-1}
+      INFERENCE_OPERATIONS: news.sentiment,sec.fls
+      NEWS_FINBERT_MODEL: ${NEWS_FINBERT_MODEL:-project-aps/finbert-finetune}
+      NEWS_FINBERT_REVISION: ${NEWS_FINBERT_REVISION:-2db55b5439cef6253c12a4973f3a9e823ff90b79}
+      SEC_FLS_MODEL: ${SEC_FLS_MODEL:-yiyanghkust/finbert-fls}
+      SEC_FLS_REVISION: ${SEC_FLS_REVISION:-443586dc31c765c0aaf1c4daaed8cf3643c92fa5}
+  platform: linux/arm64
+  environment:
+    <<: *model-inference-environment
+  expose:
+    - "8001"
+  healthcheck:
+    test: ["CMD-SHELL", "curl -fsS http://localhost:8001/readyz"]
+    interval: 10s
+    timeout: 5s
+    retries: 6
+    start_period: 60s
+  mem_reservation: ${INFERENCE_MEMORY_RESERVATION:-1250m}
+  mem_limit: ${INFERENCE_MEMORY_LIMIT:-1500m}
+  cpus: ${INFERENCE_CPUS:-4.0}
+  restart: always
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -182,6 +224,42 @@ services:
         condition: service_healthy
     restart: always
 
+  model-inference-news:
+    <<: *model-inference-common
+    build:
+      context: ./model-inference-service
+      dockerfile: Dockerfile
+      args:
+        BAKE_HF_MODELS: ${BAKE_INFERENCE_MODELS:-1}
+        INFERENCE_OPERATIONS: news.sentiment
+        NEWS_FINBERT_MODEL: ${NEWS_FINBERT_MODEL:-project-aps/finbert-finetune}
+        NEWS_FINBERT_REVISION: ${NEWS_FINBERT_REVISION:-2db55b5439cef6253c12a4973f3a9e823ff90b79}
+        SEC_FLS_MODEL: ${SEC_FLS_MODEL:-yiyanghkust/finbert-fls}
+        SEC_FLS_REVISION: ${SEC_FLS_REVISION:-443586dc31c765c0aaf1c4daaed8cf3643c92fa5}
+    environment:
+      <<: *model-inference-environment
+      INFERENCE_OPERATIONS: news.sentiment
+    volumes:
+      - inference_news_hf_cache:/opt/hf-cache
+
+  model-inference-fls:
+    <<: *model-inference-common
+    build:
+      context: ./model-inference-service
+      dockerfile: Dockerfile
+      args:
+        BAKE_HF_MODELS: ${BAKE_INFERENCE_MODELS:-1}
+        INFERENCE_OPERATIONS: sec.fls
+        NEWS_FINBERT_MODEL: ${NEWS_FINBERT_MODEL:-project-aps/finbert-finetune}
+        NEWS_FINBERT_REVISION: ${NEWS_FINBERT_REVISION:-2db55b5439cef6253c12a4973f3a9e823ff90b79}
+        SEC_FLS_MODEL: ${SEC_FLS_MODEL:-yiyanghkust/finbert-fls}
+        SEC_FLS_REVISION: ${SEC_FLS_REVISION:-443586dc31c765c0aaf1c4daaed8cf3643c92fa5}
+    environment:
+      <<: *model-inference-environment
+      INFERENCE_OPERATIONS: sec.fls
+    volumes:
+      - inference_fls_hf_cache:/opt/hf-cache
+
   technical-labeling-scheduler:
     build:
       context: ./finance-agent-core
@@ -242,3 +320,5 @@ volumes:
   pg_data:
   redis_data:
   hf_cache:
+  inference_news_hf_cache:
+  inference_fls_hf_cache:
