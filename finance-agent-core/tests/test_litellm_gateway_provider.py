@@ -333,6 +333,66 @@ def test_complete_does_not_retry_authentication_failure() -> None:
     assert attempts == 1
 
 
+@pytest.mark.parametrize(
+    ("status", "expected_code", "expected_calls"),
+    [
+        (400, LLMErrorCode.BAD_REQUEST, 1),
+        (422, LLMErrorCode.BAD_REQUEST, 1),
+        (408, LLMErrorCode.UPSTREAM_TIMEOUT, 2),
+        (429, LLMErrorCode.RATE_LIMITED, 2),
+        (500, LLMErrorCode.UPSTREAM_UNAVAILABLE, 2),
+        (502, LLMErrorCode.UPSTREAM_UNAVAILABLE, 2),
+        (503, LLMErrorCode.UPSTREAM_UNAVAILABLE, 2),
+        (504, LLMErrorCode.UPSTREAM_UNAVAILABLE, 2),
+    ],
+)
+def test_status_failure_matrix_is_bounded_and_classified(
+    status: int,
+    expected_code: LLMErrorCode,
+    expected_calls: int,
+) -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(status, json={"error": {"message": "secret"}})
+
+    provider = _provider(httpx.MockTransport(handler))
+
+    with pytest.raises(LLMProviderError) as raised:
+        provider.complete(_request())
+
+    assert raised.value.code is expected_code
+    assert raised.value.retryable is False
+    assert calls == expected_calls
+
+
+def test_connection_reset_is_retried_without_leaking_transport_details() -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise httpx.ConnectError(
+                "connection reset sk-or-v1-secret", request=request
+            )
+        return httpx.Response(
+            200,
+            json={
+                "model": "openrouter/auto",
+                "choices": [{"message": {"content": "ok"}}],
+            },
+            request=request,
+        )
+
+    provider = _provider(httpx.MockTransport(handler))
+
+    assert provider.complete(_request()).text == "ok"
+    assert calls == 2
+
+
 def test_sync_structured_completion_validates_and_sends_schema() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         body = request.read().decode()

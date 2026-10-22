@@ -75,8 +75,10 @@ deployments registered under an opaque per-user route alias; router retry and
 cooldown settings apply to that user's model group. A separate fallback alias
 is not part of the MVP, and staging must still verify selection and recovery
 behavior. The project adapter does not receive, rotate, or persist OpenRouter
-keys. A larger key pool, distributed coordination, and delegated roles remain
-follow-up work under #91 and #97.
+keys. A larger key pool and delegated roles remain follow-up work under #90.
+Distributed Router cooldown and proxy coordination are now configured through
+the shared Compose Redis service; #97 still needs live multi-worker
+failure-injection evidence before production rollout.
 
 The application constructs one shared gateway provider. Local development also
 uses the gateway; it does not create a direct OpenRouter or OpenAI client.

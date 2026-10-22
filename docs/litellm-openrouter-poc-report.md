@@ -46,12 +46,13 @@ API.
 
 ## Decision
 
-**Go for the isolated MVP gateway; no-go for production multi-worker rollout.**
-The pinned single-instance service and database-backed deployment metadata are
-adequate for the current per-user MVP. The deployment is intentionally limited
-to one gateway instance because this Compose POC does not configure LiteLLM's
-distributed Redis state. #91 owns cooldown/failover policy completion and #97
-owns the final multi-worker/rollout gate.
+**Go for the isolated MVP gateway; no-go for production rollout yet.** The
+pinned service, database-backed deployment metadata, and shared Redis
+coordination are adequate for the current per-user MVP. Compose now supports
+multiple LiteLLM workers through `LLM_GATEWAY_WORKERS` and configures both Router
+cooldown state and proxy-wide coordination Redis. #91 owns the policy contract;
+#97 owns the final multi-worker and rollout gate, including live failure
+injection with disposable credentials.
 
 The remaining live staging evidence is explicit rather than implied: disposable
 real keys must still prove successful selection across requests, 401/429
