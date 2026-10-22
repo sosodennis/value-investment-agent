@@ -13,10 +13,14 @@ from src.auth.interface.dependencies import (
     require_current_user,
     require_current_user_mutation,
 )
-from src.infrastructure.llm.litellm_admin import ManagedLlmKey, key_fingerprint
-from src.infrastructure.llm.openrouter_key_test import OpenRouterKeyTestError
-from src.infrastructure.llm.openrouter_models import OpenRouterModel
-from src.shared.llm.routes import user_route_alias
+from src.llm_provider.domain.errors import OpenRouterKeyTestError
+from src.llm_provider.domain.key_metadata import key_fingerprint
+from src.llm_provider.domain.provider_models import (
+    ManagedProviderKey,
+    OpenRouterModel,
+    ProviderKeyHealth,
+)
+from src.llm_provider.domain.routes import user_route_alias
 
 
 @pytest.fixture(autouse=True)
@@ -50,6 +54,7 @@ def _ownership(
         owned_ids=AsyncMock(return_value=owned_ids or set()),
         owns=AsyncMock(return_value=owns),
         claim=AsyncMock(return_value=claim),
+        release=AsyncMock(),
     )
 
 
@@ -80,15 +85,45 @@ async def test_list_llm_keys_returns_only_current_users_owned_metadata(
     monkeypatch.setenv("LLM_GATEWAY_BASE_URL", "http://gateway")
     monkeypatch.setenv("LLM_GATEWAY_API_KEY", "gateway-admin")
     _as_user("user-a")
-    ownership = _ownership(owned_ids={"managed-a"})
+    own_id = "57b2c97e-64c5-4a3f-9ef9-a4ae960dbfb5"
+    other_id = "90970b8a-1011-4d24-9e13-aed6dc2b76f5"
+    ownership = _ownership(owned_ids={own_id})
+    telemetry = SimpleNamespace(
+        get_many=AsyncMock(
+            return_value={
+                own_id: ProviderKeyHealth(
+                    status="cooldown",
+                    failure_count=2,
+                    cooldown_until="2099-10-21T00:00:00+00:00",
+                    last_error="rate_limited",
+                    last_used_at="2026-10-21T00:00:00+00:00",
+                ),
+                other_id: ProviderKeyHealth(
+                    status="healthy",
+                    failure_count=0,
+                    cooldown_until=None,
+                    last_error=None,
+                    last_used_at="2026-10-21T00:00:00+00:00",
+                ),
+            }
+        ),
+        delete=AsyncMock(),
+    )
     managed = [
-        ManagedLlmKey("managed-a", "primary", "9abc", "fingerprint-a", None),
-        ManagedLlmKey("managed-b", "other user", "8def", "fingerprint-b", None),
+        ManagedProviderKey(own_id, "primary", "9abc", "fingerprint-a", None),
+        ManagedProviderKey(other_id, "other user", "8def", "fingerprint-b", None),
     ]
     with (
-        patch("api.server.get_ownership_service", return_value=ownership),
         patch(
-            "api.server.LiteLLMAdminClient.list_managed",
+            "src.llm_provider.application.wiring.get_ownership_service",
+            return_value=ownership,
+        ),
+        patch(
+            "src.llm_provider.application.wiring.get_provider_key_telemetry",
+            return_value=telemetry,
+        ),
+        patch(
+            "src.llm_provider.infrastructure.litellm_admin.LiteLLMAdminClient.list_managed",
             new=AsyncMock(return_value=managed),
         ),
     ):
@@ -100,14 +135,22 @@ async def test_list_llm_keys_returns_only_current_users_owned_metadata(
     assert response.status_code == 200
     assert response.json() == [
         {
-            "id": "managed-a",
+            "id": own_id,
             "label": "primary",
             "suffix": "9abc",
             "fingerprint": "fingerprint-a",
             "created_at": None,
+            "status": "cooldown",
+            "last_tested_at": None,
+            "failure_count": 2,
+            "cooldown_until": "2099-10-21T00:00:00+00:00",
+            "last_error": "rate_limited",
+            "last_used_at": "2026-10-21T00:00:00+00:00",
+            "replacement_retire_at": None,
         }
     ]
-    assert "managed-b" not in response.text
+    assert other_id not in response.text
+    telemetry.get_many.assert_awaited_once_with({own_id})
     ownership.owned_ids.assert_awaited_once_with(
         user_id="user-a", resource_type="provider_key"
     )
@@ -121,20 +164,29 @@ async def test_add_key_registers_in_current_users_gateway_pool(
     monkeypatch.setenv("LLM_GATEWAY_API_KEY", "gateway-admin")
     _as_user("user-a")
     ownership = _ownership()
-    managed = ManagedLlmKey(
+    managed = ManagedProviderKey(
         "managed-a", "primary", "9abc", "fingerprint-a", "2026-10-21T00:00:00+00:00"
     )
     with (
-        patch("api.server.get_ownership_service", return_value=ownership),
-        patch("api.server.test_openrouter_key", new=AsyncMock()),
         patch(
-            "api.server.LiteLLMAdminClient.list_managed",
+            "src.llm_provider.application.wiring.get_ownership_service",
+            return_value=ownership,
+        ),
+        patch(
+            "src.llm_provider.application.wiring.test_openrouter_key", new=AsyncMock()
+        ),
+        patch(
+            "src.llm_provider.infrastructure.litellm_admin.LiteLLMAdminClient.list_managed",
             new=AsyncMock(return_value=[]),
         ),
         patch(
-            "api.server.LiteLLMAdminClient.add_key",
+            "src.llm_provider.infrastructure.litellm_admin.LiteLLMAdminClient.add_key",
             new=AsyncMock(return_value=managed),
         ) as add_key,
+        patch(
+            "src.llm_provider.application.wiring.get_selected_model",
+            new=AsyncMock(return_value="openrouter/free"),
+        ),
     ):
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://testserver"
@@ -160,18 +212,26 @@ async def test_duplicate_key_is_idempotent_only_for_current_owner(
     monkeypatch.setenv("LLM_GATEWAY_API_KEY", "gateway-admin")
     _as_user("user-a")
     secret = "sk-or-v1-test-openrouter-secret"
-    existing = ManagedLlmKey(
+    existing = ManagedProviderKey(
         "managed-a", "primary", "9abc", key_fingerprint(secret), None
     )
     ownership = _ownership(owned_ids={"managed-a"})
     with (
-        patch("api.server.get_ownership_service", return_value=ownership),
-        patch("api.server.test_openrouter_key", new=AsyncMock()),
         patch(
-            "api.server.LiteLLMAdminClient.list_managed",
+            "src.llm_provider.application.wiring.get_ownership_service",
+            return_value=ownership,
+        ),
+        patch(
+            "src.llm_provider.application.wiring.test_openrouter_key", new=AsyncMock()
+        ),
+        patch(
+            "src.llm_provider.infrastructure.litellm_admin.LiteLLMAdminClient.list_managed",
             new=AsyncMock(return_value=[existing]),
         ),
-        patch("api.server.LiteLLMAdminClient.add_key", new=AsyncMock()) as add_key,
+        patch(
+            "src.llm_provider.infrastructure.litellm_admin.LiteLLMAdminClient.add_key",
+            new=AsyncMock(),
+        ) as add_key,
     ):
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://testserver"
@@ -195,24 +255,33 @@ async def test_same_key_owned_by_another_user_is_registered_without_deleting_it(
     monkeypatch.setenv("LLM_GATEWAY_API_KEY", "gateway-admin")
     _as_user("user-b")
     secret = "sk-or-v1-test-openrouter-secret"
-    existing = ManagedLlmKey(
+    existing = ManagedProviderKey(
         "managed-a", "user a", "9abc", key_fingerprint(secret), None
     )
-    created = ManagedLlmKey(
+    created = ManagedProviderKey(
         "managed-b", "user b", "9abc", key_fingerprint(secret), None
     )
     ownership = _ownership(owned_ids=set())
     with (
-        patch("api.server.get_ownership_service", return_value=ownership),
-        patch("api.server.test_openrouter_key", new=AsyncMock()),
         patch(
-            "api.server.LiteLLMAdminClient.list_managed",
+            "src.llm_provider.application.wiring.get_ownership_service",
+            return_value=ownership,
+        ),
+        patch(
+            "src.llm_provider.application.wiring.test_openrouter_key", new=AsyncMock()
+        ),
+        patch(
+            "src.llm_provider.infrastructure.litellm_admin.LiteLLMAdminClient.list_managed",
             new=AsyncMock(return_value=[existing]),
         ),
         patch(
-            "api.server.LiteLLMAdminClient.add_key",
+            "src.llm_provider.infrastructure.litellm_admin.LiteLLMAdminClient.add_key",
             new=AsyncMock(return_value=created),
         ) as add_key,
+        patch(
+            "src.llm_provider.application.wiring.get_selected_model",
+            new=AsyncMock(return_value="openrouter/free"),
+        ),
     ):
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://testserver"
@@ -239,10 +308,13 @@ async def test_add_key_does_not_register_when_openrouter_probe_fails(
     _as_user("user-a")
     with (
         patch(
-            "api.server.test_openrouter_key",
+            "src.llm_provider.application.wiring.test_openrouter_key",
             new=AsyncMock(side_effect=OpenRouterKeyTestError("invalid_key")),
         ),
-        patch("api.server.LiteLLMAdminClient.add_key", new=AsyncMock()) as add_key,
+        patch(
+            "src.llm_provider.infrastructure.litellm_admin.LiteLLMAdminClient.add_key",
+            new=AsyncMock(),
+        ) as add_key,
     ):
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://testserver"
@@ -253,6 +325,74 @@ async def test_add_key_does_not_register_when_openrouter_probe_fails(
             )
     assert response.status_code == 400
     add_key.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_replace_key_tests_new_key_before_marking_old_key_for_grace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_GATEWAY_BASE_URL", "http://gateway")
+    monkeypatch.setenv("LLM_GATEWAY_API_KEY", "gateway-admin")
+    _as_user("user-a")
+    ownership = _ownership(owned_ids={"managed-old"})
+    old_key = ManagedProviderKey(
+        "managed-old", "primary", "9abc", "old-fingerprint", None
+    )
+    replacement = ManagedProviderKey(
+        "managed-new", "primary replacement", "8def", "new-fingerprint", None
+    )
+    with (
+        patch(
+            "src.llm_provider.application.wiring.get_ownership_service",
+            return_value=ownership,
+        ),
+        patch(
+            "src.llm_provider.application.wiring.test_openrouter_key", new=AsyncMock()
+        ) as probe,
+        patch(
+            "src.llm_provider.infrastructure.litellm_admin.LiteLLMAdminClient.list_managed",
+            new=AsyncMock(return_value=[old_key]),
+        ),
+        patch(
+            "src.llm_provider.infrastructure.litellm_admin.LiteLLMAdminClient.add_key",
+            new=AsyncMock(return_value=replacement),
+        ) as add_key,
+        patch(
+            "src.llm_provider.infrastructure.litellm_admin.LiteLLMAdminClient.mark_replacement_grace",
+            new=AsyncMock(),
+        ) as mark_grace,
+        patch(
+            "src.llm_provider.infrastructure.litellm_admin.LiteLLMAdminClient.delete_key",
+            new=AsyncMock(),
+        ) as delete_key,
+        patch(
+            "src.llm_provider.application.wiring.get_selected_model",
+            new=AsyncMock(return_value="openrouter/free"),
+        ),
+    ):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+        ) as client:
+            response = await client.post(
+                "/api/llm/provider-keys/managed-old/replace",
+                json={
+                    "label": "primary replacement",
+                    "api_key": "sk-or-v1-new-valid-key",
+                },
+            )
+
+    assert response.status_code == 201
+    assert response.json()["id"] == "managed-new"
+    probe.assert_awaited_once_with("sk-or-v1-new-valid-key")
+    assert add_key.await_args.kwargs["existing_ids"] == {"managed-old"}
+    ownership.claim.assert_awaited_once_with(
+        user_id="user-a",
+        resource_type="provider_key",
+        resource_id="managed-new",
+    )
+    mark_grace.assert_awaited_once()
+    assert mark_grace.await_args.args == ("managed-old",)
+    delete_key.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -285,9 +425,18 @@ async def test_test_and_delete_reject_key_owned_by_another_user(
     test_key = AsyncMock()
     delete_key = AsyncMock()
     with (
-        patch("api.server.get_ownership_service", return_value=ownership),
-        patch("api.server.LiteLLMAdminClient.test_key", new=test_key),
-        patch("api.server.LiteLLMAdminClient.delete_key", new=delete_key),
+        patch(
+            "src.llm_provider.application.wiring.get_ownership_service",
+            return_value=ownership,
+        ),
+        patch(
+            "src.llm_provider.infrastructure.litellm_admin.LiteLLMAdminClient.test_key",
+            new=test_key,
+        ),
+        patch(
+            "src.llm_provider.infrastructure.litellm_admin.LiteLLMAdminClient.delete_key",
+            new=delete_key,
+        ),
     ):
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://testserver"
@@ -302,6 +451,36 @@ async def test_test_and_delete_reject_key_owned_by_another_user(
 
 
 @pytest.mark.asyncio
+async def test_delete_key_releases_ownership_after_gateway_deletion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_GATEWAY_BASE_URL", "http://gateway")
+    monkeypatch.setenv("LLM_GATEWAY_API_KEY", "gateway-admin")
+    _as_user("user-a")
+    ownership = _ownership(owns=True)
+    with (
+        patch(
+            "src.llm_provider.application.wiring.get_ownership_service",
+            return_value=ownership,
+        ),
+        patch(
+            "src.llm_provider.infrastructure.litellm_admin.LiteLLMAdminClient.delete_key",
+            new=AsyncMock(),
+        ) as delete_key,
+    ):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+        ) as client:
+            response = await client.delete("/api/llm/provider-keys/managed-a")
+
+    assert response.status_code == 204
+    delete_key.assert_awaited_once_with("managed-a")
+    ownership.release.assert_awaited_once_with(
+        resource_type="provider_key", resource_id="managed-a"
+    )
+
+
+@pytest.mark.asyncio
 async def test_llm_settings_lists_free_models_for_authenticated_user() -> None:
     _as_user("user-a")
     models = (
@@ -313,9 +492,12 @@ async def test_llm_settings_lists_free_models_for_authenticated_user() -> None:
         ),
     )
     with (
-        patch("api.server.list_free_models", new=AsyncMock(return_value=models)),
         patch(
-            "api.server.get_selected_model",
+            "src.llm_provider.application.wiring.list_free_models",
+            new=AsyncMock(return_value=models),
+        ),
+        patch(
+            "src.llm_provider.application.wiring.get_selected_model",
             new=AsyncMock(return_value="openrouter/free"),
         ),
     ):
@@ -348,7 +530,12 @@ async def test_llm_settings_update_requires_free_model_and_authenticated_mutatio
             context_length=None,
         ),
     )
-    with patch("api.server.list_free_models", new=AsyncMock(return_value=models)):
+    with (
+        patch(
+            "src.llm_provider.application.wiring.validate_free_model",
+            new=AsyncMock(return_value=False),
+        ) as validate_model,
+    ):
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://testserver"
         ) as client:
@@ -357,25 +544,31 @@ async def test_llm_settings_update_requires_free_model_and_authenticated_mutatio
                 json={"selected_model": "openai/gpt-4o"},
             )
     assert response.status_code == 400
+    validate_model.assert_awaited_once_with("openai/gpt-4o")
 
     monkeypatch.setenv("LLM_GATEWAY_BASE_URL", "http://gateway")
     monkeypatch.setenv("LLM_GATEWAY_API_KEY", "gateway-admin")
-    gateway = SimpleNamespace(update_model=AsyncMock(), close=AsyncMock())
     with (
-        patch("api.server.list_free_models", new=AsyncMock(return_value=models)),
-        patch("api.server.validate_free_model", new=AsyncMock(return_value=True)),
-        patch("api.server.get_litellm_admin_client", return_value=gateway),
-        patch("api.server.set_selected_model", new=AsyncMock()) as set_model,
         patch(
-            "api.server._llm_settings_response",
-            new=AsyncMock(
-                return_value={
-                    "selected_model": selected_model,
-                    "default_model": "openrouter/free",
-                    "models": [],
-                }
-            ),
+            "src.llm_provider.application.wiring.list_free_models",
+            new=AsyncMock(return_value=models),
         ),
+        patch(
+            "src.llm_provider.application.wiring.validate_free_model",
+            new=AsyncMock(return_value=True),
+        ),
+        patch(
+            "src.llm_provider.application.wiring.get_selected_model",
+            new=AsyncMock(return_value=selected_model),
+        ),
+        patch(
+            "src.llm_provider.application.wiring.set_selected_model",
+            new=AsyncMock(),
+        ) as set_model,
+        patch(
+            "src.llm_provider.infrastructure.litellm_admin.LiteLLMAdminClient.update_model",
+            new=AsyncMock(),
+        ) as update_model,
     ):
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://testserver"
@@ -387,5 +580,4 @@ async def test_llm_settings_update_requires_free_model_and_authenticated_mutatio
     assert response.status_code == 200
     assert response.json()["selected_model"] == selected_model
     set_model.assert_awaited_once_with(selected_model, updated_by="user-a")
-    gateway.update_model.assert_awaited_once_with(selected_model)
-    gateway.close.assert_awaited_once_with()
+    update_model.assert_awaited_once_with(selected_model)

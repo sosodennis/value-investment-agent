@@ -8,7 +8,7 @@ const CSRF_COOKIE_NAME = 'app_csrf';
 const CSRF_HEADER_NAME = 'X-CSRF-Token';
 
 export type AuthUser =
-    components['schemas']['src__auth__interface__contracts__Principal'];
+    components['schemas']['Principal'];
 
 export class AuthApiError extends Error {
     readonly status: number;

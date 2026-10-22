@@ -43,8 +43,7 @@ from src.agents.debate.domain.fact_builders import (
     render_strict_facts_registry,
     summarize_facts_by_source,
 )
-from src.shared.kernel.tools.logger import get_logger, log_event
-from src.shared.llm.contracts import (
+from src.llm_provider.entrypoint import (
     ChatMessage,
     ChatRole,
     CompletionRequest,
@@ -52,6 +51,7 @@ from src.shared.llm.contracts import (
     LLMProviderPort,
     ModelRoute,
 )
+from src.shared.kernel.tools.logger import get_logger, log_event
 
 logger = get_logger(__name__)
 

@@ -42,6 +42,14 @@ from src.agents.debate.domain.pragmatic_verdict_policy import (
 )
 from src.agents.debate.domain.validators import FactValidator
 from src.agents.debate.interface.serializers import build_final_report_payload
+from src.llm_provider.entrypoint import (
+    ChatMessage,
+    ChatRole,
+    CompletionRequest,
+    LLMProviderPort,
+    ModelRoute,
+    StructuredRequest,
+)
 from src.shared.kernel.tools.incident_logging import (
     CONTRACT_KIND_ARTIFACT_JSON,
     CONTRACT_KIND_WORKFLOW_STATE,
@@ -51,14 +59,6 @@ from src.shared.kernel.tools.incident_logging import (
 from src.shared.kernel.tools.logger import bounded_text, get_logger, log_event
 from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
 from src.shared.kernel.workflow_contracts import WorkflowFanoutNodeResult
-from src.shared.llm.contracts import (
-    ChatMessage,
-    ChatRole,
-    CompletionRequest,
-    LLMProviderPort,
-    ModelRoute,
-    StructuredRequest,
-)
 
 logger = get_logger(__name__)
 

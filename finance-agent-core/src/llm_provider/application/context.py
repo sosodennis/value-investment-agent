@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from contextvars import ContextVar, Token
 
-from .contracts import ProviderPrincipal
+from ..domain.contracts import ProviderPrincipal
 
 _provider_principal: ContextVar[ProviderPrincipal | None] = ContextVar(
     "provider_principal", default=None

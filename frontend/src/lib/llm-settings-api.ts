@@ -4,10 +4,10 @@ import { csrfHeaders } from '@/lib/auth-api';
 
 const API_URL = process.env.NEXT_PUBLIC_LANGGRAPH_URL || 'http://localhost:8000';
 
-export type LlmProviderKey = components['schemas']['LlmProviderKeyResponse'];
+export type LlmProviderKey = components['schemas']['ProviderKeyResponse'];
 export type LlmProviderKeyTestResult =
-    components['schemas']['LlmProviderKeyTestResponse'];
-export type LlmModelOption = components['schemas']['LlmModelOptionResponse'];
+    components['schemas']['ProviderKeyTestResponse'];
+export type LlmModelOption = components['schemas']['ModelOptionResponse'];
 export type LlmSettings = components['schemas']['LlmSettingsResponse'];
 
 export class LlmSettingsApiError extends Error {
@@ -52,6 +52,16 @@ function parseLlmProviderKey(value: unknown, context: string): LlmProviderKey {
         suffix: readString(record.suffix, `${context}.suffix`),
         fingerprint: readString(record.fingerprint, `${context}.fingerprint`),
         created_at: readNullableString(record.created_at, `${context}.created_at`),
+        cooldown_until: readNullableString(record.cooldown_until, `${context}.cooldown_until`),
+        failure_count: typeof record.failure_count === 'number' ? record.failure_count : 0,
+        last_error: readNullableString(record.last_error, `${context}.last_error`),
+        last_tested_at: readNullableString(record.last_tested_at, `${context}.last_tested_at`),
+        last_used_at: readNullableString(record.last_used_at, `${context}.last_used_at`),
+        replacement_retire_at: readNullableString(
+            record.replacement_retire_at,
+            `${context}.replacement_retire_at`,
+        ),
+        status: typeof record.status === 'string' ? record.status : 'untested',
     };
 }
 

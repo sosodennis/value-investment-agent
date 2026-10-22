@@ -3,7 +3,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from src.infrastructure.llm.openrouter_models import (
+from src.llm_provider.infrastructure.openrouter_models import (
     FREE_ROUTER_ID,
     list_free_models,
 )

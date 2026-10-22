@@ -7,8 +7,7 @@ from src.agents.news.interface.contracts import SelectorResponseModel
 from src.agents.news.interface.prompt_renderers import (
     format_selector_input as format_selector_input_interface,
 )
-from src.shared.kernel.types import JSONObject
-from src.shared.llm.contracts import (
+from src.llm_provider.entrypoint import (
     ChatMessage,
     ChatRole,
     CompletionRequest,
@@ -16,6 +15,7 @@ from src.shared.llm.contracts import (
     ModelRoute,
     StructuredRequest,
 )
+from src.shared.kernel.types import JSONObject
 
 
 @dataclass(frozen=True)

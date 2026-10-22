@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from src.agents.intent.domain.ticker_candidate import TickerCandidate
+from src.llm_provider.entrypoint import LLMProviderPort, ModelRoute
 from src.shared.cross_agent.domain.market_identity import CompanyProfile
-from src.shared.llm.contracts import LLMProviderPort, ModelRoute
 
 
 class IIntentTickerSearchProvider(Protocol):

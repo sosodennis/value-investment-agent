@@ -17,8 +17,8 @@ from src.agents.debate.infrastructure.sycophancy import get_sycophancy_detector_
 from src.agents.debate.interface.preview_projection_service import (
     summarize_debate_for_preview,
 )
-from src.infrastructure.llm.provider import get_default_model_route, get_llm_provider
 from src.interface.events.schemas import ArtifactReference, build_artifact_payload
+from src.llm_provider.entrypoint import get_default_model_route, get_llm_provider
 from src.shared.kernel.contracts import (
     ARTIFACT_KIND_DEBATE_FINAL_REPORT,
     OUTPUT_KIND_DEBATE,

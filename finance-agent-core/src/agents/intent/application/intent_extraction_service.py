@@ -16,8 +16,7 @@ from src.agents.intent.interface.prompt_specs import (
     build_intent_extraction_system_prompt,
     build_search_extraction_system_prompt,
 )
-from src.shared.kernel.tools.logger import bounded_text, get_logger, log_event
-from src.shared.llm.contracts import (
+from src.llm_provider.entrypoint import (
     ChatMessage,
     ChatRole,
     CompletionRequest,
@@ -25,6 +24,7 @@ from src.shared.llm.contracts import (
     ModelRoute,
     StructuredRequest,
 )
+from src.shared.kernel.tools.logger import bounded_text, get_logger, log_event
 
 logger = get_logger(__name__)
 

@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import httpx
 
-
-class OpenRouterKeyTestError(RuntimeError):
-    """A sanitized probe failure."""
+from src.llm_provider.domain.errors import OpenRouterKeyTestError
 
 
 async def test_openrouter_key(

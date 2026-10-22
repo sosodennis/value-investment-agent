@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-import src.infrastructure.llm.provider as provider_module
+import src.llm_provider.entrypoint as provider_module
+from src.llm_provider.application import wiring
 
 
 @pytest.mark.asyncio
@@ -17,7 +18,7 @@ async def test_gateway_provider_is_reused_and_closed_at_shutdown(monkeypatch) ->
 
     await provider_module.close_llm_provider()
     monkeypatch.setenv("LLM_GATEWAY_BASE_URL", "http://gateway:4000")
-    monkeypatch.setattr(provider_module, "LiteLLMGatewayProvider", FakeProvider)
+    monkeypatch.setattr(wiring, "LiteLLMGatewayProvider", FakeProvider)
 
     first_provider = provider_module.get_llm_provider()
     second_provider = provider_module.get_llm_provider()
@@ -28,4 +29,8 @@ async def test_gateway_provider_is_reused_and_closed_at_shutdown(monkeypatch) ->
     await provider_module.close_llm_provider()
 
     assert first_provider.closed is True
-    assert provider_module._gateway_provider is None
+    replacement_provider = provider_module.get_llm_provider()
+    assert isinstance(replacement_provider, FakeProvider)
+    assert replacement_provider is not first_provider
+    await provider_module.close_llm_provider()
+    assert replacement_provider.closed is True

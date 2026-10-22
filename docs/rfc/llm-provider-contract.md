@@ -28,7 +28,8 @@ LiteLLM pool and different users resolve to different pools.
 
 ## Contract
 
-`src/shared/llm/contracts.py` contains provider-neutral models for:
+`finance-agent-core/src/llm_provider/domain/contracts.py` contains
+provider-neutral models for:
 
 - logical routes and authenticated provider principals;
 - resolved gateway routes (adapter-internal);
@@ -49,16 +50,20 @@ outcomes without prompt, cookie, token, or key material.
 | `/stream` task creation | authenticated session ownership | migrated; principal is bound before LangGraph execution |
 | LiteLLM gateway adapter | OpenAI-compatible HTTP client | migrated; user-scoped route resolution and attribution fields |
 | key settings API | LiteLLM management client | migrated; authenticated users register into their opaque pool alias |
-| retry/cooldown and multi-worker selection | gateway reliability policy | bounded adapter policy merged; Redis coordination in #91; live proof in #97 |
-| pinned LiteLLM image and disposable OpenRouter evidence | deployment/POC | follow-up issue #92 |
-| authenticated key API ownership test matrix | control/data-plane integration | follow-up issue #95 |
-| frontend workflow acceptance | browser UX | follow-up issue #96 |
-| full rollout gates | end-to-end verification | follow-up issue #97 |
+| retry/cooldown and multi-worker selection | gateway reliability policy | bounded adapter retries and Redis-backed LiteLLM cooldown are covered by deterministic contract tests; disposable-provider staging remains in #97 |
+| pinned LiteLLM image and Compose topology | deployment/POC | image and Redis contract are pinned and verified by #91's deterministic gates |
+| authenticated key API ownership | control-plane integration | per-user import, test, replace, delete, and ownership checks are implemented in #90 |
+| frontend workflow | browser UX | key and model settings workflow is implemented in #96 |
+| full rollout gates | end-to-end verification | disposable OpenRouter staging evidence remains in #97 |
 
 ## Deliberate limits
 
 LiteLLM does not currently return a stable selected deployment id or key
 fingerprint in the OpenAI-compatible response used by this adapter. The
-contract exposes both fields so #91 can attach them when the pool selector and
-cooldown registry become authoritative. Until then, attribution is optional
-and no secret is reconstructed from gateway responses.
+project does not infer per-key state from that response. The pinned gateway's
+custom callback reads the selected deployment id from LiteLLM's internal call
+metadata and writes a sanitized outcome to a dedicated Redis key. The settings
+API reads these records only after filtering deployments by authenticated user
+ownership. Request content, provider credentials, and raw upstream errors are
+not sent to the callback store. This records ordinary application traffic; it
+does not issue extra model probes.

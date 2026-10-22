@@ -22,10 +22,10 @@ from src.agents.news.application.state_updates import (
     build_analyst_node_update,
 )
 from src.agents.news.interface.parsers import parse_news_items
+from src.llm_provider.entrypoint import LLMProviderPort, ModelRoute
 from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import JSONObject
 from src.shared.kernel.workflow_contracts import WorkflowNodeResult
-from src.shared.llm.contracts import LLMProviderPort, ModelRoute
 
 logger = get_logger(__name__)
 

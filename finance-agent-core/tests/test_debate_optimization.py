@@ -6,7 +6,7 @@ from src.agents.debate.application.dto import DebateSourceLoadIssue
 from src.agents.debate.application.report_service import PreparedDebateReports
 from src.agents.debate.application.wiring import get_debate_workflow_runner
 from src.agents.debate.workflow.nodes import build_debate_nodes
-from src.shared.llm.contracts import CompletionResult
+from src.llm_provider.entrypoint import CompletionResult
 
 debate_runner = get_debate_workflow_runner()
 debate_nodes = build_debate_nodes(debate_runner)

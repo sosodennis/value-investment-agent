@@ -38,3 +38,9 @@ class OwnershipService:
             resource_type=resource_type,
             user_id=user_id,
         )
+
+    async def release(self, *, resource_type: str, resource_id: str) -> None:
+        await self._repository.release(
+            resource_type=resource_type,
+            resource_id=resource_id,
+        )

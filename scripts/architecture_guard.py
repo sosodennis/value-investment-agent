@@ -39,6 +39,7 @@ LAYERS = {
     "workflow",
 }
 PUBLIC_CAPABILITY_MODULES = {"api", "contracts", "public"}
+INDEPENDENT_CAPABILITIES = {"llm_provider"}
 
 
 @dataclass(frozen=True)
@@ -133,6 +134,17 @@ def extract_imports(path: Path, src_root: Path = SRC_ROOT) -> list[ImportRef]:
 
 def classify_module(module_name: str) -> ModuleOwner:
     parts = module_name.split(".")
+    if len(parts) >= 3 and parts[:2] == ["src", "llm_provider"]:
+        remainder = parts[2:]
+        layer = remainder[0] if remainder and remainder[0] in LAYERS else None
+        if layer == "application" and len(remainder) > 1:
+            if remainder[1] in {"composition", "wiring"}:
+                layer = "composition"
+        return ModuleOwner(
+            agent="llm_provider",
+            capability="llm_provider",
+            layer=layer,
+        )
     if parts[:3] == ["src", "workflow", "nodes"] and len(parts) >= 4:
         agent = LEGACY_WORKFLOW_AGENTS.get(parts[3])
         if agent:
@@ -163,7 +175,10 @@ def classify_module(module_name: str) -> ModuleOwner:
 
 
 def _is_agent_entrypoint(module_name: str, agent: str) -> bool:
-    return module_name == f"src.agents.{agent}.entrypoint"
+    return module_name in {
+        f"src.agents.{agent}.entrypoint",
+        f"src.{agent}.entrypoint",
+    }
 
 
 def _is_own_entrypoint_wiring_import(
@@ -175,7 +190,11 @@ def _is_own_entrypoint_wiring_import(
         and source.agent is not None
         and source.agent == target.agent
         and _is_agent_entrypoint(ref.source, source.agent)
-        and ref.target == f"src.agents.{source.agent}.application.wiring"
+        and ref.target
+        in {
+            f"src.agents.{source.agent}.application.wiring",
+            f"src.{source.agent}.application.wiring",
+        }
     )
 
 
@@ -364,6 +383,12 @@ def collect_violations(src_root: Path = SRC_ROOT) -> list[Violation]:
             if layer_message and not _is_own_entrypoint_wiring_import(
                 ref, source, target
             ):
+                if (
+                    source.agent == "llm_provider"
+                    and source.layer == "entrypoint"
+                    and ref.target == "src.llm_provider.composition.routes"
+                ):
+                    continue
                 add(_make_violation(ref, "LAYER_DIRECTION", layer_message))
 
         if source.agent and source.agent == target.agent:

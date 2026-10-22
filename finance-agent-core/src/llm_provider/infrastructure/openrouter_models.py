@@ -5,25 +5,15 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import Mapping
-from dataclasses import dataclass
 
 import httpx
+
+from src.llm_provider.domain.errors import OpenRouterModelsError
+from src.llm_provider.domain.provider_models import OpenRouterModel
 
 OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
 FREE_ROUTER_ID = "openrouter/free"
 _CACHE_TTL_SECONDS = 300.0
-
-
-class OpenRouterModelsError(RuntimeError):
-    """Raised when OpenRouter's public model catalogue cannot be read."""
-
-
-@dataclass(frozen=True)
-class OpenRouterModel:
-    id: str
-    name: str
-    description: str | None
-    context_length: int | None
 
 
 _cache: tuple[float, tuple[OpenRouterModel, ...]] | None = None

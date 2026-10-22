@@ -67,7 +67,7 @@ from src.agents.news.interface.contracts import (
     SourceInfoModel,
 )
 from src.agents.news.interface.prompt_renderers import build_analysis_chain_payload
-from src.shared.llm.contracts import ModelRoute, StructuredRequest
+from src.llm_provider.entrypoint import ModelRoute, StructuredRequest
 
 
 def test_aggregate_news_items_computes_weighted_sentiment_and_themes() -> None:

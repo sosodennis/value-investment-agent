@@ -2,8 +2,9 @@ router_settings:
   routing_strategy: simple-shuffle
   num_retries: 1
   retry_after: 1
-  allowed_fails: 2
-  cooldown_time: 30
+  # Cool a deployment after its first retryable failed dispatch.
+  allowed_fails: 0
+  cooldown_time: os.environ/LLM_PROVIDER_KEY_COOLDOWN_SECONDS
   # Cooldown and rate state must be shared by every LiteLLM worker. The
   # application does not maintain a second process-local key selector.
   redis_host: os.environ/LITELLM_REDIS_HOST
@@ -22,3 +23,5 @@ general_settings:
 
 litellm_settings:
   drop_params: true
+  callbacks:
+    - provider_key_telemetry.provider_key_telemetry

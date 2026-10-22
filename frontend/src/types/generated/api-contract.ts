@@ -24,27 +24,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/auth/local-admin/session": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Create Local Admin Session
-         * @description Create the temporary loopback-only admin session used in development.
-         */
-        post: operations["create_local_admin_session_api_auth_local_admin_session_post"];
-        /** Delete Local Admin Session */
-        delete: operations["delete_local_admin_session_api_auth_local_admin_session_delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/auth/login": {
         parameters: {
             query?: never;
@@ -120,11 +99,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Llm Provider Keys */
-        get: operations["list_llm_provider_keys_api_llm_provider_keys_get"];
+        /** List Provider Keys */
+        get: operations["list_provider_keys_api_llm_provider_keys_get"];
         put?: never;
-        /** Add Llm Provider Key */
-        post: operations["add_llm_provider_key_api_llm_provider_keys_post"];
+        /** Add Provider Key */
+        post: operations["add_provider_key_api_llm_provider_keys_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -141,8 +120,25 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Delete Llm Provider Key */
-        delete: operations["delete_llm_provider_key_api_llm_provider_keys__key_id__delete"];
+        /** Delete Provider Key */
+        delete: operations["delete_provider_key_api_llm_provider_keys__key_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/llm/provider-keys/{key_id}/replace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Replace Provider Key */
+        post: operations["replace_provider_key_api_llm_provider_keys__key_id__replace_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -157,8 +153,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Test Llm Provider Key */
-        post: operations["test_llm_provider_key_api_llm_provider_keys__key_id__test_post"];
+        /** Test Provider Key */
+        post: operations["test_provider_key_api_llm_provider_keys__key_id__test_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1122,61 +1118,12 @@ export interface components {
              */
             sentiment: "bullish" | "bearish" | "neutral";
         };
-        /** LlmModelOptionResponse */
-        LlmModelOptionResponse: {
-            /** Context Length */
-            context_length?: number | null;
-            /** Description */
-            description?: string | null;
-            /** Id */
-            id: string;
-            /** Name */
-            name: string;
-        };
-        /** LlmProviderKeyCreateRequest */
-        LlmProviderKeyCreateRequest: {
-            /**
-             * Api Key
-             * Format: password
-             */
-            api_key: string;
-            /**
-             * Label
-             * @default OpenRouter key
-             */
-            label: string;
-        };
-        /** LlmProviderKeyResponse */
-        LlmProviderKeyResponse: {
-            /** Created At */
-            created_at?: string | null;
-            /** Fingerprint */
-            fingerprint: string;
-            /** Id */
-            id: string;
-            /** Label */
-            label: string;
-            /** Suffix */
-            suffix: string;
-        };
-        /** LlmProviderKeyTestResponse */
-        LlmProviderKeyTestResponse: {
-            /** Id */
-            id: string;
-            /** Passed */
-            passed: boolean;
-            /**
-             * Status
-             * @enum {string}
-             */
-            status: "healthy" | "invalid_key" | "rate_limited" | "unavailable";
-        };
         /** LlmSettingsResponse */
         LlmSettingsResponse: {
             /** Default Model */
             default_model: string;
             /** Models */
-            models: components["schemas"]["LlmModelOptionResponse"][];
+            models: components["schemas"]["ModelOptionResponse"][];
             /** Selected Model */
             selected_model: string;
         };
@@ -1216,6 +1163,17 @@ export interface components {
              * @default text
              */
             type: string;
+        };
+        /** ModelOptionResponse */
+        ModelOptionResponse: {
+            /** Context Length */
+            context_length?: number | null;
+            /** Description */
+            description?: string | null;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
         };
         /** MomentumExtremesModel */
         MomentumExtremesModel: {
@@ -1407,6 +1365,85 @@ export interface components {
              * @constant
              */
             version: "v1";
+        };
+        /** Principal */
+        Principal: {
+            /**
+             * Auth Type
+             * @default session
+             * @constant
+             */
+            auth_type: "session";
+            /** Email */
+            email: string;
+            /**
+             * Role
+             * @default user
+             * @constant
+             */
+            role: "user";
+            /** Subject */
+            subject: string;
+            /** User Id */
+            user_id: string;
+        };
+        /** ProviderKeyCreateRequest */
+        ProviderKeyCreateRequest: {
+            /**
+             * Api Key
+             * Format: password
+             */
+            api_key: string;
+            /**
+             * Label
+             * @default OpenRouter key
+             */
+            label: string;
+        };
+        /** ProviderKeyResponse */
+        ProviderKeyResponse: {
+            /** Cooldown Until */
+            cooldown_until?: string | null;
+            /** Created At */
+            created_at?: string | null;
+            /**
+             * Failure Count
+             * @default 0
+             */
+            failure_count: number;
+            /** Fingerprint */
+            fingerprint: string;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Last Error */
+            last_error?: string | null;
+            /** Last Tested At */
+            last_tested_at?: string | null;
+            /** Last Used At */
+            last_used_at?: string | null;
+            /** Replacement Retire At */
+            replacement_retire_at?: string | null;
+            /**
+             * Status
+             * @default untested
+             */
+            status: string;
+            /** Suffix */
+            suffix: string;
+        };
+        /** ProviderKeyTestResponse */
+        ProviderKeyTestResponse: {
+            /** Id */
+            id: string;
+            /** Passed */
+            passed: boolean;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "healthy" | "invalid_key" | "rate_limited" | "unavailable";
         };
         /** QualitySummaryModel */
         QualitySummaryModel: {
@@ -2973,39 +3010,6 @@ export interface components {
             /** Value Area Coverage */
             value_area_coverage?: number | null;
         };
-        /** Principal */
-        src__auth__interface__contracts__Principal: {
-            /**
-             * Auth Type
-             * @default session
-             * @constant
-             */
-            auth_type: "session";
-            /** Email */
-            email: string;
-            /**
-             * Role
-             * @default user
-             * @constant
-             */
-            role: "user";
-            /** Subject */
-            subject: string;
-            /** User Id */
-            user_id: string;
-        };
-        /**
-         * Principal
-         * @description The minimal identity contract shared by admin-only routes.
-         */
-        src__interface__auth__local_admin__Principal: {
-            /** Auth Type */
-            auth_type: string;
-            /** Role */
-            role: string;
-            /** Subject */
-            subject: string;
-        };
     };
     responses: never;
     parameters: never;
@@ -3046,44 +3050,6 @@ export interface operations {
             };
         };
     };
-    create_local_admin_session_api_auth_local_admin_session_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["src__interface__auth__local_admin__Principal"];
-                };
-            };
-        };
-    };
-    delete_local_admin_session_api_auth_local_admin_session_delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
     login_api_auth_login_post: {
         parameters: {
             query?: never;
@@ -3103,7 +3069,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["src__auth__interface__contracts__Principal"];
+                    "application/json": components["schemas"]["Principal"];
                 };
             };
             /** @description Validation Error */
@@ -3150,7 +3116,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["src__auth__interface__contracts__Principal"];
+                    "application/json": components["schemas"]["Principal"];
                 };
             };
         };
@@ -3174,7 +3140,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["src__auth__interface__contracts__Principal"];
+                    "application/json": components["schemas"]["Principal"];
                 };
             };
             /** @description Validation Error */
@@ -3188,7 +3154,7 @@ export interface operations {
             };
         };
     };
-    list_llm_provider_keys_api_llm_provider_keys_get: {
+    list_provider_keys_api_llm_provider_keys_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3203,12 +3169,12 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LlmProviderKeyResponse"][];
+                    "application/json": components["schemas"]["ProviderKeyResponse"][];
                 };
             };
         };
     };
-    add_llm_provider_key_api_llm_provider_keys_post: {
+    add_provider_key_api_llm_provider_keys_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3217,7 +3183,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["LlmProviderKeyCreateRequest"];
+                "application/json": components["schemas"]["ProviderKeyCreateRequest"];
             };
         };
         responses: {
@@ -3227,7 +3193,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LlmProviderKeyResponse"];
+                    "application/json": components["schemas"]["ProviderKeyResponse"];
                 };
             };
             /** @description Validation Error */
@@ -3241,7 +3207,7 @@ export interface operations {
             };
         };
     };
-    delete_llm_provider_key_api_llm_provider_keys__key_id__delete: {
+    delete_provider_key_api_llm_provider_keys__key_id__delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -3270,7 +3236,42 @@ export interface operations {
             };
         };
     };
-    test_llm_provider_key_api_llm_provider_keys__key_id__test_post: {
+    replace_provider_key_api_llm_provider_keys__key_id__replace_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderKeyCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderKeyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_provider_key_api_llm_provider_keys__key_id__test_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3287,7 +3288,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LlmProviderKeyTestResponse"];
+                    "application/json": components["schemas"]["ProviderKeyTestResponse"];
                 };
             };
             /** @description Validation Error */

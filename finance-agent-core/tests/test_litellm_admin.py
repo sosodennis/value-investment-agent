@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 
 import httpx
 import pytest
 
-from src.infrastructure.llm.litellm_admin import (
+from src.llm_provider.infrastructure.litellm_admin import (
     MANAGED_MARKER,
     LiteLLMAdminClient,
     LiteLLMAdminError,
@@ -50,6 +51,28 @@ async def test_list_filters_unmanaged_models_and_redacts_key() -> None:
     assert len(keys) == 1
     assert keys[0].id == "managed-id"
     assert "secret" not in repr(keys[0])
+
+
+@pytest.mark.parametrize("status_code", [401, 403])
+@pytest.mark.asyncio
+async def test_gateway_management_auth_or_endpoint_errors_are_not_key_errors(
+    status_code: int,
+) -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/model/info"
+        return httpx.Response(status_code)
+
+    client = LiteLLMAdminClient(
+        base_url="http://gateway",
+        admin_token="admin",
+        openrouter_headers={},
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+    with pytest.raises(LiteLLMAdminError) as raised:
+        await client.list_managed()
+    await client.close()
+
+    assert raised.value.code == "unavailable"
 
 
 @pytest.mark.parametrize(
@@ -123,6 +146,8 @@ async def test_test_key_rejects_an_unhealthy_model() -> None:
                     "data": [{"model_info": {"id": "managed-id", MANAGED_MARKER: True}}]
                 },
             )
+        if request.url.path.endswith("/model/managed-id/update"):
+            return httpx.Response(200, json={"updated": True})
         assert request.url.path == "/health"
         return httpx.Response(
             200,
@@ -197,7 +222,58 @@ async def test_delete_uses_gateway_management_root() -> None:
 
 
 @pytest.mark.asyncio
-async def test_gateway_route_404_is_not_reported_as_missing_managed_key() -> None:
+async def test_replacement_metadata_and_expired_grace_cleanup_are_idempotent() -> None:
+    retire_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+    deployment = {
+        "model_info": {
+            "id": "managed-id",
+            MANAGED_MARKER: True,
+            "fingerprint": "f00dbabe",
+            "replacement_retire_at": retire_at.isoformat(),
+        }
+    }
+    deleted: list[str] = []
+    deleted_from_list = False
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal deleted_from_list
+        if request.url.path == "/model/info":
+            return httpx.Response(
+                200,
+                json={"data": [] if deleted_from_list else [deployment]},
+            )
+        if request.url.path == "/model/delete":
+            model_id = json.loads(request.content)["id"]
+            deleted.append(model_id)
+            deleted_from_list = True
+            return httpx.Response(200, json={"deleted": True})
+        if request.url.path.endswith("/managed-id/update"):
+            body = json.loads(request.content)
+            deployment["model_info"].update(body.get("model_info", {}))
+            return httpx.Response(200, json={"updated": True})
+        raise AssertionError(f"Unexpected request: {request.method} {request.url.path}")
+
+    client = LiteLLMAdminClient(
+        base_url="http://gateway",
+        admin_token="admin",
+        openrouter_headers={},
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+    await client.mark_replacement_grace(
+        "managed-id", retire_at=datetime.now(timezone.utc) + timedelta(minutes=15)
+    )
+    assert deployment["model_info"]["status"] == "replacement_grace"
+    count = await client.cleanup_expired_replacements()
+    assert count == 0
+    deployment["model_info"]["replacement_retire_at"] = retire_at.isoformat()
+    assert await client.cleanup_expired_replacements() == 1
+    assert await client.cleanup_expired_replacements() == 0
+    assert deleted == ["managed-id"]
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_gateway_route_404_is_reported_as_unavailable() -> None:
     async def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(404, json={"detail": "Not Found"})
 
@@ -207,11 +283,10 @@ async def test_gateway_route_404_is_not_reported_as_missing_managed_key() -> Non
         openrouter_headers={},
         http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
     )
-    with pytest.raises(
-        LiteLLMAdminError, match="gateway management endpoint was not found"
-    ):
+    with pytest.raises(LiteLLMAdminError) as raised:
         await client.list_managed()
     await client.close()
+    assert raised.value.code == "unavailable"
 
 
 @pytest.mark.parametrize(
