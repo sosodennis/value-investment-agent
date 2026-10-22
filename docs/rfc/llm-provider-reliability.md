@@ -21,8 +21,13 @@ delivered. A post-first-byte failure is returned as `stream_interrupted` with
 partial output/tool-call data and the attempt history. Before the first byte,
 transient status and transport errors may consume the bounded retry budget.
 
-The current Compose POC delegates cooldown state to LiteLLM and intentionally
-runs one gateway instance. Shared Redis coordination, concurrent multi-worker
-selection, half-open recovery, and real disposable-key staging evidence remain
-rollout gates for #91/#97; no process-local round-robin state is introduced as
-a substitute.
+The Compose POC delegates cooldown state to LiteLLM and configures both its
+Router Redis and proxy-wide `coordination_redis` with the shared Redis service.
+The latter keeps worker-shared auth/throttle and coordination state separate
+from response caching. `LLM_GATEWAY_WORKERS` can run multiple LiteLLM workers in
+one container; every worker uses the same Redis-backed cooldown and rate state.
+LiteLLM's `cooldown_time` expiry is the half-open recovery boundary: the next
+request probes the deployment and returns it to the healthy pool only after a
+successful request. The multi-worker and half-open behavior still needs staging
+evidence with disposable OpenRouter keys before #91/#97 can be closed; no
+process-local round-robin state is introduced as a substitute.

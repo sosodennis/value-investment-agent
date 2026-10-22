@@ -29,18 +29,22 @@ services:
       timeout: 5s
       retries: 5
 
-  # Optional single-instance LLM gateway POC. Start it with:
+  # Optional LLM gateway POC. Start it with:
   # docker compose --profile llm-gateway up -d llm-gateway
   llm-gateway:
     image: docker.litellm.ai/berriai/litellm@sha256:1acf80698f7eb47021b0bf5aed01ba9e80098cf74cdb3e588515bdd48a129fa6
     platform: linux/arm64
     profiles:
       - llm-gateway
-    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    command:
+      ["--config", "/app/config.yaml", "--port", "4000", "--num_workers", "${LLM_GATEWAY_WORKERS:-1}"]
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/litellm
       STORE_MODEL_IN_DB: "True"
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?set LITELLM_MASTER_KEY for the LLM gateway}
+      LITELLM_REDIS_HOST: ${LITELLM_REDIS_HOST:-redis}
+      LITELLM_REDIS_PORT: ${LITELLM_REDIS_PORT:-6379}
+      LITELLM_REDIS_PASSWORD: ${LITELLM_REDIS_PASSWORD:-}
     mem_limit: ${LLM_GATEWAY_MEMORY_LIMIT:-1g}
     cpus: ${LLM_GATEWAY_CPUS:-1.0}
     restart: unless-stopped
@@ -53,6 +57,8 @@ services:
         condition: service_healthy
       llm-gateway-db-init:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
     healthcheck:
       test:
         ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness')\""]
