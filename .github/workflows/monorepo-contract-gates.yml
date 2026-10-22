@@ -9,6 +9,32 @@ on:
   workflow_dispatch:
 
 jobs:
+  model-inference-service-contract-gate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: model-inference-service
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install service test dependencies
+        run: uv sync --group dev
+
+      - name: Check service formatting and lint
+        run: uv run ruff check src tests && uv run ruff format --check src tests
+
+      - name: Run service contract tests
+        run: uv run pytest
+
   llm-provider-contract-gate:
     runs-on: ubuntu-latest
     defaults:
