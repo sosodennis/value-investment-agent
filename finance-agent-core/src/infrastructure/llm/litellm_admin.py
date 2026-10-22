@@ -15,6 +15,7 @@ from src.shared.llm.routes import DEFAULT_MODEL_ALIAS
 
 MANAGED_MARKER: Final = "value_investment_agent_managed"
 OPENROUTER_BASE_URL: Final = "https://openrouter.ai/api/v1"
+OPENROUTER_LITELLM_PREFIX: Final = "openrouter/"
 
 
 class LiteLLMAdminError(RuntimeError):
@@ -36,6 +37,11 @@ def key_suffix(value: str) -> str:
 
 def key_fingerprint(value: str) -> str:
     return sha256(value.encode("utf-8")).hexdigest()[:12]
+
+
+def _to_litellm_model_id(public_model_id: str) -> str:
+    """Qualify a raw OpenRouter catalog ID for LiteLLM's OpenRouter provider."""
+    return f"{OPENROUTER_LITELLM_PREFIX}{public_model_id}"
 
 
 class LiteLLMAdminClient:
@@ -126,7 +132,7 @@ class LiteLLMAdminClient:
         payload = {
             "model_name": model_name,
             "litellm_params": {
-                "model": model,
+                "model": _to_litellm_model_id(model),
                 "api_base": OPENROUTER_BASE_URL,
                 "api_key": key,
                 "headers": self._openrouter_headers,
@@ -165,7 +171,7 @@ class LiteLLMAdminClient:
             await self._request(
                 "PATCH",
                 f"/model/{validate_model_id(item.id)}/update",
-                json={"litellm_params": {"model": model}},
+                json={"litellm_params": {"model": _to_litellm_model_id(model)}},
             )
 
     async def test_key(self, model_id: str) -> bool:
