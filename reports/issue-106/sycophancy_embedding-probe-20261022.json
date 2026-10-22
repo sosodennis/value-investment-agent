@@ -1,0 +1,1 @@
+{"available": false, "error": "ValueError: Could not load model sentence-transformers/all-MiniLM-L6-v2 from any source.", "rss_peak_mib": 74.422, "workload": "sycophancy_embedding"}
