@@ -4,7 +4,6 @@ import sys
 import types
 
 import numpy as np
-import torch
 
 from src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl.filtering.fls_filter import (
     _FLSClassifier,
@@ -12,34 +11,25 @@ from src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl.f
 from src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl.retrieval.hybrid_retriever import (
     _DenseRetriever,
 )
+from src.model_inference.entrypoint import (
+    FLSPrediction,
+    FLSResult,
+    InferenceErrorCode,
+    InferenceFailure,
+)
 
 
-def test_fls_classifier_stops_reloading_after_first_failure(
-    monkeypatch,
-) -> None:
-    load_attempts = {"tokenizer": 0}
-
-    class _FakeTokenizer:
-        @staticmethod
-        def from_pretrained(*_args, **_kwargs):  # type: ignore[no-untyped-def]
-            load_attempts["tokenizer"] += 1
-            raise RuntimeError("offline")
-
-    class _FakeModel:
-        @staticmethod
-        def from_pretrained(*_args, **_kwargs):  # type: ignore[no-untyped-def]
-            raise RuntimeError("offline")
-
-    fake_transformers = types.SimpleNamespace(
-        AutoTokenizer=_FakeTokenizer,
-        AutoModelForSequenceClassification=_FakeModel,
-    )
-    monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
-
+def test_fls_classifier_without_inference_uses_lexical_fallback() -> None:
     classifier = _FLSClassifier()
-    assert classifier._ensure_loaded() is False
-    assert classifier._ensure_loaded() is False
-    assert load_attempts["tokenizer"] == 1
+    sentences = [
+        "Historical accounting discussion.",
+        "Management expects higher revenue next year.",
+    ]
+
+    filtered, stats = classifier.keep_forward_sentences_with_stats(sentences)
+
+    assert filtered == [sentences[1]]
+    assert stats.sentences_scored == 0
 
 
 def test_dense_retriever_stops_reloading_after_first_failure(
@@ -89,94 +79,45 @@ def test_fls_prefilter_uses_default_cap_for_dense_forward_corpus() -> None:
 def test_fls_classifier_batches_inference_with_configured_batch_size(
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("SEC_TEXT_FLS_BATCH_SIZE", "3")
-    batch_sizes: list[int] = []
+    class _FakeInference:
+        def __init__(self) -> None:
+            self.inputs: list[list[str]] = []
 
-    class _FakeTokenizer:
-        def __call__(  # type: ignore[no-untyped-def]
-            self,
-            texts: list[str],
-            *,
-            return_tensors: str,
-            padding: bool,
-            truncation: bool,
-            max_length: int,
-        ) -> dict[str, torch.Tensor]:
-            assert return_tensors == "pt"
-            assert padding is True
-            assert truncation is True
-            assert max_length >= 64
-            batch_sizes.append(len(texts))
-            batch = len(texts)
-            return {
-                "input_ids": torch.ones((batch, 4), dtype=torch.long),
-                "attention_mask": torch.ones((batch, 4), dtype=torch.long),
-            }
+        def fls_predictions(self, sentences: list[str]) -> FLSResult:
+            self.inputs.append(list(sentences))
+            return FLSResult(
+                predictions=tuple(
+                    FLSPrediction(keep=True, confidence=0.9) for _sentence in sentences
+                ),
+                model_revision="test-revision",
+            )
 
-    class _FakeModel:
-        def __call__(self, **inputs: torch.Tensor) -> object:
-            batch = int(inputs["input_ids"].shape[0])
-            logits = torch.zeros((batch, 3), dtype=torch.float32)
-            logits[:, 1] = 1.0
-            return types.SimpleNamespace(logits=logits)
-
-    classifier = _FLSClassifier()
-    classifier._loaded = True
-    classifier._tokenizer = _FakeTokenizer()
-    classifier._model = _FakeModel()
-    classifier._keep_label_ids = {1}
+    inference = _FakeInference()
+    classifier = _FLSClassifier(inference)
     sentences = [f"Management expects guidance update {idx}." for idx in range(7)]
 
     filtered, stats = classifier.keep_forward_sentences_with_stats(sentences)
 
     assert len(filtered) == 7
-    assert batch_sizes == [3, 3, 1]
-    assert stats.batches == 3
+    assert inference.inputs == [sentences]
+    assert stats.batches == 1
     assert stats.sentences_scored == 7
 
 
-def test_fls_classifier_length_bucketing_preserves_output_alignment(
-    monkeypatch,
-) -> None:
-    monkeypatch.setenv("SEC_TEXT_FLS_BATCH_SIZE", "3")
-    observed_batches: list[list[int]] = []
+def test_fls_classifier_preserves_output_alignment() -> None:
+    class _FakeInference:
+        def fls_predictions(self, sentences: list[str]) -> FLSResult:
+            return FLSResult(
+                predictions=tuple(
+                    FLSPrediction(
+                        keep=int(sentence.rsplit("id=", maxsplit=1)[1]) % 2 == 1,
+                        confidence=0.8,
+                    )
+                    for sentence in sentences
+                ),
+                model_revision="test-revision",
+            )
 
-    class _FakeTokenizer:
-        def __call__(  # type: ignore[no-untyped-def]
-            self,
-            texts: list[str],
-            *,
-            return_tensors: str,
-            padding: bool,
-            truncation: bool,
-            max_length: int,
-        ) -> dict[str, torch.Tensor]:
-            assert return_tensors == "pt"
-            assert padding is True
-            assert truncation is True
-            assert max_length >= 64
-            ids = [int(text.rsplit("id=", maxsplit=1)[1]) for text in texts]
-            observed_batches.append(ids)
-            values = torch.tensor(ids, dtype=torch.long).reshape(len(ids), 1)
-            return {
-                "input_ids": values,
-                "attention_mask": torch.ones((len(ids), 1), dtype=torch.long),
-            }
-
-    class _FakeModel:
-        def __call__(self, **inputs: torch.Tensor) -> object:
-            ids = inputs["input_ids"].reshape(-1)
-            logits = torch.zeros((ids.shape[0], 2), dtype=torch.float32)
-            odd_mask = (ids % 2).to(torch.bool)
-            logits[~odd_mask, 0] = 1.0
-            logits[odd_mask, 1] = 1.0
-            return types.SimpleNamespace(logits=logits)
-
-    classifier = _FLSClassifier()
-    classifier._loaded = True
-    classifier._tokenizer = _FakeTokenizer()
-    classifier._model = _FakeModel()
-    classifier._keep_label_ids = {1}
     sentences = [
         "short id=0",
         "very long guidance sentence repeated repeated repeated id=1",
@@ -186,50 +127,30 @@ def test_fls_classifier_length_bucketing_preserves_output_alignment(
         "long demand forecast sentence repeated repeated id=5",
         "brief id=6",
     ]
+    classifier = _FLSClassifier(_FakeInference())
 
     filtered, stats = classifier.keep_forward_sentences_with_stats(sentences)
 
-    assert stats.batches == 3
-    assert observed_batches[0] == [3, 1, 5]
+    assert stats.batches == 1
     assert filtered == [sentences[1], sentences[3], sentences[5]]
 
 
 def test_fls_classifier_sentence_cache_reuses_predictions_across_calls() -> None:
-    tokenizer_calls = {"count": 0}
+    class _FakeInference:
+        def __init__(self) -> None:
+            self.calls = 0
 
-    class _FakeTokenizer:
-        def __call__(  # type: ignore[no-untyped-def]
-            self,
-            texts: list[str],
-            *,
-            return_tensors: str,
-            padding: bool,
-            truncation: bool,
-            max_length: int,
-        ) -> dict[str, torch.Tensor]:
-            assert return_tensors == "pt"
-            assert padding is True
-            assert truncation is True
-            assert max_length >= 64
-            tokenizer_calls["count"] += 1
-            batch = len(texts)
-            return {
-                "input_ids": torch.ones((batch, 4), dtype=torch.long),
-                "attention_mask": torch.ones((batch, 4), dtype=torch.long),
-            }
+        def fls_predictions(self, sentences: list[str]) -> FLSResult:
+            self.calls += 1
+            return FLSResult(
+                predictions=tuple(
+                    FLSPrediction(keep=True, confidence=0.9) for _sentence in sentences
+                ),
+                model_revision="test-revision",
+            )
 
-    class _FakeModel:
-        def __call__(self, **inputs: torch.Tensor) -> object:
-            batch = int(inputs["input_ids"].shape[0])
-            logits = torch.zeros((batch, 2), dtype=torch.float32)
-            logits[:, 1] = 1.0
-            return types.SimpleNamespace(logits=logits)
-
-    classifier = _FLSClassifier()
-    classifier._loaded = True
-    classifier._tokenizer = _FakeTokenizer()
-    classifier._model = _FakeModel()
-    classifier._keep_label_ids = {1}
+    inference = _FakeInference()
+    classifier = _FLSClassifier(inference)
     sentences = [
         "Management expects stronger demand in Q4.",
         "The company guides to higher margin next year.",
@@ -252,101 +173,28 @@ def test_fls_classifier_sentence_cache_reuses_predictions_across_calls() -> None
     assert second_stats.cache_misses == 0
     assert second_stats.sentences_scored == 0
     assert second_stats.batches == 0
-    assert tokenizer_calls["count"] == 1
+    assert inference.calls == 1
 
 
-def test_fls_classifier_warmup_runs_dummy_inference(monkeypatch) -> None:
-    load_attempts = {"tokenizer": 0, "model": 0}
-    tokenizer_inputs: list[list[str]] = []
+def test_fls_classifier_service_error_keeps_lexical_fallback() -> None:
+    class _FailingInference:
+        def fls_predictions(self, _sentences: list[str]) -> FLSResult:
+            raise InferenceFailure(
+                code=InferenceErrorCode.UNAVAILABLE,
+                request_id="test-request",
+                retryable=True,
+            )
 
-    class _FakeTokenizer:
-        def __call__(  # type: ignore[no-untyped-def]
-            self,
-            texts: list[str],
-            *,
-            return_tensors: str,
-            padding: bool,
-            truncation: bool,
-            max_length: int,
-        ) -> dict[str, torch.Tensor]:
-            assert return_tensors == "pt"
-            assert padding is True
-            assert truncation is True
-            assert max_length >= 64
-            tokenizer_inputs.append(list(texts))
-            batch = len(texts)
-            return {
-                "input_ids": torch.ones((batch, 4), dtype=torch.long),
-                "attention_mask": torch.ones((batch, 4), dtype=torch.long),
-            }
+    classifier = _FLSClassifier(_FailingInference())
+    sentences = [
+        "Historical accounting discussion.",
+        "Management expects higher revenue next year.",
+    ]
 
-    class _FakeAutoTokenizer:
-        @staticmethod
-        def from_pretrained(*_args, **_kwargs):  # type: ignore[no-untyped-def]
-            load_attempts["tokenizer"] += 1
-            return _FakeTokenizer()
+    filtered, stats = classifier.keep_forward_sentences_with_stats(sentences)
 
-    class _FakeModel:
-        def __init__(self) -> None:
-            self.config = types.SimpleNamespace(id2label={0: "not_fls", 1: "fls"})
-
-        def eval(self) -> None:
-            return None
-
-        def __call__(self, **inputs: torch.Tensor) -> object:
-            batch = int(inputs["input_ids"].shape[0])
-            logits = torch.zeros((batch, 2), dtype=torch.float32)
-            logits[:, 1] = 1.0
-            return types.SimpleNamespace(logits=logits)
-
-    class _FakeAutoModel:
-        @staticmethod
-        def from_pretrained(*_args, **_kwargs):  # type: ignore[no-untyped-def]
-            load_attempts["model"] += 1
-            return _FakeModel()
-
-    fake_transformers = types.SimpleNamespace(
-        AutoTokenizer=_FakeAutoTokenizer,
-        AutoModelForSequenceClassification=_FakeAutoModel,
-    )
-    monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
-
-    classifier = _FLSClassifier()
-    result = classifier.warmup()
-
-    assert result["enabled"] is True
-    assert result["loaded"] is True
-    assert result["batches"] == 1
-    assert float(result["inference_ms"]) >= 0.0
-    assert load_attempts == {"tokenizer": 1, "model": 1}
-    assert len(tokenizer_inputs) == 1
-    assert tokenizer_inputs[0][0].startswith("Management expects higher revenue")
-
-
-def test_fls_classifier_warmup_reports_load_error(monkeypatch) -> None:
-    class _FakeTokenizer:
-        @staticmethod
-        def from_pretrained(*_args, **_kwargs):  # type: ignore[no-untyped-def]
-            raise RuntimeError("offline")
-
-    class _FakeModel:
-        @staticmethod
-        def from_pretrained(*_args, **_kwargs):  # type: ignore[no-untyped-def]
-            raise RuntimeError("offline")
-
-    fake_transformers = types.SimpleNamespace(
-        AutoTokenizer=_FakeTokenizer,
-        AutoModelForSequenceClassification=_FakeModel,
-    )
-    monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
-
-    classifier = _FLSClassifier()
-    result = classifier.warmup()
-
-    assert result["enabled"] is True
-    assert result["loaded"] is False
-    assert result["batches"] == 0
-    assert "offline" in str(result.get("error", ""))
+    assert filtered == [sentences[1]]
+    assert stats.cache_misses == 0
 
 
 def test_dense_retriever_caches_corpus_embeddings_for_repeated_queries() -> None:

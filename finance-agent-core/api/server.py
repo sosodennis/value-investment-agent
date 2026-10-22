@@ -1,7 +1,6 @@
 import asyncio
 import os
 import sys
-import time
 import uuid
 from collections import defaultdict
 from collections.abc import Mapping
@@ -34,7 +33,6 @@ from langgraph.types import Command
 
 from src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl import (
     warmup_dependency_matcher,
-    warmup_forward_looking_filter,
 )
 from src.agents.intent.entrypoint import InterruptValue
 from src.agents.news.infrastructure.content_fetch import close_shared_async_client
@@ -61,7 +59,6 @@ from src.auth.entrypoint import (
     require_current_user_mutation,
 )
 from src.infrastructure.database import init_db
-from src.infrastructure.sentiment import get_finbert_analyzer
 from src.interface.artifacts.artifact_api_models import (
     ArtifactApiResponse,
     validate_artifact_api_response,
@@ -80,6 +77,7 @@ from src.llm_provider.entrypoint import (
     set_provider_principal,
     synchronize_selected_model,
 )
+from src.model_inference.entrypoint import close_model_inference
 from src.runtime.workspace_runtime_projection import (
     WorkspaceRuntimeActivityRecord,
     WorkspaceRuntimeActivitySegmentRecord,
@@ -149,55 +147,6 @@ async def lifespan(app: FastAPI):
         runtime_projection_repo
     )
 
-    warmup_enabled = os.getenv("NEWS_FINBERT_WARMUP", "1").strip().lower() not in {
-        "0",
-        "false",
-        "no",
-    }
-    if warmup_enabled:
-        logger.info("🚀 [Lifespan] Warming up FinBERT model cache...")
-        warmup_started = time.perf_counter()
-        analyzer = get_finbert_analyzer()
-        try:
-            available = await asyncio.to_thread(analyzer.is_available)
-            elapsed_ms = int((time.perf_counter() - warmup_started) * 1000)
-            if available:
-                logger.info(
-                    "✅ [Lifespan] FinBERT warmup completed in %d ms.",
-                    elapsed_ms,
-                )
-            else:
-                logger.warning(
-                    "⚠️ [Lifespan] FinBERT warmup skipped: %s",
-                    analyzer.load_error or "unknown error",
-                )
-        except Exception as exc:
-            logger.warning("⚠️ [Lifespan] FinBERT warmup failed: %s", str(exc))
-
-    fls_warmup_enabled = os.getenv("SEC_TEXT_FLS_WARMUP", "1").strip().lower() not in {
-        "0",
-        "false",
-        "no",
-    }
-    if fls_warmup_enabled:
-        logger.info("🚀 [Lifespan] Warming up FLS filter model cache...")
-        try:
-            warmup_result = await asyncio.to_thread(warmup_forward_looking_filter)
-            if bool(warmup_result.get("loaded")):
-                logger.info(
-                    "✅ [Lifespan] FLS warmup completed: load=%sms inference=%sms batches=%s",
-                    warmup_result.get("model_load_ms", 0.0),
-                    warmup_result.get("inference_ms", 0.0),
-                    warmup_result.get("batches", 0),
-                )
-            else:
-                logger.warning(
-                    "⚠️ [Lifespan] FLS warmup skipped: %s",
-                    warmup_result.get("error", "unknown error"),
-                )
-        except Exception as exc:
-            logger.warning("⚠️ [Lifespan] FLS warmup failed: %s", str(exc))
-
     dependency_warmup_enabled = os.getenv(
         "SEC_TEXT_DEPENDENCY_WARMUP", "1"
     ).strip().lower() not in {
@@ -232,6 +181,7 @@ async def lifespan(app: FastAPI):
         provider_key_cleanup.cancel()
         await asyncio.gather(provider_key_cleanup, return_exceptions=True)
         await close_llm_provider()
+        await close_model_inference()
         await close_shared_async_client()
         logger.info("🛑 [Lifespan] Shutting down...")
 

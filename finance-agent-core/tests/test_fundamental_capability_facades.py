@@ -50,6 +50,7 @@ FACADE_EXPORTS: dict[str, set[str]] = {
         "ForwardSignalSourceLocator",
         "apply_forward_signal_policy",
         "build_finbert_direction_reviewer",
+        "build_forward_looking_filter",
         "calibrate_signal_basis_points",
         "extract_forward_signals",
         "extract_forward_signals_from_sec_text",

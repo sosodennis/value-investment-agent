@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 
 from src.agents.news.application.analysis_service import (
     AnalysisRuntime,
@@ -68,6 +69,12 @@ from src.agents.news.interface.contracts import (
 )
 from src.agents.news.interface.prompt_renderers import build_analysis_chain_payload
 from src.llm_provider.entrypoint import ModelRoute, StructuredRequest
+from src.model_inference.entrypoint import (
+    FLSResult,
+    InferenceErrorCode,
+    InferenceFailure,
+    NewsSentimentResult,
+)
 
 
 def test_aggregate_news_items_computes_weighted_sentiment_and_themes() -> None:
@@ -279,7 +286,7 @@ def test_build_analysis_chains_keeps_provider_route_and_prompt_specs() -> None:
     provider = _FakeAnalysisProvider(_analysis_model("ok"))
     route = _selector_route()
     chains = build_analysis_chains(
-        llm_provider=provider,  # type: ignore[arg-type]
+        llm_provider=provider,
         llm_route=route,
         system_prompt="system",
         user_prompt_basic="basic {ticker}",
@@ -299,7 +306,7 @@ def test_run_analysis_with_resilience_uses_basic_when_finbert_chain_fails() -> N
         _analysis_model("basic result"),
     )
     chains = build_analysis_chains(
-        llm_provider=provider,  # type: ignore[arg-type]
+        llm_provider=provider,
         llm_route=_selector_route(),
         system_prompt="system",
         user_prompt_basic="basic {ticker}",
@@ -442,16 +449,23 @@ def test_build_news_items_from_fetch_results_creates_items() -> None:
     assert result.news_items[0]["content_id"] == "content-artifact-1"
 
 
-class _NoFinbert:
-    def is_available(self) -> bool:
-        return False
+class _UnavailableInference:
+    async def news_sentiment(self, _text: str) -> NewsSentimentResult:
+        raise InferenceFailure(
+            code=InferenceErrorCode.UNAVAILABLE,
+            request_id="test-request",
+            retryable=True,
+        )
 
-    def analyze(self, content: str) -> None:
-        _ = content
-        return None
+    def news_sentiment_sync(self, _text: str) -> NewsSentimentResult:
+        raise AssertionError("sync sentiment is not used by News")
+
+    def fls_predictions(self, _sentences: Sequence[str]) -> FLSResult:
+        raise AssertionError("FLS is not used by News")
 
 
 def test_analyze_news_items_sets_analysis_payload() -> None:
+    provider = _FakeAnalysisProvider(_analysis_model("ok"))
     result = asyncio.run(
         analyze_news_items(
             news_items=[
@@ -465,9 +479,9 @@ def test_analyze_news_items_sets_analysis_payload() -> None:
             ],
             ticker="GME",
             port=_FakeNewsPort(),
-            finbert_analyzer=_NoFinbert(),
+            model_inference=_UnavailableInference(),
             chains=build_analysis_chains(
-                llm_provider=_FakeAnalysisProvider(_analysis_model("ok")),  # type: ignore[arg-type]
+                llm_provider=provider,
                 llm_route=_selector_route(),
                 system_prompt="system",
                 user_prompt_basic="basic {ticker}",
@@ -477,6 +491,10 @@ def test_analyze_news_items_sets_analysis_payload() -> None:
     )
     assert not result.article_errors
     assert result.news_items[0]["analysis"]["summary"] == "ok"
+    assert len(provider.requests) == 1
+    prompt = provider.requests[0].completion.messages[1].content
+    assert prompt.startswith("basic GME")
+    assert "finbert" not in prompt
 
 
 class _FetchUseCasePort:

@@ -5,8 +5,10 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from src.agents.fundamental.subdomains.forward_signals.application.ports import (
-    FinbertAnalyzerProvider,
+from src.model_inference.entrypoint import (
+    InferenceErrorCode,
+    InferenceFailure,
+    ModelInference,
 )
 
 _FINBERT_DIRECTION_ENABLED = os.getenv(
@@ -38,7 +40,7 @@ class FinbertDirectionReview:
 
 
 def build_finbert_direction_reviewer(
-    get_analyzer_fn: FinbertAnalyzerProvider,
+    model_inference: ModelInference,
 ) -> Callable[[str, str, list[dict[str, object]]], FinbertDirectionReview]:
     def _review_signal_direction_with_finbert(
         metric: str,
@@ -49,7 +51,7 @@ def build_finbert_direction_reviewer(
             metric=metric,
             baseline_direction=baseline_direction,
             evidence=evidence,
-            get_analyzer_fn=get_analyzer_fn,
+            model_inference=model_inference,
         )
 
     return _review_signal_direction_with_finbert
@@ -77,7 +79,7 @@ def review_signal_direction_with_finbert(
     metric: str,
     baseline_direction: str,
     evidence: list[dict[str, object]],
-    get_analyzer_fn: FinbertAnalyzerProvider,
+    model_inference: ModelInference,
 ) -> FinbertDirectionReview:
     started = time.perf_counter()
     if not _FINBERT_DIRECTION_ENABLED:
@@ -123,8 +125,15 @@ def review_signal_direction_with_finbert(
             reason="empty_text",
         )
 
-    analyzer = get_analyzer_fn()
-    if not analyzer.is_available():
+    try:
+        result = model_inference.news_sentiment_sync(review_text)
+    except InferenceFailure as exc:
+        unavailable_codes = {
+            InferenceErrorCode.MODEL_NOT_READY,
+            InferenceErrorCode.OVERLOADED,
+            InferenceErrorCode.DEADLINE_EXCEEDED,
+            InferenceErrorCode.UNAVAILABLE,
+        }
         return _review_result(
             elapsed_ms=_elapsed_ms(started),
             reviewed=False,
@@ -132,23 +141,15 @@ def review_signal_direction_with_finbert(
             direction=None,
             confidence=0.0,
             label=None,
-            reason="model_unavailable",
-        )
-
-    result = analyzer.analyze(review_text)
-    if result is None:
-        return _review_result(
-            elapsed_ms=_elapsed_ms(started),
-            reviewed=True,
-            accepted=False,
-            direction=None,
-            confidence=0.0,
-            label=None,
-            reason="inference_failed",
+            reason=(
+                "model_unavailable"
+                if exc.code in unavailable_codes
+                else "inference_failed"
+            ),
         )
 
     label = result.label.lower().strip()
-    confidence = float(result.score)
+    confidence = float(result.confidence)
     if label not in {"positive", "negative", "neutral"}:
         return _review_result(
             elapsed_ms=_elapsed_ms(started),

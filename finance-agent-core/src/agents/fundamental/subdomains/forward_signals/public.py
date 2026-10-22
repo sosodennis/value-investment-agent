@@ -16,6 +16,7 @@ from .domain.policies.forward_signal_parser_service import parse_forward_signals
 from .domain.policies.forward_signal_policy import apply_forward_signal_policy
 from .infrastructure.sec_xbrl import (
     build_finbert_direction_reviewer,
+    build_forward_looking_filter,
     extract_forward_signals_from_sec_text,
     extract_forward_signals_from_xbrl_reports,
 )
@@ -39,6 +40,7 @@ __all__ = [
     "ForwardSignalSourceLocator",
     "apply_forward_signal_policy",
     "build_finbert_direction_reviewer",
+    "build_forward_looking_filter",
     "calibrate_signal_basis_points",
     "extract_forward_signals",
     "extract_forward_signals_from_sec_text",

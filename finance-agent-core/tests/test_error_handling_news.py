@@ -4,6 +4,7 @@ import pytest
 
 from src.agents.news.application.wiring import get_news_workflow_runner
 from src.agents.news.workflow.nodes import build_news_nodes
+from src.model_inference.entrypoint import InferenceErrorCode, InferenceFailure
 
 news_nodes = build_news_nodes(get_news_workflow_runner())
 aggregator_node = news_nodes["aggregator_node"]
@@ -127,12 +128,17 @@ async def test_analyst_node_error_log():
             "acomplete_structured",
             new=AsyncMock(side_effect=Exception("Analysis Error")),
         ):
-            with patch(
-                "src.agents.news.application.wiring.get_finbert_analyzer"
-            ) as mock_finbert:
-                # Ensure finbert doesn't crash test
-                mock_finbert.return_value.is_available.return_value = False
-
+            with patch.object(
+                get_news_workflow_runner().deps.model_inference,
+                "news_sentiment",
+                new=AsyncMock(
+                    side_effect=InferenceFailure(
+                        code=InferenceErrorCode.UNAVAILABLE,
+                        request_id="test-request",
+                        retryable=True,
+                    )
+                ),
+            ):
                 command = await analyst_node(state)
 
                 assert (

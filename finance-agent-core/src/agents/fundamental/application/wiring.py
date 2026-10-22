@@ -16,6 +16,7 @@ from src.agents.fundamental.subdomains.financial_statements.public import (
 )
 from src.agents.fundamental.subdomains.forward_signals.public import (
     build_finbert_direction_reviewer,
+    build_forward_looking_filter,
     extract_forward_signals,
     extract_forward_signals_from_sec_text,
     extract_forward_signals_from_xbrl_reports,
@@ -23,7 +24,7 @@ from src.agents.fundamental.subdomains.forward_signals.public import (
 from src.agents.fundamental.subdomains.market_data.public import (
     market_data_service,
 )
-from src.infrastructure.sentiment import get_finbert_analyzer
+from src.model_inference.entrypoint import get_model_inference
 
 
 def _normalize_financial_reports_contract(
@@ -47,7 +48,9 @@ def _normalize_financial_reports_contract(
     }
 
 
-_finbert_direction_reviewer = build_finbert_direction_reviewer(get_finbert_analyzer)
+_model_inference = get_model_inference()
+_fls_filter = build_forward_looking_filter(_model_inference)
+_finbert_direction_reviewer = build_finbert_direction_reviewer(_model_inference)
 
 
 def _extract_forward_signals_text(
@@ -56,11 +59,15 @@ def _extract_forward_signals_text(
     return extract_forward_signals_from_sec_text(
         ticker=ticker,
         rules_sector=rules_sector,
+        filter_forward_looking_sentences_with_stats_fn=_fls_filter,
         review_signal_direction_with_finbert_fn=_finbert_direction_reviewer,
     )
 
 
-def _extract_forward_signals(ticker: str, reports_raw: list[dict[str, object]]):
+def _extract_forward_signals(
+    ticker: str,
+    reports_raw: list[dict[str, object]],
+) -> list[dict[str, object]]:
     return extract_forward_signals(
         ticker=ticker,
         reports_raw=reports_raw,

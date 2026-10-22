@@ -14,11 +14,11 @@ from src.agents.news.infrastructure.content_fetch import fetch_clean_text_async
 from src.agents.news.infrastructure.ids import generate_news_id
 from src.agents.news.infrastructure.search import news_search_multi_timeframe
 from src.agents.news.infrastructure.source_reliability import get_source_reliability
-from src.infrastructure.sentiment import get_finbert_analyzer
 from src.llm_provider.entrypoint import (
     get_default_model_route,
     get_llm_provider,
 )
+from src.model_inference.entrypoint import get_model_inference
 from src.shared.kernel.types import JSONObject
 
 
@@ -40,10 +40,6 @@ def _get_source_reliability(url: str) -> float:
     return get_source_reliability(url)
 
 
-def _get_finbert_analyzer():
-    return get_finbert_analyzer()
-
-
 def build_default_news_workflow_runner() -> NewsWorkflowRunner:
     repository = build_default_news_artifact_repository()
     orchestrator = build_news_orchestrator(port=repository)
@@ -56,7 +52,7 @@ def build_default_news_workflow_runner() -> NewsWorkflowRunner:
             fetch_clean_text_async_fn=_fetch_clean_text_async,
             generate_news_id_fn=_generate_news_id,
             get_source_reliability_fn=_get_source_reliability,
-            get_finbert_analyzer_fn=_get_finbert_analyzer,
+            model_inference=get_model_inference(),
         ),
     )
 
