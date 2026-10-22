@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { LlmProviderApiError } from '@/lib/llm-provider-api';
 import LlmKeysPage from './page';
 
 const api = vi.hoisted(() => ({
@@ -12,6 +13,8 @@ const api = vi.hoisted(() => ({
     updateLlmSettings: vi.fn(),
 }));
 
+const router = vi.hoisted(() => ({ replace: vi.fn() }));
+
 const existingKey = {
     id: 'managed-1',
     label: 'Primary key',
@@ -22,7 +25,18 @@ const existingKey = {
 
 vi.mock('@/lib/llm-provider-api', () => ({
     ...api,
-    LlmProviderApiError: class LlmProviderApiError extends Error {},
+    LlmProviderApiError: class LlmProviderApiError extends Error {
+        status: number;
+
+        constructor(message: string, status: number) {
+            super(message);
+            this.status = status;
+        }
+    },
+}));
+
+vi.mock('next/navigation', () => ({
+    useRouter: () => router,
 }));
 
 describe('OpenRouter key settings', () => {
@@ -33,6 +47,7 @@ describe('OpenRouter key settings', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        sessionStorage.clear();
         api.listOpenRouterKeys.mockResolvedValue([]);
         api.getLlmSettings.mockResolvedValue({
             selected_model: 'openrouter/free',
@@ -148,5 +163,37 @@ describe('OpenRouter key settings', () => {
 
         await waitFor(() => expect(api.updateLlmSettings).toHaveBeenCalledWith('provider/example:free'));
         await screen.findByText('Default model changed to provider/example:free.');
+    });
+
+    it('redirects expired sessions and preserves only the non-secret label draft', async () => {
+        const error = new LlmProviderApiError(
+            'authentication is required',
+            401,
+        );
+        api.listOpenRouterKeys.mockRejectedValue(error);
+        const firstRender = render(<LlmKeysPage />);
+        fireEvent.change(screen.getByLabelText('Label'), {
+            target: { value: 'Keep this label' },
+        });
+
+        await waitFor(() =>
+            expect(router.replace).toHaveBeenCalledWith(
+                '/login?next=%2Fsettings%2Fllm-keys',
+            ),
+        );
+        expect(sessionStorage.getItem('llm-provider-label-draft')).toBe(
+            'Keep this label',
+        );
+        expect(sessionStorage.getItem('openrouter-api-key')).toBeNull();
+
+        firstRender.unmount();
+        api.listOpenRouterKeys.mockResolvedValue([]);
+        render(<LlmKeysPage />);
+        await waitFor(() =>
+            expect(
+                (screen.getByLabelText('Label') as HTMLInputElement).value,
+            ).toBe('Keep this label'),
+        );
+        expect(sessionStorage.getItem('llm-provider-label-draft')).toBeNull();
     });
 });

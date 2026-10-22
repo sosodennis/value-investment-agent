@@ -1,7 +1,8 @@
 'use client';
 
 import type { FormEvent } from 'react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
     Check,
     KeyRound,
@@ -47,7 +48,12 @@ function errorMessage(cause: unknown, fallback: string): string {
     }
 }
 
+const LABEL_DRAFT_STORAGE_KEY = 'llm-provider-label-draft';
+
 export default function LlmKeysPage() {
+    const router = useRouter();
+    const labelDraftRef = useRef('');
+    const redirectingRef = useRef(false);
     const [authenticated, setAuthenticated] = useState(false);
     const [keys, setKeys] = useState<OpenRouterKey[]>([]);
     const [label, setLabel] = useState('');
@@ -61,6 +67,24 @@ export default function LlmKeysPage() {
     const [selectedModel, setSelectedModel] = useState('openrouter/free');
     const [modelSaving, setModelSaving] = useState(false);
 
+    const redirectToLogin = useCallback((cause: unknown): boolean => {
+        if (!(cause instanceof LlmProviderApiError) || cause.status !== 401) {
+            return false;
+        }
+        if (redirectingRef.current) return true;
+        if (typeof window !== 'undefined') {
+            const draft = labelDraftRef.current.trim();
+            if (draft) {
+                window.sessionStorage.setItem(LABEL_DRAFT_STORAGE_KEY, draft);
+            } else {
+                window.sessionStorage.removeItem(LABEL_DRAFT_STORAGE_KEY);
+            }
+        }
+        redirectingRef.current = true;
+        router.replace(`/login?next=${encodeURIComponent('/settings/llm-keys')}`);
+        return true;
+    }, [router]);
+
     const loadKeys = useCallback(async () => {
         setLoading(true);
         setError(null);
@@ -68,12 +92,14 @@ export default function LlmKeysPage() {
             setKeys(await listOpenRouterKeys());
             setAuthenticated(true);
         } catch (cause) {
-            setError(errorMessage(cause, 'Could not load provider keys.'));
+            if (!redirectToLogin(cause)) {
+                setError(errorMessage(cause, 'Could not load provider keys.'));
+            }
             setAuthenticated(false);
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [redirectToLogin]);
 
     const loadModelSettings = useCallback(async () => {
         const settings = await getLlmSettings();
@@ -82,17 +108,25 @@ export default function LlmKeysPage() {
     }, []);
 
     useEffect(() => {
+        const draft = window.sessionStorage.getItem(LABEL_DRAFT_STORAGE_KEY);
+        if (draft) {
+            labelDraftRef.current = draft;
+            setLabel(draft);
+            window.sessionStorage.removeItem(LABEL_DRAFT_STORAGE_KEY);
+        }
         void (async () => {
             setLoading(true);
             setError(null);
             try {
                 await Promise.all([loadKeys(), loadModelSettings()]);
             } catch (cause) {
-                setError(errorMessage(cause, 'Could not load provider settings.'));
+                if (!redirectToLogin(cause)) {
+                    setError(errorMessage(cause, 'Could not load provider settings.'));
+                }
                 setLoading(false);
             }
         })();
-    }, [loadKeys, loadModelSettings]);
+    }, [loadKeys, loadModelSettings, redirectToLogin]);
 
     async function handleModelChange(model: string) {
         setSelectedModel(model);
@@ -105,8 +139,10 @@ export default function LlmKeysPage() {
             setSelectedModel(settings.selected_model);
             setNotice(`Default model changed to ${settings.selected_model}.`);
         } catch (cause) {
-            setError(errorMessage(cause, 'Could not update the default model.'));
-            await loadModelSettings();
+            if (!redirectToLogin(cause)) {
+                setError(errorMessage(cause, 'Could not update the default model.'));
+                await loadModelSettings();
+            }
         } finally {
             setModelSaving(false);
         }
@@ -124,10 +160,13 @@ export default function LlmKeysPage() {
             });
             setKeys((current) => [created, ...current]);
             setLabel('');
+            labelDraftRef.current = '';
             setApiKey('');
             setNotice(`Key ending in ${created.suffix} passed its test and was added.`);
         } catch (cause) {
-            setError(errorMessage(cause, 'Could not add this key.'));
+            if (!redirectToLogin(cause)) {
+                setError(errorMessage(cause, 'Could not add this key.'));
+            }
         } finally {
             setSubmitting(false);
         }
@@ -145,7 +184,9 @@ export default function LlmKeysPage() {
                     : `${item.label} did not pass its connection test.`,
             );
         } catch (cause) {
-            setError(errorMessage(cause, 'Could not test this key.'));
+            if (!redirectToLogin(cause)) {
+                setError(errorMessage(cause, 'Could not test this key.'));
+            }
         } finally {
             setBusyId(null);
         }
@@ -163,7 +204,9 @@ export default function LlmKeysPage() {
             setKeys((current) => current.filter((key) => key.id !== item.id));
             setNotice(`${item.label} was deleted.`);
         } catch (cause) {
-            setError(errorMessage(cause, 'Could not delete this key.'));
+            if (!redirectToLogin(cause)) {
+                setError(errorMessage(cause, 'Could not delete this key.'));
+            }
         } finally {
             setBusyId(null);
         }
@@ -229,7 +272,10 @@ export default function LlmKeysPage() {
                         <input
                             id="key-label"
                             value={label}
-                            onChange={(event) => setLabel(event.target.value)}
+                            onChange={(event) => {
+                                labelDraftRef.current = event.target.value;
+                                setLabel(event.target.value);
+                            }}
                             placeholder="Primary research key"
                             className="mt-2 mb-5 w-full rounded border border-outline-variant bg-surface px-3 py-2 text-sm outline-none focus:border-primary-container"
                             maxLength={80}
