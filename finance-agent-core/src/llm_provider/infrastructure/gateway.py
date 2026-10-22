@@ -573,6 +573,7 @@ class LiteLLMGatewayProvider:
             partial_tool_calls: tuple[dict[str, object], ...] = ()
             sequence = 0
             model = resolved_route.gateway_alias
+            attempt_route = resolved_route
             try:
                 with self._client.stream(
                     "POST",
@@ -585,6 +586,13 @@ class LiteLLMGatewayProvider:
                 ) as response:
                     if response.status_code >= 400:
                         self._raise_status(response, request, attempt, resolved_route)
+                    attempt_route = resolved_route.model_copy(
+                        update={
+                            "attribution": self._response_attribution(
+                                response.headers, resolved_route
+                            )
+                        }
+                    )
                     completed = False
                     for line in response.iter_lines():
                         event = self._stream_event_from_line(
@@ -593,7 +601,7 @@ class LiteLLMGatewayProvider:
                             attempt,
                             model,
                             sequence,
-                            resolved_route,
+                            attempt_route,
                         )
                         if event is None:
                             continue
@@ -606,7 +614,7 @@ class LiteLLMGatewayProvider:
                                     sequence=0,
                                     model=model,
                                     attempt=attempt,
-                                    attribution=resolved_route.attribution,
+                                    attribution=attempt_route.attribution,
                                 )
                             emitted = True
                             sequence = event.sequence
@@ -621,7 +629,7 @@ class LiteLLMGatewayProvider:
                                     sequence=0,
                                     model=model,
                                     attempt=attempt,
-                                    attribution=resolved_route.attribution,
+                                    attribution=attempt_route.attribution,
                                 )
                             yield event
                             completed = True
@@ -631,7 +639,7 @@ class LiteLLMGatewayProvider:
                             request,
                             attempt,
                             "gateway stream ended without a completion marker",
-                            resolved_route,
+                            attempt_route,
                         )
                     return
             except LLMProviderError as exc:
@@ -644,7 +652,7 @@ class LiteLLMGatewayProvider:
                             attempt,
                             partial_output,
                             partial_tool_calls=partial_tool_calls,
-                            resolved_route=resolved_route,
+                            resolved_route=attempt_route,
                         )
                         self._record_error_attempt(error, attempts)
                         raise error from exc
@@ -661,7 +669,7 @@ class LiteLLMGatewayProvider:
                         attempt,
                         partial_output,
                         partial_tool_calls=partial_tool_calls,
-                        resolved_route=resolved_route,
+                        resolved_route=attempt_route,
                     )
                     self._record_error_attempt(error, attempts)
                     raise error from exc
@@ -670,7 +678,7 @@ class LiteLLMGatewayProvider:
                     attempt,
                     exc,
                     timeout=isinstance(exc, httpx.TimeoutException),
-                    resolved_route=resolved_route,
+                    resolved_route=attempt_route,
                 )
                 self._record_error_attempt(error, attempts)
                 if attempt >= attempt_limit:
@@ -683,7 +691,7 @@ class LiteLLMGatewayProvider:
                         attempt,
                         partial_output,
                         partial_tool_calls=partial_tool_calls,
-                        resolved_route=resolved_route,
+                        resolved_route=attempt_route,
                     )
                     self._record_error_attempt(error, attempts)
                     raise error from exc
@@ -691,7 +699,7 @@ class LiteLLMGatewayProvider:
                     request,
                     attempt,
                     "gateway returned a malformed response",
-                    resolved_route,
+                    attempt_route,
                 )
                 self._record_error_attempt(error, attempts)
                 raise error from exc
@@ -755,6 +763,7 @@ class LiteLLMGatewayProvider:
             partial_tool_calls: tuple[dict[str, object], ...] = ()
             sequence = 0
             model = resolved_route.gateway_alias
+            attempt_route = resolved_route
             try:
                 async with self._async_client.stream(
                     "POST",
@@ -769,6 +778,13 @@ class LiteLLMGatewayProvider:
                         await self._raise_status_async(
                             response, request, attempt, resolved_route
                         )
+                    attempt_route = resolved_route.model_copy(
+                        update={
+                            "attribution": self._response_attribution(
+                                response.headers, resolved_route
+                            )
+                        }
+                    )
                     completed = False
                     async for line in response.aiter_lines():
                         event = self._stream_event_from_line(
@@ -777,7 +793,7 @@ class LiteLLMGatewayProvider:
                             attempt,
                             model,
                             sequence,
-                            resolved_route,
+                            attempt_route,
                         )
                         if event is None:
                             continue
@@ -790,7 +806,7 @@ class LiteLLMGatewayProvider:
                                     sequence=0,
                                     model=model,
                                     attempt=attempt,
-                                    attribution=resolved_route.attribution,
+                                    attribution=attempt_route.attribution,
                                 )
                             emitted = True
                             sequence = event.sequence
@@ -805,7 +821,7 @@ class LiteLLMGatewayProvider:
                                     sequence=0,
                                     model=model,
                                     attempt=attempt,
-                                    attribution=resolved_route.attribution,
+                                    attribution=attempt_route.attribution,
                                 )
                             yield event
                             completed = True
@@ -815,7 +831,7 @@ class LiteLLMGatewayProvider:
                             request,
                             attempt,
                             "gateway stream ended without a completion marker",
-                            resolved_route,
+                            attempt_route,
                         )
                     return
             except LLMProviderError as exc:
@@ -828,7 +844,7 @@ class LiteLLMGatewayProvider:
                             attempt,
                             partial_output,
                             partial_tool_calls=partial_tool_calls,
-                            resolved_route=resolved_route,
+                            resolved_route=attempt_route,
                         )
                         self._record_error_attempt(error, attempts)
                         raise error from exc
@@ -845,7 +861,7 @@ class LiteLLMGatewayProvider:
                         attempt,
                         partial_output,
                         partial_tool_calls=partial_tool_calls,
-                        resolved_route=resolved_route,
+                        resolved_route=attempt_route,
                     )
                     self._record_error_attempt(error, attempts)
                     raise error from exc
@@ -854,7 +870,7 @@ class LiteLLMGatewayProvider:
                     attempt,
                     exc,
                     timeout=isinstance(exc, httpx.TimeoutException),
-                    resolved_route=resolved_route,
+                    resolved_route=attempt_route,
                 )
                 self._record_error_attempt(error, attempts)
                 if attempt >= attempt_limit:
@@ -867,7 +883,7 @@ class LiteLLMGatewayProvider:
                         attempt,
                         partial_output,
                         partial_tool_calls=partial_tool_calls,
-                        resolved_route=resolved_route,
+                        resolved_route=attempt_route,
                     )
                     self._record_error_attempt(error, attempts)
                     raise error from exc
@@ -875,7 +891,7 @@ class LiteLLMGatewayProvider:
                     request,
                     attempt,
                     "gateway returned a malformed response",
-                    resolved_route,
+                    attempt_route,
                 )
                 self._record_error_attempt(error, attempts)
                 raise error from exc
@@ -911,6 +927,8 @@ class LiteLLMGatewayProvider:
         }
         if request.max_tokens is not None:
             payload["max_tokens"] = request.max_tokens
+        if stream:
+            payload["stream_options"] = {"include_usage": True}
         if response_schema is not None:
             payload["response_format"] = {
                 "type": "json_schema",
@@ -1192,13 +1210,14 @@ class LiteLLMGatewayProvider:
         tool_calls = _tool_calls(delta.get("tool_calls"))
         resolved_model = _string(root.get("model"), model)
         if not text and not tool_calls:
-            if first.get("finish_reason") is not None:
+            usage = _usage(root.get("usage"))
+            if usage is not None:
                 return StreamEvent(
                     kind="completed",
                     request_id=request.request_id,
                     sequence=max(sequence + 1, 1),
                     model=resolved_model,
-                    usage=_usage(root.get("usage")),
+                    usage=usage,
                     attempt=attempt,
                     attribution=resolved_route.attribution,
                 )
