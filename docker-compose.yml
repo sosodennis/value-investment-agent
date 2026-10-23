@@ -189,6 +189,8 @@ services:
       - MODEL_INFERENCE_FLS_URL=${MODEL_INFERENCE_FLS_URL:-http://model-inference-fls:8001}
       - LLM_PROVIDER_SERVICE_URL=${LLM_PROVIDER_SERVICE_URL:-http://llm-provider-service:8002}
       - LLM_PROVIDER_SERVICE_TOKEN=${LLM_PROVIDER_SERVICE_TOKEN:-}
+      - SEARCH_SERVICE_URL=${SEARCH_SERVICE_URL:-http://search-service:8003}
+      - SEARCH_SERVICE_TOKEN=${SEARCH_SERVICE_TOKEN:-local-development-only-token}
       - SEC_TEXT_DEPENDENCY_WARMUP=1
       - SEC_TEXT_DEPENDENCY_MODEL=en_core_web_sm
       - SEC_TEXT_DEBUG_RETRIEVAL_SENTENCES=1
@@ -280,7 +282,7 @@ services:
     ports:
       - "127.0.0.1:${SEARCH_SERVICE_HOST_PORT:-8003}:8003"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8003/livez', timeout=4).close()"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8003/readyz', timeout=4).close()"]
       interval: 10s
       timeout: 5s
       retries: 6

@@ -105,16 +105,31 @@ the local settings page; they are not stored in this file:
 
 ```env
 LITELLM_MASTER_KEY=replace-with-a-local-gateway-key
+SEARCH_SERVICE_TOKEN=local-development-only-token
 # Optional: Database overrides (defaults provided in docker-compose)
 # POSTGRES_USER=postgres
 # POSTGRES_PASSWORD=postgres
 # POSTGRES_DB=langgraph
 ```
 
+`SEARCH_SERVICE_TOKEN` must match between the backend and Search Service. The
+Compose default is for local development only; deployments must inject a unique
+secret. Generate a stable Search key-encryption value from `search-service/`:
+
+```bash
+uv run python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
+```
+
+Add the command's output to the untracked root `.env` as
+`SEARCH_PROVIDER_ENCRYPTION_KEY=<generated-value>`. Back it up separately, and
+do not rotate or discard it while encrypted provider keys remain in the
+database. Search readiness stays unhealthy until PostgreSQL and this encryption
+key are configured.
+
 The default local Compose setup loads `docker-compose.override.yml`. It gives
 the backend and provider service the same `local-development-only-token` when
 `LLM_PROVIDER_SERVICE_TOKEN` is unset. This value is for local development
-only.
+only. Search uses the same development-only pattern for `SEARCH_SERVICE_TOKEN`.
 
 ### 2. Run with Docker (Recommended)
 Build and start the entire stack:
