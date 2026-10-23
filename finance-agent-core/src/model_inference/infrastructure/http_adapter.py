@@ -17,6 +17,11 @@ from src.model_inference.domain.contracts import (
 )
 from src.model_inference.domain.errors import InferenceErrorCode, InferenceFailure
 from src.model_inference.infrastructure.settings import ModelInferenceSettings
+from src.shared.internal_services import (
+    INTERNAL_CONTRACT_VERSION,
+    InternalPrincipal,
+    InternalRequestContext,
+)
 
 _OPERATION_STATUS: dict[InferenceErrorCode, int] = {
     InferenceErrorCode.INVALID_ARGUMENT: 400,
@@ -57,8 +62,9 @@ class _WireFLSResult(_StrictModel):
 
 
 class _WireResponse(_StrictModel):
+    contract_version: Literal[INTERNAL_CONTRACT_VERSION]
+    correlation_id: str
     schema_version: Literal["inference.v1"]
-    request_id: str
     operation: Literal["news.sentiment", "sec.fls"]
     model_revision: str = Field(min_length=1)
     result: _WireNewsResult | _WireFLSResult
@@ -72,8 +78,9 @@ class _WireErrorBody(_StrictModel):
 
 
 class _WireErrorResponse(_StrictModel):
+    contract_version: Literal[INTERNAL_CONTRACT_VERSION]
+    correlation_id: str
     schema_version: Literal["inference.v1"]
-    request_id: str
     error: _WireErrorBody
 
 
@@ -155,7 +162,7 @@ class HttpInferenceAdapter:
             if response.is_success:
                 wire = _WireResponse.model_validate(response.json())
                 if (
-                    wire.request_id != request.request_id
+                    wire.correlation_id != request.request_id
                     or wire.operation != request.operation.value
                 ):
                     raise ValueError("response correlation did not match request")
@@ -188,7 +195,7 @@ class HttpInferenceAdapter:
                 )
 
             error_response = _WireErrorResponse.model_validate(response.json())
-            if error_response.request_id != request.request_id:
+            if error_response.correlation_id != request.request_id:
                 raise ValueError("error correlation did not match request")
             code = InferenceErrorCode(error_response.error.code)
             if _OPERATION_STATUS[code] != response.status_code:
@@ -222,7 +229,14 @@ class HttpInferenceAdapter:
                 retryable=False,
                 message="unsupported model inference input",
             )
+        context = InternalRequestContext(
+            principal=InternalPrincipal(subject_id=request.principal_subject_id),
+            correlation_id=request.request_id,
+            contract_version=INTERNAL_CONTRACT_VERSION,
+            deadline_at=request.deadline_at,
+        )
         return {
+            "context": context.model_dump(mode="json"),
             "schema_version": "inference.v1",
             "operation": request.operation.value,
             "deadline_ms": request.deadline_ms,

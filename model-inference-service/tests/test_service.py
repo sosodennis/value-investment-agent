@@ -4,6 +4,7 @@ import asyncio
 import threading
 import time
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import cast
 
 import httpx
@@ -74,6 +75,37 @@ def _client(app: object) -> httpx.AsyncClient:
     )
 
 
+def _context(
+    correlation_id: str, *, deadline_seconds: float = 5.0
+) -> dict[str, object]:
+    return {
+        "principal": {"subject_id": "user-123"},
+        "correlation_id": correlation_id,
+        "contract_version": "internal.v1",
+        "deadline_at": (
+            datetime.now(UTC) + timedelta(seconds=deadline_seconds)
+        ).isoformat(),
+    }
+
+
+def _inference_body(
+    operation: str,
+    input_data: dict[str, object],
+    *,
+    correlation_id: str = "request-1",
+    deadline_ms: int | None = None,
+) -> dict[str, object]:
+    body: dict[str, object] = {
+        "context": _context(correlation_id, deadline_seconds=5.0),
+        "schema_version": "inference.v1",
+        "operation": operation,
+        "input": input_data,
+    }
+    if deadline_ms is not None:
+        body["deadline_ms"] = deadline_ms
+    return body
+
+
 @pytest.mark.asyncio
 async def test_news_contract_readiness_auth_and_single_load(
     caplog: pytest.LogCaptureFixture,
@@ -87,14 +119,13 @@ async def test_news_contract_readiness_auth_and_single_load(
 
             unauthorized = await client.post(
                 "/v1/inference",
-                json={
-                    "schema_version": "inference.v1",
-                    "operation": "news.sentiment",
-                    "input": {"text": "Revenue growth improved."},
-                },
+                json=_inference_body(
+                    "news.sentiment", {"text": "Revenue growth improved."}
+                ),
             )
             assert unauthorized.status_code == 401
             assert unauthorized.json()["error"]["code"] == "UNAUTHENTICATED"
+            assert unauthorized.json()["contract_version"] == "internal.v1"
 
             with caplog.at_level("INFO", logger="uvicorn.error"):
                 valid = await client.post(
@@ -103,15 +134,16 @@ async def test_news_contract_readiness_auth_and_single_load(
                         "Authorization": "Bearer secret",
                         "X-Request-ID": "req-1",
                     },
-                    json={
-                        "schema_version": "inference.v1",
-                        "operation": "news.sentiment",
-                        "deadline_ms": 500,
-                        "input": {"text": "Revenue growth improved."},
-                    },
+                    json=_inference_body(
+                        "news.sentiment",
+                        {"text": "Revenue growth improved."},
+                        correlation_id="req-1",
+                        deadline_ms=500,
+                    ),
                 )
             assert valid.status_code == 200
-            assert valid.json()["request_id"] == "req-1"
+            assert valid.json()["correlation_id"] == "req-1"
+            assert valid.json()["contract_version"] == "internal.v1"
             assert valid.json()["model_revision"] == "test-revision"
             assert valid.json()["result"]["label"] == "positive"
             assert (await client.get("/readyz")).status_code == 200
@@ -126,14 +158,69 @@ async def test_news_contract_readiness_auth_and_single_load(
 
 
 @pytest.mark.asyncio
+async def test_authentication_precedes_principal_context_validation() -> None:
+    runner = FakeRunner("news.sentiment")
+    app = create_app(runners={"news.sentiment": runner}, token="secret")
+    body = _inference_body("news.sentiment", {"text": "Revenue improved."})
+    body["context"] = {
+        "principal": "malformed",
+        "correlation_id": "auth-order-1",
+        "contract_version": "internal.v1",
+        "deadline_at": "not-a-date",
+    }
+
+    async with app.router.lifespan_context(app):  # type: ignore[attr-defined]
+        async with _client(app) as client:
+            unauthorized = await client.post(
+                "/v1/inference",
+                headers={"Authorization": "Bearer wrong"},
+                json=body,
+            )
+            assert unauthorized.status_code == 401
+            assert unauthorized.json()["error"]["code"] == "UNAUTHENTICATED"
+            assert runner.infer_count == 0
+
+            invalid_context = await client.post(
+                "/v1/inference",
+                headers={"Authorization": "Bearer secret"},
+                json=body,
+            )
+            assert invalid_context.status_code == 400
+            assert invalid_context.json()["error"]["code"] == "INVALID_ARGUMENT"
+            assert invalid_context.json()["correlation_id"] == "auth-order-1"
+            assert runner.infer_count == 0
+
+
+@pytest.mark.asyncio
+async def test_expired_internal_deadline_is_rejected_before_admission() -> None:
+    runner = FakeRunner("news.sentiment")
+    app = create_app(runners={"news.sentiment": runner}, token="secret")
+    body = _inference_body("news.sentiment", {"text": "Revenue improved."})
+    body["context"] = _context("expired-1", deadline_seconds=-1)
+
+    async with app.router.lifespan_context(app):  # type: ignore[attr-defined]
+        async with _client(app) as client:
+            response = await client.post(
+                "/v1/inference",
+                headers={"Authorization": "Bearer secret"},
+                json=body,
+            )
+            assert response.status_code == 504
+            assert response.json()["correlation_id"] == "expired-1"
+            assert response.json()["contract_version"] == "internal.v1"
+            assert response.json()["error"]["code"] == "DEADLINE_EXCEEDED"
+            assert runner.infer_count == 0
+
+
+@pytest.mark.asyncio
 async def test_same_request_id_deduplicates_and_caches_success() -> None:
     runner = FakeRunner("news.sentiment", delay_seconds=0.05)
     app = create_app(runners={"news.sentiment": runner}, token="secret")
-    body = {
-        "schema_version": "inference.v1",
-        "operation": "news.sentiment",
-        "input": {"text": "Revenue growth improved."},
-    }
+    body = _inference_body(
+        "news.sentiment",
+        {"text": "Revenue growth improved."},
+        correlation_id="retry-1",
+    )
     headers = {"Authorization": "Bearer secret", "X-Request-ID": "retry-1"}
     async with app.router.lifespan_context(app):  # type: ignore[attr-defined]
         async with _client(app) as client:
@@ -149,10 +236,8 @@ async def test_same_request_id_deduplicates_and_caches_success() -> None:
             assert first.json() == duplicate.json() == replay.json()
             assert runner.infer_count == 1
 
-            changed = {
-                **body,
-                "input": {"text": "Different text with the same ID."},
-            }
+            changed = dict(body)
+            changed["input"] = {"text": "Different text with the same ID."}
             mismatch = await client.post("/v1/inference", headers=headers, json=changed)
             assert mismatch.status_code == 400
             assert mismatch.json()["error"]["code"] == "INVALID_ARGUMENT"
@@ -174,11 +259,7 @@ async def test_fls_validates_batch_and_preserves_order() -> None:
             response = await client.post(
                 "/v1/inference",
                 headers={"Authorization": "Bearer secret"},
-                json={
-                    "schema_version": "inference.v1",
-                    "operation": "sec.fls",
-                    "input": {"sentences": ["one", "two"]},
-                },
+                json=_inference_body("sec.fls", {"sentences": ["one", "two"]}),
             )
             assert response.status_code == 200
             assert len(response.json()["result"]["predictions"]) == 2
@@ -186,11 +267,7 @@ async def test_fls_validates_batch_and_preserves_order() -> None:
             invalid = await client.post(
                 "/v1/inference",
                 headers={"Authorization": "Bearer secret"},
-                json={
-                    "schema_version": "inference.v1",
-                    "operation": "sec.fls",
-                    "input": {"sentences": [" "]},
-                },
+                json=_inference_body("sec.fls", {"sentences": [" "]}),
             )
             assert invalid.status_code == 400
             assert invalid.json()["error"]["code"] == "INVALID_ARGUMENT"
@@ -198,11 +275,7 @@ async def test_fls_validates_batch_and_preserves_order() -> None:
             oversized_batch = await client.post(
                 "/v1/inference",
                 headers={"Authorization": "Bearer secret"},
-                json={
-                    "schema_version": "inference.v1",
-                    "operation": "sec.fls",
-                    "input": {"sentences": ["sentence"] * 121},
-                },
+                json=_inference_body("sec.fls", {"sentences": ["sentence"] * 121}),
             )
             assert oversized_batch.status_code == 400
             assert oversized_batch.json()["error"]["code"] == "INVALID_ARGUMENT"
@@ -217,11 +290,7 @@ async def test_news_rejects_text_over_contract_limit() -> None:
             response = await client.post(
                 "/v1/inference",
                 headers={"Authorization": "Bearer secret"},
-                json={
-                    "schema_version": "inference.v1",
-                    "operation": "news.sentiment",
-                    "input": {"text": "x" * 12_001},
-                },
+                json=_inference_body("news.sentiment", {"text": "x" * 12_001}),
             )
             assert response.status_code == 400
             assert response.json()["error"]["code"] == "INVALID_ARGUMENT"
@@ -277,7 +346,12 @@ async def test_readiness_requires_successful_model_warmup() -> None:
         async with _client(app) as client:
             response = await client.get("/readyz")
             assert response.status_code == 503
-            assert response.json()["operations"]["news.sentiment"]["ready"] is False
+            assert response.json() == {
+                "status": "not_ready",
+                "contract_version": "internal.v1",
+            }
+            details = await client.get("/readyz/details")
+            assert details.json()["operations"]["news.sentiment"]["ready"] is False
 
 
 @pytest.mark.asyncio
@@ -289,11 +363,7 @@ async def test_model_not_ready_is_a_stable_service_error() -> None:
             response = await client.post(
                 "/v1/inference",
                 headers={"Authorization": "Bearer secret"},
-                json={
-                    "schema_version": "inference.v1",
-                    "operation": "news.sentiment",
-                    "input": {"text": "Revenue improved."},
-                },
+                json=_inference_body("news.sentiment", {"text": "Revenue improved."}),
             )
             assert response.status_code == 503
             assert response.json()["error"]["code"] == "MODEL_NOT_READY"
@@ -319,11 +389,7 @@ async def test_inference_failure_does_not_expose_exception_or_input() -> None:
             response = await client.post(
                 "/v1/inference",
                 headers={"Authorization": "Bearer secret"},
-                json={
-                    "schema_version": "inference.v1",
-                    "operation": "news.sentiment",
-                    "input": {"text": "private user text"},
-                },
+                json=_inference_body("news.sentiment", {"text": "private user text"}),
             )
             assert response.status_code == 500
             assert response.json()["error"]["code"] == "INFERENCE_FAILED"
@@ -394,11 +460,11 @@ async def test_http_caller_cancellation_discards_result_and_keeps_slot_until_don
                         "Authorization": "Bearer secret",
                         "X-Request-ID": "cancel-http-1",
                     },
-                    json={
-                        "schema_version": "inference.v1",
-                        "operation": "news.sentiment",
-                        "input": {"text": "discard this result"},
-                    },
+                    json=_inference_body(
+                        "news.sentiment",
+                        {"text": "discard this result"},
+                        correlation_id="cancel-http-1",
+                    ),
                 )
             )
             await asyncio.sleep(0.02)
@@ -447,12 +513,9 @@ async def test_deadline_and_overload_are_stable() -> None:
             deadline = await client.post(
                 "/v1/inference",
                 headers={"Authorization": "Bearer secret"},
-                json={
-                    "schema_version": "inference.v1",
-                    "operation": "sec.fls",
-                    "deadline_ms": 10,
-                    "input": {"sentences": ["slow"]},
-                },
+                json=_inference_body(
+                    "sec.fls", {"sentences": ["slow"]}, deadline_ms=10
+                ),
             )
             assert deadline.status_code == 504
             assert deadline.json()["error"]["code"] == "DEADLINE_EXCEEDED"
@@ -461,12 +524,12 @@ async def test_deadline_and_overload_are_stable() -> None:
                 client.post(
                     "/v1/inference",
                     headers={"Authorization": "Bearer secret"},
-                    json={
-                        "schema_version": "inference.v1",
-                        "operation": "sec.fls",
-                        "deadline_ms": 2_000,
-                        "input": {"sentences": [str(index)]},
-                    },
+                    json=_inference_body(
+                        "sec.fls",
+                        {"sentences": [str(index)]},
+                        correlation_id=f"fls-overload-{index}",
+                        deadline_ms=2_000,
+                    ),
                 )
                 for index in range(11)
             ]
@@ -491,12 +554,6 @@ async def test_deadline_and_overload_are_stable() -> None:
 async def test_fls_admission_prefers_overload_before_queue_deadlines() -> None:
     runner = FakeRunner("sec.fls", delay_seconds=0.03)
     app = create_app(runners={"sec.fls": runner}, token="secret")
-    body = {
-        "schema_version": "inference.v1",
-        "operation": "sec.fls",
-        "deadline_ms": 750,
-        "input": {"sentences": ["Management expects revenue growth next year."]},
-    }
     async with app.router.lifespan_context(app):  # type: ignore[attr-defined]
         async with _client(app) as client:
             responses = await asyncio.gather(
@@ -507,7 +564,16 @@ async def test_fls_admission_prefers_overload_before_queue_deadlines() -> None:
                             "Authorization": "Bearer secret",
                             "X-Request-ID": f"fls-capacity-{index}",
                         },
-                        json=body,
+                        json=_inference_body(
+                            "sec.fls",
+                            {
+                                "sentences": [
+                                    "Management expects revenue growth next year."
+                                ]
+                            },
+                            correlation_id=f"fls-capacity-{index}",
+                            deadline_ms=750,
+                        ),
                     )
                     for index in range(12)
                 )
@@ -531,12 +597,6 @@ async def test_fls_admission_prefers_overload_before_queue_deadlines() -> None:
 async def test_news_admission_prefers_overload_before_queue_deadlines() -> None:
     runner = FakeRunner("news.sentiment", delay_seconds=0.06)
     app = create_app(runners={"news.sentiment": runner}, token="secret")
-    body = {
-        "schema_version": "inference.v1",
-        "operation": "news.sentiment",
-        "deadline_ms": 500,
-        "input": {"text": "Revenue growth improved during the quarter."},
-    }
     async with app.router.lifespan_context(app):  # type: ignore[attr-defined]
         async with _client(app) as client:
             responses = await asyncio.gather(
@@ -547,7 +607,12 @@ async def test_news_admission_prefers_overload_before_queue_deadlines() -> None:
                             "Authorization": "Bearer secret",
                             "X-Request-ID": f"news-capacity-{index}",
                         },
-                        json=body,
+                        json=_inference_body(
+                            "news.sentiment",
+                            {"text": "Revenue growth improved during the quarter."},
+                            correlation_id=f"news-capacity-{index}",
+                            deadline_ms=500,
+                        ),
                     )
                     for index in range(16)
                 )
@@ -577,11 +642,11 @@ async def test_model_inference_does_not_block_liveness() -> None:
                 client.post(
                     "/v1/inference",
                     headers={"Authorization": "Bearer secret"},
-                    json={
-                        "schema_version": "inference.v1",
-                        "operation": "news.sentiment",
-                        "input": {"text": "slow"},
-                    },
+                    json=_inference_body(
+                        "news.sentiment",
+                        {"text": "slow"},
+                        correlation_id="live-http-1",
+                    ),
                 )
             )
             await asyncio.sleep(0.01)

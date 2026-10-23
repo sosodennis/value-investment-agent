@@ -5,15 +5,23 @@ import hashlib
 import json
 import os
 import re
-import secrets
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import TypeAdapter, ValidationError
+from src.shared.internal_services import (
+    INTERNAL_CONTRACT_VERSION,
+    InternalAuthenticationError,
+    InternalContextValidationError,
+    InternalReadiness,
+    ReadinessStatus,
+    authenticate_internal_request,
+)
 
 from .contracts import (
     ErrorBody,
@@ -188,9 +196,11 @@ async def _await_with_disconnect(
 
 
 def _error_response(request: Request, error: ServiceError) -> JSONResponse:
+    correlation_id = getattr(request.state, "correlation_id", _request_id(request))
     response = ErrorResponse(
+        contract_version=INTERNAL_CONTRACT_VERSION,
+        correlation_id=correlation_id,
         schema_version="inference.v1",
-        request_id=_request_id(request),
         error=ErrorBody(
             code=error.code,
             message=error.message,
@@ -216,18 +226,6 @@ def _parse_input(request: InferenceRequest) -> NewsInput | FLSInput:
         return adapter.validate_python(request.input)
     except ValidationError as exc:
         raise invalid_argument("operation input failed validation") from exc
-
-
-def _authorized(request: Request, token: str) -> bool:
-    if not token:
-        return os.getenv("INFERENCE_ALLOW_INSECURE", "0").strip().lower() in {
-            "1",
-            "true",
-            "yes",
-        }
-    return secrets.compare_digest(
-        request.headers.get("Authorization", ""), f"Bearer {token}"
-    )
 
 
 def create_app(
@@ -258,14 +256,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
-        insecure_allowed = os.getenv(
-            "INFERENCE_ALLOW_INSECURE", "0"
-        ).strip().lower() in {
-            "1",
-            "true",
-            "yes",
-        }
-        if not service_token and not insecure_allowed:
+        if not service_token:
             raise RuntimeError("INFERENCE_SERVICE_TOKEN must be set")
         application.state.runtimes = runtimes
         await asyncio.gather(*(runtime.start() for runtime in runtimes.values()))
@@ -312,27 +303,74 @@ def create_app(
             for operation, runtime in runtimes.items()
         }
         ready = all(state["ready"] and state["accepting"] for state in states.values())
+        status = ReadinessStatus.READY if ready else ReadinessStatus.NOT_READY
+        body = InternalReadiness(
+            status=status,
+            contract_version=INTERNAL_CONTRACT_VERSION,
+        )
         return JSONResponse(
             status_code=200 if ready else 503,
-            content={"ready": ready, "operations": states},
+            content=body.model_dump(mode="json"),
         )
+
+    @application.get("/readyz/details")
+    async def readiness_details() -> dict[str, object]:
+        return {
+            "operations": {
+                operation: {
+                    "ready": runtime.ready,
+                    "accepting": runtime.accepting,
+                    "queue_size": runtime.queue_size,
+                    "in_flight": runtime.in_flight,
+                    "model_revision": runtime.model_revision,
+                }
+                for operation, runtime in runtimes.items()
+            }
+        }
 
     @application.post("/v1/inference", response_model=InferenceResponse)
     async def inference(request: Request) -> InferenceResponse:
-        if not _authorized(request, service_token):
-            raise unauthenticated()
-        request_id = _request_id(request)
         try:
             raw = await request.json()
+        except ValueError:
+            raw = {}
+        raw_context = (
+            raw.get("context")
+            if isinstance(raw, Mapping) and isinstance(raw.get("context"), Mapping)
+            else {}
+        )
+        try:
+            context = authenticate_internal_request(
+                request.headers.get("Authorization"),
+                expected_token=service_token,
+                raw_context=raw_context,
+            )
+        except InternalAuthenticationError as exc:
+            raise unauthenticated() from exc
+        except InternalContextValidationError as exc:
+            if isinstance(raw_context, Mapping):
+                correlation_id = raw_context.get("correlation_id")
+                if isinstance(correlation_id, str) and 1 <= len(correlation_id) <= 128:
+                    request.state.correlation_id = correlation_id
+            raise invalid_argument("request context failed validation") from exc
+        request_id = context.correlation_id
+        request.state.correlation_id = request_id
+        try:
             parsed_request = InferenceRequest.model_validate(raw)
-        except (ValueError, ValidationError) as exc:
+        except ValidationError as exc:
             raise invalid_argument("request validation failed") from exc
         payload = _parse_input(parsed_request)
         runtime = runtimes.get(parsed_request.operation)
         if runtime is None:
             raise invalid_argument("operation is not allowlisted")
-        requested_deadline = (
-            parsed_request.deadline_ms or _DEFAULTS[parsed_request.operation]
+        remaining_ms = int(
+            (context.deadline_at - datetime.now(UTC)).total_seconds() * 1_000
+        )
+        if remaining_ms <= 0:
+            raise deadline_exceeded()
+        requested_deadline = min(
+            remaining_ms,
+            parsed_request.deadline_ms or _DEFAULTS[parsed_request.operation],
         )
         deadline_ms = min(requested_deadline, _MAXIMUMS[parsed_request.operation])
         request_payload = payload.model_dump(mode="json")
@@ -355,8 +393,9 @@ def create_app(
             else:
                 typed_result = FLSResult.model_validate(result)
             return InferenceResponse(
+                contract_version=INTERNAL_CONTRACT_VERSION,
+                correlation_id=context.correlation_id,
                 schema_version="inference.v1",
-                request_id=request_id,
                 operation=parsed_request.operation,
                 model_revision=runtime.model_revision,
                 result=typed_result,

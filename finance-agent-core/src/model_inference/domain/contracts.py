@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 from types import MappingProxyType
 from typing import Literal, Protocol
@@ -57,6 +58,8 @@ class InferenceRequest:
     input: InferenceInput
     request_id: str
     deadline_ms: int
+    principal_subject_id: str
+    deadline_at: datetime
 
 
 @dataclass(frozen=True, slots=True)

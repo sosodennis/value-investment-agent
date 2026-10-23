@@ -74,7 +74,11 @@ from src.llm_provider.entrypoint import (
     reset_provider_principal,
     set_provider_principal,
 )
-from src.model_inference.entrypoint import close_model_inference
+from src.model_inference.entrypoint import (
+    close_model_inference,
+    reset_inference_principal,
+    set_inference_principal,
+)
 from src.runtime.workspace_runtime_projection import (
     WorkspaceRuntimeActivityRecord,
     WorkspaceRuntimeActivitySegmentRecord,
@@ -747,6 +751,7 @@ async def event_generator(
     provider_context_token = set_provider_principal(
         ProviderPrincipal(user_id=principal.user_id)
     )
+    inference_context_token = set_inference_principal(principal.user_id)
 
     with log_context(
         thread_id=thread_id,
@@ -987,6 +992,7 @@ async def event_generator(
                 await q.put(msg)
         finally:
             reset_provider_principal(provider_context_token)
+            reset_inference_principal(inference_context_token)
             for q in running_queues[thread_id][:]:
                 await q.put(_QUEUE_EOF)
 

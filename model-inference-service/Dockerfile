@@ -33,6 +33,7 @@ RUN mkdir -p "${HF_BAKED_CACHE}" \
     fi
 
 COPY src ./src
+COPY --from=internal-contracts . /app/src/shared
 RUN uv sync --frozen --no-dev --extra models
 
 COPY entrypoint.sh /usr/local/bin/model-inference-entrypoint.sh

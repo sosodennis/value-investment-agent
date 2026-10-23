@@ -14,6 +14,6 @@ fi
 
 export HF_HUB_CACHE="${HF_HUB_CACHE:-${runtime_cache}/hub}"
 export TRANSFORMERS_CACHE="${TRANSFORMERS_CACHE:-${HF_HUB_CACHE}}"
-export PYTHONPATH="/app/src${PYTHONPATH:+:${PYTHONPATH}}"
+export PYTHONPATH="/app/src:/app${PYTHONPATH:+:${PYTHONPATH}}"
 
 exec python -m uvicorn model_inference_service.app:app --host 0.0.0.0 --port 8001
