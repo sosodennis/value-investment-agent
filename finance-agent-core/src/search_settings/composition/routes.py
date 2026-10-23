@@ -1,0 +1,146 @@
+from __future__ import annotations
+
+from functools import lru_cache
+
+from fastapi import APIRouter, Depends, HTTPException
+
+from src.auth.entrypoint import (
+    Principal,
+    require_current_user,
+    require_current_user_mutation,
+)
+from src.search_settings.domain import (
+    ProviderKeyCreateRequest,
+    ProviderKeyReplaceRequest,
+    ProviderKeyResponse,
+    ProviderKeyTestRequest,
+    ProviderKeyTestResponse,
+    ProviderPreferencesRequest,
+    SearchSettingsResponse,
+)
+from src.search_settings.infrastructure.client import (
+    SearchServiceClient,
+    SearchServiceError,
+)
+
+search_settings_router = APIRouter(
+    prefix="/api/search/settings", tags=["Search settings"]
+)
+
+
+@lru_cache
+def get_search_service() -> SearchServiceClient:
+    return SearchServiceClient()
+
+
+async def close_search_service() -> None:
+    if get_search_service.cache_info().currsize == 0:
+        return
+    service = get_search_service()
+    get_search_service.cache_clear()
+    await service.aclose()
+
+
+def _raise(error: SearchServiceError) -> None:
+    status = (
+        error.status if error.status in {400, 401, 404, 409, 422, 429, 503} else 502
+    )
+    raise HTTPException(status_code=status, detail=error.code) from error
+
+
+@search_settings_router.get("", response_model=SearchSettingsResponse)
+async def read_search_settings(
+    principal: Principal = Depends(require_current_user),
+    service: SearchServiceClient = Depends(get_search_service),
+) -> SearchSettingsResponse:
+    try:
+        catalog, settings = await service.read(principal=principal.user_id)
+        return SearchSettingsResponse(providers=catalog, settings=settings)
+    except SearchServiceError as exc:
+        _raise(exc)
+
+
+@search_settings_router.put("", response_model=SearchSettingsResponse)
+async def update_search_settings(
+    request: ProviderPreferencesRequest,
+    principal: Principal = Depends(require_current_user_mutation),
+    service: SearchServiceClient = Depends(get_search_service),
+) -> SearchSettingsResponse:
+    try:
+        catalog = await service.catalog(principal=principal.user_id)
+        settings = await service.update(
+            principal=principal.user_id, providers=request.providers
+        )
+        return SearchSettingsResponse(providers=catalog, settings=settings)
+    except SearchServiceError as exc:
+        _raise(exc)
+
+
+@search_settings_router.post("/keys/test", response_model=ProviderKeyTestResponse)
+async def test_search_key(
+    request: ProviderKeyTestRequest,
+    principal: Principal = Depends(require_current_user_mutation),
+    service: SearchServiceClient = Depends(get_search_service),
+) -> ProviderKeyTestResponse:
+    try:
+        result = await service.test_key(
+            principal=principal.user_id,
+            provider=request.provider,
+            api_key=request.api_key.get_secret_value(),
+        )
+        return ProviderKeyTestResponse(**result.model_dump())
+    except SearchServiceError as exc:
+        _raise(exc)
+
+
+@search_settings_router.post(
+    "/keys", response_model=ProviderKeyResponse, status_code=201
+)
+async def add_search_key(
+    request: ProviderKeyCreateRequest,
+    principal: Principal = Depends(require_current_user_mutation),
+    service: SearchServiceClient = Depends(get_search_service),
+) -> ProviderKeyResponse:
+    try:
+        result = await service.add_key(
+            principal=principal.user_id,
+            provider=request.provider,
+            api_key=request.api_key.get_secret_value(),
+            label=request.label,
+        )
+        return ProviderKeyResponse(**result.model_dump())
+    except SearchServiceError as exc:
+        _raise(exc)
+
+
+@search_settings_router.put(
+    "/keys", response_model=ProviderKeyResponse, status_code=201
+)
+async def replace_search_key(
+    request: ProviderKeyReplaceRequest,
+    principal: Principal = Depends(require_current_user_mutation),
+    service: SearchServiceClient = Depends(get_search_service),
+) -> ProviderKeyResponse:
+    try:
+        result = await service.replace_key(
+            principal=principal.user_id,
+            key_id=request.key_id,
+            provider=request.provider,
+            api_key=request.api_key.get_secret_value(),
+            label=request.label,
+        )
+        return ProviderKeyResponse(**result.model_dump())
+    except SearchServiceError as exc:
+        _raise(exc)
+
+
+@search_settings_router.delete("/keys/{key_id}", status_code=204)
+async def delete_search_key(
+    key_id: str,
+    principal: Principal = Depends(require_current_user_mutation),
+    service: SearchServiceClient = Depends(get_search_service),
+) -> None:
+    try:
+        await service.delete_key(principal=principal.user_id, key_id=key_id)
+    except SearchServiceError as exc:
+        _raise(exc)
