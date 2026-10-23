@@ -4,7 +4,8 @@ import { csrfHeaders } from '@/lib/auth-api';
 
 const API_URL = process.env.NEXT_PUBLIC_LANGGRAPH_URL || 'http://localhost:8000';
 
-export type LlmProviderKey = components['schemas']['ProviderKeyResponse'];
+export type LlmProviderKey =
+    components['schemas']['src__llm_provider__interface__contracts__ProviderKeyResponse'];
 export type LlmProviderKeyTestResult =
     components['schemas']['ProviderKeyTestResponse'];
 export type LlmModelOption = components['schemas']['ModelOptionResponse'];

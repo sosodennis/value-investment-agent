@@ -247,6 +247,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/search/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Search Settings */
+        get: operations["read_search_settings_api_search_settings_get"];
+        /** Update Search Settings */
+        put: operations["update_search_settings_api_search_settings_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/search/settings/keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace Search Key */
+        put: operations["replace_search_key_api_search_settings_keys_put"];
+        /** Add Search Key */
+        post: operations["add_search_key_api_search_settings_keys_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/search/settings/keys/{key_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Search Key */
+        delete: operations["delete_search_key_api_search_settings_keys__key_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -1387,25 +1440,40 @@ export interface components {
             /** User Id */
             user_id: string;
         };
-        /** ProviderKeyCreateRequest */
-        ProviderKeyCreateRequest: {
+        /** ProviderCapabilities */
+        ProviderCapabilities: {
+            /**
+             * Key Required
+             * @default true
+             */
+            key_required: boolean;
+            /** Operations */
+            operations: ("web" | "news")[];
+            /** Optional Fields */
+            optional_fields?: ("web" | "news" | "region" | "time_range" | "safe_search")[];
+            /** Provider */
+            provider: string;
+        };
+        /** ProviderKeyReplaceRequest */
+        ProviderKeyReplaceRequest: {
             /**
              * Api Key
              * Format: password
              */
             api_key: string;
-            /**
-             * Label
-             * @default OpenRouter key
-             */
+            /** Key Id */
+            key_id: string;
+            /** Label */
             label: string;
+            /** Provider */
+            provider: string;
         };
-        /** ProviderKeyResponse */
-        ProviderKeyResponse: {
+        /** ProviderKeySummary */
+        ProviderKeySummary: {
             /** Cooldown Until */
             cooldown_until?: string | null;
-            /** Created At */
-            created_at?: string | null;
+            /** Enabled */
+            enabled: boolean;
             /**
              * Failure Count
              * @default 0
@@ -1417,19 +1485,18 @@ export interface components {
             id: string;
             /** Label */
             label: string;
-            /** Last Error */
-            last_error?: string | null;
             /** Last Tested At */
             last_tested_at?: string | null;
-            /** Last Used At */
-            last_used_at?: string | null;
-            /** Replacement Retire At */
-            replacement_retire_at?: string | null;
+            /** Priority */
+            priority: number;
+            /** Provider */
+            provider: string;
             /**
              * Status
-             * @default untested
+             * @default active
+             * @enum {string}
              */
-            status: string;
+            status: "active" | "disabled" | "cooldown" | "invalid";
             /** Suffix */
             suffix: string;
         };
@@ -1444,6 +1511,30 @@ export interface components {
              * @enum {string}
              */
             status: "healthy" | "invalid_key" | "rate_limited" | "unavailable";
+        };
+        /** ProviderPreference */
+        ProviderPreference: {
+            /** Enabled */
+            enabled: boolean;
+            /** Priority */
+            priority: number;
+            /** Provider */
+            provider: string;
+        };
+        /** ProviderPreferencesRequest */
+        ProviderPreferencesRequest: {
+            /** Providers */
+            providers: components["schemas"]["ProviderPreference"][];
+        };
+        /** ProviderSetting */
+        ProviderSetting: {
+            /** Enabled */
+            enabled: boolean;
+            key?: components["schemas"]["ProviderKeySummary"] | null;
+            /** Priority */
+            priority: number;
+            /** Provider */
+            provider: string;
         };
         /** QualitySummaryModel */
         QualitySummaryModel: {
@@ -1591,6 +1682,17 @@ export interface components {
              * @constant
              */
             version: "v1";
+        };
+        /** SearchSettingsResponse */
+        SearchSettingsResponse: {
+            /** Providers */
+            providers: components["schemas"]["ProviderCapabilities"][];
+            settings: components["schemas"]["SearchSettingsSnapshot"];
+        };
+        /** SearchSettingsSnapshot */
+        SearchSettingsSnapshot: {
+            /** Providers */
+            providers: components["schemas"]["ProviderSetting"][];
         };
         /** SetupReliabilitySummaryModel */
         SetupReliabilitySummaryModel: {
@@ -3010,6 +3112,79 @@ export interface components {
             /** Value Area Coverage */
             value_area_coverage?: number | null;
         };
+        /** ProviderKeyCreateRequest */
+        src__llm_provider__interface__contracts__ProviderKeyCreateRequest: {
+            /**
+             * Api Key
+             * Format: password
+             */
+            api_key: string;
+            /**
+             * Label
+             * @default OpenRouter key
+             */
+            label: string;
+        };
+        /** ProviderKeyResponse */
+        src__llm_provider__interface__contracts__ProviderKeyResponse: {
+            /** Cooldown Until */
+            cooldown_until?: string | null;
+            /** Created At */
+            created_at?: string | null;
+            /**
+             * Failure Count
+             * @default 0
+             */
+            failure_count: number;
+            /** Fingerprint */
+            fingerprint: string;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Last Error */
+            last_error?: string | null;
+            /** Last Tested At */
+            last_tested_at?: string | null;
+            /** Last Used At */
+            last_used_at?: string | null;
+            /** Replacement Retire At */
+            replacement_retire_at?: string | null;
+            /**
+             * Status
+             * @default untested
+             */
+            status: string;
+            /** Suffix */
+            suffix: string;
+        };
+        /** ProviderKeyCreateRequest */
+        src__search_settings__domain__ProviderKeyCreateRequest: {
+            /**
+             * Api Key
+             * Format: password
+             */
+            api_key: string;
+            /** Label */
+            label: string;
+            /** Provider */
+            provider: string;
+        };
+        /** ProviderKeyResponse */
+        src__search_settings__domain__ProviderKeyResponse: {
+            /** Active */
+            active: boolean;
+            /** Fingerprint */
+            fingerprint: string;
+            /** Id */
+            id: string;
+            /** Provider */
+            provider: string;
+            /** Suffix */
+            suffix: string;
+            /** Tested */
+            tested: boolean;
+        };
     };
     responses: never;
     parameters: never;
@@ -3169,7 +3344,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ProviderKeyResponse"][];
+                    "application/json": components["schemas"]["src__llm_provider__interface__contracts__ProviderKeyResponse"][];
                 };
             };
         };
@@ -3183,7 +3358,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ProviderKeyCreateRequest"];
+                "application/json": components["schemas"]["src__llm_provider__interface__contracts__ProviderKeyCreateRequest"];
             };
         };
         responses: {
@@ -3193,7 +3368,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ProviderKeyResponse"];
+                    "application/json": components["schemas"]["src__llm_provider__interface__contracts__ProviderKeyResponse"];
                 };
             };
             /** @description Validation Error */
@@ -3247,7 +3422,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ProviderKeyCreateRequest"];
+                "application/json": components["schemas"]["src__llm_provider__interface__contracts__ProviderKeyCreateRequest"];
             };
         };
         responses: {
@@ -3257,7 +3432,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ProviderKeyResponse"];
+                    "application/json": components["schemas"]["src__llm_provider__interface__contracts__ProviderKeyResponse"];
                 };
             };
             /** @description Validation Error */
@@ -3509,6 +3684,154 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TechnicalMonitoringRowModel"][];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_search_settings_api_search_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchSettingsResponse"];
+                };
+            };
+        };
+    };
+    update_search_settings_api_search_settings_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderPreferencesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    replace_search_key_api_search_settings_keys_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderKeyReplaceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["src__search_settings__domain__ProviderKeyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_search_key_api_search_settings_keys_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["src__search_settings__domain__ProviderKeyCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["src__search_settings__domain__ProviderKeyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_search_key_api_search_settings_keys__key_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

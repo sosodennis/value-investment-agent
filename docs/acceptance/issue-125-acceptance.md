@@ -8,9 +8,11 @@
 
 - PASS: `cd finance-agent-core && uv run pytest tests/test_search_settings_api.py -q` (`4 passed`). The tests cover authenticated ownership, masked key responses, key-validation error redaction, and service-token forwarding without browser cookies.
 - PASS: `cd frontend && pnpm exec vitest run src/app/settings/search/page.test.tsx` (`4 passed`). The tests cover loading and empty states, provider ordering, add-and-test behavior, rejected keys, and service unavailability.
+- PASS: `cd frontend && pnpm exec vitest run` (`117 passed` across 20 test files).
 - PASS: `cd frontend && pnpm typecheck`.
-- PASS: `cd frontend && pnpm exec eslint src/app/settings/search/page.tsx src/app/settings/search/page.test.tsx src/lib/search-settings-api.ts`.
+- PASS: `cd frontend && pnpm lint`.
 - PASS: `cd frontend && pnpm build`. The production build includes `/settings/search`.
+- PASS: `cd frontend && pnpm sync:api-contract`. The generated OpenAPI and TypeScript contract files were unchanged by a second run.
 - PASS: `python3 scripts/architecture_guard.py` and `git diff --check`.
 - PASS: commit hooks for whitespace, end-of-file, large files, Ruff, and Ruff format.
 
@@ -19,6 +21,8 @@
 The settings page lists provider capabilities, lets the user enable providers and change their priority, and shows masked key metadata. Add and replace send one request to Search Service, which tests the key before saving it. The browser receives only the key suffix and fingerprint. Delete uses the authenticated user's key ID.
 
 The BFF no longer exposes a separate test-only route. That route duplicated validation because Search Service already tests keys during add and replace. The Search Service contract remains unchanged.
+
+The OpenAPI export and generated TypeScript API contract now include the Search settings endpoints and payloads. Because the LLM and Search domains both define a `ProviderKeyResponse`, generated LLM references use the qualified schema name so existing LLM settings remain correctly typed.
 
 ## Scope note
 
