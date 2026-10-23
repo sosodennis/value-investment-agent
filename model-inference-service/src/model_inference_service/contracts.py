@@ -13,6 +13,7 @@ class StrictModel(BaseModel):
 
 
 class InferenceRequest(StrictModel):
+    context: dict[str, object]
     schema_version: Literal["inference.v1"]
     operation: Operation
     deadline_ms: int | None = Field(default=None, ge=1)
@@ -60,8 +61,9 @@ class FLSResult(StrictModel):
 
 
 class InferenceResponse(StrictModel):
+    contract_version: Literal["internal.v1"]
+    correlation_id: str
     schema_version: Literal["inference.v1"]
-    request_id: str
     operation: Operation
     model_revision: str
     result: NewsResult | FLSResult
@@ -75,6 +77,7 @@ class ErrorBody(StrictModel):
 
 
 class ErrorResponse(StrictModel):
+    contract_version: Literal["internal.v1"]
+    correlation_id: str
     schema_version: Literal["inference.v1"]
-    request_id: str
     error: ErrorBody

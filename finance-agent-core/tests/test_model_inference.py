@@ -6,6 +6,7 @@ import json
 import time
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Barrier, Event, Lock
 
@@ -15,6 +16,7 @@ import pytest
 from src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl.postprocess import (
     finbert_direction,
 )
+from src.model_inference.application.context import set_inference_principal
 from src.model_inference.application.service import ModelInferenceService
 from src.model_inference.application.sync_runner import BoundedSyncRunner
 from src.model_inference.domain.contracts import (
@@ -38,6 +40,8 @@ def _news_request() -> InferenceRequest:
         input=NewsSentimentInput(text="Revenue rose 12% year over year."),
         request_id="request-123",
         deadline_ms=450,
+        principal_subject_id="user-123",
+        deadline_at=datetime.now(timezone.utc) + timedelta(milliseconds=450),
     )
 
 
@@ -107,22 +111,36 @@ def _settings() -> ModelInferenceSettings:
     )
 
 
+@pytest.fixture(autouse=True)
+def _authenticated_inference_context():
+    token = set_inference_principal("user-123")
+    yield
+    from src.model_inference.application.context import reset_inference_principal
+
+    reset_inference_principal(token)
+
+
 def test_http_adapter_sends_versioned_news_request_and_parses_result() -> None:
     def respond(request: httpx.Request) -> httpx.Response:
         assert str(request.url) == "http://news-inference/v1/inference"
         assert request.headers["Authorization"] == "Bearer test-token"
         assert request.headers["X-Request-ID"] == "request-123"
-        assert json.loads(request.content) == {
+        body = json.loads(request.content)
+        assert body["context"]["principal"] == {"subject_id": "user-123"}
+        assert body["context"]["correlation_id"] == "request-123"
+        assert body["context"]["contract_version"] == "internal.v1"
+        assert {
             "schema_version": "inference.v1",
             "operation": "news.sentiment",
             "deadline_ms": 450,
             "input": {"text": "Revenue rose 12% year over year."},
-        }
+        }.items() <= body.items()
         return httpx.Response(
             200,
             json={
                 "schema_version": "inference.v1",
-                "request_id": "request-123",
+                "correlation_id": "request-123",
+                "contract_version": "internal.v1",
                 "operation": "news.sentiment",
                 "model_revision": "revision-123",
                 "result": {
@@ -147,6 +165,37 @@ def test_http_adapter_sends_versioned_news_request_and_parses_result() -> None:
     client.close()
 
 
+def test_model_inference_rejects_calls_without_authenticated_principal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    transport = _RecordingTransport(_news_result())
+    service = ModelInferenceService(transport)
+    monkeypatch.setattr(
+        "src.model_inference.application.service.get_inference_principal",
+        lambda: None,
+    )
+
+    with pytest.raises(InferenceFailure) as failure:
+        service.news_sentiment_sync("Revenue rose 12%.")
+
+    assert failure.value.code is InferenceErrorCode.UNAUTHENTICATED
+    assert transport.requests == []
+
+
+def test_endpoint_environment_configures_each_operation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MODEL_INFERENCE_NEWS_URL", "http://news-router:8001/")
+    monkeypatch.setenv("MODEL_INFERENCE_FLS_URL", "https://fls-router.internal")
+    monkeypatch.setenv("MODEL_INFERENCE_TOKEN", "service-secret")
+
+    settings = ModelInferenceSettings.from_environment()
+
+    assert settings.news_url == "http://news-router:8001"
+    assert settings.fls_url == "https://fls-router.internal"
+    assert settings.token == "service-secret"
+
+
 @pytest.mark.asyncio
 async def test_http_adapter_sends_async_news_request() -> None:
     def respond(request: httpx.Request) -> httpx.Response:
@@ -157,7 +206,8 @@ async def test_http_adapter_sends_async_news_request() -> None:
             200,
             json={
                 "schema_version": "inference.v1",
-                "request_id": "request-123",
+                "correlation_id": "request-123",
+                "contract_version": "internal.v1",
                 "operation": "news.sentiment",
                 "model_revision": "revision-123",
                 "result": {
@@ -190,8 +240,9 @@ def test_http_adapter_maps_retryable_overload_and_retry_delay() -> None:
             lambda _request: httpx.Response(
                 429,
                 json={
+                    "contract_version": "internal.v1",
+                    "correlation_id": "request-123",
                     "schema_version": "inference.v1",
-                    "request_id": "request-123",
                     "error": {
                         "code": "OVERLOADED",
                         "message": "capacity is full",
@@ -220,8 +271,9 @@ def test_http_adapter_maps_malformed_response_to_non_retryable_failure() -> None
             lambda _request: httpx.Response(
                 200,
                 json={
+                    "contract_version": "internal.v1",
+                    "correlation_id": "wrong-request",
                     "schema_version": "inference.v1",
-                    "request_id": "wrong-request",
                     "operation": "news.sentiment",
                     "model_revision": "revision-123",
                     "result": {
@@ -265,8 +317,9 @@ def test_http_adapter_maps_all_service_error_codes(
             lambda _request: httpx.Response(
                 status_code,
                 json={
+                    "contract_version": "internal.v1",
+                    "correlation_id": "request-123",
                     "schema_version": "inference.v1",
-                    "request_id": "request-123",
                     "error": {
                         "code": code.value,
                         "message": "service failure",
@@ -389,7 +442,19 @@ def test_sync_deadline_returns_while_transport_is_still_running() -> None:
     transport = _BlockingTransport()
     service = ModelInferenceService(transport)
     callers = ThreadPoolExecutor(max_workers=1)
-    call = callers.submit(service.news_sentiment_sync, "Revenue rose 12%.")
+
+    def call_with_principal() -> NewsSentimentResult:
+        token = set_inference_principal("user-123")
+        try:
+            return service.news_sentiment_sync("Revenue rose 12%.")
+        finally:
+            from src.model_inference.application.context import (
+                reset_inference_principal,
+            )
+
+            reset_inference_principal(token)
+
+    call = callers.submit(call_with_principal)
 
     try:
         assert started.wait(timeout=1)
