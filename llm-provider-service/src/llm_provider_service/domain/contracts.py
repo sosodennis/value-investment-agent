@@ -1,9 +1,3 @@
-"""Project-owned contract for model access.
-
-The contract deliberately contains no LangChain, LiteLLM, HTTP, or provider SDK
-types. Adapters translate those representations at the infrastructure edge.
-"""
-
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Iterator
@@ -21,8 +15,6 @@ class ChatRole(StrEnum):
 
 
 class ChatMessage(BaseModel):
-    """A provider-neutral chat message."""
-
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     role: ChatRole
@@ -66,8 +58,6 @@ class ProviderPrincipal(BaseModel):
 
 
 class LLMAttribution(BaseModel):
-    """Non-secret attribution attached to provider outcomes."""
-
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     deployment_id: str | None = Field(default=None, min_length=1)
@@ -75,8 +65,6 @@ class LLMAttribution(BaseModel):
 
 
 class LLMAttempt(BaseModel):
-    """Sanitized record for one gateway attempt."""
-
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     attempt: int = Field(ge=1)
@@ -100,8 +88,6 @@ class ResolvedModelRoute(BaseModel):
 
 
 class LLMRouteResolver(Protocol):
-    """Resolve a logical route for an authenticated provider principal."""
-
     def resolve(
         self,
         *,
@@ -111,8 +97,6 @@ class LLMRouteResolver(Protocol):
 
 
 class CompletionRequest(BaseModel):
-    """Input shared by non-streaming and streaming model calls."""
-
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     messages: tuple[ChatMessage, ...] = Field(min_length=1)
@@ -141,8 +125,6 @@ class Usage(BaseModel):
 
 
 class CompletionResult(BaseModel):
-    """A completed model response."""
-
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     request_id: str = Field(min_length=1)
@@ -183,8 +165,6 @@ _StructuredModel = TypeVar("_StructuredModel", bound=BaseModel)
 
 
 class StructuredRequest(BaseModel, Generic[_StructuredModel]):
-    """A request whose response is validated by the adapter."""
-
     model_config = ConfigDict(frozen=True, extra="forbid", arbitrary_types_allowed=True)
 
     completion: CompletionRequest
@@ -207,8 +187,6 @@ class LLMErrorCode(StrEnum):
 
 
 class LLMProviderError(RuntimeError):
-    """Stable error envelope raised by provider adapters."""
-
     def __init__(
         self,
         *,
@@ -246,8 +224,6 @@ _ResponseModel = TypeVar("_ResponseModel", bound=BaseModel)
 
 
 class LLMProviderPort(Protocol):
-    """Capability port consumed by application adapters."""
-
     def complete(self, request: CompletionRequest) -> CompletionResult: ...
 
     def complete_structured(

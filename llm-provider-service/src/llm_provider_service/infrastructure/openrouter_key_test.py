@@ -1,5 +1,3 @@
-"""OpenRouter credential probe with a deliberately small response contract."""
-
 from __future__ import annotations
 
 import httpx

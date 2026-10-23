@@ -1,5 +1,3 @@
-"""Small, redacting client for the internal LiteLLM model-management API."""
-
 from __future__ import annotations
 
 from collections.abc import Collection, Mapping

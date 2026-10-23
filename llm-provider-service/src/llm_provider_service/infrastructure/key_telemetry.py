@@ -1,5 +1,3 @@
-"""Read per-key request health recorded by the LiteLLM callback."""
-
 from __future__ import annotations
 
 import logging

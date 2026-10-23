@@ -189,19 +189,47 @@ async def test_authentication_precedes_principal_parsing(client) -> None:
 
 
 @pytest.mark.asyncio
-async def test_internal_lifecycle_endpoints_require_service_token(client) -> None:
+async def test_provider_service_does_not_expose_internal_lifecycle_operations(
+    client,
+) -> None:
     http, _, _ = client
     try:
-        sync = await http.post("/internal/synchronize-model")
+        sync = await http.post(
+            "/internal/synchronize-model",
+            headers={"Authorization": "Bearer service-secret"},
+        )
         cleanup = await http.post(
             "/internal/cleanup-replacements",
-            headers={"Authorization": "Bearer wrong"},
+            headers={"Authorization": "Bearer service-secret"},
         )
     finally:
         await http.aclose()
 
-    assert sync.status_code == 401
-    assert cleanup.status_code == 401
+    assert sync.status_code == 404
+    assert cleanup.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_runtime_is_closed_when_startup_fails(monkeypatch) -> None:
+    class _Runtime:
+        ready = False
+        closed = False
+
+        async def start(self) -> None:
+            raise RuntimeError("startup failed")
+
+        async def close(self) -> None:
+            self.closed = True
+
+    runtime = _Runtime()
+    monkeypatch.setattr(service, "ProviderRuntime", lambda: runtime)
+    application = SimpleNamespace(state=SimpleNamespace())
+
+    with pytest.raises(RuntimeError, match="startup failed"):
+        async with service.lifespan(application):
+            pass
+
+    assert runtime.closed
 
 
 @pytest.mark.asyncio

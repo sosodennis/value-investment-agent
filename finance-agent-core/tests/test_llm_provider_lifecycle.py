@@ -34,3 +34,13 @@ async def test_gateway_provider_is_reused_and_closed_at_shutdown(monkeypatch) ->
     assert replacement_provider is not first_provider
     await provider_module.close_llm_provider()
     assert replacement_provider.closed is True
+
+
+def test_provider_service_configuration_is_required_without_local_fallback(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("LLM_PROVIDER_SERVICE_URL", raising=False)
+    monkeypatch.delenv("LLM_PROVIDER_SERVICE_TOKEN", raising=False)
+
+    with pytest.raises(RuntimeError, match="LLM_PROVIDER_SERVICE_URL is required"):
+        provider_module.get_llm_provider()

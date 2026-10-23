@@ -1,5 +1,3 @@
-"""OpenAI-compatible adapter for the internal LiteLLM gateway."""
-
 from __future__ import annotations
 
 import json
@@ -80,8 +78,6 @@ def _env_bool(name: str, default: bool) -> bool:
 
 @dataclass(frozen=True)
 class LiteLLMGatewayConfig:
-    """Runtime settings for the project-to-gateway data plane."""
-
     base_url: str
     api_key: str
     max_attempts: int = _MAX_RETRY_ATTEMPTS
@@ -166,13 +162,6 @@ class LiteLLMGatewayConfig:
 
 
 class LiteLLMGatewayProvider:
-    """Translate the project contract to LiteLLM's OpenAI-compatible API.
-
-    Retry is deliberately bounded here and only covers transport/transient
-    status failures. Credential selection remains a gateway concern until the
-    POC proves its failover behavior.
-    """
-
     provider_name = "litellm-gateway"
 
     def __init__(

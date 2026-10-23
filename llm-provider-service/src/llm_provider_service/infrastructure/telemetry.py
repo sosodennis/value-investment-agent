@@ -1,5 +1,3 @@
-"""Bounded, provider-neutral telemetry for the LLM gateway."""
-
 from __future__ import annotations
 
 import logging
@@ -46,13 +44,6 @@ class LLMProviderTelemetrySnapshot:
 
 
 class LLMProviderTelemetry:
-    """Collect bounded counters and emit redacted request events.
-
-    Request IDs are correlation fields in logs only. They are never used as a
-    metric dimension, and prompt content and credentials are not accepted by
-    this API.
-    """
-
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._requests = 0

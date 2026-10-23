@@ -366,24 +366,6 @@ class LLMProviderServiceSettingsClient:
     async def aclose(self) -> None:
         await self._client.aclose()
 
-    async def synchronize_selected_model(self) -> None:
-        await self._client.post(
-            f"{self._base_url}/internal/synchronize-model",
-            headers={"Authorization": f"Bearer {self._token}"},
-            timeout=10.0,
-        )
-
-    async def cleanup_expired_replacements(self) -> int:
-        response = await self._client.post(
-            f"{self._base_url}/internal/cleanup-replacements",
-            headers={"Authorization": f"Bearer {self._token}"},
-            timeout=10.0,
-        )
-        if response.status_code >= 400:
-            raise ProviderSettingsError("provider_unavailable")
-        body = response.json()
-        return int(body.get("deleted", 0)) if isinstance(body, dict) else 0
-
 
 def _managed_key(item: object) -> ManagedProviderKey:
     if not isinstance(item, dict):

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-import hmac
 import json
+import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -54,14 +54,6 @@ from src.shared.internal_services import (
 
 def _token() -> str | None:
     return os.getenv("LLM_PROVIDER_SERVICE_TOKEN") or None
-
-
-def _internal_token_valid(request: Request) -> bool:
-    expected = _token()
-    authorization = request.headers.get("Authorization", "")
-    if not expected or not authorization.startswith("Bearer "):
-        return False
-    return hmac.compare_digest(authorization.removeprefix("Bearer "), expected)
 
 
 def _remaining(deadline: datetime) -> float:
@@ -165,14 +157,42 @@ def _response_model(schema: dict[str, object]) -> type[Any]:
 async def lifespan(application: FastAPI):
     runtime = ProviderRuntime()
     application.state.runtime = runtime
-    await runtime.start()
+    cleanup_task: asyncio.Task[None] | None = None
     try:
+        await runtime.start()
+        try:
+            await runtime.synchronize_model()
+        except Exception as exc:
+            logger.warning(
+                "LLM selected model synchronization failed (%s)",
+                type(exc).__name__,
+            )
+        cleanup_task = asyncio.create_task(_replacement_cleanup_loop(runtime))
         yield
     finally:
+        if cleanup_task is not None:
+            cleanup_task.cancel()
+            await asyncio.gather(cleanup_task, return_exceptions=True)
         await runtime.close()
 
 
 app = FastAPI(title="Private LLM Provider Service", version="1.0", lifespan=lifespan)
+logger = logging.getLogger(__name__)
+
+
+async def _replacement_cleanup_loop(runtime: ProviderRuntime) -> None:
+    while True:
+        try:
+            deleted = await runtime.cleanup_replacements()
+            if deleted:
+                logger.info("Expired LLM key replacements removed: %s", deleted)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning(
+                "LLM key replacement cleanup failed (%s)", type(exc).__name__
+            )
+        await asyncio.sleep(60)
 
 
 @app.get("/livez")
@@ -188,44 +208,6 @@ async def readyz(request: Request) -> JSONResponse:
         status_code=200 if status == "ready" else 503,
         content={"status": status, "contract_version": INTERNAL_CONTRACT_VERSION},
     )
-
-
-@app.post("/internal/synchronize-model", response_model=None)
-async def synchronize_model(request: Request) -> JSONResponse:
-    if not _internal_token_valid(request):
-        return _error(
-            "internal", "internal_auth_invalid", "internal authentication failed", 401
-        )
-    runtime: ProviderRuntime = request.app.state.runtime
-    if not runtime.ready:
-        return _error(
-            "internal",
-            "not_ready",
-            "provider service is not ready",
-            503,
-            retryable=True,
-        )
-    await runtime.synchronize_model()
-    return JSONResponse(content={"status": "ok"})
-
-
-@app.post("/internal/cleanup-replacements", response_model=None)
-async def cleanup_replacements(request: Request) -> JSONResponse:
-    if not _internal_token_valid(request):
-        return _error(
-            "internal", "internal_auth_invalid", "internal authentication failed", 401
-        )
-    runtime: ProviderRuntime = request.app.state.runtime
-    if not runtime.ready:
-        return _error(
-            "internal",
-            "not_ready",
-            "provider service is not ready",
-            503,
-            retryable=True,
-        )
-    deleted = await runtime.cleanup_replacements()
-    return JSONResponse(content={"deleted": deleted})
 
 
 def _validate_input(model: type[Any], raw: dict[str, Any]) -> Any:

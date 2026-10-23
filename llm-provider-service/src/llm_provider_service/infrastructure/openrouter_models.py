@@ -1,5 +1,3 @@
-"""OpenRouter model catalogue access and free-model policy."""
-
 from __future__ import annotations
 
 import asyncio

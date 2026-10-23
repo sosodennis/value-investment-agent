@@ -12,7 +12,6 @@ def key_fingerprint(value: str) -> str:
 
 
 def validate_model_id(value: str) -> str:
-    """Keep deployment identifiers opaque while rejecting empty path values."""
     if not value.strip() or len(value) > 200:
         raise ValueError("invalid managed key id")
     return value
