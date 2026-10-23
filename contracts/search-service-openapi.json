@@ -1,0 +1,2411 @@
+{
+  "components": {
+    "schemas": {
+      "Capability": {
+        "enum": [
+          "web",
+          "news",
+          "region",
+          "time_range",
+          "safe_search"
+        ],
+        "title": "Capability",
+        "type": "string"
+      },
+      "EmptyEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "context": {
+            "$ref": "#/components/schemas/InternalRequestContext"
+          },
+          "input": {
+            "$ref": "#/components/schemas/EmptyInput"
+          }
+        },
+        "required": [
+          "context",
+          "input"
+        ],
+        "title": "EmptyEnvelope",
+        "type": "object"
+      },
+      "EmptyInput": {
+        "additionalProperties": false,
+        "properties": {},
+        "title": "EmptyInput",
+        "type": "object"
+      },
+      "InternalError": {
+        "additionalProperties": false,
+        "description": "Redacted, stable failure metadata shared by internal service responses.",
+        "properties": {
+          "code": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          },
+          "retry_after_ms": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Retry After Ms"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "retryable"
+        ],
+        "title": "InternalError",
+        "type": "object"
+      },
+      "InternalErrorResponse": {
+        "additionalProperties": false,
+        "description": "Versioned error response envelope; operation details stay service-owned.",
+        "properties": {
+          "contract_version": {
+            "const": "internal.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "correlation_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "error": {
+            "$ref": "#/components/schemas/InternalError"
+          }
+        },
+        "required": [
+          "correlation_id",
+          "contract_version",
+          "error"
+        ],
+        "title": "InternalErrorResponse",
+        "type": "object"
+      },
+      "InternalPrincipal": {
+        "additionalProperties": false,
+        "description": "Authenticated application identity, without browser or provider secrets.",
+        "properties": {
+          "subject_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Subject Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject_id"
+        ],
+        "title": "InternalPrincipal",
+        "type": "object"
+      },
+      "InternalReadiness": {
+        "additionalProperties": false,
+        "description": "Response body for the shared ``/readyz`` convention.",
+        "properties": {
+          "contract_version": {
+            "const": "internal.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ReadinessStatus"
+          }
+        },
+        "required": [
+          "status",
+          "contract_version"
+        ],
+        "title": "InternalReadiness",
+        "type": "object"
+      },
+      "InternalRequestContext": {
+        "additionalProperties": false,
+        "description": "Request metadata accepted by an internal capability service.",
+        "properties": {
+          "contract_version": {
+            "const": "internal.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "correlation_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "deadline_at": {
+            "format": "date-time",
+            "title": "Deadline At",
+            "type": "string"
+          },
+          "principal": {
+            "$ref": "#/components/schemas/InternalPrincipal"
+          }
+        },
+        "required": [
+          "principal",
+          "correlation_id",
+          "contract_version",
+          "deadline_at"
+        ],
+        "title": "InternalRequestContext",
+        "type": "object"
+      },
+      "NewsSearchEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "context": {
+            "$ref": "#/components/schemas/InternalRequestContext"
+          },
+          "input": {
+            "$ref": "#/components/schemas/NewsSearchRequest"
+          }
+        },
+        "required": [
+          "context",
+          "input"
+        ],
+        "title": "NewsSearchEnvelope",
+        "type": "object"
+      },
+      "NewsSearchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "news",
+            "default": "news",
+            "title": "Operation",
+            "type": "string"
+          },
+          "query": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          },
+          "region": {
+            "anyOf": [
+              {
+                "pattern": "^(?:worldwide|(?:[A-Za-z]{2,3}(?:-[A-Za-z]{3}){0,3}|[A-Za-z]{4}|[A-Za-z]{5,8})(?:-[A-Za-z]{4})?(?:-(?:[A-Za-z]{2}|[0-9]{3}))?(?:-(?:[A-Za-z0-9]{5,8}|[0-9][A-Za-z0-9]{3}))*(?:-[0-9A-WY-Za-wy-z](?:-[A-Za-z0-9]{2,8})+)*(?:-x(?:-[A-Za-z0-9]{1,8})+)?)$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Region"
+          },
+          "result_limit": {
+            "default": 20,
+            "maximum": 50,
+            "minimum": 1,
+            "title": "Result Limit",
+            "type": "integer"
+          },
+          "safe_search": {
+            "default": true,
+            "title": "Safe Search",
+            "type": "boolean"
+          },
+          "time_range": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TimeRange"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "timeout_seconds": {
+            "default": 30,
+            "maximum": 60,
+            "minimum": 1,
+            "title": "Timeout Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "NewsSearchRequest",
+        "type": "object"
+      },
+      "Operation": {
+        "enum": [
+          "web",
+          "news"
+        ],
+        "title": "Operation",
+        "type": "string"
+      },
+      "ProviderCapabilities": {
+        "additionalProperties": false,
+        "properties": {
+          "key_required": {
+            "default": true,
+            "title": "Key Required",
+            "type": "boolean"
+          },
+          "operations": {
+            "items": {
+              "$ref": "#/components/schemas/Operation"
+            },
+            "title": "Operations",
+            "type": "array",
+            "uniqueItems": true
+          },
+          "optional_fields": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Capability"
+            },
+            "title": "Optional Fields",
+            "type": "array",
+            "uniqueItems": true
+          },
+          "provider": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "operations"
+        ],
+        "title": "ProviderCapabilities",
+        "type": "object"
+      },
+      "ProviderCatalog": {
+        "additionalProperties": false,
+        "properties": {
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderCapabilities"
+            },
+            "title": "Providers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "providers"
+        ],
+        "title": "ProviderCatalog",
+        "type": "object"
+      },
+      "ProviderCatalogResult": {
+        "additionalProperties": false,
+        "properties": {
+          "catalog": {
+            "$ref": "#/components/schemas/ProviderCatalog"
+          }
+        },
+        "required": [
+          "catalog"
+        ],
+        "title": "ProviderCatalogResult",
+        "type": "object"
+      },
+      "ProviderCatalogSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": "internal.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "correlation_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "result": {
+            "$ref": "#/components/schemas/ProviderCatalogResult"
+          }
+        },
+        "required": [
+          "correlation_id",
+          "contract_version",
+          "result"
+        ],
+        "title": "ProviderCatalogSuccess",
+        "type": "object"
+      },
+      "ProviderKeyAddEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "context": {
+            "$ref": "#/components/schemas/InternalRequestContext"
+          },
+          "input": {
+            "$ref": "#/components/schemas/ProviderKeyAddInput"
+          }
+        },
+        "required": [
+          "context",
+          "input"
+        ],
+        "title": "ProviderKeyAddEnvelope",
+        "type": "object"
+      },
+      "ProviderKeyAddInput": {
+        "additionalProperties": false,
+        "properties": {
+          "api_key": {
+            "format": "password",
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Api Key",
+            "type": "string",
+            "writeOnly": true
+          },
+          "label": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "provider": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "api_key",
+          "label"
+        ],
+        "title": "ProviderKeyAddInput",
+        "type": "object"
+      },
+      "ProviderKeyDeleteEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "context": {
+            "$ref": "#/components/schemas/InternalRequestContext"
+          },
+          "input": {
+            "$ref": "#/components/schemas/ProviderKeyDeleteInput"
+          }
+        },
+        "required": [
+          "context",
+          "input"
+        ],
+        "title": "ProviderKeyDeleteEnvelope",
+        "type": "object"
+      },
+      "ProviderKeyDeleteInput": {
+        "additionalProperties": false,
+        "properties": {
+          "key_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Key Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key_id"
+        ],
+        "title": "ProviderKeyDeleteInput",
+        "type": "object"
+      },
+      "ProviderKeyDeleteResult": {
+        "additionalProperties": false,
+        "properties": {
+          "deleted": {
+            "title": "Deleted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "deleted"
+        ],
+        "title": "ProviderKeyDeleteResult",
+        "type": "object"
+      },
+      "ProviderKeyDeleteSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": "internal.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "correlation_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "result": {
+            "$ref": "#/components/schemas/ProviderKeyDeleteResult"
+          }
+        },
+        "required": [
+          "correlation_id",
+          "contract_version",
+          "result"
+        ],
+        "title": "ProviderKeyDeleteSuccess",
+        "type": "object"
+      },
+      "ProviderKeyList": {
+        "additionalProperties": false,
+        "properties": {
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderKeySummary"
+            },
+            "title": "Providers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "providers"
+        ],
+        "title": "ProviderKeyList",
+        "type": "object"
+      },
+      "ProviderKeyListSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": "internal.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "correlation_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "result": {
+            "$ref": "#/components/schemas/ProviderKeyList"
+          }
+        },
+        "required": [
+          "correlation_id",
+          "contract_version",
+          "result"
+        ],
+        "title": "ProviderKeyListSuccess",
+        "type": "object"
+      },
+      "ProviderKeyReplaceEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "context": {
+            "$ref": "#/components/schemas/InternalRequestContext"
+          },
+          "input": {
+            "$ref": "#/components/schemas/ProviderKeyReplaceInput"
+          }
+        },
+        "required": [
+          "context",
+          "input"
+        ],
+        "title": "ProviderKeyReplaceEnvelope",
+        "type": "object"
+      },
+      "ProviderKeyReplaceInput": {
+        "additionalProperties": false,
+        "properties": {
+          "api_key": {
+            "format": "password",
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Api Key",
+            "type": "string",
+            "writeOnly": true
+          },
+          "key_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Key Id",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "provider": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "api_key",
+          "label",
+          "key_id"
+        ],
+        "title": "ProviderKeyReplaceInput",
+        "type": "object"
+      },
+      "ProviderKeyResult": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "fingerprint": {
+            "title": "Fingerprint",
+            "type": "string"
+          },
+          "id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "suffix": {
+            "title": "Suffix",
+            "type": "string"
+          },
+          "tested": {
+            "title": "Tested",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "tested",
+          "active",
+          "suffix",
+          "fingerprint"
+        ],
+        "title": "ProviderKeyResult",
+        "type": "object"
+      },
+      "ProviderKeySuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": "internal.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "correlation_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "result": {
+            "$ref": "#/components/schemas/ProviderKeyResult"
+          }
+        },
+        "required": [
+          "correlation_id",
+          "contract_version",
+          "result"
+        ],
+        "title": "ProviderKeySuccess",
+        "type": "object"
+      },
+      "ProviderKeySummary": {
+        "additionalProperties": false,
+        "properties": {
+          "cooldown_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Cooldown Until"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "failure_count": {
+            "default": 0,
+            "minimum": 0,
+            "title": "Failure Count",
+            "type": "integer"
+          },
+          "fingerprint": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Fingerprint",
+            "type": "string"
+          },
+          "id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "last_tested_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Last Tested At"
+          },
+          "priority": {
+            "minimum": 0,
+            "title": "Priority",
+            "type": "integer"
+          },
+          "provider": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Provider",
+            "type": "string"
+          },
+          "status": {
+            "default": "active",
+            "enum": [
+              "active",
+              "disabled",
+              "cooldown",
+              "invalid"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "suffix": {
+            "maxLength": 8,
+            "minLength": 4,
+            "title": "Suffix",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "label",
+          "suffix",
+          "fingerprint",
+          "enabled",
+          "priority"
+        ],
+        "title": "ProviderKeySummary",
+        "type": "object"
+      },
+      "ProviderKeyTestEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "context": {
+            "$ref": "#/components/schemas/InternalRequestContext"
+          },
+          "input": {
+            "$ref": "#/components/schemas/ProviderKeyTestInput"
+          }
+        },
+        "required": [
+          "context",
+          "input"
+        ],
+        "title": "ProviderKeyTestEnvelope",
+        "type": "object"
+      },
+      "ProviderKeyTestInput": {
+        "additionalProperties": false,
+        "properties": {
+          "api_key": {
+            "format": "password",
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Api Key",
+            "type": "string",
+            "writeOnly": true
+          },
+          "provider": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "api_key"
+        ],
+        "title": "ProviderKeyTestInput",
+        "type": "object"
+      },
+      "ProviderKeyTestResult": {
+        "additionalProperties": false,
+        "properties": {
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "valid",
+              "invalid",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "valid": {
+            "title": "Valid",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "provider",
+          "valid",
+          "status"
+        ],
+        "title": "ProviderKeyTestResult",
+        "type": "object"
+      },
+      "ProviderKeyTestSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": "internal.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "correlation_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "result": {
+            "$ref": "#/components/schemas/ProviderKeyTestResult"
+          }
+        },
+        "required": [
+          "correlation_id",
+          "contract_version",
+          "result"
+        ],
+        "title": "ProviderKeyTestSuccess",
+        "type": "object"
+      },
+      "ProviderPreference": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "priority": {
+            "minimum": 0,
+            "title": "Priority",
+            "type": "integer"
+          },
+          "provider": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "enabled",
+          "priority"
+        ],
+        "title": "ProviderPreference",
+        "type": "object"
+      },
+      "ProviderSetting": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProviderKeySummary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "priority": {
+            "minimum": 0,
+            "title": "Priority",
+            "type": "integer"
+          },
+          "provider": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "enabled",
+          "priority"
+        ],
+        "title": "ProviderSetting",
+        "type": "object"
+      },
+      "ReadinessStatus": {
+        "enum": [
+          "ready",
+          "not_ready"
+        ],
+        "title": "ReadinessStatus",
+        "type": "string"
+      },
+      "SearchOperationResult": {
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "$ref": "#/components/schemas/Operation"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/SearchResult"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "operation",
+          "results"
+        ],
+        "title": "SearchOperationResult",
+        "type": "object"
+      },
+      "SearchResult": {
+        "additionalProperties": false,
+        "properties": {
+          "canonical_url": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Canonical Url",
+            "type": "string"
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Image Url"
+          },
+          "provider": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Provider",
+            "type": "string"
+          },
+          "provider_metadata": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            "title": "Provider Metadata",
+            "type": "object"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Published At"
+          },
+          "snippet": {
+            "default": "",
+            "maxLength": 5000,
+            "title": "Snippet",
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source"
+          },
+          "title": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "canonical_url",
+          "provider"
+        ],
+        "title": "SearchResult",
+        "type": "object"
+      },
+      "SearchSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": "internal.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "correlation_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "result": {
+            "$ref": "#/components/schemas/SearchOperationResult"
+          }
+        },
+        "required": [
+          "contract_version",
+          "correlation_id",
+          "result"
+        ],
+        "title": "SearchSuccess",
+        "type": "object"
+      },
+      "SettingsEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "context": {
+            "$ref": "#/components/schemas/InternalRequestContext"
+          },
+          "input": {
+            "$ref": "#/components/schemas/SettingsUpdateInput"
+          }
+        },
+        "required": [
+          "context",
+          "input"
+        ],
+        "title": "SettingsEnvelope",
+        "type": "object"
+      },
+      "SettingsReadResult": {
+        "additionalProperties": false,
+        "properties": {
+          "settings": {
+            "$ref": "#/components/schemas/UserSettings"
+          }
+        },
+        "required": [
+          "settings"
+        ],
+        "title": "SettingsReadResult",
+        "type": "object"
+      },
+      "SettingsSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": "internal.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "correlation_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "result": {
+            "$ref": "#/components/schemas/SettingsReadResult"
+          }
+        },
+        "required": [
+          "correlation_id",
+          "contract_version",
+          "result"
+        ],
+        "title": "SettingsSuccess",
+        "type": "object"
+      },
+      "SettingsUpdateInput": {
+        "additionalProperties": false,
+        "properties": {
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderPreference"
+            },
+            "minItems": 1,
+            "title": "Providers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "providers"
+        ],
+        "title": "SettingsUpdateInput",
+        "type": "object"
+      },
+      "TimeRange": {
+        "enum": [
+          "day",
+          "week",
+          "month",
+          "year"
+        ],
+        "title": "TimeRange",
+        "type": "string"
+      },
+      "UserSettings": {
+        "additionalProperties": false,
+        "properties": {
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderSetting"
+            },
+            "title": "Providers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "providers"
+        ],
+        "title": "UserSettings",
+        "type": "object"
+      },
+      "WebSearchEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "context": {
+            "$ref": "#/components/schemas/InternalRequestContext"
+          },
+          "input": {
+            "$ref": "#/components/schemas/WebSearchRequest"
+          }
+        },
+        "required": [
+          "context",
+          "input"
+        ],
+        "title": "WebSearchEnvelope",
+        "type": "object"
+      },
+      "WebSearchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "web",
+            "default": "web",
+            "title": "Operation",
+            "type": "string"
+          },
+          "query": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          },
+          "region": {
+            "anyOf": [
+              {
+                "pattern": "^(?:worldwide|(?:[A-Za-z]{2,3}(?:-[A-Za-z]{3}){0,3}|[A-Za-z]{4}|[A-Za-z]{5,8})(?:-[A-Za-z]{4})?(?:-(?:[A-Za-z]{2}|[0-9]{3}))?(?:-(?:[A-Za-z0-9]{5,8}|[0-9][A-Za-z0-9]{3}))*(?:-[0-9A-WY-Za-wy-z](?:-[A-Za-z0-9]{2,8})+)*(?:-x(?:-[A-Za-z0-9]{1,8})+)?)$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Region"
+          },
+          "result_limit": {
+            "default": 10,
+            "maximum": 50,
+            "minimum": 1,
+            "title": "Result Limit",
+            "type": "integer"
+          },
+          "safe_search": {
+            "default": true,
+            "title": "Safe Search",
+            "type": "boolean"
+          },
+          "time_range": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TimeRange"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "timeout_seconds": {
+            "default": 30,
+            "maximum": 60,
+            "minimum": 1,
+            "title": "Timeout Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "WebSearchRequest",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "ServiceToken": {
+        "description": "Internal caller credential. The JSON context carries the authenticated principal.",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "Provider-neutral web and news search contract.",
+    "title": "Search Service",
+    "version": "search.v1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/contract": {
+      "get": {
+        "operationId": "contract",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "contract_version": {
+                      "const": "internal.v1"
+                    },
+                    "operations": {
+                      "items": {
+                        "enum": [
+                          "web",
+                          "news"
+                        ]
+                      },
+                      "type": "array"
+                    },
+                    "schema_version": {
+                      "const": "search.v1"
+                    }
+                  },
+                  "required": [
+                    "contract_version",
+                    "schema_version",
+                    "operations"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Search contract version and operations"
+          }
+        }
+      }
+    },
+    "/livez": {
+      "get": {
+        "operationId": "livez",
+        "responses": {
+          "200": {
+            "description": "Process is alive"
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "operationId": "readyz",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalReadiness"
+                }
+              }
+            },
+            "description": "Service is ready"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalReadiness"
+                }
+              }
+            },
+            "description": "Service is not ready"
+          }
+        }
+      }
+    },
+    "/v1/provider-keys/add": {
+      "post": {
+        "description": "Test a key before activating it for the authenticated user.",
+        "operationId": "providerKeyAddTestActivate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderKeyAddEnvelope"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderKeySuccess"
+                }
+              }
+            },
+            "description": "Successful operation"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          }
+        },
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ]
+      }
+    },
+    "/v1/provider-keys/delete": {
+      "post": {
+        "description": "Delete an owned key idempotently. This request contains no key material.",
+        "operationId": "providerKeyDelete",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderKeyDeleteEnvelope"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderKeyDeleteSuccess"
+                }
+              }
+            },
+            "description": "Successful operation"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          }
+        },
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ]
+      }
+    },
+    "/v1/provider-keys/list": {
+      "post": {
+        "description": "List masked key metadata for the authenticated user.",
+        "operationId": "providerKeyList",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmptyEnvelope"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderKeyListSuccess"
+                }
+              }
+            },
+            "description": "Successful operation"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          }
+        },
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ]
+      }
+    },
+    "/v1/provider-keys/replace": {
+      "post": {
+        "description": "Test a replacement before activation. Failed tests leave the current key unchanged.",
+        "operationId": "providerKeyReplaceTestActivate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderKeyReplaceEnvelope"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderKeySuccess"
+                }
+              }
+            },
+            "description": "Successful operation"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          }
+        },
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ]
+      }
+    },
+    "/v1/provider-keys/test": {
+      "post": {
+        "description": "Test a submitted key without persisting it.",
+        "operationId": "providerKeyTest",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderKeyTestEnvelope"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderKeyTestSuccess"
+                }
+              }
+            },
+            "description": "Successful operation"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          }
+        },
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ]
+      }
+    },
+    "/v1/providers/catalog": {
+      "post": {
+        "description": "Read the supported provider operations and options.",
+        "operationId": "providerCatalog",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmptyEnvelope"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderCatalogSuccess"
+                }
+              }
+            },
+            "description": "Successful operation"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          }
+        },
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ]
+      }
+    },
+    "/v1/search/news": {
+      "post": {
+        "description": "Run provider-neutral news search.",
+        "operationId": "newsSearch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewsSearchEnvelope"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchSuccess"
+                }
+              }
+            },
+            "description": "Successful operation"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          }
+        },
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ]
+      }
+    },
+    "/v1/search/web": {
+      "post": {
+        "description": "Run provider-neutral web search.",
+        "operationId": "webSearch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebSearchEnvelope"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchSuccess"
+                }
+              }
+            },
+            "description": "Successful operation"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          }
+        },
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ]
+      }
+    },
+    "/v1/settings/read": {
+      "post": {
+        "description": "Read settings for the authenticated user.",
+        "operationId": "settingsRead",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmptyEnvelope"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsSuccess"
+                }
+              }
+            },
+            "description": "Successful operation"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          }
+        },
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ]
+      }
+    },
+    "/v1/settings/update": {
+      "post": {
+        "description": "Atomically replace the authenticated user's provider order and enablement.",
+        "operationId": "settingsUpdate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsEnvelope"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsSuccess"
+                }
+              }
+            },
+            "description": "Successful operation"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          }
+        },
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ]
+      }
+    }
+  },
+  "x-search-error-status-mappings": {
+    "AUTHENTICATION_FAILED": 422,
+    "DEADLINE_EXCEEDED": 504,
+    "INVALID_REQUEST": 400,
+    "RATE_LIMITED": 429,
+    "UNSUPPORTED_CAPABILITY": 422,
+    "UPSTREAM_MALFORMED": 502,
+    "UPSTREAM_UNAVAILABLE": 503
+  }
+}
