@@ -1,0 +1,4061 @@
+{
+  "baseUrl": "http://127.0.0.1:13100",
+  "backendUrl": "http://127.0.0.1:18100",
+  "nextVersion": "16.4.2",
+  "backendHealth": {
+    "status": "ok",
+    "fastapi_version": "0.161.1",
+    "langgraph_version": "1.2.16",
+    "langchain_core_version": "1.7.0",
+    "starlette_version": "1.9.0",
+    "native_sse": true
+  },
+  "eventIntervalMs": 100,
+  "minimumIncrementalGapMs": 40,
+  "repetitions": 5,
+  "passed": false,
+  "failures": [
+    {
+      "repetition": 1,
+      "type": "delivery",
+      "checks": [
+        {
+          "route": "direct",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 20.199999809265137,
+          "eventGapsMs": [
+            100.4,
+            100.5,
+            101.9,
+            100.6,
+            101.1
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "proxy",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 30.100000381469727,
+          "eventGapsMs": [
+            95.6,
+            101.2,
+            101.6,
+            100.6,
+            102.1
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "rewrite",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 10,
+          "eventGapsMs": [
+            101,
+            100.8,
+            101,
+            101.6,
+            101.6
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "direct-authenticated",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 3.299999237060547,
+          "eventGapsMs": [
+            101.5,
+            100.2,
+            101.3,
+            101.5,
+            100.8
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "proxy-authenticated",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 6.800000190734863,
+          "eventGapsMs": [
+            101,
+            102,
+            101,
+            100.9,
+            101.5
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "rewrite-authenticated",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 4.100000381469727,
+          "eventGapsMs": [
+            101.4,
+            101.7,
+            99.3,
+            101.7,
+            101.4
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "direct-native",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 5.800000190734863,
+          "eventGapsMs": [
+            101.8,
+            100.4,
+            100.7,
+            101.9,
+            99.3
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache",
+            "accelBuffering": "",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "proxy-native",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 9.199999809265137,
+          "eventGapsMs": [
+            102.5,
+            101,
+            99.4,
+            111.9,
+            95.2
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "rewrite-native",
+          "ordered": true,
+          "terminal": true,
+          "incremental": false,
+          "firstEventMs": 610,
+          "eventGapsMs": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache",
+            "accelBuffering": "no",
+            "contentEncoding": "gzip"
+          }
+        }
+      ]
+    },
+    {
+      "repetition": 2,
+      "type": "delivery",
+      "checks": [
+        {
+          "route": "direct",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 2.200000762939453,
+          "eventGapsMs": [
+            101.3,
+            101,
+            100.8,
+            101.2,
+            101.2
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "proxy",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 6.800000190734863,
+          "eventGapsMs": [
+            102.4,
+            99.6,
+            100.8,
+            101.1,
+            101.8
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "rewrite",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 3.3000001907348633,
+          "eventGapsMs": [
+            100.9,
+            101.2,
+            102,
+            100.9,
+            100.2
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "direct-authenticated",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 2.3000001907348633,
+          "eventGapsMs": [
+            100.3,
+            100.4,
+            101.4,
+            100.9,
+            101.3
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "proxy-authenticated",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 7.199999809265137,
+          "eventGapsMs": [
+            101.8,
+            100.9,
+            101.4,
+            100.5,
+            101.5
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "rewrite-authenticated",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 4.59999942779541,
+          "eventGapsMs": [
+            101.7,
+            101.1,
+            101.3,
+            100.7,
+            101.1
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "direct-native",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 4.800000190734863,
+          "eventGapsMs": [
+            101.8,
+            101.4,
+            101.4,
+            101.3,
+            100.8
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache",
+            "accelBuffering": "",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "proxy-native",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 6.300000190734863,
+          "eventGapsMs": [
+            100.8,
+            101.2,
+            105.1,
+            99.1,
+            100.8
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "rewrite-native",
+          "ordered": true,
+          "terminal": true,
+          "incremental": false,
+          "firstEventMs": 611.6999998092651,
+          "eventGapsMs": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache",
+            "accelBuffering": "no",
+            "contentEncoding": "gzip"
+          }
+        }
+      ]
+    },
+    {
+      "repetition": 3,
+      "type": "delivery",
+      "checks": [
+        {
+          "route": "direct",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 2.3999996185302734,
+          "eventGapsMs": [
+            101.2,
+            101.1,
+            101.5,
+            101,
+            101.4
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "proxy",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 4.700000762939453,
+          "eventGapsMs": [
+            101.1,
+            102.3,
+            100.3,
+            101.5,
+            99.9
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "rewrite",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 4.5,
+          "eventGapsMs": [
+            100.3,
+            101.7,
+            101.3,
+            101.3,
+            101.1
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "direct-authenticated",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 2.8000001907348633,
+          "eventGapsMs": [
+            101.7,
+            105.1,
+            102.2,
+            100.4,
+            100.5
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "proxy-authenticated",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 7,
+          "eventGapsMs": [
+            102.6,
+            100.4,
+            100.8,
+            101.6,
+            99.4
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "rewrite-authenticated",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 3.6999998092651367,
+          "eventGapsMs": [
+            101.5,
+            101.3,
+            101.2,
+            101.5,
+            100.3
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "direct-native",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 3.8999996185302734,
+          "eventGapsMs": [
+            102.4,
+            100.6,
+            101.2,
+            100.5,
+            101.6
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache",
+            "accelBuffering": "",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "proxy-native",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 7.100000381469727,
+          "eventGapsMs": [
+            102.9,
+            101.8,
+            101.2,
+            100.3,
+            101.2
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "rewrite-native",
+          "ordered": true,
+          "terminal": true,
+          "incremental": false,
+          "firstEventMs": 609.6000003814697,
+          "eventGapsMs": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache",
+            "accelBuffering": "no",
+            "contentEncoding": "gzip"
+          }
+        }
+      ]
+    },
+    {
+      "repetition": 4,
+      "type": "delivery",
+      "checks": [
+        {
+          "route": "direct",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 2.1999998092651367,
+          "eventGapsMs": [
+            101.2,
+            101.1,
+            101.2,
+            101.1,
+            102.7
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "proxy",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 6.800000190734863,
+          "eventGapsMs": [
+            101.2,
+            100.1,
+            102,
+            101.2,
+            99.6
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "rewrite",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 4.100000381469727,
+          "eventGapsMs": [
+            100.8,
+            101.6,
+            100.8,
+            101.7,
+            101.1
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "direct-authenticated",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 4.399999618530273,
+          "eventGapsMs": [
+            101.2,
+            101.5,
+            101.5,
+            100.5,
+            100.9
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "proxy-authenticated",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 8.90000057220459,
+          "eventGapsMs": [
+            101.1,
+            100.9,
+            101.4,
+            100.9,
+            100.7
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "rewrite-authenticated",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 4.59999942779541,
+          "eventGapsMs": [
+            101.1,
+            100.3,
+            100,
+            100.7,
+            100.1
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "direct-native",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 5,
+          "eventGapsMs": [
+            101,
+            101.4,
+            101.7,
+            100.4,
+            100.8
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache",
+            "accelBuffering": "",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "proxy-native",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 6.899999618530273,
+          "eventGapsMs": [
+            102,
+            102.2,
+            99,
+            101.1,
+            100.1
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "rewrite-native",
+          "ordered": true,
+          "terminal": true,
+          "incremental": false,
+          "firstEventMs": 614.5,
+          "eventGapsMs": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache",
+            "accelBuffering": "no",
+            "contentEncoding": "gzip"
+          }
+        }
+      ]
+    },
+    {
+      "repetition": 5,
+      "type": "delivery",
+      "checks": [
+        {
+          "route": "direct",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 1.9000005722045898,
+          "eventGapsMs": [
+            101.6,
+            101.2,
+            100,
+            102.9,
+            100.8
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "proxy",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 4.300000190734863,
+          "eventGapsMs": [
+            101.3,
+            101.8,
+            99.5,
+            101.7,
+            101.1
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "rewrite",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 4.199999809265137,
+          "eventGapsMs": [
+            102.2,
+            100.6,
+            101.5,
+            101.3,
+            101
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "direct-authenticated",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 3,
+          "eventGapsMs": [
+            101.6,
+            100.7,
+            101.6,
+            100.8,
+            101.4
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "proxy-authenticated",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 7.199999809265137,
+          "eventGapsMs": [
+            101.3,
+            101.3,
+            100.3,
+            101.3,
+            100.6
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "rewrite-authenticated",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 4,
+          "eventGapsMs": [
+            100.9,
+            101,
+            100.8,
+            101.5,
+            101.6
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "direct-native",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 2.8000001907348633,
+          "eventGapsMs": [
+            101.8,
+            101.3,
+            101.1,
+            98.9,
+            101.7
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache",
+            "accelBuffering": "",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "proxy-native",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 5.5,
+          "eventGapsMs": [
+            101.4,
+            101.6,
+            101.8,
+            101.4,
+            100.3
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "rewrite-native",
+          "ordered": true,
+          "terminal": true,
+          "incremental": false,
+          "firstEventMs": 612.5,
+          "eventGapsMs": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache",
+            "accelBuffering": "no",
+            "contentEncoding": "gzip"
+          }
+        }
+      ]
+    }
+  ],
+  "output": [
+    {
+      "repetition": 1,
+      "batch": {
+        "delivery": [
+          {
+            "route": "direct",
+            "startedAt": 609.3000001907349,
+            "receivedAt": [
+              20.199999809265137,
+              120.59999942779541,
+              221.0999994277954,
+              323,
+              423.5999994277954,
+              524.6999998092651
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache, no-transform",
+              "accelBuffering": "",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "proxy",
+            "startedAt": 1237.5,
+            "receivedAt": [
+              30.100000381469727,
+              125.69999980926514,
+              226.89999961853027,
+              328.5,
+              429.1000003814697,
+              531.1999998092651
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache, no-transform",
+              "accelBuffering": "no",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "rewrite",
+            "startedAt": 1873.3000001907349,
+            "receivedAt": [
+              10,
+              111,
+              211.80000019073486,
+              312.80000019073486,
+              414.3999996185303,
+              516
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache, no-transform",
+              "accelBuffering": "no",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "direct-authenticated",
+            "startedAt": 2493.1000003814697,
+            "receivedAt": [
+              3.299999237060547,
+              104.79999923706055,
+              205,
+              306.29999923706055,
+              407.79999923706055,
+              508.5999994277954
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache, no-transform",
+              "accelBuffering": "",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "proxy-authenticated",
+            "startedAt": 3108.199999809265,
+            "receivedAt": [
+              6.800000190734863,
+              107.80000019073486,
+              209.80000019073486,
+              310.80000019073486,
+              411.69999980926514,
+              513.1999998092651
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache, no-transform",
+              "accelBuffering": "no",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "rewrite-authenticated",
+            "startedAt": 3722,
+            "receivedAt": [
+              4.100000381469727,
+              105.5,
+              207.19999980926514,
+              306.5,
+              408.19999980926514,
+              509.6000003814697
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache, no-transform",
+              "accelBuffering": "no",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "direct-native",
+            "startedAt": 4333.5,
+            "receivedAt": [
+              5.800000190734863,
+              107.60000038146973,
+              208,
+              308.69999980926514,
+              410.6000003814697,
+              509.8999996185303
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache",
+              "accelBuffering": "",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "proxy-native",
+            "startedAt": 4947.300000190735,
+            "receivedAt": [
+              9.199999809265137,
+              111.69999980926514,
+              212.69999980926514,
+              312.0999994277954,
+              424,
+              519.1999998092651
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache",
+              "accelBuffering": "no",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "rewrite-native",
+            "startedAt": 5568.60000038147,
+            "receivedAt": [
+              610,
+              610,
+              610,
+              610,
+              610,
+              610
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache",
+              "accelBuffering": "no",
+              "contentEncoding": "gzip"
+            }
+          }
+        ],
+        "replay": [
+          {
+            "route": "direct-manual",
+            "firstConnectionIds": [
+              1,
+              2,
+              3
+            ],
+            "resumedIds": [
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "combinedIds": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "gapFree": true
+          },
+          {
+            "route": "proxy-manual",
+            "firstConnectionIds": [
+              1,
+              2,
+              3
+            ],
+            "resumedIds": [
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "combinedIds": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "gapFree": true
+          },
+          {
+            "route": "rewrite-manual",
+            "firstConnectionIds": [
+              1,
+              2,
+              3
+            ],
+            "resumedIds": [
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "combinedIds": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "gapFree": true
+          },
+          {
+            "route": "direct-native",
+            "firstConnectionIds": [
+              1,
+              2,
+              3
+            ],
+            "resumedIds": [
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "combinedIds": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "gapFree": true
+          },
+          {
+            "route": "proxy-native",
+            "firstConnectionIds": [
+              1,
+              2,
+              3
+            ],
+            "resumedIds": [
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "combinedIds": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "gapFree": true
+          },
+          {
+            "route": "rewrite-native",
+            "firstConnectionIds": [
+              1,
+              2,
+              3
+            ],
+            "resumedIds": [
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "combinedIds": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "gapFree": true
+          }
+        ],
+        "authorization": [
+          {
+            "route": "direct",
+            "status": 401
+          },
+          {
+            "route": "proxy",
+            "status": 401
+          },
+          {
+            "route": "rewrite",
+            "status": 401
+          }
+        ]
+      },
+      "deliveryChecks": [
+        {
+          "route": "direct",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 20.199999809265137,
+          "eventGapsMs": [
+            100.4,
+            100.5,
+            101.9,
+            100.6,
+            101.1
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "proxy",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 30.100000381469727,
+          "eventGapsMs": [
+            95.6,
+            101.2,
+            101.6,
+            100.6,
+            102.1
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "rewrite",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 10,
+          "eventGapsMs": [
+            101,
+            100.8,
+            101,
+            101.6,
+            101.6
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "direct-authenticated",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 3.299999237060547,
+          "eventGapsMs": [
+            101.5,
+            100.2,
+            101.3,
+            101.5,
+            100.8
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "proxy-authenticated",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 6.800000190734863,
+          "eventGapsMs": [
+            101,
+            102,
+            101,
+            100.9,
+            101.5
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "rewrite-authenticated",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 4.100000381469727,
+          "eventGapsMs": [
+            101.4,
+            101.7,
+            99.3,
+            101.7,
+            101.4
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "direct-native",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 5.800000190734863,
+          "eventGapsMs": [
+            101.8,
+            100.4,
+            100.7,
+            101.9,
+            99.3
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache",
+            "accelBuffering": "",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "proxy-native",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 9.199999809265137,
+          "eventGapsMs": [
+            102.5,
+            101,
+            99.4,
+            111.9,
+            95.2
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "rewrite-native",
+          "ordered": true,
+          "terminal": true,
+          "incremental": false,
+          "firstEventMs": 610,
+          "eventGapsMs": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache",
+            "accelBuffering": "no",
+            "contentEncoding": "gzip"
+          }
+        }
+      ]
+    },
+    {
+      "repetition": 2,
+      "batch": {
+        "delivery": [
+          {
+            "route": "direct",
+            "startedAt": 10544.39999961853,
+            "receivedAt": [
+              2.200000762939453,
+              103.5,
+              204.5,
+              305.30000019073486,
+              406.5,
+              507.70000076293945
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache, no-transform",
+              "accelBuffering": "",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "proxy",
+            "startedAt": 11155.800000190735,
+            "receivedAt": [
+              6.800000190734863,
+              109.19999980926514,
+              208.80000019073486,
+              309.5999994277954,
+              410.69999980926514,
+              512.5
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache, no-transform",
+              "accelBuffering": "no",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "rewrite",
+            "startedAt": 11769.39999961853,
+            "receivedAt": [
+              3.3000001907348633,
+              104.20000076293945,
+              205.4000005722046,
+              307.4000005722046,
+              408.30000019073486,
+              508.5
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache, no-transform",
+              "accelBuffering": "no",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "direct-authenticated",
+            "startedAt": 12382.5,
+            "receivedAt": [
+              2.3000001907348633,
+              102.60000038146973,
+              203,
+              304.3999996185303,
+              405.30000019073486,
+              506.6000003814697
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache, no-transform",
+              "accelBuffering": "",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "proxy-authenticated",
+            "startedAt": 12992,
+            "receivedAt": [
+              7.199999809265137,
+              109,
+              209.89999961853027,
+              311.30000019073486,
+              411.80000019073486,
+              513.3000001907349
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache, no-transform",
+              "accelBuffering": "no",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "rewrite-authenticated",
+            "startedAt": 13607.800000190735,
+            "receivedAt": [
+              4.59999942779541,
+              106.30000019073486,
+              207.39999961853027,
+              308.69999980926514,
+              409.3999996185303,
+              510.5
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache, no-transform",
+              "accelBuffering": "no",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "direct-native",
+            "startedAt": 14221,
+            "receivedAt": [
+              4.800000190734863,
+              106.60000038146973,
+              208,
+              309.3999996185303,
+              410.69999980926514,
+              511.5
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache",
+              "accelBuffering": "",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "proxy-native",
+            "startedAt": 14835.89999961853,
+            "receivedAt": [
+              6.300000190734863,
+              107.10000038146973,
+              208.30000019073486,
+              313.4000005722046,
+              412.5,
+              513.3000001907349
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache",
+              "accelBuffering": "no",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "rewrite-native",
+            "startedAt": 15451.10000038147,
+            "receivedAt": [
+              611.6999998092651,
+              611.6999998092651,
+              611.6999998092651,
+              611.6999998092651,
+              611.6999998092651,
+              611.6999998092651
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache",
+              "accelBuffering": "no",
+              "contentEncoding": "gzip"
+            }
+          }
+        ],
+        "replay": [
+          {
+            "route": "direct-manual",
+            "firstConnectionIds": [
+              1,
+              2,
+              3
+            ],
+            "resumedIds": [
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "combinedIds": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "gapFree": true
+          },
+          {
+            "route": "proxy-manual",
+            "firstConnectionIds": [
+              1,
+              2,
+              3
+            ],
+            "resumedIds": [
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "combinedIds": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "gapFree": true
+          },
+          {
+            "route": "rewrite-manual",
+            "firstConnectionIds": [
+              1,
+              2,
+              3
+            ],
+            "resumedIds": [
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "combinedIds": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "gapFree": true
+          },
+          {
+            "route": "direct-native",
+            "firstConnectionIds": [
+              1,
+              2,
+              3
+            ],
+            "resumedIds": [
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "combinedIds": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "gapFree": true
+          },
+          {
+            "route": "proxy-native",
+            "firstConnectionIds": [
+              1,
+              2,
+              3
+            ],
+            "resumedIds": [
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "combinedIds": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "gapFree": true
+          },
+          {
+            "route": "rewrite-native",
+            "firstConnectionIds": [
+              1,
+              2,
+              3
+            ],
+            "resumedIds": [
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "combinedIds": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "gapFree": true
+          }
+        ],
+        "authorization": [
+          {
+            "route": "direct",
+            "status": 401
+          },
+          {
+            "route": "proxy",
+            "status": 401
+          },
+          {
+            "route": "rewrite",
+            "status": 401
+          }
+        ]
+      },
+      "deliveryChecks": [
+        {
+          "route": "direct",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 2.200000762939453,
+          "eventGapsMs": [
+            101.3,
+            101,
+            100.8,
+            101.2,
+            101.2
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "proxy",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 6.800000190734863,
+          "eventGapsMs": [
+            102.4,
+            99.6,
+            100.8,
+            101.1,
+            101.8
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "rewrite",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 3.3000001907348633,
+          "eventGapsMs": [
+            100.9,
+            101.2,
+            102,
+            100.9,
+            100.2
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "direct-authenticated",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 2.3000001907348633,
+          "eventGapsMs": [
+            100.3,
+            100.4,
+            101.4,
+            100.9,
+            101.3
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "proxy-authenticated",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 7.199999809265137,
+          "eventGapsMs": [
+            101.8,
+            100.9,
+            101.4,
+            100.5,
+            101.5
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "rewrite-authenticated",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 4.59999942779541,
+          "eventGapsMs": [
+            101.7,
+            101.1,
+            101.3,
+            100.7,
+            101.1
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "direct-native",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 4.800000190734863,
+          "eventGapsMs": [
+            101.8,
+            101.4,
+            101.4,
+            101.3,
+            100.8
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache",
+            "accelBuffering": "",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "proxy-native",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 6.300000190734863,
+          "eventGapsMs": [
+            100.8,
+            101.2,
+            105.1,
+            99.1,
+            100.8
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "rewrite-native",
+          "ordered": true,
+          "terminal": true,
+          "incremental": false,
+          "firstEventMs": 611.6999998092651,
+          "eventGapsMs": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache",
+            "accelBuffering": "no",
+            "contentEncoding": "gzip"
+          }
+        }
+      ]
+    },
+    {
+      "repetition": 3,
+      "batch": {
+        "delivery": [
+          {
+            "route": "direct",
+            "startedAt": 20410.60000038147,
+            "receivedAt": [
+              2.3999996185302734,
+              103.59999942779541,
+              204.69999980926514,
+              306.19999980926514,
+              407.19999980926514,
+              508.5999994277954
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache, no-transform",
+              "accelBuffering": "",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "proxy",
+            "startedAt": 21020.39999961853,
+            "receivedAt": [
+              4.700000762939453,
+              105.80000019073486,
+              208.10000038146973,
+              308.4000005722046,
+              409.9000005722046,
+              509.80000019073486
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache, no-transform",
+              "accelBuffering": "no",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "rewrite",
+            "startedAt": 21631.39999961853,
+            "receivedAt": [
+              4.5,
+              104.80000019073486,
+              206.5,
+              307.80000019073486,
+              409.1000003814697,
+              510.20000076293945
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache, no-transform",
+              "accelBuffering": "no",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "direct-authenticated",
+            "startedAt": 22244.800000190735,
+            "receivedAt": [
+              2.8000001907348633,
+              104.5,
+              209.5999994277954,
+              311.80000019073486,
+              412.19999980926514,
+              512.6999998092651
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache, no-transform",
+              "accelBuffering": "",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "proxy-authenticated",
+            "startedAt": 22861.60000038147,
+            "receivedAt": [
+              7,
+              109.59999942779541,
+              210,
+              310.79999923706055,
+              412.3999996185303,
+              511.79999923706055
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache, no-transform",
+              "accelBuffering": "no",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "rewrite-authenticated",
+            "startedAt": 23474.699999809265,
+            "receivedAt": [
+              3.6999998092651367,
+              105.19999980926514,
+              206.5,
+              307.69999980926514,
+              409.19999980926514,
+              509.5
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache, no-transform",
+              "accelBuffering": "no",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "direct-native",
+            "startedAt": 24088.60000038147,
+            "receivedAt": [
+              3.8999996185302734,
+              106.29999923706055,
+              206.89999961853027,
+              308.0999994277954,
+              408.5999994277954,
+              510.19999980926514
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache",
+              "accelBuffering": "",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "proxy-native",
+            "startedAt": 24702,
+            "receivedAt": [
+              7.100000381469727,
+              110,
+              211.80000019073486,
+              313,
+              413.30000019073486,
+              514.5
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache",
+              "accelBuffering": "no",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "rewrite-native",
+            "startedAt": 25319,
+            "receivedAt": [
+              609.6000003814697,
+              609.6000003814697,
+              609.6000003814697,
+              609.6000003814697,
+              609.6000003814697,
+              609.6000003814697
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache",
+              "accelBuffering": "no",
+              "contentEncoding": "gzip"
+            }
+          }
+        ],
+        "replay": [
+          {
+            "route": "direct-manual",
+            "firstConnectionIds": [
+              1,
+              2,
+              3
+            ],
+            "resumedIds": [
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "combinedIds": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "gapFree": true
+          },
+          {
+            "route": "proxy-manual",
+            "firstConnectionIds": [
+              1,
+              2,
+              3
+            ],
+            "resumedIds": [
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "combinedIds": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "gapFree": true
+          },
+          {
+            "route": "rewrite-manual",
+            "firstConnectionIds": [
+              1,
+              2,
+              3
+            ],
+            "resumedIds": [
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "combinedIds": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "gapFree": true
+          },
+          {
+            "route": "direct-native",
+            "firstConnectionIds": [
+              1,
+              2,
+              3
+            ],
+            "resumedIds": [
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "combinedIds": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "gapFree": true
+          },
+          {
+            "route": "proxy-native",
+            "firstConnectionIds": [
+              1,
+              2,
+              3
+            ],
+            "resumedIds": [
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "combinedIds": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "gapFree": true
+          },
+          {
+            "route": "rewrite-native",
+            "firstConnectionIds": [
+              1,
+              2,
+              3
+            ],
+            "resumedIds": [
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "combinedIds": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "gapFree": true
+          }
+        ],
+        "authorization": [
+          {
+            "route": "direct",
+            "status": 401
+          },
+          {
+            "route": "proxy",
+            "status": 401
+          },
+          {
+            "route": "rewrite",
+            "status": 401
+          }
+        ]
+      },
+      "deliveryChecks": [
+        {
+          "route": "direct",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 2.3999996185302734,
+          "eventGapsMs": [
+            101.2,
+            101.1,
+            101.5,
+            101,
+            101.4
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "proxy",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 4.700000762939453,
+          "eventGapsMs": [
+            101.1,
+            102.3,
+            100.3,
+            101.5,
+            99.9
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "rewrite",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 4.5,
+          "eventGapsMs": [
+            100.3,
+            101.7,
+            101.3,
+            101.3,
+            101.1
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "direct-authenticated",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 2.8000001907348633,
+          "eventGapsMs": [
+            101.7,
+            105.1,
+            102.2,
+            100.4,
+            100.5
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "proxy-authenticated",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 7,
+          "eventGapsMs": [
+            102.6,
+            100.4,
+            100.8,
+            101.6,
+            99.4
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "rewrite-authenticated",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 3.6999998092651367,
+          "eventGapsMs": [
+            101.5,
+            101.3,
+            101.2,
+            101.5,
+            100.3
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "direct-native",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 3.8999996185302734,
+          "eventGapsMs": [
+            102.4,
+            100.6,
+            101.2,
+            100.5,
+            101.6
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache",
+            "accelBuffering": "",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "proxy-native",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 7.100000381469727,
+          "eventGapsMs": [
+            102.9,
+            101.8,
+            101.2,
+            100.3,
+            101.2
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "rewrite-native",
+          "ordered": true,
+          "terminal": true,
+          "incremental": false,
+          "firstEventMs": 609.6000003814697,
+          "eventGapsMs": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache",
+            "accelBuffering": "no",
+            "contentEncoding": "gzip"
+          }
+        }
+      ]
+    },
+    {
+      "repetition": 4,
+      "batch": {
+        "delivery": [
+          {
+            "route": "direct",
+            "startedAt": 30260.800000190735,
+            "receivedAt": [
+              2.1999998092651367,
+              103.39999961853027,
+              204.5,
+              305.69999980926514,
+              406.80000019073486,
+              509.5
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache, no-transform",
+              "accelBuffering": "",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "proxy",
+            "startedAt": 30873.39999961853,
+            "receivedAt": [
+              6.800000190734863,
+              108,
+              208.10000038146973,
+              310.1000003814697,
+              411.30000019073486,
+              510.9000005722046
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache, no-transform",
+              "accelBuffering": "no",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "rewrite",
+            "startedAt": 31486,
+            "receivedAt": [
+              4.100000381469727,
+              104.89999961853027,
+              206.5,
+              307.30000019073486,
+              409,
+              510.1000003814697
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache, no-transform",
+              "accelBuffering": "no",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "direct-authenticated",
+            "startedAt": 32099,
+            "receivedAt": [
+              4.399999618530273,
+              105.60000038146973,
+              207.10000038146973,
+              308.6000003814697,
+              409.1000003814697,
+              510
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache, no-transform",
+              "accelBuffering": "",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "proxy-authenticated",
+            "startedAt": 32712.39999961853,
+            "receivedAt": [
+              8.90000057220459,
+              110,
+              210.9000005722046,
+              312.30000019073486,
+              413.20000076293945,
+              513.9000005722046
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache, no-transform",
+              "accelBuffering": "no",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "rewrite-authenticated",
+            "startedAt": 33328.10000038147,
+            "receivedAt": [
+              4.59999942779541,
+              105.69999980926514,
+              206,
+              306,
+              406.69999980926514,
+              506.79999923706055
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache, no-transform",
+              "accelBuffering": "no",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "direct-native",
+            "startedAt": 33936.5,
+            "receivedAt": [
+              5,
+              106,
+              207.39999961853027,
+              309.1000003814697,
+              409.5,
+              510.30000019073486
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache",
+              "accelBuffering": "",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "proxy-native",
+            "startedAt": 34548.800000190735,
+            "receivedAt": [
+              6.899999618530273,
+              108.89999961853027,
+              211.0999994277954,
+              310.0999994277954,
+              411.19999980926514,
+              511.30000019073486
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache",
+              "accelBuffering": "no",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "rewrite-native",
+            "startedAt": 35163.10000038147,
+            "receivedAt": [
+              614.5,
+              614.5,
+              614.5,
+              614.5,
+              614.5,
+              614.5
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache",
+              "accelBuffering": "no",
+              "contentEncoding": "gzip"
+            }
+          }
+        ],
+        "replay": [
+          {
+            "route": "direct-manual",
+            "firstConnectionIds": [
+              1,
+              2,
+              3
+            ],
+            "resumedIds": [
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "combinedIds": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "gapFree": true
+          },
+          {
+            "route": "proxy-manual",
+            "firstConnectionIds": [
+              1,
+              2,
+              3
+            ],
+            "resumedIds": [
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "combinedIds": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "gapFree": true
+          },
+          {
+            "route": "rewrite-manual",
+            "firstConnectionIds": [
+              1,
+              2,
+              3
+            ],
+            "resumedIds": [
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "combinedIds": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "gapFree": true
+          },
+          {
+            "route": "direct-native",
+            "firstConnectionIds": [
+              1,
+              2,
+              3
+            ],
+            "resumedIds": [
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "combinedIds": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "gapFree": true
+          },
+          {
+            "route": "proxy-native",
+            "firstConnectionIds": [
+              1,
+              2,
+              3
+            ],
+            "resumedIds": [
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "combinedIds": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "gapFree": true
+          },
+          {
+            "route": "rewrite-native",
+            "firstConnectionIds": [
+              1,
+              2,
+              3
+            ],
+            "resumedIds": [
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "combinedIds": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "gapFree": true
+          }
+        ],
+        "authorization": [
+          {
+            "route": "direct",
+            "status": 401
+          },
+          {
+            "route": "proxy",
+            "status": 401
+          },
+          {
+            "route": "rewrite",
+            "status": 401
+          }
+        ]
+      },
+      "deliveryChecks": [
+        {
+          "route": "direct",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 2.1999998092651367,
+          "eventGapsMs": [
+            101.2,
+            101.1,
+            101.2,
+            101.1,
+            102.7
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "proxy",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 6.800000190734863,
+          "eventGapsMs": [
+            101.2,
+            100.1,
+            102,
+            101.2,
+            99.6
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "rewrite",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 4.100000381469727,
+          "eventGapsMs": [
+            100.8,
+            101.6,
+            100.8,
+            101.7,
+            101.1
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "direct-authenticated",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 4.399999618530273,
+          "eventGapsMs": [
+            101.2,
+            101.5,
+            101.5,
+            100.5,
+            100.9
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "proxy-authenticated",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 8.90000057220459,
+          "eventGapsMs": [
+            101.1,
+            100.9,
+            101.4,
+            100.9,
+            100.7
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "rewrite-authenticated",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 4.59999942779541,
+          "eventGapsMs": [
+            101.1,
+            100.3,
+            100,
+            100.7,
+            100.1
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "direct-native",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 5,
+          "eventGapsMs": [
+            101,
+            101.4,
+            101.7,
+            100.4,
+            100.8
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache",
+            "accelBuffering": "",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "proxy-native",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 6.899999618530273,
+          "eventGapsMs": [
+            102,
+            102.2,
+            99,
+            101.1,
+            100.1
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "rewrite-native",
+          "ordered": true,
+          "terminal": true,
+          "incremental": false,
+          "firstEventMs": 614.5,
+          "eventGapsMs": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache",
+            "accelBuffering": "no",
+            "contentEncoding": "gzip"
+          }
+        }
+      ]
+    },
+    {
+      "repetition": 5,
+      "batch": {
+        "delivery": [
+          {
+            "route": "direct",
+            "startedAt": 40115.89999961853,
+            "receivedAt": [
+              1.9000005722045898,
+              103.5,
+              204.70000076293945,
+              304.70000076293945,
+              407.6000003814697,
+              508.4000005722046
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache, no-transform",
+              "accelBuffering": "",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "proxy",
+            "startedAt": 40727.5,
+            "receivedAt": [
+              4.300000190734863,
+              105.60000038146973,
+              207.39999961853027,
+              306.8999996185303,
+              408.6000003814697,
+              509.69999980926514
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache, no-transform",
+              "accelBuffering": "no",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "rewrite",
+            "startedAt": 41340.5,
+            "receivedAt": [
+              4.199999809265137,
+              106.39999961853027,
+              207,
+              308.5,
+              409.80000019073486,
+              510.80000019073486
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache, no-transform",
+              "accelBuffering": "no",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "direct-authenticated",
+            "startedAt": 41954.10000038147,
+            "receivedAt": [
+              3,
+              104.59999942779541,
+              205.29999923706055,
+              306.8999996185303,
+              407.69999980926514,
+              509.0999994277954
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache, no-transform",
+              "accelBuffering": "",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "proxy-authenticated",
+            "startedAt": 42565.300000190735,
+            "receivedAt": [
+              7.199999809265137,
+              108.5,
+              209.80000019073486,
+              310.0999994277954,
+              411.3999996185303,
+              512
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache, no-transform",
+              "accelBuffering": "no",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "rewrite-authenticated",
+            "startedAt": 43178.10000038147,
+            "receivedAt": [
+              4,
+              104.89999961853027,
+              205.89999961853027,
+              306.69999980926514,
+              408.19999980926514,
+              509.79999923706055
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache, no-transform",
+              "accelBuffering": "no",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "direct-native",
+            "startedAt": 43788.5,
+            "receivedAt": [
+              2.8000001907348633,
+              104.60000038146973,
+              205.89999961853027,
+              307,
+              405.8999996185303,
+              507.6000003814697
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache",
+              "accelBuffering": "",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "proxy-native",
+            "startedAt": 44399.5,
+            "receivedAt": [
+              5.5,
+              106.89999961853027,
+              208.5,
+              310.30000019073486,
+              411.69999980926514,
+              512
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache",
+              "accelBuffering": "no",
+              "contentEncoding": ""
+            }
+          },
+          {
+            "route": "rewrite-native",
+            "startedAt": 45013,
+            "receivedAt": [
+              612.5,
+              612.5,
+              612.5,
+              612.5,
+              612.5,
+              612.5
+            ],
+            "ids": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "terminal": true,
+            "headers": {
+              "contentType": "text/event-stream; charset=utf-8",
+              "cacheControl": "no-cache",
+              "accelBuffering": "no",
+              "contentEncoding": "gzip"
+            }
+          }
+        ],
+        "replay": [
+          {
+            "route": "direct-manual",
+            "firstConnectionIds": [
+              1,
+              2,
+              3
+            ],
+            "resumedIds": [
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "combinedIds": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "gapFree": true
+          },
+          {
+            "route": "proxy-manual",
+            "firstConnectionIds": [
+              1,
+              2,
+              3
+            ],
+            "resumedIds": [
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "combinedIds": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "gapFree": true
+          },
+          {
+            "route": "rewrite-manual",
+            "firstConnectionIds": [
+              1,
+              2,
+              3
+            ],
+            "resumedIds": [
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "combinedIds": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "gapFree": true
+          },
+          {
+            "route": "direct-native",
+            "firstConnectionIds": [
+              1,
+              2,
+              3
+            ],
+            "resumedIds": [
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "combinedIds": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "gapFree": true
+          },
+          {
+            "route": "proxy-native",
+            "firstConnectionIds": [
+              1,
+              2,
+              3
+            ],
+            "resumedIds": [
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "combinedIds": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "gapFree": true
+          },
+          {
+            "route": "rewrite-native",
+            "firstConnectionIds": [
+              1,
+              2,
+              3
+            ],
+            "resumedIds": [
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "combinedIds": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "gapFree": true
+          }
+        ],
+        "authorization": [
+          {
+            "route": "direct",
+            "status": 401
+          },
+          {
+            "route": "proxy",
+            "status": 401
+          },
+          {
+            "route": "rewrite",
+            "status": 401
+          }
+        ]
+      },
+      "deliveryChecks": [
+        {
+          "route": "direct",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 1.9000005722045898,
+          "eventGapsMs": [
+            101.6,
+            101.2,
+            100,
+            102.9,
+            100.8
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "proxy",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 4.300000190734863,
+          "eventGapsMs": [
+            101.3,
+            101.8,
+            99.5,
+            101.7,
+            101.1
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "rewrite",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 4.199999809265137,
+          "eventGapsMs": [
+            102.2,
+            100.6,
+            101.5,
+            101.3,
+            101
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "direct-authenticated",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 3,
+          "eventGapsMs": [
+            101.6,
+            100.7,
+            101.6,
+            100.8,
+            101.4
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "proxy-authenticated",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 7.199999809265137,
+          "eventGapsMs": [
+            101.3,
+            101.3,
+            100.3,
+            101.3,
+            100.6
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "rewrite-authenticated",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 4,
+          "eventGapsMs": [
+            100.9,
+            101,
+            100.8,
+            101.5,
+            101.6
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache, no-transform",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "direct-native",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 2.8000001907348633,
+          "eventGapsMs": [
+            101.8,
+            101.3,
+            101.1,
+            98.9,
+            101.7
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache",
+            "accelBuffering": "",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "proxy-native",
+          "ordered": true,
+          "terminal": true,
+          "incremental": true,
+          "firstEventMs": 5.5,
+          "eventGapsMs": [
+            101.4,
+            101.6,
+            101.8,
+            101.4,
+            100.3
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache",
+            "accelBuffering": "no",
+            "contentEncoding": ""
+          }
+        },
+        {
+          "route": "rewrite-native",
+          "ordered": true,
+          "terminal": true,
+          "incremental": false,
+          "firstEventMs": 612.5,
+          "eventGapsMs": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "minimumIncrementalGapMs": 40,
+          "headers": {
+            "contentType": "text/event-stream; charset=utf-8",
+            "cacheControl": "no-cache",
+            "accelBuffering": "no",
+            "contentEncoding": "gzip"
+          }
+        }
+      ]
+    }
+  ]
+}

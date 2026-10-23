@@ -1,0 +1,4 @@
+fastapi==0.125.0
+langchain-core==1.2.2
+langgraph==1.0.5
+uvicorn==0.38.0
