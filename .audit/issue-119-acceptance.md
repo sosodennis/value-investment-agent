@@ -4,7 +4,7 @@
 
 - Base SHA: `84c563ceecb1500c6bb2a5800e7b8c0aca89fb5e` (`origin/main`)
 - Branch: `codex/issue-118-119-contract`
-- Result SHA: `87020fc902b263eeb6d8120622205392a7152c4a` (implementation commit)
+- Result SHA: `a7fe8b6d50a1a6c9c806798072ef4225bb5f4d7c` (implementation and fake-service readiness coverage)
 - Verdict: **PASS** for the shared contract scope in Issue 119
 - PR: https://github.com/sosodennis/value-investment-agent/pull/127
 
@@ -13,9 +13,9 @@
 - `finance-agent-core/src/shared/internal_services/contracts.py` defines `internal.v1`, authenticated principal, correlation ID, absolute UTC deadline, redacted error, and readiness wire models.
 - `finance-agent-core/src/shared/internal_services/auth.py` authenticates the backend service token with constant-time comparison before parsing or trusting the principal context.
 - `finance-agent-core/src/shared/internal_services/README.md` documents request, response, error, readiness, authentication, redaction, and fake-service conventions.
-- `finance-agent-core/tests/fakes/internal_capability_service.py` provides an in-process FastAPI fake that imports only shared contracts and FastAPI.
+- `finance-agent-core/tests/fakes/internal_capability_service.py` provides an in-process FastAPI fake that imports only shared contracts and FastAPI, with configurable ready and not-ready states.
 - `finance-agent-core/tests/test_internal_service_contracts.py` covers malformed contexts, missing or invalid credentials, required versions, UTC deadline parsing, redaction, errors, and readiness.
-- `finance-agent-core/tests/test_internal_service_fake.py` covers authenticated correlation, fail-closed authentication before principal use, and redacted readiness.
+- `finance-agent-core/tests/test_internal_service_fake.py` covers authenticated correlation, fail-closed authentication before principal use, and both ready and not-ready HTTP readiness responses.
 - `.audit/issue-119-architecture.md` records ownership, alternatives, and the synthesis decision.
 - `.audit/issue-119.tsv` records the decision trail.
 
@@ -36,7 +36,7 @@ All commands ran against the implementation commit tree. The report and audit tr
 
 | Command | Result |
 | --- | --- |
-| `uv run pytest tests/test_internal_service_contracts.py tests/test_internal_service_fake.py tests/test_model_inference.py tests/test_llm_provider_contract.py -q` | **PASS**, 46 passed, 4 existing dependency deprecation warnings |
+| `uv run pytest tests/test_internal_service_contracts.py tests/test_internal_service_fake.py tests/test_model_inference.py tests/test_llm_provider_contract.py -q` | **PASS**, 47 passed, 4 existing dependency deprecation warnings |
 | `uv run ruff check src/shared/internal_services tests/test_internal_service_contracts.py tests/test_internal_service_fake.py tests/fakes/internal_capability_service.py` | **PASS**, all checks passed |
 | `uv run ruff format --check src/shared/internal_services tests/test_internal_service_contracts.py tests/test_internal_service_fake.py tests/fakes/internal_capability_service.py` | **PASS**, 6 files already formatted |
 | `python3 scripts/architecture_guard.py` | **PASS**, no boundary violations |
