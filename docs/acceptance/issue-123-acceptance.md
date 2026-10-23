@@ -3,6 +3,7 @@
 - Base SHA: `cf3d6b952689544fba057dac0e212bea37f8cc08`.
 - Implementation SHA: `a88c55e1b0c5a22703727b0ab8bc16fe95c96c57`.
 - Typing review follow-up SHA: `2f801db`.
+- Compose caller-wiring follow-up SHA: `abd5a12c725ec5c013d64cda7240db427a7488bc`.
 - Implementation scope: Search service runtime, PostgreSQL control plane, DDGS
   and Tavily adapters, and the Search service Compose stanza.
 - Verdict: PASS for contract-normalized provider execution, encrypted
@@ -25,6 +26,7 @@
 - PASS: `cd search-service && uv run python -m compileall -q src scripts`.
 - PASS: `python3 scripts/architecture_guard.py` and `git diff --check`.
 - PASS: `LITELLM_MASTER_KEY=compose-validation-only SEARCH_SERVICE_HOST_PORT=18083 POSTGRES_HOST_PORT=15432 docker compose -p value-investment-agent-issue123-search-runtime config --quiet`.
+- PASS: Compose wires `SEARCH_SERVICE_URL` and the same `SEARCH_SERVICE_TOKEN` into the backend and Search Service; its readiness health check targets `readyz`. Verified with `docker compose ... config --format json | jq -e` asserting the URL, shared token, and readiness path. The check returned `true`.
 - PASS: the same isolated Compose project built and started `search-service`
   with `SEARCH_PROVIDER_ENCRYPTION_KEY` set to a disposable Fernet key.
   `GET /livez` returned `{"status":"ok"}` and `GET /readyz` returned
@@ -53,6 +55,9 @@
   one request deadline, and a per-process semaphore. Cooldown and priority are
   shared through PostgreSQL across replicas; the outer in-flight semaphore is
   process-local and therefore bounds each replica independently.
+- Each user has one key per provider. Replacement is supported, but automatic
+  rotation among multiple keys for the same provider is not implemented;
+  failover is across eligible providers only.
 - Telemetry records correlation ID, provider, operation, result count or stable
   error code. It omits provider keys, query text, and upstream exception text.
 - No live DDGS or Tavily calls were run. Deployments must supply a stable,
