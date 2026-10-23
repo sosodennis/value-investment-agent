@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncIterator
 
 import httpx
 import pytest
+from pydantic import BaseModel
 from src.llm_provider_service.application.context import (
     reset_provider_principal,
     set_provider_principal,
@@ -19,6 +21,8 @@ from src.llm_provider_service.domain.contracts import (
     LLMRequestClass,
     ModelRoute,
     ProviderPrincipal,
+    StreamEvent,
+    StructuredRequest,
 )
 from src.llm_provider_service.domain.routes import DEFAULT_MODEL_ALIAS, user_route_alias
 from src.llm_provider_service.infrastructure.gateway import (
@@ -376,3 +380,176 @@ async def test_interrupted_stream_surfaces_partial_output_without_replay() -> No
     snapshot = telemetry.snapshot()
     assert (snapshot.requests, snapshot.streams, snapshot.failures) == (1, 1, 1)
     assert snapshot.stream_interruptions == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("synchronous", [False, True])
+@pytest.mark.parametrize("partial", ["none", "text", "tool"])
+@pytest.mark.parametrize(
+    "malformed",
+    [
+        "not-json-sk-secret",
+        "null",
+        '{"choices":[null]}',
+        '{"choices":[{"delta":[]}]}',
+        '{"choices":[],"usage":{"total_tokens":-1}}',
+    ],
+)
+async def test_malformed_stream_is_normalized_without_retry(
+    synchronous: bool,
+    partial: str,
+    malformed: str,
+) -> None:
+    requests: list[httpx.Request] = []
+    tool_calls = [{"index": 0, "function": {"arguments": "{"}}]
+    delta = {"content": "partial"} if partial == "text" else {"tool_calls": tool_calls}
+    prefix = (
+        f"data: {json.dumps({'choices': [{'delta': delta}]})}\n\n"
+        if partial != "none"
+        else ""
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, content=f"{prefix}data: {malformed}\n\n")
+
+    telemetry = LLMProviderTelemetry()
+    events: list[StreamEvent] = []
+    with httpx.Client(
+        transport=httpx.MockTransport(handler), base_url="https://gateway.test/v1"
+    ) as client:
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(handler), base_url="https://gateway.test/v1"
+        ) as async_client:
+            provider = LiteLLMGatewayProvider(
+                _config(), client=client, async_client=async_client, telemetry=telemetry
+            )
+            token = set_provider_principal(ProviderPrincipal(user_id="alice"))
+            try:
+                with pytest.raises(LLMProviderError) as raised:
+                    if synchronous:
+                        events.extend(provider.stream(_request()))
+                    else:
+                        async for event in provider.astream(_request()):
+                            events.append(event)
+            finally:
+                reset_provider_principal(token)
+
+    error = raised.value
+    assert error.code == (
+        LLMErrorCode.MALFORMED_RESPONSE
+        if partial == "none"
+        else LLMErrorCode.STREAM_INTERRUPTED
+    )
+    assert error.retryable is False
+    assert error.partial_output == ("partial" if partial == "text" else "")
+    assert error.partial_tool_calls == (tuple(tool_calls) if partial == "tool" else ())
+    assert [event.kind for event in events] == (
+        [] if partial == "none" else ["started", "delta"]
+    )
+    assert len(requests) == len(error.attempts) == 1
+    assert "sk-secret" not in str(error)
+    snapshot = telemetry.snapshot()
+    assert (snapshot.requests, snapshot.failures, snapshot.successes) == (1, 1, 0)
+    assert snapshot.stream_interruptions == (0 if partial == "none" else 1)
+
+
+class _StalledStream(httpx.AsyncByteStream):
+    def __init__(self) -> None:
+        self.entered = asyncio.Event()
+        self.closed = False
+
+    async def __aiter__(self) -> AsyncIterator[bytes]:
+        self.entered.set()
+        await asyncio.Event().wait()
+        yield b""
+
+    async def aclose(self) -> None:
+        self.closed = True
+
+
+@pytest.mark.asyncio
+async def test_stream_cancellation_closes_transport_and_records_cancellation() -> None:
+    stream = _StalledStream()
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, stream=stream)
+
+    telemetry = LLMProviderTelemetry()
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="https://gateway.test/v1"
+    ) as client:
+        provider = LiteLLMGatewayProvider(
+            _config(), async_client=client, telemetry=telemetry
+        )
+        token = set_provider_principal(ProviderPrincipal(user_id="alice"))
+        try:
+            iterator = provider.astream(_request())
+            task = asyncio.create_task(anext(iterator))
+            try:
+                await asyncio.wait_for(stream.entered.wait(), timeout=1)
+            finally:
+                task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        finally:
+            reset_provider_principal(token)
+            await provider.aclose()
+
+    assert stream.closed
+    assert len(requests) == 1
+    snapshot = telemetry.snapshot()
+    assert snapshot.stream_interruptions == snapshot.failures == 1
+    assert snapshot.successes == 0
+
+
+class _Answer(BaseModel):
+    count: int
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("synchronous", [False, True])
+@pytest.mark.parametrize("content", ['{"count":42}', '{"count":"invalid"}', "{}"])
+async def test_structured_completion_validates_response_model(
+    synchronous: bool,
+    content: str,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert (
+            json.loads(request.content)["response_format"]["json_schema"]["schema"]
+            == _Answer.model_json_schema()
+        )
+        return httpx.Response(
+            200, json={"choices": [{"message": {"content": content}}]}
+        )
+
+    with httpx.Client(
+        transport=httpx.MockTransport(handler), base_url="https://gateway.test/v1"
+    ) as client:
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(handler), base_url="https://gateway.test/v1"
+        ) as async_client:
+            provider = LiteLLMGatewayProvider(
+                _config(), client=client, async_client=async_client
+            )
+            request = StructuredRequest(completion=_request(), response_schema=_Answer)
+            token = set_provider_principal(ProviderPrincipal(user_id="alice"))
+            try:
+                if content == '{"count":42}':
+                    result = (
+                        provider.complete_structured(request)
+                        if synchronous
+                        else await provider.acomplete_structured(request)
+                    )
+                    assert result.count == 42
+                else:
+                    with pytest.raises(LLMProviderError) as raised:
+                        if synchronous:
+                            provider.complete_structured(request)
+                        else:
+                            await provider.acomplete_structured(request)
+                    assert raised.value.code == LLMErrorCode.SCHEMA_VALIDATION_FAILED
+            finally:
+                reset_provider_principal(token)

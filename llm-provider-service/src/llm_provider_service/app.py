@@ -4,13 +4,15 @@ import asyncio
 import json
 import logging
 import os
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
+from contextvars import Token
 from datetime import UTC, datetime
-from typing import Any
+from typing import cast
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import ConfigDict, ValidationError, create_model
+from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError, create_model
 
 from src.llm_provider_service.application.context import (
     reset_provider_principal,
@@ -40,8 +42,10 @@ from src.llm_provider_service.domain.contracts import (
     CompletionResult,
     LLMProviderError,
     ProviderPrincipal,
+    StructuredRequest,
 )
 from src.llm_provider_service.domain.errors import ProviderSettingsError
+from src.llm_provider_service.domain.provider_models import ManagedProviderKey
 from src.llm_provider_service.domain.routes import DEFAULT_MODEL_ALIAS
 from src.shared.internal_services import (
     INTERNAL_CONTRACT_VERSION,
@@ -62,20 +66,17 @@ def _remaining(deadline: datetime) -> float:
 
 async def _authorized_body(
     request: Request,
-) -> tuple[InternalRequestContext, dict[str, Any]]:
-    raw = await request.json()
-    if not isinstance(raw, dict):
-        raise InternalContextValidationError()
+) -> tuple[InternalRequestContext, dict[str, object]]:
+    raw = TypeAdapter(dict[str, object]).validate_json(await request.body())
+    raw_context = raw.get("context", {})
     context = authenticate_internal_request(
         request.headers.get("Authorization"),
         expected_token=_token(),
-        raw_context=raw.get("context", {}),
+        raw_context=raw_context if isinstance(raw_context, dict) else {},
     )
     if _remaining(context.deadline_at) <= 0:
         raise TimeoutError("request deadline expired")
-    operation = raw.get("input", {})
-    if not isinstance(operation, dict):
-        raise InternalContextValidationError()
+    operation = TypeAdapter(dict[str, object]).validate_python(raw.get("input", {}))
     return context, operation
 
 
@@ -113,7 +114,7 @@ def _error(
     return JSONResponse(status_code=status, content=response.model_dump(mode="json"))
 
 
-def _summary(key: object) -> KeySummary:
+def _summary(key: ManagedProviderKey) -> KeySummary:
     return KeySummary(
         id=key.id,
         label=key.label,
@@ -137,24 +138,36 @@ def _deadline_timeout(context: InternalRequestContext, requested: float) -> floa
     return min(requested, remaining)
 
 
-def _response_model(schema: dict[str, object]) -> type[Any]:
+def _response_model(schema: dict[str, object]) -> type[BaseModel]:
     properties = schema.get("properties", {})
-    fields = (
-        {name: (Any, None) for name in properties if isinstance(name, str)}
+    fields: dict[str, tuple[type[object], None]] = (
+        {name: (object, None) for name in properties if isinstance(name, str)}
         if isinstance(properties, dict)
         else {}
     )
-    model = create_model(
-        str(schema.get("title", "StructuredResponse")),
-        __config__=ConfigDict(extra="allow"),
-        **fields,
+
+    class StructuredResponse(BaseModel):
+        model_config = ConfigDict(extra="allow")
+
+        @classmethod
+        def model_json_schema(
+            cls, *_args: object, **_kwargs: object
+        ) -> dict[str, object]:
+            return schema
+
+    dynamic_create_model = cast(Callable[..., object], create_model)
+    return cast(
+        type[BaseModel],
+        dynamic_create_model(
+            str(schema.get("title", "StructuredResponse")),
+            __base__=StructuredResponse,
+            **fields,
+        ),
     )
-    model.model_json_schema = classmethod(lambda _cls: schema)
-    return model
 
 
 @asynccontextmanager
-async def lifespan(application: FastAPI):
+async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     runtime = ProviderRuntime()
     application.state.runtime = runtime
     cleanup_task: asyncio.Task[None] | None = None
@@ -210,11 +223,9 @@ async def readyz(request: Request) -> JSONResponse:
     )
 
 
-def _validate_input(model: type[Any], raw: dict[str, Any]) -> Any:
-    return model.model_validate(raw)
-
-
-def _bind_principal(context: InternalRequestContext):
+def _bind_principal(
+    context: InternalRequestContext,
+) -> Token[ProviderPrincipal | None]:
     return set_provider_principal(
         ProviderPrincipal(user_id=context.principal.subject_id)
     )
@@ -262,19 +273,20 @@ async def completion(request: Request) -> JSONResponse:
                     result = await runtime.gateway.acomplete(operation)
                 else:
                     response_schema = _response_model(payload.response_schema)
-                    result = await runtime.gateway.acomplete_structured(
-                        _structured_request(operation, response_schema)
+                    structured = await runtime.gateway.acomplete_structured(
+                        StructuredRequest[BaseModel](
+                            completion=operation, response_schema=response_schema
+                        )
+                    )
+                    result = CompletionResult(
+                        request_id=payload.request_id,
+                        text=json.dumps(
+                            structured.model_dump(mode="json"), separators=(",", ":")
+                        ),
+                        model=payload.route.alias,
                     )
         finally:
             reset_provider_principal(principal_token)
-        if hasattr(result, "completion"):
-            result = result.completion
-        if payload.response_schema is not None:
-            result = CompletionResult(
-                request_id=payload.request_id,
-                text=json.dumps(result.model_dump(mode="json"), separators=(",", ":")),
-                model=payload.route.alias,
-            )
         return JSONResponse(content=_success(context, result.model_dump(mode="json")))
     except InternalAuthenticationError as exc:
         return _error(correlation_id, exc.code, str(exc), 401)
@@ -327,7 +339,8 @@ async def stream_completion(request: Request) -> JSONResponse | StreamingRespons
                 correlation_id, "policy_rejected", "provider route is not allowed", 400
             )
         runtime: ProviderRuntime = request.app.state.runtime
-        if not runtime.ready or runtime.gateway is None:
+        gateway = runtime.gateway
+        if not runtime.ready or gateway is None:
             return _error(
                 correlation_id,
                 "not_ready",
@@ -365,13 +378,13 @@ async def stream_completion(request: Request) -> JSONResponse | StreamingRespons
             retryable=True,
         )
 
-    async def events():
+    async def events() -> AsyncIterator[str]:
         principal_token = _bind_principal(context)
         emitted = False
         next_sequence = 0
         try:
-            async with asyncio.timeout(timeout):
-                async for event in runtime.gateway.astream(operation):
+            async with asyncio.timeout(_deadline_timeout(context, timeout)):
+                async for event in gateway.astream(operation):
                     emitted = emitted or event.kind in {"delta", "completed"}
                     next_sequence = max(next_sequence, event.sequence + 1)
                     payload_json = json.dumps(
@@ -384,14 +397,26 @@ async def stream_completion(request: Request) -> JSONResponse | StreamingRespons
                         separators=(",", ":"),
                     )
                     yield f"data: {payload_json}\n\n"
-        except Exception:
+        except Exception as exc:
+            if isinstance(exc, TimeoutError):
+                error_code = "deadline_exceeded"
+            elif emitted:
+                error_code = "stream_interrupted"
+            elif isinstance(exc, LLMProviderError):
+                error_code = exc.code.value
+            else:
+                error_code = "unavailable"
             failure = {
                 "kind": "error",
                 "request_id": operation.request_id,
                 "sequence": next_sequence,
                 "model": operation.route.alias,
-                "error_code": "stream_interrupted" if emitted else "unavailable",
-                "error_reason": "provider stream failed",
+                "error_code": error_code,
+                "error_reason": (
+                    "request deadline expired"
+                    if error_code == "deadline_exceeded"
+                    else "provider stream failed"
+                ),
             }
             yield (
                 "data: "
@@ -412,12 +437,6 @@ async def stream_completion(request: Request) -> JSONResponse | StreamingRespons
     return StreamingResponse(events(), media_type="text/event-stream")
 
 
-def _structured_request(operation: CompletionRequest, schema: type[Any]) -> Any:
-    from src.llm_provider_service.domain.contracts import StructuredRequest
-
-    return StructuredRequest(completion=operation, response_schema=schema)
-
-
 @app.post("/v1/provider-keys/{action}", response_model=None)
 async def provider_keys(action: str, request: Request) -> JSONResponse:
     correlation_id = "unknown"
@@ -435,6 +454,8 @@ async def provider_keys(action: str, request: Request) -> JSONResponse:
             )
         timeout = _deadline_timeout(context, 10.0)
         user_id = context.principal.subject_id
+        result: KeyListResult | KeyMutationResult | KeyTestResult | KeyDeleteResult
+        payload: KeyCreateInput | KeyReplaceInput | KeyIdInput
         async with asyncio.timeout(timeout):
             if action == "list":
                 keys = await runtime.settings.list_keys(user_id=user_id)

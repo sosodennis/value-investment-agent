@@ -11,11 +11,18 @@ import pytest
 from src.llm_provider_service import app as service
 from src.llm_provider_service.application.context import get_provider_principal
 from src.llm_provider_service.domain.contracts import (
+    CompletionRequest,
     CompletionResult,
+    LLMErrorCode,
+    LLMProviderError,
     StreamEvent,
     Usage,
 )
 from src.llm_provider_service.domain.routes import DEFAULT_MODEL_ALIAS
+from src.llm_provider_service.infrastructure.gateway import (
+    LiteLLMGatewayConfig,
+    LiteLLMGatewayProvider,
+)
 
 
 class _Gateway:
@@ -407,3 +414,245 @@ async def test_stream_failure_has_monotonic_sequence_without_replay(client) -> N
     assert events[-1]["error_code"] == "stream_interrupted"
     assert gateway.stream_calls == 1
     assert "sk-do-not-leak" not in response.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("partial", [False, True])
+@pytest.mark.parametrize("request_timeout", [0.02, 5.0])
+async def test_stream_deadline_emits_deadline_error_and_closes_upstream(
+    client: tuple[httpx.AsyncClient, _Gateway, _Settings],
+    monkeypatch: pytest.MonkeyPatch,
+    partial: bool,
+    request_timeout: float,
+) -> None:
+    http, gateway, _ = client
+    closed = asyncio.Event()
+
+    async def stalled(request: CompletionRequest) -> AsyncIterator[StreamEvent]:
+        try:
+            if partial:
+                yield StreamEvent(
+                    kind="delta",
+                    request_id=request.request_id,
+                    sequence=0,
+                    model=DEFAULT_MODEL_ALIAS,
+                    text="partial",
+                )
+            await asyncio.Event().wait()
+        finally:
+            closed.set()
+
+    monkeypatch.setattr(gateway, "astream", stalled)
+    async with http:
+        response = await http.post(
+            "/v1/completions/stream",
+            headers={"Authorization": "Bearer service-secret"},
+            json={
+                "context": _context(
+                    deadline=datetime.now(UTC) + timedelta(milliseconds=100)
+                ),
+                "input": _completion_input(timeout_seconds=request_timeout),
+            },
+        )
+
+    frames = [
+        json.loads(line[6:])
+        for line in response.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    events = [frame["event"] for frame in frames]
+    assert response.status_code == 200
+    assert [event["sequence"] for event in events] == list(range(2 if partial else 1))
+    assert events[-1]["kind"] == "error"
+    assert events[-1]["error_code"] == "deadline_exceeded"
+    assert events[-1]["error_reason"] == "request deadline expired"
+    assert all(frame["correlation_id"] == "correlation-120" for frame in frames)
+    assert closed.is_set()
+
+
+@pytest.mark.asyncio
+async def test_stream_preserves_provider_error_before_output(
+    client: tuple[httpx.AsyncClient, _Gateway, _Settings],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    http, gateway, _ = client
+
+    async def rejected(request: CompletionRequest) -> AsyncIterator[StreamEvent]:
+        yield StreamEvent(
+            kind="started",
+            request_id=request.request_id,
+            sequence=0,
+            model=DEFAULT_MODEL_ALIAS,
+        )
+        raise LLMProviderError(
+            code=LLMErrorCode.RATE_LIMITED,
+            provider="test",
+            model=request.route.alias,
+            request_id=request.request_id,
+            reason="sk-do-not-leak",
+            retryable=False,
+        )
+
+    monkeypatch.setattr(gateway, "astream", rejected)
+    async with http:
+        response = await http.post(
+            "/v1/completions/stream",
+            headers={"Authorization": "Bearer service-secret"},
+            json={"context": _context(), "input": _completion_input()},
+        )
+
+    events = [
+        json.loads(line[6:])["event"]
+        for line in response.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    event = events[-1]
+    assert event["error_code"] == "rate_limited"
+    assert event["sequence"] == 1
+    assert "sk-do-not-leak" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_stream_cancellation_propagates_and_restores_principal(
+    client: tuple[httpx.AsyncClient, _Gateway, _Settings],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    http, gateway, _ = client
+    entered = asyncio.Event()
+    closed = asyncio.Event()
+
+    async def stalled(request: CompletionRequest) -> AsyncIterator[StreamEvent]:
+        try:
+            principal = get_provider_principal()
+            assert principal is not None and principal.user_id == "alice"
+            entered.set()
+            await asyncio.Event().wait()
+            yield StreamEvent(
+                kind="completed",
+                request_id=request.request_id,
+                sequence=0,
+                model=DEFAULT_MODEL_ALIAS,
+            )
+        finally:
+            closed.set()
+
+    async def send() -> httpx.Response:
+        try:
+            return await http.post(
+                "/v1/completions/stream",
+                headers={"Authorization": "Bearer service-secret"},
+                json={"context": _context(), "input": _completion_input()},
+            )
+        finally:
+            assert get_provider_principal() is None
+
+    monkeypatch.setattr(gateway, "astream", stalled)
+    async with http:
+        task = asyncio.create_task(send())
+        try:
+            await asyncio.wait_for(entered.wait(), timeout=1)
+        finally:
+            task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    assert closed.is_set()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/v1/completions",
+        "/v1/completions/stream",
+        "/v1/provider-keys/list",
+        "/v1/settings/read",
+    ],
+)
+async def test_malformed_request_json_is_normalized(
+    client: tuple[httpx.AsyncClient, _Gateway, _Settings],
+    path: str,
+) -> None:
+    http, gateway, _ = client
+    async with http:
+        response = await http.post(
+            path,
+            headers={"Authorization": "Bearer service-secret"},
+            content=b'{"sk-do-not-leak":',
+        )
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "invalid_context"
+    assert "sk-do-not-leak" not in response.text
+    assert gateway.completion_calls == gateway.stream_calls == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "content", ['{"answer":{"value":42},"completion":"preserved"}', "[]", "not-json"]
+)
+async def test_structured_completion_preserves_schema_and_response_decoding(
+    client: tuple[httpx.AsyncClient, _Gateway, _Settings],
+    monkeypatch: pytest.MonkeyPatch,
+    content: str,
+) -> None:
+    http, _, _ = client
+    schema = {
+        "title": "Answer",
+        "type": "object",
+        "properties": {
+            "answer": {"$ref": "#/$defs/Value"},
+            "completion": {"type": "string"},
+        },
+        "required": ["answer", "completion"],
+        "additionalProperties": False,
+        "$defs": {
+            "Value": {
+                "type": "object",
+                "properties": {"value": {"type": "integer"}},
+                "required": ["value"],
+            }
+        },
+    }
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200, json={"choices": [{"message": {"content": content}}]}
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="https://gateway.test/v1"
+    ) as upstream:
+        gateway = LiteLLMGatewayProvider(
+            LiteLLMGatewayConfig(
+                base_url="https://gateway.test/v1",
+                api_key="test",
+                require_principal=True,
+            ),
+            async_client=upstream,
+        )
+        monkeypatch.setattr(service.app.state.runtime, "gateway", gateway)
+        try:
+            async with http:
+                response = await http.post(
+                    "/v1/completions",
+                    headers={"Authorization": "Bearer service-secret"},
+                    json={
+                        "context": _context(),
+                        "input": _completion_input(response_schema=schema),
+                    },
+                )
+        finally:
+            await gateway.aclose()
+
+    assert len(requests) == 1
+    assert (
+        json.loads(requests[0].content)["response_format"]["json_schema"]["schema"]
+        == schema
+    )
+    if content.startswith("{"):
+        assert response.status_code == 200
+        assert json.loads(response.json()["result"]["text"]) == json.loads(content)
+    else:
+        assert response.status_code == 502
+        assert response.json()["error"]["code"] == "schema_validation_failed"
