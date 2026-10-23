@@ -95,4 +95,10 @@ Set `PROBE_MANUAL_STREAM_HEADERS=0` to model the current production endpoint's m
 
 The probe runs on localhost with production-mode Next.js and Chromium. Current project source exposes `NEXT_PUBLIC_LANGGRAPH_URL`, and `docker-compose.production.yml` does not define a public ingress or proxy. The repository has no configured GitHub deployments. The actual production hostname, CDN/ingress chain, deployed auth service, multi-worker topology, and long-duration connection limits are therefore unverified. Discussion [#131](https://github.com/sosodennis/value-investment-agent/discussions/131) currently has comments only from the repository owner; community agreement is not established and needs reports from operators who can describe a real deployment path.
 
+## Local application auth smoke test
+
+On 2026-10-23, a temporary account was created in the isolated local production-build stack and deleted after the check. Registration returned `201`, login returned `200`, anonymous SSE attach returned `401`, authenticated SSE attach returned `200` and the expected `retry` frame, and `/me` returned `401` after logout. This verifies the local frontend/auth/SSE-attach path only. The Compose provider service did not start, so this run did not execute a real LangGraph workflow or validate generated events. It does not cover a public deployment, ingress/CDN behavior, or production authorization ownership.
+
+Discussion [#131](https://github.com/sosodennis/value-investment-agent/discussions/131) has three comments, all posted by the repository owner, and no replies from other participants as of this test. These comments are research updates and requests for deployment details, not evidence of community consensus.
+
 The Next.js 16.1.0 probe install reported two high and one critical npm audit findings. The registry reported Next.js 16.4.2 as the current release on 2026-10-23, and that release fixes the reported dependency audit set. This security finding is separate from the SSE transport result.
