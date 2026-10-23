@@ -35,3 +35,27 @@ query fallbacks.
   `architecture-standard-enforcer` were checked under
   `architecture-skill-maintainer`; no guidance changes were needed.
 - No live Search Service or upstream provider calls were made.
+
+## Follow-up: Request-Local Principal
+
+- Base SHA: `67788c60a430ebd3e42f68b57a05758e096233d1`.
+- Implementation SHA: `9262ee6fed347dc5a29a3ea6d4fc2d597676fca9` (`fix(search): require request-local principal`).
+- Verdict: PASS.
+
+The authenticated stream boundary now sets a shared request-local principal
+context from the authenticated `principal.user_id` and resets it in `finally`.
+The Search client reads only this context and rejects calls when it is absent;
+it no longer imports from `llm_provider` or uses `SEARCH_SERVICE_SUBJECT_ID`.
+Provider authentication wiring is unchanged.
+
+- PASS: focused Search-client and stream-boundary tests (`12 passed`), covering
+  principal propagation, context reset, and rejection before transport when no
+  principal exists.
+- PASS: full finance-agent suite (`970 passed, 5 skipped`).
+- PASS: Ruff check and format check.
+- PASS: `python3 scripts/architecture_guard.py`.
+- PASS: source and test search found no static Search subject or Search-to-LLM
+  principal references in the relevant paths.
+- PASS: implementation commit hooks.
+
+No live Search Service or upstream provider calls were made.
