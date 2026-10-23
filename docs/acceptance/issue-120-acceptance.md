@@ -3,9 +3,9 @@
 ## Scope
 
 - Issue: #120, LLM Provider Service
-- Base: `275035bce879dce8cd6d0e94af4c02cb2a919efc`
+- Base: `750dfb27de176865ef8a3eda8b285242c61cba52`
 - Worktree branch: `codex/issue-120-llm-service`
-- Implementation result: `a54b7c601dc7441cb6bf6e834de07667e844dea5`
+- Implementation result before final error-boundary fixes: `aeee6dd685d7164776805dfaa49a470965b1b056`
 - Result: standalone `llm-provider-service` control/data plane, typed backend client boundary, Compose wiring, deadline enforcement, and replacement serialization.
 
 ## Checks
@@ -13,8 +13,8 @@
 | Check | Result | Evidence |
 | --- | --- | --- |
 | Service lint and formatting | PASS | `cd llm-provider-service && uv run ruff check src tests` |
-| Service lint, compile, and tests | PASS | `cd llm-provider-service && uv run --group dev ruff check src tests && uv run --group dev python -m compileall -q src tests && uv run --group dev pytest tests -q` -> 11 passed, 1 skipped (PostgreSQL opt-in test) |
-| Backend provider boundary tests | PASS | `cd finance-agent-core && uv run ruff check src/llm_provider/application/wiring.py src/llm_provider/composition/routes.py src/llm_provider/infrastructure/remote_client.py tests/test_llm_provider_lifecycle.py tests/test_llm_settings_api.py && uv run pytest tests/test_llm_provider_lifecycle.py tests/test_llm_settings_api.py -q` -> 6 passed |
+| Service lint, compile, strict typing, and tests | PASS | `uv run --with mypy mypy --strict --follow-imports=silent --ignore-missing-imports src/llm_provider_service/app.py`, `uv run ruff check src tests`, `uv run ruff format --check src tests`, `uv run pytest tests -q -rs` -> 73 passed, 1 skipped |
+| Backend provider boundary tests | PASS | `uv run pytest tests/test_llm_provider_contract.py tests/test_llm_provider_lifecycle.py tests/test_llm_provider_remote_client.py tests/test_llm_provider_remote_parsing.py tests/test_llm_settings_api.py tests/test_internal_service_contracts.py -q` -> 43 passed |
 | Compose default configuration | PASS | `LITELLM_MASTER_KEY=disposable-interpolation-only docker compose -p value-investment-agent-issue120-review config --quiet` |
 | Compose gateway profile | PASS | `LITELLM_MASTER_KEY=disposable-interpolation-only docker compose -p value-investment-agent-issue120-review --profile llm-gateway config --quiet` |
 | Inference named-context build checks | PASS | `LITELLM_MASTER_KEY=compose-validation-only docker compose build --check model-inference-news model-inference-fls` -> both checks completed with no warnings |
@@ -37,7 +37,17 @@
 - Switched the provider image to a service-local build context and removed the internal gateway narration comment.
 - Kept maintenance task ownership in the provider service ASGI lifespan, added cleanup for partial runtime startup failures, and limited lifecycle failure logs to exception types.
 - Added an ASGI lifespan test proving partial startup failure closes the provider runtime.
-- Final code result SHA: `0b526e597ed4dd8acfafecfe93450bd4cfd4164c`.
+- Integrated PR head after fixes: `205a700` (full SHA recorded in Git history).
+- Malformed JSON, SSE frames, and provider response schemas map to typed safe errors; `deadline_exceeded` maps to `UPSTREAM_TIMEOUT` at the backend boundary.
+- Streaming deadline errors preserve their deadline classification, and async cancellation still propagates.
+- Service app boundaries are strictly typed without `Any`.
+
+## Final independent acceptance
+
+- The original PR head `aeee6dd685d7164776805dfaa49a470965b1b056` failed independent acceptance because malformed responses escaped raw parsing errors, deadline semantics were lost, and service typing violated the project rule.
+- Those findings were fixed in commits `1378365` and `2847d44`, then integrated into the PR branch.
+- The isolated PostgreSQL replacement-lock test passed with `RUN_LLM_PROVIDER_POSTGRES_TESTS=1` against a disposable database.
+- A live Redis, LiteLLM, and OpenRouter integration was not run. This remains an explicit deployment verification gap.
 
 ## Delegation note
 
