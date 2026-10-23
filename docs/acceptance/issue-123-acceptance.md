@@ -2,6 +2,7 @@
 
 - Base SHA: `cf3d6b952689544fba057dac0e212bea37f8cc08`.
 - Implementation SHA: `a88c55e1b0c5a22703727b0ab8bc16fe95c96c57`.
+- Typing review follow-up SHA: `2f801db`.
 - Implementation scope: Search service runtime, PostgreSQL control plane, DDGS
   and Tavily adapters, and the Search service Compose stanza.
 - Verdict: PASS for contract-normalized provider execution, encrypted
@@ -20,7 +21,7 @@
   and a disposable Fernet key (`1 passed`). It verifies simultaneous key
   inserts receive unique priorities, user isolation, ciphertext at rest,
   cooldown exclusion and expiry, and decryption through a fresh adapter.
-- PASS: `cd search-service && MYPYPATH=../finance-agent-core uv run --with mypy mypy --strict --disable-error-code=valid-type src` (`8 source files`).
+- PASS: `cd search-service && MYPYPATH=../finance-agent-core uv run --with mypy mypy --strict --disable-error-code=valid-type src` (`8 source files`). The development dependency `asyncpg-stubs` provides checked asyncpg types; no import suppression is needed, and `_save_key` checks the optional `RETURNING` row.
 - PASS: `cd search-service && uv run python -m compileall -q src scripts`.
 - PASS: `python3 scripts/architecture_guard.py` and `git diff --check`.
 - PASS: `LITELLM_MASTER_KEY=compose-validation-only SEARCH_SERVICE_HOST_PORT=18083 POSTGRES_HOST_PORT=15432 docker compose -p value-investment-agent-issue123-search-runtime config --quiet`.
@@ -70,3 +71,9 @@
 - `search-service/tests/test_boundary.py`
 - `search-service/tests/test_providers.py`
 - `search-service/tests/test_postgres_control_plane.py`
+
+## Typing review follow-up
+
+- Added `asyncpg-stubs` to the development dependency group because the asyncpg runtime package does not ship a `py.typed` marker.
+- Removed the `import-untyped` suppression and the redundant class and test comments.
+- Strict mypy passes across all eight source files. The full Search Service suite passes (`94 passed, 1 skipped`); PostgreSQL integration remains skipped when `SEARCH_TEST_DATABASE_URL` is unset.
