@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from src.model_inference.application.context import (
+    reset_inference_principal,
+    set_inference_principal,
+)
 from src.model_inference.application.wiring import (
     close_default_model_inference,
 )
@@ -32,4 +36,6 @@ __all__ = [
     "NewsSentimentResult",
     "close_model_inference",
     "get_model_inference",
+    "reset_inference_principal",
+    "set_inference_principal",
 ]

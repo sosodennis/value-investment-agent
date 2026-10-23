@@ -105,19 +105,26 @@ record_inference_snapshot() {
   local started_at
   local image_id
   local readiness
+  local details
   local revision
 
   container_id="$("${COMPOSE[@]}" ps -q "$service")"
   started_at="$(docker inspect --format '{{.State.StartedAt}}' "$container_id")"
   image_id="$(docker inspect --format '{{.Image}}' "$container_id")"
   readiness="$("${COMPOSE[@]}" exec -T "$service" curl -fsS http://localhost:8001/readyz)"
-  if ! jq -e --arg operation "$operation" \
-    '.ready == true and .operations[$operation].ready == true and .operations[$operation].accepting == true' \
+  details="$("${COMPOSE[@]}" exec -T "$service" curl -fsS http://localhost:8001/readyz/details)"
+  if ! jq -e '.status == "ready" and .contract_version == "internal.v1"' \
     <<<"$readiness" >/dev/null; then
     printf '%s was not ready and accepting requests\n' "$service" >&2
     return 1
   fi
-  revision="$(jq -er --arg operation "$operation" '.operations[$operation].model_revision' <<<"$readiness")"
+  if ! jq -e --arg operation "$operation" \
+    '.operations[$operation].ready == true and .operations[$operation].accepting == true' \
+    <<<"$details" >/dev/null; then
+    printf '%s was not ready and accepting requests\n' "$service" >&2
+    return 1
+  fi
+  revision="$(jq -er --arg operation "$operation" '.operations[$operation].model_revision' <<<"$details")"
   jq -cn \
     --arg phase "$phase" \
     --arg commit "$(git rev-parse HEAD)" \
@@ -127,7 +134,8 @@ record_inference_snapshot() {
     --arg image_id "$image_id" \
     --arg model_revision "$revision" \
     --argjson readiness "$readiness" \
-    '{phase:$phase,commit:$commit,service:$service,container_id:$container_id,started_at:$started_at,image_id:$image_id,model_revision:$model_revision,readiness:$readiness}' \
+    --argjson details "$details" \
+    '{phase:$phase,commit:$commit,service:$service,container_id:$container_id,started_at:$started_at,image_id:$image_id,model_revision:$model_revision,readiness:$readiness,details:$details}' \
     >> "$REPORT"
   printf '%s\t%s\t%s\t%s\t%s\n' "$service" "$container_id" "$started_at" "$image_id" "$revision"
 }
