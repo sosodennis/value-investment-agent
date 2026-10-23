@@ -17,14 +17,72 @@ from src.llm_provider.infrastructure.openrouter_models import (
     list_free_models,
     validate_free_model,
 )
+from src.llm_provider.infrastructure.remote_client import (
+    LLMProviderServiceClient,
+    LLMProviderServiceSettingsClient,
+)
 from src.llm_provider.infrastructure.settings import (
     get_selected_model,
     set_selected_model,
 )
 
 MODEL_ROUTE_ALIAS = DEFAULT_MODEL_ALIAS
-_gateway_provider: LiteLLMGatewayProvider | None = None
+_gateway_provider: LLMProviderPort | None = None
+_settings_client: LLMProviderServiceSettingsClient | None = None
 _key_telemetry: RedisProviderKeyTelemetry | None = None
+
+
+def get_llm_provider() -> LLMProviderPort:
+    global _gateway_provider
+    if _gateway_provider is None:
+        if os.getenv("LLM_PROVIDER_SERVICE_URL", "").strip():
+            _gateway_provider = LLMProviderServiceClient()
+        else:
+            _gateway_provider = LiteLLMGatewayProvider(LiteLLMGatewayConfig.from_env())
+    return _gateway_provider
+
+
+def get_default_model_route() -> ModelRoute:
+    return ModelRoute(alias=MODEL_ROUTE_ALIAS)
+
+
+async def close_llm_provider() -> None:
+    global _gateway_provider, _settings_client, _key_telemetry
+    provider = _gateway_provider
+    _gateway_provider = None
+    if provider is not None:
+        await provider.aclose()
+    settings_client = _settings_client
+    _settings_client = None
+    if settings_client is not None:
+        await settings_client.aclose()
+    if _key_telemetry is not None:
+        await _key_telemetry.close()
+        _key_telemetry = None
+
+
+def get_provider_settings_service() -> (
+    ProviderSettingsService | LLMProviderServiceSettingsClient
+):
+    global _settings_client
+    if os.getenv("LLM_PROVIDER_SERVICE_URL", "").strip():
+        if _settings_client is None:
+            _settings_client = LLMProviderServiceSettingsClient()
+        return _settings_client
+    return ProviderSettingsService(
+        gateway=LiteLLMAdminClient(
+            base_url=os.getenv("LLM_GATEWAY_BASE_URL", "http://localhost:4000").strip(),
+            admin_token=os.getenv("LLM_GATEWAY_API_KEY", "").strip(),
+            openrouter_headers={
+                "X-Title": os.getenv("OPENROUTER_X_TITLE", "Value Investment Agent")
+            },
+        ),
+        ownership=get_ownership_service(),
+        settings=_SelectedModelSettings(),
+        catalog=_OpenRouterCatalog(),
+        validate_key=test_openrouter_key,
+        telemetry=get_provider_key_telemetry(),
+    )
 
 
 def get_provider_key_telemetry() -> RedisProviderKeyTelemetry:
@@ -34,58 +92,12 @@ def get_provider_key_telemetry() -> RedisProviderKeyTelemetry:
     return _key_telemetry
 
 
-def get_llm_provider() -> LLMProviderPort:
-    global _gateway_provider
-    if _gateway_provider is None:
-        _gateway_provider = LiteLLMGatewayProvider(LiteLLMGatewayConfig.from_env())
-    return _gateway_provider
-
-
-def get_default_model_route() -> ModelRoute:
-    return ModelRoute(alias=MODEL_ROUTE_ALIAS)
-
-
-async def close_llm_provider() -> None:
-    global _gateway_provider, _key_telemetry
-    provider = _gateway_provider
-    _gateway_provider = None
-    if provider is not None:
-        await provider.aclose()
-    telemetry = _key_telemetry
-    _key_telemetry = None
-    if telemetry is not None:
-        await telemetry.close()
-
-
 class _OpenRouterCatalog:
     async def list_free_models(self):
         return await list_free_models()
 
     async def validate_free_model(self, model_id: str) -> bool:
         return await validate_free_model(model_id)
-
-
-def get_provider_settings_service() -> ProviderSettingsService:
-    base_url = os.getenv("LLM_GATEWAY_BASE_URL", "http://localhost:4000").strip()
-    token = os.getenv("LLM_GATEWAY_API_KEY", "").strip()
-    openrouter_headers = {
-        "X-Title": os.getenv("OPENROUTER_X_TITLE", "Value Investment Agent")
-    }
-    referer = os.getenv("OPENROUTER_HTTP_REFERER", "").strip()
-    if referer:
-        openrouter_headers["HTTP-Referer"] = referer
-    return ProviderSettingsService(
-        gateway=LiteLLMAdminClient(
-            base_url=base_url,
-            admin_token=token,
-            openrouter_headers=openrouter_headers,
-        ),
-        ownership=get_ownership_service(),
-        settings=_SelectedModelSettings(),
-        catalog=_OpenRouterCatalog(),
-        validate_key=test_openrouter_key,
-        telemetry=get_provider_key_telemetry(),
-    )
 
 
 class _SelectedModelSettings:

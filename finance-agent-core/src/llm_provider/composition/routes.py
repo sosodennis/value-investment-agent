@@ -156,7 +156,9 @@ async def read_llm_settings(
     service: ProviderSettingsService = Depends(get_provider_settings_service),
 ) -> LlmSettingsResponse:
     try:
-        selected, models = await service.selected_model_settings()
+        selected, models = await service.selected_model_settings(
+            user_id=_principal.subject
+        )
     except ProviderSettingsError as exc:
         _raise_http_error(exc)
     return LlmSettingsResponse(

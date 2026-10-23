@@ -186,8 +186,9 @@ class ProviderSettingsService:
             await self._telemetry.delete(key_id)
 
     async def selected_model_settings(
-        self,
+        self, *, user_id: str | None = None
     ) -> tuple[str, Sequence[OpenRouterModel]]:
+        _ = user_id
         try:
             models = await self._catalog.list_free_models()
         except OpenRouterModelsError as exc:
