@@ -9,7 +9,7 @@ from src.agents.intent.infrastructure.market_data.company_profile_provider impor
 from src.agents.intent.infrastructure.market_data.yahoo_ticker_search_provider import (
     search_ticker,
 )
-from src.agents.intent.infrastructure.search.ddg_web_search_provider import web_search
+from src.agents.intent.infrastructure.search.search_web_provider import web_search
 from src.llm_provider.entrypoint import (
     get_default_model_route,
     get_llm_provider,
