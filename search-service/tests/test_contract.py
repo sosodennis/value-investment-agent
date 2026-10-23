@@ -178,6 +178,10 @@ def test_request_defaults_and_openapi_artifact_are_explicit() -> None:
     assert schemas["WebSearchRequest"]["properties"]["result_limit"]["default"] == 10
     assert schemas["NewsSearchRequest"]["properties"]["result_limit"]["default"] == 20
     assert schemas["WebSearchRequest"]["properties"]["timeout_seconds"]["maximum"] == 60
+    assert (
+        "worldwide"
+        in schemas["WebSearchRequest"]["properties"]["region"]["anyOf"][0]["pattern"]
+    )
     delete_schema = openapi["paths"]["/v1/provider-keys/delete"]["post"]["requestBody"][
         "content"
     ]["application/json"]["schema"]["$ref"]
@@ -186,6 +190,31 @@ def test_request_defaults_and_openapi_artifact_are_explicit() -> None:
         "content"
     ]["application/json"]["schema"]["$ref"]
     assert error_schema.endswith("InternalErrorResponse")
+
+
+def test_region_accepts_intent_and_script_locales_but_rejects_arbitrary_values() -> (
+    None
+):
+    intent_lookup = WebSearchRequest(
+        query="company ticker",
+        region="en-US",
+        time_range="year",
+        result_limit=7,
+        safe_search=True,
+    )
+    news_lookup = NewsSearchRequest(
+        query="company news",
+        region="worldwide",
+        time_range="week",
+        result_limit=8,
+        safe_search=False,
+    )
+    script_locale = WebSearchRequest(query="test", region="zh-Hant-TW")
+    assert intent_lookup.region == "en-US"
+    assert news_lookup.region == "worldwide"
+    assert script_locale.region == "zh-Hant-TW"
+    with pytest.raises(ValueError):
+        WebSearchRequest(query="test", region="not_a_region")
 
 
 @pytest.mark.asyncio

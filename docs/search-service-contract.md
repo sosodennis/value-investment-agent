@@ -8,7 +8,7 @@ routing, normalized results, and user-scoped provider credentials.
 
 Every POST operation accepts exactly `context` and `input`. The principal is
 the owner for settings and key operations; callers cannot supply a separate
-user identifier.
+user identifier. This example shows the News mapping.
 
 ```json
 {
@@ -19,11 +19,11 @@ user identifier.
     "deadline_at": "2026-10-23T18:30:00Z"
   },
   "input": {
-    "query": "semiconductor demand",
+    "query": "semiconductor headlines",
     "result_limit": 8,
     "region": "worldwide",
     "time_range": "week",
-    "safe_search": true
+    "safe_search": false
   }
 }
 ```
@@ -57,13 +57,16 @@ Web and news use distinct strict input schemas. Queries are trimmed, must not
 be blank, and are limited to 1-512 characters. `result_limit` is 1-50; web
 defaults to 10 and news to 20. `timeout_seconds` defaults to 30 and is bounded
 to 1-60. `safe_search` defaults to true. `region` and `time_range` are
-optional; use `region: "worldwide"` for a worldwide search. Supported time
-ranges are `day`, `week`, `month`, and `year`.
+optional and must be either a BCP-47 locale tag or the provider-neutral
+`worldwide` sentinel. Examples include `en-US`, `zh-Hant-TW`, and
+`worldwide`. Supported time ranges are `day`, `week`, `month`, and `year`.
 
-The caller-facing mappings are explicit: an Intent-style lookup uses query,
-`region: "worldwide"`, `time_range: "year"`, `result_limit: 7`, and
-`safe_search: true`. News lookups use worldwide region and `safe_search: false`,
-with `week` or `month` windows and caller-selected limits such as 4, 8, or 10.
+The caller-facing mappings preserve each source's region semantics. An
+Intent-style lookup uses `region: "en-US"` (the BCP-47 form of the DDGS
+`us-en` setting), `time_range: "year"`, `result_limit: 7`, and
+`safe_search: true`. News lookups use `region: "worldwide"` and
+`safe_search: false`, with `week` or `month` windows and caller-selected limits
+such as 4, 8, or 10.
 The service does not accept provider-specific engine, category, ranking,
 ticker, or article-fetch controls.
 

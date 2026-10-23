@@ -37,8 +37,13 @@ class TimeRange(StrEnum):
     YEAR = "year"
 
 
-class Region(StrEnum):
-    WORLDWIDE = "worldwide"
+REGION_PATTERN = (
+    r"^(?:worldwide|(?:[A-Za-z]{2,3}(?:-[A-Za-z]{3}){0,3}|[A-Za-z]{4}|"
+    r"[A-Za-z]{5,8})(?:-[A-Za-z]{4})?(?:-(?:[A-Za-z]{2}|[0-9]{3}))?"
+    r"(?:-(?:[A-Za-z0-9]{5,8}|[0-9][A-Za-z0-9]{3}))*"
+    r"(?:-[0-9A-WY-Za-wy-z](?:-[A-Za-z0-9]{2,8})+)*"
+    r"(?:-x(?:-[A-Za-z0-9]{1,8})+)?)$"
+)
 
 
 class EmptyInput(WireModel):
@@ -48,7 +53,7 @@ class EmptyInput(WireModel):
 class SearchRequestBase(WireModel):
     query: str = Field(min_length=1, max_length=512)
     result_limit: int = Field(default=10, ge=1, le=MAX_RESULTS)
-    region: str | Region | None = Field(default=None)
+    region: str | None = Field(default=None, pattern=REGION_PATTERN)
     time_range: TimeRange | None = None
     safe_search: bool = True
     timeout_seconds: int = Field(default=30, ge=1, le=60)
