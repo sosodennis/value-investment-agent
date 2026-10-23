@@ -99,14 +99,8 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Lifecycle manager for the FastAPI application.
-    Constructs and compiles the graph once at startup.
-    """
     logger.info("🚀 [Lifespan] Initializing application resources...")
-    # Initialize DB
     await init_db()
-    # Initialize Graph
     logger.info("🚀 [Lifespan] Building workflow graph...")
     graph = await get_graph()
     app.state.graph = graph
@@ -524,6 +518,7 @@ async def _require_thread_owner(*, user_id: str, thread_id: str) -> None:
 active_tasks: dict[str, asyncio.Task] = {}
 running_queues: dict[str, list[asyncio.Queue]] = defaultdict(list)
 thread_sequences: dict[str, int] = defaultdict(lambda: 1)
+_QUEUE_EOF: None = None
 
 
 @app.middleware("http")
@@ -992,9 +987,8 @@ async def event_generator(
                 await q.put(msg)
         finally:
             reset_provider_principal(provider_context_token)
-            # Signal EOF to all queues.
             for q in running_queues[thread_id][:]:
-                await q.put(None)
+                await q.put(_QUEUE_EOF)
 
             # Cleanup.
             if thread_id in active_tasks:
@@ -1343,8 +1337,7 @@ async def attach_stream(
                 except asyncio.TimeoutError:
                     yield ": keep-alive\n\n"
                     continue
-                if msg is None:
-                    # EOF signal
+                if msg is _QUEUE_EOF:
                     break
                 yield msg
         finally:
