@@ -233,8 +233,10 @@ services:
 
   llm-provider-service:
     build:
-      context: .
-      dockerfile: llm-provider-service/Dockerfile
+      context: ./llm-provider-service
+      dockerfile: Dockerfile
+      additional_contexts:
+        internal-contracts: ./finance-agent-core/src/shared
     platform: linux/arm64
     environment:
       POSTGRES_HOST: postgres

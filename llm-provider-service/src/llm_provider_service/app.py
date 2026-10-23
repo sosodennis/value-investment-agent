@@ -451,48 +451,52 @@ async def provider_keys(action: str, request: Request) -> JSONResponse:
                 503,
                 retryable=True,
             )
+        timeout = _deadline_timeout(context, 10.0)
         user_id = context.principal.subject_id
-        if action == "list":
-            keys = await runtime.settings.list_keys(user_id=user_id)
-            result = KeyListResult(keys=tuple(_summary(key) for key in keys))
-        elif action == "create":
-            payload = KeyCreateInput.model_validate(raw_input)
-            key = await runtime.settings.add_key(
-                user_id=user_id,
-                key=payload.api_key.get_secret_value(),
-                label=payload.label,
-            )
-            result = KeyMutationResult(key=_summary(key))
-        elif action == "replace":
-            payload = KeyReplaceInput.model_validate(raw_input)
-            key = await runtime.settings.replace_key(
-                user_id=user_id,
-                key_id=payload.key_id,
-                key=payload.api_key.get_secret_value(),
-                label=payload.label,
-            )
-            result = KeyMutationResult(key=_summary(key))
-        elif action == "test":
-            payload = KeyIdInput.model_validate(raw_input)
-            passed = await runtime.settings.test_key(
-                user_id=user_id, key_id=payload.key_id
-            )
-            result = KeyTestResult(
-                id=payload.key_id,
-                passed=passed,
-                status="healthy" if passed else "unavailable",
-            )
-        elif action == "delete":
-            payload = KeyIdInput.model_validate(raw_input)
-            await runtime.settings.delete_key(user_id=user_id, key_id=payload.key_id)
-            result = KeyDeleteResult()
-        else:
-            return _error(
-                correlation_id,
-                "invalid_argument",
-                "provider-key operation is not supported",
-                404,
-            )
+        async with asyncio.timeout(timeout):
+            if action == "list":
+                keys = await runtime.settings.list_keys(user_id=user_id)
+                result = KeyListResult(keys=tuple(_summary(key) for key in keys))
+            elif action == "create":
+                payload = KeyCreateInput.model_validate(raw_input)
+                key = await runtime.settings.add_key(
+                    user_id=user_id,
+                    key=payload.api_key.get_secret_value(),
+                    label=payload.label,
+                )
+                result = KeyMutationResult(key=_summary(key))
+            elif action == "replace":
+                payload = KeyReplaceInput.model_validate(raw_input)
+                key = await runtime.settings.replace_key(
+                    user_id=user_id,
+                    key_id=payload.key_id,
+                    key=payload.api_key.get_secret_value(),
+                    label=payload.label,
+                )
+                result = KeyMutationResult(key=_summary(key))
+            elif action == "test":
+                payload = KeyIdInput.model_validate(raw_input)
+                passed = await runtime.settings.test_key(
+                    user_id=user_id, key_id=payload.key_id
+                )
+                result = KeyTestResult(
+                    id=payload.key_id,
+                    passed=passed,
+                    status="healthy" if passed else "unavailable",
+                )
+            elif action == "delete":
+                payload = KeyIdInput.model_validate(raw_input)
+                await runtime.settings.delete_key(
+                    user_id=user_id, key_id=payload.key_id
+                )
+                result = KeyDeleteResult()
+            else:
+                return _error(
+                    correlation_id,
+                    "invalid_argument",
+                    "provider-key operation is not supported",
+                    404,
+                )
         return JSONResponse(content=_success(context, result.model_dump(mode="json")))
     except InternalAuthenticationError as exc:
         return _error(correlation_id, exc.code, str(exc), 401)
@@ -542,22 +546,24 @@ async def settings(action: str, request: Request) -> JSONResponse:
                 503,
                 retryable=True,
             )
-        if action == "read":
-            selected, models = await runtime.settings.selected_model_settings()
-        elif action == "update":
-            payload = SettingsUpdateInput.model_validate(raw_input)
-            await runtime.settings.update_selected_model(
-                model_id=payload.selected_model,
-                user_id=context.principal.subject_id,
-            )
-            selected, models = await runtime.settings.selected_model_settings()
-        else:
-            return _error(
-                correlation_id,
-                "invalid_argument",
-                "settings operation is not supported",
-                404,
-            )
+        timeout = _deadline_timeout(context, 10.0)
+        async with asyncio.timeout(timeout):
+            if action == "read":
+                selected, models = await runtime.settings.selected_model_settings()
+            elif action == "update":
+                payload = SettingsUpdateInput.model_validate(raw_input)
+                await runtime.settings.update_selected_model(
+                    model_id=payload.selected_model,
+                    user_id=context.principal.subject_id,
+                )
+                selected, models = await runtime.settings.selected_model_settings()
+            else:
+                return _error(
+                    correlation_id,
+                    "invalid_argument",
+                    "settings operation is not supported",
+                    404,
+                )
         result = SettingsResult(
             selected_model=selected,
             models=tuple(

@@ -136,51 +136,56 @@ class ProviderSettingsService:
             key_id = validate_model_id(key_id)
         except ValueError as exc:
             raise ProviderSettingsError("invalid_key_id") from exc
-        if not await self._ownership.owns(
-            user_id=user_id, resource_type=RESOURCE_TYPE, resource_id=key_id
-        ):
-            raise ProviderSettingsError("not_found")
-        existing_keys = await self._gateway.list_managed()
-        old_key = next((item for item in existing_keys if item.id == key_id), None)
-        if old_key is None:
-            raise ProviderSettingsError("not_found")
-        if old_key.fingerprint == key_fingerprint(key):
-            raise ProviderSettingsError("replacement_must_differ")
-        await self._test_key_material(key)
+        async with self._ownership.replacement_lock(user_id=user_id, key_id=key_id):
+            if not await self._ownership.owns(
+                user_id=user_id, resource_type=RESOURCE_TYPE, resource_id=key_id
+            ):
+                raise ProviderSettingsError("not_found")
+            existing_keys = await self._gateway.list_managed()
+            old_key = next((item for item in existing_keys if item.id == key_id), None)
+            if old_key is None:
+                raise ProviderSettingsError("not_found")
+            if old_key.replacement_retire_at is not None:
+                raise ProviderSettingsError("replacement_in_progress")
+            if old_key.fingerprint == key_fingerprint(key):
+                raise ProviderSettingsError("replacement_must_differ")
+            await self._test_key_material(key)
 
-        owned_ids = await self._ownership.owned_ids(
-            user_id=user_id, resource_type=RESOURCE_TYPE
-        )
-        replacement = await self._gateway.add_key(
-            key=key,
-            label=label,
-            model=await self._settings.get_selected_model(),
-            model_name=user_route_alias(user_id),
-            existing_ids=owned_ids,
-        )
-        if not await self._ownership.claim(
-            user_id=user_id,
-            resource_type=RESOURCE_TYPE,
-            resource_id=replacement.id,
-            fingerprint=replacement.fingerprint,
-        ):
-            if replacement.id not in owned_ids:
+            owned_ids = await self._ownership.owned_ids(
+                user_id=user_id, resource_type=RESOURCE_TYPE
+            )
+            replacement = await self._gateway.add_key(
+                key=key,
+                label=label,
+                model=await self._settings.get_selected_model(),
+                model_name=user_route_alias(user_id),
+                existing_ids=owned_ids,
+            )
+            if not await self._ownership.claim(
+                user_id=user_id,
+                resource_type=RESOURCE_TYPE,
+                resource_id=replacement.id,
+                fingerprint=replacement.fingerprint,
+            ):
+                if replacement.id not in owned_ids:
+                    await self._gateway.delete_key(replacement.id)
+                raise ProviderSettingsError("already_owned")
+            grace_seconds = min(
+                3600,
+                max(60, int(os.getenv("LLM_KEY_REPLACEMENT_GRACE_SECONDS", "900"))),
+            )
+            try:
+                await self._gateway.mark_replacement_grace(
+                    key_id,
+                    retire_at=datetime.now(UTC) + timedelta(seconds=grace_seconds),
+                )
+            except Exception:
                 await self._gateway.delete_key(replacement.id)
-            raise ProviderSettingsError("already_owned")
-        grace_seconds = min(
-            3600, max(60, int(os.getenv("LLM_KEY_REPLACEMENT_GRACE_SECONDS", "900")))
-        )
-        try:
-            await self._gateway.mark_replacement_grace(
-                key_id, retire_at=datetime.now(UTC) + timedelta(seconds=grace_seconds)
-            )
-        except Exception:
-            await self._gateway.delete_key(replacement.id)
-            await self._ownership.release(
-                resource_type=RESOURCE_TYPE, resource_id=replacement.id
-            )
-            raise
-        return replacement
+                await self._ownership.release(
+                    resource_type=RESOURCE_TYPE, resource_id=replacement.id
+                )
+                raise
+            return replacement
 
     async def test_key(self, *, user_id: str, key_id: str) -> bool:
         try:

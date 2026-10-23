@@ -915,9 +915,6 @@ class LiteLLMGatewayProvider:
         resolved_route: ResolvedModelRoute,
     ) -> dict[str, object]:
         payload: dict[str, object] = {
-            # The stable alias selects the managed key pool. The selected
-            # upstream model is synchronized into its deployments by the
-            # settings service before requests are sent.
             "model": resolved_route.gateway_alias,
             "messages": [
                 self._message_payload(message) for message in request.messages

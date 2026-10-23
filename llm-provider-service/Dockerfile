@@ -8,12 +8,12 @@ WORKDIR /app
 ENV PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:${PATH}"
 
-COPY llm-provider-service/pyproject.toml ./
+COPY pyproject.toml ./
 RUN python -m pip install --no-cache-dir uv==0.11.28 \
     && uv sync --no-dev --no-install-project
 
-COPY finance-agent-core/src/shared/internal_services ./src/shared/internal_services
-COPY llm-provider-service/src ./src/llm_provider_service
+COPY --from=internal-contracts internal_services ./src/shared/internal_services
+COPY src ./src/llm_provider_service
 RUN uv sync --no-dev
 
 EXPOSE 8002

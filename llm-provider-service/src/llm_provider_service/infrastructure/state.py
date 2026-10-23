@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from sqlalchemy import String, delete, select, text
 from sqlalchemy.exc import IntegrityError
@@ -74,6 +76,24 @@ class ProviderState:
 
     async def close(self) -> None:
         await self._engine.dispose()
+
+    @asynccontextmanager
+    async def replacement_lock(
+        self, *, user_id: str, key_id: str
+    ) -> AsyncIterator[None]:
+        lock_key = f"llm-provider-replacement:{user_id}:{key_id}"
+        async with self._engine.connect() as connection:
+            await connection.execute(
+                text("SELECT pg_advisory_lock(hashtextextended(:lock_key, 0))"),
+                {"lock_key": lock_key},
+            )
+            try:
+                yield
+            finally:
+                await connection.execute(
+                    text("SELECT pg_advisory_unlock(hashtextextended(:lock_key, 0))"),
+                    {"lock_key": lock_key},
+                )
 
     async def claim(
         self,

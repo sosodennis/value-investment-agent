@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Collection, Sequence
+from contextlib import AbstractAsyncContextManager
 from datetime import datetime
 from typing import Protocol
 
@@ -36,6 +37,10 @@ class KeyGateway(Protocol):
 
 
 class OwnershipPort(Protocol):
+    def replacement_lock(
+        self, *, user_id: str, key_id: str
+    ) -> AbstractAsyncContextManager[None]: ...
+
     async def claim(
         self,
         *,

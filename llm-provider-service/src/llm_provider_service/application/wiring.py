@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from contextlib import AbstractAsyncContextManager
 
 from src.llm_provider_service.application.ports import ModelCatalog
 from src.llm_provider_service.application.settings_service import (
@@ -28,6 +29,11 @@ from src.llm_provider_service.infrastructure.state import ProviderState
 class _Ownership:
     def __init__(self, state: ProviderState) -> None:
         self._state = state
+
+    def replacement_lock(
+        self, *, user_id: str, key_id: str
+    ) -> AbstractAsyncContextManager[None]:
+        return self._state.replacement_lock(user_id=user_id, key_id=key_id)
 
     async def claim(
         self,

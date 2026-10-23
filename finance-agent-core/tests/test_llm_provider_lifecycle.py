@@ -9,8 +9,7 @@ from src.llm_provider.application import wiring
 @pytest.mark.asyncio
 async def test_gateway_provider_is_reused_and_closed_at_shutdown(monkeypatch) -> None:
     class FakeProvider:
-        def __init__(self, config: object) -> None:
-            self.config = config
+        def __init__(self) -> None:
             self.closed = False
 
         async def aclose(self) -> None:
