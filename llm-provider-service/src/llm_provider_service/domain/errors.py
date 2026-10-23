@@ -1,0 +1,15 @@
+from __future__ import annotations
+
+
+class ProviderSettingsError(RuntimeError):
+    def __init__(self, code: str) -> None:
+        self.code = code
+        super().__init__(code)
+
+
+class OpenRouterKeyTestError(RuntimeError):
+    pass
+
+
+class OpenRouterModelsError(RuntimeError):
+    pass

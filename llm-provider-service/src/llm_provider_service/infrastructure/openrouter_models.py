@@ -1,5 +1,3 @@
-"""OpenRouter model catalogue access and free-model policy."""
-
 from __future__ import annotations
 
 import asyncio
@@ -8,8 +6,8 @@ from collections.abc import Mapping
 
 import httpx
 
-from src.llm_provider.domain.errors import OpenRouterModelsError
-from src.llm_provider.domain.provider_models import OpenRouterModel
+from src.llm_provider_service.domain.errors import OpenRouterModelsError
+from src.llm_provider_service.domain.provider_models import OpenRouterModel
 
 OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
 FREE_ROUTER_ID = "openrouter/free"

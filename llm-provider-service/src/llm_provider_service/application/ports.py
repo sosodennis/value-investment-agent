@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Collection, Sequence
+from contextlib import AbstractAsyncContextManager
 from datetime import datetime
 from typing import Protocol
 
-from src.llm_provider.domain.provider_models import (
+from src.llm_provider_service.domain.provider_models import (
     ManagedProviderKey,
     OpenRouterModel,
     ProviderKeyHealth,
@@ -36,12 +37,17 @@ class KeyGateway(Protocol):
 
 
 class OwnershipPort(Protocol):
+    def replacement_lock(
+        self, *, user_id: str, key_id: str
+    ) -> AbstractAsyncContextManager[None]: ...
+
     async def claim(
         self,
         *,
         user_id: str,
         resource_type: str,
         resource_id: str,
+        fingerprint: str | None = None,
     ) -> bool: ...
 
     async def owns(
@@ -55,6 +61,10 @@ class OwnershipPort(Protocol):
     async def owned_ids(self, *, user_id: str, resource_type: str) -> set[str]: ...
 
     async def release(self, *, resource_type: str, resource_id: str) -> None: ...
+
+    async def find_by_fingerprint(
+        self, *, user_id: str, fingerprint: str
+    ) -> str | None: ...
 
 
 class SelectedModelSettings(Protocol):

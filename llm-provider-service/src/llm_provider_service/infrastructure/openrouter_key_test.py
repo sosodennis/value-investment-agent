@@ -1,10 +1,8 @@
-"""OpenRouter credential probe with a deliberately small response contract."""
-
 from __future__ import annotations
 
 import httpx
 
-from src.llm_provider.domain.errors import OpenRouterKeyTestError
+from src.llm_provider_service.domain.errors import OpenRouterKeyTestError
 
 
 async def test_openrouter_key(

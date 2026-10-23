@@ -68,14 +68,11 @@ from src.interface.events.protocol import AgentEvent
 from src.interface.events.schemas import AgentOutputArtifact
 from src.llm_provider.entrypoint import (
     ProviderPrincipal,
-    ProviderSettingsError,
-    cleanup_expired_replacements,
     close_llm_provider,
     llm_settings_router,
     provider_keys_router,
     reset_provider_principal,
     set_provider_principal,
-    synchronize_selected_model,
 )
 from src.model_inference.entrypoint import (
     close_model_inference,
@@ -97,7 +94,6 @@ from src.shared.kernel.tools.logger import (
     clear_log_context,
     get_logger,
     log_context,
-    log_event,
 )
 from src.shared.kernel.types import InterruptResumePayload, JSONObject
 from src.workflow.graph import get_graph
@@ -105,39 +101,10 @@ from src.workflow.graph import get_graph
 logger = get_logger(__name__)
 
 
-async def _provider_key_cleanup_loop() -> None:
-    while True:
-        try:
-            deleted = await cleanup_expired_replacements()
-            if deleted:
-                log_event(
-                    logger,
-                    event="llm_key_replacement_grace_expired",
-                    message="Expired replacement keys were removed from the gateway",
-                    fields={"deleted_count": deleted},
-                )
-        except asyncio.CancelledError:
-            raise
-        except (HTTPException, ProviderSettingsError):
-            logger.warning("LLM replacement cleanup could not reach the gateway")
-        await asyncio.sleep(60)
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Lifecycle manager for the FastAPI application.
-    Constructs and compiles the graph once at startup.
-    """
     logger.info("🚀 [Lifespan] Initializing application resources...")
-    # Initialize DB
     await init_db()
-    try:
-        await synchronize_selected_model()
-    except (HTTPException, ProviderSettingsError) as exc:
-        logger.warning("LLM model synchronization skipped: %s", str(exc))
-
-    # Initialize Graph
     logger.info("🚀 [Lifespan] Building workflow graph...")
     graph = await get_graph()
     app.state.graph = graph
@@ -177,13 +144,10 @@ async def lifespan(app: FastAPI):
                 "⚠️ [Lifespan] Dependency matcher warmup failed: %s", str(exc)
             )
 
-    provider_key_cleanup = asyncio.create_task(_provider_key_cleanup_loop())
     logger.info("✅ [Lifespan] Initialization complete.")
     try:
         yield
     finally:
-        provider_key_cleanup.cancel()
-        await asyncio.gather(provider_key_cleanup, return_exceptions=True)
         await close_llm_provider()
         await close_model_inference()
         await close_shared_async_client()
@@ -558,6 +522,7 @@ async def _require_thread_owner(*, user_id: str, thread_id: str) -> None:
 active_tasks: dict[str, asyncio.Task] = {}
 running_queues: dict[str, list[asyncio.Queue]] = defaultdict(list)
 thread_sequences: dict[str, int] = defaultdict(lambda: 1)
+_QUEUE_EOF: None = None
 
 
 @app.middleware("http")
@@ -1028,9 +993,8 @@ async def event_generator(
         finally:
             reset_provider_principal(provider_context_token)
             reset_inference_principal(inference_context_token)
-            # Signal EOF to all queues.
             for q in running_queues[thread_id][:]:
-                await q.put(None)
+                await q.put(_QUEUE_EOF)
 
             # Cleanup.
             if thread_id in active_tasks:
@@ -1379,8 +1343,7 @@ async def attach_stream(
                 except asyncio.TimeoutError:
                     yield ": keep-alive\n\n"
                     continue
-                if msg is None:
-                    # EOF signal
+                if msg is _QUEUE_EOF:
                     break
                 yield msg
         finally:

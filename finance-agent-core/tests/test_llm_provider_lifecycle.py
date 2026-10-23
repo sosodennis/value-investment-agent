@@ -9,16 +9,16 @@ from src.llm_provider.application import wiring
 @pytest.mark.asyncio
 async def test_gateway_provider_is_reused_and_closed_at_shutdown(monkeypatch) -> None:
     class FakeProvider:
-        def __init__(self, config: object) -> None:
-            self.config = config
+        def __init__(self) -> None:
             self.closed = False
 
         async def aclose(self) -> None:
             self.closed = True
 
     await provider_module.close_llm_provider()
-    monkeypatch.setenv("LLM_GATEWAY_BASE_URL", "http://gateway:4000")
-    monkeypatch.setattr(wiring, "LiteLLMGatewayProvider", FakeProvider)
+    monkeypatch.setenv("LLM_PROVIDER_SERVICE_URL", "http://provider:8002")
+    monkeypatch.setenv("LLM_PROVIDER_SERVICE_TOKEN", "service-token")
+    monkeypatch.setattr(wiring, "LLMProviderServiceClient", FakeProvider)
 
     first_provider = provider_module.get_llm_provider()
     second_provider = provider_module.get_llm_provider()
@@ -34,3 +34,13 @@ async def test_gateway_provider_is_reused_and_closed_at_shutdown(monkeypatch) ->
     assert replacement_provider is not first_provider
     await provider_module.close_llm_provider()
     assert replacement_provider.closed is True
+
+
+def test_provider_service_configuration_is_required_without_local_fallback(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("LLM_PROVIDER_SERVICE_URL", raising=False)
+    monkeypatch.delenv("LLM_PROVIDER_SERVICE_TOKEN", raising=False)
+
+    with pytest.raises(RuntimeError, match="LLM_PROVIDER_SERVICE_URL is required"):
+        provider_module.get_llm_provider()

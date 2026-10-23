@@ -1,0 +1,9 @@
+x-local-provider-auth: &local-provider-auth
+  LLM_PROVIDER_SERVICE_TOKEN: ${LLM_PROVIDER_SERVICE_TOKEN:-local-development-only-token}
+
+services:
+  backend:
+    environment: *local-provider-auth
+
+  llm-provider-service:
+    environment: *local-provider-auth

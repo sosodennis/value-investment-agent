@@ -1,5 +1,3 @@
-"""OpenAI-compatible adapter for the internal LiteLLM gateway."""
-
 from __future__ import annotations
 
 import json
@@ -19,8 +17,8 @@ from typing import TypeVar, cast
 import httpx
 from pydantic import BaseModel, ValidationError
 
-from src.llm_provider.application.context import get_provider_principal
-from src.llm_provider.domain.contracts import (
+from src.llm_provider_service.application.context import get_provider_principal
+from src.llm_provider_service.domain.contracts import (
     ChatMessage,
     CompletionRequest,
     CompletionResult,
@@ -35,7 +33,7 @@ from src.llm_provider.domain.contracts import (
     StructuredRequest,
     Usage,
 )
-from src.llm_provider.domain.routes import UserScopedRouteResolver
+from src.llm_provider_service.domain.routes import UserScopedRouteResolver
 
 from .telemetry import LLMProviderTelemetry
 
@@ -80,8 +78,6 @@ def _env_bool(name: str, default: bool) -> bool:
 
 @dataclass(frozen=True)
 class LiteLLMGatewayConfig:
-    """Runtime settings for the project-to-gateway data plane."""
-
     base_url: str
     api_key: str
     max_attempts: int = _MAX_RETRY_ATTEMPTS
@@ -166,13 +162,6 @@ class LiteLLMGatewayConfig:
 
 
 class LiteLLMGatewayProvider:
-    """Translate the project contract to LiteLLM's OpenAI-compatible API.
-
-    Retry is deliberately bounded here and only covers transport/transient
-    status failures. Credential selection remains a gateway concern until the
-    POC proves its failover behavior.
-    """
-
     provider_name = "litellm-gateway"
 
     def __init__(
@@ -915,9 +904,6 @@ class LiteLLMGatewayProvider:
         resolved_route: ResolvedModelRoute,
     ) -> dict[str, object]:
         payload: dict[str, object] = {
-            # The stable alias selects the managed key pool. The selected
-            # upstream model is synchronized into its deployments by the
-            # settings service before requests are sent.
             "model": resolved_route.gateway_alias,
             "messages": [
                 self._message_payload(message) for message in request.messages

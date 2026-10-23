@@ -7,10 +7,12 @@ from src.auth.entrypoint import (
     require_current_user,
     require_current_user_mutation,
 )
-from src.llm_provider.application.settings_service import ProviderSettingsService
 from src.llm_provider.application.wiring import get_provider_settings_service
 from src.llm_provider.domain.errors import ProviderSettingsError
 from src.llm_provider.domain.provider_models import ManagedProviderKey
+from src.llm_provider.infrastructure.remote_client import (
+    LLMProviderServiceSettingsClient,
+)
 from src.llm_provider.interface.contracts import (
     LlmSettingsResponse,
     LlmSettingsUpdateRequest,
@@ -71,7 +73,7 @@ def _raise_http_error(error: ProviderSettingsError) -> None:
 @provider_keys_router.get("", response_model=list[ProviderKeyResponse])
 async def list_provider_keys(
     principal: Principal = Depends(require_current_user),
-    service: ProviderSettingsService = Depends(get_provider_settings_service),
+    service: LLMProviderServiceSettingsClient = Depends(get_provider_settings_service),
 ) -> list[ProviderKeyResponse]:
     try:
         return [
@@ -86,7 +88,7 @@ async def list_provider_keys(
 async def add_provider_key(
     request: ProviderKeyCreateRequest,
     principal: Principal = Depends(require_current_user_mutation),
-    service: ProviderSettingsService = Depends(get_provider_settings_service),
+    service: LLMProviderServiceSettingsClient = Depends(get_provider_settings_service),
 ) -> ProviderKeyResponse:
     try:
         key = await service.add_key(
@@ -106,7 +108,7 @@ async def replace_provider_key(
     key_id: str,
     request: ProviderKeyCreateRequest,
     principal: Principal = Depends(require_current_user_mutation),
-    service: ProviderSettingsService = Depends(get_provider_settings_service),
+    service: LLMProviderServiceSettingsClient = Depends(get_provider_settings_service),
 ) -> ProviderKeyResponse:
     try:
         key = await service.replace_key(
@@ -124,7 +126,7 @@ async def replace_provider_key(
 async def test_provider_key(
     key_id: str,
     principal: Principal = Depends(require_current_user_mutation),
-    service: ProviderSettingsService = Depends(get_provider_settings_service),
+    service: LLMProviderServiceSettingsClient = Depends(get_provider_settings_service),
 ) -> ProviderKeyTestResponse:
     try:
         await service.test_key(user_id=principal.user_id, key_id=key_id)
@@ -142,7 +144,7 @@ async def test_provider_key(
 async def delete_provider_key(
     key_id: str,
     principal: Principal = Depends(require_current_user_mutation),
-    service: ProviderSettingsService = Depends(get_provider_settings_service),
+    service: LLMProviderServiceSettingsClient = Depends(get_provider_settings_service),
 ) -> None:
     try:
         await service.delete_key(user_id=principal.user_id, key_id=key_id)
@@ -153,10 +155,12 @@ async def delete_provider_key(
 @llm_settings_router.get("", response_model=LlmSettingsResponse)
 async def read_llm_settings(
     _principal: Principal = Depends(require_current_user),
-    service: ProviderSettingsService = Depends(get_provider_settings_service),
+    service: LLMProviderServiceSettingsClient = Depends(get_provider_settings_service),
 ) -> LlmSettingsResponse:
     try:
-        selected, models = await service.selected_model_settings()
+        selected, models = await service.selected_model_settings(
+            user_id=_principal.subject
+        )
     except ProviderSettingsError as exc:
         _raise_http_error(exc)
     return LlmSettingsResponse(
@@ -178,7 +182,7 @@ async def read_llm_settings(
 async def update_llm_settings(
     request: LlmSettingsUpdateRequest,
     principal: Principal = Depends(require_current_user_mutation),
-    service: ProviderSettingsService = Depends(get_provider_settings_service),
+    service: LLMProviderServiceSettingsClient = Depends(get_provider_settings_service),
 ) -> LlmSettingsResponse:
     try:
         await service.update_selected_model(

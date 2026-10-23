@@ -7,21 +7,33 @@ to an environment file tracked by Git.
 
 ## Preflight
 
-Set a deployment-only `LITELLM_MASTER_KEY` in the shell or an ignored local
-environment file. For a staging run, also prepare two disposable OpenRouter
-keys and record only their labels and fingerprints. Never paste the raw values
-into logs, issue comments, test fixtures, or screenshots.
+Set deployment-only `LITELLM_MASTER_KEY` and `LLM_PROVIDER_SERVICE_TOKEN`
+values through the deployment secret manager. For a staging run, also prepare
+two disposable OpenRouter keys and record only their labels and fingerprints.
+Never paste raw values into logs, issue comments, test fixtures, or screenshots.
+
+Use the production overlay and list both Compose files explicitly. This bypasses
+the automatically loaded local development override, and Compose rejects a
+missing provider service token.
 
 Validate the rendered Compose file and start the shared dependencies:
 
 ```bash
 LITELLM_MASTER_KEY="$LITELLM_MASTER_KEY" \
+LLM_PROVIDER_SERVICE_TOKEN="$LLM_PROVIDER_SERVICE_TOKEN" \
 LLM_GATEWAY_WORKERS=2 \
-docker compose --profile llm-gateway config --quiet
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.production.yml \
+  --profile llm-gateway config --quiet
 
 LITELLM_MASTER_KEY="$LITELLM_MASTER_KEY" \
+LLM_PROVIDER_SERVICE_TOKEN="$LLM_PROVIDER_SERVICE_TOKEN" \
 LLM_GATEWAY_WORKERS=2 \
-docker compose --profile llm-gateway up -d postgres redis llm-gateway-db-init llm-gateway
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.production.yml \
+  --profile llm-gateway up -d postgres redis llm-gateway-db-init llm-gateway
 
 ./scripts/litellm_poc_smoke.sh
 ```
