@@ -13,8 +13,8 @@
 | Check | Result | Evidence |
 | --- | --- | --- |
 | Service lint and formatting | PASS | `cd llm-provider-service && uv run ruff check src tests` |
-| Service lint, compile, and tests | PASS | `cd llm-provider-service && uv run ruff check src tests && uv run python -m compileall -q src tests && uv run pytest tests -q` -> 10 passed |
-| Backend provider boundary tests | PASS | `cd finance-agent-core && uv run ruff check src/llm_provider/application/wiring.py src/llm_provider/composition/routes.py src/llm_provider/infrastructure/remote_client.py tests/test_llm_provider_lifecycle.py tests/test_llm_settings_api.py && uv run pytest tests/test_llm_provider_lifecycle.py tests/test_llm_settings_api.py -q` -> 4 passed |
+| Service lint, compile, and tests | PASS | `cd llm-provider-service && uv run --group dev ruff check src tests && uv run --group dev python -m compileall -q src tests && uv run --group dev pytest tests -q` -> 11 passed, 1 skipped (PostgreSQL opt-in test) |
+| Backend provider boundary tests | PASS | `cd finance-agent-core && uv run ruff check src/llm_provider/application/wiring.py src/llm_provider/composition/routes.py src/llm_provider/infrastructure/remote_client.py tests/test_llm_provider_lifecycle.py tests/test_llm_settings_api.py && uv run pytest tests/test_llm_provider_lifecycle.py tests/test_llm_settings_api.py -q` -> 6 passed |
 | Compose default configuration | PASS | `LITELLM_MASTER_KEY=disposable-interpolation-only docker compose -p value-investment-agent-issue120-review config --quiet` |
 | Compose gateway profile | PASS | `LITELLM_MASTER_KEY=disposable-interpolation-only docker compose -p value-investment-agent-issue120-review --profile llm-gateway config --quiet` |
 | Inference named-context build checks | PASS | `LITELLM_MASTER_KEY=compose-validation-only docker compose build --check model-inference-news model-inference-fls` -> both checks completed with no warnings |
@@ -26,8 +26,8 @@
 
 - The service startup migration reads legacy ownership/settings tables when present. This preserves existing deployments but should be removed after a separately managed data migration is complete.
 - `/readyz` verifies local initialization and internal authentication configuration; it does not probe LiteLLM admin connectivity. Gateway failures are surfaced through provider operation errors.
-- Live Postgres, Redis, LiteLLM, and OpenRouter integration was not run in this isolated acceptance pass.
-- The service image was built; no live Postgres, Redis, LiteLLM, or OpenRouter integration was run.
+- The PostgreSQL replacement-lock integration test passed against an isolated Compose PostgreSQL instance; the default service test run skips this opt-in test.
+- A full live Redis, LiteLLM, and OpenRouter stack integration was not run in this isolated acceptance pass.
 
 ## Fix round
 
@@ -35,8 +35,10 @@
 - Wrapped provider-key and settings operations in deadline-scoped timeouts.
 - Added a PostgreSQL advisory lock and lifecycle guard so concurrent replacement of one old key has a single winner across replicas.
 - Switched the provider image to a service-local build context and removed the internal gateway narration comment.
-- Final report commit and result SHA: `b291e4ff1fed2d2a40a56422347bad3897dcd5fe`.
+- Kept maintenance task ownership in the provider service ASGI lifespan, added cleanup for partial runtime startup failures, and limited lifecycle failure logs to exception types.
+- Added an ASGI lifespan test proving partial startup failure closes the provider runtime.
+- Final code result SHA: `0b526e597ed4dd8acfafecfe93450bd4cfd4164c`.
 
 ## Delegation note
 
-The first architecture review was accidentally delegated with `gpt-6-sol` rather than the requested `gpt-6.1-sol`. The corrected review used `gpt-6.1-sol` with the requested reasoning level; no implementation decision depends solely on the first review.
+The first architecture review was accidentally delegated with `gpt-6-sol` rather than the requested `gpt-6.1-sol`. The corrected review used `gpt-6.1-sol` with the requested reasoning level; no implementation decision depends solely on the first review. The cross-judge selected the existing ASGI lifespan ownership (rather than moving the maintenance task into `ProviderRuntime`) and required partial-startup cleanup plus sanitized exception-type logging; both changes are included above.
