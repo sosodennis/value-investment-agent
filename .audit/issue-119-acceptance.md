@@ -4,9 +4,9 @@
 
 - Base SHA: `84c563ceecb1500c6bb2a5800e7b8c0aca89fb5e` (`origin/main`)
 - Branch: `codex/issue-118-119-contract`
-- Result SHA: `87020fc902b263eeb6d8120622205392a7152c4a` for implementation; the final report commit is added below
+- Result SHA: `87020fc902b263eeb6d8120622205392a7152c4a` (implementation commit)
 - Verdict: **PASS** for the shared contract scope in Issue 119
-- PR: to be filled after push
+- PR: https://github.com/sosodennis/value-investment-agent/pull/127
 
 ## Changed files
 
@@ -19,9 +19,20 @@
 - `.audit/issue-119-architecture.md` records ownership, alternatives, and the synthesis decision.
 - `.audit/issue-119.tsv` records the decision trail.
 
+## Baseline evidence
+
+- `finance-agent-core/src/auth/interface/dependencies.py:31-40` authenticates the browser session and derives the API principal.
+- `finance-agent-core/src/auth/interface/contracts.py:10-21` maps the authenticated user record to `Principal.user_id` and `subject`.
+- `finance-agent-core/src/llm_provider/domain/contracts.py:55-66,113-127` has an LLM-specific user principal and request ID/timeout fields.
+- `finance-agent-core/src/model_inference/domain/contracts.py:54-59` carries inference operation, request ID, and a relative millisecond deadline.
+- `finance-agent-core/src/model_inference/infrastructure/http_adapter.py:80-107` sends an optional bearer token and `X-Request-ID` header.
+- `finance-agent-core/src/shared/kernel/README.md:5-24` assigns stable, non-provider primitives to shared code and excludes clients and API DTO assembly.
+- `docker-compose.yml:1-37` configures inference readiness separately from service request contracts.
+- `finance-agent-core/src/agents/news/infrastructure/search/ddg_news_search_provider.py:7-28` and `finance-agent-core/src/agents/intent/application/ports.py:11-32` show Search currently lives behind agent-owned providers and ports.
+
 ## Verification
 
-All commands ran from the final worktree state.
+All commands ran against the implementation commit tree. The report and audit trail were updated afterward.
 
 | Command | Result |
 | --- | --- |
@@ -31,7 +42,11 @@ All commands ran from the final worktree state.
 | `python3 scripts/architecture_guard.py` | **PASS**, no boundary violations |
 | `git diff --check` | **PASS** |
 
+The implementation result SHA is the code commit above. The acceptance report and PR metadata are committed in later documentation commits on the PR branch.
+
 The architect arena dispatch was attempted as required by the pstack architecture workflow. The host rejected the dispatch because the agent thread limit was reached. The design record names that limitation and compares the nested context envelope against a header-only alternative and per-service shared DTOs.
+
+The agent thread limit also prevented an independent cross-model review of the decision trail. The implementation was reviewed locally, the staged diff passed repository hooks, and the automated checks above passed.
 
 ## Integration instructions for #120 and #121
 
@@ -44,6 +59,10 @@ The architect arena dispatch was attempted as required by the pstack architectur
 7. Use `tests/fakes/internal_capability_service.py` as the contract-test pattern. The fake must remain independent of backend implementation modules; add service-specific fake payloads and tests in each service repository or service package.
 8. Use the absolute deadline as a decreasing request budget. Compute local transport timeout from remaining time and do not reset the budget at each hop.
 
+For #120, map `context.principal.subject_id` to the service's existing owner key at the authenticated service boundary. Keep key ownership checks and all LLM/provider request and response schemas inside the LLM service. Echo the shared correlation/version fields around each service-owned response and error.
+
+For #121, keep `news.sentiment` and `sec.fls` as service-owned operations. Replace the relative `deadline_ms` as the wire source with the shared absolute `deadline_at`; at the service boundary, calculate remaining monotonic time once and cap it by the existing operation policy. Retain the service-specific model revision and result schemas. Return shared correlation/version metadata and expose readiness only after required model loading and warmup complete.
+
 ## Remaining gaps
 
 - This issue does not add HTTP middleware to LLM, inference, or Search. #120 and #121 must wire these primitives into their service boundaries.
@@ -51,3 +70,4 @@ The architect arena dispatch was attempted as required by the pstack architectur
 - Readiness currently has a shared response shape only. Each service must implement its own dependency and model/provider readiness checks.
 - The repository's existing Compose file has service-specific healthchecks. #120 and #121 should add or update service wiring without introducing fixed `container_name`, ports, or shared mutable volumes.
 - Existing full-suite tests were not run because this change has no provider runtime or agent workflow changes. Focused regression coverage and the architecture guard passed.
+- The agent thread limit prevented parallel architecture candidates, a cross-model trail review, and the pstack comment review. The architecture sketch records the candidate comparison and this limitation.
