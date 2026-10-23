@@ -1,8 +1,86 @@
+import json
+import os
+import subprocess
 from pathlib import Path
 
 import yaml
 
 ROOT = Path(__file__).parents[2]
+LOCAL_PROVIDER_TOKEN = "local-development-only-token"
+TEST_MASTER_KEY = "compose-test-master-key"
+TEST_PRODUCTION_PROVIDER_TOKEN = "compose-test-production-token"
+
+
+def _compose_config(
+    *files: str, provider_token: str | None
+) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    env.pop("COMPOSE_FILE", None)
+    env.pop("LLM_PROVIDER_SERVICE_TOKEN", None)
+    env["LITELLM_MASTER_KEY"] = TEST_MASTER_KEY
+    if provider_token is not None:
+        env["LLM_PROVIDER_SERVICE_TOKEN"] = provider_token
+
+    return subprocess.run(
+        [
+            "docker",
+            "compose",
+            "-p",
+            "value-investment-agent-compose-auth-test",
+            "--env-file",
+            "/dev/null",
+            *files,
+            "--profile",
+            "llm-gateway",
+            "config",
+            "--format",
+            "json",
+        ],
+        cwd=ROOT,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _assert_shared_provider_token(config_output: str, expected_token: str) -> None:
+    services = json.loads(config_output)["services"]
+    backend_environment = services["backend"]["environment"]
+    provider_environment = services["llm-provider-service"]["environment"]
+
+    assert backend_environment["LLM_PROVIDER_SERVICE_TOKEN"] == expected_token
+    assert provider_environment["LLM_PROVIDER_SERVICE_TOKEN"] == expected_token
+    assert expected_token.strip()
+    assert "LITELLM_MASTER_KEY" not in backend_environment
+    assert "LLM_GATEWAY_API_KEY" not in backend_environment
+    assert not any(
+        name.startswith(("LLM_GATEWAY_", "OPENROUTER_")) for name in backend_environment
+    )
+
+
+def test_compose_auth_dev_default_and_production_secret() -> None:
+    local = _compose_config(provider_token=None)
+    assert local.returncode == 0, "default local Compose config failed"
+    _assert_shared_provider_token(local.stdout, LOCAL_PROVIDER_TOKEN)
+
+    production_files = (
+        "-f",
+        "docker-compose.yml",
+        "-f",
+        "docker-compose.production.yml",
+    )
+    production_without_token = _compose_config(*production_files, provider_token=None)
+    assert production_without_token.returncode != 0
+    assert "LLM_PROVIDER_SERVICE_TOKEN" in production_without_token.stderr
+
+    production = _compose_config(
+        *production_files, provider_token=TEST_PRODUCTION_PROVIDER_TOKEN
+    )
+    assert production.returncode == 0, "production Compose config rejected a token"
+    _assert_shared_provider_token(production.stdout, TEST_PRODUCTION_PROVIDER_TOKEN)
+    production_services = json.loads(production.stdout)["services"]
+    assert production_services["backend"]["environment"]["APP_ENV"] == "production"
 
 
 def test_litellm_poc_uses_database_managed_openrouter_deployments() -> None:
@@ -97,22 +175,50 @@ def test_compose_poc_is_pinned_bounded_and_loopback_only() -> None:
     assert "env_file" not in contract_test
 
 
-def test_backend_requires_request_principal_for_gateway_data_plane() -> None:
+def test_provider_service_owns_gateway_credentials_and_retry_policy() -> None:
     compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text())
-    environment = compose["services"]["backend"]["environment"]
+    backend_environment = compose["services"]["backend"]["environment"]
+    provider_environment = compose["services"]["llm-provider-service"]["environment"]
 
-    assert (
-        "LLM_GATEWAY_REQUIRE_PRINCIPAL=${LLM_GATEWAY_REQUIRE_PRINCIPAL:-true}"
-        in environment
+    backend_variables = {
+        entry.removeprefix("- ").split("=", maxsplit=1)[0]
+        for entry in backend_environment
+    }
+    assert not any("LITELLM_MASTER_KEY" in entry for entry in backend_environment)
+    assert "LLM_GATEWAY_API_KEY" not in backend_variables
+    assert not any(name.startswith("LLM_GATEWAY_") for name in backend_variables)
+    assert not any(name.startswith("OPENROUTER_") for name in backend_variables)
+
+    assert provider_environment["LLM_GATEWAY_API_KEY"] == "${LITELLM_MASTER_KEY:-}"
+    assert provider_environment["LLM_GATEWAY_BASE_URL"] == (
+        "${LLM_GATEWAY_BASE_URL:-http://llm-gateway:4000}"
     )
-    assert "LLM_GATEWAY_MAX_ATTEMPTS=${LLM_GATEWAY_MAX_ATTEMPTS:-3}" in environment
-    assert (
-        "LLM_GATEWAY_MAX_ATTEMPTS_INTERACTIVE=${LLM_GATEWAY_MAX_ATTEMPTS_INTERACTIVE:-2}"
-        in environment
+    assert provider_environment["LLM_GATEWAY_REQUIRE_PRINCIPAL"] == (
+        "${LLM_GATEWAY_REQUIRE_PRINCIPAL:-true}"
     )
-    assert (
-        "LLM_GATEWAY_MAX_ATTEMPTS_BACKGROUND=${LLM_GATEWAY_MAX_ATTEMPTS_BACKGROUND:-3}"
-        in environment
+    assert provider_environment["LLM_GATEWAY_MAX_ATTEMPTS"] == (
+        "${LLM_GATEWAY_MAX_ATTEMPTS:-3}"
+    )
+    assert provider_environment["LLM_GATEWAY_MAX_ATTEMPTS_INTERACTIVE"] == (
+        "${LLM_GATEWAY_MAX_ATTEMPTS_INTERACTIVE:-2}"
+    )
+    assert provider_environment["LLM_GATEWAY_MAX_ATTEMPTS_BACKGROUND"] == (
+        "${LLM_GATEWAY_MAX_ATTEMPTS_BACKGROUND:-3}"
+    )
+    assert provider_environment["LLM_GATEWAY_BACKOFF_SECONDS"] == (
+        "${LLM_GATEWAY_BACKOFF_SECONDS:-0.25}"
+    )
+    assert provider_environment["LLM_GATEWAY_MAX_BACKOFF_SECONDS"] == (
+        "${LLM_GATEWAY_MAX_BACKOFF_SECONDS:-8}"
+    )
+    assert provider_environment["LLM_GATEWAY_JITTER_SECONDS"] == (
+        "${LLM_GATEWAY_JITTER_SECONDS:-0.25}"
+    )
+    assert provider_environment["OPENROUTER_HTTP_REFERER"] == (
+        "${OPENROUTER_HTTP_REFERER:-}"
+    )
+    assert provider_environment["OPENROUTER_X_TITLE"] == (
+        "${OPENROUTER_X_TITLE:-Value Investment Agent}"
     )
 
 

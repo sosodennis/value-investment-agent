@@ -58,16 +58,44 @@ jobs:
       - name: Run deterministic LLM provider gates
         run: >
           uv run pytest
-          tests/test_litellm_gateway_provider.py
-          tests/test_litellm_admin.py
           tests/test_litellm_poc_config.py
+          tests/test_llm_provider_contract.py
+          tests/test_llm_provider_lifecycle.py
+          tests/test_llm_provider_remote_client.py
           tests/test_llm_settings_api.py
+          tests/test_internal_service_contracts.py
 
       - name: Validate Compose contract
         working-directory: .
         env:
           LITELLM_MASTER_KEY: ci-contract-placeholder
         run: docker compose config --quiet
+
+  llm-provider-service-contract-gate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: llm-provider-service
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install service test dependencies
+        run: uv sync --group dev
+
+      - name: Check service formatting and lint
+        run: uv run ruff check src tests && uv run ruff format --check src tests
+
+      - name: Run service contract tests
+        run: uv run pytest tests
 
   fundamental-release-gate:
     if: github.event_name == 'workflow_dispatch'

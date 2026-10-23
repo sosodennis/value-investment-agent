@@ -1,22 +1,20 @@
-"""Small, redacting client for the internal LiteLLM model-management API."""
-
 from __future__ import annotations
 
 from collections.abc import Collection, Mapping
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Final
 from uuid import uuid4
 
 import httpx
 
-from src.llm_provider.domain.errors import ProviderSettingsError
-from src.llm_provider.domain.key_metadata import (
+from src.llm_provider_service.domain.errors import ProviderSettingsError
+from src.llm_provider_service.domain.key_metadata import (
     key_fingerprint,
     key_suffix,
     validate_model_id,
 )
-from src.llm_provider.domain.provider_models import ManagedProviderKey
-from src.llm_provider.domain.routes import DEFAULT_MODEL_ALIAS
+from src.llm_provider_service.domain.provider_models import ManagedProviderKey
+from src.llm_provider_service.domain.routes import DEFAULT_MODEL_ALIAS
 
 MANAGED_MARKER: Final = "value_investment_agent_managed"
 OPENROUTER_BASE_URL: Final = "https://openrouter.ai/api/v1"
@@ -155,7 +153,7 @@ class LiteLLMAdminClient:
         behavior for operational callers; the user-facing API always supplies
         the current user's IDs.
         """
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         key_id = str(uuid4())
         fingerprint = key_fingerprint(key)
         existing = next(
@@ -270,7 +268,7 @@ class LiteLLMAdminClient:
             model_id,
             {
                 "status": status,
-                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                "last_tested_at": datetime.now(UTC).isoformat(),
                 "failure_count": failure_count,
                 "last_error": last_error,
             },
@@ -283,12 +281,12 @@ class LiteLLMAdminClient:
             model_id,
             {
                 "status": "replacement_grace",
-                "replacement_retire_at": retire_at.astimezone(timezone.utc).isoformat(),
+                "replacement_retire_at": retire_at.astimezone(UTC).isoformat(),
             },
         )
 
     async def cleanup_expired_replacements(self) -> int:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         expired = [
             item
             for item in await self.list_managed()
@@ -387,5 +385,5 @@ def _parse_utc(value: str) -> datetime:
     except ValueError as exc:
         raise LiteLLMAdminError("gateway returned invalid lifecycle metadata") from exc
     if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)

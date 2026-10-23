@@ -1,5 +1,3 @@
-"""Read per-key request health recorded by the LiteLLM callback."""
-
 from __future__ import annotations
 
 import logging
@@ -11,7 +9,7 @@ from uuid import UUID
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
-from src.llm_provider.domain.provider_models import ProviderKeyHealth
+from src.llm_provider_service.domain.provider_models import ProviderKeyHealth
 
 _logger = logging.getLogger(__name__)
 _KEY_PREFIX = "via:llm-provider:key-health:"

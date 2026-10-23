@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
-from src.llm_provider.application.ports import (
+from src.llm_provider_service.application.ports import (
     KeyGateway,
     ModelCatalog,
     OpenRouterKeyValidator,
@@ -13,14 +13,20 @@ from src.llm_provider.application.ports import (
     ProviderKeyTelemetry,
     SelectedModelSettings,
 )
-from src.llm_provider.domain.errors import (
+from src.llm_provider_service.domain.errors import (
     OpenRouterKeyTestError,
     OpenRouterModelsError,
     ProviderSettingsError,
 )
-from src.llm_provider.domain.key_metadata import key_fingerprint, validate_model_id
-from src.llm_provider.domain.provider_models import ManagedProviderKey, OpenRouterModel
-from src.llm_provider.domain.routes import user_route_alias
+from src.llm_provider_service.domain.key_metadata import (
+    key_fingerprint,
+    validate_model_id,
+)
+from src.llm_provider_service.domain.provider_models import (
+    ManagedProviderKey,
+    OpenRouterModel,
+)
+from src.llm_provider_service.domain.routes import user_route_alias
 
 RESOURCE_TYPE = "provider_key"
 
@@ -50,6 +56,13 @@ class ProviderSettingsService:
         keys = [
             key for key in await self._gateway.list_managed() if key.id in owned_ids
         ]
+        for key in keys:
+            await self._ownership.claim(
+                user_id=user_id,
+                resource_type=RESOURCE_TYPE,
+                resource_id=key.id,
+                fingerprint=key.fingerprint,
+            )
         if self._telemetry is None or not keys:
             return keys
         health_by_id = await self._telemetry.get_many({key.id for key in keys})
@@ -96,8 +109,23 @@ class ProviderSettingsService:
             user_id=user_id,
             resource_type=RESOURCE_TYPE,
             resource_id=managed.id,
+            fingerprint=managed.fingerprint,
         ):
             await self._gateway.delete_key(managed.id)
+            existing_id = await self._ownership.find_by_fingerprint(
+                user_id=user_id, fingerprint=managed.fingerprint
+            )
+            if existing_id is not None:
+                existing = next(
+                    (
+                        item
+                        for item in await self._gateway.list_managed()
+                        if item.id == existing_id
+                    ),
+                    None,
+                )
+                if existing is not None:
+                    return existing
             raise ProviderSettingsError("already_owned")
         return managed
 
@@ -108,50 +136,56 @@ class ProviderSettingsService:
             key_id = validate_model_id(key_id)
         except ValueError as exc:
             raise ProviderSettingsError("invalid_key_id") from exc
-        if not await self._ownership.owns(
-            user_id=user_id, resource_type=RESOURCE_TYPE, resource_id=key_id
-        ):
-            raise ProviderSettingsError("not_found")
-        existing_keys = await self._gateway.list_managed()
-        old_key = next((item for item in existing_keys if item.id == key_id), None)
-        if old_key is None:
-            raise ProviderSettingsError("not_found")
-        if old_key.fingerprint == key_fingerprint(key):
-            raise ProviderSettingsError("replacement_must_differ")
-        await self._test_key_material(key)
+        async with self._ownership.replacement_lock(user_id=user_id, key_id=key_id):
+            if not await self._ownership.owns(
+                user_id=user_id, resource_type=RESOURCE_TYPE, resource_id=key_id
+            ):
+                raise ProviderSettingsError("not_found")
+            existing_keys = await self._gateway.list_managed()
+            old_key = next((item for item in existing_keys if item.id == key_id), None)
+            if old_key is None:
+                raise ProviderSettingsError("not_found")
+            if old_key.replacement_retire_at is not None:
+                raise ProviderSettingsError("replacement_in_progress")
+            if old_key.fingerprint == key_fingerprint(key):
+                raise ProviderSettingsError("replacement_must_differ")
+            await self._test_key_material(key)
 
-        owned_ids = await self._ownership.owned_ids(
-            user_id=user_id, resource_type=RESOURCE_TYPE
-        )
-        replacement = await self._gateway.add_key(
-            key=key,
-            label=label,
-            model=await self._settings.get_selected_model(),
-            model_name=user_route_alias(user_id),
-            existing_ids=owned_ids,
-        )
-        if not await self._ownership.claim(
-            user_id=user_id,
-            resource_type=RESOURCE_TYPE,
-            resource_id=replacement.id,
-        ):
-            if replacement.id not in owned_ids:
+            owned_ids = await self._ownership.owned_ids(
+                user_id=user_id, resource_type=RESOURCE_TYPE
+            )
+            replacement = await self._gateway.add_key(
+                key=key,
+                label=label,
+                model=await self._settings.get_selected_model(),
+                model_name=user_route_alias(user_id),
+                existing_ids=owned_ids,
+            )
+            if not await self._ownership.claim(
+                user_id=user_id,
+                resource_type=RESOURCE_TYPE,
+                resource_id=replacement.id,
+                fingerprint=replacement.fingerprint,
+            ):
+                if replacement.id not in owned_ids:
+                    await self._gateway.delete_key(replacement.id)
+                raise ProviderSettingsError("already_owned")
+            grace_seconds = min(
+                3600,
+                max(60, int(os.getenv("LLM_KEY_REPLACEMENT_GRACE_SECONDS", "900"))),
+            )
+            try:
+                await self._gateway.mark_replacement_grace(
+                    key_id,
+                    retire_at=datetime.now(UTC) + timedelta(seconds=grace_seconds),
+                )
+            except Exception:
                 await self._gateway.delete_key(replacement.id)
-            raise ProviderSettingsError("already_owned")
-        grace_seconds = min(
-            3600, max(60, int(os.getenv("LLM_KEY_REPLACEMENT_GRACE_SECONDS", "900")))
-        )
-        try:
-            await self._gateway.mark_replacement_grace(
-                key_id, retire_at=datetime.now(UTC) + timedelta(seconds=grace_seconds)
-            )
-        except Exception:
-            await self._gateway.delete_key(replacement.id)
-            await self._ownership.release(
-                resource_type=RESOURCE_TYPE, resource_id=replacement.id
-            )
-            raise
-        return replacement
+                await self._ownership.release(
+                    resource_type=RESOURCE_TYPE, resource_id=replacement.id
+                )
+                raise
+            return replacement
 
     async def test_key(self, *, user_id: str, key_id: str) -> bool:
         try:

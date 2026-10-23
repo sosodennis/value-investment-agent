@@ -3,7 +3,6 @@ from src.llm_provider.application.context import (
     reset_provider_principal,
     set_provider_principal,
 )
-from src.llm_provider.application.settings_service import ProviderSettingsService
 from src.llm_provider.application.wiring import (
     close_llm_provider,
     get_default_model_route,
@@ -39,14 +38,6 @@ from src.llm_provider.domain.routes import DEFAULT_MODEL_ALIAS
 MODEL_ROUTE_ALIAS = DEFAULT_MODEL_ALIAS
 
 
-async def cleanup_expired_replacements() -> int:
-    return await get_provider_settings_service().cleanup_expired_replacements()
-
-
-async def synchronize_selected_model() -> None:
-    await get_provider_settings_service().synchronize_selected_model()
-
-
 __all__ = [
     "ChatMessage",
     "ChatRole",
@@ -58,7 +49,6 @@ __all__ = [
     "LLMProviderError",
     "LLMProviderPort",
     "ProviderSettingsError",
-    "ProviderSettingsService",
     "LLMRequestClass",
     "LLMRouteResolver",
     "ModelRoute",
@@ -68,7 +58,6 @@ __all__ = [
     "StructuredRequest",
     "Usage",
     "close_llm_provider",
-    "cleanup_expired_replacements",
     "get_default_model_route",
     "get_llm_provider",
     "get_provider_settings_service",
@@ -77,5 +66,4 @@ __all__ = [
     "set_provider_principal",
     "llm_settings_router",
     "provider_keys_router",
-    "synchronize_selected_model",
 ]
