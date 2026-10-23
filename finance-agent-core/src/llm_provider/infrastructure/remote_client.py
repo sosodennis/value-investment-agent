@@ -53,6 +53,10 @@ class LLMProviderServiceClient(LLMProviderPort):
     ) -> None:
         self._base_url = (base_url or _url()).rstrip("/")
         self._token = token if token is not None else _token()
+        if not self._base_url:
+            raise RuntimeError("LLM_PROVIDER_SERVICE_URL is required")
+        if not self._token:
+            raise RuntimeError("LLM_PROVIDER_SERVICE_TOKEN is required")
         self._client = httpx.Client(timeout=None)
         self._async_client = httpx.AsyncClient(timeout=None)
 
@@ -277,6 +281,10 @@ class LLMProviderServiceSettingsClient:
     ) -> None:
         self._base_url = (base_url or _url()).rstrip("/")
         self._token = token if token is not None else _token()
+        if not self._base_url:
+            raise RuntimeError("LLM_PROVIDER_SERVICE_URL is required")
+        if not self._token:
+            raise RuntimeError("LLM_PROVIDER_SERVICE_TOKEN is required")
         self._client = httpx.AsyncClient(timeout=None)
 
     async def _call(

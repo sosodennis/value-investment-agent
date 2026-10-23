@@ -17,8 +17,9 @@ async def test_gateway_provider_is_reused_and_closed_at_shutdown(monkeypatch) ->
             self.closed = True
 
     await provider_module.close_llm_provider()
-    monkeypatch.setenv("LLM_GATEWAY_BASE_URL", "http://gateway:4000")
-    monkeypatch.setattr(wiring, "LiteLLMGatewayProvider", FakeProvider)
+    monkeypatch.setenv("LLM_PROVIDER_SERVICE_URL", "http://provider:8002")
+    monkeypatch.setenv("LLM_PROVIDER_SERVICE_TOKEN", "service-token")
+    monkeypatch.setattr(wiring, "LLMProviderServiceClient", FakeProvider)
 
     first_provider = provider_module.get_llm_provider()
     second_provider = provider_module.get_llm_provider()
