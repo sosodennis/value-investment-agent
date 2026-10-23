@@ -1,13 +1,14 @@
 # Search Service `search.v1` Contract
 
-This document freezes the provider-neutral boundary for the independently
-deployed Search Service. The service consumes the shared `internal.v1` request
-context from #119 and owns only search transport, provider capability routing,
-normalized results, and user-scoped provider credentials.
+The independently deployed Search Service consumes the shared `internal.v1`
+context from #119. It owns provider-neutral search, provider capability
+routing, normalized results, and user-scoped provider credentials.
 
-## Request envelope
+## Request and response envelopes
 
-`POST /v1/search/web` and `POST /v1/search/news` accept:
+Every POST operation accepts exactly `context` and `input`. The principal is
+the owner for settings and key operations; callers cannot supply a separate
+user identifier.
 
 ```json
 {
@@ -19,102 +20,107 @@ normalized results, and user-scoped provider credentials.
   },
   "input": {
     "query": "semiconductor demand",
-    "limit": 10,
-    "region": "US",
+    "result_limit": 8,
+    "region": "worldwide",
     "time_range": "week",
     "safe_search": true
   }
 }
 ```
 
-The web and news inputs are distinct strict schemas. `query` is trimmed,
-non-blank, and at most 500 characters. `limit` defaults to 10 and is bounded
-to 50. `region`, `time_range`, and `safe_search` are optional. The service
-does not accept provider-specific engine, category, ranking, ticker, or fetch
-controls. The owner is always `context.principal.subject_id`; a body user ID
-does not exist and is never authoritative.
-
-The service authenticates `Authorization: Bearer <service-token>` before it
-parses or uses the principal. Authentication and context parsing are separate:
-the service token identifies the trusted caller and the context identifies the
-end user.
-
-## Success and normalized results
-
-Success is HTTP 200, including no matches (`results: []`):
+Search success is HTTP 200, including no matches:
 
 ```json
 {
-  "contract_version": "internal.v1",
-  "schema_version": "search.v1",
   "correlation_id": "corr-123",
-  "operation": "news",
-  "results": [{
-    "title": "Example",
-    "canonical_url": "https://example.test/story",
-    "snippet": "A bounded provider-neutral summary.",
-    "provider": "provider-a",
-    "source": "Example News",
-    "published_at": "2026-10-23T17:00:00Z",
-    "image_url": "https://example.test/story.jpg",
-    "provider_metadata": {"provider-a": {"rank": 1}}
-  }]
+  "contract_version": "internal.v1",
+  "result": {
+    "operation": "web",
+    "results": [{
+      "title": "Example",
+      "canonical_url": "https://example.test/story",
+      "snippet": "A bounded provider-neutral summary.",
+      "provider": "provider-a",
+      "provider_metadata": {"provider-a": {"rank": 1}}
+    }]
+  }
 }
 ```
 
-`title`, `canonical_url`, `snippet`, and `provider` are normalized fields.
-Optional metadata is namespaced and primitive-valued; it cannot overwrite or
-replace normalized fields. Search does not define News categories, source
-reliability, ranking policy, article fetching, or Intent ticker candidates.
+Errors use #119 `InternalErrorResponse`: `correlation_id`,
+`contract_version: "internal.v1"`, and an `error` containing `code`, `message`,
+`retryable`, and optional `retry_after_ms`.
 
-## Capabilities and routing
+## Search inputs and defaults
 
-Providers declare operation capabilities (`web`, `news`) and optional-field
-capabilities (`region`, `time_range`, `safe_search`). A request is eligible
-only when the provider is enabled for the authenticated user, has a usable
-credential when required, supports the operation, and supports every supplied
-optional field. Eligible providers are attempted in the user's ordered
-priority. Disabled providers, missing keys, and providers in durable cooldown
-are skipped. With no eligible provider, the stable outcome is
-`UNSUPPORTED_CAPABILITY`.
+Web and news use distinct strict input schemas. Queries are trimmed, must not
+be blank, and are limited to 1-512 characters. `result_limit` is 1-50; web
+defaults to 10 and news to 20. `timeout_seconds` defaults to 30 and is bounded
+to 1-60. `safe_search` defaults to true. `region` and `time_range` are
+optional; use `region: "worldwide"` for a worldwide search. Supported time
+ranges are `day`, `week`, `month`, and `year`.
 
-Provider-specific options are never required by this contract. Provider
-registries, credentials, cooldowns, enablement, and priorities are ports in
-the service and must be implemented with durable shared state and atomic
-per-user updates by #123; process-local state is not authoritative.
+The caller-facing mappings are explicit: an Intent-style lookup uses query,
+`region: "worldwide"`, `time_range: "year"`, `result_limit: 7`, and
+`safe_search: true`. News lookups use worldwide region and `safe_search: false`,
+with `week` or `month` windows and caller-selected limits such as 4, 8, or 10.
+The service does not accept provider-specific engine, category, ranking,
+ticker, or article-fetch controls.
 
-## Key lifecycle
+The service authenticates `Authorization: Bearer <service-token>` before
+parsing or using the principal. Authentication failures preserve
+`internal_auth_unconfigured`, `internal_auth_missing`, and
+`internal_auth_invalid`, each with HTTP 401.
 
-The private settings boundary provides add/test, replace, list masked metadata,
-and delete operations. New or replacement key material is tested before it is
-activated. A failed test is not persisted as an active credential. Raw keys
-are accepted only at this secret boundary, are passed to the provider test,
-and are never returned or included in normal logs/errors. Lists expose only
-provider, label, suffix, fingerprint, enabled state, and priority.
+## Operations
 
-## Deadlines, bounds, and errors
+| Route | Input | Result |
+| --- | --- | --- |
+| `POST /v1/search/web` | Web search input | Normalized web results |
+| `POST /v1/search/news` | News search input | Normalized news results |
+| `POST /v1/providers/catalog` | `{}` | Provider operation and option capabilities |
+| `POST /v1/settings/read` | `{}` | Authenticated user's provider settings |
+| `POST /v1/settings/update` | Full provider preference list | Atomically replaced settings through the control-plane port |
+| `POST /v1/provider-keys/test` | Provider and key | Validity only; never persisted |
+| `POST /v1/provider-keys/add` | Provider, key, label | Test then activate |
+| `POST /v1/provider-keys/replace` | Owned key ID, provider, key, label | Test then replace; failed tests preserve the current key |
+| `POST /v1/provider-keys/delete` | Owned key ID only | Idempotent deletion; no key material is accepted |
+| `POST /v1/provider-keys/list` | `{}` | Masked key metadata |
 
-`deadline_at` is one absolute UTC deadline. Provider attempts and fallback use
-the remaining time; the service bounds query length, result count, and total
-attempts. It never resets the deadline for a retry. The finite error set is:
+Raw keys are accepted only by key test/add/replace and are never returned in
+responses. Key lists expose provider, label, suffix, fingerprint, enabled
+state, and priority. Provider metadata is nested by provider name and contains
+only primitive values.
+
+## Routing, deadlines, and errors
+
+A provider is eligible when enabled for the authenticated user, credentialed
+when required, capable of the operation, and capable of every requested
+option. Providers are attempted in priority order, up to three attempts.
+Provider attempts and fallback share the lesser of `deadline_at` and the
+request timeout. No retry resets either deadline.
 
 | Code | HTTP | Meaning |
 | --- | ---: | --- |
-| `INVALID_ARGUMENT` | 400 | Invalid envelope or input |
-| `UNAUTHENTICATED` | 401 | Missing or invalid service credential |
-| `UNSUPPORTED_CAPABILITY` | 422 | No provider can serve operation/options |
+| `INVALID_REQUEST` | 400 | Invalid envelope or input |
+| `UNSUPPORTED_CAPABILITY` | 422 | No configured provider serves the operation/options |
+| `INVALID_PROVIDER_KEY` | 422 | Key test rejected the submitted key |
 | `RATE_LIMITED` | 429 | Provider/service rate limit |
-| `DEADLINE_EXCEEDED` | 504 | Absolute deadline expired |
-| `UPSTREAM_UNAVAILABLE` | 503 | Eligible providers unavailable |
-| `MALFORMED_UPSTREAM_RESPONSE` | 502 | Provider response failed normalization |
+| `UPSTREAM_MALFORMED` | 502 | Provider response failed normalization |
+| `UPSTREAM_UNAVAILABLE` | 503 | Eligible providers are unavailable |
+| `DEADLINE_EXCEEDED` | 504 | Effective request deadline expired |
 
-Errors echo `contract_version`, `schema_version`, and `correlation_id`. Error
-messages are generic and bounded. They never include raw keys, raw query
-text, upstream payloads, or internal URLs.
+Error messages are bounded and redacted; they do not include keys, query text,
+upstream payloads, or internal URLs. Provider credentials, cooldowns,
+enablement, priorities, and atomic per-user settings persistence are
+control-plane responsibilities owned by #123.
 
-## Independent service surface
+## Executable contract
 
-`GET /livez`, `GET /readyz`, and `GET /contract` are exposed by the standalone
-service. The image uses the existing BuildKit `internal-contracts` context only
-for shared `internal_services` authentication/context primitives. It does not
-import LangGraph, frontend, or finance-agent-core application modules.
+`contracts/search-service-openapi.json` is generated by:
+
+```bash
+python3 search-service/scripts/generate_openapi.py
+```
+
+The service also exposes `GET /livez`, `GET /readyz`, and `GET /contract`.

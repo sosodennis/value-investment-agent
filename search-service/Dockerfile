@@ -1,14 +1,14 @@
 FROM python:3.11-slim
 
 WORKDIR /app
-ENV PYTHONUNBUFFERED=1
+ENV PYTHONUNBUFFERED=1 PATH="/app/.venv/bin:$PATH"
 
 COPY pyproject.toml ./
 RUN python -m pip install --no-cache-dir uv==0.11.28 \
     && uv sync --no-dev --no-install-project
 
 COPY --from=internal-contracts internal_services ./src/shared/internal_services
-COPY src ./src/search_service
+COPY src ./src
 RUN uv sync --no-dev
 
 EXPOSE 8003

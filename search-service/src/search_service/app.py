@@ -4,7 +4,7 @@ import asyncio
 import hashlib
 import os
 from collections.abc import Mapping
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -13,25 +13,40 @@ from src.shared.internal_services import (
     INTERNAL_CONTRACT_VERSION,
     InternalAuthenticationError,
     InternalContextValidationError,
+    InternalError,
+    InternalErrorResponse,
+    InternalReadiness,
     InternalRequestContext,
+    ReadinessStatus,
     authenticate_internal_request,
 )
 
 from .contracts import (
-    ErrorBody,
+    KeyDeleteInput,
+    KeyReplaceInput,
+    KeyTestInput,
     NewsSearchRequest,
     Operation,
-    ProviderKeyInput,
+    ProviderCatalog,
+    ProviderKeyAddInput,
+    ProviderKeyDeleteResult,
     ProviderKeyList,
     ProviderKeyResult,
+    ProviderKeyTestResult,
     SearchErrorCode,
-    SearchFailure,
+    SearchOperationResult,
     SearchRequestBase,
+    SearchResult,
     SearchSuccess,
+    SettingsReadResult,
+    SettingsUpdateInput,
     WebSearchRequest,
 )
 from .errors import SearchServiceError
 from .ports import SearchControlPlane, SearchProvider, requested_capabilities
+
+_MAX_ATTEMPTS = 3
+_MAX_CONCURRENCY = 32
 
 
 def _remaining(deadline_at: datetime) -> float:
@@ -65,83 +80,97 @@ def create_app(
     service_token = (
         token if token is not None else os.getenv("SEARCH_SERVICE_TOKEN", "")
     )
-    application = FastAPI(title="Private Search Service", version="1.0")
-    provider_slots = asyncio.Semaphore(32)
+    application = FastAPI(
+        title="Private Search Service",
+        version="search.v1",
+    )
+    provider_slots = asyncio.Semaphore(_MAX_CONCURRENCY)
 
-    def context_for(request: Request, raw: object) -> InternalRequestContext:
-        context_raw = raw.get("context", {}) if isinstance(raw, dict) else {}
-        if not isinstance(context_raw, dict):
-            context_raw = {}
-        return authenticate_internal_request(
-            request.headers.get("Authorization"),
-            expected_token=service_token,
-            raw_context=context_raw,
-        )
-
-    def error_response(
+    def response_error(
+        *,
         correlation_id: str,
-        code: SearchErrorCode,
+        code: str,
         message: str,
         status: int,
-        *,
         retryable: bool = False,
         retry_after_ms: int | None = None,
     ) -> JSONResponse:
-        response = SearchFailure(
-            contract_version=INTERNAL_CONTRACT_VERSION,
-            schema_version="search.v1",
+        body = InternalErrorResponse(
             correlation_id=correlation_id,
-            error=ErrorBody(
+            contract_version=INTERNAL_CONTRACT_VERSION,
+            error=InternalError(
                 code=code,
                 message=message,
                 retryable=retryable,
                 retry_after_ms=retry_after_ms,
             ),
         )
+        return JSONResponse(status_code=status, content=body.model_dump(mode="json"))
+
+    def success(context: InternalRequestContext, result: object) -> JSONResponse:
         return JSONResponse(
-            status_code=status, content=response.model_dump(mode="json")
+            content={
+                "correlation_id": context.correlation_id,
+                "contract_version": INTERNAL_CONTRACT_VERSION,
+                "result": result.model_dump(mode="json"),
+            }
         )
 
-    async def read_body(request: Request) -> object:
+    def authorize(request: Request, raw: object) -> InternalRequestContext:
+        raw_context = raw.get("context", {}) if isinstance(raw, dict) else {}
+        if not isinstance(raw_context, dict):
+            raw_context = {}
+        return authenticate_internal_request(
+            request.headers.get("Authorization"),
+            expected_token=service_token,
+            raw_context=raw_context,
+        )
+
+    async def read_json(request: Request) -> object:
         try:
             return await request.json()
         except Exception as exc:
             raise SearchServiceError(
-                SearchErrorCode.INVALID_ARGUMENT, 400, "request body is invalid"
+                SearchErrorCode.INVALID_REQUEST, 400, "request body is invalid"
             ) from exc
 
-    async def search(request: Request, operation: Operation) -> JSONResponse:
+    def read_input(raw: object, model: type[SearchRequestBase]) -> SearchRequestBase:
+        if (
+            not isinstance(raw, dict)
+            or set(raw) != {"context", "input"}
+            or not isinstance(raw.get("input"), dict)
+        ):
+            raise SearchServiceError(
+                SearchErrorCode.INVALID_REQUEST, 400, "operation input is invalid"
+            )
+        return model.model_validate(raw["input"])
+
+    async def run_search(request: Request, operation: Operation) -> JSONResponse:
         correlation_id = "unknown"
         try:
-            raw = await read_body(request)
+            raw = await read_json(request)
             correlation_id = _correlation_id(raw)
-            context = context_for(request, raw)
+            context = authorize(request, raw)
             correlation_id = context.correlation_id
-            if not isinstance(raw, dict) or not isinstance(raw.get("input"), dict):
-                raise SearchServiceError(
-                    SearchErrorCode.INVALID_ARGUMENT, 400, "search input is invalid"
-                )
-            request_model: type[SearchRequestBase] = (
+            model: type[SearchRequestBase] = (
                 WebSearchRequest if operation is Operation.WEB else NewsSearchRequest
             )
-            payload = request_model.model_validate(raw["input"])
-            if _remaining(context.deadline_at) <= 0:
-                raise SearchServiceError(
-                    SearchErrorCode.DEADLINE_EXCEEDED,
-                    504,
-                    "request deadline expired",
-                    True,
-                )
-
-            credentials = await control_plane.credentials_for(
-                subject_id=context.principal.subject_id
+            payload = read_input(raw, model)
+            operation_deadline = min(
+                context.deadline_at,
+                datetime.now(UTC) + timedelta(seconds=payload.timeout_seconds),
             )
-            providers_by_name = providers
             requested = requested_capabilities(payload)
+            credentials = await asyncio.wait_for(
+                control_plane.credentials_for(subject_id=context.principal.subject_id),
+                timeout=max(0.001, _remaining(operation_deadline)),
+            )
             eligible: list[tuple[int, str, SearchProvider, str]] = []
             for credential in credentials:
-                provider = providers_by_name.get(credential.provider)
-                if not credential.enabled or not credential.api_key or provider is None:
+                provider = providers.get(credential.provider)
+                if provider is None or not credential.enabled:
+                    continue
+                if provider.capabilities.key_required and not credential.api_key:
                     continue
                 if operation not in provider.capabilities.operations:
                     continue
@@ -162,8 +191,9 @@ def create_app(
                     "no enabled provider supports this operation and its options",
                 )
 
-            for _priority, _name, provider, api_key in sorted(eligible)[:3]:
-                remaining = _remaining(context.deadline_at)
+            last_provider_error: SearchServiceError | None = None
+            for _priority, _name, provider, api_key in sorted(eligible)[:_MAX_ATTEMPTS]:
+                remaining = _remaining(operation_deadline)
                 if remaining <= 0:
                     raise SearchServiceError(
                         SearchErrorCode.DEADLINE_EXCEEDED,
@@ -171,26 +201,30 @@ def create_app(
                         "request deadline expired",
                         True,
                     )
+                acquired = False
                 try:
                     await asyncio.wait_for(provider_slots.acquire(), timeout=remaining)
-                    try:
-                        results = await asyncio.wait_for(
-                            provider.search(
-                                operation=operation,
-                                request=payload,
-                                api_key=api_key,
-                                deadline_at=context.deadline_at,
-                            ),
-                            timeout=_remaining(context.deadline_at),
-                        )
-                    finally:
-                        provider_slots.release()
-                    response = SearchSuccess(
-                        contract_version=INTERNAL_CONTRACT_VERSION,
-                        schema_version="search.v1",
-                        correlation_id=context.correlation_id,
+                    acquired = True
+                    raw_results = await asyncio.wait_for(
+                        provider.search(
+                            operation=operation,
+                            request=payload,
+                            api_key=api_key,
+                            deadline_at=operation_deadline,
+                        ),
+                        timeout=_remaining(operation_deadline),
+                    )
+                    results = tuple(
+                        SearchResult.model_validate(item) for item in raw_results
+                    )
+                    result = SearchOperationResult(
                         operation=operation,
-                        results=results[: payload.limit],
+                        results=results[: payload.result_limit],
+                    )
+                    response = SearchSuccess(
+                        correlation_id=context.correlation_id,
+                        contract_version=INTERNAL_CONTRACT_VERSION,
+                        result=result,
                     )
                     return JSONResponse(content=response.model_dump(mode="json"))
                 except TimeoutError as exc:
@@ -200,10 +234,25 @@ def create_app(
                         "request deadline expired",
                         True,
                     ) from exc
-                except SearchServiceError:
-                    continue
+                except ValidationError:
+                    last_provider_error = SearchServiceError(
+                        SearchErrorCode.UPSTREAM_MALFORMED,
+                        502,
+                        "provider response could not be normalized",
+                    )
+                except SearchServiceError as exc:
+                    if exc.code in {
+                        SearchErrorCode.RATE_LIMITED,
+                        SearchErrorCode.UPSTREAM_MALFORMED,
+                    }:
+                        last_provider_error = exc
                 except Exception:
                     continue
+                finally:
+                    if acquired:
+                        provider_slots.release()
+            if last_provider_error is not None:
+                raise last_provider_error
             raise SearchServiceError(
                 SearchErrorCode.UPSTREAM_UNAVAILABLE,
                 503,
@@ -212,35 +261,64 @@ def create_app(
                 250,
             )
         except InternalAuthenticationError as exc:
-            return error_response(
-                correlation_id,
-                SearchErrorCode.UNAUTHENTICATED,
-                str(exc),
-                401,
+            return response_error(
+                correlation_id=correlation_id,
+                code=exc.code,
+                message=str(exc),
+                status=401,
             )
         except InternalContextValidationError:
-            return error_response(
-                correlation_id,
-                SearchErrorCode.INVALID_ARGUMENT,
-                "request context is invalid",
-                400,
+            return response_error(
+                correlation_id=correlation_id,
+                code=SearchErrorCode.INVALID_REQUEST,
+                message="request context is invalid",
+                status=400,
             )
         except ValidationError:
-            return error_response(
-                correlation_id,
-                SearchErrorCode.INVALID_ARGUMENT,
-                "search input failed validation",
-                400,
+            return response_error(
+                correlation_id=correlation_id,
+                code=SearchErrorCode.INVALID_REQUEST,
+                message="operation input failed validation",
+                status=400,
             )
         except SearchServiceError as exc:
-            return error_response(
-                correlation_id,
-                exc.code,
-                exc.message,
-                exc.status_code,
+            return response_error(
+                correlation_id=correlation_id,
+                code=exc.code,
+                message=exc.message,
+                status=exc.status_code,
                 retryable=exc.retryable,
                 retry_after_ms=exc.retry_after_ms,
             )
+
+    async def run_context_operation(
+        request: Request,
+        operation: str,
+    ) -> tuple[InternalRequestContext, object]:
+        raw = await read_json(request)
+        context = authorize(request, raw)
+        if (
+            not isinstance(raw, dict)
+            or set(raw) != {"context", "input"}
+            or not isinstance(raw.get("input"), dict)
+        ):
+            raise SearchServiceError(
+                SearchErrorCode.INVALID_REQUEST, 400, "operation input is invalid"
+            )
+        return context, raw["input"]
+
+    @application.exception_handler(SearchServiceError)
+    async def handle_service_error(
+        request: Request, exc: SearchServiceError
+    ) -> JSONResponse:
+        return response_error(
+            correlation_id="unknown",
+            code=exc.code,
+            message=exc.message,
+            status=exc.status_code,
+            retryable=exc.retryable,
+            retry_after_ms=exc.retry_after_ms,
+        )
 
     @application.get("/livez")
     async def livez() -> dict[str, str]:
@@ -251,12 +329,13 @@ def create_app(
         ready = bool(service_token and providers) and not isinstance(
             control_plane, _UnavailableControlPlane
         )
+        body = InternalReadiness(
+            status=ReadinessStatus.READY if ready else ReadinessStatus.NOT_READY,
+            contract_version=INTERNAL_CONTRACT_VERSION,
+        )
         return JSONResponse(
             status_code=200 if ready else 503,
-            content={
-                "status": "ready" if ready else "not_ready",
-                "contract_version": INTERNAL_CONTRACT_VERSION,
-            },
+            content=body.model_dump(mode="json"),
         )
 
     @application.get("/contract")
@@ -269,238 +348,316 @@ def create_app(
 
     @application.post("/v1/search/web")
     async def web_search(request: Request) -> JSONResponse:
-        return await search(request, Operation.WEB)
+        return await run_search(request, Operation.WEB)
 
     @application.post("/v1/search/news")
     async def news_search(request: Request) -> JSONResponse:
-        return await search(request, Operation.NEWS)
+        return await run_search(request, Operation.NEWS)
 
-    @application.post("/v1/provider-keys/{provider}/{action}")
-    async def change_provider_key(
-        provider: str, action: str, request: Request
-    ) -> JSONResponse:
+    @application.post("/v1/providers/catalog")
+    async def provider_catalog(request: Request) -> JSONResponse:
         correlation_id = "unknown"
         try:
-            raw = await read_body(request)
-            correlation_id = _correlation_id(raw)
-            context = context_for(request, raw)
+            context, _ = await run_context_operation(request, "provider_catalog")
             correlation_id = context.correlation_id
-            if not isinstance(raw, dict) or not isinstance(raw.get("input"), dict):
-                raise SearchServiceError(
-                    SearchErrorCode.INVALID_ARGUMENT, 400, "key input is invalid"
+            catalog = ProviderCatalog(
+                providers=tuple(
+                    provider.capabilities.model_copy(update={"provider": name})
+                    for name, provider in sorted(providers.items())
                 )
-            payload = ProviderKeyInput.model_validate(raw["input"])
-            configured = providers.get(provider)
-            if configured is None:
+            )
+            return success(context, catalog)
+        except InternalAuthenticationError as exc:
+            return response_error(
+                correlation_id=correlation_id,
+                code=exc.code,
+                message=str(exc),
+                status=401,
+            )
+        except (InternalContextValidationError, ValidationError, SearchServiceError):
+            return response_error(
+                correlation_id=correlation_id,
+                code=SearchErrorCode.INVALID_REQUEST,
+                message="provider catalog request is invalid",
+                status=400,
+            )
+
+    @application.post("/v1/settings/read")
+    async def settings_read(request: Request) -> JSONResponse:
+        correlation_id = "unknown"
+        try:
+            context, _ = await run_context_operation(request, "settings_read")
+            correlation_id = context.correlation_id
+            settings = await control_plane.get_settings(
+                subject_id=context.principal.subject_id
+            )
+            return success(context, SettingsReadResult(settings=settings))
+        except InternalAuthenticationError as exc:
+            return response_error(
+                correlation_id=correlation_id,
+                code=exc.code,
+                message=str(exc),
+                status=401,
+            )
+        except InternalContextValidationError:
+            return response_error(
+                correlation_id=correlation_id,
+                code=SearchErrorCode.INVALID_REQUEST,
+                message="request context is invalid",
+                status=400,
+            )
+
+    @application.post("/v1/settings/update")
+    async def settings_update(request: Request) -> JSONResponse:
+        correlation_id = "unknown"
+        try:
+            context, raw_input = await run_context_operation(request, "settings_update")
+            correlation_id = context.correlation_id
+            payload = SettingsUpdateInput.model_validate(raw_input)
+            names = [item.provider for item in payload.providers]
+            priorities = [item.priority for item in payload.providers]
+            if len(set(names)) != len(names) or len(set(priorities)) != len(priorities):
+                raise SearchServiceError(
+                    SearchErrorCode.INVALID_REQUEST,
+                    400,
+                    "provider settings must have unique providers and priorities",
+                )
+            if any(name not in providers for name in names):
+                raise SearchServiceError(
+                    SearchErrorCode.INVALID_REQUEST,
+                    400,
+                    "provider settings contain an unknown provider",
+                )
+            result = await control_plane.replace_settings(
+                subject_id=context.principal.subject_id, providers=payload.providers
+            )
+            return success(context, SettingsReadResult(settings=result))
+        except InternalAuthenticationError as exc:
+            return response_error(
+                correlation_id=correlation_id,
+                code=exc.code,
+                message=str(exc),
+                status=401,
+            )
+        except (InternalContextValidationError, ValidationError):
+            return response_error(
+                correlation_id=correlation_id,
+                code=SearchErrorCode.INVALID_REQUEST,
+                message="settings update is invalid",
+                status=400,
+            )
+        except SearchServiceError as exc:
+            return response_error(
+                correlation_id=correlation_id,
+                code=exc.code,
+                message=exc.message,
+                status=exc.status_code,
+            )
+
+    @application.post("/v1/provider-keys/test")
+    async def provider_key_test(request: Request) -> JSONResponse:
+        correlation_id = "unknown"
+        try:
+            context, raw_input = await run_context_operation(
+                request, "provider_key_test"
+            )
+            correlation_id = context.correlation_id
+            payload = KeyTestInput.model_validate(raw_input)
+            provider = providers.get(payload.provider)
+            if provider is None:
                 raise SearchServiceError(
                     SearchErrorCode.UNSUPPORTED_CAPABILITY,
                     422,
                     "provider is not configured",
                 )
             key = payload.api_key.get_secret_value()
-            if _remaining(context.deadline_at) <= 0:
-                raise SearchServiceError(
-                    SearchErrorCode.DEADLINE_EXCEEDED,
-                    504,
-                    "request deadline expired",
-                    True,
-                )
-            tested = await asyncio.wait_for(
-                configured.test_key(key, deadline_at=context.deadline_at),
-                timeout=_remaining(context.deadline_at),
+            valid = await asyncio.wait_for(
+                provider.test_key(key, deadline_at=context.deadline_at),
+                timeout=max(0.001, _remaining(context.deadline_at)),
             )
-            if not tested:
-                raise SearchServiceError(
-                    SearchErrorCode.UPSTREAM_UNAVAILABLE,
-                    422,
-                    "provider key test failed",
-                )
-            fingerprint = _fingerprint(key)
-            if action == "delete":
-                await control_plane.delete_key(
-                    subject_id=context.principal.subject_id,
-                    provider=provider,
-                )
-                return JSONResponse(
-                    content={
-                        "contract_version": INTERNAL_CONTRACT_VERSION,
-                        "schema_version": "search.v1",
-                        "correlation_id": correlation_id,
-                        "result": {"deleted": True},
-                    }
-                )
-            if action not in {"add", "replace"}:
-                raise SearchServiceError(
-                    SearchErrorCode.INVALID_ARGUMENT,
-                    404,
-                    "key operation is unsupported",
-                )
-            write_key = (
-                control_plane.add_tested_key
-                if action == "add"
-                else control_plane.replace_tested_key
+            result = ProviderKeyTestResult(
+                provider=payload.provider,
+                valid=valid,
+                status="valid" if valid else "invalid",
             )
-            summary = await write_key(
-                subject_id=context.principal.subject_id,
-                provider=provider,
-                api_key=key,
-                label=payload.label,
-                suffix=_safe_suffix(key),
-                fingerprint=fingerprint,
-            )
-            body = ProviderKeyResult(
-                provider=provider,
-                tested=True,
-                active=True,
-                suffix=summary.suffix,
-                fingerprint=summary.fingerprint,
-            )
-            return JSONResponse(
-                content={
-                    "contract_version": INTERNAL_CONTRACT_VERSION,
-                    "schema_version": "search.v1",
-                    "correlation_id": correlation_id,
-                    "result": body.model_dump(mode="json"),
-                }
-            )
-        except InternalAuthenticationError:
-            return error_response(
-                correlation_id,
-                SearchErrorCode.UNAUTHENTICATED,
-                "service authentication failed",
-                401,
+            return success(context, result)
+        except InternalAuthenticationError as exc:
+            return response_error(
+                correlation_id=correlation_id,
+                code=exc.code,
+                message=str(exc),
+                status=401,
             )
         except (InternalContextValidationError, ValidationError):
-            return error_response(
-                correlation_id,
-                SearchErrorCode.INVALID_ARGUMENT,
-                "key request is invalid",
-                400,
-            )
-        except SearchServiceError as exc:
-            return error_response(
-                correlation_id,
-                exc.code,
-                exc.message,
-                exc.status_code,
-                retryable=exc.retryable,
-                retry_after_ms=exc.retry_after_ms,
+            return response_error(
+                correlation_id=correlation_id,
+                code=SearchErrorCode.INVALID_REQUEST,
+                message="key test request is invalid",
+                status=400,
             )
         except TimeoutError:
-            return error_response(
-                correlation_id,
-                SearchErrorCode.DEADLINE_EXCEEDED,
-                "request deadline expired",
-                504,
+            return response_error(
+                correlation_id=correlation_id,
+                code=SearchErrorCode.DEADLINE_EXCEEDED,
+                message="request deadline expired",
+                status=504,
                 retryable=True,
             )
-
-    @application.post("/v1/provider-keys/list")
-    async def list_provider_keys(request: Request) -> JSONResponse:
-        correlation_id = "unknown"
-        try:
-            raw = await read_body(request)
-            correlation_id = _correlation_id(raw)
-            context = context_for(request, raw)
-            correlation_id = context.correlation_id
-            keys = await control_plane.list_keys(
-                subject_id=context.principal.subject_id
-            )
-            body = ProviderKeyList(providers=keys)
-            return JSONResponse(
-                content={
-                    "contract_version": INTERNAL_CONTRACT_VERSION,
-                    "schema_version": "search.v1",
-                    "correlation_id": correlation_id,
-                    "result": body.model_dump(mode="json"),
-                }
-            )
-        except InternalAuthenticationError:
-            return error_response(
-                correlation_id,
-                SearchErrorCode.UNAUTHENTICATED,
-                "service authentication failed",
-                401,
-            )
-        except InternalContextValidationError:
-            return error_response(
-                correlation_id,
-                SearchErrorCode.INVALID_ARGUMENT,
-                "request context is invalid",
-                400,
+        except SearchServiceError as exc:
+            return response_error(
+                correlation_id=correlation_id,
+                code=exc.code,
+                message=exc.message,
+                status=exc.status_code,
             )
 
-    @application.post("/v1/settings/provider")
-    async def update_provider_settings(request: Request) -> JSONResponse:
+    @application.post("/v1/provider-keys/add")
+    async def provider_key_add(request: Request) -> JSONResponse:
+        return await mutate_provider_key(request, replace=False)
+
+    @application.post("/v1/provider-keys/replace")
+    async def provider_key_replace(request: Request) -> JSONResponse:
+        return await mutate_provider_key(request, replace=True)
+
+    async def mutate_provider_key(request: Request, *, replace: bool) -> JSONResponse:
         correlation_id = "unknown"
         try:
-            raw = await read_body(request)
-            correlation_id = _correlation_id(raw)
-            context = context_for(request, raw)
+            context, raw_input = await run_context_operation(
+                request, "provider_key_mutation"
+            )
             correlation_id = context.correlation_id
-            if not isinstance(raw, dict) or not isinstance(raw.get("input"), dict):
-                raise SearchServiceError(
-                    SearchErrorCode.INVALID_ARGUMENT,
-                    400,
-                    "provider settings are invalid",
-                )
-            values = raw["input"]
-            provider = values.get("provider")
-            enabled = values.get("enabled")
-            priority = values.get("priority")
-            if (
-                not isinstance(provider, str)
-                or not provider
-                or not isinstance(enabled, bool)
-                or not isinstance(priority, int)
-                or priority < 0
-            ):
-                raise SearchServiceError(
-                    SearchErrorCode.INVALID_ARGUMENT,
-                    400,
-                    "provider settings are invalid",
-                )
-            if provider not in providers:
+            payload = (
+                KeyReplaceInput.model_validate(raw_input)
+                if replace
+                else ProviderKeyAddInput.model_validate(raw_input)
+            )
+            provider = providers.get(payload.provider)
+            if provider is None:
                 raise SearchServiceError(
                     SearchErrorCode.UNSUPPORTED_CAPABILITY,
                     422,
                     "provider is not configured",
                 )
-            await control_plane.update_provider(
+            key = payload.api_key.get_secret_value()
+            valid = await asyncio.wait_for(
+                provider.test_key(key, deadline_at=context.deadline_at),
+                timeout=max(0.001, _remaining(context.deadline_at)),
+            )
+            if not valid:
+                raise SearchServiceError(
+                    SearchErrorCode.INVALID_PROVIDER_KEY,
+                    422,
+                    "provider key test failed",
+                )
+            method = (
+                control_plane.replace_tested_key
+                if replace
+                else control_plane.add_tested_key
+            )
+            summary = await method(
                 subject_id=context.principal.subject_id,
-                provider=provider,
-                enabled=enabled,
-                priority=priority,
+                provider=payload.provider,
+                api_key=key,
+                label=payload.label,
+                suffix=_safe_suffix(key),
+                fingerprint=_fingerprint(key),
+                key_id=payload.key_id if replace else None,
             )
-            return JSONResponse(
-                content={
-                    "contract_version": INTERNAL_CONTRACT_VERSION,
-                    "schema_version": "search.v1",
-                    "correlation_id": correlation_id,
-                    "result": {
-                        "provider": provider,
-                        "enabled": enabled,
-                        "priority": priority,
-                    },
-                }
+            return success(
+                context,
+                ProviderKeyResult(
+                    provider=payload.provider,
+                    tested=True,
+                    active=True,
+                    suffix=summary.suffix,
+                    fingerprint=summary.fingerprint,
+                ),
             )
-        except InternalAuthenticationError:
-            return error_response(
-                correlation_id,
-                SearchErrorCode.UNAUTHENTICATED,
-                "service authentication failed",
-                401,
+        except InternalAuthenticationError as exc:
+            return response_error(
+                correlation_id=correlation_id,
+                code=exc.code,
+                message=str(exc),
+                status=401,
             )
-        except InternalContextValidationError:
-            return error_response(
-                correlation_id,
-                SearchErrorCode.INVALID_ARGUMENT,
-                "request context is invalid",
-                400,
+        except (InternalContextValidationError, ValidationError):
+            return response_error(
+                correlation_id=correlation_id,
+                code=SearchErrorCode.INVALID_REQUEST,
+                message="key mutation request is invalid",
+                status=400,
+            )
+        except TimeoutError:
+            return response_error(
+                correlation_id=correlation_id,
+                code=SearchErrorCode.DEADLINE_EXCEEDED,
+                message="request deadline expired",
+                status=504,
+                retryable=True,
             )
         except SearchServiceError as exc:
-            return error_response(
-                correlation_id, exc.code, exc.message, exc.status_code
+            return response_error(
+                correlation_id=correlation_id,
+                code=exc.code,
+                message=exc.message,
+                status=exc.status_code,
+                retryable=exc.retryable,
+                retry_after_ms=exc.retry_after_ms,
+            )
+
+    @application.post("/v1/provider-keys/delete")
+    async def provider_key_delete(request: Request) -> JSONResponse:
+        correlation_id = "unknown"
+        try:
+            context, raw_input = await run_context_operation(
+                request, "provider_key_delete"
+            )
+            correlation_id = context.correlation_id
+            payload = KeyDeleteInput.model_validate(raw_input)
+            await control_plane.delete_key(
+                subject_id=context.principal.subject_id, key_id=payload.key_id
+            )
+            return success(context, ProviderKeyDeleteResult(deleted=True))
+        except InternalAuthenticationError as exc:
+            return response_error(
+                correlation_id=correlation_id,
+                code=exc.code,
+                message=str(exc),
+                status=401,
+            )
+        except (InternalContextValidationError, ValidationError):
+            return response_error(
+                correlation_id=correlation_id,
+                code=SearchErrorCode.INVALID_REQUEST,
+                message="key delete request is invalid",
+                status=400,
+            )
+
+    @application.post("/v1/provider-keys/list")
+    async def provider_key_list(request: Request) -> JSONResponse:
+        correlation_id = "unknown"
+        try:
+            context, _ = await run_context_operation(request, "provider_key_list")
+            correlation_id = context.correlation_id
+            result = ProviderKeyList(
+                providers=await control_plane.list_keys(
+                    subject_id=context.principal.subject_id
+                )
+            )
+            return success(context, result)
+        except InternalAuthenticationError as exc:
+            return response_error(
+                correlation_id=correlation_id,
+                code=exc.code,
+                message=str(exc),
+                status=401,
+            )
+        except InternalContextValidationError:
+            return response_error(
+                correlation_id=correlation_id,
+                code=SearchErrorCode.INVALID_REQUEST,
+                message="request context is invalid",
+                status=400,
             )
 
     return application
@@ -519,10 +676,16 @@ class _UnavailableControlPlane:
     async def list_keys(self, *, subject_id: str) -> tuple[object, ...]:
         raise RuntimeError("search control plane is not configured")
 
-    async def delete_key(self, *, subject_id: str, provider: str) -> None:
+    async def test_key(self, **_values: object) -> bool:
         raise RuntimeError("search control plane is not configured")
 
-    async def update_provider(self, **_values: object) -> None:
+    async def delete_key(self, **_values: object) -> None:
+        raise RuntimeError("search control plane is not configured")
+
+    async def get_settings(self, **_values: object) -> object:
+        raise RuntimeError("search control plane is not configured")
+
+    async def replace_settings(self, **_values: object) -> object:
         raise RuntimeError("search control plane is not configured")
 
 

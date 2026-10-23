@@ -1,17 +1,24 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import httpx
 import pytest
 
 from search_service.app import create_app
 from search_service.contracts import (
+    Capability,
+    NewsSearchRequest,
     Operation,
     ProviderCapabilities,
     ProviderKeySummary,
+    ProviderSetting,
     SearchResult,
+    UserSettings,
+    WebSearchRequest,
 )
 
 
@@ -28,6 +35,7 @@ class FakeProvider:
         self.name = name
         self.capabilities = capabilities
         self.calls: list[tuple[str, str]] = []
+        self.requests = []
         self.tested: list[str] = []
         self.test_result = True
         self.results: tuple[SearchResult, ...] = (
@@ -41,6 +49,7 @@ class FakeProvider:
 
     async def search(self, *, operation, request, api_key, deadline_at):
         self.calls.append((operation.value, api_key))
+        self.requests.append(request)
         return self.results
 
     async def test_key(self, api_key: str, *, deadline_at):
@@ -58,8 +67,9 @@ class FakeControlPlane:
         return self.credentials
 
     async def add_tested_key(
-        self, *, subject_id, provider, api_key, label, suffix, fingerprint
+        self, *, subject_id, provider, api_key, label, suffix, fingerprint, key_id=None
     ):
+        _ = (subject_id, key_id)
         self.raw_keys.append(api_key)
         summary = ProviderKeySummary(
             provider=provider,
@@ -72,11 +82,44 @@ class FakeControlPlane:
         self.keys.append(summary)
         return summary
 
+    async def replace_tested_key(
+        self, *, subject_id, provider, api_key, label, suffix, fingerprint, key_id
+    ):
+        _ = (subject_id, key_id)
+        self.raw_keys.append(api_key)
+        summary = ProviderKeySummary(
+            provider=provider,
+            label=label,
+            suffix=suffix,
+            fingerprint=fingerprint,
+            enabled=True,
+            priority=0,
+        )
+        self.keys = [summary]
+        return summary
+
+    async def test_key(self, *, subject_id, provider, api_key):
+        _ = (subject_id, provider)
+        return api_key != "invalid"
+
     async def list_keys(self, *, subject_id):
         return tuple(self.keys)
 
-    async def delete_key(self, *, subject_id, provider):
-        self.keys = [key for key in self.keys if key.provider != provider]
+    async def delete_key(self, *, subject_id, key_id):
+        _ = (subject_id, key_id)
+        self.keys.clear()
+
+    async def get_settings(self, *, subject_id):
+        _ = subject_id
+        return UserSettings(providers=())
+
+    async def replace_settings(self, *, subject_id, providers):
+        _ = subject_id
+        return UserSettings(
+            providers=tuple(
+                ProviderSetting(**provider.model_dump()) for provider in providers
+            )
+        )
 
     async def update_provider(self, *, subject_id, provider, enabled, priority):
         _ = (subject_id, provider, enabled, priority)
@@ -103,11 +146,55 @@ def client_for(
     )
 
 
+def test_request_defaults_and_openapi_artifact_are_explicit() -> None:
+    web = WebSearchRequest(query=" earnings ")
+    news = NewsSearchRequest(query=" earnings ")
+    assert (web.query, web.result_limit, web.timeout_seconds, web.safe_search) == (
+        "earnings",
+        10,
+        30,
+        True,
+    )
+    assert (news.result_limit, news.timeout_seconds, news.safe_search) == (20, 30, True)
+    artifact = (
+        Path(__file__).resolve().parents[2]
+        / "contracts"
+        / "search-service-openapi.json"
+    )
+    openapi = json.loads(artifact.read_text())
+    assert set(openapi["paths"]) >= {
+        "/v1/search/web",
+        "/v1/search/news",
+        "/v1/providers/catalog",
+        "/v1/settings/read",
+        "/v1/settings/update",
+        "/v1/provider-keys/test",
+        "/v1/provider-keys/add",
+        "/v1/provider-keys/replace",
+        "/v1/provider-keys/delete",
+        "/v1/provider-keys/list",
+    }
+    schemas = openapi["components"]["schemas"]
+    assert schemas["WebSearchRequest"]["properties"]["result_limit"]["default"] == 10
+    assert schemas["NewsSearchRequest"]["properties"]["result_limit"]["default"] == 20
+    assert schemas["WebSearchRequest"]["properties"]["timeout_seconds"]["maximum"] == 60
+    delete_schema = openapi["paths"]["/v1/provider-keys/delete"]["post"]["requestBody"][
+        "content"
+    ]["application/json"]["schema"]["$ref"]
+    assert delete_schema.endswith("ProviderKeyDeleteEnvelope")
+    error_schema = openapi["paths"]["/v1/search/web"]["post"]["responses"]["502"][
+        "content"
+    ]["application/json"]["schema"]["$ref"]
+    assert error_schema.endswith("InternalErrorResponse")
+
+
 @pytest.mark.asyncio
 async def test_authentication_precedes_principal_use() -> None:
     provider = FakeProvider(
         "alpha",
-        capabilities=ProviderCapabilities(operations=frozenset({Operation.WEB})),
+        capabilities=ProviderCapabilities(
+            provider="alpha", operations=frozenset({Operation.WEB})
+        ),
     )
     control = FakeControlPlane((Credential("alpha", "alpha-secret"),))
     client = client_for(control, {"alpha": provider})
@@ -120,18 +207,54 @@ async def test_authentication_precedes_principal_use() -> None:
     finally:
         await client.aclose()
     assert response.status_code == 401
+    assert response.json()["error"]["code"] == "internal_auth_invalid"
     assert provider.calls == []
+
+
+@pytest.mark.asyncio
+async def test_authentication_failures_keep_internal_contract_codes() -> None:
+    control = FakeControlPlane()
+    app = create_app(providers={}, control_plane=control, token=None)
+    client = httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://search.test"
+    )
+    try:
+        unconfigured = await client.post(
+            "/v1/settings/read", json={"context": {}, "input": {}}
+        )
+    finally:
+        await client.aclose()
+    assert unconfigured.status_code == 401
+    assert unconfigured.json()["error"]["code"] == "internal_auth_unconfigured"
+
+    client = client_for(control, {})
+    try:
+        missing = await client.post(
+            "/v1/settings/read", json={"context": {}, "input": {}}
+        )
+    finally:
+        await client.aclose()
+    assert missing.status_code == 401
+    assert missing.json()["error"]["code"] == "internal_auth_missing"
 
 
 @pytest.mark.asyncio
 async def test_priority_skips_disabled_and_missing_key() -> None:
     first = FakeProvider(
         "first",
-        capabilities=ProviderCapabilities(operations=frozenset({Operation.WEB})),
+        capabilities=ProviderCapabilities(
+            provider="first",
+            operations=frozenset({Operation.WEB}),
+            optional_fields=frozenset({Capability.SAFE_SEARCH}),
+        ),
     )
     second = FakeProvider(
         "second",
-        capabilities=ProviderCapabilities(operations=frozenset({Operation.WEB})),
+        capabilities=ProviderCapabilities(
+            provider="second",
+            operations=frozenset({Operation.WEB}),
+            optional_fields=frozenset({Capability.SAFE_SEARCH}),
+        ),
     )
     control = FakeControlPlane(
         (
@@ -158,7 +281,9 @@ async def test_unsupported_options_and_empty_success() -> None:
     provider = FakeProvider(
         "alpha",
         capabilities=ProviderCapabilities(
-            operations=frozenset({Operation.WEB}), optional_fields=frozenset()
+            provider="alpha",
+            operations=frozenset({Operation.WEB}),
+            optional_fields=frozenset(),
         ),
     )
     control = FakeControlPlane((Credential("alpha", "secret"),))
@@ -179,7 +304,11 @@ async def test_unsupported_options_and_empty_success() -> None:
 async def test_empty_search_is_success_with_correlation_and_version() -> None:
     provider = FakeProvider(
         "alpha",
-        capabilities=ProviderCapabilities(operations=frozenset({Operation.NEWS})),
+        capabilities=ProviderCapabilities(
+            provider="alpha",
+            operations=frozenset({Operation.NEWS}),
+            optional_fields=frozenset({Capability.SAFE_SEARCH}),
+        ),
     )
     provider.results = ()
     control = FakeControlPlane((Credential("alpha", "secret"),))
@@ -193,38 +322,89 @@ async def test_empty_search_is_success_with_correlation_and_version() -> None:
     finally:
         await client.aclose()
     assert response.status_code == 200
-    assert response.json()["results"] == []
+    assert response.json()["result"]["results"] == []
     assert response.json()["correlation_id"] == "corr-122"
-    assert response.json()["schema_version"] == "search.v1"
+    assert response.json()["contract_version"] == "internal.v1"
+
+
+@pytest.mark.asyncio
+async def test_search_limit_and_worldwide_options_reach_provider() -> None:
+    provider = FakeProvider(
+        "alpha",
+        capabilities=ProviderCapabilities(
+            provider="alpha",
+            operations=frozenset({Operation.NEWS}),
+            optional_fields=frozenset(
+                {Capability.REGION, Capability.SAFE_SEARCH, Capability.TIME_RANGE}
+            ),
+        ),
+    )
+    control = FakeControlPlane((Credential("alpha", "secret"),))
+    client = client_for(control, {"alpha": provider})
+    try:
+        response = await client.post(
+            "/v1/search/news",
+            headers={"Authorization": "Bearer service-token"},
+            json={
+                "context": context(),
+                "input": {
+                    "query": "earnings",
+                    "result_limit": 8,
+                    "region": "worldwide",
+                    "time_range": "week",
+                    "safe_search": False,
+                },
+            },
+        )
+    finally:
+        await client.aclose()
+    assert response.status_code == 200
+    sent = provider.requests[0]
+    assert (sent.result_limit, sent.region, sent.time_range, sent.safe_search) == (
+        8,
+        "worldwide",
+        "week",
+        False,
+    )
 
 
 @pytest.mark.asyncio
 async def test_key_test_failure_does_not_persist_and_success_redacts() -> None:
     provider = FakeProvider(
         "alpha",
-        capabilities=ProviderCapabilities(operations=frozenset({Operation.WEB})),
+        capabilities=ProviderCapabilities(
+            provider="alpha", operations=frozenset({Operation.WEB})
+        ),
     )
     provider.test_result = False
     control = FakeControlPlane()
     client = client_for(control, {"alpha": provider})
     try:
         failed = await client.post(
-            "/v1/provider-keys/alpha/add",
+            "/v1/provider-keys/add",
             headers={"Authorization": "Bearer service-token"},
             json={
                 "context": context(),
-                "input": {"api_key": "raw-secret", "label": "main"},
+                "input": {
+                    "provider": "alpha",
+                    "api_key": "raw-secret",
+                    "label": "main",
+                },
             },
         )
         assert failed.status_code == 422
         assert control.keys == []
         provider.test_result = True
         success = await client.post(
-            "/v1/provider-keys/alpha/add",
+            "/v1/provider-keys/add",
             headers={"Authorization": "Bearer service-token"},
             json={
                 "context": context(),
-                "input": {"api_key": "raw-secret", "label": "main"},
+                "input": {
+                    "provider": "alpha",
+                    "api_key": "raw-secret",
+                    "label": "main",
+                },
             },
         )
     finally:
@@ -232,3 +412,19 @@ async def test_key_test_failure_does_not_persist_and_success_redacts() -> None:
     assert success.status_code == 200
     assert "raw-secret" not in success.text
     assert control.raw_keys == ["raw-secret"]
+
+
+@pytest.mark.asyncio
+async def test_delete_key_uses_owned_id_without_key_material() -> None:
+    control = FakeControlPlane()
+    client = client_for(control, {})
+    try:
+        response = await client.post(
+            "/v1/provider-keys/delete",
+            headers={"Authorization": "Bearer service-token"},
+            json={"context": context(), "input": {"key_id": "key-123"}},
+        )
+    finally:
+        await client.aclose()
+    assert response.status_code == 200
+    assert response.json()["result"] == {"deleted": True}

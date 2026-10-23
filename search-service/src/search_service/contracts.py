@@ -6,9 +6,10 @@ from typing import Literal
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
+from src.shared.internal_services import InternalRequestContext
 
 SEARCH_CONTRACT_VERSION = "search.v1"
-MAX_QUERY_LENGTH = 500
+MAX_QUERY_LENGTH = 512
 MAX_RESULTS = 50
 
 
@@ -36,12 +37,21 @@ class TimeRange(StrEnum):
     YEAR = "year"
 
 
+class Region(StrEnum):
+    WORLDWIDE = "worldwide"
+
+
+class EmptyInput(WireModel):
+    pass
+
+
 class SearchRequestBase(WireModel):
-    query: str = Field(min_length=1, max_length=MAX_QUERY_LENGTH)
-    limit: int = Field(default=10, ge=1, le=MAX_RESULTS)
-    region: str | None = Field(default=None, min_length=2, max_length=16)
+    query: str = Field(min_length=1, max_length=512)
+    result_limit: int = Field(default=10, ge=1, le=MAX_RESULTS)
+    region: str | Region | None = Field(default=None)
     time_range: TimeRange | None = None
-    safe_search: bool | None = None
+    safe_search: bool = True
+    timeout_seconds: int = Field(default=30, ge=1, le=60)
 
     @field_validator("query")
     @classmethod
@@ -57,6 +67,7 @@ class WebSearchRequest(SearchRequestBase):
 
 class NewsSearchRequest(SearchRequestBase):
     operation: Literal[Operation.NEWS] = Operation.NEWS
+    result_limit: int = Field(default=20, ge=1, le=MAX_RESULTS)
 
 
 class SearchResult(WireModel):
@@ -67,7 +78,7 @@ class SearchResult(WireModel):
     source: str | None = Field(default=None, max_length=512)
     published_at: datetime | None = None
     image_url: str | None = Field(default=None, max_length=4096)
-    provider_metadata: dict[str, str | int | float | bool | None] = Field(
+    provider_metadata: dict[str, dict[str, str | int | float | bool | None]] = Field(
         default_factory=dict
     )
 
@@ -82,26 +93,30 @@ class SearchResult(WireModel):
         return value
 
 
-class SearchSuccess(WireModel):
-    contract_version: Literal["internal.v1"]
-    schema_version: Literal[SEARCH_CONTRACT_VERSION]
-    correlation_id: str = Field(min_length=1, max_length=128)
+class SearchOperationResult(WireModel):
     operation: Operation
     results: tuple[SearchResult, ...]
 
 
+class SearchSuccess(WireModel):
+    contract_version: Literal["internal.v1"]
+    correlation_id: str = Field(min_length=1, max_length=128)
+    result: SearchOperationResult
+
+
 class SearchErrorCode(StrEnum):
-    INVALID_ARGUMENT = "INVALID_ARGUMENT"
+    INVALID_REQUEST = "INVALID_REQUEST"
     UNSUPPORTED_CAPABILITY = "UNSUPPORTED_CAPABILITY"
-    UNAUTHENTICATED = "UNAUTHENTICATED"
+    AUTHENTICATION_FAILED = "AUTHENTICATION_FAILED"
+    INVALID_PROVIDER_KEY = "INVALID_PROVIDER_KEY"
     RATE_LIMITED = "RATE_LIMITED"
     DEADLINE_EXCEEDED = "DEADLINE_EXCEEDED"
     UPSTREAM_UNAVAILABLE = "UPSTREAM_UNAVAILABLE"
-    MALFORMED_UPSTREAM_RESPONSE = "MALFORMED_UPSTREAM_RESPONSE"
+    UPSTREAM_MALFORMED = "UPSTREAM_MALFORMED"
 
 
 class ErrorBody(WireModel):
-    code: SearchErrorCode
+    code: str = Field(min_length=1, max_length=128)
     message: str = Field(min_length=1, max_length=256)
     retryable: bool
     retry_after_ms: int | None = Field(default=None, ge=0)
@@ -109,19 +124,54 @@ class ErrorBody(WireModel):
 
 class SearchFailure(WireModel):
     contract_version: Literal["internal.v1"]
-    schema_version: Literal[SEARCH_CONTRACT_VERSION]
     correlation_id: str = Field(min_length=1, max_length=128)
     error: ErrorBody
 
 
 class ProviderCapabilities(WireModel):
+    provider: str = Field(min_length=1, max_length=128)
     operations: frozenset[Operation]
     optional_fields: frozenset[Capability] = frozenset()
+    key_required: bool = True
 
 
-class ProviderKeyInput(WireModel):
+class ProviderCatalog(WireModel):
+    providers: tuple[ProviderCapabilities, ...]
+
+
+class ProviderKeyAddInput(WireModel):
+    provider: str = Field(min_length=1, max_length=128)
     api_key: SecretStr = Field(min_length=1, max_length=4096)
     label: str = Field(min_length=1, max_length=128)
+
+
+class ProviderKeyReplaceInput(ProviderKeyAddInput):
+    key_id: str = Field(min_length=1, max_length=128)
+
+
+class ProviderKeyTestInput(WireModel):
+    provider: str = Field(min_length=1, max_length=128)
+    api_key: SecretStr = Field(min_length=1, max_length=4096)
+
+
+class ProviderKeyDeleteInput(WireModel):
+    key_id: str = Field(min_length=1, max_length=128)
+
+
+class KeyAddInput(ProviderKeyAddInput):
+    pass
+
+
+class KeyReplaceInput(ProviderKeyReplaceInput):
+    pass
+
+
+class KeyTestInput(ProviderKeyTestInput):
+    pass
+
+
+class KeyDeleteInput(ProviderKeyDeleteInput):
+    pass
 
 
 class ProviderKeySummary(WireModel):
@@ -131,6 +181,10 @@ class ProviderKeySummary(WireModel):
     fingerprint: str = Field(min_length=1, max_length=128)
     enabled: bool
     priority: int = Field(ge=0)
+    status: Literal["active", "disabled", "cooldown", "invalid"] = "active"
+    failure_count: int = Field(default=0, ge=0)
+    cooldown_until: datetime | None = None
+    last_tested_at: datetime | None = None
 
 
 class ProviderKeyResult(WireModel):
@@ -145,5 +199,80 @@ class ProviderKeyList(WireModel):
     providers: tuple[ProviderKeySummary, ...]
 
 
-class ProviderKeyDelete(WireModel):
+class ProviderSetting(WireModel):
     provider: str = Field(min_length=1, max_length=128)
+    enabled: bool
+    priority: int = Field(ge=0)
+    key: ProviderKeySummary | None = None
+
+
+class ProviderPreference(WireModel):
+    provider: str = Field(min_length=1, max_length=128)
+    enabled: bool
+    priority: int = Field(ge=0)
+
+
+class UserSettings(WireModel):
+    providers: tuple[ProviderSetting, ...]
+
+
+class SettingsUpdateInput(WireModel):
+    providers: tuple[ProviderPreference, ...] = Field(min_length=1)
+
+
+class SettingsReadResult(WireModel):
+    settings: UserSettings
+
+
+class ProviderCatalogResult(WireModel):
+    catalog: ProviderCatalog
+
+
+class ProviderKeyTestResult(WireModel):
+    provider: str
+    valid: bool
+    status: Literal["valid", "invalid", "unavailable"]
+
+
+class ProviderKeyDeleteResult(WireModel):
+    deleted: bool
+
+
+class WebSearchEnvelope(WireModel):
+    context: InternalRequestContext
+    input: WebSearchRequest
+
+
+class NewsSearchEnvelope(WireModel):
+    context: InternalRequestContext
+    input: NewsSearchRequest
+
+
+class EmptyEnvelope(WireModel):
+    context: InternalRequestContext
+    input: EmptyInput
+
+
+class SettingsEnvelope(WireModel):
+    context: InternalRequestContext
+    input: SettingsUpdateInput
+
+
+class ProviderKeyTestEnvelope(WireModel):
+    context: InternalRequestContext
+    input: ProviderKeyTestInput
+
+
+class ProviderKeyAddEnvelope(WireModel):
+    context: InternalRequestContext
+    input: ProviderKeyAddInput
+
+
+class ProviderKeyReplaceEnvelope(WireModel):
+    context: InternalRequestContext
+    input: ProviderKeyReplaceInput
+
+
+class ProviderKeyDeleteEnvelope(WireModel):
+    context: InternalRequestContext
+    input: ProviderKeyDeleteInput
