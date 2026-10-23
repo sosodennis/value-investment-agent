@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, datetime, timedelta
@@ -8,7 +7,7 @@ from typing import NoReturn, TypeVar
 from uuid import uuid4
 
 import httpx
-from pydantic import BaseModel
+from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from src.llm_provider.application.context import get_provider_principal
 from src.llm_provider.domain.contracts import (
@@ -24,6 +23,37 @@ from src.llm_provider.domain.errors import ProviderSettingsError
 from src.llm_provider.domain.provider_models import ManagedProviderKey, OpenRouterModel
 
 _Model = TypeVar("_Model", bound=BaseModel)
+_Value = TypeVar("_Value")
+
+
+class _CompletionEnvelope(BaseModel):
+    result: CompletionResult
+
+
+class _StreamEnvelope(BaseModel):
+    event: StreamEvent
+
+
+class _SettingsEnvelope(BaseModel):
+    result: dict[str, object]
+
+
+def _malformed(request: CompletionRequest) -> NoReturn:
+    raise LLMProviderError(
+        code=LLMErrorCode.MALFORMED_RESPONSE,
+        provider="llm-provider-service",
+        model=request.route.alias,
+        request_id=request.request_id,
+        reason="provider service returned a malformed response",
+        retryable=False,
+    ) from None
+
+
+def _settings_value(adapter: TypeAdapter[_Value], value: object) -> _Value:
+    try:
+        return adapter.validate_python(value)
+    except ValidationError:
+        raise ProviderSettingsError("provider_unavailable") from None
 
 
 def _url() -> str:
@@ -127,19 +157,19 @@ class LLMProviderServiceClient(LLMProviderPort):
 
     @staticmethod
     def _result(
-        payload: dict[str, object], request: CompletionRequest
+        response: httpx.Response, request: CompletionRequest
     ) -> CompletionResult:
-        result = payload.get("result")
-        if not isinstance(result, dict):
-            raise LLMProviderError(
-                code=LLMErrorCode.MALFORMED_RESPONSE,
-                provider="llm-provider-service",
-                model=request.route.alias,
-                request_id=request.request_id,
-                reason="provider service returned a malformed response",
-                retryable=False,
-            )
-        return CompletionResult.model_validate(result)
+        try:
+            return _CompletionEnvelope.model_validate_json(response.content).result
+        except ValidationError:
+            _malformed(request)
+
+    @staticmethod
+    def _event(line: str, request: CompletionRequest) -> StreamEvent:
+        try:
+            return _StreamEnvelope.model_validate_json(line[6:]).event
+        except ValidationError:
+            _malformed(request)
 
     @classmethod
     def _raise_response(
@@ -148,17 +178,17 @@ class LLMProviderServiceClient(LLMProviderPort):
         try:
             body = response.json()
             error = body.get("error", {}) if isinstance(body, dict) else {}
+            if not isinstance(error, dict):
+                raise ValueError("invalid error envelope")
             code = str(error.get("code", "upstream_unavailable"))
-            message = str(error.get("message", "LLM provider service request failed"))[
-                :512
-            ]
             retryable = bool(error.get("retryable", response.status_code >= 500))
         except (ValueError, TypeError):
-            code, message, retryable = (
+            code, retryable = (
                 "upstream_unavailable",
-                "LLM provider service request failed",
                 True,
             )
+        if code == "deadline_exceeded":
+            code = LLMErrorCode.UPSTREAM_TIMEOUT.value
         try:
             error_code = LLMErrorCode(code)
         except ValueError:
@@ -168,7 +198,7 @@ class LLMProviderServiceClient(LLMProviderPort):
             provider="llm-provider-service",
             model=request.route.alias,
             request_id=request.request_id,
-            reason=message,
+            reason="LLM provider service request failed",
             retryable=retryable,
             http_status=response.status_code,
         )
@@ -219,13 +249,13 @@ class LLMProviderServiceClient(LLMProviderPort):
         response = self._post(request)
         if response.status_code >= 400:
             self._raise_response(response, request)
-        return self._result(response.json(), request)
+        return self._result(response, request)
 
     async def acomplete(self, request: CompletionRequest) -> CompletionResult:
         response = await self._apost(request)
         if response.status_code >= 400:
             self._raise_response(response, request)
-        return self._result(response.json(), request)
+        return self._result(response, request)
 
     def complete_structured(self, request: StructuredRequest[_Model]) -> _Model:
         response = self._post(
@@ -234,8 +264,8 @@ class LLMProviderServiceClient(LLMProviderPort):
         )
         if response.status_code >= 400:
             self._raise_response(response, request.completion)
-        result = self._result(response.json(), request.completion)
-        return request.response_schema.model_validate_json(result.text)
+        result = self._result(response, request.completion)
+        return self._structured_result(request, result)
 
     async def acomplete_structured(self, request: StructuredRequest[_Model]) -> _Model:
         response = await self._apost(
@@ -244,8 +274,24 @@ class LLMProviderServiceClient(LLMProviderPort):
         )
         if response.status_code >= 400:
             self._raise_response(response, request.completion)
-        result = self._result(response.json(), request.completion)
-        return request.response_schema.model_validate_json(result.text)
+        result = self._result(response, request.completion)
+        return self._structured_result(request, result)
+
+    @staticmethod
+    def _structured_result(
+        request: StructuredRequest[_Model], result: CompletionResult
+    ) -> _Model:
+        try:
+            return request.response_schema.model_validate_json(result.text)
+        except ValidationError:
+            raise LLMProviderError(
+                code=LLMErrorCode.SCHEMA_VALIDATION_FAILED,
+                provider="llm-provider-service",
+                model=request.completion.route.alias,
+                request_id=request.completion.request_id,
+                reason="provider response did not match the requested schema",
+                retryable=False,
+            ) from None
 
     def stream(self, request: CompletionRequest) -> Iterator[StreamEvent]:
         yield from self._stream_sync(request)
@@ -265,11 +311,12 @@ class LLMProviderServiceClient(LLMProviderPort):
                 timeout=request.timeout_seconds,
             ) as response:
                 if response.status_code >= 400:
+                    response.read()
                     self._raise_response(response, request)
                 for line in response.iter_lines():
                     if not line.startswith("data: "):
                         continue
-                    yield StreamEvent.model_validate(json.loads(line[6:])["event"])
+                    yield self._event(line, request)
         except httpx.TransportError as exc:
             _raise_provider_transport_error(request, exc)
 
@@ -288,10 +335,11 @@ class LLMProviderServiceClient(LLMProviderPort):
                 timeout=request.timeout_seconds,
             ) as response:
                 if response.status_code >= 400:
+                    await response.aread()
                     self._raise_response(response, request)
                 async for line in response.aiter_lines():
                     if line.startswith("data: "):
-                        yield StreamEvent.model_validate(json.loads(line[6:])["event"])
+                        yield self._event(line, request)
         except httpx.TransportError as exc:
             _raise_provider_transport_error(request, exc)
 
@@ -331,15 +379,16 @@ class LLMProviderServiceSettingsClient:
             raise ProviderSettingsError(
                 "not_found" if response.status_code == 404 else "provider_unavailable"
             )
-        body = response.json()
-        result = body.get("result") if isinstance(body, dict) else None
-        if not isinstance(result, dict):
-            raise ProviderSettingsError("provider_unavailable")
-        return result
+        try:
+            return _SettingsEnvelope.model_validate_json(response.content).result
+        except ValidationError:
+            raise ProviderSettingsError("provider_unavailable") from None
 
     async def list_keys(self, *, user_id: str) -> list[ManagedProviderKey]:
         result = await self._call("/v1/provider-keys/list", {}, user_id=user_id)
-        return [_managed_key(item) for item in result.get("keys", [])]
+        return _settings_value(
+            TypeAdapter(list[ManagedProviderKey]), result.get("keys")
+        )
 
     async def add_key(
         self, *, user_id: str, key: str, label: str
@@ -349,7 +398,7 @@ class LLMProviderServiceSettingsClient:
             {"api_key": key, "label": label},
             user_id=user_id,
         )
-        return _managed_key(result["key"])
+        return _settings_value(TypeAdapter(ManagedProviderKey), result.get("key"))
 
     async def replace_key(
         self, *, user_id: str, key_id: str, key: str, label: str
@@ -359,13 +408,16 @@ class LLMProviderServiceSettingsClient:
             {"key_id": key_id, "api_key": key, "label": label},
             user_id=user_id,
         )
-        return _managed_key(result["key"])
+        return _settings_value(TypeAdapter(ManagedProviderKey), result.get("key"))
 
     async def test_key(self, *, user_id: str, key_id: str) -> bool:
         result = await self._call(
             "/v1/provider-keys/test", {"key_id": key_id}, user_id=user_id
         )
-        return bool(result.get("passed"))
+        try:
+            return TypeAdapter(bool).validate_python(result.get("passed"), strict=True)
+        except ValidationError:
+            raise ProviderSettingsError("provider_unavailable") from None
 
     async def delete_key(self, *, user_id: str, key_id: str) -> None:
         await self._call(
@@ -378,15 +430,15 @@ class LLMProviderServiceSettingsClient:
         result = await self._call(
             "/v1/settings/read", {}, user_id=user_id or self._principal()
         )
-        return str(result["selected_model"]), [
-            _model(item) for item in result.get("models", [])
-        ]
+        return _settings_value(
+            TypeAdapter(str), result.get("selected_model")
+        ), _settings_value(TypeAdapter(list[OpenRouterModel]), result.get("models"))
 
     async def update_selected_model(self, *, model_id: str, user_id: str) -> str:
         result = await self._call(
             "/v1/settings/update", {"selected_model": model_id}, user_id=user_id
         )
-        return str(result["selected_model"])
+        return _settings_value(TypeAdapter(str), result.get("selected_model"))
 
     def _principal(self) -> str:
         principal = get_provider_principal()
@@ -396,49 +448,3 @@ class LLMProviderServiceSettingsClient:
 
     async def aclose(self) -> None:
         await self._client.aclose()
-
-
-def _managed_key(item: object) -> ManagedProviderKey:
-    if not isinstance(item, dict):
-        raise ProviderSettingsError("provider_unavailable")
-    return ManagedProviderKey(
-        id=str(item.get("id", "")),
-        label=str(item.get("label", "OpenRouter key")),
-        suffix=str(item.get("suffix", "****")),
-        fingerprint=str(item.get("fingerprint", "unknown")),
-        created_at=item.get("created_at")
-        if isinstance(item.get("created_at"), str)
-        else None,
-        status=str(item.get("status", "untested")),
-        last_tested_at=item.get("last_tested_at")
-        if isinstance(item.get("last_tested_at"), str)
-        else None,
-        failure_count=int(item.get("failure_count", 0)),
-        cooldown_until=item.get("cooldown_until")
-        if isinstance(item.get("cooldown_until"), str)
-        else None,
-        last_error=item.get("last_error")
-        if isinstance(item.get("last_error"), str)
-        else None,
-        last_used_at=item.get("last_used_at")
-        if isinstance(item.get("last_used_at"), str)
-        else None,
-        replacement_retire_at=item.get("replacement_retire_at")
-        if isinstance(item.get("replacement_retire_at"), str)
-        else None,
-    )
-
-
-def _model(item: object) -> OpenRouterModel:
-    if not isinstance(item, dict):
-        raise ProviderSettingsError("provider_unavailable")
-    return OpenRouterModel(
-        id=str(item.get("id", "")),
-        name=str(item.get("name", "")),
-        description=item.get("description")
-        if isinstance(item.get("description"), str)
-        else None,
-        context_length=int(item["context_length"])
-        if isinstance(item.get("context_length"), int)
-        else None,
-    )
