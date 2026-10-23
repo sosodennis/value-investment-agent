@@ -1,6 +1,9 @@
 from fastapi.testclient import TestClient
 
-from src.shared.internal_services import INTERNAL_CONTRACT_VERSION
+from src.shared.internal_services import (
+    INTERNAL_CONTRACT_VERSION,
+    ReadinessStatus,
+)
 from tests.fakes.internal_capability_service import create_fake_internal_service
 
 
@@ -62,3 +65,20 @@ def test_fake_service_readiness_is_versioned_and_redacted() -> None:
         "contract_version": INTERNAL_CONTRACT_VERSION,
     }
     assert "service-secret" not in response.text
+
+
+def test_fake_service_reports_not_ready_with_service_unavailable_status() -> None:
+    client = TestClient(
+        create_fake_internal_service(
+            expected_token="service-secret",
+            readiness_status=ReadinessStatus.NOT_READY,
+        )
+    )
+
+    response = client.get("/readyz")
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "status": "not_ready",
+        "contract_version": INTERNAL_CONTRACT_VERSION,
+    }

@@ -3,7 +3,7 @@
 from collections.abc import Mapping
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.shared.internal_services import (
@@ -29,15 +29,21 @@ class _FakeResponse(BaseModel):
     result: dict[str, object]
 
 
-def create_fake_internal_service(*, expected_token: str) -> FastAPI:
+def create_fake_internal_service(
+    *,
+    expected_token: str,
+    readiness_status: ReadinessStatus = ReadinessStatus.READY,
+) -> FastAPI:
     """Build an in-process service with no dependency on backend app modules."""
 
     app = FastAPI()
 
     @app.get("/readyz", response_model=InternalReadiness)
-    async def ready() -> InternalReadiness:
+    async def ready(response: Response) -> InternalReadiness:
+        if readiness_status is ReadinessStatus.NOT_READY:
+            response.status_code = 503
         return InternalReadiness(
-            status=ReadinessStatus.READY,
+            status=readiness_status,
             contract_version=INTERNAL_CONTRACT_VERSION,
         )
 
