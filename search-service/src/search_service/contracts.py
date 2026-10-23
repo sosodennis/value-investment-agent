@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import StrEnum
-from typing import Literal
+from typing import Generic, Literal, TypeVar
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
@@ -87,6 +87,15 @@ class SearchResult(WireModel):
         default_factory=dict
     )
 
+    @field_validator("published_at")
+    @classmethod
+    def published_at_must_be_utc(cls, value: datetime | None) -> datetime | None:
+        if value is not None and (
+            value.tzinfo is None or value.utcoffset() != timedelta(0)
+        ):
+            raise ValueError("published_at must be a UTC RFC3339 timestamp")
+        return value
+
     @field_validator("canonical_url", "image_url")
     @classmethod
     def require_http_url(cls, value: str | None) -> str | None:
@@ -113,11 +122,21 @@ class SearchErrorCode(StrEnum):
     INVALID_REQUEST = "INVALID_REQUEST"
     UNSUPPORTED_CAPABILITY = "UNSUPPORTED_CAPABILITY"
     AUTHENTICATION_FAILED = "AUTHENTICATION_FAILED"
-    INVALID_PROVIDER_KEY = "INVALID_PROVIDER_KEY"
     RATE_LIMITED = "RATE_LIMITED"
     DEADLINE_EXCEEDED = "DEADLINE_EXCEEDED"
     UPSTREAM_UNAVAILABLE = "UPSTREAM_UNAVAILABLE"
     UPSTREAM_MALFORMED = "UPSTREAM_MALFORMED"
+
+
+SEARCH_ERROR_STATUSES: dict[str, int] = {
+    SearchErrorCode.INVALID_REQUEST: 400,
+    SearchErrorCode.UNSUPPORTED_CAPABILITY: 422,
+    SearchErrorCode.AUTHENTICATION_FAILED: 422,
+    SearchErrorCode.RATE_LIMITED: 429,
+    SearchErrorCode.DEADLINE_EXCEEDED: 504,
+    SearchErrorCode.UPSTREAM_UNAVAILABLE: 503,
+    SearchErrorCode.UPSTREAM_MALFORMED: 502,
+}
 
 
 class ErrorBody(WireModel):
@@ -163,23 +182,8 @@ class ProviderKeyDeleteInput(WireModel):
     key_id: str = Field(min_length=1, max_length=128)
 
 
-class KeyAddInput(ProviderKeyAddInput):
-    pass
-
-
-class KeyReplaceInput(ProviderKeyReplaceInput):
-    pass
-
-
-class KeyTestInput(ProviderKeyTestInput):
-    pass
-
-
-class KeyDeleteInput(ProviderKeyDeleteInput):
-    pass
-
-
 class ProviderKeySummary(WireModel):
+    id: str = Field(min_length=1, max_length=128)
     provider: str = Field(min_length=1, max_length=128)
     label: str = Field(min_length=1, max_length=128)
     suffix: str = Field(min_length=4, max_length=8)
@@ -193,6 +197,7 @@ class ProviderKeySummary(WireModel):
 
 
 class ProviderKeyResult(WireModel):
+    id: str = Field(min_length=1, max_length=128)
     provider: str
     tested: bool
     active: bool
@@ -281,3 +286,36 @@ class ProviderKeyReplaceEnvelope(WireModel):
 class ProviderKeyDeleteEnvelope(WireModel):
     context: InternalRequestContext
     input: ProviderKeyDeleteInput
+
+
+_Result = TypeVar("_Result")
+
+
+class SuccessEnvelope(WireModel, Generic[_Result]):
+    correlation_id: str = Field(min_length=1, max_length=128)
+    contract_version: Literal["internal.v1"]
+    result: _Result
+
+
+class ProviderCatalogSuccess(SuccessEnvelope[ProviderCatalogResult]):
+    pass
+
+
+class SettingsSuccess(SuccessEnvelope[SettingsReadResult]):
+    pass
+
+
+class ProviderKeyTestSuccess(SuccessEnvelope[ProviderKeyTestResult]):
+    pass
+
+
+class ProviderKeySuccess(SuccessEnvelope[ProviderKeyResult]):
+    pass
+
+
+class ProviderKeyDeleteSuccess(SuccessEnvelope[ProviderKeyDeleteResult]):
+    pass
+
+
+class ProviderKeyListSuccess(SuccessEnvelope[ProviderKeyList]):
+    pass

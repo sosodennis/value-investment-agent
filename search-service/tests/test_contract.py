@@ -67,11 +67,12 @@ class FakeControlPlane:
         return self.credentials
 
     async def add_tested_key(
-        self, *, subject_id, provider, api_key, label, suffix, fingerprint, key_id=None
+        self, *, subject_id, provider, api_key, label, suffix, fingerprint
     ):
-        _ = (subject_id, key_id)
+        _ = subject_id
         self.raw_keys.append(api_key)
         summary = ProviderKeySummary(
+            id="key-123",
             provider=provider,
             label=label,
             suffix=suffix,
@@ -88,6 +89,7 @@ class FakeControlPlane:
         _ = (subject_id, key_id)
         self.raw_keys.append(api_key)
         summary = ProviderKeySummary(
+            id=key_id,
             provider=provider,
             label=label,
             suffix=suffix,
@@ -97,10 +99,6 @@ class FakeControlPlane:
         )
         self.keys = [summary]
         return summary
-
-    async def test_key(self, *, subject_id, provider, api_key):
-        _ = (subject_id, provider)
-        return api_key != "invalid"
 
     async def list_keys(self, *, subject_id):
         return tuple(self.keys)
@@ -120,9 +118,6 @@ class FakeControlPlane:
                 ProviderSetting(**provider.model_dump()) for provider in providers
             )
         )
-
-    async def update_provider(self, *, subject_id, provider, enabled, priority):
-        _ = (subject_id, provider, enabled, priority)
 
 
 def context(*, user_id: str = "user-a") -> dict[str, object]:

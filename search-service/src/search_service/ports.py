@@ -54,7 +54,6 @@ class SearchControlPlane(Protocol):
         label: str,
         suffix: str,
         fingerprint: str,
-        key_id: str | None = None,
     ) -> ProviderKeySummary: ...
 
     async def replace_tested_key(
@@ -66,14 +65,10 @@ class SearchControlPlane(Protocol):
         label: str,
         suffix: str,
         fingerprint: str,
-        key_id: str | None = None,
+        key_id: str,
     ) -> ProviderKeySummary: ...
 
     async def list_keys(self, *, subject_id: str) -> tuple[ProviderKeySummary, ...]: ...
-
-    async def test_key(
-        self, *, subject_id: str, provider: str, api_key: str
-    ) -> bool: ...
 
     async def delete_key(self, *, subject_id: str, key_id: str) -> None: ...
 
@@ -82,15 +77,6 @@ class SearchControlPlane(Protocol):
     async def replace_settings(
         self, *, subject_id: str, providers: tuple[ProviderPreference, ...]
     ) -> UserSettings: ...
-
-    async def update_provider(
-        self,
-        *,
-        subject_id: str,
-        provider: str,
-        enabled: bool,
-        priority: int,
-    ) -> None: ...
 
 
 def requested_capabilities(request: SearchRequestBase) -> frozenset[Capability]:

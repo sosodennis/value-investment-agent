@@ -333,6 +333,32 @@
         "title": "ProviderCatalogResult",
         "type": "object"
       },
+      "ProviderCatalogSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": "internal.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "correlation_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "result": {
+            "$ref": "#/components/schemas/ProviderCatalogResult"
+          }
+        },
+        "required": [
+          "correlation_id",
+          "contract_version",
+          "result"
+        ],
+        "title": "ProviderCatalogSuccess",
+        "type": "object"
+      },
       "ProviderKeyAddEnvelope": {
         "additionalProperties": false,
         "properties": {
@@ -429,6 +455,32 @@
         "title": "ProviderKeyDeleteResult",
         "type": "object"
       },
+      "ProviderKeyDeleteSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": "internal.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "correlation_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "result": {
+            "$ref": "#/components/schemas/ProviderKeyDeleteResult"
+          }
+        },
+        "required": [
+          "correlation_id",
+          "contract_version",
+          "result"
+        ],
+        "title": "ProviderKeyDeleteSuccess",
+        "type": "object"
+      },
       "ProviderKeyList": {
         "additionalProperties": false,
         "properties": {
@@ -444,6 +496,32 @@
           "providers"
         ],
         "title": "ProviderKeyList",
+        "type": "object"
+      },
+      "ProviderKeyListSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": "internal.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "correlation_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "result": {
+            "$ref": "#/components/schemas/ProviderKeyList"
+          }
+        },
+        "required": [
+          "correlation_id",
+          "contract_version",
+          "result"
+        ],
+        "title": "ProviderKeyListSuccess",
         "type": "object"
       },
       "ProviderKeyReplaceEnvelope": {
@@ -513,6 +591,12 @@
             "title": "Fingerprint",
             "type": "string"
           },
+          "id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
           "provider": {
             "title": "Provider",
             "type": "string"
@@ -527,6 +611,7 @@
           }
         },
         "required": [
+          "id",
           "provider",
           "tested",
           "active",
@@ -534,6 +619,32 @@
           "fingerprint"
         ],
         "title": "ProviderKeyResult",
+        "type": "object"
+      },
+      "ProviderKeySuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": "internal.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "correlation_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "result": {
+            "$ref": "#/components/schemas/ProviderKeyResult"
+          }
+        },
+        "required": [
+          "correlation_id",
+          "contract_version",
+          "result"
+        ],
+        "title": "ProviderKeySuccess",
         "type": "object"
       },
       "ProviderKeySummary": {
@@ -566,6 +677,12 @@
             "maxLength": 128,
             "minLength": 1,
             "title": "Fingerprint",
+            "type": "string"
+          },
+          "id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Id",
             "type": "string"
           },
           "label": {
@@ -617,6 +734,7 @@
           }
         },
         "required": [
+          "id",
           "provider",
           "label",
           "suffix",
@@ -696,6 +814,32 @@
           "status"
         ],
         "title": "ProviderKeyTestResult",
+        "type": "object"
+      },
+      "ProviderKeyTestSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": "internal.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "correlation_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "result": {
+            "$ref": "#/components/schemas/ProviderKeyTestResult"
+          }
+        },
+        "required": [
+          "correlation_id",
+          "contract_version",
+          "result"
+        ],
+        "title": "ProviderKeyTestSuccess",
         "type": "object"
       },
       "ProviderPreference": {
@@ -949,6 +1093,32 @@
         "title": "SettingsReadResult",
         "type": "object"
       },
+      "SettingsSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": "internal.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "correlation_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "result": {
+            "$ref": "#/components/schemas/SettingsReadResult"
+          }
+        },
+        "required": [
+          "correlation_id",
+          "contract_version",
+          "result"
+        ],
+        "title": "SettingsSuccess",
+        "type": "object"
+      },
       "SettingsUpdateInput": {
         "additionalProperties": false,
         "properties": {
@@ -1187,7 +1357,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProviderKeyResult"
+                  "$ref": "#/components/schemas/ProviderKeySuccess"
                 }
               }
             },
@@ -1290,7 +1460,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProviderKeyDeleteResult"
+                  "$ref": "#/components/schemas/ProviderKeyDeleteSuccess"
                 }
               }
             },
@@ -1326,7 +1496,47 @@
             },
             "description": "Stable internal error"
           },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
           "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "504": {
             "content": {
               "application/json": {
                 "schema": {
@@ -1363,7 +1573,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProviderKeyList"
+                  "$ref": "#/components/schemas/ProviderKeyListSuccess"
                 }
               }
             },
@@ -1389,7 +1599,47 @@
             },
             "description": "Stable internal error"
           },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
           "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "504": {
             "content": {
               "application/json": {
                 "schema": {
@@ -1426,7 +1676,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProviderKeyResult"
+                  "$ref": "#/components/schemas/ProviderKeySuccess"
                 }
               }
             },
@@ -1539,7 +1789,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProviderKeyTestResult"
+                  "$ref": "#/components/schemas/ProviderKeyTestSuccess"
                 }
               }
             },
@@ -1576,6 +1826,16 @@
             "description": "Stable internal error"
           },
           "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "502": {
             "content": {
               "application/json": {
                 "schema": {
@@ -1632,7 +1892,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProviderCatalogResult"
+                  "$ref": "#/components/schemas/ProviderCatalogSuccess"
                 }
               }
             },
@@ -1658,7 +1918,47 @@
             },
             "description": "Stable internal error"
           },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
           "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "504": {
             "content": {
               "application/json": {
                 "schema": {
@@ -1901,7 +2201,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SettingsReadResult"
+                  "$ref": "#/components/schemas/SettingsSuccess"
                 }
               }
             },
@@ -1927,7 +2227,47 @@
             },
             "description": "Stable internal error"
           },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
           "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "504": {
             "content": {
               "application/json": {
                 "schema": {
@@ -1964,7 +2304,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SettingsReadResult"
+                  "$ref": "#/components/schemas/SettingsSuccess"
                 }
               }
             },
@@ -2000,7 +2340,47 @@
             },
             "description": "Stable internal error"
           },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
           "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "504": {
             "content": {
               "application/json": {
                 "schema": {
@@ -2018,5 +2398,14 @@
         ]
       }
     }
+  },
+  "x-search-error-status-mappings": {
+    "AUTHENTICATION_FAILED": 422,
+    "DEADLINE_EXCEEDED": 504,
+    "INVALID_REQUEST": 400,
+    "RATE_LIMITED": 429,
+    "UNSUPPORTED_CAPABILITY": 422,
+    "UPSTREAM_MALFORMED": 502,
+    "UPSTREAM_UNAVAILABLE": 503
   }
 }

@@ -106,8 +106,8 @@ request timeout. No retry resets either deadline.
 | Code | HTTP | Meaning |
 | --- | ---: | --- |
 | `INVALID_REQUEST` | 400 | Invalid envelope or input |
-| `UNSUPPORTED_CAPABILITY` | 422 | No configured provider serves the operation/options |
-| `INVALID_PROVIDER_KEY` | 422 | Key test rejected the submitted key |
+| `UNSUPPORTED_CAPABILITY` | 422 | No configured provider serves the operation/options, or the requested provider is unknown |
+| `AUTHENTICATION_FAILED` | 422 | Provider rejected a key during activation; key-test requests return `valid: false` with HTTP 200 |
 | `RATE_LIMITED` | 429 | Provider/service rate limit |
 | `UPSTREAM_MALFORMED` | 502 | Provider response failed normalization |
 | `UPSTREAM_UNAVAILABLE` | 503 | Eligible providers are unavailable |

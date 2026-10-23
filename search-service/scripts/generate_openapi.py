@@ -15,24 +15,31 @@ from src.shared.internal_services import (  # noqa: E402
 )
 
 from search_service.contracts import (  # noqa: E402
+    SEARCH_ERROR_STATUSES,
     EmptyEnvelope,
     NewsSearchEnvelope,
     ProviderCatalog,
     ProviderCatalogResult,
+    ProviderCatalogSuccess,
     ProviderKeyAddEnvelope,
     ProviderKeyAddInput,
     ProviderKeyDeleteEnvelope,
     ProviderKeyDeleteResult,
+    ProviderKeyDeleteSuccess,
     ProviderKeyList,
+    ProviderKeyListSuccess,
     ProviderKeyReplaceEnvelope,
     ProviderKeyReplaceInput,
     ProviderKeyResult,
+    ProviderKeySuccess,
     ProviderKeyTestEnvelope,
     ProviderKeyTestResult,
+    ProviderKeyTestSuccess,
     SearchOperationResult,
     SearchSuccess,
     SettingsEnvelope,
     SettingsReadResult,
+    SettingsSuccess,
     WebSearchEnvelope,
 )
 
@@ -41,20 +48,26 @@ _SCHEMA_MODELS: tuple[type[BaseModel], ...] = (
     NewsSearchEnvelope,
     ProviderCatalog,
     ProviderCatalogResult,
+    ProviderCatalogSuccess,
     ProviderKeyAddInput,
     ProviderKeyAddEnvelope,
     ProviderKeyDeleteEnvelope,
     ProviderKeyDeleteResult,
+    ProviderKeyDeleteSuccess,
     ProviderKeyList,
+    ProviderKeyListSuccess,
     ProviderKeyReplaceInput,
     ProviderKeyReplaceEnvelope,
     ProviderKeyResult,
+    ProviderKeySuccess,
     ProviderKeyTestEnvelope,
     ProviderKeyTestResult,
+    ProviderKeyTestSuccess,
     SearchOperationResult,
     SearchSuccess,
     SettingsEnvelope,
     SettingsReadResult,
+    SettingsSuccess,
     WebSearchEnvelope,
     InternalErrorResponse,
     InternalReadiness,
@@ -102,7 +115,9 @@ def _operation(
     responses: dict[str, object] = {
         success_status: _response(success_model, "Successful operation")
     }
-    for status in errors:
+    for status in sorted(
+        set(errors) | {str(status) for status in SEARCH_ERROR_STATUSES.values()}
+    ):
         responses[status] = _response("InternalErrorResponse", "Stable internal error")
     return {
         "operationId": operation_id,
@@ -183,7 +198,7 @@ def document() -> dict[str, object]:
             "post": _operation(
                 "providerCatalog",
                 empty,
-                "ProviderCatalogResult",
+                "ProviderCatalogSuccess",
                 errors=("400", "401", "503"),
                 description="Read the supported provider operations and options.",
             )
@@ -192,8 +207,8 @@ def document() -> dict[str, object]:
             "post": _operation(
                 "settingsRead",
                 empty,
-                "SettingsReadResult",
-                errors=("400", "401", "503"),
+                "SettingsSuccess",
+                errors=("400", "401", "503", "504"),
                 description="Read settings for the authenticated user.",
             )
         },
@@ -201,8 +216,8 @@ def document() -> dict[str, object]:
             "post": _operation(
                 "settingsUpdate",
                 "SettingsEnvelope",
-                "SettingsReadResult",
-                errors=("400", "401", "404", "503"),
+                "SettingsSuccess",
+                errors=("400", "401", "404", "503", "504"),
                 description="Atomically replace the authenticated user's provider order and enablement.",
             )
         },
@@ -210,7 +225,7 @@ def document() -> dict[str, object]:
             "post": _operation(
                 "providerKeyTest",
                 "ProviderKeyTestEnvelope",
-                "ProviderKeyTestResult",
+                "ProviderKeyTestSuccess",
                 errors=("400", "401", "422", "429", "503", "504"),
                 description="Test a submitted key without persisting it.",
             )
@@ -219,7 +234,7 @@ def document() -> dict[str, object]:
             "post": _operation(
                 "providerKeyAddTestActivate",
                 "ProviderKeyAddEnvelope",
-                "ProviderKeyResult",
+                "ProviderKeySuccess",
                 errors=("400", "401", "422", "429", "502", "503", "504"),
                 description="Test a key before activating it for the authenticated user.",
             )
@@ -228,7 +243,7 @@ def document() -> dict[str, object]:
             "post": _operation(
                 "providerKeyReplaceTestActivate",
                 "ProviderKeyReplaceEnvelope",
-                "ProviderKeyResult",
+                "ProviderKeySuccess",
                 errors=("400", "401", "404", "422", "429", "502", "503", "504"),
                 description="Test a replacement before activation. Failed tests leave the current key unchanged.",
             )
@@ -237,8 +252,8 @@ def document() -> dict[str, object]:
             "post": _operation(
                 "providerKeyDelete",
                 "ProviderKeyDeleteEnvelope",
-                "ProviderKeyDeleteResult",
-                errors=("400", "401", "404", "503"),
+                "ProviderKeyDeleteSuccess",
+                errors=("400", "401", "404", "503", "504"),
                 description="Delete an owned key idempotently. This request contains no key material.",
             )
         },
@@ -246,14 +261,15 @@ def document() -> dict[str, object]:
             "post": _operation(
                 "providerKeyList",
                 empty,
-                "ProviderKeyList",
-                errors=("400", "401", "503"),
+                "ProviderKeyListSuccess",
+                errors=("400", "401", "503", "504"),
                 description="List masked key metadata for the authenticated user.",
             )
         },
     }
     return {
         "openapi": "3.1.0",
+        "x-search-error-status-mappings": SEARCH_ERROR_STATUSES,
         "info": {
             "title": "Search Service",
             "version": "search.v1",

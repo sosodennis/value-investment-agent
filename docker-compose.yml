@@ -277,7 +277,7 @@ services:
     ports:
       - "127.0.0.1:${SEARCH_SERVICE_HOST_PORT:-8003}:8003"
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8003/readyz"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8003/livez', timeout=4).close()"]
       interval: 10s
       timeout: 5s
       retries: 6
