@@ -4,7 +4,7 @@ import json
 import os
 from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, datetime, timedelta
-from typing import TypeVar
+from typing import NoReturn, TypeVar
 from uuid import uuid4
 
 import httpx
@@ -45,6 +45,28 @@ def _context(*, user_id: str, seconds: float) -> dict[str, object]:
         "contract_version": "internal.v1",
         "deadline_at": _deadline(seconds).isoformat().replace("+00:00", "Z"),
     }
+
+
+def _raise_provider_transport_error(
+    request: CompletionRequest, error: httpx.TransportError
+) -> NoReturn:
+    timed_out = isinstance(error, httpx.TimeoutException)
+    raise LLMProviderError(
+        code=(
+            LLMErrorCode.UPSTREAM_TIMEOUT
+            if timed_out
+            else LLMErrorCode.UPSTREAM_UNAVAILABLE
+        ),
+        provider="llm-provider-service",
+        model=request.route.alias,
+        request_id=request.request_id,
+        reason=(
+            "provider service request timed out"
+            if timed_out
+            else "provider service is unavailable"
+        ),
+        retryable=True,
+    ) from None
 
 
 class LLMProviderServiceClient(LLMProviderPort):
@@ -151,53 +173,64 @@ class LLMProviderServiceClient(LLMProviderPort):
             http_status=response.status_code,
         )
 
+    def _post(
+        self,
+        request: CompletionRequest,
+        *,
+        response_schema: dict[str, object] | None = None,
+    ) -> httpx.Response:
+        try:
+            return self._client.post(
+                f"{self._base_url}/v1/completions",
+                headers=self._headers(),
+                json={
+                    "context": _context(
+                        user_id=self._principal(), seconds=request.timeout_seconds
+                    ),
+                    "input": self._input(request, response_schema=response_schema),
+                },
+                timeout=request.timeout_seconds,
+            )
+        except httpx.TransportError as exc:
+            _raise_provider_transport_error(request, exc)
+
+    async def _apost(
+        self,
+        request: CompletionRequest,
+        *,
+        response_schema: dict[str, object] | None = None,
+    ) -> httpx.Response:
+        try:
+            return await self._async_client.post(
+                f"{self._base_url}/v1/completions",
+                headers=self._headers(),
+                json={
+                    "context": _context(
+                        user_id=self._principal(), seconds=request.timeout_seconds
+                    ),
+                    "input": self._input(request, response_schema=response_schema),
+                },
+                timeout=request.timeout_seconds,
+            )
+        except httpx.TransportError as exc:
+            _raise_provider_transport_error(request, exc)
+
     def complete(self, request: CompletionRequest) -> CompletionResult:
-        response = self._client.post(
-            f"{self._base_url}/v1/completions",
-            headers=self._headers(),
-            json={
-                "context": _context(
-                    user_id=self._principal(), seconds=request.timeout_seconds
-                ),
-                "input": self._input(request),
-            },
-            timeout=request.timeout_seconds,
-        )
+        response = self._post(request)
         if response.status_code >= 400:
             self._raise_response(response, request)
         return self._result(response.json(), request)
 
     async def acomplete(self, request: CompletionRequest) -> CompletionResult:
-        response = await self._async_client.post(
-            f"{self._base_url}/v1/completions",
-            headers=self._headers(),
-            json={
-                "context": _context(
-                    user_id=self._principal(), seconds=request.timeout_seconds
-                ),
-                "input": self._input(request),
-            },
-            timeout=request.timeout_seconds,
-        )
+        response = await self._apost(request)
         if response.status_code >= 400:
             self._raise_response(response, request)
         return self._result(response.json(), request)
 
     def complete_structured(self, request: StructuredRequest[_Model]) -> _Model:
-        response = self._client.post(
-            f"{self._base_url}/v1/completions",
-            headers=self._headers(),
-            json={
-                "context": _context(
-                    user_id=self._principal(),
-                    seconds=request.completion.timeout_seconds,
-                ),
-                "input": self._input(
-                    request.completion,
-                    response_schema=request.response_schema.model_json_schema(),
-                ),
-            },
-            timeout=request.completion.timeout_seconds,
+        response = self._post(
+            request.completion,
+            response_schema=request.response_schema.model_json_schema(),
         )
         if response.status_code >= 400:
             self._raise_response(response, request.completion)
@@ -205,20 +238,9 @@ class LLMProviderServiceClient(LLMProviderPort):
         return request.response_schema.model_validate_json(result.text)
 
     async def acomplete_structured(self, request: StructuredRequest[_Model]) -> _Model:
-        response = await self._async_client.post(
-            f"{self._base_url}/v1/completions",
-            headers=self._headers(),
-            json={
-                "context": _context(
-                    user_id=self._principal(),
-                    seconds=request.completion.timeout_seconds,
-                ),
-                "input": self._input(
-                    request.completion,
-                    response_schema=request.response_schema.model_json_schema(),
-                ),
-            },
-            timeout=request.completion.timeout_seconds,
+        response = await self._apost(
+            request.completion,
+            response_schema=request.response_schema.model_json_schema(),
         )
         if response.status_code >= 400:
             self._raise_response(response, request.completion)
@@ -229,46 +251,49 @@ class LLMProviderServiceClient(LLMProviderPort):
         yield from self._stream_sync(request)
 
     def _stream_sync(self, request: CompletionRequest) -> Iterator[StreamEvent]:
-        with self._client.stream(
-            "POST",
-            f"{self._base_url}/v1/completions/stream",
-            headers=self._headers(),
-            json={
-                "context": _context(
-                    user_id=self._principal(), seconds=request.timeout_seconds
-                ),
-                "input": self._input(request),
-            },
-            timeout=request.timeout_seconds,
-        ) as response:
-            if response.status_code >= 400:
-                self._raise_response(response, request)
-            for line in response.iter_lines():
-                if not line.startswith("data: "):
-                    continue
-                yield StreamEvent.model_validate(json.loads(line[6:])["event"])
+        try:
+            with self._client.stream(
+                "POST",
+                f"{self._base_url}/v1/completions/stream",
+                headers=self._headers(),
+                json={
+                    "context": _context(
+                        user_id=self._principal(), seconds=request.timeout_seconds
+                    ),
+                    "input": self._input(request),
+                },
+                timeout=request.timeout_seconds,
+            ) as response:
+                if response.status_code >= 400:
+                    self._raise_response(response, request)
+                for line in response.iter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    yield StreamEvent.model_validate(json.loads(line[6:])["event"])
+        except httpx.TransportError as exc:
+            _raise_provider_transport_error(request, exc)
 
     async def astream(self, request: CompletionRequest) -> AsyncIterator[StreamEvent]:
-        response = await self._async_client.stream(
-            "POST",
-            f"{self._base_url}/v1/completions/stream",
-            headers=self._headers(),
-            json={
-                "context": _context(
-                    user_id=self._principal(), seconds=request.timeout_seconds
-                ),
-                "input": self._input(request),
-            },
-            timeout=request.timeout_seconds,
-        ).__aenter__()
         try:
-            if response.status_code >= 400:
-                self._raise_response(response, request)
-            async for line in response.aiter_lines():
-                if line.startswith("data: "):
-                    yield StreamEvent.model_validate(json.loads(line[6:])["event"])
-        finally:
-            await response.aclose()
+            async with self._async_client.stream(
+                "POST",
+                f"{self._base_url}/v1/completions/stream",
+                headers=self._headers(),
+                json={
+                    "context": _context(
+                        user_id=self._principal(), seconds=request.timeout_seconds
+                    ),
+                    "input": self._input(request),
+                },
+                timeout=request.timeout_seconds,
+            ) as response:
+                if response.status_code >= 400:
+                    self._raise_response(response, request)
+                async for line in response.aiter_lines():
+                    if line.startswith("data: "):
+                        yield StreamEvent.model_validate(json.loads(line[6:])["event"])
+        except httpx.TransportError as exc:
+            _raise_provider_transport_error(request, exc)
 
     async def aclose(self) -> None:
         self._client.close()
@@ -290,12 +315,18 @@ class LLMProviderServiceSettingsClient:
     async def _call(
         self, action: str, payload: dict[str, object], *, user_id: str
     ) -> dict[str, object]:
-        response = await self._client.post(
-            f"{self._base_url}{action}",
-            headers={"Authorization": f"Bearer {self._token}"},
-            json={"context": _context(user_id=user_id, seconds=10.0), "input": payload},
-            timeout=10.0,
-        )
+        try:
+            response = await self._client.post(
+                f"{self._base_url}{action}",
+                headers={"Authorization": f"Bearer {self._token}"},
+                json={
+                    "context": _context(user_id=user_id, seconds=10.0),
+                    "input": payload,
+                },
+                timeout=10.0,
+            )
+        except httpx.TransportError:
+            raise ProviderSettingsError("provider_unavailable") from None
         if response.status_code >= 400:
             raise ProviderSettingsError(
                 "not_found" if response.status_code == 404 else "provider_unavailable"
