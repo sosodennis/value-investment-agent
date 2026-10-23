@@ -121,7 +121,6 @@ class LLMProviderTelemetry:
         started_at: float,
         stream: bool = False,
     ) -> None:
-        """Record cancellation while allowing framework cancellation to propagate."""
         with self._lock:
             self._failures += 1
             self._latency_ms += max(0.0, (perf_counter() - started_at) * 1000)

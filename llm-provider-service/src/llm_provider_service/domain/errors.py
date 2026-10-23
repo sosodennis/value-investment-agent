@@ -8,8 +8,8 @@ class ProviderSettingsError(RuntimeError):
 
 
 class OpenRouterKeyTestError(RuntimeError):
-    """A sanitized key validation failure."""
+    pass
 
 
 class OpenRouterModelsError(RuntimeError):
-    """The public OpenRouter model catalogue is unavailable or malformed."""
+    pass

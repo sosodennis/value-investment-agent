@@ -114,8 +114,6 @@ class CompletionRequest(BaseModel):
 
 
 class Usage(BaseModel):
-    """Provider usage normalized without exposing provider response objects."""
-
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     prompt_tokens: int | None = Field(default=None, ge=0)

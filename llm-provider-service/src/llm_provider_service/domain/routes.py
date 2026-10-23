@@ -14,15 +14,11 @@ USER_ROUTE_PREFIX = "openrouter-user-"
 
 
 def user_route_alias(user_id: str) -> str:
-    """Return a stable opaque LiteLLM alias for one authenticated user."""
-
     digest = sha256(user_id.encode("utf-8")).hexdigest()[:20]
     return f"{USER_ROUTE_PREFIX}{digest}"
 
 
 class UserScopedRouteResolver(LLMRouteResolver):
-    """Resolve the only logical route into a user-owned gateway pool."""
-
     def resolve(
         self,
         *,
