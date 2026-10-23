@@ -34,7 +34,6 @@ FormattedResult = dict[str, object]
 async def _fetch_one_managed(
     task: SearchTask, semaphore: asyncio.Semaphore
 ) -> list[SearchResult]:
-    """Search with the News slice's retry and query fallback policy."""
     import random
     import time
 

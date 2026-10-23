@@ -3,7 +3,10 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator
 from datetime import datetime
-from types import SimpleNamespace
+from typing import Literal
+
+from langchain_core.runnables import RunnableConfig
+from langgraph.types import StateSnapshot
 
 import api.server as server
 from api.server import (
@@ -77,7 +80,11 @@ async def test_event_generator_sets_and_resets_request_principal() -> None:
 
     class GraphStub:
         async def astream_events(
-            self, _input_data: object, *, config: object, version: str
+            self,
+            _input_data: object,
+            config: RunnableConfig | None = None,
+            *,
+            version: Literal["v1", "v2"] = "v2",
         ) -> AsyncIterator[dict[str, object]]:
             del config, version
             principal = get_request_principal()
@@ -85,8 +92,17 @@ async def test_event_generator_sets_and_resets_request_principal() -> None:
             if False:
                 yield {}
 
-        async def aget_state(self, _config: object) -> SimpleNamespace:
-            return SimpleNamespace(next=(), tasks=())
+        async def aget_state(self, _config: object) -> StateSnapshot:
+            return StateSnapshot(
+                values={},
+                next=(),
+                config={},
+                metadata=None,
+                created_at=None,
+                parent_config=None,
+                tasks=(),
+                interrupts=(),
+            )
 
     thread_id = "search-principal-context"
     server.thread_sequences[thread_id] = 1
@@ -96,7 +112,7 @@ async def test_event_generator_sets_and_resets_request_principal() -> None:
         thread_id,
         {},
         {"configurable": {"thread_id": thread_id}},
-        GraphStub(),  # type: ignore[arg-type]
+        GraphStub(),
         run_id="run-1",
         principal=Principal(
             user_id="alice", subject="alice", email="alice@example.test"

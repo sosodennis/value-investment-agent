@@ -1,5 +1,3 @@
-"""Request-local identity for authenticated internal service calls."""
-
 from __future__ import annotations
 
 from contextvars import ContextVar, Token

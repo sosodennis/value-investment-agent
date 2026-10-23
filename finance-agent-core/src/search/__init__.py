@@ -1,5 +1,3 @@
-"""Public typed client for the Search Service operation boundary."""
-
 from src.search.client import (
     SearchClient,
     SearchClientError,
