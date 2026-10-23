@@ -1,8 +1,86 @@
+import json
+import os
+import subprocess
 from pathlib import Path
 
 import yaml
 
 ROOT = Path(__file__).parents[2]
+LOCAL_PROVIDER_TOKEN = "local-development-only-token"
+TEST_MASTER_KEY = "compose-test-master-key"
+TEST_PRODUCTION_PROVIDER_TOKEN = "compose-test-production-token"
+
+
+def _compose_config(
+    *files: str, provider_token: str | None
+) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    env.pop("COMPOSE_FILE", None)
+    env.pop("LLM_PROVIDER_SERVICE_TOKEN", None)
+    env["LITELLM_MASTER_KEY"] = TEST_MASTER_KEY
+    if provider_token is not None:
+        env["LLM_PROVIDER_SERVICE_TOKEN"] = provider_token
+
+    return subprocess.run(
+        [
+            "docker",
+            "compose",
+            "-p",
+            "value-investment-agent-compose-auth-test",
+            "--env-file",
+            "/dev/null",
+            *files,
+            "--profile",
+            "llm-gateway",
+            "config",
+            "--format",
+            "json",
+        ],
+        cwd=ROOT,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _assert_shared_provider_token(config_output: str, expected_token: str) -> None:
+    services = json.loads(config_output)["services"]
+    backend_environment = services["backend"]["environment"]
+    provider_environment = services["llm-provider-service"]["environment"]
+
+    assert backend_environment["LLM_PROVIDER_SERVICE_TOKEN"] == expected_token
+    assert provider_environment["LLM_PROVIDER_SERVICE_TOKEN"] == expected_token
+    assert expected_token.strip()
+    assert "LITELLM_MASTER_KEY" not in backend_environment
+    assert "LLM_GATEWAY_API_KEY" not in backend_environment
+    assert not any(
+        name.startswith(("LLM_GATEWAY_", "OPENROUTER_")) for name in backend_environment
+    )
+
+
+def test_compose_auth_dev_default_and_production_secret() -> None:
+    local = _compose_config(provider_token=None)
+    assert local.returncode == 0, "default local Compose config failed"
+    _assert_shared_provider_token(local.stdout, LOCAL_PROVIDER_TOKEN)
+
+    production_files = (
+        "-f",
+        "docker-compose.yml",
+        "-f",
+        "docker-compose.production.yml",
+    )
+    production_without_token = _compose_config(*production_files, provider_token=None)
+    assert production_without_token.returncode != 0
+    assert "LLM_PROVIDER_SERVICE_TOKEN" in production_without_token.stderr
+
+    production = _compose_config(
+        *production_files, provider_token=TEST_PRODUCTION_PROVIDER_TOKEN
+    )
+    assert production.returncode == 0, "production Compose config rejected a token"
+    _assert_shared_provider_token(production.stdout, TEST_PRODUCTION_PROVIDER_TOKEN)
+    production_services = json.loads(production.stdout)["services"]
+    assert production_services["backend"]["environment"]["APP_ENV"] == "production"
 
 
 def test_litellm_poc_uses_database_managed_openrouter_deployments() -> None:

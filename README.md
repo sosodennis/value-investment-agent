@@ -111,6 +111,11 @@ LITELLM_MASTER_KEY=replace-with-a-local-gateway-key
 # POSTGRES_DB=langgraph
 ```
 
+The default local Compose setup loads `docker-compose.override.yml`. It gives
+the backend and provider service the same `local-development-only-token` when
+`LLM_PROVIDER_SERVICE_TOKEN` is unset. This value is for local development
+only.
+
 ### 2. Run with Docker (Recommended)
 Build and start the entire stack:
 
@@ -127,6 +132,19 @@ Access the application:
 Open the LLM settings page, add one or more OpenRouter keys, and select a
 free model. The backend sends all application requests through the internal
 `openrouter-default` LiteLLM route.
+
+For production, provide `LLM_PROVIDER_SERVICE_TOKEN` through your deployment
+secret manager and use `docker-compose.production.yml`. The production overlay
+sets `APP_ENV=production` and fails Compose configuration when the token is
+missing. Pass both Compose files explicitly so the local development override
+is not loaded:
+
+```bash
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.production.yml \
+  --profile llm-gateway up -d --build
+```
 
 ### 3. Manual Development (Optional)
 
