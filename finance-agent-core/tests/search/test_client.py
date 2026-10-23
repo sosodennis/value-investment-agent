@@ -1,15 +1,12 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 import httpx
 import pytest
 
-from src.llm_provider.entrypoint import (
-    ProviderPrincipal,
-    reset_provider_principal,
-    set_provider_principal,
-)
 from src.search import (
     NewsSearchRequest,
     SearchClient,
@@ -17,19 +14,32 @@ from src.search import (
     SearchClientSettings,
     WebSearchRequest,
 )
+from src.shared.internal_services import (
+    InternalPrincipal,
+    reset_request_principal,
+    set_request_principal,
+)
 
 
 def _client(handler: httpx.MockTransport) -> SearchClient:
     settings = SearchClientSettings(
         base_url="https://search.test",
         service_token="test-token",
-        subject_id="test-user",
     )
     return SearchClient(
         settings,
         client=httpx.Client(transport=handler),
         async_client=httpx.AsyncClient(transport=handler),
     )
+
+
+@contextmanager
+def _request_principal(subject_id: str = "test-user") -> Iterator[None]:
+    token = set_request_principal(InternalPrincipal(subject_id=subject_id))
+    try:
+        yield
+    finally:
+        reset_request_principal(token)
 
 
 def test_web_operation_sends_frozen_policy_and_parses_empty_success() -> None:
@@ -47,9 +57,10 @@ def test_web_operation_sends_frozen_policy_and_parses_empty_success() -> None:
             },
         )
 
-    result = _client(httpx.MockTransport(respond)).search_web(
-        WebSearchRequest(query="  AAPL stock  ")
-    )
+    with _request_principal():
+        result = _client(httpx.MockTransport(respond)).search_web(
+            WebSearchRequest(query="  AAPL stock  ")
+        )
 
     assert result.results == ()
     assert requests[0].url.path == "/v1/search/web"
@@ -82,9 +93,10 @@ async def test_news_operation_sends_worldwide_week_limit_and_safe_search_off() -
             },
         )
 
-    await _client(httpx.MockTransport(respond)).search_news(
-        NewsSearchRequest(query="AAPL earnings", result_limit=4, time_range="week")
-    )
+    with _request_principal():
+        await _client(httpx.MockTransport(respond)).search_news(
+            NewsSearchRequest(query="AAPL earnings", result_limit=4, time_range="week")
+        )
     sent = json.loads(captured[0].content)
     assert captured[0].url.path == "/v1/search/news"
     assert sent["input"]["region"] == "worldwide"
@@ -107,7 +119,7 @@ def test_client_rejects_wrong_correlation_and_malformed_responses() -> None:
         )
     )
 
-    with pytest.raises(SearchClientError) as caught:
+    with _request_principal(), pytest.raises(SearchClientError) as caught:
         client.search_web(WebSearchRequest(query="AAPL"))
     assert caught.value.code == "UPSTREAM_MALFORMED"
 
@@ -128,7 +140,7 @@ def test_client_maps_service_error_envelope() -> None:
             },
         )
 
-    with pytest.raises(SearchClientError) as caught:
+    with _request_principal(), pytest.raises(SearchClientError) as caught:
         _client(httpx.MockTransport(respond)).search_web(WebSearchRequest(query="AAPL"))
     assert caught.value.code == "UPSTREAM_UNAVAILABLE"
     assert caught.value.retryable
@@ -141,13 +153,13 @@ def test_client_maps_transport_timeout() -> None:
         )
     )
 
-    with pytest.raises(SearchClientError) as caught:
+    with _request_principal(), pytest.raises(SearchClientError) as caught:
         client.search_web(WebSearchRequest(query="AAPL"))
     assert caught.value.code == "DEADLINE_EXCEEDED"
     assert not caught.value.retryable
 
 
-def test_authenticated_request_principal_overrides_standalone_subject() -> None:
+def test_authenticated_request_principal_is_sent_to_search_service() -> None:
     seen: list[str] = []
 
     def respond(request: httpx.Request) -> httpx.Response:
@@ -162,10 +174,22 @@ def test_authenticated_request_principal_overrides_standalone_subject() -> None:
             },
         )
 
-    token = set_provider_principal(ProviderPrincipal(user_id="alice"))
-    try:
+    with _request_principal("alice"):
         _client(httpx.MockTransport(respond)).search_web(WebSearchRequest(query="AAPL"))
-    finally:
-        reset_provider_principal(token)
 
     assert seen == ["alice"]
+
+
+def test_search_client_rejects_missing_request_principal_before_transport() -> None:
+    requests: list[httpx.Request] = []
+    client = _client(
+        httpx.MockTransport(
+            lambda request: requests.append(request) or httpx.Response(200, json={})
+        )
+    )
+
+    with pytest.raises(SearchClientError) as caught:
+        client.search_web(WebSearchRequest(query="AAPL"))
+
+    assert caught.value.code == "AUTHENTICATION_FAILED"
+    assert requests == []

@@ -89,6 +89,11 @@ from src.runtime.workspace_runtime_projection import (
 )
 from src.services.artifact_manager import artifact_manager
 from src.services.history import history_service
+from src.shared.internal_services import (
+    InternalPrincipal,
+    reset_request_principal,
+    set_request_principal,
+)
 from src.shared.kernel.tools.logger import (
     bind_log_context,
     clear_log_context,
@@ -752,6 +757,9 @@ async def event_generator(
         ProviderPrincipal(user_id=principal.user_id)
     )
     inference_context_token = set_inference_principal(principal.user_id)
+    request_principal_token = set_request_principal(
+        InternalPrincipal(subject_id=principal.user_id)
+    )
 
     with log_context(
         thread_id=thread_id,
@@ -993,6 +1001,7 @@ async def event_generator(
         finally:
             reset_provider_principal(provider_context_token)
             reset_inference_principal(inference_context_token)
+            reset_request_principal(request_principal_token)
             for q in running_queues[thread_id][:]:
                 await q.put(_QUEUE_EOF)
 

@@ -8,7 +8,6 @@ from uuid import uuid4
 import httpx
 from pydantic import ValidationError
 
-from src.llm_provider.entrypoint import get_provider_principal
 from src.search.contracts import (
     NewsSearchRequest,
     SearchFailure,
@@ -16,20 +15,19 @@ from src.search.contracts import (
     SearchSuccess,
     WebSearchRequest,
 )
+from src.shared.internal_services import get_request_principal
 
 
 @dataclass(frozen=True)
 class SearchClientSettings:
     base_url: str
     service_token: str
-    subject_id: str | None = None
 
     @classmethod
     def from_env(cls) -> SearchClientSettings:
         return cls(
             base_url=os.getenv("SEARCH_SERVICE_URL", "http://search-service:8003"),
             service_token=os.getenv("SEARCH_SERVICE_TOKEN", ""),
-            subject_id=os.getenv("SEARCH_SERVICE_SUBJECT_ID"),
         )
 
 
@@ -108,11 +106,8 @@ class SearchClient:
     def _payload(
         self, request: WebSearchRequest | NewsSearchRequest
     ) -> tuple[str, dict[str, object]]:
-        principal = get_provider_principal()
-        subject_id = (
-            principal.user_id if principal is not None else self._settings.subject_id
-        )
-        if not subject_id:
+        principal = get_request_principal()
+        if principal is None:
             raise SearchClientError(
                 "AUTHENTICATION_FAILED",
                 "authenticated search principal is required",
@@ -120,7 +115,7 @@ class SearchClient:
             )
         correlation_id = uuid4().hex
         context = {
-            "principal": {"subject_id": subject_id},
+            "principal": principal.model_dump(mode="json"),
             "correlation_id": correlation_id,
             "contract_version": "internal.v1",
             "deadline_at": (
