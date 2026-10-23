@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 import os
 from collections.abc import Awaitable, Mapping
 from datetime import UTC, datetime, timedelta
-from typing import TypeVar
+from typing import TypeVar, cast
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -56,10 +57,13 @@ from .ports import (
     SearchProvider,
     requested_capabilities,
 )
+from .postgres_control_plane import PostgresSearchControlPlane
+from .providers import DDGSProvider, TavilyProvider
 
 _MAX_ATTEMPTS = 3
 _MAX_CONCURRENCY = 32
 _T = TypeVar("_T")
+_LOGGER = logging.getLogger("search_service.execution")
 
 
 def _remaining(deadline_at: datetime) -> float:
@@ -297,6 +301,15 @@ def create_app(
                         contract_version="internal.v1",
                         result=result,
                     )
+                    _LOGGER.info(
+                        "search_provider_succeeded",
+                        extra={
+                            "correlation_id": context.correlation_id,
+                            "provider": provider.name,
+                            "operation": operation.value,
+                            "result_count": len(results),
+                        },
+                    )
                     return JSONResponse(content=response.model_dump(mode="json"))
                 except TimeoutError as exc:
                     raise SearchServiceError(
@@ -306,12 +319,40 @@ def create_app(
                         True,
                     ) from exc
                 except ValidationError:
+                    _LOGGER.warning(
+                        "search_provider_failed",
+                        extra={
+                            "correlation_id": context.correlation_id,
+                            "provider": provider.name,
+                            "operation": operation.value,
+                            "error_code": str(SearchErrorCode.UPSTREAM_MALFORMED),
+                        },
+                    )
                     last_provider_error = SearchServiceError(
                         SearchErrorCode.UPSTREAM_MALFORMED,
                         502,
                         "provider response could not be normalized",
                     )
                 except SearchServiceError as exc:
+                    _LOGGER.warning(
+                        "search_provider_failed",
+                        extra={
+                            "correlation_id": context.correlation_id,
+                            "provider": provider.name,
+                            "operation": operation.value,
+                            "error_code": str(exc.code),
+                        },
+                    )
+                    if exc.code == SearchErrorCode.RATE_LIMITED:
+                        record_failure = getattr(control_plane, "record_failure", None)
+                        if record_failure is not None:
+                            await _call_control_plane(
+                                record_failure(
+                                    subject_id=context.principal.subject_id,
+                                    provider=provider.name,
+                                ),
+                                deadline_at=operation_deadline,
+                            )
                     if exc.code in {
                         SearchErrorCode.AUTHENTICATION_FAILED,
                         SearchErrorCode.DEADLINE_EXCEEDED,
@@ -320,6 +361,15 @@ def create_app(
                     }:
                         last_provider_error = exc
                 except Exception:
+                    _LOGGER.warning(
+                        "search_provider_failed",
+                        extra={
+                            "correlation_id": context.correlation_id,
+                            "provider": provider.name,
+                            "operation": operation.value,
+                            "error_code": str(SearchErrorCode.UPSTREAM_UNAVAILABLE),
+                        },
+                    )
                     continue
                 finally:
                     if acquired:
@@ -420,6 +470,12 @@ def create_app(
         ready = bool(service_token and providers) and not isinstance(
             control_plane, _UnavailableControlPlane
         )
+        check_control_plane = getattr(control_plane, "is_ready", None)
+        if ready and check_control_plane is not None:
+            try:
+                ready = await asyncio.wait_for(check_control_plane(), timeout=2.0)
+            except Exception:
+                ready = False
         body = InternalReadiness(
             status=ReadinessStatus.READY if ready else ReadinessStatus.NOT_READY,
             contract_version=INTERNAL_CONTRACT_VERSION,
@@ -876,4 +932,16 @@ class _UnavailableControlPlane:
         raise RuntimeError("search control plane is not configured")
 
 
-app = create_app(providers={}, control_plane=_UnavailableControlPlane())
+_default_providers: dict[str, SearchProvider] = {"ddgs": DDGSProvider()}
+if os.getenv("TAVILY_API_ENABLED", "1").lower() not in {"0", "false", "no"}:
+    _default_providers["tavily"] = TavilyProvider()
+
+_database_url = os.getenv("SEARCH_CONTROL_DATABASE_URL", "")
+_encryption_key = os.getenv("SEARCH_PROVIDER_ENCRYPTION_KEY", "")
+_default_control_plane = cast(
+    SearchControlPlane,
+    PostgresSearchControlPlane(_database_url, _encryption_key)
+    if _database_url and _encryption_key
+    else _UnavailableControlPlane(),
+)
+app = create_app(providers=_default_providers, control_plane=_default_control_plane)

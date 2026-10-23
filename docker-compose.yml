@@ -272,6 +272,9 @@ services:
     platform: linux/arm64
     environment:
       SEARCH_SERVICE_TOKEN: ${SEARCH_SERVICE_TOKEN:-local-development-only-token}
+      SEARCH_CONTROL_DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-langgraph}
+      SEARCH_PROVIDER_ENCRYPTION_KEY: ${SEARCH_PROVIDER_ENCRYPTION_KEY:-}
+      TAVILY_API_ENABLED: ${TAVILY_API_ENABLED:-1}
     expose:
       - "8003"
     ports:
@@ -283,6 +286,9 @@ services:
       retries: 6
       start_period: 10s
     restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   model-inference-news:
     <<: *model-inference-common
