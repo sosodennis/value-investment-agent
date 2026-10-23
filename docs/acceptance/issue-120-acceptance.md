@@ -35,7 +35,7 @@
 - Wrapped provider-key and settings operations in deadline-scoped timeouts.
 - Added a PostgreSQL advisory lock and lifecycle guard so concurrent replacement of one old key has a single winner across replicas.
 - Switched the provider image to a service-local build context and removed the internal gateway narration comment.
-- Final report commit and result SHA: to be recorded after commit.
+- Final report commit and result SHA: `b291e4ff1fed2d2a40a56422347bad3897dcd5fe`.
 
 ## Delegation note
 
