@@ -11,7 +11,6 @@ from pydantic import BaseModel, Field, ValidationError
 from src.search_settings.domain import (
     ProviderCapabilities,
     ProviderKeyResult,
-    ProviderKeyTestResult,
     ProviderPreference,
     SearchSettingsSnapshot,
     StrictModel,
@@ -86,15 +85,7 @@ class _KeyEnvelope(StrictModel):
     result: ProviderKeyResult
 
 
-class _TestEnvelope(StrictModel):
-    contract_version: Literal["internal.v1"]
-    correlation_id: str
-    result: ProviderKeyTestResult
-
-
 class SearchServiceClient:
-    """Search settings transport. Browser credentials are never forwarded."""
-
     def __init__(
         self,
         *,
@@ -218,17 +209,6 @@ class SearchServiceClient:
             response_type=_SettingsEnvelope,
         )
         return envelope.result.settings
-
-    async def test_key(
-        self, *, principal: str, provider: str, api_key: str
-    ) -> ProviderKeyTestResult:
-        envelope = await self._post(
-            principal=principal,
-            path="/v1/provider-keys/test",
-            input_data={"provider": provider, "api_key": api_key},
-            response_type=_TestEnvelope,
-        )
-        return envelope.result
 
     async def add_key(
         self, *, principal: str, provider: str, api_key: str, label: str

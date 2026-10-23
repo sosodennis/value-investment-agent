@@ -6,7 +6,7 @@ import { ArrowDown, ArrowUp, Check, CircleAlert, KeyRound, Loader2, RefreshCw, S
 import { BeuiSelect } from '@/components/beui/BeuiSelect';
 import {
     addSearchKey, deleteSearchKey, getSearchSettings, replaceSearchKey,
-    SearchSettingsApiError, testSearchKey, updateSearchSettings,
+    SearchSettingsApiError, updateSearchSettings,
     type SearchSettings, type SearchProviderSetting,
 } from '@/lib/search-settings-api';
 
@@ -67,13 +67,7 @@ export default function SearchSettingsPage() {
     async function saveKey(event: FormEvent<HTMLFormElement>) {
         event.preventDefault(); setBusyProvider(provider); setError(null); setNotice(null);
         try {
-            const testInput = { provider, api_key: apiKey };
-            const keyInput = { ...testInput, label: label.trim() || `${provider} key` };
-            const test = await testSearchKey(testInput);
-            if (!test.valid) {
-                setError(test.status === 'unavailable' ? 'The provider could not be reached. The key was not saved.' : 'The provider rejected this key. The key was not saved.');
-                return;
-            }
+            const keyInput = { provider, api_key: apiKey, label: label.trim() || `${provider} key` };
             if (replacementKeyId) await replaceSearchKey({ ...keyInput, key_id: replacementKeyId });
             else await addSearchKey(keyInput);
             setApiKey(''); setLabel(''); setReplacementKeyId(null);

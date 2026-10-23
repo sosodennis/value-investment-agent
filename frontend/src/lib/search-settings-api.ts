@@ -35,7 +35,6 @@ export type SearchSettings = {
     settings: { providers: SearchProviderSetting[] };
 };
 
-export type SearchKeyTest = { provider: string; valid: boolean; status: 'valid' | 'invalid' | 'unavailable' };
 export type SearchKeyMutation = { id: string; provider: string; tested: boolean; active: boolean; suffix: string; fingerprint: string };
 
 export class SearchSettingsApiError extends Error {
@@ -108,12 +107,6 @@ function parseSnapshot(value: unknown): SearchSettings {
         }) },
     };
 }
-function parseTest(value: unknown): SearchKeyTest {
-    const item = record(value, 'search_key_test');
-    const status = item.status;
-    if (status !== 'valid' && status !== 'invalid' && status !== 'unavailable') throw new TypeError('search_key_test.status is unsupported.');
-    return { provider: string(item.provider, 'search_key_test.provider'), valid: bool(item.valid, 'search_key_test.valid'), status };
-}
 function parseMutation(value: unknown): SearchKeyMutation {
     const item = record(value, 'search_key_mutation');
     return { id: string(item.id, 'search_key_mutation.id'), provider: string(item.provider, 'search_key_mutation.provider'), tested: bool(item.tested, 'search_key_mutation.tested'), active: bool(item.active, 'search_key_mutation.active'), suffix: string(item.suffix, 'search_key_mutation.suffix'), fingerprint: string(item.fingerprint, 'search_key_mutation.fingerprint') };
@@ -137,7 +130,6 @@ async function request<T>(path: string, decode: (value: unknown) => T, init?: Re
 
 export const getSearchSettings = (): Promise<SearchSettings> => request('/api/search/settings', parseSnapshot);
 export const updateSearchSettings = (providers: { provider: string; enabled: boolean; priority: number }[]): Promise<SearchSettings> => request('/api/search/settings', parseSnapshot, { method: 'PUT', body: JSON.stringify({ providers }) });
-export const testSearchKey = (input: { provider: string; api_key: string }): Promise<SearchKeyTest> => request('/api/search/settings/keys/test', parseTest, { method: 'POST', body: JSON.stringify(input) });
 export const addSearchKey = (input: { provider: string; api_key: string; label: string }): Promise<SearchKeyMutation> => request('/api/search/settings/keys', parseMutation, { method: 'POST', body: JSON.stringify(input) });
 export const replaceSearchKey = (input: { provider: string; key_id: string; api_key: string; label: string }): Promise<SearchKeyMutation> => request('/api/search/settings/keys', parseMutation, { method: 'PUT', body: JSON.stringify(input) });
 export const deleteSearchKey = (keyId: string): Promise<void> => request(`/api/search/settings/keys/${encodeURIComponent(keyId)}`, () => undefined, { method: 'DELETE' });

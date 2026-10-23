@@ -49,12 +49,6 @@ class ProviderPreference(StrictModel):
     priority: int = Field(ge=0)
 
 
-class ProviderKeyTestResult(StrictModel):
-    provider: str
-    valid: bool
-    status: Literal["valid", "invalid", "unavailable"]
-
-
 class ProviderKeyResult(StrictModel):
     id: str
     provider: str
@@ -76,17 +70,6 @@ class ProviderKeyResponse(StrictModel):
     active: bool
     suffix: str
     fingerprint: str
-
-
-class ProviderKeyTestResponse(StrictModel):
-    provider: str
-    valid: bool
-    status: Literal["valid", "invalid", "unavailable"]
-
-
-class ProviderKeyTestRequest(StrictModel):
-    provider: str = Field(min_length=1, max_length=128)
-    api_key: SecretStr = Field(min_length=1, max_length=4096)
 
 
 class ProviderPreferencesRequest(StrictModel):

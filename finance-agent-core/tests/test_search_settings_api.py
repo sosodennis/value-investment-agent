@@ -18,7 +18,6 @@ from src.search_settings.composition.routes import search_settings_router
 from src.search_settings.domain import (
     ProviderCapabilities,
     ProviderKeyResult,
-    ProviderKeyTestResult,
     ProviderPreference,
     ProviderSetting,
     SearchSettingsSnapshot,
@@ -55,13 +54,6 @@ class FakeSearchService:
                 for item in providers
             ]
         )
-
-    async def test_key(
-        self, *, principal: str, provider: str, api_key: str
-    ) -> ProviderKeyTestResult:
-        self.principals.append(principal)
-        self.key = api_key
-        return ProviderKeyTestResult(provider=provider, valid=True, status="valid")
 
     async def add_key(
         self, *, principal: str, provider: str, api_key: str, label: str
@@ -159,7 +151,14 @@ async def test_search_transport_forwards_context_and_service_token_without_brows
             json={
                 "contract_version": "internal.v1",
                 "correlation_id": "corr",
-                "result": {"provider": "provider-a", "valid": True, "status": "valid"},
+                "result": {
+                    "id": "key-1",
+                    "provider": "provider-a",
+                    "tested": True,
+                    "active": True,
+                    "suffix": "w-key",
+                    "fingerprint": "fp-safe",
+                },
             },
         )
 
@@ -168,14 +167,17 @@ async def test_search_transport_forwards_context_and_service_token_without_brows
     service = SearchServiceClient(
         base_url="http://search", token="service-secret", client=client
     )
-    await service.test_key(principal="user-a", provider="provider-a", api_key="raw-key")
+    await service.add_key(
+        principal="user-a", provider="provider-a", api_key="raw-key", label="Primary"
+    )
     request = seen[0]
     body = json.loads(request.content)
-    assert request.url.path == "/v1/provider-keys/test"
+    assert request.url.path == "/v1/provider-keys/add"
     assert request.headers["authorization"] == "Bearer service-secret"
     assert "cookie" not in request.headers
     assert body["context"]["principal"]["subject_id"] == "user-a"
     assert body["input"]["api_key"] == "raw-key"
+    assert body["input"]["label"] == "Primary"
     await client.aclose()
 
 

@@ -13,8 +13,6 @@ from src.search_settings.domain import (
     ProviderKeyCreateRequest,
     ProviderKeyReplaceRequest,
     ProviderKeyResponse,
-    ProviderKeyTestRequest,
-    ProviderKeyTestResponse,
     ProviderPreferencesRequest,
     SearchSettingsResponse,
 )
@@ -72,23 +70,6 @@ async def update_search_settings(
             principal=principal.user_id, providers=request.providers
         )
         return SearchSettingsResponse(providers=catalog, settings=settings)
-    except SearchServiceError as exc:
-        _raise(exc)
-
-
-@search_settings_router.post("/keys/test", response_model=ProviderKeyTestResponse)
-async def test_search_key(
-    request: ProviderKeyTestRequest,
-    principal: Principal = Depends(require_current_user_mutation),
-    service: SearchServiceClient = Depends(get_search_service),
-) -> ProviderKeyTestResponse:
-    try:
-        result = await service.test_key(
-            principal=principal.user_id,
-            provider=request.provider,
-            api_key=request.api_key.get_secret_value(),
-        )
-        return ProviderKeyTestResponse(**result.model_dump())
     except SearchServiceError as exc:
         _raise(exc)
 

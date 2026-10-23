@@ -5,7 +5,7 @@ import { SearchSettingsApiError } from '@/lib/search-settings-api';
 
 const api = vi.hoisted(() => ({
     addSearchKey: vi.fn(), deleteSearchKey: vi.fn(), getSearchSettings: vi.fn(),
-    replaceSearchKey: vi.fn(), testSearchKey: vi.fn(), updateSearchSettings: vi.fn(),
+    replaceSearchKey: vi.fn(), updateSearchSettings: vi.fn(),
 }));
 const router = vi.hoisted(() => ({ replace: vi.fn() }));
 
@@ -32,7 +32,6 @@ describe('Search settings page', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         api.getSearchSettings.mockResolvedValue(snapshot);
-        api.testSearchKey.mockResolvedValue({ provider: 'provider-a', valid: true, status: 'valid' });
         api.addSearchKey.mockResolvedValue({ id: 'key1', provider: 'provider-a', tested: true, active: true, suffix: 'cdef', fingerprint: 'safe-fingerprint' });
         api.updateSearchSettings.mockResolvedValue(snapshot);
         api.deleteSearchKey.mockResolvedValue(undefined);
@@ -51,24 +50,24 @@ describe('Search settings page', () => {
         expect(screen.queryByLabelText('API key for ddgs')).toBeNull();
     });
 
-    it('tests a key before adding and clears its input after activation', async () => {
+    it('adds the key through the service test-and-save operation and clears its input', async () => {
         render(<SearchSettingsPage />);
         const input = await screen.findByLabelText('Search provider API key');
         fireEvent.change(input, { target: { value: 'raw-key-secret' } });
         fireEvent.click(screen.getByRole('button', { name: 'Test and add' }));
         await screen.findByText('Provider key tested and added.');
-        expect(api.testSearchKey).toHaveBeenCalledWith({ provider: 'provider-a', api_key: 'raw-key-secret' });
+        expect(api.addSearchKey).toHaveBeenCalledTimes(1);
         expect(api.addSearchKey).toHaveBeenCalledWith({ provider: 'provider-a', api_key: 'raw-key-secret', label: 'provider-a key' });
         expect(screen.queryByDisplayValue('raw-key-secret')).toBeNull();
     });
 
-    it('does not activate an invalid key and reports service unavailability', async () => {
-        api.testSearchKey.mockResolvedValue({ provider: 'provider-a', valid: false, status: 'invalid' });
+    it('does not report success when the service rejects a key and reports service unavailability', async () => {
+        api.addSearchKey.mockRejectedValue(new SearchSettingsApiError('provider_key_rejected', 422));
         render(<SearchSettingsPage />);
         fireEvent.change(await screen.findByLabelText('Search provider API key'), { target: { value: 'rejected' } });
         fireEvent.click(screen.getByRole('button', { name: 'Test and add' }));
-        await screen.findByText('The provider rejected this key. The key was not saved.');
-        expect(api.addSearchKey).not.toHaveBeenCalled();
+        await screen.findByText('The provider rejected this setting or key.');
+        expect(api.addSearchKey).toHaveBeenCalledTimes(1);
 
         cleanup();
         api.getSearchSettings.mockRejectedValue(new SearchSettingsApiError('unavailable', 503));
