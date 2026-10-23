@@ -71,7 +71,6 @@ async def test_postgres_control_plane_is_owner_scoped_atomic_and_durable() -> No
             os.environ["SEARCH_TEST_DATABASE_URL"],
             encryption_key,
         )
-        # The same encryption key must decrypt keys after creating a fresh adapter.
         assert {
             item.api_key for item in await persisted.credentials_for(subject_id=owner)
         } == {f"secret-{index}" for index in range(8)}

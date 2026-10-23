@@ -5,7 +5,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-import asyncpg  # type: ignore[import-untyped]
+import asyncpg
 from cryptography.fernet import Fernet, InvalidToken
 
 from .contracts import (
@@ -27,8 +27,6 @@ class StoredCredential:
 
 
 class PostgresSearchControlPlane:
-    """Search-owned PostgreSQL state with encrypted credentials and owner-scoped writes."""
-
     def __init__(self, dsn: str, encryption_key: str) -> None:
         if not dsn or not encryption_key:
             raise ValueError("Search database URL and encryption key are required")
@@ -210,6 +208,8 @@ class PostgresSearchControlPlane:
                     priority,
                     now,
                 )
+            if row is None:
+                raise RuntimeError("provider key write returned no row")
         return self._summary(row)
 
     async def add_tested_key(
