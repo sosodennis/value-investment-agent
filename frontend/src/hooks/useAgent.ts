@@ -13,6 +13,7 @@ import {
 import { useAgentReducer } from './useAgentReducer';
 import { deriveActiveAgentId } from '@/lib/agent-session-state';
 import { csrfHeaders } from '@/lib/auth-api';
+import { parseWorkflowActivityEvent } from '@/features/workflow';
 
 const API_URL = process.env.NEXT_PUBLIC_LANGGRAPH_URL || 'http://localhost:8000';
 
@@ -38,6 +39,8 @@ export function useAgent(assistantId: string = 'agent') {
     const {
         state,
         processEvent,
+        processWorkflowEvent,
+        hydrateWorkflow,
         initSession,
         loadHistory: dispatchLoadHistory,
         addUserMessage,
@@ -108,8 +111,12 @@ export function useAgent(assistantId: string = 'agent') {
                         if (jsonStr === 'null') continue;
                         try {
                             const parsed: unknown = JSON.parse(jsonStr);
-                            const event = parseAgentEvent(parsed, 'stream event');
-                            processEvent(event);
+                            if (typeof parsed === 'object' && parsed !== null && 'event_name' in parsed && parsed.event_name === 'workflow.activity') {
+                                processWorkflowEvent(parseWorkflowActivityEvent(parsed, 'stream workflow.activity'));
+                            } else {
+                                const event = parseAgentEvent(parsed, 'stream event');
+                                processEvent(event);
+                            }
                         } catch (e) {
                             clientLogger.error('stream.parse_error', {
                                 event: trimmed,
@@ -127,7 +134,7 @@ export function useAgent(assistantId: string = 'agent') {
                 setIsLoading(false);
             }
         },
-        [processEvent, setError]
+        [processEvent, processWorkflowEvent, setError]
     );
 
     const sendMessage = useCallback(
@@ -271,6 +278,9 @@ export function useAgent(assistantId: string = 'agent') {
                     );
                 }
                 const stateRaw: unknown = await stateResponse.json();
+                if (typeof stateRaw === 'object' && stateRaw !== null && 'activity_snapshot' in stateRaw) {
+                    hydrateWorkflow(stateRaw.activity_snapshot);
+                }
                 const stateData = parseThreadStateResponse(stateRaw);
                 dispatchLoadHistory(stateData.messages, id, stateData);
                 if (stateData.is_running) {
@@ -284,7 +294,7 @@ export function useAgent(assistantId: string = 'agent') {
                 setIsLoading(false);
             }
         },
-        [dispatchLoadHistory, parseStream, setError]
+        [dispatchLoadHistory, hydrateWorkflow, parseStream, setError]
     );
 
     return {

@@ -8,6 +8,13 @@ import {
     ThreadStateResponse,
 } from '../types/protocol';
 import {
+    applyWorkflowActivityEvent,
+    createWorkflowActivityState,
+    parseWorkflowActivitySnapshot,
+    type WorkflowActivityEvent,
+    type WorkflowActivityState,
+} from '@/features/workflow';
+import {
     deriveActiveAgentId,
     deriveHydratedAgentStatuses,
     isLiveAgentStatus,
@@ -30,12 +37,15 @@ export interface AgentState {
     currentStatus: AgentStatus | null;
     statusHistory: StatusHistoryEntry[];
     activeAgentId: string | null;
+    workflow: WorkflowActivityState | null;
 }
 
 export type AgentAction =
     | { type: 'INIT_SESSION'; threadId: string }
     | { type: 'LOAD_HISTORY'; messages: Message[]; threadId: string; stateData?: ThreadStateResponse }
     | { type: 'PROCESS_EVENT'; event: AgentEvent }
+    | { type: 'PROCESS_WORKFLOW_EVENT'; event: WorkflowActivityEvent }
+    | { type: 'HYDRATE_WORKFLOW'; snapshot: unknown }
     | { type: 'ADD_USER_MESSAGE'; message: Message }
     | { type: 'SET_ERROR'; error: string }
     | { type: 'RESET' };
@@ -52,6 +62,7 @@ const initialState: AgentState = {
     currentStatus: null,
     statusHistory: [],
     activeAgentId: null,
+    workflow: null,
 };
 
 const toInterruptRequestData = (
@@ -158,6 +169,27 @@ function agentReducer(state: AgentState, action: AgentAction): AgentState {
 
         case 'RESET':
             return initialState;
+
+        case 'HYDRATE_WORKFLOW': {
+            const snapshot = parseWorkflowActivitySnapshot(action.snapshot);
+            const status = snapshot.run_status === 'running' || snapshot.run_status === 'waiting'
+                ? 'running'
+                : snapshot.run_status === 'failed' ? 'error'
+                    : snapshot.run_status === 'completed' || snapshot.run_status === 'cancelled' ? 'done' : 'idle';
+            return { ...state, threadId: snapshot.thread_id, workflow: createWorkflowActivityState(snapshot), status };
+        }
+
+        case 'PROCESS_WORKFLOW_EVENT': {
+            if (!state.workflow) return state;
+            const workflow = applyWorkflowActivityEvent(state.workflow, action.event);
+            if (workflow.gapDetected) return { ...state, workflow };
+            const status = workflow.runStatus === 'running' || workflow.runStatus === 'waiting'
+                ? 'running'
+                : workflow.runStatus === 'failed' ? 'error'
+                    : workflow.runStatus === 'completed' || workflow.runStatus === 'cancelled' ? 'done' : state.status;
+            const occurredAt = Date.parse(action.event.occurred_at);
+            return { ...state, workflow, status, lastSeqId: workflow.cursor, cursorUpdatedAt: Number.isNaN(occurredAt) ? state.cursorUpdatedAt : occurredAt };
+        }
 
         case 'SET_ERROR':
             return { ...state, error: action.error, status: 'error' };
@@ -327,6 +359,14 @@ export function useAgentReducer() {
         dispatch({ type: 'PROCESS_EVENT', event });
     }, []);
 
+    const processWorkflowEvent = useCallback((event: WorkflowActivityEvent) => {
+        dispatch({ type: 'PROCESS_WORKFLOW_EVENT', event });
+    }, []);
+
+    const hydrateWorkflow = useCallback((snapshot: unknown) => {
+        dispatch({ type: 'HYDRATE_WORKFLOW', snapshot });
+    }, []);
+
     const initSession = useCallback((threadId: string) => {
         dispatch({ type: 'INIT_SESSION', threadId });
     }, []);
@@ -353,6 +393,8 @@ export function useAgentReducer() {
     return {
         state,
         processEvent,
+        processWorkflowEvent,
+        hydrateWorkflow,
         initSession,
         addUserMessage,
         setError,
