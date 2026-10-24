@@ -4,7 +4,9 @@ import asyncio
 import hashlib
 import logging
 import os
-from collections.abc import Awaitable, Mapping
+import random
+from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import TypeVar, cast
 
@@ -36,6 +38,7 @@ from .contracts import (
     ProviderKeyList,
     ProviderKeyReplaceInput,
     ProviderKeyResult,
+    ProviderKeySetEnabledInput,
     ProviderKeySummary,
     ProviderKeyTestInput,
     ProviderKeyTestResult,
@@ -62,8 +65,70 @@ from .providers import DDGSProvider, TavilyProvider
 
 _MAX_ATTEMPTS = 3
 _MAX_CONCURRENCY = 32
+_LEASE_SECONDS = 30
+_MAX_BACKOFF_SECONDS = 0.25
 _T = TypeVar("_T")
 _LOGGER = logging.getLogger("search_service.execution")
+
+
+@dataclass(frozen=True)
+class _CredentialView:
+    """Runtime view of a credential, tolerant of the pre-pool contract."""
+
+    provider: str
+    api_key: str
+    key_id: str | None
+    enabled: bool
+    provider_priority: int
+    key_priority: int
+    status: str
+    cooldown_until: datetime | None
+
+
+def _value(item: object, name: str, default: object = None) -> object:
+    return getattr(item, name, default)
+
+
+def _int_value(item: object, name: str, default: int) -> int:
+    value = _value(item, name, default)
+    return value if isinstance(value, int) else default
+
+
+def _secret_value(raw: object) -> str:
+    getter = getattr(raw, "get_secret_value", None)
+    if callable(getter):
+        value = getter()
+        return value if isinstance(value, str) else ""
+    return raw if isinstance(raw, str) else ""
+
+
+def _credential_view(item: object) -> _CredentialView:
+    provider = _value(item, "provider", "")
+    provider_name = provider if isinstance(provider, str) else ""
+    key_id = _value(item, "key_id", None)
+    provider_priority = _int_value(item, "provider_priority", -1)
+    if provider_priority < 0:
+        provider_priority = _int_value(item, "priority", 0)
+    key_priority = _int_value(item, "key_priority", -1)
+    if key_priority < 0:
+        key_priority = _int_value(item, "priority", 0)
+    cooldown_until = _value(item, "cooldown_until", None)
+    return _CredentialView(
+        provider=provider_name,
+        api_key=_secret_value(_value(item, "api_key", "")),
+        key_id=key_id if isinstance(key_id, str) else None,
+        enabled=bool(_value(item, "enabled", True)),
+        provider_priority=provider_priority,
+        key_priority=key_priority,
+        status=str(_value(item, "status", "active")),
+        cooldown_until=cooldown_until if isinstance(cooldown_until, datetime) else None,
+    )
+
+
+def _eligible_credential(credential: _CredentialView, *, now: datetime) -> bool:
+    if not credential.enabled or credential.status in {"disabled", "invalid"}:
+        return False
+    return credential.cooldown_until is None or credential.cooldown_until <= now
 
 
 def _remaining(deadline_at: datetime) -> float:
@@ -118,6 +183,175 @@ async def _test_provider_key(
             True,
             250,
         ) from exc
+
+
+async def _claim_credential(
+    control_plane: SearchControlPlane,
+    *,
+    subject_id: str,
+    provider: str,
+    deadline_at: datetime,
+) -> object | None:
+    """Claim one key when the durable pool supports leases.
+
+    The fallback is intentional: it keeps the runtime usable while an older
+    in-process control plane is being replaced by the pooled implementation.
+    """
+
+    claim = getattr(control_plane, "claim_credential", None)
+    if not callable(claim):
+        return None
+    operation = cast(Callable[..., Awaitable[object | None]], claim)
+    try:
+        return await _call_control_plane(
+            operation(
+                subject_id=subject_id,
+                provider=provider,
+                lease_seconds=_LEASE_SECONDS,
+            ),
+            deadline_at=deadline_at,
+        )
+    except TypeError:
+        # A transitional implementation may expose the method without the
+        # lease parameter. It still provides useful ownership isolation.
+        return await _call_control_plane(
+            operation(subject_id=subject_id, provider=provider),
+            deadline_at=deadline_at,
+        )
+
+
+async def _release_credential(
+    control_plane: SearchControlPlane,
+    *,
+    subject_id: str,
+    credential: _CredentialView,
+    succeeded: bool,
+    deadline_at: datetime,
+) -> None:
+    if credential.key_id is None:
+        return
+    if _remaining(deadline_at) <= 0:
+        return
+    release = getattr(control_plane, "release_credential", None)
+    if not callable(release):
+        return
+    operation = cast(Callable[..., Awaitable[object]], release)
+    try:
+        await _call_control_plane(
+            operation(
+                subject_id=subject_id,
+                key_id=credential.key_id,
+                succeeded=succeeded,
+            ),
+            deadline_at=deadline_at,
+        )
+    except TypeError:
+        await _call_control_plane(
+            operation(subject_id=subject_id, key_id=credential.key_id),
+            deadline_at=deadline_at,
+        )
+
+
+async def _record_credential_failure(
+    control_plane: SearchControlPlane,
+    *,
+    subject_id: str,
+    credential: _CredentialView,
+    error: SearchServiceError,
+    deadline_at: datetime,
+) -> None:
+    """Persist key health without making telemetry a second retry loop."""
+
+    cooldown_seconds = max(1, min(60, (error.retry_after_ms or 30) // 1000))
+    if error.retry_after_ms is not None:
+        cooldown_seconds = max(1, min(60, (error.retry_after_ms + 999) // 1000))
+    status = (
+        "invalid" if error.code == SearchErrorCode.AUTHENTICATION_FAILED else "cooldown"
+    )
+    key_failure = getattr(control_plane, "record_key_failure", None)
+    provider_failure = getattr(control_plane, "record_provider_failure", None)
+    if not callable(provider_failure):
+        provider_failure = getattr(control_plane, "record_failure", None)
+    if (
+        error.code
+        in {
+            SearchErrorCode.DEADLINE_EXCEEDED,
+            SearchErrorCode.INVALID_REQUEST,
+            SearchErrorCode.UNSUPPORTED_CAPABILITY,
+        }
+        or _remaining(deadline_at) <= 0
+    ):
+        return
+    operation: Awaitable[object] | None = None
+    try:
+        provider_scoped = error.code in {
+            SearchErrorCode.UPSTREAM_UNAVAILABLE,
+            SearchErrorCode.UPSTREAM_MALFORMED,
+        }
+        if provider_scoped and callable(provider_failure):
+            operation = cast(Callable[..., Awaitable[object]], provider_failure)(
+                subject_id=subject_id,
+                provider=credential.provider,
+                cooldown_seconds=cooldown_seconds,
+            )
+        elif callable(key_failure) and credential.key_id is not None:
+            operation = cast(Callable[..., Awaitable[object]], key_failure)(
+                subject_id=subject_id,
+                key_id=credential.key_id,
+                status=status,
+                cooldown_seconds=cooldown_seconds,
+            )
+        elif callable(provider_failure):
+            operation = cast(Callable[..., Awaitable[object]], provider_failure)(
+                subject_id=subject_id,
+                provider=credential.provider,
+                cooldown_seconds=cooldown_seconds,
+            )
+        if operation is None:
+            return
+        await _call_control_plane(operation, deadline_at=deadline_at)
+    except TypeError:
+        # Compatibility with the old provider-wide record_failure signature.
+        if not callable(provider_failure):
+            return
+        await _call_control_plane(
+            cast(Callable[..., Awaitable[object]], provider_failure)(
+                subject_id=subject_id,
+                provider=credential.provider,
+                cooldown_seconds=cooldown_seconds,
+            ),
+            deadline_at=deadline_at,
+        )
+    except SearchServiceError as exc:
+        if exc.code == SearchErrorCode.DEADLINE_EXCEEDED:
+            raise
+        _LOGGER.warning(
+            "search_credential_health_update_failed",
+            extra={"provider": credential.provider, "error_code": str(exc.code)},
+        )
+
+
+def _backoff_seconds(error: SearchServiceError, attempt: int) -> float:
+    retry_after: float = (error.retry_after_ms or 0) / 1000
+    exponential: float = min(_MAX_BACKOFF_SECONDS, 0.02 * (2 ** max(0, attempt - 1)))
+    base: float = min(_MAX_BACKOFF_SECONDS, max(retry_after, exponential))
+    jitter: float = random.uniform(0, min(0.02, base))
+    return min(_MAX_BACKOFF_SECONDS, base + jitter)
+
+
+async def _pause_before_retry(
+    error: SearchServiceError, *, attempt: int, deadline_at: datetime
+) -> None:
+    delay = _backoff_seconds(error, attempt)
+    remaining = _remaining(deadline_at)
+    if remaining <= 0:
+        raise SearchServiceError(
+            SearchErrorCode.DEADLINE_EXCEEDED,
+            504,
+            "request deadline expired",
+            True,
+        )
+    await asyncio.sleep(min(delay, remaining))
 
 
 def _fingerprint(api_key: str) -> str:
@@ -240,142 +474,240 @@ def create_app(
                 control_plane.credentials_for(subject_id=context.principal.subject_id),
                 deadline_at=operation_deadline,
             )
-            eligible: list[tuple[int, str, SearchProvider, str]] = []
-            for credential in credentials:
-                provider = providers.get(credential.provider)
-                if provider is None or not credential.enabled:
-                    continue
-                if provider.capabilities.key_required and not credential.api_key:
-                    continue
+            now = datetime.now(UTC)
+            grouped: dict[str, list[_CredentialView]] = {}
+            for raw_credential in credentials:
+                credential = _credential_view(raw_credential)
+                if _eligible_credential(credential, now=now):
+                    grouped.setdefault(credential.provider, []).append(credential)
+
+            eligible_providers: list[tuple[int, str, SearchProvider]] = []
+            for name, provider in providers.items():
                 if operation not in provider.capabilities.operations:
                     continue
                 if not requested.issubset(provider.capabilities.optional_fields):
                     continue
-                eligible.append(
-                    (
-                        credential.priority,
-                        credential.provider,
-                        provider,
-                        credential.api_key,
-                    )
+                keys = grouped.get(name, [])
+                if provider.capabilities.key_required:
+                    keys = [item for item in keys if item.api_key]
+                if provider.capabilities.key_required and not keys:
+                    continue
+                provider_priority = min(
+                    (item.provider_priority for item in keys), default=10_000
                 )
-            if not eligible:
+                eligible_providers.append((provider_priority, name, provider))
+            if not eligible_providers:
                 raise SearchServiceError(
                     SearchErrorCode.UNSUPPORTED_CAPABILITY,
                     422,
                     "no enabled provider supports this operation and its options",
                 )
 
-            last_provider_error: SearchServiceError | None = None
-            for _priority, _name, provider, api_key in sorted(eligible)[:_MAX_ATTEMPTS]:
-                remaining = _remaining(operation_deadline)
-                if remaining <= 0:
-                    raise SearchServiceError(
-                        SearchErrorCode.DEADLINE_EXCEEDED,
-                        504,
-                        "request deadline expired",
-                        True,
+            attempted_keys: set[str] = set()
+            total_attempts = 0
+            last_error: SearchServiceError | None = None
+            for _priority, provider_name, provider in sorted(eligible_providers):
+                provider_keys = sorted(
+                    grouped.get(provider_name, []),
+                    key=lambda item: (item.key_priority, item.key_id or item.api_key),
+                )
+                if provider.capabilities.key_required:
+                    provider_keys = [item for item in provider_keys if item.api_key]
+                # Keyless providers (for example DDGS) get one synthetic key.
+                if not provider_keys and not provider.capabilities.key_required:
+                    provider_keys = [
+                        _CredentialView(
+                            provider=provider_name,
+                            api_key="",
+                            key_id=None,
+                            enabled=True,
+                            provider_priority=_priority,
+                            key_priority=0,
+                            status="active",
+                            cooldown_until=None,
+                        )
+                    ]
+                while total_attempts < _MAX_ATTEMPTS:
+                    remaining = _remaining(operation_deadline)
+                    if remaining <= 0:
+                        raise SearchServiceError(
+                            SearchErrorCode.DEADLINE_EXCEEDED,
+                            504,
+                            "request deadline expired",
+                            True,
+                        )
+                    candidate: _CredentialView | None = None
+                    claimed = await _claim_credential(
+                        control_plane,
+                        subject_id=context.principal.subject_id,
+                        provider=provider_name,
+                        deadline_at=operation_deadline,
                     )
-                acquired = False
-                try:
-                    await asyncio.wait_for(provider_slots.acquire(), timeout=remaining)
-                    acquired = True
-                    raw_results = await asyncio.wait_for(
-                        provider.search(
+                    if claimed is not None:
+                        candidate = _credential_view(claimed)
+                        if not _eligible_credential(candidate, now=datetime.now(UTC)):
+                            continue
+                    else:
+                        candidate = next(
+                            (
+                                item
+                                for item in provider_keys
+                                if (item.key_id or item.api_key) not in attempted_keys
+                            ),
+                            None,
+                        )
+                    if candidate is None:
+                        break
+                    identity = (
+                        candidate.key_id or f"{candidate.provider}:{candidate.api_key}"
+                    )
+                    if identity in attempted_keys:
+                        break
+                    attempted_keys.add(identity)
+                    total_attempts += 1
+                    acquired = False
+                    succeeded = False
+                    error: SearchServiceError | None = None
+                    try:
+                        await asyncio.wait_for(
+                            provider_slots.acquire(), timeout=remaining
+                        )
+                        acquired = True
+                        raw_results = await asyncio.wait_for(
+                            provider.search(
+                                operation=operation,
+                                request=payload,
+                                api_key=candidate.api_key,
+                                deadline_at=operation_deadline,
+                            ),
+                            timeout=_remaining(operation_deadline),
+                        )
+                        results = tuple(
+                            SearchResult.model_validate(item) for item in raw_results
+                        )
+                        succeeded = True
+                        result = SearchOperationResult(
                             operation=operation,
-                            request=payload,
-                            api_key=api_key,
-                            deadline_at=operation_deadline,
-                        ),
-                        timeout=_remaining(operation_deadline),
-                    )
-                    results = tuple(
-                        SearchResult.model_validate(item) for item in raw_results
-                    )
-                    result = SearchOperationResult(
-                        operation=operation,
-                        results=results[: payload.result_limit],
-                    )
-                    response = SearchSuccess(
-                        correlation_id=context.correlation_id,
-                        contract_version="internal.v1",
-                        result=result,
-                    )
-                    _LOGGER.info(
-                        "search_provider_succeeded",
-                        extra={
-                            "correlation_id": context.correlation_id,
-                            "provider": provider.name,
-                            "operation": operation.value,
-                            "result_count": len(results),
-                        },
-                    )
-                    return JSONResponse(content=response.model_dump(mode="json"))
-                except TimeoutError as exc:
-                    raise SearchServiceError(
-                        SearchErrorCode.DEADLINE_EXCEEDED,
-                        504,
-                        "request deadline expired",
-                        True,
-                    ) from exc
-                except ValidationError:
-                    _LOGGER.warning(
-                        "search_provider_failed",
-                        extra={
-                            "correlation_id": context.correlation_id,
-                            "provider": provider.name,
-                            "operation": operation.value,
-                            "error_code": str(SearchErrorCode.UPSTREAM_MALFORMED),
-                        },
-                    )
-                    last_provider_error = SearchServiceError(
-                        SearchErrorCode.UPSTREAM_MALFORMED,
-                        502,
-                        "provider response could not be normalized",
-                    )
-                except SearchServiceError as exc:
-                    _LOGGER.warning(
-                        "search_provider_failed",
-                        extra={
-                            "correlation_id": context.correlation_id,
-                            "provider": provider.name,
-                            "operation": operation.value,
-                            "error_code": str(exc.code),
-                        },
-                    )
-                    if exc.code == SearchErrorCode.RATE_LIMITED:
-                        record_failure = getattr(control_plane, "record_failure", None)
-                        if record_failure is not None:
-                            await _call_control_plane(
-                                record_failure(
-                                    subject_id=context.principal.subject_id,
-                                    provider=provider.name,
-                                ),
+                            results=results[: payload.result_limit],
+                        )
+                        response = SearchSuccess(
+                            correlation_id=context.correlation_id,
+                            contract_version="internal.v1",
+                            result=result,
+                        )
+                        _LOGGER.info(
+                            "search_provider_succeeded",
+                            extra={
+                                "correlation_id": context.correlation_id,
+                                "provider": provider.name,
+                                "operation": operation.value,
+                                "result_count": len(results),
+                            },
+                        )
+                        return JSONResponse(content=response.model_dump(mode="json"))
+                    except asyncio.CancelledError:
+                        raise
+                    except TimeoutError as exc:
+                        error = SearchServiceError(
+                            SearchErrorCode.DEADLINE_EXCEEDED,
+                            504,
+                            "request deadline expired",
+                            True,
+                        )
+                        raise error from exc
+                    except ValidationError as exc:
+                        error = SearchServiceError(
+                            SearchErrorCode.UPSTREAM_MALFORMED,
+                            502,
+                            "provider response could not be normalized",
+                        )
+                        last_error = error
+                        _LOGGER.warning(
+                            "search_provider_failed",
+                            extra={
+                                "correlation_id": context.correlation_id,
+                                "provider": provider.name,
+                                "operation": operation.value,
+                                "error_code": str(error.code),
+                            },
+                        )
+                        del exc
+                    except SearchServiceError as exc:
+                        error = exc
+                        last_error = exc
+                        _LOGGER.warning(
+                            "search_provider_failed",
+                            extra={
+                                "correlation_id": context.correlation_id,
+                                "provider": provider.name,
+                                "operation": operation.value,
+                                "error_code": str(exc.code),
+                            },
+                        )
+                        if exc.code in {
+                            SearchErrorCode.INVALID_REQUEST,
+                            SearchErrorCode.UNSUPPORTED_CAPABILITY,
+                            SearchErrorCode.DEADLINE_EXCEEDED,
+                        }:
+                            raise
+                    except Exception as exc:
+                        error = SearchServiceError(
+                            SearchErrorCode.UPSTREAM_UNAVAILABLE,
+                            503,
+                            "search provider is unavailable",
+                            True,
+                        )
+                        last_error = error
+                        _LOGGER.warning(
+                            "search_provider_failed",
+                            extra={
+                                "correlation_id": context.correlation_id,
+                                "provider": provider.name,
+                                "operation": operation.value,
+                                "error_code": str(error.code),
+                            },
+                        )
+                        del exc
+                    finally:
+                        if acquired:
+                            provider_slots.release()
+                        if error is not None:
+                            await _record_credential_failure(
+                                control_plane,
+                                subject_id=context.principal.subject_id,
+                                credential=candidate,
+                                error=error,
                                 deadline_at=operation_deadline,
                             )
-                    if exc.code in {
-                        SearchErrorCode.AUTHENTICATION_FAILED,
-                        SearchErrorCode.DEADLINE_EXCEEDED,
-                        SearchErrorCode.RATE_LIMITED,
+                        await _release_credential(
+                            control_plane,
+                            subject_id=context.principal.subject_id,
+                            credential=candidate,
+                            succeeded=succeeded,
+                            deadline_at=operation_deadline,
+                        )
+                    if error is None:
+                        break
+                    if error.code == SearchErrorCode.DEADLINE_EXCEEDED:
+                        raise error
+                    if error.code == SearchErrorCode.UPSTREAM_MALFORMED:
+                        # A malformed response is a provider-level failure;
+                        # trying another key on the same adapter cannot fix it.
+                        break
+                    if total_attempts >= _MAX_ATTEMPTS:
+                        break
+                    if error.code in {
+                        SearchErrorCode.UPSTREAM_UNAVAILABLE,
                         SearchErrorCode.UPSTREAM_MALFORMED,
                     }:
-                        last_provider_error = exc
-                except Exception:
-                    _LOGGER.warning(
-                        "search_provider_failed",
-                        extra={
-                            "correlation_id": context.correlation_id,
-                            "provider": provider.name,
-                            "operation": operation.value,
-                            "error_code": str(SearchErrorCode.UPSTREAM_UNAVAILABLE),
-                        },
+                        break
+                    await _pause_before_retry(
+                        error, attempt=total_attempts, deadline_at=operation_deadline
                     )
-                    continue
-                finally:
-                    if acquired:
-                        provider_slots.release()
-            if last_provider_error is not None:
-                raise last_provider_error
+                if total_attempts >= _MAX_ATTEMPTS:
+                    break
+            if last_error is not None:
+                raise last_error
             raise SearchServiceError(
                 SearchErrorCode.UPSTREAM_UNAVAILABLE,
                 503,
@@ -842,6 +1174,59 @@ def create_app(
                 retry_after_ms=exc.retry_after_ms,
             )
 
+    @application.post("/v1/provider-keys/set-enabled")
+    async def provider_key_set_enabled(request: Request) -> JSONResponse:
+        correlation_id = "unknown"
+        try:
+            context, raw_input = await run_context_operation(request)
+            correlation_id = context.correlation_id
+            payload = ProviderKeySetEnabledInput.model_validate(raw_input)
+            summary = await _call_control_plane(
+                control_plane.set_key_enabled(
+                    subject_id=context.principal.subject_id,
+                    key_id=payload.key_id,
+                    enabled=payload.enabled,
+                ),
+                deadline_at=context.deadline_at,
+            )
+            return success(
+                context,
+                ProviderKeyResult(
+                    id=summary.id,
+                    provider=summary.provider,
+                    tested=summary.last_tested_at is not None,
+                    active=summary.enabled,
+                    suffix=summary.suffix,
+                    fingerprint=summary.fingerprint,
+                ),
+            )
+        except InternalAuthenticationError as exc:
+            return response_error(
+                request,
+                correlation_id=correlation_id,
+                code=exc.code,
+                message=str(exc),
+                status=401,
+            )
+        except (InternalContextValidationError, ValidationError):
+            return response_error(
+                request,
+                correlation_id=correlation_id,
+                code=SearchErrorCode.INVALID_REQUEST,
+                message="key enablement request is invalid",
+                status=400,
+            )
+        except SearchServiceError as exc:
+            return response_error(
+                request,
+                correlation_id=correlation_id,
+                code=exc.code,
+                message=exc.message,
+                status=exc.status_code,
+                retryable=exc.retryable,
+                retry_after_ms=exc.retry_after_ms,
+            )
+
     @application.post("/v1/provider-keys/list")
     async def provider_key_list(request: Request) -> JSONResponse:
         correlation_id = "unknown"
@@ -921,6 +1306,11 @@ class _UnavailableControlPlane:
         raise RuntimeError("search control plane is not configured")
 
     async def delete_key(self, *, subject_id: str, key_id: str) -> None:
+        raise RuntimeError("search control plane is not configured")
+
+    async def set_key_enabled(
+        self, *, subject_id: str, key_id: str, enabled: bool
+    ) -> ProviderKeySummary:
         raise RuntimeError("search control plane is not configured")
 
     async def get_settings(self, *, subject_id: str) -> UserSettings:

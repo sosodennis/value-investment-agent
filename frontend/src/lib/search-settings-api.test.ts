@@ -7,7 +7,7 @@ describe('Search settings API boundary', () => {
     it('uses the authenticated product API and parses its response before returning data', async () => {
         const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
             providers: [{ provider: 'ddgs', operations: ['web', 'news'], key_required: false, optional_fields: [] }],
-            settings: { providers: [{ provider: 'ddgs', enabled: true, priority: 0, key: null }] },
+            settings: { providers: [{ provider: 'ddgs', enabled: true, priority: 0, keys: [] }] },
         }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
         vi.stubGlobal('fetch', fetchMock);
 
@@ -18,7 +18,7 @@ describe('Search settings API boundary', () => {
     });
 
     it('rejects malformed payloads instead of exposing untyped fields', async () => {
-        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ providers: [], settings: { providers: [{ provider: 'ddgs', enabled: 'yes', priority: 0 }] } }), { status: 200 })));
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ providers: [], settings: { providers: [{ provider: 'ddgs', enabled: 'yes', priority: 0, keys: [] }] } }), { status: 200 })));
         await expect(getSearchSettings()).rejects.toThrow('search_provider_setting.enabled must be a boolean.');
     });
 

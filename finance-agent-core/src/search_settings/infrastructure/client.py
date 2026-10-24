@@ -245,6 +245,17 @@ class SearchServiceClient:
             response_type=_DeleteEnvelope,
         )
 
+    async def set_key_enabled(
+        self, *, principal: str, key_id: str, enabled: bool
+    ) -> ProviderKeyResult:
+        envelope = await self._post(
+            principal=principal,
+            path="/v1/provider-keys/set-enabled",
+            input_data={"key_id": key_id, "enabled": enabled},
+            response_type=_KeyEnvelope,
+        )
+        return envelope.result
+
 
 class _DeleteResult(StrictModel):
     deleted: bool

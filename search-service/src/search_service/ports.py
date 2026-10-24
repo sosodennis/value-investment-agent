@@ -32,10 +32,16 @@ class SearchProvider(Protocol):
 
 
 class ProviderCredential(Protocol):
+    key_id: str
     provider: str
     api_key: str
     enabled: bool
     priority: int
+    provider_priority: int
+    key_priority: int
+    fingerprint: str
+    status: str
+    cooldown_until: datetime | None
 
 
 class SearchControlPlane(Protocol):
@@ -44,6 +50,35 @@ class SearchControlPlane(Protocol):
     async def credentials_for(
         self, *, subject_id: str
     ) -> tuple[ProviderCredential, ...]: ...
+
+    async def claim_credential(
+        self, *, subject_id: str, provider: str, lease_seconds: int = 30
+    ) -> ProviderCredential | None: ...
+
+    async def release_credential(
+        self, *, subject_id: str, key_id: str, succeeded: bool = False
+    ) -> None: ...
+
+    async def record_key_failure(
+        self,
+        *,
+        subject_id: str,
+        key_id: str,
+        status: str = "cooldown",
+        cooldown_seconds: int = 30,
+    ) -> None: ...
+
+    async def record_provider_failure(
+        self,
+        *,
+        subject_id: str,
+        provider: str,
+        cooldown_seconds: int = 30,
+    ) -> None: ...
+
+    async def set_key_enabled(
+        self, *, subject_id: str, key_id: str, enabled: bool
+    ) -> ProviderKeySummary: ...
 
     async def add_tested_key(
         self,

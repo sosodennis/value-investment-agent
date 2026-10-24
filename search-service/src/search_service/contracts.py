@@ -182,6 +182,11 @@ class ProviderKeyDeleteInput(WireModel):
     key_id: str = Field(min_length=1, max_length=128)
 
 
+class ProviderKeySetEnabledInput(WireModel):
+    key_id: str = Field(min_length=1, max_length=128)
+    enabled: bool
+
+
 class ProviderKeySummary(WireModel):
     id: str = Field(min_length=1, max_length=128)
     provider: str = Field(min_length=1, max_length=128)
@@ -194,6 +199,7 @@ class ProviderKeySummary(WireModel):
     failure_count: int = Field(default=0, ge=0)
     cooldown_until: datetime | None = None
     last_tested_at: datetime | None = None
+    last_used_at: datetime | None = None
 
 
 class ProviderKeyResult(WireModel):
@@ -213,7 +219,7 @@ class ProviderSetting(WireModel):
     provider: str = Field(min_length=1, max_length=128)
     enabled: bool
     priority: int = Field(ge=0)
-    key: ProviderKeySummary | None = None
+    keys: tuple[ProviderKeySummary, ...] = ()
 
 
 class ProviderPreference(WireModel):
@@ -286,6 +292,11 @@ class ProviderKeyReplaceEnvelope(WireModel):
 class ProviderKeyDeleteEnvelope(WireModel):
     context: InternalRequestContext
     input: ProviderKeyDeleteInput
+
+
+class ProviderKeySetEnabledEnvelope(WireModel):
+    context: InternalRequestContext
+    input: ProviderKeySetEnabledInput
 
 
 _Result = TypeVar("_Result")

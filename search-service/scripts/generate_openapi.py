@@ -31,6 +31,7 @@ from search_service.contracts import (  # noqa: E402
     ProviderKeyReplaceEnvelope,
     ProviderKeyReplaceInput,
     ProviderKeyResult,
+    ProviderKeySetEnabledEnvelope,
     ProviderKeySuccess,
     ProviderKeyTestEnvelope,
     ProviderKeyTestResult,
@@ -58,6 +59,7 @@ _SCHEMA_MODELS: tuple[type[BaseModel], ...] = (
     ProviderKeyListSuccess,
     ProviderKeyReplaceInput,
     ProviderKeyReplaceEnvelope,
+    ProviderKeySetEnabledEnvelope,
     ProviderKeyResult,
     ProviderKeySuccess,
     ProviderKeyTestEnvelope,
@@ -264,6 +266,15 @@ def document() -> dict[str, object]:
                 "ProviderKeyListSuccess",
                 errors=("400", "401", "503", "504"),
                 description="List masked key metadata for the authenticated user.",
+            )
+        },
+        "/v1/provider-keys/set-enabled": {
+            "post": _operation(
+                "providerKeySetEnabled",
+                "ProviderKeySetEnabledEnvelope",
+                "ProviderKeySuccess",
+                errors=("400", "401", "404", "503", "504"),
+                description="Enable or disable an owned provider key without exposing key material.",
             )
         },
     }

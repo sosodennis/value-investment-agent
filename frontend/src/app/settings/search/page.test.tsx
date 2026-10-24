@@ -5,7 +5,7 @@ import { SearchSettingsApiError } from '@/lib/search-settings-api';
 
 const api = vi.hoisted(() => ({
     addSearchKey: vi.fn(), deleteSearchKey: vi.fn(), getSearchSettings: vi.fn(),
-    replaceSearchKey: vi.fn(), updateSearchSettings: vi.fn(),
+    replaceSearchKey: vi.fn(), setSearchKeyEnabled: vi.fn(), updateSearchSettings: vi.fn(),
 }));
 const router = vi.hoisted(() => ({ replace: vi.fn() }));
 
@@ -23,8 +23,8 @@ const snapshot = {
         { provider: 'ddgs', operations: ['web', 'news'], key_required: false, optional_fields: ['region'] },
     ],
     settings: { providers: [
-        { provider: 'provider-a', enabled: true, priority: 0, key: null },
-        { provider: 'ddgs', enabled: true, priority: 1, key: null },
+        { provider: 'provider-a', enabled: true, priority: 0, keys: [] },
+        { provider: 'ddgs', enabled: true, priority: 1, keys: [] },
     ] },
 };
 
@@ -46,7 +46,7 @@ describe('Search settings page', () => {
         resolveSettings(snapshot);
         await screen.findAllByText('provider-a');
         screen.getByText('ddgs does not require a key.');
-        screen.getByText('No key configured');
+        screen.getByText('No keys configured');
         expect(screen.queryByLabelText('API key for ddgs')).toBeNull();
     });
 

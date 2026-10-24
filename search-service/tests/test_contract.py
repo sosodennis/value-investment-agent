@@ -14,6 +14,7 @@ from search_service.contracts import (
     NewsSearchRequest,
     Operation,
     ProviderCapabilities,
+    ProviderKeySetEnabledInput,
     ProviderKeySummary,
     ProviderSetting,
     SearchResult,
@@ -106,6 +107,20 @@ class FakeControlPlane:
     async def delete_key(self, *, subject_id, key_id):
         _ = (subject_id, key_id)
         self.keys.clear()
+
+    async def set_key_enabled(self, *, subject_id, key_id, enabled):
+        _ = subject_id
+        for index, key in enumerate(self.keys):
+            if key.id == key_id:
+                updated = key.model_copy(
+                    update={
+                        "enabled": enabled,
+                        "status": "active" if enabled else "disabled",
+                    }
+                )
+                self.keys[index] = updated
+                return updated
+        raise AssertionError("unknown key")
 
     async def get_settings(self, *, subject_id):
         _ = subject_id
@@ -210,6 +225,24 @@ def test_region_accepts_intent_and_script_locales_but_rejects_arbitrary_values()
     assert script_locale.region == "zh-Hant-TW"
     with pytest.raises(ValueError):
         WebSearchRequest(query="test", region="not_a_region")
+
+
+def test_provider_settings_model_a_key_pool_and_safe_usage_metadata() -> None:
+    used_at = datetime.now(UTC)
+    key = ProviderKeySummary(
+        id="key-1",
+        provider="alpha",
+        label="primary",
+        suffix="1234",
+        fingerprint="sha256:masked",
+        enabled=True,
+        priority=0,
+        last_used_at=used_at,
+    )
+    setting = ProviderSetting(provider="alpha", enabled=True, priority=0, keys=(key,))
+    assert setting.keys == (key,)
+    assert setting.model_dump(mode="json")["keys"][0]["last_used_at"]
+    assert ProviderKeySetEnabledInput(key_id="key-1", enabled=False).enabled is False
 
 
 @pytest.mark.asyncio

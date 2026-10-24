@@ -45,6 +45,7 @@ CONTROL_ROUTES = (
     ("/v1/provider-keys/replace", {**KEY_INPUT, "key_id": "key-123"}),
     ("/v1/provider-keys/list", {}),
     ("/v1/provider-keys/delete", {"key_id": "key-123"}),
+    ("/v1/provider-keys/set-enabled", {"key_id": "key-123", "enabled": False}),
 )
 
 
@@ -88,6 +89,7 @@ class UnavailableControlPlane(FakeControlPlane):
     replace_tested_key = fail
     list_keys = fail
     delete_key = fail
+    set_key_enabled = fail
 
 
 def validate_openapi_response(
@@ -200,6 +202,18 @@ async def test_actual_success_response_matches_committed_openapi(
     generated = runpy.run_path(str(root / "search-service/scripts/generate_openapi.py"))
     assert artifact == generated["document"]()
     control = FakeControlPlane((Credential("alpha", "secret"),))
+    if route == "/v1/provider-keys/set-enabled":
+        control.keys.append(
+            ProviderKeySummary(
+                id="key-123",
+                provider="alpha",
+                label="main",
+                suffix="cret",
+                fingerprint="fingerprint",
+                enabled=True,
+                priority=0,
+            )
+        )
     async with client_for(control, {"alpha": provider()}) as client:
         response = await client.post(
             route,

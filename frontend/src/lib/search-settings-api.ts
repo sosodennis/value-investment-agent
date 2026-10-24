@@ -20,6 +20,7 @@ export type SearchKey = {
     status: 'active' | 'disabled' | 'cooldown' | 'invalid';
     failure_count: number;
     last_tested_at: string | null;
+    last_used_at: string | null;
     cooldown_until: string | null;
 };
 
@@ -27,7 +28,7 @@ export type SearchProviderSetting = {
     provider: string;
     enabled: boolean;
     priority: number;
-    key: SearchKey | null;
+    keys: SearchKey[];
 };
 
 export type SearchSettings = {
@@ -80,7 +81,15 @@ function parseKey(value: unknown): SearchKey | null {
         priority: number(item.priority, 'search_key.priority'), status, failure_count: number(item.failure_count ?? 0, 'search_key.failure_count'),
         last_tested_at: item.last_tested_at === null || item.last_tested_at === undefined ? null : string(item.last_tested_at, 'search_key.last_tested_at'),
         cooldown_until: item.cooldown_until === null || item.cooldown_until === undefined ? null : string(item.cooldown_until, 'search_key.cooldown_until'),
+        last_used_at: item.last_used_at === null || item.last_used_at === undefined ? null : string(item.last_used_at, 'search_key.last_used_at'),
     };
+}
+function parseKeys(value: unknown): SearchKey[] {
+    return array(value, 'search_provider_setting.keys').map((entry, index) => {
+        const parsed = parseKey(entry);
+        if (parsed === null) throw new TypeError(`search_provider_setting.keys[${index}] must be an object.`);
+        return parsed;
+    });
 }
 function parseSnapshot(value: unknown): SearchSettings {
     const root = record(value, 'search_settings');
@@ -102,7 +111,8 @@ function parseSnapshot(value: unknown): SearchSettings {
             const item = record(value, 'search_provider_setting');
             return {
                 provider: string(item.provider, 'search_provider_setting.provider'), enabled: bool(item.enabled, 'search_provider_setting.enabled'),
-                priority: number(item.priority, 'search_provider_setting.priority'), key: parseKey(item.key),
+                priority: number(item.priority, 'search_provider_setting.priority'),
+                keys: item.keys === undefined ? [] : parseKeys(item.keys),
             };
         }) },
     };
@@ -133,3 +143,4 @@ export const updateSearchSettings = (providers: { provider: string; enabled: boo
 export const addSearchKey = (input: { provider: string; api_key: string; label: string }): Promise<SearchKeyMutation> => request('/api/search/settings/keys', parseMutation, { method: 'POST', body: JSON.stringify(input) });
 export const replaceSearchKey = (input: { provider: string; key_id: string; api_key: string; label: string }): Promise<SearchKeyMutation> => request('/api/search/settings/keys', parseMutation, { method: 'PUT', body: JSON.stringify(input) });
 export const deleteSearchKey = (keyId: string): Promise<void> => request(`/api/search/settings/keys/${encodeURIComponent(keyId)}`, () => undefined, { method: 'DELETE' });
+export const setSearchKeyEnabled = (keyId: string, enabled: boolean): Promise<SearchKeyMutation> => request(`/api/search/settings/keys/${encodeURIComponent(keyId)}`, parseMutation, { method: 'PATCH', body: JSON.stringify({ enabled }) });

@@ -11,6 +11,7 @@ from src.auth.entrypoint import (
 )
 from src.search_settings.domain import (
     ProviderKeyCreateRequest,
+    ProviderKeyEnabledRequest,
     ProviderKeyReplaceRequest,
     ProviderKeyResponse,
     ProviderPreferencesRequest,
@@ -123,5 +124,21 @@ async def delete_search_key(
 ) -> None:
     try:
         await service.delete_key(principal=principal.user_id, key_id=key_id)
+    except SearchServiceError as exc:
+        _raise(exc)
+
+
+@search_settings_router.patch("/keys/{key_id}", response_model=ProviderKeyResponse)
+async def set_search_key_enabled(
+    key_id: str,
+    request: ProviderKeyEnabledRequest,
+    principal: Principal = Depends(require_current_user_mutation),
+    service: SearchServiceClient = Depends(get_search_service),
+) -> ProviderKeyResponse:
+    try:
+        result = await service.set_key_enabled(
+            principal=principal.user_id, key_id=key_id, enabled=request.enabled
+        )
+        return ProviderKeyResponse(**result.model_dump())
     except SearchServiceError as exc:
         _raise(exc)
