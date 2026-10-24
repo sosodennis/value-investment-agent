@@ -101,8 +101,8 @@ step. It is the only expected human setup action during the run:
 1. Start the required local stack and make the login, registration, and LLM settings pages reachable.
 2. Give the human the exact local URL and ask them to create a dedicated staging account through `/register`.
 3. Ask the human to sign in and add a disposable OpenRouter key at `/settings/llm`, using the labels in the LLM prerequisite section below.
-4. Ask the human to test the key in the UI and reply only that the staging account is ready. Never ask for the password, session cookie, raw key, or an authorization header.
-5. Continue all non-LLM checks while the human is completing this step. Once the human confirms readiness, run the LLM-dependent browser and integration gates and record only masked metadata and request evidence.
+4. Ask the human to reply only that the account and key have been provisioned. The architect's staging smoke command performs the actual key test. Never ask for the password, session cookie, raw key, or an authorization header in chat, issues, or reports.
+5. Continue all non-LLM checks while the human is completing this step. Once the human confirms provisioning, run the LLM-dependent browser and integration gates and record only masked metadata and request evidence.
 
 If the execution environment supports an architect-controlled browser session,
 the human may complete these steps in that session so the architect can use the
@@ -119,6 +119,24 @@ the same account's pool because those mutations are intentionally user-scoped
 and can race with failover tests. Use a separate manual-QA account and key for
 concurrent testing, or limit the human's staging-account use to read-only UI
 inspection while the architect runs the mutation and failover matrix.
+
+### Shared staging access for engineers
+
+The architect must make staging access repeatable without asking the human to
+retest the key on every branch or rebuild:
+
+- Keep one explicitly named shared staging Compose project for live LLM smoke and integration checks. It owns the staging database, LiteLLM state, Redis coordination, and provider service. Do not point every feature worktree at the same mutable database.
+- Add an idempotent root script under the #147 integration ownership, such as `scripts/refactor_staging_smoke.sh`. It must validate service health, register-or-login the dedicated staging user, ensure the labelled provider key exists when the local secret is available, call the authenticated provider test/completion path, and print only masked status, request IDs, latency, attempt count, and provider error codes.
+- The script reads secrets from an untracked local secret source (the existing ignored `.env` for local development or an approved OS secret store). At minimum define `STAGING_BASE_URL`, `STAGING_EMAIL`, `STAGING_PASSWORD`, and `STAGING_OPENROUTER_KEY`; service tokens such as `LITELLM_MASTER_KEY` and `LLM_PROVIDER_SERVICE_TOKEN` are injected separately by Compose. Never echo the values, include them in command output, or write them to a report.
+- The script must be safe to rerun after a fresh database: registration conflicts become login, key creation is keyed by the explicit label, and a failed test does not create duplicate records. Raw key material is sent only through the authenticated settings/provider path and is never stored in project application metadata.
+- Engineers use this command for real-provider checks and use fake providers or contract fixtures for ordinary unit and feature development. Only the architect/integration owner mutates the shared staging pool during the failover matrix; other engineers may run bounded read/test requests but must not add, replace, or delete its keys concurrently.
+- If a separate worktree needs live LLM calls, it must use its own Compose project, ports, database, and credentials, or run against the shared staging project in read/test-only mode. A worktree must never silently reuse another worktree's volumes.
+
+This removes the need for the human to participate in routine provider tests.
+The human provisions the account and secret once; the architect and engineers
+run the repeatable command thereafter. If the local secret source is not
+available, continue with fake-provider and contract gates and mark live LLM
+acceptance `INCONCLUSIVE` rather than asking for a key in chat.
 
 ## Required pstack workflow
 
