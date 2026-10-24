@@ -26,6 +26,13 @@ class ProviderState:
 
     async def initialize(self) -> None:
         async with self._engine.begin() as connection:
+            # Multiple replicas can start against the same database. Serialize
+            # schema creation and compatibility seeding so PostgreSQL does not
+            # race while creating the same relation type.
+            await connection.execute(
+                text("SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))"),
+                {"lock_key": "llm-provider-schema-initialize"},
+            )
             await connection.execute(
                 text(
                     """

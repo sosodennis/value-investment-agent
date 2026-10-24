@@ -1,0 +1,9 @@
+# Verification image: reuse a known baked-model image and replace only the
+# service source and shared internal contract. This keeps #126 deterministic
+# and avoids downloading FinBERT artifacts during the deployment check.
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+
+WORKDIR /app
+COPY src/model_inference_service ./src/model_inference_service
+COPY --from=internal-contracts internal_services ./src/shared/internal_services

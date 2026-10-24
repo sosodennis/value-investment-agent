@@ -5,7 +5,7 @@ import httpx
 from src.llm_provider_service.domain.errors import OpenRouterKeyTestError
 
 
-async def test_openrouter_key(
+async def validate_openrouter_key(
     key: str, *, base_url: str = "https://openrouter.ai/api/v1"
 ) -> None:
     try:

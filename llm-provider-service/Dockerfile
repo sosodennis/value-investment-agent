@@ -13,7 +13,7 @@ RUN python -m pip install --no-cache-dir uv==0.11.28 \
     && uv sync --no-dev --no-install-project
 
 COPY --from=internal-contracts internal_services ./src/shared/internal_services
-COPY src ./src/llm_provider_service
+COPY src/llm_provider_service ./src/llm_provider_service
 RUN uv sync --no-dev
 
 EXPOSE 8002

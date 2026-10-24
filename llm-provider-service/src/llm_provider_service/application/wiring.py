@@ -17,7 +17,7 @@ from src.llm_provider_service.infrastructure.key_telemetry import (
 )
 from src.llm_provider_service.infrastructure.litellm_admin import LiteLLMAdminClient
 from src.llm_provider_service.infrastructure.openrouter_key_test import (
-    test_openrouter_key,
+    validate_openrouter_key,
 )
 from src.llm_provider_service.infrastructure.openrouter_models import (
     list_free_models,
@@ -114,7 +114,7 @@ class ProviderRuntime:
             ownership=_Ownership(self.state),
             settings=_Settings(self.state),
             catalog=_Catalog(),
-            validate_key=test_openrouter_key,
+            validate_key=validate_openrouter_key,
             telemetry=self.telemetry,
         )
         self.ready = True
