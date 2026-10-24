@@ -21,6 +21,7 @@ class QueueSubscriber:
         except asyncio.QueueFull as exc:
             self._closed = True
             try:
+                self._queue.get_nowait()
                 self._queue.put_nowait(None)
             except asyncio.QueueFull:
                 pass

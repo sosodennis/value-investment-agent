@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 
 import pytest
 
 from src.analysis_runtime.application.runtime_service import AnalysisRuntimeService
-from src.analysis_runtime.domain.contracts import Activity
-from src.analysis_runtime.domain.errors import ReplayGapError, ThreadNotFoundError
+from src.analysis_runtime.domain.contracts import Activity, ActivityEvent
+from src.analysis_runtime.domain.errors import (
+    ActivityPersistenceError,
+    ReplayGapError,
+    ThreadNotFoundError,
+)
 from src.analysis_runtime.infrastructure.memory_repository import (
     InMemoryActivityRepository,
 )
@@ -43,6 +48,11 @@ class FailingRunner:
     async def run(self, **kwargs):
         raise RuntimeError("runner failed")
         yield  # pragma: no cover
+
+
+class FailingRepository(InMemoryActivityRepository):
+    async def append_atomic(self, event):
+        raise RuntimeError("storage unavailable")
 
 
 @pytest.mark.asyncio
@@ -108,3 +118,60 @@ async def test_failed_run_publishes_terminal_activity() -> None:
     replay = await service.replay(principal_id="user", thread_id="thread", after_seq=0)
     assert replay.events[-1].payload.status == "failed"
     assert replay.events[-1].run_id == run_id
+
+
+@pytest.mark.asyncio
+async def test_storage_failure_does_not_publish_unpersisted_event() -> None:
+    repository = FailingRepository()
+    service = AnalysisRuntimeService(
+        repository=repository, owner=Owner(), runner=Runner()
+    )
+    subscriber = await service.hub.subscribe()
+    with pytest.raises(ActivityPersistenceError):
+        await service._persist_and_publish(
+            # Exercise the persistence-before-publish boundary directly.
+            ActivityEvent(
+                event_id="evt",
+                seq_id=1,
+                thread_id="thread",
+                run_id="run",
+                occurred_at=datetime.now(timezone.utc),
+                payload=Activity(
+                    activity_id="workflow",
+                    thread_id="thread",
+                    run_id="run",
+                    scope_path=("workflow",),
+                    kind="phase",
+                    status="running",
+                    label="Workflow",
+                    attempt=1,
+                ),
+            )
+        )
+    assert subscriber._queue.empty()
+
+
+@pytest.mark.asyncio
+async def test_slow_subscriber_is_bounded() -> None:
+    hub = BoundedNotificationHub(queue_size=1)
+    subscriber = await hub.subscribe()
+    event = ActivityEvent(
+        event_id="evt",
+        seq_id=1,
+        thread_id="thread",
+        run_id="run",
+        occurred_at=datetime.now(timezone.utc),
+        payload=Activity(
+            activity_id="workflow",
+            thread_id="thread",
+            run_id="run",
+            scope_path=("workflow",),
+            kind="phase",
+            status="running",
+            label="Workflow",
+            attempt=1,
+        ),
+    )
+    await hub.publish(event)
+    await hub.publish(event.model_copy(update={"event_id": "evt-2", "seq_id": 2}))
+    assert await subscriber.receive() is None
