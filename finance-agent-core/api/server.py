@@ -3,11 +3,11 @@ import os
 import sys
 import uuid
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from functools import lru_cache
-from typing import Literal
+from typing import Literal, Protocol
 
 import uvicorn
 from fastapi import (
@@ -28,8 +28,9 @@ from pydantic import BaseModel, ConfigDict
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.runnables import RunnableConfig
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.types import Command
+from langgraph.types import Command, StateSnapshot
 
 from src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl import (
     warmup_dependency_matcher,
@@ -89,6 +90,11 @@ from src.runtime.workspace_runtime_projection import (
 )
 from src.services.artifact_manager import artifact_manager
 from src.services.history import history_service
+from src.shared.internal_services import (
+    InternalPrincipal,
+    reset_request_principal,
+    set_request_principal,
+)
 from src.shared.kernel.tools.logger import (
     bind_log_context,
     clear_log_context,
@@ -99,6 +105,18 @@ from src.shared.kernel.types import InterruptResumePayload, JSONObject
 from src.workflow.graph import get_graph
 
 logger = get_logger(__name__)
+
+
+class EventGeneratorGraph(Protocol):
+    def astream_events(
+        self,
+        input_data: Command[object] | dict[str, object],
+        config: RunnableConfig | None = None,
+        *,
+        version: Literal["v1", "v2"] = "v2",
+    ) -> AsyncIterator[Mapping[str, object]]: ...
+
+    async def aget_state(self, config: RunnableConfig) -> StateSnapshot: ...
 
 
 @asynccontextmanager
@@ -731,9 +749,9 @@ async def _resolve_next_seq_id(
 
 async def event_generator(
     thread_id: str,
-    input_data: Command | dict[str, object],
-    config: dict[str, dict[str, str]],
-    graph: CompiledStateGraph,
+    input_data: Command[object] | dict[str, object],
+    config: RunnableConfig,
+    graph: EventGeneratorGraph,
     *,
     run_id: str,
     principal: AuthPrincipal,
@@ -752,6 +770,9 @@ async def event_generator(
         ProviderPrincipal(user_id=principal.user_id)
     )
     inference_context_token = set_inference_principal(principal.user_id)
+    request_principal_token = set_request_principal(
+        InternalPrincipal(subject_id=principal.user_id)
+    )
 
     with log_context(
         thread_id=thread_id,
@@ -993,6 +1014,7 @@ async def event_generator(
         finally:
             reset_provider_principal(provider_context_token)
             reset_inference_principal(inference_context_token)
+            reset_request_principal(request_principal_token)
             for q in running_queues[thread_id][:]:
                 await q.put(_QUEUE_EOF)
 
@@ -1365,7 +1387,7 @@ async def stream_agent(
         user_id=principal.user_id, resource_type="thread", resource_id=thread_id
     ):
         raise HTTPException(status_code=404, detail="thread was not found")
-    config = {"configurable": {"thread_id": thread_id}}
+    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
     runtime_projection = getattr(request.app.state, "runtime_projection", None)
 
     if thread_id in active_tasks:
@@ -1404,7 +1426,10 @@ async def stream_agent(
 
         user_msg = HumanMessage(content=body.message)
         await history_service.save_message(thread_id, user_msg)
-        input_data = {"messages": [user_msg], "user_query": body.message}
+        input_data: Command[object] | dict[str, object] = {
+            "messages": [user_msg],
+            "user_query": body.message,
+        }
     elif body.resume_payload:
         run_id = str(uuid.uuid4())
         if runtime_projection is not None:

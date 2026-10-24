@@ -14,6 +14,11 @@ from .contracts import (
     InternalRequestContext,
     ReadinessStatus,
 )
+from .principal_context import (
+    get_request_principal,
+    reset_request_principal,
+    set_request_principal,
+)
 
 __all__ = [
     "INTERNAL_CONTRACT_VERSION",
@@ -26,4 +31,7 @@ __all__ = [
     "InternalRequestContext",
     "ReadinessStatus",
     "authenticate_internal_request",
+    "get_request_principal",
+    "reset_request_principal",
+    "set_request_principal",
 ]

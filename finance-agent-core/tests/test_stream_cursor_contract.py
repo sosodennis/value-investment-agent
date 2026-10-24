@@ -1,16 +1,26 @@
 from __future__ import annotations
 
+import asyncio
+from collections.abc import AsyncIterator
 from datetime import datetime
+from typing import Literal
 
+from langchain_core.runnables import RunnableConfig
+from langgraph.types import StateSnapshot
+
+import api.server as server
 from api.server import (
     _build_event_from_activity_record,
     _format_sse_event,
     _parse_after_seq,
+    event_generator,
 )
+from src.auth.interface.contracts import Principal
 from src.interface.events.protocol import AgentEvent
 from src.runtime.workspace_runtime_projection.domain.contracts import (
     WorkspaceRuntimeActivityRecord,
 )
+from src.shared.internal_services import get_request_principal
 
 
 def test_parse_after_seq_prefers_query_param() -> None:
@@ -63,3 +73,52 @@ def test_build_event_from_activity_record_roundtrip() -> None:
     assert event.source == "system"
     assert event.data == {"status": "done"}
     assert event.metadata == {"source": "test"}
+
+
+async def test_event_generator_sets_and_resets_request_principal() -> None:
+    observed: list[str | None] = []
+
+    class GraphStub:
+        async def astream_events(
+            self,
+            _input_data: object,
+            config: RunnableConfig | None = None,
+            *,
+            version: Literal["v1", "v2"] = "v2",
+        ) -> AsyncIterator[dict[str, object]]:
+            del config, version
+            principal = get_request_principal()
+            observed.append(principal.subject_id if principal else None)
+            if False:
+                yield {}
+
+        async def aget_state(self, _config: object) -> StateSnapshot:
+            return StateSnapshot(
+                values={},
+                next=(),
+                config={},
+                metadata=None,
+                created_at=None,
+                parent_config=None,
+                tasks=(),
+                interrupts=(),
+            )
+
+    thread_id = "search-principal-context"
+    server.thread_sequences[thread_id] = 1
+    server.running_queues[thread_id] = [asyncio.Queue()]
+
+    await event_generator(
+        thread_id,
+        {},
+        {"configurable": {"thread_id": thread_id}},
+        GraphStub(),
+        run_id="run-1",
+        principal=Principal(
+            user_id="alice", subject="alice", email="alice@example.test"
+        ),
+    )
+
+    assert observed == ["alice"]
+    assert get_request_principal() is None
+    del server.thread_sequences[thread_id]

@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from urllib.parse import urlparse
 
+from pydantic import ValidationError
+
 from src.agents.news.domain.search_strategy.contracts import SearchTask
 from src.agents.news.domain.search_strategy.query_policy_service import (
     build_base_term,
@@ -20,6 +22,7 @@ from src.agents.news.domain.search_strategy.ranking_policy_service import (
     TIER_2_DOMAINS,
     TOP_TIER_DOMAINS,
 )
+from src.search import NewsSearchRequest, SearchClientError, get_search_client
 from src.shared.kernel.tools.logger import get_logger, log_event
 
 logger = get_logger(__name__)
@@ -28,53 +31,41 @@ SearchResult = dict[str, object]
 FormattedResult = dict[str, object]
 
 
-def _is_no_results_error(err: Exception) -> bool:
-    return "No results found" in str(err)
-
-
-def _run_query(
-    ddgs: object, query: str, time_param: str, limit: int
+async def _fetch_one_managed(
+    task: SearchTask, semaphore: asyncio.Semaphore
 ) -> list[SearchResult]:
-    results = ddgs.news(
-        query,
-        region="wt-wt",
-        safesearch="off",
-        time=time_param,
-        max_results=limit,
-    )
-    return list(results)
-
-
-def _fetch_one_sync(task: SearchTask) -> list[SearchResult]:
-    """Synchronous fetch with retry logic and fallbacks."""
+    import random
     import time
 
-    from ddgs import DDGS
-
-    max_retries = 2
-    queries = (task.query,) + task.fallbacks
-    last_error: Exception | None = None
-
-    for query in queries:
-        for attempt in range(max_retries):
-            try:
-                if attempt == 0:
-                    log_event(
-                        logger,
-                        event="news_search_query_started",
-                        message="news search query started",
-                        fields={
-                            "tag": task.tag,
-                            "timeframe": task.time_param,
-                            "query_preview": query[:60],
-                        },
+    async with semaphore:
+        await asyncio.sleep(random.uniform(*JITTER_SECONDS))
+        for query in (task.query,) + task.fallbacks:
+            for attempt in range(2):
+                started_at = time.perf_counter()
+                try:
+                    response = await get_search_client().search_news(
+                        NewsSearchRequest(
+                            query=query,
+                            result_limit=task.limit,
+                            time_range="week" if task.time_param == "w" else "month",
+                        )
                     )
-
-                with DDGS() as ddgs:
-                    search_start = time.perf_counter()
-                    results_list = _run_query(ddgs, query, task.time_param, task.limit)
-                    search_end = time.perf_counter()
-
+                    results: list[SearchResult] = [
+                        {
+                            "title": item.title,
+                            "url": item.canonical_url,
+                            "body": item.snippet,
+                            "snippet": item.snippet,
+                            "source": item.source or "",
+                            "date": item.published_at.isoformat()
+                            if item.published_at
+                            else "",
+                            "image": item.image_url or "",
+                            "_time_frame": task.time_param,
+                            "_search_tag": task.tag,
+                        }
+                        for item in response.results
+                    ]
                     log_event(
                         logger,
                         event="news_search_query_completed",
@@ -82,57 +73,34 @@ def _fetch_one_sync(task: SearchTask) -> list[SearchResult]:
                         fields={
                             "tag": task.tag,
                             "timeframe": task.time_param,
-                            "seconds": round(search_end - search_start, 3),
-                            "query_preview": query[:50],
-                            "result_count": len(results_list),
+                            "seconds": round(time.perf_counter() - started_at, 3),
+                            "result_count": len(results),
                         },
                     )
-
-                    if not results_list:
-                        break
-
-                    for r in results_list:
-                        r["_time_frame"] = task.time_param
-                        r["_search_tag"] = task.tag
-                    return results_list
-
-            except Exception as e:
-                if _is_no_results_error(e):
-                    log_event(
-                        logger,
-                        event="news_search_query_no_results",
-                        message="news search query returned no results",
-                        fields={"tag": task.tag, "query_preview": query[:80]},
+                    if results:
+                        return results
+                    break
+                except (SearchClientError, ValidationError) as exc:
+                    retryable = (
+                        exc.retryable if isinstance(exc, SearchClientError) else False
                     )
-                    break
-
-                last_error = e
-                if attempt == max_retries - 1:
-                    break
-                time.sleep(1)  # Brief pause before retry
-
-    if last_error is not None:
-        log_event(
-            logger,
-            event="news_search_query_failed",
-            message="news search query failed after retries",
-            level=logging.WARNING,
-            error_code="NEWS_SEARCH_QUERY_FAILED",
-            fields={"tag": task.tag, "exception": str(last_error)},
-        )
-    return []
-
-
-async def _fetch_one_managed(
-    task: SearchTask, semaphore: asyncio.Semaphore
-) -> list[SearchResult]:
-    """Async wrapper with semaphore control and jitter."""
-    import random
-
-    async with semaphore:
-        # Small random jitter to avoid burst patterns while keeping latency acceptable
-        await asyncio.sleep(random.uniform(*JITTER_SECONDS))
-        return await asyncio.to_thread(_fetch_one_sync, task)
+                    error_code = (
+                        exc.code
+                        if isinstance(exc, SearchClientError)
+                        else "INVALID_REQUEST"
+                    )
+                    if not retryable or attempt == 1:
+                        log_event(
+                            logger,
+                            event="news_search_query_failed",
+                            message="news search query failed",
+                            level=logging.WARNING,
+                            error_code="NEWS_SEARCH_QUERY_FAILED",
+                            fields={"tag": task.tag, "error_code": error_code},
+                        )
+                        break
+                    await asyncio.sleep(1)
+        return []
 
 
 def _dedupe_results(
