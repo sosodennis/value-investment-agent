@@ -19,8 +19,8 @@ def build_data_fetch_error_update(error_message: str) -> JSONObject:
     return _guard_state_update(
         "data_fetch",
         {
-            "current_node": "data_fetch",
-            "internal_progress": {"data_fetch": "error"},
+            "active_activity_id": "data_fetch",
+            "workflow_activity_updates": {"data_fetch": "error"},
             "error_logs": [
                 {
                     "node": "data_fetch",
@@ -50,8 +50,8 @@ def build_data_fetch_success_update(
                 "degraded_reasons": list(degraded_reasons),
                 "artifact": artifact,
             },
-            "current_node": "data_fetch",
-            "internal_progress": {
+            "active_activity_id": "data_fetch",
+            "workflow_activity_updates": {
                 "data_fetch": "done",
                 "feature_compute": "running",
             },
@@ -63,8 +63,8 @@ def build_feature_compute_error_update(error_message: str) -> JSONObject:
     return _guard_state_update(
         "feature_compute",
         {
-            "current_node": "feature_compute",
-            "internal_progress": {"feature_compute": "error"},
+            "active_activity_id": "feature_compute",
+            "workflow_activity_updates": {"feature_compute": "error"},
             "error_logs": [
                 {
                     "node": "feature_compute",
@@ -96,8 +96,8 @@ def build_feature_compute_success_update(
                 "degraded_reasons": list(degraded_reasons),
                 "artifact": artifact,
             },
-            "current_node": "feature_compute",
-            "internal_progress": {
+            "active_activity_id": "feature_compute",
+            "workflow_activity_updates": {
                 "feature_compute": "done",
                 "pattern_compute": "running",
             },
@@ -109,8 +109,8 @@ def build_pattern_compute_error_update(error_message: str) -> JSONObject:
     return _guard_state_update(
         "pattern_compute",
         {
-            "current_node": "pattern_compute",
-            "internal_progress": {"pattern_compute": "error"},
+            "active_activity_id": "pattern_compute",
+            "workflow_activity_updates": {"pattern_compute": "error"},
             "error_logs": [
                 {
                     "node": "pattern_compute",
@@ -134,8 +134,8 @@ def build_pattern_compute_success_update(
                 "pattern_pack_id": pattern_pack_id,
                 "artifact": artifact,
             },
-            "current_node": "pattern_compute",
-            "internal_progress": {
+            "active_activity_id": "pattern_compute",
+            "workflow_activity_updates": {
                 "pattern_compute": "done",
                 "alerts_compute": "running",
             },
@@ -147,8 +147,8 @@ def build_alerts_compute_error_update(error_message: str) -> JSONObject:
     return _guard_state_update(
         "alerts_compute",
         {
-            "current_node": "alerts_compute",
-            "internal_progress": {"alerts_compute": "error"},
+            "active_activity_id": "alerts_compute",
+            "workflow_activity_updates": {"alerts_compute": "error"},
             "error_logs": [
                 {
                     "node": "alerts_compute",
@@ -172,8 +172,8 @@ def build_alerts_compute_success_update(
                 "alerts_id": alerts_id,
                 "artifact": artifact,
             },
-            "current_node": "alerts_compute",
-            "internal_progress": {
+            "active_activity_id": "alerts_compute",
+            "workflow_activity_updates": {
                 "alerts_compute": "done",
                 "regime_compute": "running",
             },
@@ -185,8 +185,8 @@ def build_regime_compute_error_update(error_message: str) -> JSONObject:
     return _guard_state_update(
         "regime_compute",
         {
-            "current_node": "regime_compute",
-            "internal_progress": {"regime_compute": "error"},
+            "active_activity_id": "regime_compute",
+            "workflow_activity_updates": {"regime_compute": "error"},
             "error_logs": [
                 {
                     "node": "regime_compute",
@@ -210,8 +210,8 @@ def build_regime_compute_success_update(
                 "regime_pack_id": regime_pack_id,
                 "artifact": artifact,
             },
-            "current_node": "regime_compute",
-            "internal_progress": {
+            "active_activity_id": "regime_compute",
+            "workflow_activity_updates": {
                 "regime_compute": "done",
                 "fusion_compute": "running",
             },
@@ -223,8 +223,8 @@ def build_fusion_compute_error_update(error_message: str) -> JSONObject:
     return _guard_state_update(
         "fusion_compute",
         {
-            "current_node": "fusion_compute",
-            "internal_progress": {"fusion_compute": "error"},
+            "active_activity_id": "fusion_compute",
+            "workflow_activity_updates": {"fusion_compute": "error"},
             "error_logs": [
                 {
                     "node": "fusion_compute",
@@ -268,8 +268,8 @@ def build_fusion_compute_success_update(
                 "degraded_reasons": list(degraded_reasons),
                 "artifact": artifact,
             },
-            "current_node": "fusion_compute",
-            "internal_progress": {
+            "active_activity_id": "fusion_compute",
+            "workflow_activity_updates": {
                 "fusion_compute": "done",
                 "verification_compute": "running",
             },
@@ -281,8 +281,8 @@ def build_verification_compute_error_update(error_message: str) -> JSONObject:
     return _guard_state_update(
         "verification_compute",
         {
-            "current_node": "verification_compute",
-            "internal_progress": {"verification_compute": "error"},
+            "active_activity_id": "verification_compute",
+            "workflow_activity_updates": {"verification_compute": "error"},
             "error_logs": [
                 {
                     "node": "verification_compute",
@@ -328,8 +328,8 @@ def build_verification_compute_success_update(
                 "obv": obv,
                 "artifact": artifact,
             },
-            "current_node": "verification_compute",
-            "internal_progress": {
+            "active_activity_id": "verification_compute",
+            "workflow_activity_updates": {
                 "verification_compute": "done",
                 "semantic_translate": "running",
             },
@@ -341,8 +341,8 @@ def build_fracdiff_error_update(error_message: str) -> JSONObject:
     return _guard_state_update(
         "fracdiff_compute",
         {
-            "current_node": "fracdiff_compute",
-            "internal_progress": {"fracdiff_compute": "error"},
+            "active_activity_id": "fracdiff_compute",
+            "workflow_activity_updates": {"fracdiff_compute": "error"},
             "error_logs": [
                 {
                     "node": "fracdiff_compute",
@@ -386,8 +386,8 @@ def build_fracdiff_success_update(
                 "obv": obv,
                 "artifact": artifact,
             },
-            "current_node": "fracdiff_compute",
-            "internal_progress": {
+            "active_activity_id": "fracdiff_compute",
+            "workflow_activity_updates": {
                 "fracdiff_compute": "done",
                 "semantic_translate": "running",
             },
@@ -409,8 +409,8 @@ def build_semantic_success_update(
             "semantic_translate",
             {
                 "technical_analysis": technical_analysis,
-                "current_node": "semantic_translate",
-                "internal_progress": {"semantic_translate": "done"},
+                "active_activity_id": "semantic_translate",
+                "workflow_activity_updates": {"semantic_translate": "done"},
             },
         )
     )
@@ -421,8 +421,8 @@ def build_semantic_error_update(error_message: str) -> SemanticCommandUpdateResu
         update=_guard_state_update(
             "semantic_translate",
             {
-                "current_node": "semantic_translate",
-                "internal_progress": {"semantic_translate": "error"},
+                "active_activity_id": "semantic_translate",
+                "workflow_activity_updates": {"semantic_translate": "error"},
                 "error_logs": [
                     {
                         "node": "semantic_translate",
@@ -454,8 +454,8 @@ def _guard_state_update(node: str, update: JSONObject) -> JSONObject:
     )
 
     return {
-        "current_node": node,
-        "internal_progress": {node: "error"},
+        "active_activity_id": node,
+        "workflow_activity_updates": {node: "error"},
         "error_logs": [
             {
                 "node": node,

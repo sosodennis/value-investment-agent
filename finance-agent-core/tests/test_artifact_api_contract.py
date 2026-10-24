@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import pytest
 
-import api.server as server
 from api.server import app
 from src.agents.debate.interface.contracts import parse_debate_artifact_model
 from src.agents.fundamental.subdomains.artifacts_provenance.interface.contracts import (
@@ -22,24 +21,33 @@ from src.interface.artifacts.artifact_envelope import build_artifact_envelope
 
 
 @pytest.fixture(autouse=True)
-def authenticated_api(monkeypatch: pytest.MonkeyPatch) -> None:
+def authenticated_api(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
     app.dependency_overrides[require_current_user] = lambda: Principal(
         user_id="test-user",
         subject="test-user",
         email="test@example.com",
     )
-    monkeypatch.setattr(server, "_require_thread_owner", AsyncMock(return_value=None))
+    ownership = AsyncMock()
+    ownership.owns = AsyncMock(return_value=True)
     monkeypatch.setattr(
-        server.artifact_manager,
-        "get_artifact",
+        "src.interface.artifacts.routes.get_ownership_service", lambda: ownership
+    )
+    monkeypatch.setattr(
+        "src.interface.artifacts.routes.artifact_manager.get_artifact",
         AsyncMock(return_value=SimpleNamespace(thread_id="test-thread")),
     )
-    yield
+    monkeypatch.setattr(
+        "src.interface.artifacts.routes.artifact_manager.get_artifact_envelope",
+        AsyncMock(),
+    )
+    yield ownership
     app.dependency_overrides.clear()
 
 
 @pytest.mark.asyncio
-async def test_get_artifact_returns_canonical_fundamental_payload() -> None:
+async def test_get_artifact_returns_canonical_fundamental_payload(
+    authenticated_api: AsyncMock,
+) -> None:
     payload = parse_fundamental_artifact_model(
         {
             "ticker": "AAPL",
@@ -70,14 +78,14 @@ async def test_get_artifact_returns_canonical_fundamental_payload() -> None:
         data=payload,
     )
     with patch(
-        "api.server.artifact_manager.get_artifact_envelope",
+        "src.interface.artifacts.routes.artifact_manager.get_artifact_envelope",
         new=AsyncMock(return_value=envelope),
     ):
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app),
             base_url="http://testserver",
         ) as client:
-            response = await client.get("/api/artifacts/art_fa")
+            response = await client.get("/api/v1/artifacts/art_fa")
 
     assert response.status_code == 200
     assert response.json()["kind"] == "financial_reports"
@@ -98,12 +106,17 @@ async def test_get_artifact_returns_canonical_fundamental_payload() -> None:
         ]
         is True
     )
-    assert response.headers["cache-control"] == "public, max-age=3600"
+    assert response.headers["cache-control"] == "private, max-age=3600"
     assert response.headers["etag"] == '"art_fa"'
+    authenticated_api.owns.assert_awaited_once_with(
+        user_id="test-user", resource_type="thread", resource_id="test-thread"
+    )
 
 
 @pytest.mark.asyncio
-async def test_get_artifact_returns_canonical_news_and_debate_payload() -> None:
+async def test_get_artifact_returns_canonical_news_and_debate_payload(
+    authenticated_api: AsyncMock,
+) -> None:
     news_payload = parse_news_artifact_model(
         {
             "ticker": "NVDA",
@@ -212,31 +225,41 @@ async def test_get_artifact_returns_canonical_news_and_debate_payload() -> None:
             data=payload,
         )
         with patch(
-            "api.server.artifact_manager.get_artifact_envelope",
+            "src.interface.artifacts.routes.artifact_manager.get_artifact_envelope",
             new=AsyncMock(return_value=envelope),
         ):
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=app),
                 base_url="http://testserver",
             ) as client:
-                response = await client.get(f"/api/artifacts/{artifact_id}")
+                response = await client.get(f"/api/v1/artifacts/{artifact_id}")
 
         assert response.status_code == 200
         assert response.json()["kind"] == kind
         assert expected_key in response.json()["data"]
+    assert authenticated_api.owns.await_count == 3
 
 
 @pytest.mark.asyncio
-async def test_get_artifact_returns_404_when_missing() -> None:
-    with patch(
-        "api.server.artifact_manager.get_artifact_envelope",
-        new=AsyncMock(return_value=None),
+async def test_get_artifact_returns_404_when_missing(
+    authenticated_api: AsyncMock,
+) -> None:
+    with (
+        patch(
+            "src.interface.artifacts.routes.artifact_manager.get_artifact",
+            new=AsyncMock(return_value=None),
+        ),
+        patch(
+            "src.interface.artifacts.routes.artifact_manager.get_artifact_envelope",
+            new=AsyncMock(return_value=None),
+        ),
     ):
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app),
             base_url="http://testserver",
         ) as client:
-            response = await client.get("/api/artifacts/missing")
+            response = await client.get("/api/v1/artifacts/missing")
 
     assert response.status_code == 404
-    assert response.json() == {"detail": "Artifact not found"}
+    assert response.json() == {"detail": "artifact_not_found"}
+    authenticated_api.owns.assert_not_awaited()

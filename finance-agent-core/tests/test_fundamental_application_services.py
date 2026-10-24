@@ -52,7 +52,7 @@ def test_build_valuation_missing_inputs_update_sets_error_shape() -> None:
     fa = update["fundamental_analysis"]
     assert isinstance(fa, dict)
     assert fa == {}
-    assert update["internal_progress"]["calculation"] == "error"
+    assert update["workflow_activity_updates"]["calculation"] == "error"
     assert "Missing SEC XBRL inputs" in update["error_logs"][0]["error"]
 
 
@@ -149,7 +149,7 @@ def test_build_valuation_success_update_includes_output_and_artifact() -> None:
             "preview": preview,
             "reference": {
                 "artifact_id": reports_artifact_id,
-                "download_url": f"/api/artifacts/{reports_artifact_id}",
+                "download_url": f"/api/v1/artifacts/{reports_artifact_id}",
                 "type": "financial_reports",
             },
         },
@@ -400,7 +400,7 @@ def test_build_valuation_success_update_includes_output_and_artifact() -> None:
     )
     assert preview["data_freshness"]["shares_outstanding_source"] == "market_data"
     assert preview["data_freshness"]["time_alignment"]["status"] == "high_risk"
-    assert update["internal_progress"]["calculation"] == "done"
+    assert update["workflow_activity_updates"]["calculation"] == "done"
 
 
 def test_build_valuation_success_update_keeps_zero_intrinsic_value() -> None:
@@ -425,7 +425,7 @@ def test_build_valuation_success_update_keeps_zero_intrinsic_value() -> None:
             "preview": preview,
             "reference": {
                 "artifact_id": reports_artifact_id,
-                "download_url": f"/api/artifacts/{reports_artifact_id}",
+                "download_url": f"/api/v1/artifacts/{reports_artifact_id}",
                 "type": "financial_reports",
             },
         },
@@ -463,7 +463,7 @@ def test_build_valuation_success_update_derives_missing_valuation_metrics() -> N
             "preview": preview,
             "reference": {
                 "artifact_id": reports_artifact_id,
-                "download_url": f"/api/artifacts/{reports_artifact_id}",
+                "download_url": f"/api/v1/artifacts/{reports_artifact_id}",
                 "type": "financial_reports",
             },
         },
@@ -515,7 +515,7 @@ def test_build_valuation_success_update_converts_total_distribution_to_per_share
             "preview": preview,
             "reference": {
                 "artifact_id": reports_artifact_id,
-                "download_url": f"/api/artifacts/{reports_artifact_id}",
+                "download_url": f"/api/v1/artifacts/{reports_artifact_id}",
                 "type": "financial_reports",
             },
         },
@@ -563,7 +563,7 @@ def test_build_valuation_success_update_skips_total_distribution_without_shares(
             "preview": preview,
             "reference": {
                 "artifact_id": reports_artifact_id,
-                "download_url": f"/api/artifacts/{reports_artifact_id}",
+                "download_url": f"/api/v1/artifacts/{reports_artifact_id}",
                 "type": "financial_reports",
             },
         },
@@ -576,7 +576,7 @@ def test_build_valuation_success_update_skips_total_distribution_without_shares(
 
 def test_build_valuation_error_update_sets_calculation_error() -> None:
     update = build_valuation_error_update("boom")
-    assert update["internal_progress"]["calculation"] == "error"
+    assert update["workflow_activity_updates"]["calculation"] == "error"
     assert update["error_logs"][0]["error"] == "boom"
 
 
@@ -653,7 +653,7 @@ async def test_build_and_store_model_selection_artifact_supports_keyword_seriali
             "preview": preview,
             "reference": {
                 "artifact_id": report_id,
-                "download_url": f"/api/artifacts/{report_id}",
+                "download_url": f"/api/v1/artifacts/{report_id}",
                 "type": "financial_reports",
             },
         },

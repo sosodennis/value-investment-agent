@@ -79,7 +79,7 @@ async def test_provider_settings_require_authenticated_user_even_with_admin_toke
         transport=httpx.ASGITransport(app=app), base_url="http://testserver"
     ) as client:
         response = await client.get(
-            "/api/llm/provider-keys",
+            "/api/v1/llm/provider-keys",
             headers={"Authorization": "Bearer legacy-admin-token"},
         )
     assert response.status_code == 401
@@ -89,13 +89,13 @@ async def test_provider_settings_require_authenticated_user_even_with_admin_toke
 async def test_provider_key_routes_delegate_to_provider_service() -> None:
     service = _Service()
     async with _client(service) as client:
-        listed = await client.get("/api/llm/provider-keys")
+        listed = await client.get("/api/v1/llm/provider-keys")
         created = await client.post(
-            "/api/llm/provider-keys",
+            "/api/v1/llm/provider-keys",
             json={"api_key": "sk-this-is-a-long-test-secret", "label": "primary"},
         )
-        tested = await client.post("/api/llm/provider-keys/managed-a/test")
-        deleted = await client.delete("/api/llm/provider-keys/managed-a")
+        tested = await client.post("/api/v1/llm/provider-keys/managed-a/test")
+        deleted = await client.delete("/api/v1/llm/provider-keys/managed-a")
     assert listed.status_code == 200
     assert created.status_code == 201
     assert "sk-this-is-a-long-test-secret" not in created.text
@@ -113,12 +113,12 @@ async def test_provider_key_routes_delegate_to_provider_service() -> None:
 async def test_settings_routes_delegate_and_map_validation_errors() -> None:
     service = _Service()
     async with _client(service) as client:
-        read = await client.get("/api/llm/settings")
+        read = await client.get("/api/v1/llm/settings")
         updated = await client.put(
-            "/api/llm/settings", json={"selected_model": "openrouter/free"}
+            "/api/v1/llm/settings", json={"selected_model": "openrouter/free"}
         )
         rejected = await client.put(
-            "/api/llm/settings", json={"selected_model": "paid/model"}
+            "/api/v1/llm/settings", json={"selected_model": "paid/model"}
         )
     assert read.status_code == 200
     assert updated.status_code == 200

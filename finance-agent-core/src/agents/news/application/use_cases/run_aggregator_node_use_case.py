@@ -95,8 +95,8 @@ async def run_aggregator_node_use_case(
                     "report_id": None,
                     "artifact": None,
                 },
-                "current_node": "aggregator_node",
-                "internal_progress": {"aggregator_node": "error"},
+                "active_activity_id": "aggregator_node",
+                "workflow_activity_updates": {"aggregator_node": "error"},
                 "error_logs": [
                     {
                         "node": "aggregator_node",
@@ -152,8 +152,8 @@ async def run_aggregator_node_use_case(
                     "report_id": None,
                     "artifact": None,
                 },
-                "current_node": "aggregator_node",
-                "internal_progress": {"aggregator_node": "error"},
+                "active_activity_id": "aggregator_node",
+                "workflow_activity_updates": {"aggregator_node": "error"},
                 "error_logs": [
                     {
                         "node": "aggregator_node",

@@ -1273,7 +1273,7 @@ def _rewrite_artifact_reference(
         return
     artifact["reference"] = {
         "artifact_id": snapshot_artifact_id,
-        "download_url": f"/api/artifacts/{snapshot_artifact_id}",
+        "download_url": f"/api/v1/artifacts/{snapshot_artifact_id}",
         "type": reference_type,
     }
 

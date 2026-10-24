@@ -23,7 +23,7 @@ from src.search_settings.infrastructure.client import (
 )
 
 search_settings_router = APIRouter(
-    prefix="/api/search/settings", tags=["Search settings"]
+    prefix="/api/v1/search/settings", tags=["Search settings"]
 )
 
 

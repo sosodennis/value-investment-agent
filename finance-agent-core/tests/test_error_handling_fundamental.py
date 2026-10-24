@@ -31,7 +31,9 @@ async def test_financial_health_node_error_log():
         assert "error_logs" in command.update
         assert command.update["error_logs"][0]["node"] == "financial_health"
         assert "Network Timeout" in command.update["error_logs"][0]["error"]
-        assert command.update["internal_progress"]["financial_health"] == "error"
+        assert (
+            command.update["workflow_activity_updates"]["financial_health"] == "error"
+        )
         assert command.goto == "__end__"
 
 
@@ -61,7 +63,7 @@ async def test_model_selection_node_error_log():
         assert "error_logs" in command.update
         assert command.update["error_logs"][0]["node"] == "model_selection"
         assert "Selection Logic Error" in command.update["error_logs"][0]["error"]
-        assert command.update["internal_progress"]["model_selection"] == "error"
+        assert command.update["workflow_activity_updates"]["model_selection"] == "error"
         assert command.goto == "__end__"
 
 

@@ -33,7 +33,7 @@ from src.agents.intent.interface.serializers import (
     serialize_ticker_selection_interrupt_payload,
 )
 from src.agents.intent.interface.ticker_candidate_mapper import to_ticker_candidate
-from src.interface.events.schemas import build_artifact_payload
+from src.interface.artifacts.output_schemas import build_artifact_payload
 from src.shared.cross_agent.domain.market_identity import CompanyProfile
 from src.shared.kernel.contracts import OUTPUT_KIND_INTENT_EXTRACTION
 from src.shared.kernel.tools.incident_logging import (
@@ -271,8 +271,8 @@ class IntentOrchestrator:
                 ),
                 HumanMessage(content=f"Selected Ticker: {selected_symbol}"),
             ],
-            "current_node": "clarifying",
-            "internal_progress": {"clarifying": "done"},
+            "active_activity_id": "clarifying",
+            "workflow_activity_updates": {"clarifying": "done"},
         }
 
     def run_extraction(self, state: Mapping[str, object]) -> IntentNodeResult:
@@ -313,8 +313,8 @@ class IntentOrchestrator:
                     "intent_extraction": {
                         "status": "clarifying",
                     },
-                    "current_node": "extraction",
-                    "internal_progress": {
+                    "active_activity_id": "extraction",
+                    "workflow_activity_updates": {
                         "extraction": "done",
                         "clarifying": "running",
                     },
@@ -346,8 +346,11 @@ class IntentOrchestrator:
                         "extracted_intent": intent.model_dump(mode="json"),
                         "status": "searching",
                     },
-                    "current_node": "extraction",
-                    "internal_progress": {"extraction": "done", "searching": "running"},
+                    "active_activity_id": "extraction",
+                    "workflow_activity_updates": {
+                        "extraction": "done",
+                        "searching": "running",
+                    },
                 },
                 goto="searching",
             )
@@ -376,8 +379,8 @@ class IntentOrchestrator:
             return IntentNodeResult(
                 update={
                     "intent_extraction": {"status": "clarifying"},
-                    "current_node": "extraction",
-                    "internal_progress": {
+                    "active_activity_id": "extraction",
+                    "workflow_activity_updates": {
                         "extraction": "error",
                         "clarifying": "running",
                     },
@@ -438,8 +441,11 @@ class IntentOrchestrator:
             return IntentNodeResult(
                 update={
                     "intent_extraction": {"status": "clarifying"},
-                    "current_node": "searching",
-                    "internal_progress": {"searching": "done", "clarifying": "running"},
+                    "active_activity_id": "searching",
+                    "workflow_activity_updates": {
+                        "searching": "done",
+                        "clarifying": "running",
+                    },
                 },
                 goto="clarifying",
             )
@@ -504,8 +510,11 @@ class IntentOrchestrator:
                         ),
                         "status": "deciding",
                     },
-                    "current_node": "searching",
-                    "internal_progress": {"searching": "done", "deciding": "running"},
+                    "active_activity_id": "searching",
+                    "workflow_activity_updates": {
+                        "searching": "done",
+                        "deciding": "running",
+                    },
                 },
                 goto="deciding",
             )
@@ -545,8 +554,8 @@ class IntentOrchestrator:
             return IntentNodeResult(
                 update={
                     "intent_extraction": {"status": "clarifying"},
-                    "current_node": "searching",
-                    "internal_progress": {
+                    "active_activity_id": "searching",
+                    "workflow_activity_updates": {
                         "searching": "error",
                         "clarifying": "running",
                     },
@@ -606,8 +615,11 @@ class IntentOrchestrator:
             return IntentNodeResult(
                 update={
                     "intent_extraction": {"status": "clarifying"},
-                    "current_node": "deciding",
-                    "internal_progress": {"deciding": "done", "clarifying": "running"},
+                    "active_activity_id": "deciding",
+                    "workflow_activity_updates": {
+                        "deciding": "done",
+                        "clarifying": "running",
+                    },
                 },
                 goto="clarifying",
             )
@@ -654,8 +666,8 @@ class IntentOrchestrator:
                 return IntentNodeResult(
                     update={
                         "intent_extraction": {"status": "clarifying"},
-                        "current_node": "deciding",
-                        "internal_progress": {
+                        "active_activity_id": "deciding",
+                        "workflow_activity_updates": {
                             "deciding": "done",
                             "clarifying": "running",
                         },
@@ -701,8 +713,8 @@ class IntentOrchestrator:
                 return IntentNodeResult(
                     update={
                         "intent_extraction": {"status": "clarifying"},
-                        "current_node": "deciding",
-                        "internal_progress": {
+                        "active_activity_id": "deciding",
+                        "workflow_activity_updates": {
                             "deciding": "done",
                             "clarifying": "running",
                         },
@@ -735,8 +747,8 @@ class IntentOrchestrator:
             return IntentNodeResult(
                 update={
                     "intent_extraction": resolved_ctx,
-                    "current_node": "deciding",
-                    "internal_progress": {"deciding": "done"},
+                    "active_activity_id": "deciding",
+                    "workflow_activity_updates": {"deciding": "done"},
                 },
                 goto="END",
             )
@@ -776,8 +788,11 @@ class IntentOrchestrator:
             return IntentNodeResult(
                 update={
                     "intent_extraction": {"status": "clarifying"},
-                    "current_node": "deciding",
-                    "internal_progress": {"deciding": "error", "clarifying": "running"},
+                    "active_activity_id": "deciding",
+                    "workflow_activity_updates": {
+                        "deciding": "error",
+                        "clarifying": "running",
+                    },
                     "error_logs": [
                         {
                             "node": "deciding",
@@ -827,8 +842,11 @@ class IntentOrchestrator:
         return IntentNodeResult(
             update={
                 "intent_extraction": {"status": "extraction"},
-                "current_node": "clarifying",
-                "internal_progress": {"clarifying": "done", "extraction": "running"},
+                "active_activity_id": "clarifying",
+                "workflow_activity_updates": {
+                    "clarifying": "done",
+                    "extraction": "running",
+                },
             },
             goto="extraction",
         )

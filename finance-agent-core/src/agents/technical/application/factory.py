@@ -30,7 +30,10 @@ from src.agents.technical.subdomains.signal_fusion import (
     SemanticTagPolicyResult,
 )
 from src.agents.technical.subdomains.verification import VerificationRuntimeService
-from src.interface.events.schemas import ArtifactReference, build_artifact_payload
+from src.interface.artifacts.output_schemas import (
+    ArtifactReference,
+    build_artifact_payload,
+)
 from src.shared.kernel.contracts import (
     ARTIFACT_KIND_TA_FULL_REPORT,
     OUTPUT_KIND_TECHNICAL_ANALYSIS,
@@ -58,7 +61,7 @@ def _build_semantic_output_artifact(
         preview=preview,
         reference=ArtifactReference(
             artifact_id=report_id,
-            download_url=f"/api/artifacts/{report_id}",
+            download_url=f"/api/v1/artifacts/{report_id}",
             type=ARTIFACT_KIND_TA_FULL_REPORT,
         ),
     )

@@ -5,8 +5,8 @@ from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
 
 def build_financial_health_missing_ticker_update() -> JSONObject:
     return {
-        "current_node": "financial_health",
-        "internal_progress": {"financial_health": "error"},
+        "active_activity_id": "financial_health",
+        "workflow_activity_updates": {"financial_health": "error"},
         "error_logs": [
             {
                 "node": "financial_health",
@@ -36,8 +36,8 @@ def build_financial_health_success_update(
 
     return {
         "fundamental_analysis": fa_update,
-        "current_node": "financial_health",
-        "internal_progress": {
+        "active_activity_id": "financial_health",
+        "workflow_activity_updates": {
             "financial_health": "done",
             "model_selection": "running",
         },
@@ -46,8 +46,8 @@ def build_financial_health_success_update(
 
 def build_model_selection_waiting_update() -> JSONObject:
     return {
-        "current_node": "model_selection",
-        "internal_progress": {"model_selection": "waiting"},
+        "active_activity_id": "model_selection",
+        "workflow_activity_updates": {"model_selection": "waiting"},
     }
 
 
@@ -57,8 +57,8 @@ def build_model_selection_success_update(
 ) -> JSONObject:
     return {
         "fundamental_analysis": fa_update,
-        "current_node": "model_selection",
-        "internal_progress": {
+        "active_activity_id": "model_selection",
+        "workflow_activity_updates": {
             "model_selection": "done",
             "calculation": "running",
         },
@@ -67,7 +67,7 @@ def build_model_selection_success_update(
 
 def build_node_error_update(*, node: str, error: str) -> JSONObject:
     return {
-        "current_node": node,
+        "active_activity_id": node,
         "error_logs": [
             {
                 "node": node,
@@ -75,5 +75,5 @@ def build_node_error_update(*, node: str, error: str) -> JSONObject:
                 "severity": "error",
             }
         ],
-        "internal_progress": {node: "error"},
+        "workflow_activity_updates": {node: "error"},
     }

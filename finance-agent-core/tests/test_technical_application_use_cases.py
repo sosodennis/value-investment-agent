@@ -708,11 +708,11 @@ def test_semantic_command_update_builders() -> None:
     )
     error = build_semantic_error_update("boom")
 
-    assert success.update["current_node"] == "semantic_translate"
-    assert success.update["internal_progress"]["semantic_translate"] == "done"
+    assert success.update["active_activity_id"] == "semantic_translate"
+    assert success.update["workflow_activity_updates"]["semantic_translate"] == "done"
     assert success.update["technical_analysis"]["is_degraded"] is False
     assert success.update["technical_analysis"]["degraded_reasons"] == []
-    assert error.update["internal_progress"]["semantic_translate"] == "error"
+    assert error.update["workflow_activity_updates"]["semantic_translate"] == "error"
     assert error.update["error_logs"][0]["error"] == "boom"
 
 
@@ -734,9 +734,9 @@ def test_data_fetch_update_builders() -> None:
     assert success["technical_analysis"]["price_artifact_id"] == "price-1"
     assert success["technical_analysis"]["is_degraded"] is True
     assert success["technical_analysis"]["degraded_reasons"] == ["1h_UNAVAILABLE"]
-    assert success["internal_progress"]["data_fetch"] == "done"
-    assert success["internal_progress"]["feature_compute"] == "running"
-    assert error["internal_progress"]["data_fetch"] == "error"
+    assert success["workflow_activity_updates"]["data_fetch"] == "done"
+    assert success["workflow_activity_updates"]["feature_compute"] == "running"
+    assert error["workflow_activity_updates"]["data_fetch"] == "error"
     assert error["error_logs"][0]["node"] == "data_fetch"
 
 
@@ -763,7 +763,7 @@ def test_fracdiff_update_builders() -> None:
     )
     error = build_fracdiff_error_update("bad")
     assert success["technical_analysis"]["chart_data_id"] == "chart-1"
-    assert success["current_node"] == "fracdiff_compute"
+    assert success["active_activity_id"] == "fracdiff_compute"
     assert error["error_logs"][0]["node"] == "fracdiff_compute"
 
 
@@ -1441,7 +1441,7 @@ async def test_run_data_fetch_handles_typed_provider_failure() -> None:
     )
 
     assert result.goto == "END"
-    assert result.update["internal_progress"]["data_fetch"] == "error"
+    assert result.update["workflow_activity_updates"]["data_fetch"] == "error"
     assert "Empty daily data returned" in result.update["error_logs"][0]["error"]
 
 

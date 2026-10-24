@@ -102,7 +102,7 @@ class FredMacroProvider(MarketDataProvider):
                 "limit": 1,
             }
         )
-        url = "https://api.stlouisfed.org/fred/series/observations" f"?{query}"
+        url = f"https://api.stlouisfed.org/fred/series/observations?{query}"
         try:
             with urlopen(url, timeout=self._timeout_seconds) as response:
                 payload = json.loads(response.read().decode("utf-8"))

@@ -13,9 +13,9 @@ def _format_metric_value(value: object, *, is_currency: bool) -> str:
     if not is_currency:
         return f"{numeric:,.2f}"
     if abs(numeric) >= 1_000_000_000:
-        return f"${numeric/1_000_000_000:.1f}B"
+        return f"${numeric / 1_000_000_000:.1f}B"
     if abs(numeric) >= 1_000_000:
-        return f"${numeric/1_000_000:.1f}M"
+        return f"${numeric / 1_000_000:.1f}M"
     return f"${numeric:,.0f}"
 
 

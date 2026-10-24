@@ -30,7 +30,7 @@ async def test_r1_bull_node_error_resilience():
         # Should continue to moderator
         assert command.goto == "r1_moderator"
         # Status should be degraded
-        assert command.update["internal_progress"]["r1_bull"] == "error"
+        assert command.update["workflow_activity_updates"]["r1_bull"] == "error"
         # History should have phantom message
         assert "Bull Agent failed" in command.update["history"][0].content
         assert "[SYSTEM]" in command.update["history"][0].content
@@ -65,6 +65,6 @@ async def test_verdict_node_error_log():
         # Should end workflow
         assert command.goto == "__end__"
         # Status should be error
-        assert command.update["internal_progress"]["verdict"] == "error"
+        assert command.update["workflow_activity_updates"]["verdict"] == "error"
         # Error log present
         assert "Verdict generation failed" in command.update["error_logs"][0]["error"]

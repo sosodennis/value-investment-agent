@@ -21,7 +21,7 @@ from src.auth.interface.dependencies import (
     set_auth_cookies,
 )
 
-router = APIRouter(prefix="/api/auth", tags=["Authentication"])
+router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
 SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60
 
 

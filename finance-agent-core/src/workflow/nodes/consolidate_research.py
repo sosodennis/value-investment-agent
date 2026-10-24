@@ -24,7 +24,7 @@ def consolidate_research_node(state: AgentState) -> Command:
 
         return Command(
             update={
-                "node_statuses": {
+                "workflow_activity_statuses": {
                     "consolidate_research": "done",
                 }
             },

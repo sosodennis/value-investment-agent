@@ -43,8 +43,10 @@ async def test_debate_aggregator_caches_reports():
 
         assert "context_summary_text" in command.update
         assert command.update["context_summary_text"] == "compressed_data"
-        assert command.update["internal_progress"]["debate_aggregator"] == "done"
-        assert command.update["internal_progress"]["r1_bull"] == "running"
+        assert (
+            command.update["workflow_activity_updates"]["debate_aggregator"] == "done"
+        )
+        assert command.update["workflow_activity_updates"]["r1_bull"] == "running"
         mock_prepare.assert_called_once()
         mock_compress.assert_called_once()
 
@@ -79,7 +81,7 @@ async def test_debate_aggregator_exposes_degraded_source_state() -> None:
         )
         command = await debate_aggregator_node(state)
 
-    assert command.update["internal_progress"]["debate_aggregator"] == "done"
+    assert command.update["workflow_activity_updates"]["debate_aggregator"] == "done"
     assert command.update["error_logs"][0]["node"] == "debate_aggregator"
     assert "degraded source inputs" in command.update["error_logs"][0]["error"]
 
@@ -92,7 +94,7 @@ async def test_agent_uses_cached_reports():
         "facts_registry_text": "FACTS_REGISTRY (STRICT CITATION REQUIRED):\n[F001] data",
         "intent_extraction": {"resolved_ticker": "AAPL"},
         "debate": {"history": []},
-        "internal_progress": {},
+        "workflow_activity_updates": {},
     }
 
     with (
@@ -125,7 +127,7 @@ async def test_agent_fallbacks_if_no_cache():
         # no context_summary_text
         "intent_extraction": {"resolved_ticker": "AAPL"},
         "debate": {"history": []},
-        "internal_progress": {},
+        "workflow_activity_updates": {},
     }
 
     with (

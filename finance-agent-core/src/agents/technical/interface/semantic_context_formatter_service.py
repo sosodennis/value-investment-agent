@@ -50,7 +50,7 @@ I have simulated 5 years of trading to validate this setup.
 The best performing logic was: "{best_strat.strategy_name}"
 
 - Logic: {best_strat.strategy_description}
-- Win Rate: {best_strat.win_rate*100:.1f}% (Per Trade)
+- Win Rate: {best_strat.win_rate * 100:.1f}% (Per Trade)
 - Profit Factor: {best_strat.profit_factor:.2f} (Gross Profit / Gross Loss)
 - Sharpe Ratio: {best_strat.sharpe_ratio:.2f}
 - Total Trades: {best_strat.total_trades}{sample_warning}
@@ -88,10 +88,10 @@ def format_wfa_for_llm(wfa_results: WalkForwardResult | None) -> str:
 I simulated realistic adaptive trading by re-selecting strategies quarterly based on past performance.
 
 - WFA Sharpe Ratio: {wfa_sharpe:.2f}
-- WFA Total Return: {wfa_results['wfa_total_return']*100:.1f}%
-- WFA Max Drawdown: {wfa_results['wfa_max_drawdown']*100:.1f}%
+- WFA Total Return: {wfa_results["wfa_total_return"] * 100:.1f}%
+- WFA Max Drawdown: {wfa_results["wfa_max_drawdown"] * 100:.1f}%
 - Walk-Forward Efficiency: {wfe_ratio:.2f} ({robustness})
-- Periods Tested: {len(wfa_results['selection_log'])}
+- Periods Tested: {len(wfa_results["selection_log"])}
 
 [Interpretation]
 {interpretation}
