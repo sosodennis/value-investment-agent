@@ -2,7 +2,7 @@
 
 - Base SHA: `e5561efb4dbdf9cbba78eced93ef9553f8533a5b` (`origin/main` after
   #123, #124, and #125 merges).
-- Result SHA: `9a273d6`.
+- Result SHA: `c81432e`.
 - Verdict: PASS for the multi-key Search contract, durable key/provider health,
   bounded same-provider rotation, cross-provider fallback, ownership isolation,
   masked settings operations, and redacted service boundaries.
