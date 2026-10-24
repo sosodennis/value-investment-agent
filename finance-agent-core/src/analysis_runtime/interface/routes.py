@@ -138,9 +138,16 @@ async def activity_events(
     request: Request,
     principal: Principal = Depends(require_current_user),
     after_seq: int = Query(default=0, ge=0),
+    run_id: str | None = Query(default=None, min_length=1),
 ):
     service = _runtime(request)
     try:
+        if run_id is not None:
+            await service.snapshot(
+                principal_id=principal.user_id,
+                thread_id=thread_id,
+                run_id=run_id,
+            )
         replay, subscriber = await service.subscribe(
             principal_id=principal.user_id,
             thread_id=thread_id,
@@ -153,6 +160,8 @@ async def activity_events(
         seen: set[str] = set()
         try:
             for event in replay.events:
+                if run_id is not None and event.run_id != run_id:
+                    continue
                 seen.add(event.event_id)
                 yield f"id: {event.seq_id}\nevent: workflow.activity\ndata: {json.dumps(event.model_dump(mode='json'))}\n\n"
             yield ": heartbeat\n\n"
@@ -167,6 +176,8 @@ async def activity_events(
                 if event is None:
                     yield 'event: error\ndata: {"code":"subscriber_overloaded"}\n\n'
                     break
+                if run_id is not None and event.run_id != run_id:
+                    continue
                 if event.event_id in seen:
                     continue
                 seen.add(event.event_id)

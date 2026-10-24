@@ -58,7 +58,7 @@ def _build_semantic_output_artifact(
         preview=preview,
         reference=ArtifactReference(
             artifact_id=report_id,
-            download_url=f"/api/artifacts/{report_id}",
+            download_url=f"/api/v1/artifacts/{report_id}",
             type=ARTIFACT_KIND_TA_FULL_REPORT,
         ),
     )

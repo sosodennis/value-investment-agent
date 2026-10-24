@@ -62,7 +62,7 @@ def build_model_selection_artifact(
 ) -> AgentOutputArtifactPayload:
     reference = ArtifactReference(
         artifact_id=report_id,
-        download_url=f"/api/artifacts/{report_id}",
+        download_url=f"/api/v1/artifacts/{report_id}",
         type=ARTIFACT_KIND_FINANCIAL_REPORTS,
     )
     return build_artifact_payload(
@@ -82,7 +82,7 @@ def build_valuation_artifact(
 ) -> AgentOutputArtifactPayload:
     reference = ArtifactReference(
         artifact_id=reports_artifact_id,
-        download_url=f"/api/artifacts/{reports_artifact_id}",
+        download_url=f"/api/v1/artifacts/{reports_artifact_id}",
         type=ARTIFACT_KIND_FINANCIAL_REPORTS,
     )
     return build_artifact_payload(

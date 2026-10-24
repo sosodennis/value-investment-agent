@@ -35,7 +35,7 @@ def _build_debate_output_artifact(
     if report_id:
         reference = ArtifactReference(
             artifact_id=report_id,
-            download_url=f"/api/artifacts/{report_id}",
+            download_url=f"/api/v1/artifacts/{report_id}",
             type=ARTIFACT_KIND_DEBATE_FINAL_REPORT,
         )
 

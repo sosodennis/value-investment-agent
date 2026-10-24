@@ -22,7 +22,7 @@ class ArtifactReference(BaseModel):
     artifact_id: str = Field(..., description="UUID of the artifact in the store")
     download_url: str = Field(
         ...,
-        description="API endpoint to fetch the artifact (e.g., /api/artifacts/{id})",
+        description="API endpoint to fetch the artifact (e.g., /api/v1/artifacts/{id})",
     )
     type: str = Field(
         ...,
