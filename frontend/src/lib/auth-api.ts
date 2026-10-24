@@ -110,23 +110,23 @@ async function request<T>(
 }
 
 export function getCurrentUser(): Promise<AuthUser> {
-    return request('/api/auth/me', parseAuthUser);
+    return request('/api/v1/auth/me', parseAuthUser);
 }
 
 export function login(email: string, password: string): Promise<AuthUser> {
-    return request('/api/auth/login', parseAuthUser, {
+    return request('/api/v1/auth/login', parseAuthUser, {
         method: 'POST',
         body: JSON.stringify({ email, password }),
     });
 }
 
 export function register(email: string, password: string): Promise<AuthUser> {
-    return request('/api/auth/register', parseAuthUser, {
+    return request('/api/v1/auth/register', parseAuthUser, {
         method: 'POST',
         body: JSON.stringify({ email, password }),
     });
 }
 
 export function logout(): Promise<void> {
-    return request('/api/auth/logout', () => undefined, { method: 'POST' });
+    return request('/api/v1/auth/logout', () => undefined, { method: 'POST' });
 }

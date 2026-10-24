@@ -398,7 +398,7 @@ function buildArtifactHref(value: string): string {
     if (value.startsWith('http://') || value.startsWith('https://')) {
         return value;
     }
-    return `${BACKEND_URL}/api/artifacts/${value}`;
+    return `${BACKEND_URL}/api/v1/artifacts/${value}`;
 }
 
 function extractArtifactLinks(

@@ -167,7 +167,7 @@ describe('TechnicalAnalysisOutput', () => {
             <TechnicalAnalysisOutput
                 reference={{
                     artifact_id: 'report-1',
-                    download_url: '/api/artifacts/report-1',
+                    download_url: '/api/v1/artifacts/report-1',
                     type: 'technical_analysis.output',
                 }}
                 previewData={null}

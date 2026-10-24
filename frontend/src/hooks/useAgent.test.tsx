@@ -1,140 +1,62 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { useAgent } from './useAgent';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useAgent } from './useAgent';
 
-describe('useAgent restore flow', () => {
+const activity = (overrides: Record<string, unknown> = {}) => ({
+    activity_id: 'analysis', thread_id: 'thread_1', run_id: 'run_1',
+    scope_path: ['fundamental_analysis'], kind: 'phase', status: 'running',
+    label: 'Fundamental analysis', attempt: 1, ...overrides,
+});
+
+const snapshot = (overrides: Record<string, unknown> = {}) => ({
+    thread_id: 'thread_1', run_id: 'run_1', run_status: 'running', cursor: 1,
+    active_activities: [activity()], recent_activities: [], ...overrides,
+});
+
+const streamResponse = (event: unknown) => {
+    const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+            controller.enqueue(new TextEncoder().encode(`event: workflow.activity\ndata: ${JSON.stringify(event)}\n\n`));
+            controller.close();
+        },
+    });
+    return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+};
+
+describe('useAgent workflow runtime', () => {
     const fetchMock = vi.fn();
+    beforeEach(() => vi.stubGlobal('fetch', fetchMock));
+    afterEach(() => { vi.unstubAllGlobals(); fetchMock.mockReset(); });
 
-    beforeEach(() => {
-        vi.stubGlobal('fetch', fetchMock);
+    it('hydrates a canonical snapshot and subscribes with its cursor', async () => {
+        fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(snapshot()), { status: 200 }));
+        fetchMock.mockResolvedValueOnce(new Response(null, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }));
+        const { result } = renderHook(() => useAgent());
+        await act(async () => result.current.loadHistory('thread_1'));
+        await waitFor(() => expect(result.current.workflow?.runId).toBe('run_1'));
+        expect(result.current.threadId).toBe('thread_1');
+        expect(result.current.workflow?.active.get('analysis')?.label).toBe('Fundamental analysis');
+        expect(String(fetchMock.mock.calls[0]?.[0])).toContain('/api/v1/threads/thread_1/activities');
+        expect(String(fetchMock.mock.calls[1]?.[0])).toContain('/api/v1/threads/thread_1/events?after_seq=1');
     });
 
-    afterEach(() => {
-        vi.unstubAllGlobals();
-        fetchMock.mockReset();
+    it('rejects a snapshot from another thread', async () => {
+        fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(snapshot({ thread_id: 'other' })), { status: 200 }));
+        const { result } = renderHook(() => useAgent());
+        await act(async () => result.current.loadHistory('thread_1'));
+        await waitFor(() => expect(result.current.error).toMatch(/activity identity mismatch/));
     });
 
-    it('hydrates refresh state from thread snapshot instead of history-only messages', async () => {
+    it('applies terminal events and closes the connection', async () => {
+        const terminal = { event_id: 'evt_2', seq_id: 2, event_version: 'v1', event_name: 'workflow.activity', thread_id: 'thread_1', run_id: 'run_1', occurred_at: '2026-10-24T00:00:00Z', payload: activity({ status: 'completed' }) };
         fetchMock
-            .mockResolvedValueOnce(
-                new Response(
-                    JSON.stringify({
-                        thread_id: 'thread_1',
-                        messages: [
-                            {
-                                id: 'snapshot-ai-1',
-                                role: 'assistant',
-                                content: 'Resolving ticker',
-                                type: 'text',
-                                agentId: 'intent_extraction',
-                            },
-                        ],
-                        interrupts: [],
-                        is_running: true,
-                        agent_statuses: {
-                            intent_extraction: 'done',
-                            financial_news_research: 'running',
-                        },
-                        node_statuses: {
-                            intent_extraction: 'done',
-                            financial_news_research: 'idle',
-                        },
-                        agent_outputs: {},
-                        last_seq_id: 5,
-                        cursor: {
-                            last_seq_id: 9,
-                            updated_at: '2026-03-21T08:00:00Z',
-                        },
-                        activity_timeline: [
-                            {
-                                event_id: 'evt_1',
-                                seq_id: 9,
-                                event_type: 'agent.status',
-                                agent_id: 'financial_news_research',
-                                node: 'financial_news_research',
-                                status: 'running',
-                                created_at: '2026-03-21T08:00:00Z',
-                                run_id: 'run_1',
-                                payload: {},
-                            },
-                        ],
-                        active_agent_id: 'debate',
-                        current_node: 'semantic_translate',
-                        current_status: 'running',
-                        status_history: [
-                            {
-                                id: 'status_1',
-                                node: 'financial_news_research',
-                                agentId: 'financial_news_research',
-                                status: 'running',
-                                timestamp: '2026-03-21T08:00:00Z',
-                            },
-                        ],
-                    }),
-                    { status: 200, headers: { 'Content-Type': 'application/json' } }
-                )
-            )
-            .mockResolvedValueOnce(
-                new Response('', { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
-            );
-
-        const { result } = renderHook(() => useAgent('test-agent'));
-
-        await act(async () => {
-            await result.current.loadHistory('thread_1');
-        });
-
-        await waitFor(() => {
-            expect(result.current.threadId).toBe('thread_1');
-            expect(result.current.messages).toHaveLength(1);
-        });
-
-        expect(result.current.messages[0]?.id).toBe('snapshot-ai-1');
-        expect(result.current.currentNode).toBe('semantic_translate');
-        expect(result.current.currentStatus).toBe('running');
-        expect(result.current.activityFeed).toHaveLength(1);
-        expect(result.current.activityFeed[0]?.agentId).toBe('financial_news_research');
-        expect(result.current.agentStatuses.financial_news_research).toBe('running');
-        expect(result.current.activeAgentId).toBe('debate');
-        expect(fetchMock).toHaveBeenCalledTimes(2);
-        expect(fetchMock.mock.calls[0]?.[0]).toContain('/thread/thread_1');
-        expect(fetchMock.mock.calls[1]?.[0]).toContain('/stream/thread_1?after_seq=9');
-    });
-
-    it('skips stream attach when the thread is not running', async () => {
-        fetchMock.mockResolvedValueOnce(
-            new Response(
-                JSON.stringify({
-                    thread_id: 'thread_2',
-                    messages: [],
-                    interrupts: [],
-                    is_running: false,
-                    agent_statuses: {
-                        intent_extraction: 'done',
-                    },
-                    node_statuses: {
-                        intent_extraction: 'done',
-                    },
-                    agent_outputs: {},
-                    last_seq_id: 0,
-                    cursor: {
-                        last_seq_id: 0,
-                        updated_at: '2026-03-21T08:05:00Z',
-                    },
-                    activity_timeline: [],
-                    status_history: [],
-                }),
-                { status: 200, headers: { 'Content-Type': 'application/json' } }
-            )
-        );
-
-        const { result } = renderHook(() => useAgent('test-agent'));
-
-        await act(async () => {
-            await result.current.loadHistory('thread_2');
-        });
-
-        expect(fetchMock).toHaveBeenCalledTimes(1);
-        expect(fetchMock.mock.calls[0]?.[0]).toContain('/thread/thread_2');
+            .mockResolvedValueOnce(new Response(JSON.stringify(snapshot()), { status: 200 }))
+            .mockResolvedValueOnce(streamResponse(terminal))
+            .mockResolvedValueOnce(new Response(JSON.stringify(snapshot({ cursor: 2, run_status: 'completed', active_activities: [], recent_activities: [terminal.payload] })), { status: 200 }));
+        const { result } = renderHook(() => useAgent());
+        await act(async () => result.current.loadHistory('thread_1'));
+        await waitFor(() => expect(result.current.workflow?.runStatus).toBe('completed'));
+        expect(result.current.connectionState).toBe('closed');
+        expect(result.current.workflow?.active.size).toBe(0);
     });
 });

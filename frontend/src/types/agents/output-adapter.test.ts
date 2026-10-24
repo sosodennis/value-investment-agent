@@ -23,7 +23,7 @@ describe('output adapter', () => {
                 summary: 'done',
                 reference: {
                     artifact_id: 'artifact_1',
-                    download_url: '/api/artifacts/artifact_1',
+                    download_url: '/api/v1/artifacts/artifact_1',
                     type: 'application/json',
                 },
                 preview: {

@@ -2,7 +2,7 @@ import { operations } from '@/types/generated/api-contract';
 import { isRecord } from '../preview';
 
 type ArtifactEnvelopeResponse =
-    operations['get_artifact_api_artifacts__artifact_id__get']['responses'][200]['content']['application/json'];
+    operations['get_artifact_api_v1_artifacts__artifact_id__get']['responses'][200]['content']['application/json'];
 
 export type ArtifactKind =
     | ArtifactEnvelopeResponse['kind']
