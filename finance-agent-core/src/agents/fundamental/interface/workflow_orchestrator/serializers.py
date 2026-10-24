@@ -10,7 +10,10 @@ from src.agents.fundamental.subdomains.forward_signals.public import (
     ForwardSignalPayload,
     serialize_forward_signals,
 )
-from src.interface.events.schemas import ArtifactReference, build_artifact_payload
+from src.interface.artifacts.output_schemas import (
+    ArtifactReference,
+    build_artifact_payload,
+)
 from src.shared.kernel.contracts import (
     ARTIFACT_KIND_FINANCIAL_REPORTS,
     OUTPUT_KIND_FUNDAMENTAL_ANALYSIS,

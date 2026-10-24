@@ -30,7 +30,10 @@ from src.agents.technical.subdomains.signal_fusion import (
     SemanticTagPolicyResult,
 )
 from src.agents.technical.subdomains.verification import VerificationRuntimeService
-from src.interface.events.schemas import ArtifactReference, build_artifact_payload
+from src.interface.artifacts.output_schemas import (
+    ArtifactReference,
+    build_artifact_payload,
+)
 from src.shared.kernel.contracts import (
     ARTIFACT_KIND_TA_FULL_REPORT,
     OUTPUT_KIND_TECHNICAL_ANALYSIS,

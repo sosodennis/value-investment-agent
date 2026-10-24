@@ -33,7 +33,7 @@ from src.agents.intent.interface.serializers import (
     serialize_ticker_selection_interrupt_payload,
 )
 from src.agents.intent.interface.ticker_candidate_mapper import to_ticker_candidate
-from src.interface.events.schemas import build_artifact_payload
+from src.interface.artifacts.output_schemas import build_artifact_payload
 from src.shared.cross_agent.domain.market_identity import CompanyProfile
 from src.shared.kernel.contracts import OUTPUT_KIND_INTENT_EXTRACTION
 from src.shared.kernel.tools.incident_logging import (
