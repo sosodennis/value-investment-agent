@@ -1,0 +1,62 @@
+# Issue #126 verification overlay.
+#
+# The verification project is reached from a disposable client container on
+# the Compose network. Removing published ports lets each capability run two
+# replicas without colliding on the host. Project-scoped volumes still keep
+# PostgreSQL, Redis, and model artifacts isolated from other worktrees.
+services:
+  postgres:
+    ports: []
+    volumes: !override []
+    tmpfs:
+      - /var/lib/postgresql/data
+
+  redis:
+    ports: []
+    volumes: !override []
+    tmpfs:
+      - /data
+
+  llm-gateway:
+    ports: []
+
+  backend:
+    ports: []
+    image: ${ISSUE126_BACKEND_IMAGE:-value-investment-agent-backend:latest}
+    build: null
+    volumes: !override []
+
+  frontend:
+    ports: []
+
+  llm-provider-service:
+    ports: []
+
+  search-service:
+    ports: []
+
+  model-inference-news:
+    image: ${ISSUE126_NEWS_IMAGE:-value-investment-agent-issue126-news-current:latest}
+    build:
+      context: ./model-inference-service
+      dockerfile: Dockerfile.issue126
+      additional_contexts:
+        internal-contracts: ./finance-agent-core/src/shared
+      args:
+        BASE_IMAGE: ${ISSUE126_NEWS_BASE_IMAGE:-value-investment-agent-issue109-final-probe2-model-inference-news:latest}
+    volumes: !override []
+
+  model-inference-fls:
+    image: ${ISSUE126_FLS_IMAGE:-value-investment-agent-issue126-fls-current:latest}
+    build:
+      context: ./model-inference-service
+      dockerfile: Dockerfile.issue126
+      additional_contexts:
+        internal-contracts: ./finance-agent-core/src/shared
+      args:
+        BASE_IMAGE: ${ISSUE126_FLS_BASE_IMAGE:-value-investment-agent-issue109-final-probe2-model-inference-fls:latest}
+    volumes: !override []
+
+networks:
+  default:
+    internal: true

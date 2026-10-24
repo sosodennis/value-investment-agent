@@ -107,8 +107,7 @@ async def test_replacements_serialize_across_independent_postgres_state_clients(
     old_key_id = f"old-{uuid4()}"
     user_id = f"user-{uuid4()}"
     try:
-        await state_one.initialize()
-        await state_two.initialize()
+        await asyncio.gather(state_one.initialize(), state_two.initialize())
         assert state_one._engine is not state_two._engine
         assert await state_one.claim(
             user_id=user_id,
