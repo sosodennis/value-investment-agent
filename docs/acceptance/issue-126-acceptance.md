@@ -20,7 +20,7 @@ finding, not a product pass/fail result.
 
 - Baseline: `af25f9d634fcb98f2372dd4892e9d13110c92175` (`origin/main`)
 - Capability implementation: `da46e27210a134ecd244aba816f7d07afb079051`
-- Final verification tooling and LiteLLM pin: `afde1da`
+- Final verification tooling: `afde1da`; final reviewed registry pin: `35aaa1b`
 - LiteLLM image: `ghcr.io/berriai/litellm@sha256:7294b90f868c5c38c99b83021c7ba46f9b439e95f8e32964c925c7d2563a03f7` (`v1.106.2`, ARM64)
 
 ## Verification matrix
