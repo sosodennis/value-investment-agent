@@ -93,6 +93,33 @@ No issue is closed because a PR was opened or because a worker says it is
 finished. Close an issue only after the architect has inspected the merged
 diff, rerun the relevant checks, and recorded a `VERIFIED` verdict.
 
+## One-time human staging gate
+
+The architect must put this gate before the first LLM-dependent acceptance
+step. It is the only expected human setup action during the run:
+
+1. Start the required local stack and make the login, registration, and LLM settings pages reachable.
+2. Give the human the exact local URL and ask them to create a dedicated staging account through `/register`.
+3. Ask the human to sign in and add a disposable OpenRouter key at `/settings/llm`, using the labels in the LLM prerequisite section below.
+4. Ask the human to test the key in the UI and reply only that the staging account is ready. Never ask for the password, session cookie, raw key, or an authorization header.
+5. Continue all non-LLM checks while the human is completing this step. Once the human confirms readiness, run the LLM-dependent browser and integration gates and record only masked metadata and request evidence.
+
+If the execution environment supports an architect-controlled browser session,
+the human may complete these steps in that session so the architect can use the
+already-authenticated browser without receiving credentials. Otherwise the
+architect must use the project's approved local secret mechanism for a
+dedicated test credential; credentials must remain untracked and must never be
+printed in reports or commands.
+
+The user session is browser-local. A login in the human's browser is not
+automatically available to another browser, worktree, or API client. The human
+can still test the running application independently in another browser or
+account. Do not have two people concurrently add, replace, or delete keys in
+the same account's pool because those mutations are intentionally user-scoped
+and can race with failover tests. Use a separate manual-QA account and key for
+concurrent testing, or limit the human's staging-account use to read-only UI
+inspection while the architect runs the mutation and failover matrix.
+
 ## Required pstack workflow
 
 Every worker and the architect must follow the repository `AGENTS.md` and use
@@ -205,8 +232,9 @@ real deployment path exists.
 
 ## LLM prerequisite and what it does not unblock
 
-Before LLM-dependent browser or end-to-end acceptance, the human operator should
-create a dedicated staging user through the normal registration page:
+Before LLM-dependent browser or end-to-end acceptance, the human operator
+completes the one-time staging gate above and creates a dedicated staging user
+through the normal registration page:
 
 ```text
 `/register` -> dedicated refactor staging account -> `/settings/llm`
