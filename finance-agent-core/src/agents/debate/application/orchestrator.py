@@ -104,7 +104,7 @@ class DebateOrchestrator:
             )
             return DebateNodeResult(
                 update={
-                    "internal_progress": {"debate_aggregator": "error"},
+                    "workflow_activity_updates": {"debate_aggregator": "error"},
                     "error_logs": [
                         {
                             "node": "debate_aggregator",
@@ -184,8 +184,8 @@ class DebateOrchestrator:
         )
         return DebateNodeResult(
             update={
-                "current_node": "debate_aggregator",
-                "internal_progress": {
+                "active_activity_id": "debate_aggregator",
+                "workflow_activity_updates": {
                     "debate_aggregator": "done",
                     "r1_bull": "running",
                     "r1_bear": "running",
@@ -211,7 +211,7 @@ class DebateOrchestrator:
             return DebateNodeResult(
                 update={
                     "fact_extraction_status": "error",
-                    "internal_progress": {"fact_extractor": "error"},
+                    "workflow_activity_updates": {"fact_extractor": "error"},
                     "error_logs": [
                         {
                             "node": "fact_extractor",
@@ -317,7 +317,7 @@ class DebateOrchestrator:
                 update={
                     "history": result["history"],
                     "bull_thesis": result["bull_thesis"],
-                    "internal_progress": success_progress,
+                    "workflow_activity_updates": success_progress,
                 },
                 goto=success_goto,
             )
@@ -354,7 +354,7 @@ class DebateOrchestrator:
                         AIMessage(content=f"[SYSTEM] {error_msg}", name="GrowthHunter")
                     ],
                     "bull_thesis": "[ARGUMENT MISSING]",
-                    "internal_progress": error_progress,
+                    "workflow_activity_updates": error_progress,
                     "error_logs": [
                         {"node": node_name, "error": exc_text, "severity": "error"}
                     ],
@@ -407,7 +407,7 @@ class DebateOrchestrator:
                 update={
                     "history": result["history"],
                     "bear_thesis": result["bear_thesis"],
-                    "internal_progress": success_progress,
+                    "workflow_activity_updates": success_progress,
                 },
                 goto=success_goto,
             )
@@ -446,7 +446,7 @@ class DebateOrchestrator:
                         )
                     ],
                     "bear_thesis": "[ARGUMENT MISSING]",
-                    "internal_progress": error_progress,
+                    "workflow_activity_updates": error_progress,
                     "error_logs": [
                         {"node": node_name, "error": exc_text, "severity": "error"}
                     ],
@@ -508,7 +508,7 @@ class DebateOrchestrator:
                         "current_round": result["current_round"],
                         "artifact": artifact,
                     },
-                    "internal_progress": success_progress,
+                    "workflow_activity_updates": success_progress,
                 },
                 goto=success_goto,
             )
@@ -545,7 +545,7 @@ class DebateOrchestrator:
                         AIMessage(content=f"[SYSTEM] {error_msg}", name="Judge")
                     ],
                     "debate": {"current_round": round_num},
-                    "internal_progress": error_progress,
+                    "workflow_activity_updates": error_progress,
                     "error_logs": [
                         {"node": node_name, "error": exc_text, "severity": "error"}
                     ],
@@ -565,7 +565,7 @@ class DebateOrchestrator:
             )
             return DebateNodeResult(
                 update={
-                    "internal_progress": {"verdict": "error"},
+                    "workflow_activity_updates": {"verdict": "error"},
                     "error_logs": [
                         {
                             "node": "verdict",
@@ -670,7 +670,7 @@ class DebateOrchestrator:
             return DebateNodeResult(
                 update={
                     "debate": debate_update,
-                    "internal_progress": {"verdict": "done"},
+                    "workflow_activity_updates": {"verdict": "done"},
                 },
                 goto="END",
             )
@@ -686,7 +686,7 @@ class DebateOrchestrator:
             )
             return DebateNodeResult(
                 update={
-                    "internal_progress": {"verdict": "error"},
+                    "workflow_activity_updates": {"verdict": "error"},
                     "error_logs": [
                         {
                             "node": "verdict",

@@ -1168,7 +1168,7 @@ async def test_run_valuation_saves_snapshot_and_rewrites_reference() -> None:
     artifact = result.update["artifact"]
     assert isinstance(artifact, dict)
     assert artifact["reference"]["artifact_id"] == "saved-report"
-    assert artifact["reference"]["download_url"] == "/api/artifacts/saved-report"
+    assert artifact["reference"]["download_url"] == "/api/v1/artifacts/saved-report"
     assert artifact["reference"]["type"] == "financial_reports"
     assert (
         result.update["fundamental_analysis"]["financial_reports_artifact_id"]
@@ -1194,7 +1194,7 @@ async def test_run_valuation_keeps_success_when_snapshot_save_fails() -> None:
     )
 
     assert result.goto == "END"
-    assert result.update["internal_progress"]["calculation"] == "done"
+    assert result.update["workflow_activity_updates"]["calculation"] == "done"
     assert (
         result.update["fundamental_analysis"]["financial_reports_artifact_id"]
         == "fa-report-1"

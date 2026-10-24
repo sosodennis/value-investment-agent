@@ -28,11 +28,11 @@ from src.shared.kernel.workflow_routing import (
 
 def test_workflow_node_result_is_frozen_dataclass() -> None:
     result = WorkflowNodeResult(
-        update={"node_statuses": {"intent": "running"}}, goto="END"
+        update={"workflow_activity_statuses": {"intent": "running"}}, goto="END"
     )
 
     assert result.goto == "END"
-    assert result.update["node_statuses"] == {"intent": "running"}
+    assert result.update["workflow_activity_statuses"] == {"intent": "running"}
 
     with pytest.raises(FrozenInstanceError):
         result.goto = "searching"  # type: ignore[misc]
@@ -40,7 +40,7 @@ def test_workflow_node_result_is_frozen_dataclass() -> None:
 
 def test_workflow_fanout_node_result_accepts_list_goto() -> None:
     result = WorkflowFanoutNodeResult(
-        update={"internal_progress": {"debate_aggregator": "done"}},
+        update={"workflow_activity_updates": {"debate_aggregator": "done"}},
         goto=["fact_extractor", "r1_bull"],
     )
 

@@ -22,7 +22,10 @@ from src.agents.news.interface.prompt_specs import (
     build_selector_prompt_spec,
 )
 from src.agents.news.interface.serializers import build_news_report_payload
-from src.interface.events.schemas import ArtifactReference, build_artifact_payload
+from src.interface.artifacts.output_schemas import (
+    ArtifactReference,
+    build_artifact_payload,
+)
 from src.llm_provider.entrypoint import LLMProviderPort, ModelRoute
 from src.model_inference.entrypoint import ModelInference
 from src.shared.kernel.contracts import (
@@ -39,7 +42,7 @@ def _build_news_output_artifact(
     if report_id:
         reference = ArtifactReference(
             artifact_id=report_id,
-            download_url=f"/api/artifacts/{report_id}",
+            download_url=f"/api/v1/artifacts/{report_id}",
             type=ARTIFACT_KIND_NEWS_ANALYSIS_REPORT,
         )
     return build_artifact_payload(

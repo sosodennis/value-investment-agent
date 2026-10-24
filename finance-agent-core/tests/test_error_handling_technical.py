@@ -30,8 +30,8 @@ async def test_data_fetch_node_error():
 
         command = await _nodes()["data_fetch"](state)
 
-        assert command.update["current_node"] == "data_fetch"
-        assert command.update["internal_progress"]["data_fetch"] == "error"
+        assert command.update["active_activity_id"] == "data_fetch"
+        assert command.update["workflow_activity_updates"]["data_fetch"] == "error"
         assert "Data fetch failed" in command.update["error_logs"][0]["error"]
         assert command.goto == "__end__"
 
@@ -46,7 +46,7 @@ async def test_verification_compute_node_error_missing_inputs():
 
     command = await _nodes()["verification_compute"](state)
 
-    assert command.update["current_node"] == "verification_compute"
+    assert command.update["active_activity_id"] == "verification_compute"
     assert (
         "Missing timeseries/feature/fusion inputs"
         in command.update["error_logs"][0]["error"]
@@ -71,7 +71,7 @@ async def test_verification_compute_node_crash():
     ):
         command = await _nodes()["verification_compute"](state)
 
-    assert command.update["current_node"] == "verification_compute"
+    assert command.update["active_activity_id"] == "verification_compute"
     assert "Verification compute failed" in command.update["error_logs"][0]["error"]
 
 
@@ -95,5 +95,5 @@ async def test_semantic_translate_node_error():
 
         command = await _nodes()["semantic_translate"](state)
 
-    assert command.update["current_node"] == "semantic_translate"
+    assert command.update["active_activity_id"] == "semantic_translate"
     assert "Semantic translation failed" in command.update["error_logs"][0]["error"]

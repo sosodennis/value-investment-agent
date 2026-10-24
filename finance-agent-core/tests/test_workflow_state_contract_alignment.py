@@ -63,7 +63,7 @@ def test_technical_context_contract_is_canonical() -> None:
     assert "signals" not in keys
 
 
-def test_root_state_contains_internal_progress_contract() -> None:
+def test_root_state_contains_workflow_activity_updates_contract() -> None:
     keys = set(AgentState.__annotations__)
-    assert "internal_progress" in keys
+    assert "workflow_activity_updates" in keys
     assert "ticker" not in keys

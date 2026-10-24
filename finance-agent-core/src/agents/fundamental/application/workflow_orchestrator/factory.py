@@ -51,7 +51,7 @@ from src.agents.fundamental.subdomains.forward_signals.public import (
 from src.agents.fundamental.subdomains.model_selection.public import (
     select_valuation_model,
 )
-from src.interface.events.schemas import build_artifact_payload
+from src.interface.artifacts.output_schemas import build_artifact_payload
 from src.shared.kernel.contracts import OUTPUT_KIND_FUNDAMENTAL_ANALYSIS
 
 

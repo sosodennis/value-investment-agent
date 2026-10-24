@@ -72,16 +72,20 @@ def build_replay_diagnostics(
 
     replay: BoundaryReplayDiagnostics = {
         "node": node,
-        "current_node": (
-            state.get("current_node")
-            if isinstance(state.get("current_node"), str)
+        "active_activity_id": (
+            state.get("active_activity_id")
+            if isinstance(state.get("active_activity_id"), str)
             else None
         ),
         "ticker": _resolved_ticker_from_state(state),
         "message_count": message_count,
         "artifact_refs": _collect_artifact_refs(state),
-        "node_statuses": _string_map(state.get("node_statuses")),
-        "internal_progress": _string_map(state.get("internal_progress")),
+        "workflow_activity_statuses": _string_map(
+            state.get("workflow_activity_statuses")
+        ),
+        "workflow_activity_updates": _string_map(
+            state.get("workflow_activity_updates")
+        ),
     }
     return replay
 

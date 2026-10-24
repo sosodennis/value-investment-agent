@@ -7,6 +7,8 @@ This folder contains generated cross-stack contracts used by both backend and fr
 1. `openapi.json`: Exported from FastAPI (`finance-agent-core/api/server.py`).
 2. `fixtures/sse-events-v1.json`: Shared SSE contract fixtures consumed by backend and frontend tests.
 3. `fixtures/manifest.json`: Source of truth for supported SSE protocol fixture versions.
+4. `workflow-activity-v1.schema.json`: Cross-language JSON Schema for the canonical `workflow.activity` event, activity, and snapshot types.
+5. `fixtures/workflow-activity-v1.json`: Shared activity behavior fixtures consumed by the #145 backend and #146 frontend workers.
 
 ## Generate
 
@@ -33,6 +35,13 @@ When SSE envelope or event payload contracts change:
    `python3 scripts/validate-sse-fixtures.py`
 5. Ensure backend protocol fixture tests pass.
 6. Ensure frontend protocol fixture tests pass.
+
+When the durable activity contract changes:
+
+1. Update `workflow-activity-v1.schema.json` and `docs/contracts/workflow-activity-v1.md` together.
+2. Update the `activity_contracts` entry in `fixtures/manifest.json`.
+3. Add or update scenarios in `fixtures/workflow-activity-v1.json` for both backend and frontend behavior.
+4. Keep activity fixtures independent from raw LangGraph namespaces and arbitrary state dictionaries.
 
 ## Protocol Version Policy
 

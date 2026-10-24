@@ -21,8 +21,8 @@ def build_fetch_node_update(
             "news_items_artifact_id": news_items_id,
             "report_id": None,
         },
-        "current_node": "fetch_node",
-        "internal_progress": {"fetch_node": "done", "analyst_node": "running"},
+        "active_activity_id": "fetch_node",
+        "workflow_activity_updates": {"fetch_node": "done", "analyst_node": "running"},
     }
     if article_errors:
         update["error_logs"] = [
@@ -43,8 +43,11 @@ def build_analyst_node_update(
             "news_items_artifact_id": news_items_id,
             "report_id": None,
         },
-        "current_node": "analyst_node",
-        "internal_progress": {"analyst_node": "done", "aggregator_node": "running"},
+        "active_activity_id": "analyst_node",
+        "workflow_activity_updates": {
+            "analyst_node": "done",
+            "aggregator_node": "running",
+        },
     }
     if article_errors:
         update["error_logs"] = [
@@ -60,15 +63,15 @@ def build_analyst_node_update(
 def build_search_node_no_ticker_update() -> JSONObject:
     return {
         "financial_news_research": _clear_news_context(),
-        "current_node": "search_node",
-        "internal_progress": {"search_node": "done"},
+        "active_activity_id": "search_node",
+        "workflow_activity_updates": {"search_node": "done"},
     }
 
 
 def build_search_node_error_update(error_message: str) -> JSONObject:
     return {
-        "current_node": "search_node",
-        "internal_progress": {"search_node": "error"},
+        "active_activity_id": "search_node",
+        "workflow_activity_updates": {"search_node": "error"},
         "error_logs": [
             {
                 "node": "search_node",
@@ -82,8 +85,8 @@ def build_search_node_error_update(error_message: str) -> JSONObject:
 def build_search_node_empty_update() -> JSONObject:
     return {
         "financial_news_research": _clear_news_context(),
-        "current_node": "search_node",
-        "internal_progress": {"search_node": "done"},
+        "active_activity_id": "search_node",
+        "workflow_activity_updates": {"search_node": "done"},
     }
 
 
@@ -100,8 +103,11 @@ def build_search_node_success_update(
             "news_items_artifact_id": None,
             "report_id": None,
         },
-        "current_node": "search_node",
-        "internal_progress": {"search_node": "done", "selector_node": "running"},
+        "active_activity_id": "search_node",
+        "workflow_activity_updates": {
+            "search_node": "done",
+            "selector_node": "running",
+        },
     }
 
 
@@ -113,8 +119,8 @@ def build_selector_node_update(
 ) -> JSONObject:
     update: JSONObject = {
         "financial_news_research": {"selection_artifact_id": selection_artifact_id},
-        "current_node": "selector_node",
-        "internal_progress": {"selector_node": "done", "fetch_node": "running"},
+        "active_activity_id": "selector_node",
+        "workflow_activity_updates": {"selector_node": "done", "fetch_node": "running"},
     }
     if is_degraded:
         normalized_error = (
@@ -136,8 +142,8 @@ def build_selector_node_update(
 
 def build_selector_node_error_update(error_message: str) -> JSONObject:
     return {
-        "current_node": "selector_node",
-        "internal_progress": {"selector_node": "error"},
+        "active_activity_id": "selector_node",
+        "workflow_activity_updates": {"selector_node": "error"},
         "error_logs": [
             {
                 "node": "selector_node",
@@ -150,8 +156,8 @@ def build_selector_node_error_update(error_message: str) -> JSONObject:
 
 def build_fetch_node_error_update(error_message: str) -> JSONObject:
     return {
-        "current_node": "fetch_node",
-        "internal_progress": {"fetch_node": "error"},
+        "active_activity_id": "fetch_node",
+        "workflow_activity_updates": {"fetch_node": "error"},
         "error_logs": [
             {
                 "node": "fetch_node",
@@ -164,8 +170,8 @@ def build_fetch_node_error_update(error_message: str) -> JSONObject:
 
 def build_analyst_node_error_update(error_message: str) -> JSONObject:
     return {
-        "current_node": "analyst_node",
-        "internal_progress": {"analyst_node": "error"},
+        "active_activity_id": "analyst_node",
+        "workflow_activity_updates": {"analyst_node": "error"},
         "error_logs": [
             {
                 "node": "analyst_node",
@@ -178,8 +184,8 @@ def build_analyst_node_error_update(error_message: str) -> JSONObject:
 
 def build_analyst_chain_error_update(error_message: str) -> JSONObject:
     return {
-        "current_node": "analyst_node",
-        "internal_progress": {"analyst_node": "error"},
+        "active_activity_id": "analyst_node",
+        "workflow_activity_updates": {"analyst_node": "error"},
         "error_logs": [
             {
                 "node": "analyst_node",
@@ -203,6 +209,6 @@ def build_aggregator_node_update(
 
     return {
         "financial_news_research": news_update,
-        "current_node": "aggregator_node",
-        "internal_progress": {"aggregator_node": "done"},
+        "active_activity_id": "aggregator_node",
+        "workflow_activity_updates": {"aggregator_node": "done"},
     }
