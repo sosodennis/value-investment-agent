@@ -302,6 +302,41 @@ async def test_provider_error_mapping_and_fallback(error: SearchServiceError) ->
 
 
 @pytest.mark.asyncio
+async def test_provider_telemetry_contains_stable_fields_without_sensitive_inputs(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level("WARNING", logger="search_service.execution")
+    failed = FailedProvider(
+        SearchServiceError(
+            SearchErrorCode.RATE_LIMITED,
+            429,
+            "provider rate limited private query raw-secret",
+            True,
+        )
+    )
+    control = FakeControlPlane((Credential("alpha", "raw-secret"),))
+    async with client_for(control, {"alpha": failed}) as client:
+        response = await client.post(
+            "/v1/search/web",
+            headers=HEADERS,
+            json={
+                "context": context(),
+                "input": {"query": "private query raw-secret"},
+            },
+        )
+    assert response.status_code == 429
+    assert len(caplog.records) == 1
+    record = caplog.records[0]
+    assert record.message == "search_provider_failed"
+    assert record.correlation_id == "corr-122"
+    assert record.provider == "alpha"
+    assert record.operation == "web"
+    assert record.error_code == "RATE_LIMITED"
+    assert "private query" not in caplog.text
+    assert "raw-secret" not in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_failed_replacement_preserves_existing_key() -> None:
     control = FakeControlPlane()
     upstream = provider()
