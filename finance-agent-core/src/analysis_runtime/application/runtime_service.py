@@ -8,7 +8,9 @@ from datetime import datetime, timezone
 from src.analysis_runtime.application.ports import (
     ActivityRepository,
     GraphRunner,
+    NotificationHub,
     OwnerPort,
+    RuntimeSubscriber,
 )
 from src.analysis_runtime.domain.contracts import (
     Activity,
@@ -24,7 +26,6 @@ from src.analysis_runtime.domain.errors import (
 )
 from src.analysis_runtime.infrastructure.notifications import (
     BoundedNotificationHub,
-    QueueSubscriber,
 )
 
 
@@ -37,7 +38,7 @@ class AnalysisRuntimeService:
         repository: ActivityRepository,
         owner: OwnerPort,
         runner: GraphRunner,
-        hub: BoundedNotificationHub | None = None,
+        hub: NotificationHub | None = None,
         replay_limit: int = 200,
         heartbeat_seconds: float = 15.0,
     ) -> None:
@@ -134,7 +135,7 @@ class AnalysisRuntimeService:
         thread_id: str,
         after_seq: int,
         limit: int | None = None,
-    ) -> tuple[ReplayPage, QueueSubscriber]:
+    ) -> tuple[ReplayPage, RuntimeSubscriber]:
         await self._check_owner(principal_id=principal_id, thread_id=thread_id)
         async with self._subscription_gate:
             replay = await self.replay(
@@ -146,7 +147,7 @@ class AnalysisRuntimeService:
             subscriber = await self.hub.subscribe(thread_id=thread_id)
         return replay, subscriber
 
-    async def unsubscribe(self, subscriber: QueueSubscriber) -> None:
+    async def unsubscribe(self, subscriber: RuntimeSubscriber) -> None:
         await self.hub.unsubscribe(subscriber)
 
     async def _persist_and_publish(self, event: ActivityEvent) -> None:

@@ -12,8 +12,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.analysis_runtime.application.ports import OwnerPort
 from src.analysis_runtime.application.runtime_service import AnalysisRuntimeService
 from src.analysis_runtime.infrastructure import (
-    BoundedNotificationHub,
     LangGraphRunner,
+    PostgresNotificationHub,
     SqlAlchemyActivityRepository,
 )
 from src.analysis_runtime.interface.routes import router as analysis_runtime_router
@@ -58,15 +58,18 @@ def _cors_origins() -> list[str]:
 async def lifespan(app: FastAPI):
     await init_db()
     graph = await get_graph()
+    hub = PostgresNotificationHub()
+    await hub.start()
     app.state.analysis_runtime = AnalysisRuntimeService(
         repository=SqlAlchemyActivityRepository(),
         owner=OwnedThreadPort(),
         runner=LangGraphRunner(graph),
-        hub=BoundedNotificationHub(),
+        hub=hub,
     )
     try:
         yield
     finally:
+        await hub.close()
         await close_search_service()
         await close_llm_provider()
         await close_model_inference()

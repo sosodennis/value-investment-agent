@@ -63,7 +63,13 @@ class RuntimeSubscriber(Protocol):
 
 
 class NotificationHub(Protocol):
+    async def subscribe(self, *, thread_id: str) -> RuntimeSubscriber: ...
+
+    async def unsubscribe(self, subscriber: RuntimeSubscriber) -> None: ...
+
     async def publish(self, event: ActivityEvent) -> None: ...
+
+    async def close(self) -> None: ...
 
 
 class LlmProviderClientPort(Protocol):
