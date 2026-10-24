@@ -19,12 +19,12 @@ CONTRACT_KIND_INTERRUPT_PAYLOAD: BoundaryContractKind = "interrupt_payload"
 
 class BoundaryReplayDiagnostics(TypedDict):
     node: str
-    current_node: str | None
+    active_activity_id: str | None
     ticker: str | None
     message_count: int
     artifact_refs: dict[str, str]
-    node_statuses: dict[str, str]
-    internal_progress: dict[str, str]
+    workflow_activity_statuses: dict[str, str]
+    workflow_activity_updates: dict[str, str]
 
 
 class BoundaryEventPayload(TypedDict, total=False):

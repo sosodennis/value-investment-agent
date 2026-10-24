@@ -237,13 +237,15 @@ def adapt_langgraph_event(
                 seq_id += 1
 
             # 3. Explicit Status Emission (Restored Logic)
-            # If the output contains explicit `node_statuses`, we must emit agent.status events.
+            # If the output contains explicit `workflow_activity_statuses`, we must emit agent.status events.
             # This replaces the old "auto-done" logic with "explicit-done" logic.
-            node_statuses_raw = output.get("node_statuses")
-            if isinstance(node_statuses_raw, Mapping):
-                for node_id, status in node_statuses_raw.items():
+            workflow_activity_statuses_raw = output.get("workflow_activity_statuses")
+            if isinstance(workflow_activity_statuses_raw, Mapping):
+                for node_id, status in workflow_activity_statuses_raw.items():
                     if not isinstance(node_id, str) or not isinstance(status, str):
-                        raise TypeError("node_statuses must be a mapping[str, str]")
+                        raise TypeError(
+                            "workflow_activity_statuses must be a mapping[str, str]"
+                        )
                     events.append(
                         AgentEvent(
                             thread_id=thread_id,

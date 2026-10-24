@@ -599,7 +599,7 @@ def _build_fcff_wacc(
 
     if interest_cost_rate is None or interest_cost_rate <= 0:
         assumptions.append(
-            "wacc fallback to CAPM cost_of_equity " "(fcff_wacc_missing_cost_of_debt)"
+            "wacc fallback to CAPM cost_of_equity (fcff_wacc_missing_cost_of_debt)"
         )
         return cost_of_equity, (
             "Fallback CAPM cost of equity (missing cost of debt for positive debt). "
@@ -617,7 +617,7 @@ def _build_fcff_wacc(
     total_capital = equity_value + debt_value
     if total_capital <= 0:
         assumptions.append(
-            "wacc fallback to CAPM cost_of_equity " "(fcff_wacc_non_positive_capital)"
+            "wacc fallback to CAPM cost_of_equity (fcff_wacc_non_positive_capital)"
         )
         return cost_of_equity, (
             "Fallback CAPM cost of equity (non-positive FCFF capital base). "
@@ -816,8 +816,7 @@ def _build_saas_capm_terminal_inputs(
         )
     elif anchor_source == "filing":
         assumptions.append(
-            "terminal_growth sourced from filing-first anchor "
-            "(market stale fallback)"
+            "terminal_growth sourced from filing-first anchor (market stale fallback)"
         )
     else:
         assumptions.append("terminal_growth sourced from long_run_growth_anchor")
@@ -951,7 +950,7 @@ def _build_saas_operating_rates(
             "Policy default CapEx rate for non-blocking missing CapEx inputs",
         )
         assumptions.append(
-            "capex_rates defaulted to " f"{capex_default:.2%} (anchor=da_rate)"
+            f"capex_rates defaulted to {capex_default:.2%} (anchor=da_rate)"
         )
     sbc_rate_tf = ratio(
         "SBC Rate",

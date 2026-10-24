@@ -1,6 +1,6 @@
 """
 Isolated state class for Debate subgraph.
-Shared node_statuses with parent.
+Shared workflow_activity_statuses with parent.
 """
 
 from typing import Annotated, NotRequired
@@ -53,7 +53,7 @@ class DebateOutput(BaseModel):
     debate: DebateContext
     model_type: str | None = None
     messages: list[object] = Field(default_factory=list)
-    node_statuses: dict[str, str] = Field(default_factory=dict)
+    workflow_activity_statuses: dict[str, str] = Field(default_factory=dict)
     error_logs: list[dict] = Field(default_factory=list)
 
 
@@ -83,9 +83,9 @@ class DebateState(TypedDict):
     bear_thesis: Annotated[str | None, last_value]
 
     # --- Private State ---
-    internal_progress: Annotated[dict[str, str], merge_dict]
-    current_node: Annotated[str, last_value]
-    node_statuses: Annotated[dict[str, str], merge_dict]
+    workflow_activity_updates: Annotated[dict[str, str], merge_dict]
+    active_activity_id: Annotated[str, last_value]
+    workflow_activity_statuses: Annotated[dict[str, str], merge_dict]
     context_summary_text: Annotated[str | None, last_value]
     facts_registry_text: Annotated[str | None, last_value]
 

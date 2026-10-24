@@ -208,7 +208,7 @@ def _validate_correlation_group_variables(
     if repeated_across_groups:
         repeated_list = ", ".join(sorted(repeated_across_groups))
         raise ValueError(
-            "correlated variables cannot appear in multiple groups: " f"{repeated_list}"
+            f"correlated variables cannot appear in multiple groups: {repeated_list}"
         )
 
 

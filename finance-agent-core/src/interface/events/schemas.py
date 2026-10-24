@@ -46,8 +46,7 @@ class AgentOutputArtifact(BaseModel):
     kind: AgentOutputKind = Field(
         ...,
         description=(
-            "Output contract kind discriminator "
-            "(e.g. 'fundamental_analysis.output')."
+            "Output contract kind discriminator (e.g. 'fundamental_analysis.output')."
         ),
     )
     version: str = Field(
