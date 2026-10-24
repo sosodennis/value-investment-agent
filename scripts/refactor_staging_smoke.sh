@@ -15,6 +15,9 @@ REPORT="${STAGING_SMOKE_REPORT:-$ROOT/.audit/refactor-staging-smoke.jsonl}"
 TIMEOUT_SECONDS="${STAGING_SMOKE_TIMEOUT_SECONDS:-90}"
 RETRY_ATTEMPTS="${STAGING_SMOKE_RETRY_ATTEMPTS:-3}"
 THREAD_ID="refactor-smoke-$(date -u +%Y%m%d%H%M%S)-$$"
+PRIMARY_KEY_ID=""
+SECONDARY_KEY_ID=""
+PRIMARY_DELETED=0
 
 for command in curl jq awk sed mktemp date; do
   command -v "$command" >/dev/null 2>&1 || {
@@ -54,7 +57,7 @@ cookie_jar="$(mktemp)"
 response_body="$(mktemp)"
 response_headers="$(mktemp)"
 sse_body="$(mktemp)"
-trap 'rm -f "$cookie_jar" "$response_body" "$response_headers" "$sse_body"' EXIT
+trap cleanup_primary EXIT
 
 record() {
   local check="$1" status="$2" request_id="${3:-}" latency_ms="${4:-0}" attempts="${5:-1}" error_code="${6:-}"
@@ -63,7 +66,7 @@ record() {
     --arg origin "$BACKEND_ORIGIN" --arg thread_id "$THREAD_ID" \
     --argjson latency_ms "$latency_ms" --argjson attempts "$attempts" \
     --arg error_code "$error_code" \
-    '{check:$check,status:$status,backend_origin:$origin,thread_id:$thread_id,request_id:$request_id,latency_ms:$latency_ms,attempts:$attempts,error_code:$error_code}' \
+    '{check:$check,status:$status,backend_origin:$origin,thread_id:$thread_id,request_id:$request_id,latency_ms:$latency_ms,attempts:$attempts,usage:null,error_code:$error_code}' \
     >> "$REPORT"
 }
 
@@ -89,6 +92,39 @@ health_check() {
   request GET /health
   [[ "$REQUEST_CODE" == "200" ]] || { record health NOT_VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" 1 "http_$REQUEST_CODE"; return 1; }
   record health VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS"
+}
+
+restore_primary_key() {
+  [[ "$PRIMARY_DELETED" == "1" ]] || return 0
+  [[ -n "$STAGING_OPENROUTER_KEY" ]] || return 1
+  local payload restored_id
+  payload="$(jq -cn --arg key "$STAGING_OPENROUTER_KEY" --arg label "$STAGING_PRIMARY_LABEL" '{api_key:$key,label:$label}')"
+  request POST /api/v1/llm/provider-keys "$payload" "$CSRF_TOKEN"
+  if [[ "$REQUEST_CODE" != "201" ]]; then
+    record primary_restore NOT_VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" 1 "http_$REQUEST_CODE"
+    return 1
+  fi
+  restored_id="$(jq -r '.id // empty' "$response_body" 2>/dev/null || true)"
+  if [[ -z "$restored_id" ]]; then
+    record primary_restore NOT_VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" 1 missing_key_id
+    return 1
+  fi
+  PRIMARY_KEY_ID="$restored_id"
+  PRIMARY_DELETED=0
+  request POST "/api/v1/llm/provider-keys/$PRIMARY_KEY_ID/test" "" "$CSRF_TOKEN"
+  local status
+  status="$(jq -r '.status // "unknown"' "$response_body" 2>/dev/null || printf 'unknown')"
+  if [[ "$REQUEST_CODE" == "200" && "$status" == "healthy" ]]; then
+    record primary_restore VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS"
+    return 0
+  fi
+  record primary_restore NOT_VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" 1 "key_${status}"
+  return 1
+}
+
+cleanup_primary() {
+  restore_primary_key || true
+  rm -f "$cookie_jar" "$response_body" "$response_headers" "$sse_body"
 }
 
 secret_bundle_available() {
@@ -138,8 +174,9 @@ ensure_key() {
 }
 
 completion() {
-  local run_payload run_id event_count terminal_count attempt=1
-  run_payload="$(jq -cn --arg message "${STAGING_COMPLETION_MESSAGE:-Analyze the valuation workflow for AAPL and return a concise result.}" '{message:$message}')"
+  local check_name="${1:-completion}" message="${2:-${STAGING_COMPLETION_MESSAGE:-Analyze the valuation workflow for AAPL and return a concise result.}}"
+  local run_payload run_id event_count terminal_count completed_count failed_count max_attempt=1 attempt=1
+  run_payload="$(jq -cn --arg message "$message" '{message:$message}')"
   while (( attempt <= RETRY_ATTEMPTS )); do
     request POST "/api/v1/threads/$THREAD_ID/runs" "$run_payload" "$CSRF_TOKEN"
     run_id="$(jq -r '.run_id // empty' "$response_body" 2>/dev/null || true)"
@@ -156,16 +193,51 @@ completion() {
     -H 'Accept: text/event-stream' -H "Last-Event-ID: 0" -b "$cookie_jar" \
     "$BACKEND_ORIGIN/api/v1/threads/$THREAD_ID/events?run_id=$run_id&after_seq=0" >/dev/null || true
   event_count="$(awk '/^event: / {count++} END {print count+0}' "$sse_body")"
+  max_attempt="$(awk '/^data: / {sub(/^data: /, ""); print}' "$sse_body" | jq -s '[.[] | .payload.attempt // 1] | max // 1' 2>/dev/null || printf '1')"
   terminal_count="$(
     awk '/^data: / {sub(/^data: /, ""); print}' "$sse_body" |
       jq -s --arg run_id "$run_id" '[.[] | select(.event_name == "workflow.activity" and .run_id == $run_id and .payload.run_id == $run_id and (.payload.status == "completed" or .payload.status == "failed" or .payload.status == "cancelled"))] | length'
   )"
-  if (( event_count > 0 && terminal_count > 0 )); then
-    record completion VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" "$attempt"
+  completed_count="$(
+    awk '/^data: / {sub(/^data: /, ""); print}' "$sse_body" |
+      jq -s --arg run_id "$run_id" '[.[] | select(.event_name == "workflow.activity" and .run_id == $run_id and .payload.run_id == $run_id and .payload.status == "completed")] | length'
+  )"
+  failed_count=$((terminal_count - completed_count))
+  if (( event_count > 0 && completed_count > 0 && failed_count == 0 )); then
+    record "$check_name" VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" "$max_attempt"
   else
-    record completion NOT_VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" "$attempt" no_terminal_event
+    local failure_code="no_terminal_event"
+    (( failed_count > 0 )) && failure_code="workflow_failed"
+    record "$check_name" NOT_VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" "$max_attempt" "$failure_code"
     return 1
   fi
+}
+
+failover_probe() {
+  if [[ -z "$PRIMARY_KEY_ID" || -z "$SECONDARY_KEY_ID" || "$PRIMARY_KEY_ID" == "$SECONDARY_KEY_ID" ]]; then
+    record failover INCONCLUSIVE "" 0 1 missing_distinct_key_pool
+    return 0
+  fi
+  if [[ -z "$STAGING_OPENROUTER_KEY" ]]; then
+    record failover INCONCLUSIVE "" 0 1 missing_primary_raw_key
+    return 0
+  fi
+
+  request DELETE "/api/v1/llm/provider-keys/$PRIMARY_KEY_ID" "" "$CSRF_TOKEN"
+  if [[ "$REQUEST_CODE" != "204" ]]; then
+    record failover NOT_VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" 1 "http_$REQUEST_CODE"
+    return 1
+  fi
+  PRIMARY_DELETED=1
+  record failover_injection VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS"
+
+  if completion failover_completion "Fail over to the secondary provider key and analyze the valuation workflow for AAPL."; then
+    record failover VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS"
+  else
+    record failover NOT_VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" 1 no_terminal_event
+    return 1
+  fi
+  restore_primary_key
 }
 
 if ! health_check; then
@@ -181,14 +253,15 @@ if ! secret_bundle_available; then
 fi
 
 login
-primary_key_id="$(ensure_key "$STAGING_PRIMARY_LABEL" "$STAGING_OPENROUTER_KEY")"
-secondary_key_id="$(ensure_key "$STAGING_SECONDARY_LABEL" "$STAGING_SECONDARY_OPENROUTER_KEY" || true)"
-completion
-
-if [[ -n "$primary_key_id" && -n "$secondary_key_id" ]]; then
-  record failover INCONCLUSIVE "" 0 1 "requires_explicit_primary_fault_injection"
+PRIMARY_KEY_ID="$(ensure_key "$STAGING_PRIMARY_LABEL" "$STAGING_OPENROUTER_KEY")"
+SECONDARY_KEY_ID="$(ensure_key "$STAGING_SECONDARY_LABEL" "$STAGING_SECONDARY_OPENROUTER_KEY" || true)"
+if [[ -n "$PRIMARY_KEY_ID" ]]; then
+  completion
+  record live_provider VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS"
 else
-  record failover INCONCLUSIVE "" 0 1 missing_secondary_or_primary_key
+  record live_provider INCONCLUSIVE "" 0 1 missing_primary_key
 fi
+
+failover_probe
 
 echo "Staging smoke completed; report: $REPORT"

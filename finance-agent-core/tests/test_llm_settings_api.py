@@ -30,6 +30,7 @@ class _Service:
             OpenRouterModel("openrouter/free", "Free Models Router", "router", None),
         )
         self.calls: list[tuple[str, object]] = []
+        self.test_result = True
 
     async def list_keys(self, *, user_id: str):
         self.calls.append(("list_keys", user_id))
@@ -41,7 +42,7 @@ class _Service:
 
     async def test_key(self, *, user_id: str, key_id: str):
         self.calls.append(("test_key", (user_id, key_id)))
-        return True
+        return self.test_result
 
     async def delete_key(self, *, user_id: str, key_id: str):
         self.calls.append(("delete_key", (user_id, key_id)))
@@ -107,6 +108,20 @@ async def test_provider_key_routes_delegate_to_provider_service() -> None:
         "test_key",
         "delete_key",
     ]
+
+
+@pytest.mark.asyncio
+async def test_provider_key_route_preserves_failed_test_result() -> None:
+    service = _Service()
+    service.test_result = False
+    async with _client(service) as client:
+        response = await client.post("/api/v1/llm/provider-keys/managed-a/test")
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": "managed-a",
+        "passed": False,
+        "status": "unavailable",
+    }
 
 
 @pytest.mark.asyncio
