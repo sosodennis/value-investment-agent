@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowDown, ArrowUp, Check, CircleAlert, KeyRound, Loader2, RefreshCw, Save, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, CircleAlert, KeyRound, Loader2, RefreshCw, Save, Trash2, Power } from 'lucide-react';
 import { BeuiSelect } from '@/components/beui/BeuiSelect';
 import {
-    addSearchKey, deleteSearchKey, getSearchSettings, replaceSearchKey,
+    addSearchKey, deleteSearchKey, getSearchSettings, replaceSearchKey, setSearchKeyEnabled,
     SearchSettingsApiError, updateSearchSettings,
     type SearchSettings, type SearchProviderSetting,
 } from '@/lib/search-settings-api';
@@ -68,20 +68,31 @@ export default function SearchSettingsPage() {
         event.preventDefault(); setBusyProvider(provider); setError(null); setNotice(null);
         try {
             const keyInput = { provider, api_key: apiKey, label: label.trim() || `${provider} key` };
-            if (replacementKeyId) await replaceSearchKey({ ...keyInput, key_id: replacementKeyId });
+            const replacing = replacementKeyId !== null;
+            if (replacing) await replaceSearchKey({ ...keyInput, key_id: replacementKeyId });
             else await addSearchKey(keyInput);
             setApiKey(''); setLabel(''); setReplacementKeyId(null);
             await load();
-            setNotice(replacementKeyId ? 'Provider key replaced after a successful test.' : 'Provider key tested and added.');
+            setNotice(replacing ? 'Provider key replaced after a successful test.' : 'Provider key tested and added.');
         } catch (cause) { setError(requestMessage(cause)); }
         finally { setBusyProvider(null); }
     }
 
-    async function removeKey(item: SearchProviderSetting) {
-        if (!item.key || !window.confirm(`Delete the ${item.key.label} key?`)) return;
-        setBusyProvider(item.provider); setError(null); setNotice(null);
-        try { await deleteSearchKey(item.key.id); await load(); setNotice(`${item.key.label} was deleted.`); }
+    async function removeKey(providerName: string, keyId: string, labelValue: string) {
+        if (!window.confirm(`Delete the ${labelValue} key?`)) return;
+        setBusyProvider(providerName); setError(null); setNotice(null);
+        try { await deleteSearchKey(keyId); await load(); setNotice(`${labelValue} was deleted.`); }
         catch (cause) { setError(requestMessage(cause)); }
+        finally { setBusyProvider(null); }
+    }
+
+    async function toggleKey(providerName: string, keyId: string, enabled: boolean) {
+        setBusyProvider(providerName); setError(null); setNotice(null);
+        try {
+            await setSearchKeyEnabled(keyId, enabled);
+            await load();
+            setNotice(enabled ? 'Provider key enabled.' : 'Provider key disabled.');
+        } catch (cause) { setError(requestMessage(cause)); }
         finally { setBusyProvider(null); }
     }
 
@@ -124,10 +135,14 @@ export default function SearchSettingsPage() {
                         {sortedDraft.map((item) => {
                             const capability = providersByName.get(item.provider);
                             if (!capability?.key_required) return <p key={item.provider} className="py-3 text-sm text-on-surface-variant">{item.provider} does not require a key.</p>;
-                            return <div key={item.provider} className="flex flex-wrap items-center justify-between gap-3 py-3">
-                                <div><p className="font-medium">{item.provider}</p>{item.key ? <p className="text-sm text-on-surface-variant">{item.key.label} · •••• {item.key.suffix} · {item.key.status}{item.key.last_tested_at ? ` · Tested ${new Date(item.key.last_tested_at).toLocaleString()}` : ' · Not tested'}{item.key.failure_count ? ` · ${item.key.failure_count} recent failures` : ''}</p> : <p className="text-sm text-on-surface-variant">No key configured</p>}</div>
-                                {item.key && <button type="button" onClick={() => { setProvider(item.provider); setReplacementKeyId(item.key?.id ?? null); setLabel(item.key?.label ?? ''); }} className="rounded border border-outline-variant px-3 py-2 text-sm hover:bg-surface-container">Replace</button>}
-                                {item.key && <button type="button" onClick={() => void removeKey(item)} disabled={busyProvider === item.provider} aria-label={`Delete ${item.key.label}`} title="Delete provider key" className="rounded p-2 text-error hover:bg-error/10 disabled:opacity-50"><Trash2 size={17} /></button>}
+                            return <div key={item.provider} className="py-3">
+                                <p className="font-medium">{item.provider}</p>
+                                {item.keys.length === 0 ? <p className="text-sm text-on-surface-variant">No keys configured</p> : <div className="mt-2 divide-y divide-outline-variant/40 border border-outline-variant/60">
+                                    {item.keys.map((key) => <div key={key.id} className="flex flex-wrap items-center justify-between gap-3 px-3 py-2">
+                                        <div className="min-w-0"><p className="truncate text-sm">{key.label} · •••• {key.suffix}</p><p className="text-xs text-on-surface-variant">{key.status}{key.cooldown_until ? ` · Cooldown until ${new Date(key.cooldown_until).toLocaleString()}` : ''}{key.last_tested_at ? ` · Tested ${new Date(key.last_tested_at).toLocaleString()}` : ' · Not tested'}{key.last_used_at ? ` · Used ${new Date(key.last_used_at).toLocaleString()}` : ''}{key.failure_count ? ` · ${key.failure_count} recent failures` : ''}</p></div>
+                                        <div className="flex items-center gap-1"><button type="button" onClick={() => { setProvider(item.provider); setReplacementKeyId(key.id); setLabel(key.label); }} className="rounded border border-outline-variant px-3 py-2 text-sm hover:bg-surface-container">Replace</button><button type="button" onClick={() => void toggleKey(item.provider, key.id, !key.enabled)} disabled={busyProvider === item.provider} aria-label={`${key.enabled ? 'Disable' : 'Enable'} ${key.label}`} title={`${key.enabled ? 'Disable' : 'Enable'} provider key`} className="rounded p-2 hover:bg-surface-container disabled:opacity-50"><Power size={17} /></button><button type="button" onClick={() => void removeKey(item.provider, key.id, key.label)} disabled={busyProvider === item.provider} aria-label={`Delete ${key.label}`} title="Delete provider key" className="rounded p-2 text-error hover:bg-error/10 disabled:opacity-50"><Trash2 size={17} /></button></div>
+                                    </div>)}
+                                </div>}
                             </div>;
                         })}
                     </div>

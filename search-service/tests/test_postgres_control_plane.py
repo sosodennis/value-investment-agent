@@ -32,7 +32,7 @@ async def test_postgres_control_plane_is_owner_scoped_atomic_and_durable() -> No
             *(
                 store.add_tested_key(
                     subject_id=owner,
-                    provider=f"provider-{index}",
+                    provider=f"provider-{index // 4}",
                     api_key=f"secret-{index}",
                     label=f"key-{index}",
                     suffix=f"{index:04}",
@@ -41,7 +41,21 @@ async def test_postgres_control_plane_is_owner_scoped_atomic_and_durable() -> No
                 for index in range(8)
             )
         )
-        assert len({item.priority for item in inserted}) == 8
+        assert {
+            item.priority for item in inserted if item.provider == "provider-0"
+        } == {0, 1, 2, 3}
+        assert {
+            item.priority for item in inserted if item.provider == "provider-1"
+        } == {0, 1, 2, 3}
+        duplicate = await store.add_tested_key(
+            subject_id=owner,
+            provider="provider-0",
+            api_key="secret-0",
+            label="duplicate-label-is-ignored",
+            suffix="0000",
+            fingerprint="fingerprint-0",
+        )
+        assert duplicate.id == inserted[0].id
         credentials = await store.credentials_for(subject_id=owner)
         assert {item.api_key for item in credentials} == {
             f"secret-{index}" for index in range(8)
@@ -56,16 +70,35 @@ async def test_postgres_control_plane_is_owner_scoped_atomic_and_durable() -> No
         assert len(ciphertexts) == 8
         assert all("secret-" not in row["encrypted_key"] for row in ciphertexts)
 
-        await store.record_failure(
-            subject_id=owner, provider="provider-0", cooldown_seconds=1
+        claims = await asyncio.gather(
+            *(
+                store.claim_credential(
+                    subject_id=owner, provider="provider-0", lease_seconds=2
+                )
+                for _ in range(2)
+            )
         )
-        assert "provider-0" not in {
-            item.provider for item in await store.credentials_for(subject_id=owner)
-        }
+        assert all(item is not None for item in claims)
+        claimed_ids = {item.key_id for item in claims if item is not None}
+        assert len(claimed_ids) == 2
+        await store.record_key_failure(
+            subject_id=owner,
+            key_id=claims[0].key_id,
+            cooldown_seconds=1,
+        )
+        await store.release_credential(
+            subject_id=owner, key_id=claims[1].key_id, succeeded=False
+        )
+        available = await store.credentials_for(subject_id=owner)
+        assert sum(item.provider == "provider-0" for item in available) == 3
         await asyncio.sleep(1.1)
-        assert "provider-0" in {
-            item.provider for item in await store.credentials_for(subject_id=owner)
-        }
+        assert (
+            sum(
+                item.provider == "provider-0"
+                for item in await store.credentials_for(subject_id=owner)
+            )
+            == 4
+        )
 
         persisted = PostgresSearchControlPlane(
             os.environ["SEARCH_TEST_DATABASE_URL"],
@@ -83,5 +116,8 @@ async def test_postgres_control_plane_is_owner_scoped_atomic_and_durable() -> No
                 )
                 await connection.execute(
                     "DELETE FROM search_provider_keys WHERE owner_id=$1", owner
+                )
+                await connection.execute(
+                    "DELETE FROM search_provider_health WHERE owner_id=$1", owner
                 )
         await store.aclose()

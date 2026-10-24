@@ -3380,6 +3380,20 @@
         "title": "ProviderCapabilities",
         "type": "object"
       },
+      "ProviderKeyEnabledRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "ProviderKeyEnabledRequest",
+        "type": "object"
+      },
       "ProviderKeyReplaceRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3465,6 +3479,17 @@
               }
             ],
             "title": "Last Tested At"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
           },
           "priority": {
             "minimum": 0.0,
@@ -3584,15 +3609,12 @@
             "title": "Enabled",
             "type": "boolean"
           },
-          "key": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ProviderKeySummary"
-              },
-              {
-                "type": "null"
-              }
-            ]
+          "keys": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderKeySummary"
+            },
+            "title": "Keys",
+            "type": "array"
           },
           "priority": {
             "title": "Priority",
@@ -10975,6 +10997,56 @@
           }
         },
         "summary": "Delete Search Key",
+        "tags": [
+          "Search settings"
+        ]
+      },
+      "patch": {
+        "operationId": "set_search_key_enabled_api_search_settings_keys__key_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key_id",
+            "required": true,
+            "schema": {
+              "title": "Key Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderKeyEnabledRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/src__search_settings__domain__ProviderKeyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Search Key Enabled",
         "tags": [
           "Search settings"
         ]

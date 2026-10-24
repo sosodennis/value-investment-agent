@@ -29,6 +29,7 @@ class ProviderKeySummary(StrictModel):
     cooldown_until: str | None = None
     failure_count: int = Field(default=0, ge=0)
     last_tested_at: str | None = None
+    last_used_at: str | None = None
     status: Literal["active", "disabled", "cooldown", "invalid"] = "active"
 
 
@@ -36,7 +37,7 @@ class ProviderSetting(StrictModel):
     provider: str
     enabled: bool
     priority: int
-    key: ProviderKeySummary | None = None
+    keys: list[ProviderKeySummary] = Field(default_factory=list)
 
 
 class SearchSettingsSnapshot(StrictModel):
@@ -84,3 +85,7 @@ class ProviderKeyCreateRequest(StrictModel):
 
 class ProviderKeyReplaceRequest(ProviderKeyCreateRequest):
     key_id: str = Field(min_length=1, max_length=128)
+
+
+class ProviderKeyEnabledRequest(StrictModel):
+    enabled: bool

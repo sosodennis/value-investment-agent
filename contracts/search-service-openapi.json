@@ -621,6 +621,44 @@
         "title": "ProviderKeyResult",
         "type": "object"
       },
+      "ProviderKeySetEnabledEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "context": {
+            "$ref": "#/components/schemas/InternalRequestContext"
+          },
+          "input": {
+            "$ref": "#/components/schemas/ProviderKeySetEnabledInput"
+          }
+        },
+        "required": [
+          "context",
+          "input"
+        ],
+        "title": "ProviderKeySetEnabledEnvelope",
+        "type": "object"
+      },
+      "ProviderKeySetEnabledInput": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "key_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Key Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key_id",
+          "enabled"
+        ],
+        "title": "ProviderKeySetEnabledInput",
+        "type": "object"
+      },
       "ProviderKeySuccess": {
         "additionalProperties": false,
         "properties": {
@@ -703,6 +741,19 @@
             ],
             "default": null,
             "title": "Last Tested At"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Last Used At"
           },
           "priority": {
             "minimum": 0,
@@ -876,16 +927,13 @@
             "title": "Enabled",
             "type": "boolean"
           },
-          "key": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ProviderKeySummary"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null
+          "keys": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ProviderKeySummary"
+            },
+            "title": "Keys",
+            "type": "array"
           },
           "priority": {
             "minimum": 0,
@@ -1666,6 +1714,119 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ProviderKeyReplaceEnvelope"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderKeySuccess"
+                }
+              }
+            },
+            "description": "Successful operation"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Stable internal error"
+          }
+        },
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ]
+      }
+    },
+    "/v1/provider-keys/set-enabled": {
+      "post": {
+        "description": "Enable or disable an owned provider key without exposing key material.",
+        "operationId": "providerKeySetEnabled",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderKeySetEnabledEnvelope"
               }
             }
           },

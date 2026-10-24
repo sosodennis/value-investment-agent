@@ -79,6 +79,19 @@ class FakeSearchService:
     async def delete_key(self, *, principal: str, key_id: str) -> None:
         self.principals.append(principal)
 
+    async def set_key_enabled(
+        self, *, principal: str, key_id: str, enabled: bool
+    ) -> ProviderKeyResult:
+        self.principals.append(principal)
+        return ProviderKeyResult(
+            id=key_id,
+            provider="provider-a",
+            tested=True,
+            active=enabled,
+            suffix="cdef",
+            fingerprint="fp-safe",
+        )
+
 
 def make_app(service: FakeSearchService, principal_id: str) -> FastAPI:
     app = FastAPI()
@@ -112,12 +125,17 @@ async def test_bff_uses_authenticated_principal_and_returns_only_masked_key_meta
                 "label": "Primary",
             },
         )
+        disabled = await client.patch(
+            "/api/search/settings/keys/key-1", json={"enabled": False}
+        )
     assert settings.status_code == 200
     assert created.status_code == 201
-    assert service.principals == ["user-a", "user-a"]
+    assert service.principals == ["user-a", "user-a", "user-a"]
     assert service.key == "raw-secret-abcdef"
     assert "raw-secret" not in json.dumps(created.json())
     assert created.json()["suffix"] == "cdef"
+    assert disabled.status_code == 200
+    assert disabled.json()["active"] is False
 
 
 @pytest.mark.asyncio
@@ -178,6 +196,12 @@ async def test_search_transport_forwards_context_and_service_token_without_brows
     assert body["context"]["principal"]["subject_id"] == "user-a"
     assert body["input"]["api_key"] == "raw-key"
     assert body["input"]["label"] == "Primary"
+    await service.set_key_enabled(principal="user-a", key_id="key-1", enabled=False)
+    assert seen[1].url.path == "/v1/provider-keys/set-enabled"
+    assert json.loads(seen[1].content)["input"] == {
+        "key_id": "key-1",
+        "enabled": False,
+    }
     await client.aclose()
 
 
