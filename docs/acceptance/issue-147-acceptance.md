@@ -50,10 +50,11 @@ An authenticated run through worker 1 returned `202`; worker 2 received 17
 cursor was 17. After worker 2 stopped and restarted, replay returned the same
 events from PostgreSQL. `scripts/refactor_staging_smoke.sh` derived
 `http://127.0.0.1:8200` from `BACKEND_HOST_PORT`, recorded `health=VERIFIED`,
-and safely recorded `live_provider=INCONCLUSIVE` and
+and safely recorded `live_provider=INCONCLUSIVE`, `retry=INCONCLUSIVE`, and
 `failover=INCONCLUSIVE` with `missing_secret_bundle` without printing or
 requesting credentials. The script now performs labelled key tests, requires a
-completed terminal activity, and supports an integration-owner-only primary
+completed terminal activity, records an observed workflow retry only when an
+activity attempt exceeds one, and supports an integration-owner-only primary
 delete, secondary completion, and primary restore probe when the local raw
 primary key is available.
 
