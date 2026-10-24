@@ -143,7 +143,7 @@ class AnalysisRuntimeService:
                 after_seq=after_seq,
                 limit=limit,
             )
-            subscriber = await self.hub.subscribe()
+            subscriber = await self.hub.subscribe(thread_id=thread_id)
         return replay, subscriber
 
     async def unsubscribe(self, subscriber: QueueSubscriber) -> None:

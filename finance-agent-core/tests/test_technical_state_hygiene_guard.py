@@ -19,7 +19,7 @@ def test_state_update_guard_rejects_pandas_payload() -> None:
         },
     )
 
-    assert update["internal_progress"]["feature_compute"] == "error"
+    assert update["workflow_activity_updates"]["feature_compute"] == "error"
     assert (
         "State payload contains disallowed pandas objects"
         in update["error_logs"][0]["error"]
@@ -38,4 +38,4 @@ def test_state_update_guard_allows_plain_payload() -> None:
         },
     )
 
-    assert update["internal_progress"]["feature_compute"] == "done"
+    assert update["workflow_activity_updates"]["feature_compute"] == "done"

@@ -7,7 +7,8 @@ from src.analysis_runtime.domain.errors import SubscriberOverloadedError
 
 
 class QueueSubscriber:
-    def __init__(self, *, maxsize: int) -> None:
+    def __init__(self, *, thread_id: str, maxsize: int) -> None:
+        self.thread_id = thread_id
         self._queue: asyncio.Queue[ActivityEvent | None] = asyncio.Queue(
             maxsize=maxsize
         )
@@ -42,26 +43,33 @@ class BoundedNotificationHub:
     def __init__(self, *, queue_size: int = 128) -> None:
         self._queue_size = queue_size
         self._lock = asyncio.Lock()
-        self._subscribers: set[QueueSubscriber] = set()
+        self._subscribers: dict[str, set[QueueSubscriber]] = {}
 
-    async def subscribe(self) -> QueueSubscriber:
-        subscriber = QueueSubscriber(maxsize=self._queue_size)
+    async def subscribe(self, *, thread_id: str) -> QueueSubscriber:
+        subscriber = QueueSubscriber(thread_id=thread_id, maxsize=self._queue_size)
         async with self._lock:
-            self._subscribers.add(subscriber)
+            self._subscribers.setdefault(thread_id, set()).add(subscriber)
         return subscriber
 
     async def unsubscribe(self, subscriber: QueueSubscriber) -> None:
         async with self._lock:
-            self._subscribers.discard(subscriber)
+            subscribers = self._subscribers.get(subscriber.thread_id)
+            if subscribers is not None:
+                subscribers.discard(subscriber)
+                if not subscribers:
+                    self._subscribers.pop(subscriber.thread_id, None)
         subscriber.close()
 
     async def publish(self, event: ActivityEvent) -> None:
         overloaded: list[QueueSubscriber] = []
         async with self._lock:
-            for subscriber in tuple(self._subscribers):
+            subscribers = self._subscribers.get(event.thread_id, set())
+            for subscriber in tuple(subscribers):
                 try:
                     subscriber.push(event)
                 except SubscriberOverloadedError:
                     overloaded.append(subscriber)
             for subscriber in overloaded:
-                self._subscribers.discard(subscriber)
+                subscribers.discard(subscriber)
+            if not subscribers:
+                self._subscribers.pop(event.thread_id, None)

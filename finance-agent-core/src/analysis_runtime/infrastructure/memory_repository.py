@@ -25,6 +25,7 @@ class InMemoryActivityRepository:
         self._lock = asyncio.Lock()
         self._events: dict[str, list[ActivityEvent]] = defaultdict(list)
         self._event_ids: dict[str, set[str]] = defaultdict(set)
+        self._cursors: dict[str, int] = defaultdict(int)
         self._runs: dict[str, RunStatusRecord] = {}
         self._retention = replay_retention
 
@@ -33,16 +34,17 @@ class InMemoryActivityRepository:
             events = self._events[event.thread_id]
             if event.event_id in self._event_ids[event.thread_id]:
                 return False
-            expected = len(events) + 1 if events else event.seq_id
-            if events and event.seq_id != events[-1].seq_id + 1:
+            expected = self._cursors[event.thread_id] + 1
+            if event.seq_id != expected:
                 raise ActivityPersistenceError(
-                    f"sequence must advance from {events[-1].seq_id} to {event.seq_id}"
+                    f"sequence must advance from {self._cursors[event.thread_id]} to {event.seq_id}"
                 )
-            if event.seq_id < 1 or event.seq_id != expected:
+            if event.seq_id < 1:
                 raise ActivityPersistenceError("event sequence is not append-only")
             if any(existing.seq_id == event.seq_id for existing in events):
                 raise ActivityPersistenceError("event sequence already exists")
             events.append(event)
+            self._cursors[event.thread_id] = event.seq_id
             self._event_ids[event.thread_id].add(event.event_id)
             if len(events) > self._retention:
                 removed = events.pop(0)
@@ -69,7 +71,7 @@ class InMemoryActivityRepository:
             cursor = (
                 page[-1].seq_id
                 if page
-                else (events[-1].seq_id if events else after_seq)
+                else (self._cursors[thread_id] if events else after_seq)
             )
             return ReplayPage(
                 events=tuple(page), cursor=cursor, has_more=len(selected) > len(page)
@@ -97,7 +99,7 @@ class InMemoryActivityRepository:
                 thread_id=thread_id,
                 run_id=run_id,
                 run_status=status,
-                cursor=events[-1].seq_id if events else 0,
+                cursor=self._cursors[thread_id],
                 active_activities=active,
                 recent_activities=recent,
             )

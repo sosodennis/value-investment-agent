@@ -10,7 +10,7 @@ from src.interface.events.mappers import NodeOutputMapper
 def test_on_chain_end_status_behavior():
     """
     Test that adapt_langgraph_event emits agent.status='done'
-    when a node finishes without explicit node_statuses.
+    when a node finishes without explicit workflow_activity_statuses.
     """
     # Setup
     thread_id = "test_thread"
@@ -54,7 +54,7 @@ def test_on_chain_end_status_behavior():
 @patch("src.interface.events.adapters.get_agent_name")
 def test_explicit_status_update_via_state_with_mapper(mock_get_agent_name):
     """
-    Test that NodeOutputMapper correctly passes through node_statuses.
+    Test that NodeOutputMapper correctly passes through workflow_activity_statuses.
     This replicates the issue where mappers were stripping this field.
     """
     # mock_get_agent_id.return_value = "intent_extraction" <-- Unused as we test Mapper directly?
@@ -72,7 +72,7 @@ def test_explicit_status_update_via_state_with_mapper(mock_get_agent_name):
                 "reference": None,
             }
         },  # Context with artifact
-        "node_statuses": {"intent_extraction": "done"},  # Explicit status
+        "workflow_activity_statuses": {"intent_extraction": "done"},  # Explicit status
     }
 
     # Verify Mapper behavior directly
@@ -83,4 +83,6 @@ def test_explicit_status_update_via_state_with_mapper(mock_get_agent_name):
     assert result["kind"] == "intent_extraction.output"
     assert result["preview"]["ticker"] == "AAPL"
     # Node statuses should be stripped as they are not part of the artifact
-    assert "node_statuses" not in result, "Mapper should strip non-artifact fields"
+    assert (
+        "workflow_activity_statuses" not in result
+    ), "Mapper should strip non-artifact fields"

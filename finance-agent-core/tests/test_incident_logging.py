@@ -8,10 +8,10 @@ from src.shared.kernel.tools.logger import get_logger
 def test_build_replay_diagnostics_collects_artifact_refs() -> None:
     state = {
         "intent_extraction": {"resolved_ticker": "AAPL"},
-        "current_node": "aggregator_node",
+        "active_activity_id": "aggregator_node",
         "messages": [{"content": "hello"}],
-        "node_statuses": {"financial_news_research": "running"},
-        "internal_progress": {"aggregator_node": "running"},
+        "workflow_activity_statuses": {"financial_news_research": "running"},
+        "workflow_activity_updates": {"aggregator_node": "running"},
         "financial_news_research": {
             "search_artifact_id": "search-1",
             "selection_artifact_id": "selection-1",

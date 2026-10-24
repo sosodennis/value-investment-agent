@@ -52,7 +52,7 @@ def test_build_valuation_missing_inputs_update_sets_error_shape() -> None:
     fa = update["fundamental_analysis"]
     assert isinstance(fa, dict)
     assert fa == {}
-    assert update["internal_progress"]["calculation"] == "error"
+    assert update["workflow_activity_updates"]["calculation"] == "error"
     assert "Missing SEC XBRL inputs" in update["error_logs"][0]["error"]
 
 
@@ -400,7 +400,7 @@ def test_build_valuation_success_update_includes_output_and_artifact() -> None:
     )
     assert preview["data_freshness"]["shares_outstanding_source"] == "market_data"
     assert preview["data_freshness"]["time_alignment"]["status"] == "high_risk"
-    assert update["internal_progress"]["calculation"] == "done"
+    assert update["workflow_activity_updates"]["calculation"] == "done"
 
 
 def test_build_valuation_success_update_keeps_zero_intrinsic_value() -> None:
@@ -576,7 +576,7 @@ def test_build_valuation_success_update_skips_total_distribution_without_shares(
 
 def test_build_valuation_error_update_sets_calculation_error() -> None:
     update = build_valuation_error_update("boom")
-    assert update["internal_progress"]["calculation"] == "error"
+    assert update["workflow_activity_updates"]["calculation"] == "error"
     assert update["error_logs"][0]["error"] == "boom"
 
 
