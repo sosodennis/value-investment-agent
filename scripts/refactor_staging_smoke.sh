@@ -57,8 +57,6 @@ cookie_jar="$(mktemp)"
 response_body="$(mktemp)"
 response_headers="$(mktemp)"
 sse_body="$(mktemp)"
-trap cleanup_primary EXIT
-
 record() {
   local check="$1" status="$2" request_id="${3:-}" latency_ms="${4:-0}" attempts="${5:-1}" error_code="${6:-}"
   jq -cn \
@@ -126,6 +124,8 @@ cleanup_primary() {
   restore_primary_key || true
   rm -f "$cookie_jar" "$response_body" "$response_headers" "$sse_body"
 }
+
+trap cleanup_primary EXIT
 
 secret_bundle_available() {
   [[ -n "$STAGING_EMAIL" && -n "$STAGING_PASSWORD" ]]
