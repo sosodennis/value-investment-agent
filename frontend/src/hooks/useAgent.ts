@@ -1,302 +1,119 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { clientLogger } from '@/lib/logger';
-import { InterruptResumePayload } from '../types/interrupts';
-import {
-    Message,
-    parseAgentEvent,
-    parseApiErrorMessage,
-    parseHistoryResponse,
-    parseStreamStartResponse,
-    parseThreadStateResponse,
-    StreamRequest,
-} from '../types/protocol';
+import type { InterruptResumePayload } from '@/types/interrupts';
+import type { AgentStatus } from '@/types/agents';
+import { applyWorkflowActivityEvent, boundedReconnectDelay, cancelWorkflowRun, consumeWorkflowEvents, createWorkflowActivityState, getActivitySnapshot, startWorkflowRun, type WorkflowActivitySnapshot } from '@/features/workflow';
 import { useAgentReducer } from './useAgentReducer';
-import { deriveActiveAgentId } from '@/lib/agent-session-state';
-import { csrfHeaders } from '@/lib/auth-api';
-import { parseWorkflowActivityEvent } from '@/features/workflow';
 
-const API_URL = process.env.NEXT_PUBLIC_LANGGRAPH_URL || 'http://localhost:8000';
+const makeThreadId = () => `thread_${Date.now()}`;
+const toError = (value: unknown, fallback: string) => value instanceof Error ? value.message : fallback;
 
-const toErrorMessage = (error: unknown, fallback: string): string =>
-    error instanceof Error ? error.message : fallback;
-
-const readErrorMessage = async (
-    response: Response,
-    fallback: string
-): Promise<string> => {
-    try {
-        const raw: unknown = await response.json();
-        return (
-            parseApiErrorMessage(raw) || `${fallback} (HTTP ${response.status})`
-        );
-    } catch {
-        return `${fallback} (HTTP ${response.status})`;
-    }
-};
-
-export function useAgent(assistantId: string = 'agent') {
+export function useAgent(assistantId = 'agent') {
     void assistantId;
-    const {
-        state,
-        processEvent,
-        processWorkflowEvent,
-        hydrateWorkflow,
-        initSession,
-        loadHistory: dispatchLoadHistory,
-        addUserMessage,
-        setError,
-    } = useAgentReducer();
-
+    const { state, initSession, setRun, hydrateWorkflow, processWorkflowEvent, setConnection, addUserMessage, setError } = useAgentReducer();
     const [isLoading, setIsLoading] = useState(false);
-    const [hasMore, setHasMore] = useState(true);
-    const activeAgentId = deriveActiveAgentId({
-        active_agent_id: state.activeAgentId,
-        current_node: state.currentNode,
-        current_status: state.currentStatus,
-        status_history: state.statusHistory,
-        node_statuses: Object.fromEntries(
-            Object.entries(state.agents).map(([id, data]) => [id, data.status])
-        ),
-        is_running: state.status === 'running' || state.status === 'paused',
-    });
+    const [hasMore] = useState(false);
+    const abortRef = useRef<AbortController | null>(null);
 
-    const parseStream = useCallback(
-        async (threadId: string, afterSeq?: number) => {
-            let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    const attachStream = useCallback(async (threadId: string, initialSnapshot: WorkflowActivitySnapshot, expectedRunId = initialSnapshot.run_id) => {
+        abortRef.current?.abort();
+        const controller = new AbortController();
+        abortRef.current = controller;
+        let attempt = 0;
+        let snapshot = initialSnapshot;
+        let cursor = snapshot.cursor;
+        let projection = createWorkflowActivityState(snapshot);
+        while (!controller.signal.aborted && attempt < 5) {
             try {
-                const streamUrl = new URL(`${API_URL}/stream/${threadId}`);
-                if (
-                    typeof afterSeq === 'number' &&
-                    Number.isFinite(afterSeq) &&
-                    afterSeq > 0
-                ) {
-                    streamUrl.searchParams.set('after_seq', String(afterSeq));
-                }
-                const response = await fetch(streamUrl.toString(), {
-                    credentials: 'include',
+                setConnection(attempt === 0 ? 'connecting' : 'reconnecting');
+                await consumeWorkflowEvents(threadId, cursor, controller.signal, (event) => {
+                    if (event.run_id !== expectedRunId || event.thread_id !== threadId) throw new TypeError('workflow event identity mismatch.');
+                    const next = applyWorkflowActivityEvent(projection, event);
+                    if (next.gapDetected) throw new Error('workflow sequence gap requires snapshot recovery.');
+                    projection = next;
+                    cursor = next.cursor;
+                    processWorkflowEvent(event);
+                    setConnection('connected');
+                    return event.payload.activity_id === 'workflow' && ['completed', 'failed', 'cancelled'].includes(event.payload.status);
                 });
-                if (!response.ok) {
-                    throw new Error(
-                        await readErrorMessage(response, 'Failed to attach to stream')
-                    );
-                }
-
-                reader = response.body?.getReader();
-                const decoder = new TextDecoder();
-                if (!reader) return;
-
-                let buffer = '';
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-
-                    buffer += decoder.decode(value, { stream: true });
-                    const events = buffer.split(/\r?\n\r?\n/);
-                    buffer = events.pop() || '';
-
-                    for (const rawEvent of events) {
-                        const trimmed = rawEvent.replace(/\r/g, '').trim();
-                        if (!trimmed || trimmed.startsWith(':')) continue;
-
-                        const dataLines: string[] = [];
-                        const lines = trimmed.split('\n');
-                        for (const line of lines) {
-                            if (line.startsWith('data:')) {
-                                dataLines.push(line.slice(5).trimStart());
-                            }
-                        }
-
-                        if (dataLines.length === 0) continue;
-                        const jsonStr = dataLines.join('\n');
-                        if (jsonStr === 'null') continue;
-                        try {
-                            const parsed: unknown = JSON.parse(jsonStr);
-                            if (typeof parsed === 'object' && parsed !== null && 'event_name' in parsed && parsed.event_name === 'workflow.activity') {
-                                processWorkflowEvent(parseWorkflowActivityEvent(parsed, 'stream workflow.activity'));
-                            } else {
-                                const event = parseAgentEvent(parsed, 'stream event');
-                                processEvent(event);
-                            }
-                        } catch (e) {
-                            clientLogger.error('stream.parse_error', {
-                                event: trimmed,
-                                error: e instanceof Error ? e.message : String(e),
-                                threadId,
-                            });
-                            throw e;
-                        }
-                    }
-                }
+                if (controller.signal.aborted) return;
+                snapshot = await getActivitySnapshot(threadId, controller.signal);
+                if (snapshot.run_id !== expectedRunId) throw new TypeError('activity snapshot run identity mismatch.');
+                hydrateWorkflow(snapshot);
+                if (['completed', 'failed', 'cancelled'].includes(snapshot.run_status)) { setConnection('closed'); return; }
+                cursor = snapshot.cursor;
+                projection = createWorkflowActivityState(snapshot);
             } catch (error) {
-                setError(toErrorMessage(error, 'An error occurred during streaming.'));
-            } finally {
-                reader?.releaseLock();
-                setIsLoading(false);
+                if (controller.signal.aborted) { setConnection('disconnected'); return; }
+                clientLogger.error('workflow.stream.error', { threadId, attempt, error: toError(error, 'stream failed') });
+                snapshot = await getActivitySnapshot(threadId, controller.signal);
+                if (snapshot.run_id !== expectedRunId) throw new TypeError('activity snapshot run identity mismatch.');
+                hydrateWorkflow(snapshot);
+                if (['completed', 'failed', 'cancelled'].includes(snapshot.run_status)) { setConnection('closed'); return; }
+                cursor = snapshot.cursor;
+                projection = createWorkflowActivityState(snapshot);
             }
-        },
-        [processEvent, processWorkflowEvent, setError]
-    );
+            attempt += 1;
+            if (attempt < 5) await new Promise((resolve) => setTimeout(resolve, boundedReconnectDelay(attempt)));
+        }
+        setConnection('closed');
+    }, [hydrateWorkflow, processWorkflowEvent, setConnection]);
 
-    const sendMessage = useCallback(
-        async (content: string, newSession = false) => {
-            setIsLoading(true);
+    const sendMessage = useCallback(async (content: string, newSession = false) => {
+        setIsLoading(true);
+        const threadId = newSession || !state.threadId ? makeThreadId() : state.threadId;
+        if (threadId !== state.threadId) initSession(threadId);
+        addUserMessage({ id: `user_${Date.now()}`, role: 'user', content, type: 'text' });
+        try {
+            const run = await startWorkflowRun(threadId, { message: content });
+            setRun(run.run_id);
+            const snapshot = await getActivitySnapshot(threadId);
+            hydrateWorkflow(snapshot);
+            await attachStream(threadId, snapshot, run.run_id);
+        } catch (error) { setError(toError(error, 'Failed to start workflow run.')); } finally { setIsLoading(false); }
+    }, [addUserMessage, attachStream, hydrateWorkflow, initSession, setError, setRun, state.threadId]);
 
-            let currentThreadId = state.threadId;
-            if (newSession || !currentThreadId) {
-                currentThreadId = `thread_${Date.now()}`;
-                initSession(currentThreadId);
-            }
+    const submitCommand = useCallback(async (payload: InterruptResumePayload) => {
+        if (!state.threadId) { setError('Session ID missing.'); return; }
+        const text = 'approved' in payload ? (payload.approved ? 'Approved' : 'Rejected') : 'selected_symbol' in payload ? `Selected ${payload.selected_symbol}` : 'Resumed execution';
+        addUserMessage({ id: `user_${Date.now()}`, role: 'user', content: text, type: 'text' });
+        setIsLoading(true);
+        try {
+            const run = await startWorkflowRun(state.threadId, { resume_payload: { ...payload } });
+            setRun(run.run_id);
+            const snapshot = await getActivitySnapshot(state.threadId);
+            hydrateWorkflow(snapshot);
+            await attachStream(state.threadId, snapshot, run.run_id);
+        } catch (error) { setError(toError(error, 'Failed to resume workflow run.')); } finally { setIsLoading(false); }
+    }, [addUserMessage, attachStream, hydrateWorkflow, setError, setRun, state.threadId]);
 
-            const userMsg: Message = {
-                id: `user_${Date.now()}`,
-                role: 'user',
-                content,
-                type: 'text',
-            };
-            addUserMessage(userMsg);
+    const loadHistory = useCallback(async (threadId: string) => {
+        setIsLoading(true);
+        try {
+            const snapshot = await getActivitySnapshot(threadId);
+            hydrateWorkflow(snapshot);
+            if (snapshot.run_status === 'running' || snapshot.run_status === 'waiting' || snapshot.run_status === 'queued') await attachStream(threadId, snapshot, snapshot.run_id);
+        } catch (error) { setError(toError(error, 'Failed to load workflow snapshot.')); } finally { setIsLoading(false); }
+    }, [attachStream, hydrateWorkflow, setError]);
 
-            try {
-                const payload: StreamRequest = {
-                    thread_id: currentThreadId,
-                    message: content,
-                };
-                const res = await fetch(`${API_URL}/stream`, {
-                    method: 'POST',
-                    credentials: 'include',
-                    headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
-                    body: JSON.stringify(payload),
-                });
+    const cancelRun = useCallback(async () => {
+        if (!state.threadId || !state.runId) return;
+        try {
+            await cancelWorkflowRun(state.threadId, state.runId);
+            abortRef.current?.abort();
+            const snapshot = await getActivitySnapshot(state.threadId);
+            hydrateWorkflow(snapshot);
+            setConnection('closed');
+        } catch (error) { setError(toError(error, 'Failed to cancel workflow run.')); }
+    }, [hydrateWorkflow, setConnection, setError, state.runId, state.threadId]);
 
-                if (!res.ok) {
-                    throw new Error(await readErrorMessage(res, 'Could not start job'));
-                }
-                const startData = parseStreamStartResponse(await res.json());
-                if (startData.thread_id !== currentThreadId) {
-                    throw new Error(
-                        `Thread ID mismatch: expected ${currentThreadId}, got ${startData.thread_id}.`
-                    );
-                }
-                await parseStream(currentThreadId);
-            } catch (error) {
-                setError(toErrorMessage(error, 'Failed to send message.'));
-                setIsLoading(false);
-            }
-        },
-        [state.threadId, initSession, addUserMessage, parseStream, setError]
-    );
-
-    const submitCommand = useCallback(
-        async (payload: InterruptResumePayload) => {
-            const threadId = state.threadId;
-            if (!threadId) {
-                setError('Session ID missing. Please refresh the page.');
-                return;
-            }
-
-            let interactionText = 'Resumed execution';
-            if (
-                'selected_symbol' in payload &&
-                typeof payload.selected_symbol === 'string'
-            ) {
-                interactionText = `Selected Ticker: ${payload.selected_symbol}`;
-            } else if (
-                'approved' in payload &&
-                typeof payload.approved === 'boolean'
-            ) {
-                interactionText = payload.approved
-                    ? 'Approved Audit Plan'
-                    : 'Rejected Audit Plan';
-            }
-
-            const userActionMsg: Message = {
-                id: `user_action_${Date.now()}`,
-                role: 'user',
-                content: interactionText,
-                type: 'text',
-            };
-            addUserMessage(userActionMsg);
-            setIsLoading(true);
-
-            try {
-                const requestPayload: StreamRequest = {
-                    thread_id: threadId,
-                    resume_payload: payload,
-                };
-                const res = await fetch(`${API_URL}/stream`, {
-                    method: 'POST',
-                    credentials: 'include',
-                    headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
-                    body: JSON.stringify(requestPayload),
-                });
-                if (!res.ok) {
-                    throw new Error(await readErrorMessage(res, 'Could not resume job'));
-                }
-                const startData = parseStreamStartResponse(await res.json());
-                if (startData.thread_id !== threadId) {
-                    throw new Error(
-                        `Thread ID mismatch: expected ${threadId}, got ${startData.thread_id}.`
-                    );
-                }
-                await parseStream(threadId);
-            } catch (error) {
-                setError(toErrorMessage(error, 'Failed to submit command.'));
-                setIsLoading(false);
-            }
-        },
-        [state.threadId, addUserMessage, parseStream, setError]
-    );
-
-    const loadHistory = useCallback(
-        async (id: string, before?: string) => {
-            setIsLoading(true);
-            try {
-                if (before) {
-                    const historyUrl = new URL(`${API_URL}/history/${id}`);
-                    historyUrl.searchParams.append('before', before);
-                    const historyResponse = await fetch(historyUrl.toString(), {
-                        credentials: 'include',
-                    });
-                    if (!historyResponse.ok) {
-                        throw new Error(
-                            await readErrorMessage(historyResponse, 'History fetch failed')
-                        );
-                    }
-
-                    const historyRaw: unknown = await historyResponse.json();
-                    const historyData = parseHistoryResponse(historyRaw);
-                    if (historyData.length < 20) setHasMore(false);
-                    dispatchLoadHistory(historyData, id);
-                    return;
-                }
-
-                const stateResponse = await fetch(`${API_URL}/thread/${id}`, {
-                    credentials: 'include',
-                });
-                if (!stateResponse.ok) {
-                    throw new Error(
-                        await readErrorMessage(stateResponse, 'Thread state fetch failed')
-                    );
-                }
-                const stateRaw: unknown = await stateResponse.json();
-                if (typeof stateRaw === 'object' && stateRaw !== null && 'activity_snapshot' in stateRaw) {
-                    hydrateWorkflow(stateRaw.activity_snapshot);
-                }
-                const stateData = parseThreadStateResponse(stateRaw);
-                dispatchLoadHistory(stateData.messages, id, stateData);
-                if (stateData.is_running) {
-                    const afterSeq =
-                        stateData.cursor?.last_seq_id ?? stateData.last_seq_id;
-                    await parseStream(id, afterSeq);
-                }
-            } catch (error) {
-                setError(toErrorMessage(error, 'Failed to load history.'));
-            } finally {
-                setIsLoading(false);
-            }
-        },
-        [dispatchLoadHistory, hydrateWorkflow, parseStream, setError]
-    );
-
+    const activeActivities = state.workflow ? [...state.workflow.active.values()] : [];
+    const agentStatuses: Record<string, AgentStatus> = {};
+    for (const activity of activeActivities) {
+        const id = activity.scope_path[0] ?? activity.activity_id;
+        agentStatuses[id] = activity.status === 'waiting' ? 'attention' : activity.status === 'running' ? 'running' : activity.status === 'completed' ? 'done' : activity.status === 'failed' || activity.status === 'cancelled' ? 'error' : 'idle';
+    }
+    const agentOutputs: Record<string, null> = {};
     return {
         messages: state.messages,
         sendMessage,
@@ -305,17 +122,13 @@ export function useAgent(assistantId: string = 'agent') {
         isLoading,
         error: state.error,
         threadId: state.threadId,
+        runId: state.runId,
+        connectionState: state.connection,
+        cancelRun,
         hasMore,
-        agentStatuses: Object.fromEntries(
-            Object.entries(state.agents).map(([id, data]) => [id, data.status])
-        ),
-        agentOutputs: Object.fromEntries(
-            Object.entries(state.agents).map(([id, data]) => [id, data.output])
-        ),
-        currentNode: state.currentNode,
-        currentStatus: state.currentStatus,
-        activityFeed: state.statusHistory,
-        activeAgentId,
-        projectionUpdatedAt: state.cursorUpdatedAt,
+        agentStatuses,
+        agentOutputs,
+        workflow: state.workflow,
+        activeActivities,
     };
 }

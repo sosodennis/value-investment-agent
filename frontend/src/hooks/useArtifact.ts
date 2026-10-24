@@ -80,7 +80,7 @@ export function useArtifact<T>(
     );
 
     const { data, error, isLoading } = useSWR<T>(
-        artifactId ? `${API_URL}/api/artifacts/${artifactId}` : null,
+        artifactId ? `${API_URL}/api/v1/artifacts/${artifactId}` : null,
         fetcher,
         {
             revalidateOnFocus: false,

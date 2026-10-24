@@ -4,18 +4,15 @@
  */
 
 export interface paths {
-    "/api/artifacts/{artifact_id}": {
+    "/api/v1/artifacts/{artifact_id}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /**
-         * Get Artifact
-         * @description Retrieve artifact data with HTTP caching.
-         */
-        get: operations["get_artifact_api_artifacts__artifact_id__get"];
+        /** Get Artifact */
+        get: operations["get_artifact_api_v1_artifacts__artifact_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -24,7 +21,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/auth/login": {
+    "/api/v1/auth/login": {
         parameters: {
             query?: never;
             header?: never;
@@ -34,14 +31,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Login */
-        post: operations["login_api_auth_login_post"];
+        post: operations["login_api_v1_auth_login_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/auth/logout": {
+    "/api/v1/auth/logout": {
         parameters: {
             query?: never;
             header?: never;
@@ -51,14 +48,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Logout */
-        post: operations["logout_api_auth_logout_post"];
+        post: operations["logout_api_v1_auth_logout_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/auth/me": {
+    "/api/v1/auth/me": {
         parameters: {
             query?: never;
             header?: never;
@@ -66,7 +63,7 @@ export interface paths {
             cookie?: never;
         };
         /** Me */
-        get: operations["me_api_auth_me_get"];
+        get: operations["me_api_v1_auth_me_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -75,7 +72,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/auth/register": {
+    "/api/v1/auth/register": {
         parameters: {
             query?: never;
             header?: never;
@@ -85,14 +82,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Register */
-        post: operations["register_api_auth_register_post"];
+        post: operations["register_api_v1_auth_register_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/llm/provider-keys": {
+    "/api/v1/llm/provider-keys": {
         parameters: {
             query?: never;
             header?: never;
@@ -100,17 +97,17 @@ export interface paths {
             cookie?: never;
         };
         /** List Provider Keys */
-        get: operations["list_provider_keys_api_llm_provider_keys_get"];
+        get: operations["list_provider_keys_api_v1_llm_provider_keys_get"];
         put?: never;
         /** Add Provider Key */
-        post: operations["add_provider_key_api_llm_provider_keys_post"];
+        post: operations["add_provider_key_api_v1_llm_provider_keys_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/llm/provider-keys/{key_id}": {
+    "/api/v1/llm/provider-keys/{key_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -121,13 +118,13 @@ export interface paths {
         put?: never;
         post?: never;
         /** Delete Provider Key */
-        delete: operations["delete_provider_key_api_llm_provider_keys__key_id__delete"];
+        delete: operations["delete_provider_key_api_v1_llm_provider_keys__key_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/llm/provider-keys/{key_id}/replace": {
+    "/api/v1/llm/provider-keys/{key_id}/replace": {
         parameters: {
             query?: never;
             header?: never;
@@ -137,14 +134,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Replace Provider Key */
-        post: operations["replace_provider_key_api_llm_provider_keys__key_id__replace_post"];
+        post: operations["replace_provider_key_api_v1_llm_provider_keys__key_id__replace_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/llm/provider-keys/{key_id}/test": {
+    "/api/v1/llm/provider-keys/{key_id}/test": {
         parameters: {
             query?: never;
             header?: never;
@@ -154,14 +151,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Test Provider Key */
-        post: operations["test_provider_key_api_llm_provider_keys__key_id__test_post"];
+        post: operations["test_provider_key_api_v1_llm_provider_keys__key_id__test_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/llm/settings": {
+    "/api/v1/llm/settings": {
         parameters: {
             query?: never;
             header?: never;
@@ -169,9 +166,9 @@ export interface paths {
             cookie?: never;
         };
         /** Read Llm Settings */
-        get: operations["read_llm_settings_api_llm_settings_get"];
+        get: operations["read_llm_settings_api_v1_llm_settings_get"];
         /** Update Llm Settings */
-        put: operations["update_llm_settings_api_llm_settings_put"];
+        put: operations["update_llm_settings_api_v1_llm_settings_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -179,15 +176,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/observability/calibration/direction-readiness": {
+    "/api/v1/observability/calibration/direction-readiness": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Get Direction Calibration Readiness */
-        get: operations["get_direction_calibration_readiness_api_observability_calibration_direction_readiness_get"];
+        /** Direction Readiness */
+        get: operations["direction_readiness_api_v1_observability_calibration_direction_readiness_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -196,15 +193,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/observability/monitoring/aggregates": {
+    "/api/v1/observability/monitoring/aggregates": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Get Monitoring Aggregates */
-        get: operations["get_monitoring_aggregates_api_observability_monitoring_aggregates_get"];
+        /** Monitoring Aggregates */
+        get: operations["monitoring_aggregates_api_v1_observability_monitoring_aggregates_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -213,15 +210,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/observability/monitoring/events/{event_id}": {
+    "/api/v1/observability/monitoring/events/{event_id}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Get Monitoring Event Detail */
-        get: operations["get_monitoring_event_detail_api_observability_monitoring_events__event_id__get"];
+        /** Monitoring Event */
+        get: operations["monitoring_event_api_v1_observability_monitoring_events__event_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -230,15 +227,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/observability/monitoring/rows": {
+    "/api/v1/observability/monitoring/rows": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Get Monitoring Rows */
-        get: operations["get_monitoring_rows_api_observability_monitoring_rows_get"];
+        /** Monitoring Rows */
+        get: operations["monitoring_rows_api_v1_observability_monitoring_rows_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -247,7 +244,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/search/settings": {
+    "/api/v1/search/settings": {
         parameters: {
             query?: never;
             header?: never;
@@ -255,9 +252,9 @@ export interface paths {
             cookie?: never;
         };
         /** Read Search Settings */
-        get: operations["read_search_settings_api_search_settings_get"];
+        get: operations["read_search_settings_api_v1_search_settings_get"];
         /** Update Search Settings */
-        put: operations["update_search_settings_api_search_settings_put"];
+        put: operations["update_search_settings_api_v1_search_settings_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -265,7 +262,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/search/settings/keys": {
+    "/api/v1/search/settings/keys": {
         parameters: {
             query?: never;
             header?: never;
@@ -274,16 +271,16 @@ export interface paths {
         };
         get?: never;
         /** Replace Search Key */
-        put: operations["replace_search_key_api_search_settings_keys_put"];
+        put: operations["replace_search_key_api_v1_search_settings_keys_put"];
         /** Add Search Key */
-        post: operations["add_search_key_api_search_settings_keys_post"];
+        post: operations["add_search_key_api_v1_search_settings_keys_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/search/settings/keys/{key_id}": {
+    "/api/v1/search/settings/keys/{key_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -294,11 +291,96 @@ export interface paths {
         put?: never;
         post?: never;
         /** Delete Search Key */
-        delete: operations["delete_search_key_api_search_settings_keys__key_id__delete"];
+        delete: operations["delete_search_key_api_v1_search_settings_keys__key_id__delete"];
         options?: never;
         head?: never;
         /** Set Search Key Enabled */
-        patch: operations["set_search_key_enabled_api_search_settings_keys__key_id__patch"];
+        patch: operations["set_search_key_enabled_api_v1_search_settings_keys__key_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/threads/{thread_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Thread Snapshot */
+        get: operations["thread_snapshot_api_v1_threads__thread_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/threads/{thread_id}/activities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Activity Snapshot */
+        get: operations["activity_snapshot_api_v1_threads__thread_id__activities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/threads/{thread_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Activity Events */
+        get: operations["activity_events_api_v1_threads__thread_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/threads/{thread_id}/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Run */
+        post: operations["start_run_api_v1_threads__thread_id__runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/threads/{thread_id}/runs/{run_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Run */
+        post: operations["cancel_run_api_v1_threads__thread_id__runs__run_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/health": {
@@ -318,26 +400,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/history/{thread_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get History
-         * @description Retrieve persistent history with cursor pagination.
-         */
-        get: operations["get_history_history__thread_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/ready": {
         parameters: {
             query?: never;
@@ -347,106 +409,6 @@ export interface paths {
         };
         /** Ready */
         get: operations["ready_ready_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/stream": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Stream Agent
-         * @description Start or resume a job.
-         */
-        post: operations["stream_agent_stream_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/stream/{thread_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Attach Stream
-         * @description Attach to an existing background job's event stream.
-         */
-        get: operations["attach_stream_stream__thread_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/thread/{thread_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Thread History
-         * @description Retrieve history and job status.
-         */
-        get: operations["get_thread_history_thread__thread_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/thread/{thread_id}/activity": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Agent Activity
-         * @description Retrieve per-agent activity segments with cursor pagination.
-         */
-        get: operations["get_agent_activity_thread__thread_id__activity_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/thread/{thread_id}/agents": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Agent Statuses
-         * @description Retrieve node statuses and financial reports for the dashboard.
-         */
-        get: operations["get_agent_statuses_thread__thread_id__agents_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -481,116 +443,6 @@ export interface components {
             sentiment_score: number;
             /** Summary */
             summary: string;
-        };
-        /** ActivitySegmentResponse */
-        ActivitySegmentResponse: {
-            /** Agentid */
-            agentId: string;
-            /** Ended At */
-            ended_at?: string | null;
-            /** Id */
-            id: string;
-            /** Is Current */
-            is_current: boolean;
-            /** Node */
-            node: string;
-            /** Runid */
-            runId: string;
-            /**
-             * Started At
-             * Format: date-time
-             */
-            started_at: string;
-            /** Status */
-            status: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-        };
-        /** ActivityTimelineEntryResponse */
-        ActivityTimelineEntryResponse: {
-            /** Agent Id */
-            agent_id: string;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Event Id */
-            event_id: string;
-            /** Event Type */
-            event_type: string;
-            /** Node */
-            node: string | null;
-            /** Payload */
-            payload: {
-                [key: string]: unknown;
-            };
-            /** Run Id */
-            run_id: string | null;
-            /** Seq Id */
-            seq_id: number;
-            /** Status */
-            status: string | null;
-        };
-        /**
-         * AgentOutputArtifact
-         * @description Standard container for all Sub-Agent outputs.
-         *
-         *     This structure implements a three-tier data architecture:
-         *     - L1 (summary): Message bubble text (<500 chars) - Always present
-         *     - L2 (preview): Hot data for immediate UI rendering (<1KB) - Optional
-         *     - L3 (reference): Cold data pointer for async loading - Optional
-         *
-         *     This ensures efficient state management by avoiding large data duplication
-         *     in LangGraph checkpoints.
-         */
-        AgentOutputArtifact: {
-            /**
-             * Kind
-             * @description Output contract kind discriminator (e.g. 'fundamental_analysis.output').
-             * @enum {string}
-             */
-            kind: "intent_extraction.output" | "fundamental_analysis.output" | "financial_news_research.output" | "debate.output" | "technical_analysis.output" | "generic.output";
-            /**
-             * Preview
-             * @description L2: Hot data for immediate UI rendering (<1KB). Generated by Mapper from State.
-             */
-            preview?: {
-                [key: string]: unknown;
-            } | null;
-            /** @description L3: Cold data pointer for async loading. Points to Artifact Store. */
-            reference?: components["schemas"]["ArtifactReference"] | null;
-            /**
-             * Summary
-             * @description L1: Short summary for message bubble (<500 chars)
-             */
-            summary: string;
-            /**
-             * Version
-             * @description Output contract version. Must be 'v1'.
-             * @default v1
-             */
-            version: string;
-        };
-        /** AgentStatusesResponse */
-        AgentStatusesResponse: {
-            /** Agent Outputs */
-            agent_outputs: {
-                [key: string]: components["schemas"]["AgentOutputArtifact"];
-            };
-            /** Agent Statuses */
-            agent_statuses: {
-                [key: string]: string;
-            };
-            /** Current Node */
-            current_node?: string | null;
-            /** Node Statuses */
-            node_statuses: {
-                [key: string]: string;
-            };
         };
         /** AlertReadoutItemModel */
         AlertReadoutItemModel: {
@@ -680,30 +532,6 @@ export interface components {
             what_it_means_now: string;
             /** Why It Matters Now */
             why_it_matters_now: string;
-        };
-        /**
-         * ArtifactReference
-         * @description L3 冷數據指針 (Cold Data Pointer)
-         *
-         *     Points to large artifacts stored in the Artifact Store.
-         *     Frontend can fetch these asynchronously via the download_url.
-         */
-        ArtifactReference: {
-            /**
-             * Artifact Id
-             * @description UUID of the artifact in the store
-             */
-            artifact_id: string;
-            /**
-             * Download Url
-             * @description API endpoint to fetch the artifact (e.g., /api/artifacts/{id})
-             */
-            download_url: string;
-            /**
-             * Type
-             * @description Artifact type identifier (e.g., 'financial_report', 'news_analysis')
-             */
-            type: string;
         };
         /** ArtifactRefsModel */
         ArtifactRefsModel: {
@@ -1091,26 +919,6 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
-        /**
-         * HumanTickerSelection
-         * @description Payload for ticker selection interrupt.
-         */
-        HumanTickerSelection: {
-            /** Candidates */
-            candidates?: components["schemas"]["TickerCandidateModel"][];
-            intent?: components["schemas"]["IntentExtraction"] | null;
-            /**
-             * Reason
-             * @default Multiple tickers found or ambiguity detected.
-             */
-            reason: string;
-            /**
-             * Type
-             * @default ticker_selection
-             * @constant
-             */
-            type: "ticker_selection";
-        };
         /** IndustrialExtensionModel */
         IndustrialExtensionModel: {
             accounts_receivable?: components["schemas"]["TraceableFieldModel"] | null;
@@ -1123,40 +931,6 @@ export interface components {
             sga_expense?: components["schemas"]["TraceableFieldModel"] | null;
         } & {
             [key: string]: unknown;
-        };
-        /**
-         * IntentExtraction
-         * @description Extracted intent from user query.
-         */
-        IntentExtraction: {
-            /**
-             * Company Name
-             * @description The name of the company or ticker mentioned by the user.
-             */
-            company_name?: string | null;
-            /**
-             * Is Valuation Request
-             * @description Whether the user is asking for a financial valuation (default: True).
-             * @default true
-             */
-            is_valuation_request: boolean;
-            /**
-             * Reasoning
-             * @description Brief reasoning for the extraction.
-             */
-            reasoning?: string | null;
-            /**
-             * Ticker
-             * @description The stock ticker if explicitly mentioned.
-             */
-            ticker?: string | null;
-        };
-        /** InterruptResumePayload */
-        InterruptResumePayload: {
-            /** Selected Symbol */
-            selected_symbol?: string;
-            /** Ticker */
-            ticker?: string;
         };
         /** KeyFactModel */
         KeyFactModel: {
@@ -1192,31 +966,6 @@ export interface components {
             email: string;
             /** Password */
             password: string;
-        };
-        /** MessageResponse */
-        MessageResponse: {
-            /** Agentid */
-            agentId?: string | null;
-            /** Content */
-            content: string;
-            /** Created At */
-            created_at?: string | null;
-            /** Data */
-            data?: {
-                [key: string]: unknown;
-            } | unknown[] | string | number | boolean | null;
-            /** Id */
-            id: string;
-            /**
-             * Role
-             * @enum {string}
-             */
-            role: "user" | "assistant" | "system" | "tool";
-            /**
-             * Type
-             * @default text
-             */
-            type: string;
         };
         /** ModelOptionResponse */
         ModelOptionResponse: {
@@ -1621,39 +1370,26 @@ export interface components {
             /** Password */
             password: string;
         };
-        /** RequestSchema */
-        RequestSchema: {
+        /** RunRequest */
+        RunRequest: {
             /** Message */
             message?: string | null;
-            resume_payload?: components["schemas"]["InterruptResumePayload"] | null;
-            /** Thread Id */
-            thread_id: string;
+            /** Resume Payload */
+            resume_payload?: {
+                [key: string]: unknown;
+            } | null;
         };
-        /** RunStatusResponse */
-        RunStatusResponse: {
-            /** Ended At */
-            ended_at?: string | null;
+        /** RunResponse */
+        RunResponse: {
             /** Run Id */
             run_id: string;
             /**
-             * Started At
-             * Format: date-time
+             * Status
+             * @default started
              */
-            started_at: string;
-            /** Status */
             status: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-        };
-        /** RuntimeCursorResponse */
-        RuntimeCursorResponse: {
-            /** Last Seq Id */
-            last_seq_id: number;
-            /** Updated At */
-            updated_at?: string | null;
+            /** Thread Id */
+            thread_id: string;
         };
         /** ScenarioModel */
         ScenarioModel: {
@@ -1745,34 +1481,6 @@ export interface components {
             name: string;
             /** Reliability Score */
             reliability_score: number;
-        };
-        /** StatusHistoryEntryResponse */
-        StatusHistoryEntryResponse: {
-            /** Agentid */
-            agentId: string;
-            /** Id */
-            id: string;
-            /** Node */
-            node: string;
-            /** Status */
-            status: string;
-            /**
-             * Timestamp
-             * Format: date-time
-             */
-            timestamp: string;
-        };
-        /** StreamStartResponse */
-        StreamStartResponse: {
-            /** Run Id */
-            run_id: string;
-            /**
-             * Status
-             * @enum {string}
-             */
-            status: "started" | "running";
-            /** Thread Id */
-            thread_id: string;
         };
         /** StructureConfluenceSummaryModel */
         StructureConfluenceSummaryModel: {
@@ -2996,84 +2704,6 @@ export interface components {
             /** Wfe Ratio */
             wfe_ratio?: number | null;
         };
-        /** ThreadStateResponse */
-        ThreadStateResponse: {
-            /** Active Agent Id */
-            active_agent_id?: string | null;
-            /**
-             * Activity Timeline
-             * @default []
-             */
-            activity_timeline: components["schemas"]["ActivityTimelineEntryResponse"][];
-            /** Agent Outputs */
-            agent_outputs: {
-                [key: string]: components["schemas"]["AgentOutputArtifact"];
-            };
-            /** Agent Statuses */
-            agent_statuses: {
-                [key: string]: string;
-            };
-            /** Current Node */
-            current_node?: string | null;
-            /** Current Status */
-            current_status?: string | null;
-            cursor?: components["schemas"]["RuntimeCursorResponse"] | null;
-            /** Interrupts */
-            interrupts: components["schemas"]["HumanTickerSelection"][];
-            /** Is Running */
-            is_running: boolean;
-            /** Last Seq Id */
-            last_seq_id: number;
-            /** Messages */
-            messages: components["schemas"]["MessageResponse"][];
-            /** Next */
-            next?: string[] | null;
-            /** Node Statuses */
-            node_statuses: {
-                [key: string]: string;
-            };
-            /** Resolved Ticker */
-            resolved_ticker?: string | null;
-            run?: components["schemas"]["RunStatusResponse"] | null;
-            /** Status */
-            status?: string | null;
-            /**
-             * Status History
-             * @default []
-             */
-            status_history: components["schemas"]["StatusHistoryEntryResponse"][];
-            /** Thread Id */
-            thread_id: string;
-        };
-        /** TickerCandidateModel */
-        TickerCandidateModel: {
-            /**
-             * Confidence
-             * @description Match confidence score (0-1)
-             * @default 1
-             */
-            confidence: number;
-            /**
-             * Exchange
-             * @description Exchange code
-             */
-            exchange?: string | null;
-            /**
-             * Name
-             * @description Company name
-             */
-            name: string;
-            /**
-             * Symbol
-             * @description Stock ticker symbol
-             */
-            symbol: string;
-            /**
-             * Type
-             * @description Security type (stock, ETF, etc.)
-             */
-            type?: string | null;
-        };
         TraceableFieldModel: {
             [key: string]: unknown;
         };
@@ -3203,7 +2833,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    get_artifact_api_artifacts__artifact_id__get: {
+    get_artifact_api_v1_artifacts__artifact_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3234,7 +2864,7 @@ export interface operations {
             };
         };
     };
-    login_api_auth_login_post: {
+    login_api_v1_auth_login_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3267,7 +2897,7 @@ export interface operations {
             };
         };
     };
-    logout_api_auth_logout_post: {
+    logout_api_v1_auth_logout_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3285,7 +2915,7 @@ export interface operations {
             };
         };
     };
-    me_api_auth_me_get: {
+    me_api_v1_auth_me_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3305,7 +2935,7 @@ export interface operations {
             };
         };
     };
-    register_api_auth_register_post: {
+    register_api_v1_auth_register_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3338,7 +2968,7 @@ export interface operations {
             };
         };
     };
-    list_provider_keys_api_llm_provider_keys_get: {
+    list_provider_keys_api_v1_llm_provider_keys_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3358,7 +2988,7 @@ export interface operations {
             };
         };
     };
-    add_provider_key_api_llm_provider_keys_post: {
+    add_provider_key_api_v1_llm_provider_keys_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3391,7 +3021,7 @@ export interface operations {
             };
         };
     };
-    delete_provider_key_api_llm_provider_keys__key_id__delete: {
+    delete_provider_key_api_v1_llm_provider_keys__key_id__delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -3420,7 +3050,7 @@ export interface operations {
             };
         };
     };
-    replace_provider_key_api_llm_provider_keys__key_id__replace_post: {
+    replace_provider_key_api_v1_llm_provider_keys__key_id__replace_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3455,7 +3085,7 @@ export interface operations {
             };
         };
     };
-    test_provider_key_api_llm_provider_keys__key_id__test_post: {
+    test_provider_key_api_v1_llm_provider_keys__key_id__test_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3486,7 +3116,7 @@ export interface operations {
             };
         };
     };
-    read_llm_settings_api_llm_settings_get: {
+    read_llm_settings_api_v1_llm_settings_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3506,7 +3136,7 @@ export interface operations {
             };
         };
     };
-    update_llm_settings_api_llm_settings_put: {
+    update_llm_settings_api_v1_llm_settings_put: {
         parameters: {
             query?: never;
             header?: never;
@@ -3539,22 +3169,10 @@ export interface operations {
             };
         };
     };
-    get_direction_calibration_readiness_api_observability_calibration_direction_readiness_get: {
+    direction_readiness_api_v1_observability_calibration_direction_readiness_get: {
         parameters: {
             query?: {
                 tickers?: string[];
-                agent_sources?: string[];
-                timeframes?: string[];
-                horizons?: string[];
-                logic_versions?: string[];
-                directions?: string[];
-                run_types?: string[];
-                reliability_levels?: string[];
-                event_time_start?: string | null;
-                event_time_end?: string | null;
-                resolved_time_start?: string | null;
-                resolved_time_end?: string | null;
-                labeling_method_version?: string;
                 limit?: number;
                 include_observations?: boolean;
             };
@@ -3584,7 +3202,7 @@ export interface operations {
             };
         };
     };
-    get_monitoring_aggregates_api_observability_monitoring_aggregates_get: {
+    monitoring_aggregates_api_v1_observability_monitoring_aggregates_get: {
         parameters: {
             query?: {
                 tickers?: string[];
@@ -3628,7 +3246,7 @@ export interface operations {
             };
         };
     };
-    get_monitoring_event_detail_api_observability_monitoring_events__event_id__get: {
+    monitoring_event_api_v1_observability_monitoring_events__event_id__get: {
         parameters: {
             query?: {
                 labeling_method_version?: string;
@@ -3661,7 +3279,7 @@ export interface operations {
             };
         };
     };
-    get_monitoring_rows_api_observability_monitoring_rows_get: {
+    monitoring_rows_api_v1_observability_monitoring_rows_get: {
         parameters: {
             query?: {
                 tickers?: string[];
@@ -3672,11 +3290,6 @@ export interface operations {
                 directions?: string[];
                 run_types?: string[];
                 reliability_levels?: string[];
-                event_time_start?: string | null;
-                event_time_end?: string | null;
-                resolved_time_start?: string | null;
-                resolved_time_end?: string | null;
-                labeling_method_version?: string;
                 limit?: number;
             };
             header?: never;
@@ -3705,7 +3318,7 @@ export interface operations {
             };
         };
     };
-    read_search_settings_api_search_settings_get: {
+    read_search_settings_api_v1_search_settings_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3725,7 +3338,7 @@ export interface operations {
             };
         };
     };
-    update_search_settings_api_search_settings_put: {
+    update_search_settings_api_v1_search_settings_put: {
         parameters: {
             query?: never;
             header?: never;
@@ -3758,7 +3371,7 @@ export interface operations {
             };
         };
     };
-    replace_search_key_api_search_settings_keys_put: {
+    replace_search_key_api_v1_search_settings_keys_put: {
         parameters: {
             query?: never;
             header?: never;
@@ -3791,7 +3404,7 @@ export interface operations {
             };
         };
     };
-    add_search_key_api_search_settings_keys_post: {
+    add_search_key_api_v1_search_settings_keys_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3824,7 +3437,7 @@ export interface operations {
             };
         };
     };
-    delete_search_key_api_search_settings_keys__key_id__delete: {
+    delete_search_key_api_v1_search_settings_keys__key_id__delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -3853,7 +3466,7 @@ export interface operations {
             };
         };
     };
-    set_search_key_enabled_api_search_settings_keys__key_id__patch: {
+    set_search_key_enabled_api_v1_search_settings_keys__key_id__patch: {
         parameters: {
             query?: never;
             header?: never;
@@ -3888,34 +3501,9 @@ export interface operations {
             };
         };
     };
-    health_health_get: {
+    thread_snapshot_api_v1_threads__thread_id__get: {
         parameters: {
             query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: string;
-                    };
-                };
-            };
-        };
-    };
-    get_history_history__thread_id__get: {
-        parameters: {
-            query?: {
-                limit?: number;
-                before?: string | null;
-            };
             header?: never;
             path: {
                 thread_id: string;
@@ -3930,7 +3518,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MessageResponse"][];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -3944,11 +3532,13 @@ export interface operations {
             };
         };
     };
-    ready_ready_get: {
+    activity_snapshot_api_v1_threads__thread_id__activities_get: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                thread_id: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -3959,33 +3549,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: string;
-                    };
-                };
-            };
-        };
-    };
-    stream_agent_stream_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RequestSchema"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["StreamStartResponse"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -3999,10 +3563,10 @@ export interface operations {
             };
         };
     };
-    attach_stream_stream__thread_id__get: {
+    activity_events_api_v1_threads__thread_id__events_get: {
         parameters: {
             query?: {
-                after_seq?: number | null;
+                after_seq?: number;
             };
             header?: never;
             path: {
@@ -4032,7 +3596,7 @@ export interface operations {
             };
         };
     };
-    get_thread_history_thread__thread_id__get: {
+    start_run_api_v1_threads__thread_id__runs_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -4041,15 +3605,19 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ThreadStateResponse"];
+                    "application/json": components["schemas"]["RunResponse"];
                 };
             };
             /** @description Validation Error */
@@ -4063,29 +3631,24 @@ export interface operations {
             };
         };
     };
-    get_agent_activity_thread__thread_id__activity_get: {
+    cancel_run_api_v1_threads__thread_id__runs__run_id__cancel_post: {
         parameters: {
-            query: {
-                agent_id: string;
-                limit?: number;
-                before_updated_at?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
                 thread_id: string;
+                run_id: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            200: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["ActivitySegmentResponse"][];
-                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -4098,13 +3661,11 @@ export interface operations {
             };
         };
     };
-    get_agent_statuses_thread__thread_id__agents_get: {
+    health_health_get: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                thread_id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -4115,16 +3676,31 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AgentStatusesResponse"];
+                    "application/json": {
+                        [key: string]: string;
+                    };
                 };
             };
-            /** @description Validation Error */
-            422: {
+        };
+    };
+    ready_ready_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": {
+                        [key: string]: string;
+                    };
                 };
             };
         };

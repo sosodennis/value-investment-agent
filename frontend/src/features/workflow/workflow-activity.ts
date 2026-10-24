@@ -62,6 +62,19 @@ export interface WorkflowActivityState {
     gapDetected: boolean;
 }
 
+const MAX_EVENT_IDS = 1000;
+
+function rememberEvent(eventIds: Set<string>, eventId: string): Set<string> {
+    const next = new Set(eventIds);
+    next.add(eventId);
+    while (next.size > MAX_EVENT_IDS) {
+        const oldest = next.values().next().value;
+        if (oldest === undefined) break;
+        next.delete(oldest);
+    }
+    return next;
+}
+
 const record = (value: unknown, context: string): UnknownRecord => {
     if (typeof value !== 'object' || value === null || Array.isArray(value)) {
         throw new TypeError(`${context} must be an object.`);
@@ -158,12 +171,12 @@ export function createWorkflowActivityState(snapshot: WorkflowActivitySnapshot):
 export function applyWorkflowActivityEvent(state: WorkflowActivityState, event: WorkflowActivityEvent): WorkflowActivityState {
     if (event.thread_id !== state.threadId || event.run_id !== state.runId || event.payload.thread_id !== state.threadId || event.payload.run_id !== state.runId) throw new TypeError('workflow.activity event identity mismatch.');
     if (state.eventIds.has(event.event_id)) return state;
-    if (event.seq_id <= state.cursor) return { ...state, eventIds: new Set(state.eventIds).add(event.event_id) };
+    if (event.seq_id <= state.cursor) return { ...state, eventIds: rememberEvent(state.eventIds, event.event_id) };
     if (event.seq_id !== state.cursor + 1) return { ...state, gapDetected: true };
     const active = new Map(state.active);
     if (TERMINAL_ACTIVITY_STATUSES.has(event.payload.status)) active.delete(event.payload.activity_id); else active.set(event.payload.activity_id, event.payload);
     const recent = [event.payload, ...state.recent.filter((item) => item.activity_id !== event.payload.activity_id)].slice(0, 100);
-    return { ...state, cursor: event.seq_id, active, recent, eventIds: new Set(state.eventIds).add(event.event_id), gapDetected: false };
+    return { ...state, cursor: event.seq_id, active, recent, eventIds: rememberEvent(state.eventIds, event.event_id), gapDetected: false };
 }
 
 export function parseSseActivityFrame(data: string): WorkflowActivityEvent {

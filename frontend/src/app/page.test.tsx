@@ -58,7 +58,7 @@ describe('AnalysisWorkspace refresh restore behavior', () => {
         });
     });
 
-    it('focuses the active agent after refresh even if localStorage points to a stale selection', async () => {
+    it('restores the user selected agent without inferring one from workflow activity', async () => {
         localStorage.setItem('agent_thread_id', 'thread_1');
         localStorage.setItem('agent_selected_agent_id', 'technical_analysis');
 
@@ -77,27 +77,17 @@ describe('AnalysisWorkspace refresh restore behavior', () => {
                 financial_news_research: 'running',
             },
             agentOutputs: {},
-            currentNode: 'semantic_translate',
-            currentStatus: 'running',
-            activityFeed: [
-                {
-                    id: 'status_1',
-                    node: 'financial_news_research',
-                    agentId: 'financial_news_research',
-                    status: 'running',
-                    timestamp: Date.parse('2026-03-21T08:00:00Z'),
-                },
-            ],
-            activeAgentId: 'financial_news_research',
-            projectionUpdatedAt: null,
+            workflow: null,
+            activeActivities: [],
+            runId: null,
+            connectionState: 'disconnected',
+            cancelRun: vi.fn(),
         });
 
         render(<AnalysisWorkspace />);
 
         await waitFor(() => {
-            expect(screen.getByTestId('agent-detail').textContent).toBe(
-                'financial_news_research'
-            );
+            expect(screen.getByTestId('agent-detail').textContent).toBe('technical_analysis');
         });
     });
 });

@@ -22,3 +22,10 @@ export type {
     WorkflowActivityState,
     WorkflowRunStatus,
 } from './workflow-activity';
+export {
+    cancelWorkflowRun,
+    consumeWorkflowEvents,
+    getActivitySnapshot,
+    startWorkflowRun,
+} from './api';
+export type { WorkflowRun } from './api';

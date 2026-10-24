@@ -64,9 +64,9 @@ export function useTechnicalObservability(
     filters: TechnicalObservabilityFilters
 ) {
     const baseParams = buildTechnicalObservabilitySearchParams(filters).toString();
-    const aggregatesUrl = `${API_URL}/api/observability/monitoring/aggregates?${baseParams}`;
-    const rowsUrl = `${API_URL}/api/observability/monitoring/rows?${baseParams}`;
-    const calibrationUrl = `${API_URL}/api/observability/calibration/direction-readiness?${baseParams}`;
+    const aggregatesUrl = `${API_URL}/api/v1/observability/monitoring/aggregates?${baseParams}`;
+    const rowsUrl = `${API_URL}/api/v1/observability/monitoring/rows?${baseParams}`;
+    const calibrationUrl = `${API_URL}/api/v1/observability/calibration/direction-readiness?${baseParams}`;
 
     const fetchAggregates = useCallback(
         (url: string) =>
@@ -140,7 +140,7 @@ export function useTechnicalObservabilityEventDetail(
     const url =
         eventId === null
             ? null
-            : `${API_URL}/api/observability/monitoring/events/${eventId}?${buildTechnicalObservabilitySearchParams(
+            : `${API_URL}/api/v1/observability/monitoring/events/${eventId}?${buildTechnicalObservabilitySearchParams(
                   {
                       tickers: [],
                       agentSources: [],
