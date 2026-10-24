@@ -69,9 +69,7 @@ class InMemoryActivityRepository:
             selected = [event for event in events if event.seq_id > after_seq]
             page = selected[:limit]
             cursor = (
-                page[-1].seq_id
-                if page
-                else (self._cursors[thread_id] if events else after_seq)
+                page[-1].seq_id if page else max(self._cursors[thread_id], after_seq)
             )
             return ReplayPage(
                 events=tuple(page), cursor=cursor, has_more=len(selected) > len(page)

@@ -232,3 +232,5 @@ async def test_retention_keeps_monotonic_cursor_after_eviction() -> None:
     )
     empty = await repository.replay(thread_id="thread-a", after_seq=5, limit=10)
     assert empty.cursor == 5
+    future = await repository.replay(thread_id="thread-a", after_seq=99, limit=10)
+    assert future.cursor == 99
