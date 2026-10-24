@@ -18,6 +18,9 @@ THREAD_ID="refactor-smoke-$(date -u +%Y%m%d%H%M%S)-$$"
 PRIMARY_KEY_ID=""
 SECONDARY_KEY_ID=""
 PRIMARY_DELETED=0
+LAST_COMPLETION_ATTEMPTS=1
+LAST_COMPLETION_REQUEST_ID=""
+LAST_COMPLETION_LATENCY_MS=0
 
 for command in curl jq awk sed mktemp date; do
   command -v "$command" >/dev/null 2>&1 || {
@@ -194,6 +197,9 @@ completion() {
     "$BACKEND_ORIGIN/api/v1/threads/$THREAD_ID/events?run_id=$run_id&after_seq=0" >/dev/null || true
   event_count="$(awk '/^event: / {count++} END {print count+0}' "$sse_body")"
   max_attempt="$(awk '/^data: / {sub(/^data: /, ""); print}' "$sse_body" | jq -s '[.[] | .payload.attempt // 1] | max // 1' 2>/dev/null || printf '1')"
+  LAST_COMPLETION_ATTEMPTS="$max_attempt"
+  LAST_COMPLETION_REQUEST_ID="$REQUEST_ID"
+  LAST_COMPLETION_LATENCY_MS="$REQUEST_LATENCY_MS"
   terminal_count="$(
     awk '/^data: / {sub(/^data: /, ""); print}' "$sse_body" |
       jq -s --arg run_id "$run_id" '[.[] | select(.event_name == "workflow.activity" and .run_id == $run_id and .payload.run_id == $run_id and (.payload.status == "completed" or .payload.status == "failed" or .payload.status == "cancelled"))] | length'
@@ -247,6 +253,7 @@ fi
 
 if ! secret_bundle_available; then
   record live_provider INCONCLUSIVE "" 0 1 missing_secret_bundle
+  record retry INCONCLUSIVE "" 0 1 missing_secret_bundle
   record failover INCONCLUSIVE "" 0 1 missing_secret_bundle
   echo "Staging smoke recorded health and an inconclusive live-provider gate; no secret bundle was available. Report: $REPORT"
   exit 0
@@ -257,9 +264,15 @@ PRIMARY_KEY_ID="$(ensure_key "$STAGING_PRIMARY_LABEL" "$STAGING_OPENROUTER_KEY")
 SECONDARY_KEY_ID="$(ensure_key "$STAGING_SECONDARY_LABEL" "$STAGING_SECONDARY_OPENROUTER_KEY" || true)"
 if [[ -n "$PRIMARY_KEY_ID" ]]; then
   completion
-  record live_provider VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS"
+  record live_provider VERIFIED "$LAST_COMPLETION_REQUEST_ID" "$LAST_COMPLETION_LATENCY_MS" "$LAST_COMPLETION_ATTEMPTS"
+  if (( LAST_COMPLETION_ATTEMPTS > 1 )); then
+    record retry VERIFIED "$LAST_COMPLETION_REQUEST_ID" "$LAST_COMPLETION_LATENCY_MS" "$LAST_COMPLETION_ATTEMPTS"
+  else
+    record retry INCONCLUSIVE "$LAST_COMPLETION_REQUEST_ID" "$LAST_COMPLETION_LATENCY_MS" 1 no_retry_observed
+  fi
 else
   record live_provider INCONCLUSIVE "" 0 1 missing_primary_key
+  record retry INCONCLUSIVE "" 0 1 missing_primary_key
 fi
 
 failover_probe
