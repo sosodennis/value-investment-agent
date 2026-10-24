@@ -88,6 +88,8 @@ from src.runtime.workspace_runtime_projection import (
     derive_active_agent_id,
     derive_recent_activity,
 )
+from src.search_settings import search_settings_router
+from src.search_settings.composition.routes import close_search_service
 from src.services.artifact_manager import artifact_manager
 from src.services.history import history_service
 from src.shared.internal_services import (
@@ -166,6 +168,7 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        await close_search_service()
         await close_llm_provider()
         await close_model_inference()
         await close_shared_async_client()
@@ -182,13 +185,17 @@ app = FastAPI(
 app.include_router(auth_router)
 app.include_router(provider_keys_router)
 app.include_router(llm_settings_router)
+app.include_router(search_settings_router)
 
 
 @app.exception_handler(RequestValidationError)
 async def handle_request_validation_error(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
-    if request.url.path == "/api/llm/provider-keys" and request.method == "POST":
+    if (request.url.path == "/api/llm/provider-keys" and request.method == "POST") or (
+        request.url.path.startswith("/api/search/settings/keys")
+        and request.method in {"POST", "PUT"}
+    ):
         detail = [
             {key: error[key] for key in ("loc", "msg", "type") if key in error}
             for error in exc.errors()

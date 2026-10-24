@@ -3,7 +3,7 @@
 import React from 'react';
 import { GlobalNav } from './index';
 // Next.js automatically optimizes these via optmizePackageImports in next.config.ts
-import { Bell, Settings, User } from 'lucide-react';
+import { Bell, KeyRound, Settings, User } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { usePathname, useRouter } from 'next/navigation';
@@ -43,6 +43,14 @@ export function AppHeader() {
                     title="LLM settings"
                 >
                     <Settings size={18} />
+                </Link> : null}
+                {user ? <Link
+                    href="/settings/search"
+                    className="p-2 text-on-surface-variant hover:text-on-surface transition-colors duration-200 focus:ring-2 focus:ring-primary-container focus:outline-none rounded"
+                    aria-label="Search settings"
+                    title="Search settings"
+                >
+                    <KeyRound size={18} />
                 </Link> : null}
                 {user ? (
                     <button

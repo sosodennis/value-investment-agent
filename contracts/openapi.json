@@ -3335,31 +3335,92 @@
         "title": "Principal",
         "type": "object"
       },
-      "ProviderKeyCreateRequest": {
+      "ProviderCapabilities": {
+        "additionalProperties": false,
         "properties": {
-          "api_key": {
-            "format": "password",
-            "maxLength": 500,
-            "minLength": 20,
-            "title": "Api Key",
-            "type": "string",
-            "writeOnly": true
+          "key_required": {
+            "default": true,
+            "title": "Key Required",
+            "type": "boolean"
           },
-          "label": {
-            "default": "OpenRouter key",
-            "maxLength": 80,
-            "minLength": 1,
-            "title": "Label",
+          "operations": {
+            "items": {
+              "enum": [
+                "web",
+                "news"
+              ],
+              "type": "string"
+            },
+            "title": "Operations",
+            "type": "array"
+          },
+          "optional_fields": {
+            "items": {
+              "enum": [
+                "web",
+                "news",
+                "region",
+                "time_range",
+                "safe_search"
+              ],
+              "type": "string"
+            },
+            "title": "Optional Fields",
+            "type": "array"
+          },
+          "provider": {
+            "title": "Provider",
             "type": "string"
           }
         },
         "required": [
-          "api_key"
+          "provider",
+          "operations"
         ],
-        "title": "ProviderKeyCreateRequest",
+        "title": "ProviderCapabilities",
         "type": "object"
       },
-      "ProviderKeyResponse": {
+      "ProviderKeyReplaceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "api_key": {
+            "format": "password",
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Api Key",
+            "type": "string",
+            "writeOnly": true
+          },
+          "key_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Key Id",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "provider": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "api_key",
+          "label",
+          "key_id"
+        ],
+        "title": "ProviderKeyReplaceRequest",
+        "type": "object"
+      },
+      "ProviderKeySummary": {
+        "additionalProperties": false,
         "properties": {
           "cooldown_until": {
             "anyOf": [
@@ -3372,19 +3433,13 @@
             ],
             "title": "Cooldown Until"
           },
-          "created_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Created At"
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
           },
           "failure_count": {
             "default": 0,
+            "minimum": 0.0,
             "title": "Failure Count",
             "type": "integer"
           },
@@ -3400,17 +3455,6 @@
             "title": "Label",
             "type": "string"
           },
-          "last_error": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Error"
-          },
           "last_tested_at": {
             "anyOf": [
               {
@@ -3422,30 +3466,23 @@
             ],
             "title": "Last Tested At"
           },
-          "last_used_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Used At"
+          "priority": {
+            "minimum": 0.0,
+            "title": "Priority",
+            "type": "integer"
           },
-          "replacement_retire_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Replacement Retire At"
+          "provider": {
+            "title": "Provider",
+            "type": "string"
           },
           "status": {
-            "default": "untested",
+            "default": "active",
+            "enum": [
+              "active",
+              "disabled",
+              "cooldown",
+              "invalid"
+            ],
             "title": "Status",
             "type": "string"
           },
@@ -3456,11 +3493,14 @@
         },
         "required": [
           "id",
+          "provider",
           "label",
           "suffix",
-          "fingerprint"
+          "fingerprint",
+          "enabled",
+          "priority"
         ],
-        "title": "ProviderKeyResponse",
+        "title": "ProviderKeySummary",
         "type": "object"
       },
       "ProviderKeyTestResponse": {
@@ -3490,6 +3530,85 @@
           "status"
         ],
         "title": "ProviderKeyTestResponse",
+        "type": "object"
+      },
+      "ProviderPreference": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "priority": {
+            "minimum": 0.0,
+            "title": "Priority",
+            "type": "integer"
+          },
+          "provider": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "enabled",
+          "priority"
+        ],
+        "title": "ProviderPreference",
+        "type": "object"
+      },
+      "ProviderPreferencesRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderPreference"
+            },
+            "minItems": 1,
+            "title": "Providers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "providers"
+        ],
+        "title": "ProviderPreferencesRequest",
+        "type": "object"
+      },
+      "ProviderSetting": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProviderKeySummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "integer"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "enabled",
+          "priority"
+        ],
+        "title": "ProviderSetting",
         "type": "object"
       },
       "QualitySummaryModel": {
@@ -4054,6 +4173,44 @@
           "data"
         ],
         "title": "SearchResultsEnvelope",
+        "type": "object"
+      },
+      "SearchSettingsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderCapabilities"
+            },
+            "title": "Providers",
+            "type": "array"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/SearchSettingsSnapshot"
+          }
+        },
+        "required": [
+          "providers",
+          "settings"
+        ],
+        "title": "SearchSettingsResponse",
+        "type": "object"
+      },
+      "SearchSettingsSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderSetting"
+            },
+            "title": "Providers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "providers"
+        ],
+        "title": "SearchSettingsSnapshot",
         "type": "object"
       },
       "SetupReliabilitySummaryModel": {
@@ -9197,6 +9354,205 @@
         },
         "title": "VolumeProfileSummaryModel",
         "type": "object"
+      },
+      "src__llm_provider__interface__contracts__ProviderKeyCreateRequest": {
+        "properties": {
+          "api_key": {
+            "format": "password",
+            "maxLength": 500,
+            "minLength": 20,
+            "title": "Api Key",
+            "type": "string",
+            "writeOnly": true
+          },
+          "label": {
+            "default": "OpenRouter key",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_key"
+        ],
+        "title": "ProviderKeyCreateRequest",
+        "type": "object"
+      },
+      "src__llm_provider__interface__contracts__ProviderKeyResponse": {
+        "properties": {
+          "cooldown_until": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cooldown Until"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "failure_count": {
+            "default": 0,
+            "title": "Failure Count",
+            "type": "integer"
+          },
+          "fingerprint": {
+            "title": "Fingerprint",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "last_tested_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Tested At"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "replacement_retire_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replacement Retire At"
+          },
+          "status": {
+            "default": "untested",
+            "title": "Status",
+            "type": "string"
+          },
+          "suffix": {
+            "title": "Suffix",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "suffix",
+          "fingerprint"
+        ],
+        "title": "ProviderKeyResponse",
+        "type": "object"
+      },
+      "src__search_settings__domain__ProviderKeyCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "api_key": {
+            "format": "password",
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Api Key",
+            "type": "string",
+            "writeOnly": true
+          },
+          "label": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "provider": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "api_key",
+          "label"
+        ],
+        "title": "ProviderKeyCreateRequest",
+        "type": "object"
+      },
+      "src__search_settings__domain__ProviderKeyResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "fingerprint": {
+            "title": "Fingerprint",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "suffix": {
+            "title": "Suffix",
+            "type": "string"
+          },
+          "tested": {
+            "title": "Tested",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "tested",
+          "active",
+          "suffix",
+          "fingerprint"
+        ],
+        "title": "ProviderKeyResponse",
+        "type": "object"
       }
     }
   },
@@ -9460,7 +9816,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/ProviderKeyResponse"
+                    "$ref": "#/components/schemas/src__llm_provider__interface__contracts__ProviderKeyResponse"
                   },
                   "title": "Response List Provider Keys Api Llm Provider Keys Get",
                   "type": "array"
@@ -9481,7 +9837,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ProviderKeyCreateRequest"
+                "$ref": "#/components/schemas/src__llm_provider__interface__contracts__ProviderKeyCreateRequest"
               }
             }
           },
@@ -9492,7 +9848,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProviderKeyResponse"
+                  "$ref": "#/components/schemas/src__llm_provider__interface__contracts__ProviderKeyResponse"
                 }
               }
             },
@@ -9568,7 +9924,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ProviderKeyCreateRequest"
+                "$ref": "#/components/schemas/src__llm_provider__interface__contracts__ProviderKeyCreateRequest"
               }
             }
           },
@@ -9579,7 +9935,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProviderKeyResponse"
+                  "$ref": "#/components/schemas/src__llm_provider__interface__contracts__ProviderKeyResponse"
                 }
               }
             },
@@ -10446,6 +10802,181 @@
         "summary": "Get Monitoring Rows",
         "tags": [
           "Observability"
+        ]
+      }
+    },
+    "/api/search/settings": {
+      "get": {
+        "operationId": "read_search_settings_api_search_settings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Read Search Settings",
+        "tags": [
+          "Search settings"
+        ]
+      },
+      "put": {
+        "operationId": "update_search_settings_api_search_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderPreferencesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Search Settings",
+        "tags": [
+          "Search settings"
+        ]
+      }
+    },
+    "/api/search/settings/keys": {
+      "post": {
+        "operationId": "add_search_key_api_search_settings_keys_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/src__search_settings__domain__ProviderKeyCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/src__search_settings__domain__ProviderKeyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Search Key",
+        "tags": [
+          "Search settings"
+        ]
+      },
+      "put": {
+        "operationId": "replace_search_key_api_search_settings_keys_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderKeyReplaceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/src__search_settings__domain__ProviderKeyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Replace Search Key",
+        "tags": [
+          "Search settings"
+        ]
+      }
+    },
+    "/api/search/settings/keys/{key_id}": {
+      "delete": {
+        "operationId": "delete_search_key_api_search_settings_keys__key_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key_id",
+            "required": true,
+            "schema": {
+              "title": "Key Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Search Key",
+        "tags": [
+          "Search settings"
         ]
       }
     },
