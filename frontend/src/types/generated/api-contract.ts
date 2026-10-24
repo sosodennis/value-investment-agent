@@ -297,7 +297,8 @@ export interface paths {
         delete: operations["delete_search_key_api_search_settings_keys__key_id__delete"];
         options?: never;
         head?: never;
-        patch?: never;
+        /** Set Search Key Enabled */
+        patch: operations["set_search_key_enabled_api_search_settings_keys__key_id__patch"];
         trace?: never;
     };
     "/health": {
@@ -1454,6 +1455,11 @@ export interface components {
             /** Provider */
             provider: string;
         };
+        /** ProviderKeyEnabledRequest */
+        ProviderKeyEnabledRequest: {
+            /** Enabled */
+            enabled: boolean;
+        };
         /** ProviderKeyReplaceRequest */
         ProviderKeyReplaceRequest: {
             /**
@@ -1487,6 +1493,8 @@ export interface components {
             label: string;
             /** Last Tested At */
             last_tested_at?: string | null;
+            /** Last Used At */
+            last_used_at?: string | null;
             /** Priority */
             priority: number;
             /** Provider */
@@ -1530,7 +1538,8 @@ export interface components {
         ProviderSetting: {
             /** Enabled */
             enabled: boolean;
-            key?: components["schemas"]["ProviderKeySummary"] | null;
+            /** Keys */
+            keys?: components["schemas"]["ProviderKeySummary"][];
             /** Priority */
             priority: number;
             /** Provider */
@@ -3832,6 +3841,41 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_search_key_enabled_api_search_settings_keys__key_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderKeyEnabledRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["src__search_settings__domain__ProviderKeyResponse"];
+                };
             };
             /** @description Validation Error */
             422: {
