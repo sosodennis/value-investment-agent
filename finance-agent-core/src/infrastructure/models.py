@@ -311,3 +311,42 @@ class WorkspaceRuntimeCursor(Base):
         onupdate=datetime.utcnow,
         nullable=False,
     )
+
+
+class WorkflowActivityEvent(Base):
+    """Durable application activity envelope and its per-thread cursor."""
+
+    __tablename__ = "workflow_activity_events"
+
+    event_id = Column(String, primary_key=True)
+    thread_id = Column(String, nullable=False, index=True)
+    run_id = Column(String, nullable=False, index=True)
+    seq_id = Column(Integer, nullable=False)
+    event_version = Column(String, nullable=False)
+    event_name = Column(String, nullable=False)
+    occurred_at = Column(DateTime, nullable=False)
+    payload = Column(JSON, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("thread_id", "seq_id", name="uq_workflow_activity_thread_seq"),
+        Index("idx_workflow_activity_thread_seq", "thread_id", "seq_id"),
+    )
+
+
+class WorkflowRun(Base):
+    __tablename__ = "workflow_runs"
+
+    thread_id = Column(String, primary_key=True)
+    run_id = Column(String, nullable=False, unique=True, index=True)
+    status = Column(String, nullable=False)
+    started_at = Column(DateTime, nullable=False)
+    updated_at = Column(DateTime, nullable=False, index=True)
+    ended_at = Column(DateTime, nullable=True)
+
+
+class WorkflowActivityCursor(Base):
+    __tablename__ = "workflow_activity_cursors"
+
+    thread_id = Column(String, primary_key=True)
+    last_seq_id = Column(Integer, nullable=False, default=0)
+    updated_at = Column(DateTime, nullable=False)

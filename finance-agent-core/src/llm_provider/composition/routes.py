@@ -22,8 +22,10 @@ from src.llm_provider.interface.contracts import (
     ProviderKeyTestResponse,
 )
 
-provider_keys_router = APIRouter(prefix="/api/llm/provider-keys", tags=["LLM settings"])
-llm_settings_router = APIRouter(prefix="/api/llm/settings", tags=["LLM settings"])
+provider_keys_router = APIRouter(
+    prefix="/api/v1/llm/provider-keys", tags=["LLM settings"]
+)
+llm_settings_router = APIRouter(prefix="/api/v1/llm/settings", tags=["LLM settings"])
 
 
 def _key_response(key: ManagedProviderKey) -> ProviderKeyResponse:
