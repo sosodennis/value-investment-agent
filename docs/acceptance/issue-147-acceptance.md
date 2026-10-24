@@ -16,7 +16,10 @@ failure recovery through replay, and explicit lifespan cleanup.
 
 ```text
 uv run pytest -q
-934 passed, 5 skipped
+935 passed, 5 skipped
+
+uv run pytest -q (llm-provider-service)
+73 passed, 1 skipped
 
 uv run ruff check src tests
 All checks passed
@@ -49,7 +52,10 @@ events from PostgreSQL. `scripts/refactor_staging_smoke.sh` derived
 `http://127.0.0.1:8200` from `BACKEND_HOST_PORT`, recorded `health=VERIFIED`,
 and safely recorded `live_provider=INCONCLUSIVE` and
 `failover=INCONCLUSIVE` with `missing_secret_bundle` without printing or
-requesting credentials.
+requesting credentials. The script now performs labelled key tests, requires a
+completed terminal activity, and supports an integration-owner-only primary
+delete, secondary completion, and primary restore probe when the local raw
+primary key is available.
 
 ## Verdict
 
