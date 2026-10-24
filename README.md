@@ -83,7 +83,7 @@ Currently supported models:
 ## 🏗️ Architecture
 
 *   **Frontend**: [Next.js 16](https://nextjs.org/), React 19, TypeScript.
-*   **Backend**: Python, [FastAPI](https://fastapi.tiangolo.com/), [LangGraph](https://langchain-ai.github.io/langgraph/). Structured using **Clean Architecture** and **Domain-Driven Design (DDD)** principles to ensure decoupling of core domain logic (e.g., valuation models) from infrastructure and application details.
+*   **Backend**: Python, [FastAPI](https://fastapi.tiangolo.com/), [LangGraph](https://langchain-ai.github.io/langgraph/). Organized by feature ownership, with internal layers where they clarify dependencies between finance logic and infrastructure.
 *   **Database**: PostgreSQL (for state persistence and checkpointing).
 *   **Infrastructure**: Docker Compose.
 
@@ -185,14 +185,13 @@ npm run dev
 ```
 
 ## 🧭 Development Guidelines
-Authoritative engineering guidelines (mandatory):
+The two canonical engineering guides are:
 
-*   [`docs/README.md`](docs/README.md) (document authority index)
-*   [`docs/clean-architecture-engineering-guideline.md`](docs/clean-architecture-engineering-guideline.md)
+*   [`docs/README.md`](docs/README.md) (documentation index)
 *   [`docs/backend-guideline.md`](docs/backend-guideline.md)
 *   [`docs/frontend-guideline.md`](docs/frontend-guideline.md)
-*   [`docs/agent-layer-responsibility-and-naming-guideline.md`](docs/agent-layer-responsibility-and-naming-guideline.md)
-*   [`docs/fundamental-reference-architecture.md`](docs/fundamental-reference-architecture.md) (reference implementation)
+
+Agent graph and dependency rules are defined in the [Agent Architecture Standard](.agents/skills/architecture-standard-enforcer/references/cross-agent-architecture-standard.md).
 
 Cross-stack contract sync:
 
@@ -201,11 +200,7 @@ Cross-stack contract sync:
     *   `contracts/openapi.json`
     *   `frontend/src/types/generated/api-contract.ts`
 
-Additional audit/history references (non-normative):
-
-*   `docs/fullstack-change-control-playbook.md`
-*   `docs/clean-architecture-agent-workflow-blueprint.md`
-*   `docs/agent-cross-review-2026-02-13.md`
+Service contracts, design decisions, research reports, and runbooks are indexed in [`docs/README.md`](docs/README.md). They add detail for their own topic and do not define a second general coding standard.
 
 ## 🤝 Contributing
 Contributions are welcome! Please follow the coding standards outlined in the project.

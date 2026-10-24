@@ -3,9 +3,9 @@
 日期: 2026-03-03
 範圍: `finance-agent-core/src/agents/*`
 狀態: Active
-搭配規範: `cross_agent_class_naming_and_layer_responsibility_guideline.md`
+硬性架構規則: [Agent Architecture Standard](../../../.agents/skills/architecture-standard-enforcer/references/cross-agent-architecture-standard.md)
 
-本文件只保留「可執行經驗」。硬規則以 cross-agent standard 為唯一來源，避免重複維護。
+本 playbook 只保留實作經驗、反模式和 review 步驟。Agent 架構硬規則以 Agent Architecture Standard 為唯一來源。
 
 ## 1. 反覆出現的反模式（精簡版）
 

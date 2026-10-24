@@ -1,34 +1,34 @@
-# Documentation Index
-Date: 2026-02-19
-Status: Active
+# Engineering documentation
 
-This folder keeps active rules, architecture decisions, and one pending backlog for the next refactor.
+This index separates coding rules from contracts, decisions, research, and operations. Only the two guides below define general frontend and backend coding standards.
 
-## 1. Canonical Rules
+Root `AGENTS.md` contains finance-domain constraints, agent skill routing, and repository-specific instructions. It points to these guides for general coding rules.
 
-1. `/Users/denniswong/Desktop/Project/value-investment-agent/docs/clean-architecture-engineering-guideline.md`
-2. `/Users/denniswong/Desktop/Project/value-investment-agent/docs/backend-guideline.md`
-3. `/Users/denniswong/Desktop/Project/value-investment-agent/docs/backend-canonicalization-flow.md`
-4. `/Users/denniswong/Desktop/Project/value-investment-agent/docs/frontend-guideline.md`
-5. `/Users/denniswong/Desktop/Project/value-investment-agent/docs/agent-layer-responsibility-and-naming-guideline.md`
-6. `/Users/denniswong/Desktop/Project/value-investment-agent/docs/prompt-refactor-guideline.md`
-7. `/Users/denniswong/Desktop/Project/value-investment-agent/docs/simple-triad-layer-alignment-2026-02-16.md`
-8. `/Users/denniswong/Desktop/Project/value-investment-agent/docs/developer-workflow-checklist.md`
+## Canonical guides
 
-## 2. Architecture Decisions
+- [Frontend engineering guide](frontend-guideline.md)
+- [Backend engineering guide](backend-guideline.md)
 
-1. `/Users/denniswong/Desktop/Project/value-investment-agent/docs/agent-centric-subgraph-shared-kernel-adr-2026-02-19.md`
-2. `/Users/denniswong/Desktop/Project/value-investment-agent/docs/technical-decision-observability-backbone-adr-2026-03-21.md`
-3. `/Users/denniswong/Desktop/Project/value-investment-agent/docs/technical-observability-internal-ui-adr-2026-03-21.md`
-4. `/Users/denniswong/Desktop/Project/value-investment-agent/docs/analysis-workspace-runtime-durability-adr-2026-03-21.md`
-5. `/Users/denniswong/Desktop/Project/value-investment-agent/docs/analysis-workspace-runtime-durability-detailed-adr-2026-03-21.md`
+## Specialized architecture rules
 
-## 3. Pending Backlog
+- [Agent Architecture Standard](../.agents/skills/architecture-standard-enforcer/references/cross-agent-architecture-standard.md) defines hard dependency and graph rules for agent work.
+- [Cross-agent refactor playbook](../finance-agent-core/docs/standards/refactor_lessons_and_cross_agent_playbook.md) records implementation lessons and review steps. It does not replace the standard.
+- [Professional Matte design](ui/stitch/DESIGN.md) describes the product's visual direction. The frontend guide explains how it maps to UI components and tokens.
 
-1. `/Users/denniswong/Desktop/Project/value-investment-agent/docs/next-refactor-pending-2026-02-19.md`
+## Contracts and service references
 
-## 4. Usage Rules
+- [OpenAPI contract index](../contracts/README.md)
+- [LLM Provider contract](llm-provider-contract.md)
+- [Model Inference boundary](issue-121-inference-boundary.md)
+- [Search Service contract](search-service-contract.md)
+- [Internal capability service contract](../finance-agent-core/src/shared/internal_services/README.md)
+- Service-specific deployment and operating instructions live in each service README and in [`runbooks/`](runbooks/).
 
-1. If two docs conflict, section 1 has higher priority.
-2. Pending items must be tracked only in the backlog file from section 3.
-3. Completed/audit history is kept in git history; do not recreate deleted historical docs unless explicitly requested.
+## Decisions and research
+
+- [Discussion #130: frontend architecture and UI foundation](https://github.com/sosodennis/value-investment-agent/discussions/130)
+- [Discussion #131: SSE transport and recovery](https://github.com/sosodennis/value-investment-agent/discussions/131)
+- [Discussion #140: backend guidelines, module boundaries, and SSE](https://github.com/sosodennis/value-investment-agent/discussions/140)
+- Accepted architecture decisions include the [Analysis Workspace runtime durability ADR](analysis-workspace-runtime-durability-adr-2026-03-21.md), its [detailed companion](analysis-workspace-runtime-durability-detailed-adr-2026-03-21.md), and the [observability backbone ADR](technical-decision-observability-backbone-adr-2026-03-21.md). Research and audit reports live in [`reports/`](reports/) and [`research-paper/`](research-paper/).
+
+ADRs record decisions for a specific system change. Contracts describe a service or data boundary. Reports record evidence and a dated code review. These references do not create a competing general coding standard.

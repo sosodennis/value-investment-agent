@@ -108,14 +108,9 @@ graph TD
 
 ## **Part 2: Coding & Development Rules**
 
-### **1. Technology Stack & Style**
+The canonical frontend and backend coding standards are [`docs/frontend-guideline.md`](docs/frontend-guideline.md) and [`docs/backend-guideline.md`](docs/backend-guideline.md). This section keeps only finance-domain constraints that those guides do not define.
 
-*   **Frameworks**: LangGraph (Orchestration), FastAPI (Serving), Pydantic (Validation), NetworkX (Calculation Engine).
-*   **Style Guide**:
-    *   **Strict Typing**: All function signatures must have type hints. No `Any`.
-    *   **Pydantic V2**: Use `model_dump()` instead of `dict()`.
-
-### **2. Traceability Architecture (Provenance)**
+### **1. Traceability Architecture (Provenance)**
 
 To ensure every number is auditable, the system uses a `TraceableField` generic with specific `Provenance` types:
 
@@ -133,7 +128,7 @@ class TraceableField(BaseModel, Generic[T]):
     provenance: XBRLProvenance | ComputedProvenance | ManualProvenance
 ```
 
-### **3. Code Generation Principles**
+### **2. Agent and Calculation Boundaries**
 
 *   **Separation of Concerns**: Keep "Thinking" (Agents) separate from "Math" (Calculations).
 *   **Tool Usage**: Agents should rely on tools (e.g., `edgartools`, `yfinance`) rather than internal knowledge.
