@@ -49,11 +49,6 @@ STAGING_SECONDARY_LABEL="$(read_secret STAGING_SECONDARY_LABEL || true)"
 STAGING_PRIMARY_LABEL="${STAGING_PRIMARY_LABEL:-full-refactor-staging-primary}"
 STAGING_SECONDARY_LABEL="${STAGING_SECONDARY_LABEL:-full-refactor-staging-secondary}"
 
-[[ -n "$STAGING_EMAIL" && -n "$STAGING_PASSWORD" ]] || {
-  echo "STAGING_EMAIL and STAGING_PASSWORD are required through the environment or secret file" >&2
-  exit 2
-}
-
 mkdir -p "$(dirname "$REPORT")"
 cookie_jar="$(mktemp)"
 response_body="$(mktemp)"
@@ -74,15 +69,15 @@ record() {
 
 request() {
   local method="$1" path="$2" payload="${3:-}" csrf="${4:-}" started ended
-  started="$(date +%s%3N)"
+  started="$(date +%s)"
   local -a args=(curl --silent --show-error --max-time "$TIMEOUT_SECONDS" --output "$response_body" --dump-header "$response_headers" --write-out '%{http_code}' -X "$method" "$BACKEND_ORIGIN$path" -b "$cookie_jar" -c "$cookie_jar" -H 'Accept: application/json')
   [[ -n "$payload" ]] && args+=( -H 'Content-Type: application/json' --data "$payload" )
   [[ -n "$csrf" ]] && args+=( -H "X-CSRF-Token: $csrf" )
   local code
   code="$("${args[@]}" 2>/dev/null || true)"
-  ended="$(date +%s%3N)"
+  ended="$(date +%s)"
   REQUEST_CODE="$code"
-  REQUEST_LATENCY_MS=$((ended - started))
+  REQUEST_LATENCY_MS=$(((ended - started) * 1000))
   REQUEST_ID="$(awk 'BEGIN{IGNORECASE=1} /^x-request-id:/ {gsub("\r", "", $2); print $2; exit}' "$response_headers")"
 }
 
@@ -94,6 +89,10 @@ health_check() {
   request GET /health
   [[ "$REQUEST_CODE" == "200" ]] || { record health NOT_VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" 1 "http_$REQUEST_CODE"; return 1; }
   record health VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS"
+}
+
+secret_bundle_available() {
+  [[ -n "$STAGING_EMAIL" && -n "$STAGING_PASSWORD" ]]
 }
 
 login() {
@@ -144,7 +143,7 @@ completion() {
   while (( attempt <= RETRY_ATTEMPTS )); do
     request POST "/api/v1/threads/$THREAD_ID/runs" "$run_payload" "$CSRF_TOKEN"
     run_id="$(jq -r '.run_id // empty' "$response_body" 2>/dev/null || true)"
-    if [[ "$REQUEST_CODE" == "200" || "$REQUEST_CODE" == "201" ]]; then
+    if [[ "$REQUEST_CODE" == "202" ]]; then
       record completion_start VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" "$attempt"
       break
     fi
@@ -155,9 +154,12 @@ completion() {
   [[ -n "$run_id" ]] || { record completion NOT_VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" "$RETRY_ATTEMPTS" retry_exhausted; return 1; }
   curl --silent --show-error --max-time "$TIMEOUT_SECONDS" --output "$sse_body" -N \
     -H 'Accept: text/event-stream' -H "Last-Event-ID: 0" -b "$cookie_jar" \
-    "$BACKEND_ORIGIN/api/v1/threads/$THREAD_ID/events?run_id=$run_id" >/dev/null || true
+    "$BACKEND_ORIGIN/api/v1/threads/$THREAD_ID/events?run_id=$run_id&after_seq=0" >/dev/null || true
   event_count="$(awk '/^event: / {count++} END {print count+0}' "$sse_body")"
-  terminal_count="$(awk '/^event: / && $2 ~ /terminal|completed|failed|cancelled/ {count++} END {print count+0}' "$sse_body")"
+  terminal_count="$(
+    awk '/^data: / {sub(/^data: /, ""); print}' "$sse_body" |
+      jq -s --arg run_id "$run_id" '[.[] | select(.event_name == "workflow.activity" and .run_id == $run_id and .payload.run_id == $run_id and (.payload.status == "completed" or .payload.status == "failed" or .payload.status == "cancelled"))] | length'
+  )"
   if (( event_count > 0 && terminal_count > 0 )); then
     record completion VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" "$attempt"
   else
@@ -166,7 +168,18 @@ completion() {
   fi
 }
 
-health_check
+if ! health_check; then
+  echo "Staging smoke health check failed; report: $REPORT" >&2
+  exit 1
+fi
+
+if ! secret_bundle_available; then
+  record live_provider INCONCLUSIVE "" 0 1 missing_secret_bundle
+  record failover INCONCLUSIVE "" 0 1 missing_secret_bundle
+  echo "Staging smoke recorded health and an inconclusive live-provider gate; no secret bundle was available. Report: $REPORT"
+  exit 0
+fi
+
 login
 primary_key_id="$(ensure_key "$STAGING_PRIMARY_LABEL" "$STAGING_OPENROUTER_KEY")"
 secondary_key_id="$(ensure_key "$STAGING_SECONDARY_LABEL" "$STAGING_SECONDARY_OPENROUTER_KEY" || true)"
