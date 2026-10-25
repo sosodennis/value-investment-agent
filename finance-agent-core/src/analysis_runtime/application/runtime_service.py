@@ -14,6 +14,7 @@ from src.analysis_runtime.domain.contracts import (
     Activity,
     ActivityEvent,
     ActivitySnapshot,
+    AnalysisRunPage,
     ReplayPage,
 )
 from src.analysis_runtime.domain.errors import (
@@ -72,7 +73,12 @@ class AnalysisRuntimeService:
         selected_run_id = run_id or str(uuid.uuid4())
         now = datetime.now(timezone.utc)
         await self.repository.set_run(
-            thread_id=thread_id, run_id=selected_run_id, status="queued", now=now
+            thread_id=thread_id,
+            run_id=selected_run_id,
+            status="queued",
+            now=now,
+            principal_id=principal_id,
+            input_data=input_data,
         )
         task = asyncio.create_task(
             self._execute(
@@ -99,18 +105,43 @@ class AnalysisRuntimeService:
                 run_id=run_id,
                 status="cancelled",
                 now=datetime.now(timezone.utc),
+                principal_id=principal_id,
             )
 
     async def snapshot(
         self, *, principal_id: str, thread_id: str, run_id: str | None = None
     ) -> ActivitySnapshot:
         await self._check_owner(principal_id=principal_id, thread_id=thread_id)
-        run = await self.repository.get_run(thread_id=thread_id)
-        if run is None:
-            raise ThreadNotFoundError("thread was not found")
-        if run_id is not None and run.run_id != run_id:
+        if run_id is None:
+            run = await self.repository.get_run(thread_id=thread_id)
+            if run is None:
+                raise ThreadNotFoundError("thread was not found")
+            run_id = run.run_id
+        elif (
+            await self.repository.get_run_history(
+                principal_id=principal_id, thread_id=thread_id, run_id=run_id
+            )
+            is None
+        ):
             raise RunNotFoundError("run was not found")
-        return await self.repository.snapshot(thread_id=thread_id, run_id=run.run_id)
+        return await self.repository.snapshot(thread_id=thread_id, run_id=run_id)
+
+    async def list_run_history(
+        self,
+        *,
+        principal_id: str,
+        limit: int,
+        before_started_at: datetime | None = None,
+        before_thread_id: str | None = None,
+        before_run_id: str | None = None,
+    ) -> AnalysisRunPage:
+        return await self.repository.list_run_history(
+            principal_id=principal_id,
+            limit=limit,
+            before_started_at=before_started_at,
+            before_thread_id=before_thread_id,
+            before_run_id=before_run_id,
+        )
 
     async def replay(
         self,
@@ -176,6 +207,7 @@ class AnalysisRuntimeService:
                 run_id=run_id,
                 status="running",
                 now=datetime.now(timezone.utc),
+                principal_id=principal_id,
             )
             async for item in self.runner.run(
                 thread_id=thread_id,
@@ -232,6 +264,7 @@ class AnalysisRuntimeService:
                 run_id=run_id,
                 status="completed",
                 now=datetime.now(timezone.utc),
+                principal_id=principal_id,
             )
         except asyncio.CancelledError:
             await self._emit_terminal(
@@ -245,6 +278,7 @@ class AnalysisRuntimeService:
                 run_id=run_id,
                 status="cancelled",
                 now=datetime.now(timezone.utc),
+                principal_id=principal_id,
             )
             raise
         except Exception:
@@ -259,6 +293,7 @@ class AnalysisRuntimeService:
                 run_id=run_id,
                 status="failed",
                 now=datetime.now(timezone.utc),
+                principal_id=principal_id,
             )
         finally:
             self._tasks.pop(thread_id, None)

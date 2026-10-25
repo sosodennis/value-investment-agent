@@ -122,10 +122,11 @@ async def activity_snapshot(
     thread_id: str,
     request: Request,
     principal: Principal = Depends(require_current_user),
+    run_id: str | None = Query(default=None, min_length=1),
 ):
     try:
         snapshot = await _runtime(request).snapshot(
-            principal_id=principal.user_id, thread_id=thread_id
+            principal_id=principal.user_id, thread_id=thread_id, run_id=run_id
         )
         return snapshot.model_dump(mode="json")
     except Exception as exc:

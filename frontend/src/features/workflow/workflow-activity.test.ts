@@ -34,6 +34,14 @@ describe('workflow.activity consumer boundary', () => {
         expect(state.eventIds.size).toBe(1);
     });
 
+    it('accepts unknown run status for legacy history with unrecoverable state', () => {
+        const snapshot = parseWorkflowActivitySnapshot({
+            thread_id: 'thread-1', run_id: 'run-1', run_status: 'unknown', cursor: 0,
+            active_activities: [], recent_activities: [],
+        });
+        expect(snapshot.run_status).toBe('unknown');
+    });
+
     it('flags gaps for replay/snapshot recovery and models terminal activities as sets', () => {
         const snapshot = parseWorkflowActivitySnapshot({ thread_id: 'thread-1', run_id: 'run-1', run_status: 'running', cursor: 1, active_activities: [activity()], recent_activities: [] });
         const state = applyWorkflowActivityEvent(createWorkflowActivityState(snapshot), parseWorkflowActivityEvent(event(3)));

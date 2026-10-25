@@ -241,6 +241,47 @@ class WorkflowRun(Base):
     ended_at = Column(DateTime, nullable=True)
 
 
+class WorkflowRunHistory(Base):
+    """Per-run durable index; detailed outputs remain in activity events."""
+
+    __tablename__ = "workflow_run_history"
+
+    thread_id = Column(String, primary_key=True)
+    run_id = Column(String, primary_key=True)
+    principal_id = Column(String, nullable=False, index=True)
+    status = Column(String, nullable=False)
+    started_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime, nullable=True)
+    ended_at = Column(DateTime, nullable=True)
+    input_data = Column(JSON, nullable=True)
+
+    __table_args__ = (
+        Index(
+            "idx_workflow_run_history_recent",
+            "principal_id",
+            "started_at",
+            "thread_id",
+            "run_id",
+        ),
+    )
+
+
+class DatabaseMigration(Base):
+    __tablename__ = "database_migrations"
+
+    migration_id = Column(String, primary_key=True)
+    initialized_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+
+
+class DatabaseMigrationWorkItem(Base):
+    __tablename__ = "database_migration_work_items"
+
+    migration_id = Column(String, primary_key=True)
+    thread_id = Column(String, primary_key=True)
+    run_id = Column(String, primary_key=True)
+
+
 class WorkflowActivityCursor(Base):
     __tablename__ = "workflow_activity_cursors"
 

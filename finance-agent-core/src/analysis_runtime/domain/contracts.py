@@ -22,6 +22,7 @@ RunStatus = Literal[
     "completed",
     "failed",
     "cancelled",
+    "unknown",
 ]
 
 
@@ -62,6 +63,28 @@ class RunStatusRecord(BaseModel):
     started_at: datetime
     updated_at: datetime
     ended_at: datetime | None = None
+
+
+class AnalysisRunRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    thread_id: str
+    run_id: str
+    status: RunStatus
+    started_at: datetime | None = None
+    updated_at: datetime | None = None
+    ended_at: datetime | None = None
+    input_data: dict[str, object] | None = None
+
+
+class AnalysisRunPage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    runs: tuple[AnalysisRunRecord, ...]
+    has_more: bool
+    next_started_at: datetime | None = None
+    next_thread_id: str | None = None
+    next_run_id: str | None = None
 
 
 class ActivitySnapshot(BaseModel):
