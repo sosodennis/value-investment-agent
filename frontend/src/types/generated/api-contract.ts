@@ -89,6 +89,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dashboard/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Capabilities */
+        get: operations["capabilities_api_v1_dashboard_capabilities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/dashboard/market-movers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Market Movers */
+        get: operations["market_movers_api_v1_dashboard_market_movers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/dashboard/recent-analyses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Recent Analyses */
+        get: operations["recent_analyses_api_v1_dashboard_recent_analyses_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/llm/provider-keys": {
         parameters: {
             query?: never;
@@ -556,6 +607,21 @@ export interface components {
             /** Verification Report Id */
             verification_report_id?: string | null;
         };
+        /** CapabilityItem */
+        CapabilityItem: {
+            /**
+             * Checked At
+             * Format: date-time
+             */
+            checked_at: string;
+            /** Detail */
+            detail?: string | null;
+            /** Id */
+            id: string;
+            /** Source */
+            source: string;
+            status: components["schemas"]["DashboardStatus"];
+        };
         /** ConfidenceCalibrationModel */
         ConfidenceCalibrationModel: {
             /** Calibration Applied */
@@ -578,6 +644,22 @@ export interface components {
             /** Reason Codes */
             reason_codes?: string[] | null;
         };
+        /** DashboardCapabilities */
+        DashboardCapabilities: {
+            /** Capabilities */
+            capabilities: components["schemas"]["CapabilityItem"][];
+            /**
+             * Checked At
+             * Format: date-time
+             */
+            checked_at: string;
+            status: components["schemas"]["DashboardStatus"];
+        };
+        /**
+         * DashboardStatus
+         * @enum {string}
+         */
+        DashboardStatus: "operational" | "degraded" | "unavailable" | "unknown";
         /** DebateArtifactModel */
         DebateArtifactModel: {
             /** Alpha */
@@ -967,6 +1049,44 @@ export interface components {
             /** Password */
             password: string;
         };
+        /** MarketMoverItem */
+        MarketMoverItem: {
+            /** Change Absolute */
+            change_absolute: number;
+            /** Change Percent */
+            change_percent: number;
+            /** Currency */
+            currency?: string | null;
+            /** Market State */
+            market_state?: string | null;
+            /** Name */
+            name: string;
+            /** Price */
+            price: number;
+            /** Quote Time */
+            quote_time?: string | null;
+            /** Symbol */
+            symbol: string;
+        };
+        /** MarketMoversResponse */
+        MarketMoversResponse: {
+            /** Error Code */
+            error_code?: string | null;
+            /** Fetched At */
+            fetched_at?: string | null;
+            /** Items */
+            items?: components["schemas"]["MarketMoverItem"][];
+            /**
+             * Source
+             * @default yahoo_finance
+             */
+            source: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "fresh" | "stale" | "unavailable";
+        };
         /** ModelOptionResponse */
         ModelOptionResponse: {
             /** Context Length */
@@ -1353,6 +1473,46 @@ export interface components {
             real_estate_assets?: components["schemas"]["TraceableFieldModel"] | null;
         } & {
             [key: string]: unknown;
+        };
+        /** RecentAnalysesResponse */
+        RecentAnalysesResponse: {
+            /**
+             * Fetched At
+             * Format: date-time
+             */
+            fetched_at: string;
+            /** Items */
+            items?: components["schemas"]["RecentAnalysisItem"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /**
+             * Source
+             * @default analysis_runtime
+             * @constant
+             */
+            source: "analysis_runtime";
+        };
+        /** RecentAnalysisItem */
+        RecentAnalysisItem: {
+            /** Company Name */
+            company_name?: string | null;
+            /** Run Id */
+            run_id: string;
+            /** Started At */
+            started_at?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "waiting" | "completed" | "failed" | "cancelled" | "unknown";
+            /** Summary */
+            summary?: string | null;
+            /** Thread Id */
+            thread_id: string;
+            /** Ticker */
+            ticker?: string | null;
+            /** Updated At */
+            updated_at?: string | null;
         };
         /** RegimeSummaryModel */
         RegimeSummaryModel: {
@@ -2955,6 +3115,89 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Principal"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    capabilities_api_v1_dashboard_capabilities_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardCapabilities"];
+                };
+            };
+        };
+    };
+    market_movers_api_v1_dashboard_market_movers_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketMoversResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recent_analyses_api_v1_dashboard_recent_analyses_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                next_cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecentAnalysesResponse"];
                 };
             };
             /** @description Validation Error */

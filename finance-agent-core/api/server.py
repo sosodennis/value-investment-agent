@@ -19,6 +19,12 @@ from src.analysis_runtime.infrastructure import (
 from src.analysis_runtime.interface.routes import router as analysis_runtime_router
 from src.auth.entrypoint import auth_router, get_ownership_service
 from src.infrastructure.migrations import assert_migrations_complete
+from src.dashboard.infrastructure import (
+    HttpReadinessProvider,
+    MarketMoversService,
+    YahooMarketMoversProvider,
+)
+from src.dashboard.routes import router as dashboard_router
 from src.interface.artifacts.routes import router as artifact_router
 from src.llm_provider.entrypoint import (
     close_llm_provider,
@@ -64,6 +70,8 @@ async def lifespan(app: FastAPI):
         runner=LangGraphRunner(graph),
         hub=BoundedNotificationHub(),
     )
+    app.state.market_movers_service = MarketMoversService(YahooMarketMoversProvider())
+    app.state.readiness_provider = HttpReadinessProvider()
     try:
         yield
     finally:
@@ -89,6 +97,7 @@ app.include_router(provider_keys_router)
 app.include_router(llm_settings_router)
 app.include_router(search_settings_router)
 app.include_router(analysis_runtime_router)
+app.include_router(dashboard_router)
 app.include_router(observability_router)
 app.include_router(artifact_router)
 

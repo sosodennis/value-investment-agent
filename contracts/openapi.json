@@ -546,6 +546,46 @@
         "title": "ArtifactRefsModel",
         "type": "object"
       },
+      "CapabilityItem": {
+        "additionalProperties": false,
+        "properties": {
+          "checked_at": {
+            "format": "date-time",
+            "title": "Checked At",
+            "type": "string"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DashboardStatus"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "source",
+          "checked_at"
+        ],
+        "title": "CapabilityItem",
+        "type": "object"
+      },
       "ConfidenceCalibrationModel": {
         "properties": {
           "calibration_applied": {
@@ -648,6 +688,43 @@
         },
         "title": "ConfidenceEligibilityModel",
         "type": "object"
+      },
+      "DashboardCapabilities": {
+        "additionalProperties": false,
+        "properties": {
+          "capabilities": {
+            "items": {
+              "$ref": "#/components/schemas/CapabilityItem"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "checked_at": {
+            "format": "date-time",
+            "title": "Checked At",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DashboardStatus"
+          }
+        },
+        "required": [
+          "status",
+          "checked_at",
+          "capabilities"
+        ],
+        "title": "DashboardCapabilities",
+        "type": "object"
+      },
+      "DashboardStatus": {
+        "enum": [
+          "operational",
+          "degraded",
+          "unavailable",
+          "unknown"
+        ],
+        "title": "DashboardStatus",
+        "type": "string"
       },
       "DebateArtifactModel": {
         "properties": {
@@ -2229,6 +2306,128 @@
         "title": "LoginRequest",
         "type": "object"
       },
+      "MarketMoverItem": {
+        "additionalProperties": false,
+        "properties": {
+          "change_absolute": {
+            "title": "Change Absolute",
+            "type": "number"
+          },
+          "change_percent": {
+            "title": "Change Percent",
+            "type": "number"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "market_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market State"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "price": {
+            "title": "Price",
+            "type": "number"
+          },
+          "quote_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote Time"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "name",
+          "price",
+          "change_absolute",
+          "change_percent"
+        ],
+        "title": "MarketMoverItem",
+        "type": "object"
+      },
+      "MarketMoversResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "fetched_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fetched At"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MarketMoverItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "source": {
+            "default": "yahoo_finance",
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "fresh",
+              "stale",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "MarketMoversResponse",
+        "type": "object"
+      },
       "ModelOptionResponse": {
         "properties": {
           "context_length": {
@@ -3496,6 +3695,135 @@
           }
         },
         "title": "RealEstateExtensionModel",
+        "type": "object"
+      },
+      "RecentAnalysesResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "fetched_at": {
+            "format": "date-time",
+            "title": "Fetched At",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RecentAnalysisItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "source": {
+            "const": "analysis_runtime",
+            "default": "analysis_runtime",
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fetched_at"
+        ],
+        "title": "RecentAnalysesResponse",
+        "type": "object"
+      },
+      "RecentAnalysisItem": {
+        "additionalProperties": false,
+        "properties": {
+          "company_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Name"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "waiting",
+              "completed",
+              "failed",
+              "cancelled",
+              "unknown"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "string"
+          },
+          "ticker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ticker"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "thread_id",
+          "run_id",
+          "status"
+        ],
+        "title": "RecentAnalysisItem",
         "type": "object"
       },
       "RegimeSummaryModel": {
@@ -9049,6 +9377,135 @@
         "summary": "Register",
         "tags": [
           "Authentication"
+        ]
+      }
+    },
+    "/api/v1/dashboard/capabilities": {
+      "get": {
+        "operationId": "capabilities_api_v1_dashboard_capabilities_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardCapabilities"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Capabilities",
+        "tags": [
+          "Dashboard"
+        ]
+      }
+    },
+    "/api/v1/dashboard/market-movers": {
+      "get": {
+        "operationId": "market_movers_api_v1_dashboard_market_movers_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 3,
+              "maximum": 10,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketMoversResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Market Movers",
+        "tags": [
+          "Dashboard"
+        ]
+      }
+    },
+    "/api/v1/dashboard/recent-analyses": {
+      "get": {
+        "operationId": "recent_analyses_api_v1_dashboard_recent_analyses_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "next_cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 512,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Next Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecentAnalysesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recent Analyses",
+        "tags": [
+          "Dashboard"
         ]
       }
     },
