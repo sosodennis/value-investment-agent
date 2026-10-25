@@ -27,7 +27,7 @@ docker compose -p value-investment-agent-i171-cache up -d --build \
   model-inference-fls search-service backend
 ```
 
-The first launch attempt omitted the required inference service token and the two model containers exited. Supplying a local verification token recreated them successfully; no production credential was used. Postgres, Redis, provider, backend, and both inference services became healthy. Search remained unhealthy with `/readyz` returning 503 because its control plane did not report ready in this isolated configuration. Backend `/health` returned `{"status":"ok"}`.
+The first launch attempt omitted the required inference service token and the two model containers exited. Supplying a local verification token recreated them successfully; no production credential was used. The initial Compose run also had no `SEARCH_PROVIDER_ENCRYPTION_KEY`, so Search selected its unavailable control plane and `/readyz` returned 503. Supplying a disposable Fernet key to this isolated project made Search `/readyz` return 200 and its Docker health become healthy. Postgres, Redis, provider, backend, Search, and both inference services were then healthy. Backend `/health` returned `{"status":"ok"}`. The active project was not changed.
 
 Both model services reported `ready: true` for their pinned revisions. Real offline inference succeeded for `news.sentiment` and `sec.fls`; the outputs included a positive sentiment score and an FLS prediction. The inference containers had `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`, and `HF_LOCAL_FILES_ONLY=1` from Compose.
 
@@ -37,4 +37,4 @@ The retirement helper was exercised against four synthetic volumes labelled for 
 
 ## Remaining verification limits
 
-The search service's unrelated readiness failure remains outside this cache lifecycle change and should be investigated before claiming the entire development stack is healthy. The default model path and both model services passed cold-load, restart, offline inference, and no-volume checks. Existing cache volumes in other projects remain untouched by design.
+Issue #171's exact health criterion is: "A clean Compose launch and a subsequent restart both load the required models offline and pass the model services' behavioral health checks." It names model services, not every optional capability in the Compose file. In this verification, the entire selected Compose service set was healthy after required Search configuration was supplied. The default model path and both model services passed cold-load, restart, offline inference, and no-volume checks. Existing cache volumes in other projects remain untouched by design.
