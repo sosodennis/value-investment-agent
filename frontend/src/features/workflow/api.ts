@@ -38,12 +38,18 @@ function parseRunResponse(value: unknown): WorkflowRun {
     return { thread_id: record.thread_id, run_id: record.run_id, status: typeof record.status === 'string' ? record.status : 'started' } satisfies StartRunResponse;
 }
 
-export async function getActivitySnapshot(threadId: string, signal?: AbortSignal): Promise<WorkflowActivitySnapshot> {
-    const response = await fetch(`${API_URL}/api/v1/threads/${encodeURIComponent(threadId)}/activities`, { credentials: 'include', signal });
+export async function getActivitySnapshot(
+    threadId: string,
+    options: { runId?: string; signal?: AbortSignal } = {},
+): Promise<WorkflowActivitySnapshot> {
+    const url = new URL(`${API_URL}/api/v1/threads/${encodeURIComponent(threadId)}/activities`);
+    if (options.runId) url.searchParams.set('run_id', options.runId);
+    const response = await fetch(url.toString(), { credentials: 'include', signal: options.signal });
     if (!response.ok) throw await readError(response, 'Activity snapshot');
     const payload: unknown = await response.json();
     const snapshot = parseWorkflowActivitySnapshot(payload);
     if (snapshot.thread_id !== threadId) throw new TypeError('activity snapshot thread identity mismatch.');
+    if (options.runId && snapshot.run_id !== options.runId) throw new TypeError('activity snapshot run identity mismatch.');
     return snapshot;
 }
 
@@ -69,9 +75,11 @@ export async function consumeWorkflowEvents(
     afterSeq: number,
     signal: AbortSignal,
     onEvent: (event: WorkflowActivityEvent) => boolean | void,
+    runId?: string,
 ): Promise<void> {
     const url = new URL(`${API_URL}/api/v1/threads/${encodeURIComponent(threadId)}/events`);
     url.searchParams.set('after_seq', String(afterSeq));
+    if (runId) url.searchParams.set('run_id', runId);
     const response = await fetch(url.toString(), { credentials: 'include', signal, headers: { Accept: 'text/event-stream' } });
     if (!response.ok) throw await readError(response, 'Workflow event stream');
     const reader = response.body?.getReader();

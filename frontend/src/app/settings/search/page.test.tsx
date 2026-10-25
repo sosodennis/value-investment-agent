@@ -79,12 +79,47 @@ describe('Search settings page', () => {
     it('persists enablement and order from the provider list', async () => {
         render(<SearchSettingsPage />);
         await screen.findAllByText('provider-a');
+        fireEvent.click(screen.getByLabelText('Enabled', { selector: '#provider-enabled-provider-a' }));
         fireEvent.click(screen.getByRole('button', { name: 'Move ddgs up' }));
         fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
         await waitFor(() => expect(api.updateSearchSettings).toHaveBeenCalledWith([
             { provider: 'ddgs', enabled: true, priority: 0 },
-            { provider: 'provider-a', enabled: true, priority: 1 },
+            { provider: 'provider-a', enabled: false, priority: 1 },
         ]));
+    });
+
+    it('tests and replaces an existing provider key', async () => {
+        const keyedSnapshot = {
+            ...snapshot,
+            settings: { providers: [
+                { ...snapshot.settings.providers[0], keys: [{ id: 'key1', provider: 'provider-a', label: 'Main', suffix: 'cdef', fingerprint: 'safe', enabled: true, priority: 0, status: 'active' as const, failure_count: 0, last_tested_at: null, last_used_at: null, cooldown_until: null }] },
+                snapshot.settings.providers[1],
+            ] },
+        };
+        api.getSearchSettings.mockResolvedValue(keyedSnapshot);
+        api.replaceSearchKey.mockResolvedValue({ id: 'key1', provider: 'provider-a', tested: true, active: true, suffix: '9876', fingerprint: 'safe-fingerprint' });
+        render(<SearchSettingsPage />);
+        await screen.findByText('Main · •••• cdef');
+        fireEvent.click(screen.getByRole('button', { name: 'Replace' }));
+        fireEvent.change(await screen.findByLabelText('Replacement API key'), { target: { value: 'replacement-secret' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Test and replace key' }));
+        await screen.findByText('Provider key tested and replaced.');
+        expect(api.replaceSearchKey).toHaveBeenCalledWith({ provider: 'provider-a', key_id: 'key1', api_key: 'replacement-secret', label: 'Main' });
+    });
+
+    it('toggles an existing key through its account-scoped API action', async () => {
+        const keyedSnapshot = {
+            ...snapshot,
+            settings: { providers: [
+                { ...snapshot.settings.providers[0], keys: [{ id: 'key1', provider: 'provider-a', label: 'Main', suffix: 'cdef', fingerprint: 'safe', enabled: true, priority: 0, status: 'active' as const, failure_count: 0, last_tested_at: null, last_used_at: null, cooldown_until: null }] },
+                snapshot.settings.providers[1],
+            ] },
+        };
+        api.getSearchSettings.mockResolvedValue(keyedSnapshot);
+        render(<SearchSettingsPage />);
+        await screen.findByText('Main · •••• cdef');
+        fireEvent.click(screen.getByRole('button', { name: 'Disable Main' }));
+        await waitFor(() => expect(api.setSearchKeyEnabled).toHaveBeenCalledWith('key1', false));
     });
 
     it('requires an explicit dialog action before deleting a key', async () => {

@@ -6,6 +6,8 @@ import { WorkspacePage } from '@/features/workspace/workspace-page';
 export function WorkspacePageClient() {
     const searchParams = useSearchParams();
     const tickerParam = searchParams.get('ticker');
+    const threadId = searchParams.get('thread_id');
+    const runId = searchParams.get('run_id');
     const initialTicker = tickerParam ? tickerParam.trim() : null;
     const shouldAutoStart = Boolean(initialTicker);
 
@@ -13,6 +15,8 @@ export function WorkspacePageClient() {
         <WorkspacePage
             initialTicker={initialTicker}
             autoStart={shouldAutoStart}
+            initialThreadId={threadId}
+            expectedRunId={runId}
         />
     );
 }

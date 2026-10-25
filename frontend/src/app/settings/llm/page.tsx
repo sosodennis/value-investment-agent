@@ -29,6 +29,7 @@ import {
     getLlmSettings,
     listLlmProviderKeys,
     LlmSettingsApiError,
+    replaceLlmProviderKey,
     type LlmProviderKey,
     type LlmModelOption,
     testLlmProviderKey,
@@ -111,6 +112,7 @@ export default function LlmSettingsPage() {
     const [isSavingModel, setIsSavingModel] = useState(false);
     const [keyOperation, setKeyOperation] = useState<KeyOperation>(null);
     const [deleteCandidate, setDeleteCandidate] = useState<LlmProviderKey | null>(null);
+    const [replacementCandidate, setReplacementCandidate] = useState<LlmProviderKey | null>(null);
 
     const redirectToLogin = useCallback((cause: unknown): boolean => {
         if (!(cause instanceof LlmSettingsApiError) || cause.status !== 401) return false;
@@ -187,18 +189,27 @@ export default function LlmSettingsPage() {
     async function handleAddKey(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
         if (isAddingKey || !apiKey) return;
+        const replacing = replacementCandidate !== null;
         setIsAddingKey(true);
         setOperationError(null);
         setNotice(null);
         try {
-            const created = await addLlmProviderKey({ label: label.trim() || 'OpenRouter key', api_key: apiKey });
-            setKeys((current) => [created, ...current]);
+            const input = { label: label.trim() || 'OpenRouter key', api_key: apiKey };
+            const created = replacing
+                ? await replaceLlmProviderKey(replacementCandidate.id, input)
+                : await addLlmProviderKey(input);
+            setKeys((current) => replacing
+                ? current.map((key) => key.id === replacementCandidate.id ? created : key)
+                : [created, ...current]);
+            setReplacementCandidate(null);
             setLabel('');
             labelDraftRef.current = '';
             setApiKey('');
-            setNotice(`Key ending in ${created.suffix} passed its test and was added.`);
+            setNotice(replacing
+                ? `Key ending in ${created.suffix} passed its test and replaced ${input.label}.`
+                : `Key ending in ${created.suffix} passed its test and was added.`);
         } catch (cause) {
-            if (!redirectToLogin(cause)) setOperationError(errorMessage(cause, 'Could not add this key.'));
+            if (!redirectToLogin(cause)) setOperationError(errorMessage(cause, replacing ? 'Could not replace this key.' : 'Could not add this key.'));
         } finally {
             setIsAddingKey(false);
         }
@@ -282,9 +293,10 @@ export default function LlmSettingsPage() {
                 <div className="grid gap-7 lg:grid-cols-[minmax(16rem,0.8fr)_minmax(0,1.2fr)]">
                     <form onSubmit={(event) => void handleAddKey(event)} className="grid content-start gap-5 border-b border-border py-6 lg:border-b-0 lg:border-r lg:pr-7" aria-labelledby="add-key-heading">
                         <div>
-                            <h2 id="add-key-heading" className="font-semibold">Add a provider key</h2>
+                            <h2 id="add-key-heading" className="font-semibold">{replacementCandidate ? `Replace ${replacementCandidate.label}` : 'Add a provider key'}</h2>
                             <p className="mt-1 text-sm text-muted-foreground">The key is tested before it is stored.</p>
                         </div>
+                        {replacementCandidate ? <Button type="button" variant="ghost" className="justify-self-start" disabled={isAddingKey} onClick={() => { setReplacementCandidate(null); setLabel(''); labelDraftRef.current = ''; setApiKey(''); }}>Cancel replacement</Button> : null}
                         <Field label="Label" htmlFor="key-label" description="Optional. Use a name you recognize.">
                             <Input id="key-label" value={label} onChange={(event) => { labelDraftRef.current = event.target.value; setLabel(event.target.value); }} placeholder="Primary research key" maxLength={80} disabled={isAddingKey} />
                         </Field>
@@ -292,8 +304,8 @@ export default function LlmSettingsPage() {
                             <Input id="openrouter-key" type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder="sk-or-v1-..." minLength={20} maxLength={500} autoComplete="off" required disabled={isAddingKey} />
                         </Field>
                         <Button type="submit" disabled={isAddingKey || !authenticated || !apiKey}>
-                            {isAddingKey ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <Plus aria-hidden="true" />}
-                            {isAddingKey ? 'Testing and adding...' : 'Test and add key'}
+                            {isAddingKey ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : replacementCandidate ? <RefreshCw aria-hidden="true" /> : <Plus aria-hidden="true" />}
+                            {isAddingKey ? (replacementCandidate ? 'Testing and replacing...' : 'Testing and adding...') : replacementCandidate ? 'Test and replace key' : 'Test and add key'}
                         </Button>
                     </form>
 
@@ -345,6 +357,9 @@ export default function LlmSettingsPage() {
                                                     <Button type="button" variant="outline" size="sm" onClick={() => void handleTestKey(item)} disabled={keyOperation !== null || isLoadingKeys}>
                                                         {activeOperation === 'test' ? <LoaderCircle className="animate-spin" /> : <Check />}
                                                         {activeOperation === 'test' ? 'Testing...' : 'Test'}
+                                                    </Button>
+                                                    <Button type="button" variant="outline" size="sm" onClick={() => { setReplacementCandidate(item); setLabel(item.label); labelDraftRef.current = item.label; setApiKey(''); setOperationError(null); setNotice(null); }} disabled={keyOperation !== null || isLoadingKeys || isAddingKey}>
+                                                        <RefreshCw aria-hidden="true" />Replace
                                                     </Button>
                                                     <Button type="button" variant="ghost" size="icon" onClick={() => setDeleteCandidate(item)} disabled={keyOperation !== null || isLoadingKeys} aria-label={`Delete ${item.label}`} title={`Delete ${item.label}`}>
                                                         {activeOperation === 'delete' ? <LoaderCircle className="animate-spin" /> : <Trash2 />}

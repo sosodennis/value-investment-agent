@@ -1,13 +1,12 @@
 import { useCallback } from 'react';
 import useSWR from 'swr';
 import { clientLogger } from '@/lib/logger';
+import { buildArtifactUrl } from '@/features/artifacts/api';
 import { parseApiErrorMessage } from '@/types/protocol';
 import {
     ArtifactKind,
     parseArtifactEnvelope,
 } from '@/types/agents/artifact-envelope-parser';
-
-const API_URL = process.env.NEXT_PUBLIC_LANGGRAPH_URL || 'http://localhost:8000';
 
 type ArtifactParser<T> = (value: unknown, context: string) => T;
 type ArtifactCacheOptions = {
@@ -80,7 +79,7 @@ export function useArtifact<T>(
     );
 
     const { data, error, isLoading } = useSWR<T>(
-        artifactId ? `${API_URL}/api/v1/artifacts/${artifactId}` : null,
+        artifactId ? buildArtifactUrl(artifactId) : null,
         fetcher,
         {
             revalidateOnFocus: false,

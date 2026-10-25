@@ -9,6 +9,7 @@ const api = vi.hoisted(() => ({
     deleteLlmProviderKey: vi.fn(),
     getLlmSettings: vi.fn(),
     listLlmProviderKeys: vi.fn(),
+    replaceLlmProviderKey: vi.fn(),
     testLlmProviderKey: vi.fn(),
     updateLlmSettings: vi.fn(),
 }));
@@ -163,6 +164,32 @@ describe('LLM settings', () => {
         await screen.findByText('Primary key was deleted.');
         expect(api.deleteLlmProviderKey).toHaveBeenCalledWith(existingKey.id);
         expect(screen.queryByText(existingKey.label)).toBeNull();
+    });
+
+    it('tests and replaces a configured key in place', async () => {
+        api.listLlmProviderKeys.mockResolvedValue([existingKey]);
+        api.replaceLlmProviderKey.mockResolvedValue({
+            ...existingKey,
+            suffix: '9876',
+            status: 'healthy',
+        });
+        render(<LlmSettingsPage />);
+        await screen.findByText(existingKey.label);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Replace' }));
+        expect((screen.getByLabelText('Label') as HTMLInputElement).value).toBe(existingKey.label);
+        fireEvent.change(screen.getByLabelText('OpenRouter API key'), {
+            target: { value: 'sk-or-v1-replacement-secret' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Test and replace key' }));
+
+        await screen.findByText(/passed its test and replaced Primary key/);
+        expect(api.replaceLlmProviderKey).toHaveBeenCalledWith(existingKey.id, {
+            label: existingKey.label,
+            api_key: 'sk-or-v1-replacement-secret',
+        });
+        expect(screen.getByText('sk-or-••••9876')).toBeTruthy();
+        expect(screen.queryByDisplayValue('sk-or-v1-replacement-secret')).toBeNull();
     });
 
     it('updates the global model policy from the free model picker', async () => {
