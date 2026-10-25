@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 
-import { TechnicalObservabilityWorkspace } from '@/components/technical-observability/TechnicalObservabilityWorkspace';
+import { TechnicalObservabilityPage as TechnicalObservabilityView } from '@/features/technical-observability/technical-observability-page';
 
 export const metadata: Metadata = {
     title: 'Technical Observability | FinanceAI Lab',
@@ -9,5 +9,5 @@ export const metadata: Metadata = {
 };
 
 export default function TechnicalObservabilityPage() {
-    return <TechnicalObservabilityWorkspace />;
+    return <TechnicalObservabilityView />;
 }

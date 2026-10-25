@@ -121,6 +121,9 @@ export function useTechnicalObservability(
         aggregates: aggregatesState.data ?? [],
         rows: rowsState.data ?? [],
         calibrationReadiness: calibrationState.data ?? null,
+        aggregatesError: aggregatesState.error ?? null,
+        rowsError: rowsState.error ?? null,
+        calibrationError: calibrationState.error ?? null,
         isLoading:
             aggregatesState.isLoading ||
             rowsState.isLoading ||
