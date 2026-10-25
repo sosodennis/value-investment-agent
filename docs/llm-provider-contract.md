@@ -52,7 +52,7 @@ for interactive work and six for background work. `LLM_GATEWAY_MAX_ATTEMPTS`
 sets the global cap. `LLM_GATEWAY_MAX_ATTEMPTS_INTERACTIVE` and
 `LLM_GATEWAY_MAX_ATTEMPTS_BACKGROUND` set each class budget.
 
-Backoff starts at `0.25s`, stops at `8s`, and adds up to `0.25s` of jitter. Set
+Backoff starts at `1s`, stops at `8s`, and adds up to `0.25s` of jitter. Set
 `LLM_GATEWAY_BACKOFF_SECONDS`, `LLM_GATEWAY_MAX_BACKOFF_SECONDS`, and
 `LLM_GATEWAY_JITTER_SECONDS` to change it. The adapter honors a numeric or
 HTTP-date `Retry-After` header and caps the delay. It reduces upstream response

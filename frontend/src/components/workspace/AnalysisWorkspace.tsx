@@ -22,6 +22,7 @@ export function AnalysisWorkspace({
 }: AnalysisWorkspaceProps) {
     const {
         sendMessage,
+        submitCommand,
         loadHistory,
         isLoading,
         threadId,
@@ -174,6 +175,8 @@ export function AnalysisWorkspace({
                         workflow={workflow}
                         connectionState={connectionState}
                         onCancelRun={cancelRun}
+                        onResumeInteraction={submitCommand}
+                        isSubmitting={isLoading}
                     />
                 </WorkspaceLayout.Content>
             </WorkspaceLayout.Main>

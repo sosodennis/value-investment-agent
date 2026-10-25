@@ -17,6 +17,8 @@ from src.analysis_runtime.domain.contracts import (
     ActivityEvent,
     ActivitySnapshot,
     ReplayPage,
+    RunStatus,
+    TickerSelectionResponse,
 )
 from src.analysis_runtime.domain.errors import (
     ActivityPersistenceError,
@@ -86,6 +88,69 @@ class AnalysisRuntimeService:
         self._tasks[thread_id] = task
         return selected_run_id
 
+    async def resume(
+        self,
+        *,
+        principal_id: str,
+        thread_id: str,
+        run_id: str,
+        activity_id: str,
+        interaction_id: str,
+        response: TickerSelectionResponse,
+    ) -> str:
+        await self._check_owner(principal_id=principal_id, thread_id=thread_id)
+        task = self._tasks.get(thread_id)
+        if task and not task.done():
+            raise RunAlreadyActiveError("thread already has an active run")
+        activity = await self.repository.claim_resume(
+            thread_id=thread_id,
+            run_id=run_id,
+            activity_id=activity_id,
+            interaction_id=interaction_id,
+            response=response,
+            principal_id=principal_id,
+            now=datetime.now(timezone.utc),
+        )
+        resume_input = {
+            "interrupt_response": response.model_dump(mode="json"),
+            "resuming_activity_id": activity.activity_id,
+            "resuming_scope_path": list(activity.scope_path),
+            "resuming_attempt": activity.attempt,
+        }
+        self._tasks[thread_id] = asyncio.create_task(
+            self._execute(
+                principal_id=principal_id,
+                thread_id=thread_id,
+                run_id=run_id,
+                input_data=resume_input,
+            )
+        )
+        return run_id
+
+    async def recover_pending_resumes(self) -> int:
+        """Restart resume commands durably claimed before a process stopped."""
+        pending = await self.repository.pending_resumes()
+        recovered = 0
+        for item in pending:
+            if item.thread_id in self._tasks and not self._tasks[item.thread_id].done():
+                continue
+            resume_input = {
+                "interrupt_response": item.response.model_dump(mode="json"),
+                "resuming_activity_id": item.activity_id,
+                "resuming_scope_path": list(item.scope_path),
+                "resuming_attempt": item.attempt,
+            }
+            self._tasks[item.thread_id] = asyncio.create_task(
+                self._execute(
+                    principal_id=item.principal_id,
+                    thread_id=item.thread_id,
+                    run_id=item.run_id,
+                    input_data=resume_input,
+                )
+            )
+            recovered += 1
+        return recovered
+
     async def cancel(self, *, principal_id: str, thread_id: str, run_id: str) -> None:
         await self._check_owner(principal_id=principal_id, thread_id=thread_id)
         run = await self.repository.get_run(thread_id=thread_id)
@@ -150,10 +215,14 @@ class AnalysisRuntimeService:
     async def unsubscribe(self, subscriber: RuntimeSubscriber) -> None:
         await self.hub.unsubscribe(subscriber)
 
-    async def _persist_and_publish(self, event: ActivityEvent) -> None:
+    async def _persist_and_publish(
+        self, event: ActivityEvent, *, run_status: RunStatus | None = None
+    ) -> None:
         async with self._subscription_gate:
             try:
-                inserted = await self.repository.append_atomic(event)
+                inserted = await self.repository.append_atomic(
+                    event, run_status=run_status
+                )
             except Exception as exc:
                 if isinstance(exc, ActivityPersistenceError):
                     raise
@@ -178,6 +247,7 @@ class AnalysisRuntimeService:
                 status="running",
                 now=datetime.now(timezone.utc),
             )
+            suspended = False
             async for item in self.runner.run(
                 thread_id=thread_id,
                 run_id=run_id,
@@ -188,6 +258,9 @@ class AnalysisRuntimeService:
                     item
                     if isinstance(item, Activity)
                     else Activity.model_validate(item)
+                )
+                suspended = (
+                    activity.status == "waiting" and activity.interruption is not None
                 )
                 current = await self.repository.replay(
                     thread_id=thread_id, after_seq=0, limit=1_000_000
@@ -203,7 +276,13 @@ class AnalysisRuntimeService:
                         update={"thread_id": thread_id, "run_id": run_id}
                     ),
                 )
-                await self._persist_and_publish(event)
+                await self._persist_and_publish(
+                    event, run_status="waiting" if suspended else None
+                )
+                if suspended:
+                    break
+            if suspended:
+                return
             completion = Activity(
                 activity_id="workflow",
                 thread_id=thread_id,
@@ -226,13 +305,8 @@ class AnalysisRuntimeService:
                     run_id=run_id,
                     occurred_at=datetime.now(timezone.utc),
                     payload=completion,
-                )
-            )
-            await self.repository.set_run(
-                thread_id=thread_id,
-                run_id=run_id,
-                status="completed",
-                now=datetime.now(timezone.utc),
+                ),
+                run_status="completed",
             )
         except asyncio.CancelledError:
             await self._emit_terminal(

@@ -4,9 +4,20 @@ import {
     boundedReconnectDelay,
     createWorkflowActivityState,
     parseSseActivityFrame,
+    parseWorkflowActivity,
     parseWorkflowActivityEvent,
     parseWorkflowActivitySnapshot,
 } from './workflow-activity';
+
+const tickerInterruption = {
+    interaction_id: 'interaction-1',
+    request: {
+        type: 'ticker_selection',
+        title: 'Ticker Resolution',
+        description: 'Choose the intended company.',
+        candidates: [{ symbol: 'GOOG', name: 'Alphabet Inc.', confidence: 0.91 }],
+    },
+};
 
 const activity = (status: string = 'running') => ({
     activity_id: 'root', thread_id: 'thread-1', run_id: 'run-1', scope_path: ['root'],
@@ -20,6 +31,7 @@ describe('workflow.activity consumer boundary', () => {
     it('rejects malformed, unknown-first payloads and cross identity', () => {
         expect(() => parseWorkflowActivityEvent({ ...event(1), payload: { ...activity(), progress: 101 } })).toThrow();
         expect(() => parseWorkflowActivityEvent({ ...event(1), payload: { ...activity(), run_id: 'other' } })).toThrow(/identity/);
+        expect(() => parseWorkflowActivityEvent({ ...event(1), event_name: 'interrupt.request' })).toThrow(/event_name/);
     });
 
     it('hydrates snapshot then applies ordered deltas with event id dedupe', () => {
@@ -45,5 +57,17 @@ describe('workflow.activity consumer boundary', () => {
     it('parses SSE frames and bounds reconnect backoff', () => {
         expect(parseSseActivityFrame(JSON.stringify(event(1))).event_id).toBe('event-1');
         expect(boundedReconnectDelay(20)).toBe(8000);
+    });
+
+    it('hydrates and replays the typed waiting interaction', () => {
+        const waiting = parseWorkflowActivity({ ...activity('waiting'), interruption: tickerInterruption });
+        const snapshot = parseWorkflowActivitySnapshot({
+            thread_id: 'thread-1', run_id: 'run-1', run_status: 'waiting', cursor: 1,
+            active_activities: [waiting], recent_activities: [waiting],
+        });
+        const state = createWorkflowActivityState(snapshot);
+        expect(state.active.get('root')?.interruption?.interaction_id).toBe('interaction-1');
+        expect(() => parseWorkflowActivity({ ...activity('waiting'), type: 'ticker_selection', data: {} })).toThrow(/unsupported field/);
+        expect(() => parseWorkflowActivity({ ...activity('waiting'), interruption: { ...tickerInterruption, request: { ...tickerInterruption.request, candidates: [] } } })).toThrow(/candidates/);
     });
 });

@@ -7,13 +7,17 @@ from datetime import datetime
 from src.analysis_runtime.domain.contracts import (
     ActivityEvent,
     ActivitySnapshot,
+    PendingResume,
     ReplayPage,
     RunStatus,
     RunStatusRecord,
+    TickerSelectionResponse,
 )
 from src.analysis_runtime.domain.errors import (
     ActivityPersistenceError,
+    InteractionNotAvailableError,
     InvalidCursorError,
+    InvalidInteractionResponseError,
     ReplayGapError,
 )
 
@@ -27,9 +31,12 @@ class InMemoryActivityRepository:
         self._event_ids: dict[str, set[str]] = defaultdict(set)
         self._cursors: dict[str, int] = defaultdict(int)
         self._runs: dict[str, RunStatusRecord] = {}
+        self._pending_resumes: dict[str, PendingResume] = {}
         self._retention = replay_retention
 
-    async def append_atomic(self, event: ActivityEvent) -> bool:
+    async def append_atomic(
+        self, event: ActivityEvent, *, run_status: RunStatus | None = None
+    ) -> bool:
         async with self._lock:
             events = self._events[event.thread_id]
             if event.event_id in self._event_ids[event.thread_id]:
@@ -43,6 +50,23 @@ class InMemoryActivityRepository:
                 raise ActivityPersistenceError("event sequence is not append-only")
             if any(existing.seq_id == event.seq_id for existing in events):
                 raise ActivityPersistenceError("event sequence already exists")
+            if run_status is not None:
+                run = self._runs.get(event.thread_id)
+                if run is None or run.run_id != event.run_id:
+                    raise ActivityPersistenceError(
+                        "run status does not match activity event"
+                    )
+                self._runs[event.thread_id] = run.model_copy(
+                    update={
+                        "status": run_status,
+                        "updated_at": event.occurred_at,
+                        "ended_at": event.occurred_at
+                        if run_status in {"completed", "failed", "cancelled"}
+                        else None,
+                    }
+                )
+                if run_status in {"waiting", "completed", "failed", "cancelled"}:
+                    self._pending_resumes.pop(event.thread_id, None)
             events.append(event)
             self._cursors[event.thread_id] = event.seq_id
             self._event_ids[event.thread_id].add(event.event_id)
@@ -130,4 +154,67 @@ class InMemoryActivityRepository:
                 else None,
             )
             self._runs[thread_id] = record
+            if status in {"completed", "failed", "cancelled"}:
+                self._pending_resumes.pop(thread_id, None)
             return record
+
+    async def claim_resume(
+        self,
+        *,
+        thread_id: str,
+        run_id: str,
+        activity_id: str,
+        interaction_id: str,
+        response: TickerSelectionResponse,
+        principal_id: str,
+        now: datetime,
+    ):
+        async with self._lock:
+            run = self._runs.get(thread_id)
+            if run is None or run.run_id != run_id:
+                raise InteractionNotAvailableError("run cannot accept this interaction")
+            if run.status != "waiting":
+                raise InteractionNotAvailableError("run is not waiting for input")
+
+            event = next(
+                (
+                    item
+                    for item in reversed(self._events.get(thread_id, ()))
+                    if item.run_id == run_id and item.payload.activity_id == activity_id
+                ),
+                None,
+            )
+            activity = event.payload if event is not None else None
+            if (
+                activity is None
+                or activity.status != "waiting"
+                or activity.interruption is None
+                or activity.interruption.interaction_id != interaction_id
+            ):
+                raise InteractionNotAvailableError(
+                    "interaction is stale or unavailable"
+                )
+            candidates = activity.interruption.request.candidates
+            if response.selected_symbol not in {item.symbol for item in candidates}:
+                raise InvalidInteractionResponseError(
+                    "selected symbol is not one of the available candidates"
+                )
+
+            self._runs[thread_id] = run.model_copy(
+                update={"status": "running", "updated_at": now, "ended_at": None}
+            )
+            self._pending_resumes[thread_id] = PendingResume(
+                thread_id=thread_id,
+                run_id=run_id,
+                principal_id=principal_id,
+                activity=activity.interruption,
+                activity_id=activity.activity_id,
+                scope_path=activity.scope_path,
+                attempt=activity.attempt,
+                response=response,
+            )
+            return activity
+
+    async def pending_resumes(self) -> tuple[PendingResume, ...]:
+        async with self._lock:
+            return tuple(self._pending_resumes.values())

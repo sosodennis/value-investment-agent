@@ -75,10 +75,11 @@ resources use the same safe not-found response.
 
 ## Frozen event and error vocabulary
 
-The current adapter emits `content.delta`, `agent.status`,
+The pre-cutover adapter emitted `content.delta`, `agent.status`,
 `agent.lifecycle`, `state.update`, `interrupt.request`, and `error` from
-`src/interface/events/adapters.py`. The new public activity event is
-`workflow.activity`, owned by #148. It carries the stable envelope:
+`src/interface/events/adapters.py`. The #147 cutover removes that public event
+union. The sole durable workflow event is `workflow.activity`, owned by #148.
+It carries the stable envelope:
 
 ```text
 event_id, seq_id, event_version, thread_id, run_id, occurred_at, event_name,

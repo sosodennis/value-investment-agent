@@ -13,6 +13,31 @@ export const TERMINAL_ACTIVITY_STATUSES = new Set<ActivityStatus>([
 export type ActivityStatus = (typeof ACTIVITY_STATUSES)[number];
 export type ActivityKind = (typeof ACTIVITY_KINDS)[number];
 
+export interface TickerCandidate {
+    symbol: string;
+    name: string;
+    exchange?: string | null;
+    type?: string | null;
+    confidence: number;
+}
+
+export interface TickerSelectionRequest {
+    type: 'ticker_selection';
+    title: string;
+    description: string;
+    candidates: TickerCandidate[];
+}
+
+export interface ActivityInterruption {
+    interaction_id: string;
+    request: TickerSelectionRequest;
+}
+
+export interface TickerSelectionResponse {
+    type: 'ticker_selection';
+    selected_symbol: string;
+}
+
 export interface WorkflowActivity {
     activity_id: string;
     parent_activity_id?: string;
@@ -24,6 +49,7 @@ export interface WorkflowActivity {
     label: string;
     progress?: number;
     attempt: number;
+    interruption?: ActivityInterruption;
 }
 
 export interface WorkflowActivityEvent {
@@ -94,8 +120,55 @@ const oneOf = <T extends string>(value: unknown, values: readonly T[], context: 
     return value as T;
 };
 
+const onlyKeys = (value: UnknownRecord, keys: readonly string[], context: string): void => {
+    const allowed = new Set(keys);
+    if (Object.keys(value).some((key) => !allowed.has(key))) throw new TypeError(`${context} has an unsupported field.`);
+};
+
+function parseActivityInterruption(value: unknown, context: string): ActivityInterruption {
+    const input = record(value, context);
+    onlyKeys(input, ['interaction_id', 'request'], context);
+    const request = record(input.request, `${context}.request`);
+    onlyKeys(request, ['type', 'title', 'description', 'candidates'], `${context}.request`);
+    if (!Array.isArray(request.candidates) || request.candidates.length < 1 || request.candidates.length > 20) {
+        throw new TypeError(`${context}.request.candidates must contain 1 to 20 candidates.`);
+    }
+    const candidates = request.candidates.map((value, index): TickerCandidate => {
+        const candidateContext = `${context}.request.candidates[${index}]`;
+        const candidate = record(value, candidateContext);
+        onlyKeys(candidate, ['symbol', 'name', 'exchange', 'type', 'confidence'], candidateContext);
+        if (typeof candidate.confidence !== 'number' || !Number.isFinite(candidate.confidence) || candidate.confidence < 0 || candidate.confidence > 1) {
+            throw new TypeError(`${candidateContext}.confidence must be between 0 and 1.`);
+        }
+        const parsed: TickerCandidate = {
+            symbol: string(candidate.symbol, `${candidateContext}.symbol`),
+            name: string(candidate.name, `${candidateContext}.name`),
+            confidence: candidate.confidence,
+        };
+        if (candidate.exchange !== undefined) {
+            if (candidate.exchange !== null && typeof candidate.exchange !== 'string') throw new TypeError(`${candidateContext}.exchange must be a string or null.`);
+            parsed.exchange = candidate.exchange;
+        }
+        if (candidate.type !== undefined) {
+            if (candidate.type !== null && typeof candidate.type !== 'string') throw new TypeError(`${candidateContext}.type must be a string or null.`);
+            parsed.type = candidate.type;
+        }
+        return parsed;
+    });
+    return {
+        interaction_id: string(input.interaction_id, `${context}.interaction_id`),
+        request: {
+            type: oneOf(request.type, ['ticker_selection'], `${context}.request.type`),
+            title: string(request.title, `${context}.request.title`),
+            description: string(request.description, `${context}.request.description`),
+            candidates,
+        },
+    };
+}
+
 export function parseWorkflowActivity(value: unknown, context = 'activity'): WorkflowActivity {
     const input = record(value, context);
+    onlyKeys(input, ['activity_id', 'parent_activity_id', 'thread_id', 'run_id', 'scope_path', 'kind', 'status', 'label', 'progress', 'attempt', 'interruption'], context);
     const scope = input.scope_path;
     if (!Array.isArray(scope) || scope.length < 1 || scope.some((part) => typeof part !== 'string' || part.length === 0)) {
         throw new TypeError(`${context}.scope_path must be a non-empty string array.`);
@@ -117,11 +190,14 @@ export function parseWorkflowActivity(value: unknown, context = 'activity'): Wor
     if (result.attempt < 1) throw new TypeError(`${context}.attempt must be positive.`);
     if (input.parent_activity_id !== undefined) result.parent_activity_id = string(input.parent_activity_id, `${context}.parent_activity_id`);
     if (progress !== undefined) result.progress = progress;
+    if (input.interruption !== undefined) result.interruption = parseActivityInterruption(input.interruption, `${context}.interruption`);
+    if (result.interruption && result.status !== 'waiting') throw new TypeError(`${context}.interruption requires waiting status.`);
     return result;
 }
 
 export function parseWorkflowActivityEvent(value: unknown, context = 'workflow.activity event'): WorkflowActivityEvent {
     const input = record(value, context);
+    onlyKeys(input, ['event_id', 'seq_id', 'event_version', 'event_name', 'thread_id', 'run_id', 'occurred_at', 'payload'], context);
     const eventVersion = input.event_version;
     if (eventVersion !== ACTIVITY_VERSION) throw new TypeError(`${context}.event_version must be v1.`);
     if (input.event_name !== ACTIVITY_EVENT_NAME) throw new TypeError(`${context}.event_name must be workflow.activity.`);
@@ -142,6 +218,7 @@ export function parseWorkflowActivityEvent(value: unknown, context = 'workflow.a
 
 export function parseWorkflowActivitySnapshot(value: unknown, context = 'workflow.activity snapshot'): WorkflowActivitySnapshot {
     const input = record(value, context);
+    onlyKeys(input, ['thread_id', 'run_id', 'run_status', 'cursor', 'active_activities', 'recent_activities'], context);
     const active = input.active_activities;
     const recent = input.recent_activities;
     if (!Array.isArray(active) || !Array.isArray(recent)) throw new TypeError(`${context} activity sets must be arrays.`);

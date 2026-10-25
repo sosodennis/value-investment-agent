@@ -66,6 +66,7 @@ async def lifespan(app: FastAPI):
         runner=LangGraphRunner(graph),
         hub=hub,
     )
+    await app.state.analysis_runtime.recover_pending_resumes()
     try:
         yield
     finally:

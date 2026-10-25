@@ -44,7 +44,17 @@ Activity {
           "failed" | "cancelled" | "skipped",
   label: string,
   progress?: number,  // measured [0, 100], omit when not measurable
-  attempt: positive integer
+  attempt: positive integer,
+  interruption?: {
+    interaction_id: string,
+    request: {
+      type: "ticker_selection",
+      title: string,
+      description: string,
+      candidates: { symbol: string, name: string, exchange?: string | null,
+                    type?: string | null, confidence: number }[]
+    }
+  }
 }
 ```
 
@@ -76,11 +86,20 @@ running -> waiting -> running
 ```
 
 An activity may be discovered as `queued`, become `running`, pause as
-`waiting` for an interrupt or deliberate wait, and then resume. A retry emits
-the same logical `activity_id` with `attempt + 1`; each attempt has its own
-terminal event. A terminal status for an attempt is immutable. `degraded` is
-not a lifecycle status: a usable completed result carries quality metadata in
-the owning result/artifact contract.
+`waiting` for an interrupt or deliberate wait, and then resume. A human-input
+wait includes a typed `interruption` on the waiting activity. For ticker
+selection, the answer is submitted to
+`POST /api/v1/threads/{thread_id}/runs/{run_id}/resume` with the exact
+`activity_id`, `interaction_id`, and a `ticker_selection` response. The runtime
+accepts it only while that matching interaction is still the current waiting
+activity, and only when the selected symbol is one of its candidates. A
+successful resume continues the same run, emits the same activity identity
+with `attempt + 1`, and omits the consumed interruption. `waiting` without an
+`interruption` is not resumable. A retry emits the same logical `activity_id`
+with `attempt + 1`; each attempt has its own terminal event. A terminal status
+for an attempt is immutable. `degraded` is not a lifecycle status: a usable
+completed result carries quality metadata in the owning result/artifact
+contract.
 
 The current active set contains activities whose latest attempt is queued,
 running, or waiting. Completed, failed, cancelled, and skipped activities are
@@ -123,11 +142,14 @@ for sequential nodes, parallel subgraphs, repeated invocations, retry
 attempts, interrupts, cancellation, failure, completion, duplicate delivery,
 replay, and sequence gaps. Every scenario includes valid events, a snapshot,
 and machine-readable assertions for the backend and frontend tests.
+The interrupt scenarios carry the prompt in the durable activity event and
+snapshot, include the typed resume request, and verify the next attempt removes
+the consumed prompt. No interrupt content is carried through chat-message
+metadata or a separate SSE event.
 
 The fixture manifest indexes this contract under `activity_contracts`. The
-legacy `sse-events-v1.json` entry remains only as a baseline until #145/#146
-replace the old event union and remove the old fixture in the same cutover; it
-is not a source for the new activity contract.
+legacy SSE event fixture and event union are deleted by the #147 cutover; they
+are not compatibility sources for this contract.
 
 ## Dependency gate
 

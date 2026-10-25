@@ -2,9 +2,7 @@ export interface Message {
     id: string;
     role: 'user' | 'assistant' | 'system' | 'tool';
     content: string;
-    type?: 'text' | 'financial_report' | 'interrupt.request';
-    data?: unknown;
-    isInteractive?: boolean;
+    type?: 'text' | 'financial_report';
     created_at?: string | null;
     agentId?: string;
 }

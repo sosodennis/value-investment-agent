@@ -7,9 +7,27 @@ from uuid import UUID
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
+from langgraph.types import Interrupt as LangGraphInterrupt
 
 from src.analysis_runtime.application.ports import GraphRunner
-from src.analysis_runtime.domain.contracts import Activity, ActivityKind, ActivityStatus
+from src.analysis_runtime.domain.contracts import (
+    Activity,
+    ActivityInterruption,
+    ActivityKind,
+    ActivityStatus,
+    TickerSelectionRequest,
+)
+from src.analysis_runtime.domain.errors import InvalidRunnerInterruptError
+from src.llm_provider.entrypoint import (
+    ProviderPrincipal,
+    reset_provider_principal,
+    set_provider_principal,
+)
+from src.shared.internal_services import (
+    InternalPrincipal,
+    reset_request_principal,
+    set_request_principal,
+)
 
 
 class EventGraph(Protocol):
@@ -124,57 +142,228 @@ class LangGraphRunner(GraphRunner):
         principal_id: str,
     ) -> AsyncIterator[Activity]:
         message = input_data.get("message")
-        resume_payload = input_data.get("resume_payload")
+        interrupt_response = input_data.get("interrupt_response")
+        resuming_activity_id = input_data.get("resuming_activity_id")
+        resuming_scope_path = input_data.get("resuming_scope_path")
+        resuming_attempt = input_data.get("resuming_attempt")
+        if isinstance(resuming_scope_path, list | tuple) and all(
+            isinstance(part, str) for part in resuming_scope_path
+        ):
+            resume_scope = tuple(resuming_scope_path)
+        else:
+            resume_scope = ()
+        if not isinstance(resuming_activity_id, str):
+            resuming_activity_id = None
+        if not isinstance(resuming_attempt, int) or isinstance(resuming_attempt, bool):
+            resuming_attempt = 0
         if isinstance(message, str) and message:
             graph_input: Command[object] | dict[str, object] = {
                 "messages": [HumanMessage(content=message)],
                 "user_query": message,
             }
-        elif isinstance(resume_payload, Mapping):
-            graph_input = Command(resume=dict(resume_payload))
+        elif isinstance(interrupt_response, Mapping):
+            graph_input = Command(resume=dict(interrupt_response))
         else:
             graph_input = {}
 
-        callback_metadata: dict[str, Mapping[str, object]] = {}
-        async for raw in self._graph.astream_events(
-            graph_input,
-            config={"configurable": {"thread_id": thread_id}},
-            version="v2",
-        ):
-            event_name = raw.get("event")
-            if not isinstance(event_name, str) or event_name not in _LIFECYCLE_EVENTS:
-                continue
-            metadata = raw.get("metadata")
-            metadata_map = metadata if isinstance(metadata, Mapping) else {}
-            callback_run_id = _callback_id(raw.get("run_id"))
-            if callback_run_id in callback_metadata:
-                merged_metadata = dict(callback_metadata[callback_run_id])
-                merged_metadata.update(metadata_map)
-                metadata_map = merged_metadata
-            scope_path = _activity_scope(metadata_map)
-            if callback_run_id is None or not scope_path:
-                continue
-            callback_metadata[callback_run_id] = metadata_map
+        provider_token = set_provider_principal(ProviderPrincipal(user_id=principal_id))
+        request_token = set_request_principal(
+            InternalPrincipal(subject_id=principal_id)
+        )
+        try:
+            callback_metadata: dict[str, Mapping[str, object]] = {}
+            active_callbacks: dict[
+                str, tuple[Mapping[str, object], tuple[str, ...], str | None]
+            ] = {}
+            resumed_activity_started = False
+            suspended = False
+            async for raw in self._graph.astream_events(
+                graph_input,
+                config={"configurable": {"thread_id": thread_id}},
+                version="v2",
+            ):
+                if suspended:
+                    continue
+                event_name = raw.get("event")
+                if event_name == "on_chain_stream":
+                    interruption = self._interrupt_activity(
+                        raw,
+                        thread_id=thread_id,
+                        run_id=run_id,
+                        resuming_activity_id=resuming_activity_id,
+                        resuming_scope_path=resume_scope,
+                        resuming_attempt=resuming_attempt,
+                        active_callbacks=active_callbacks,
+                    )
+                    if interruption is not None:
+                        suspended = True
+                        yield interruption
+                    continue
+                if (
+                    not isinstance(event_name, str)
+                    or event_name not in _LIFECYCLE_EVENTS
+                ):
+                    continue
+                metadata = raw.get("metadata")
+                metadata_map = metadata if isinstance(metadata, Mapping) else {}
+                callback_run_id = _callback_id(raw.get("run_id"))
+                if callback_run_id in callback_metadata:
+                    merged_metadata = dict(callback_metadata[callback_run_id])
+                    merged_metadata.update(metadata_map)
+                    metadata_map = merged_metadata
+                scope_path = _activity_scope(metadata_map)
+                if callback_run_id is None or not scope_path:
+                    continue
+                callback_metadata[callback_run_id] = metadata_map
 
-            parent_activity_id = None
-            parent_ids = raw.get("parent_ids")
-            if isinstance(parent_ids, list | tuple):
-                for parent_id in reversed(parent_ids):
-                    normalized_parent_id = _callback_id(parent_id)
-                    if normalized_parent_id is not None:
-                        parent_activity_id = f"langgraph:{normalized_parent_id}"
-                        break
+                is_resumed_activity = (
+                    not resumed_activity_started
+                    and resuming_activity_id is not None
+                    and scope_path == resume_scope
+                )
+                activity_id = (
+                    resuming_activity_id
+                    if is_resumed_activity
+                    else f"langgraph:{callback_run_id}"
+                )
+                attempt = (
+                    resuming_attempt + 1
+                    if is_resumed_activity
+                    else _activity_attempt(metadata_map)
+                )
+                if is_resumed_activity:
+                    resumed_activity_started = True
 
-            _, status = _LIFECYCLE_EVENTS[event_name]
-            yield Activity(
-                activity_id=f"langgraph:{callback_run_id}",
-                parent_activity_id=parent_activity_id,
-                thread_id=thread_id,
-                run_id=run_id,
-                scope_path=scope_path,
-                kind=_activity_kind(event_name, metadata_map),
-                status=status,
-                label=_activity_label(event_name, metadata_map, scope_path),
-                progress=_activity_progress(raw, metadata_map),
-                attempt=_activity_attempt(metadata_map),
+                parent_activity_id = None
+                parent_ids = raw.get("parent_ids")
+                if isinstance(parent_ids, list | tuple):
+                    for parent_id in reversed(parent_ids):
+                        normalized_parent_id = _callback_id(parent_id)
+                        if normalized_parent_id is not None:
+                            parent_activity_id = f"langgraph:{normalized_parent_id}"
+                            break
+
+                event_family, _ = _LIFECYCLE_EVENTS[event_name]
+                if event_family == "chain" and event_name == "on_chain_start":
+                    active_callbacks[callback_run_id] = (
+                        metadata_map,
+                        scope_path,
+                        parent_activity_id,
+                    )
+
+                _, status = _LIFECYCLE_EVENTS[event_name]
+                yield Activity(
+                    activity_id=activity_id,
+                    parent_activity_id=parent_activity_id,
+                    thread_id=thread_id,
+                    run_id=run_id,
+                    scope_path=scope_path,
+                    kind=_activity_kind(event_name, metadata_map),
+                    status=status,
+                    label=_activity_label(event_name, metadata_map, scope_path),
+                    progress=_activity_progress(raw, metadata_map),
+                    attempt=attempt,
+                )
+                if event_family == "chain" and event_name in {
+                    "on_chain_end",
+                    "on_chain_error",
+                }:
+                    active_callbacks.pop(callback_run_id, None)
+        finally:
+            reset_request_principal(request_token)
+            reset_provider_principal(provider_token)
+
+    @staticmethod
+    def _interrupt_activity(
+        raw: Mapping[str, object],
+        *,
+        thread_id: str,
+        run_id: str,
+        resuming_activity_id: str | None,
+        resuming_scope_path: tuple[str, ...],
+        resuming_attempt: int,
+        active_callbacks: Mapping[
+            str, tuple[Mapping[str, object], tuple[str, ...], str | None]
+        ],
+    ) -> Activity | None:
+        data = raw.get("data")
+        chunk = data.get("chunk") if isinstance(data, Mapping) else None
+        if not isinstance(chunk, Mapping) or "__interrupt__" not in chunk:
+            return None
+        raw_interrupts = chunk.get("__interrupt__")
+        if not isinstance(raw_interrupts, list | tuple) or len(raw_interrupts) != 1:
+            raise InvalidRunnerInterruptError(
+                "interrupt stream must contain one request"
             )
+        interrupt = raw_interrupts[0]
+        if not isinstance(interrupt, LangGraphInterrupt):
+            raise InvalidRunnerInterruptError("interrupt stream has an invalid request")
+        value = interrupt.value
+        if not isinstance(value, Mapping) or value.get("type") != "ticker_selection":
+            raise InvalidRunnerInterruptError("unsupported interrupt request type")
+
+        candidates = value.get("candidates")
+        reason = value.get("reason")
+        try:
+            request = TickerSelectionRequest.model_validate(
+                {
+                    "type": "ticker_selection",
+                    "title": "Ticker Resolution",
+                    "description": reason,
+                    "candidates": candidates,
+                }
+            )
+        except Exception as exc:
+            raise InvalidRunnerInterruptError(
+                "ticker selection interrupt has an invalid payload"
+            ) from exc
+
+        scoped_callbacks = [
+            (callback_id, callback)
+            for callback_id, callback in active_callbacks.items()
+            if callback[1]
+        ]
+        if not scoped_callbacks:
+            raise InvalidRunnerInterruptError(
+                "interrupt has no active application activity"
+            )
+        deepest_scope_size = max(len(callback[1]) for _, callback in scoped_callbacks)
+        deepest_callbacks = [
+            (callback_id, callback)
+            for callback_id, callback in scoped_callbacks
+            if len(callback[1]) == deepest_scope_size
+        ]
+        if len({callback[1] for _, callback in deepest_callbacks}) > 1:
+            raise InvalidRunnerInterruptError(
+                "interrupt cannot be assigned to one active application activity"
+            )
+        callback_run_id, (metadata_map, scope_path, parent_activity_id) = (
+            deepest_callbacks[-1]
+        )
+
+        is_resumed_activity = (
+            resuming_activity_id is not None and scope_path == resuming_scope_path
+        )
+        return Activity(
+            activity_id=(
+                resuming_activity_id
+                if is_resumed_activity
+                else f"langgraph:{callback_run_id}"
+            ),
+            parent_activity_id=parent_activity_id,
+            thread_id=thread_id,
+            run_id=run_id,
+            scope_path=scope_path,
+            kind=_activity_kind("on_chain_start", metadata_map),
+            status="waiting",
+            label=_activity_label("on_chain_start", metadata_map, scope_path),
+            attempt=(
+                resuming_attempt + 1
+                if is_resumed_activity
+                else _activity_attempt(metadata_map)
+            ),
+            interruption=ActivityInterruption(
+                interaction_id=interrupt.id,
+                request=request,
+            ),
+        )

@@ -5,7 +5,7 @@ import { Zap, Activity } from 'lucide-react';
 import { useFinancialData } from '@/hooks/useFinancialData';
 import { AgentWorkspaceTab } from './AgentWorkspaceTab';
 import { AgentOutputTab } from './AgentOutputTab';
-import type { ConnectionState, WorkflowActivityState } from '@/features/workflow';
+import type { ConnectionState, TickerSelectionResponse, WorkflowActivity, WorkflowActivityState } from '@/features/workflow';
 
 type DetailTab = 'Workspace' | 'Output' | 'Logs';
 const DETAIL_TABS: DetailTab[] = ['Workspace', 'Output', 'Logs'];
@@ -17,6 +17,8 @@ interface AgentDetailPanelProps {
     workflow: WorkflowActivityState | null;
     connectionState: ConnectionState;
     onCancelRun?: () => Promise<void>;
+    onResumeInteraction?: (activity: WorkflowActivity, response: TickerSelectionResponse) => Promise<void>;
+    isSubmitting?: boolean;
 }
 
 export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
@@ -26,6 +28,8 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
     workflow,
     connectionState,
     onCancelRun,
+    onResumeInteraction,
+    isSubmitting = false,
 }) => {
     const [activeTab, setActiveTab] = useState<DetailTab>('Workspace');
 
@@ -109,6 +113,8 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                         agent={agent}
                         workflow={workflow}
                         connectionState={connectionState}
+                        onResumeInteraction={onResumeInteraction}
+                        isSubmitting={isSubmitting}
                     />
                 )}
 

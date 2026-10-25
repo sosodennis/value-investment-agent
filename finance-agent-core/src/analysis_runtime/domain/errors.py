@@ -16,6 +16,18 @@ class RunAlreadyActiveError(RuntimeErrorBase):
     code = "run_already_active"
 
 
+class InteractionNotAvailableError(RuntimeErrorBase):
+    code = "interaction_not_available"
+
+
+class InvalidInteractionResponseError(RuntimeErrorBase):
+    code = "invalid_interaction_response"
+
+
+class InvalidRunnerInterruptError(RuntimeErrorBase):
+    code = "invalid_runner_interrupt"
+
+
 class InvalidCursorError(RuntimeErrorBase):
     code = "invalid_cursor"
 

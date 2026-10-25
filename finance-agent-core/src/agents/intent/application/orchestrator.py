@@ -28,7 +28,6 @@ from src.agents.intent.interface.parsers import (
     parse_ticker_candidates,
 )
 from src.agents.intent.interface.serializers import (
-    build_ticker_selection_interrupt_ui_payload,
     serialize_ticker_candidates,
     serialize_ticker_selection_interrupt_payload,
 )
@@ -210,19 +209,8 @@ class IntentOrchestrator:
         *,
         user_input: object,
         candidates_raw: object,
-        interrupt_payload_dump: JSONObject,
     ) -> dict[str, object] | None:
         candidate_objs = self.parse_candidates(candidates_raw)
-        reason_raw = interrupt_payload_dump.get("reason")
-        reason = (
-            reason_raw
-            if isinstance(reason_raw, str)
-            else "Multiple tickers found or ambiguity detected."
-        )
-        ui_payload = build_ticker_selection_interrupt_ui_payload(
-            candidates=candidate_objs,
-            reason=reason,
-        )
         selected_symbol = self.resolve_selected_symbol(
             user_input=user_input,
             candidate_objs=candidate_objs,
@@ -246,7 +234,7 @@ class IntentOrchestrator:
             )
             return None
 
-        from langchain_core.messages import AIMessage, HumanMessage
+        from langchain_core.messages import HumanMessage
 
         intent_ctx = self.build_resolved_intent_context(
             ticker=selected_symbol,
@@ -260,17 +248,7 @@ class IntentOrchestrator:
 
         return {
             "intent_extraction": intent_ctx,
-            "messages": [
-                AIMessage(
-                    content="",
-                    additional_kwargs={
-                        "type": "interrupt.request",
-                        "data": ui_payload,
-                        "agent_id": "intent_extraction",
-                    },
-                ),
-                HumanMessage(content=f"Selected Ticker: {selected_symbol}"),
-            ],
+            "messages": [HumanMessage(content=f"Selected Ticker: {selected_symbol}")],
             "active_activity_id": "clarifying",
             "workflow_activity_updates": {"clarifying": "done"},
         }

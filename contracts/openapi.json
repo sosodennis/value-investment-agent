@@ -3559,33 +3559,43 @@
         "title": "RegisterRequest",
         "type": "object"
       },
+      "ResumeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "activity_id": {
+            "minLength": 1,
+            "title": "Activity Id",
+            "type": "string"
+          },
+          "interaction_id": {
+            "minLength": 1,
+            "title": "Interaction Id",
+            "type": "string"
+          },
+          "response": {
+            "$ref": "#/components/schemas/TickerSelectionResponse"
+          }
+        },
+        "required": [
+          "activity_id",
+          "interaction_id",
+          "response"
+        ],
+        "title": "ResumeRequest",
+        "type": "object"
+      },
       "RunRequest": {
         "additionalProperties": false,
         "properties": {
           "message": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Message"
-          },
-          "resume_payload": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Resume Payload"
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
           }
         },
+        "required": [
+          "message"
+        ],
         "title": "RunRequest",
         "type": "object"
       },
@@ -8387,6 +8397,28 @@
         "title": "TechnicalWfaSummaryData",
         "type": "object"
       },
+      "TickerSelectionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "selected_symbol": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Selected Symbol",
+            "type": "string"
+          },
+          "type": {
+            "const": "ticker_selection",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "selected_symbol"
+        ],
+        "title": "TickerSelectionResponse",
+        "type": "object"
+      },
       "TraceableFieldModel": {
         "additionalProperties": true,
         "type": "object"
@@ -10137,6 +10169,23 @@
               "title": "After Seq",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Run Id"
+            }
           }
         ],
         "responses": {
@@ -10256,6 +10305,67 @@
           }
         },
         "summary": "Cancel Run",
+        "tags": [
+          "Analysis runtime"
+        ]
+      }
+    },
+    "/api/v1/threads/{thread_id}/runs/{run_id}/resume": {
+      "post": {
+        "operationId": "resume_run_api_v1_threads__thread_id__runs__run_id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResumeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resume Run",
         "tags": [
           "Analysis runtime"
         ]

@@ -1,10 +1,4 @@
 {
-  "supported_versions": [
-    {
-      "version": "v1",
-      "fixture": "sse-events-v1.json"
-    }
-  ],
   "activity_contracts": [
     {
       "version": "v1",

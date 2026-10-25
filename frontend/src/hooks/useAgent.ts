@@ -1,8 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { clientLogger } from '@/lib/logger';
-import type { InterruptResumePayload } from '@/types/interrupts';
 import type { AgentStatus } from '@/types/agents';
-import { applyWorkflowActivityEvent, boundedReconnectDelay, cancelWorkflowRun, consumeWorkflowEvents, createWorkflowActivityState, getActivitySnapshot, startWorkflowRun, type WorkflowActivitySnapshot } from '@/features/workflow';
+import { applyWorkflowActivityEvent, boundedReconnectDelay, cancelWorkflowRun, consumeWorkflowEvents, createWorkflowActivityState, getActivitySnapshot, resumeWorkflowRun, startWorkflowRun, type TickerSelectionResponse, type WorkflowActivity, type WorkflowActivitySnapshot } from '@/features/workflow';
 import { useAgentReducer } from './useAgentReducer';
 
 const makeThreadId = () => `thread_${Date.now()}`;
@@ -73,19 +72,23 @@ export function useAgent(assistantId = 'agent') {
         } catch (error) { setError(toError(error, 'Failed to start workflow run.')); } finally { setIsLoading(false); }
     }, [addUserMessage, attachStream, hydrateWorkflow, initSession, setError, setRun, state.threadId]);
 
-    const submitCommand = useCallback(async (payload: InterruptResumePayload) => {
-        if (!state.threadId) { setError('Session ID missing.'); return; }
-        const text = 'approved' in payload ? (payload.approved ? 'Approved' : 'Rejected') : 'selected_symbol' in payload ? `Selected ${payload.selected_symbol}` : 'Resumed execution';
+    const submitCommand = useCallback(async (activity: WorkflowActivity, response: TickerSelectionResponse) => {
+        if (!state.threadId || !state.runId || !activity.interruption) { setError('The workflow interaction is no longer available.'); return; }
+        const text = `Selected ${response.selected_symbol}`;
         addUserMessage({ id: `user_${Date.now()}`, role: 'user', content: text, type: 'text' });
         setIsLoading(true);
         try {
-            const run = await startWorkflowRun(state.threadId, { resume_payload: { ...payload } });
+            const run = await resumeWorkflowRun(state.threadId, state.runId, {
+                activity_id: activity.activity_id,
+                interaction_id: activity.interruption.interaction_id,
+                response,
+            });
             setRun(run.run_id);
             const snapshot = await getActivitySnapshot(state.threadId);
             hydrateWorkflow(snapshot);
             await attachStream(state.threadId, snapshot, run.run_id);
         } catch (error) { setError(toError(error, 'Failed to resume workflow run.')); } finally { setIsLoading(false); }
-    }, [addUserMessage, attachStream, hydrateWorkflow, setError, setRun, state.threadId]);
+    }, [addUserMessage, attachStream, hydrateWorkflow, setError, setRun, state.runId, state.threadId]);
 
     const loadHistory = useCallback(async (threadId: string) => {
         setIsLoading(true);

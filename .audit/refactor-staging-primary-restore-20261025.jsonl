@@ -1,0 +1,4 @@
+{"check":"health","status":"VERIFIED","backend_origin":"http://127.0.0.1:8500","thread_id":"refactor-smoke-20261025020227-73464","request_id":"","latency_ms":0,"attempts":1,"provider_calls":[],"usage":null,"error_code":""}
+{"check":"register","status":"VERIFIED","backend_origin":"http://127.0.0.1:8500","thread_id":"refactor-smoke-20261025020227-73464","request_id":"","latency_ms":0,"attempts":1,"provider_calls":[],"usage":null,"error_code":""}
+{"check":"login","status":"VERIFIED","backend_origin":"http://127.0.0.1:8500","thread_id":"refactor-smoke-20261025020227-73464","request_id":"","latency_ms":0,"attempts":1,"provider_calls":[],"usage":null,"error_code":""}
+{"check":"primary_restore","status":"VERIFIED","backend_origin":"http://127.0.0.1:8500","thread_id":"refactor-smoke-20261025020227-73464","request_id":"","latency_ms":0,"attempts":1,"provider_calls":[],"usage":null,"error_code":""}

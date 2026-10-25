@@ -8,9 +8,11 @@ from src.analysis_runtime.domain.contracts import (
     Activity,
     ActivityEvent,
     ActivitySnapshot,
+    PendingResume,
     ReplayPage,
     RunStatus,
     RunStatusRecord,
+    TickerSelectionResponse,
 )
 
 
@@ -32,7 +34,9 @@ class OwnerPort(Protocol):
 
 
 class ActivityRepository(Protocol):
-    async def append_atomic(self, event: ActivityEvent) -> bool: ...
+    async def append_atomic(
+        self, event: ActivityEvent, *, run_status: RunStatus | None = None
+    ) -> bool: ...
 
     async def replay(
         self,
@@ -54,6 +58,20 @@ class ActivityRepository(Protocol):
         status: RunStatus,
         now: datetime,
     ) -> RunStatusRecord: ...
+
+    async def claim_resume(
+        self,
+        *,
+        thread_id: str,
+        run_id: str,
+        activity_id: str,
+        interaction_id: str,
+        response: TickerSelectionResponse,
+        principal_id: str,
+        now: datetime,
+    ) -> Activity: ...
+
+    async def pending_resumes(self) -> tuple[PendingResume, ...]: ...
 
 
 class RuntimeSubscriber(Protocol):

@@ -206,7 +206,7 @@ def test_provider_service_owns_gateway_credentials_and_retry_policy() -> None:
         "${LLM_GATEWAY_MAX_ATTEMPTS_BACKGROUND:-3}"
     )
     assert provider_environment["LLM_GATEWAY_BACKOFF_SECONDS"] == (
-        "${LLM_GATEWAY_BACKOFF_SECONDS:-0.25}"
+        "${LLM_GATEWAY_BACKOFF_SECONDS:-1.0}"
     )
     assert provider_environment["LLM_GATEWAY_MAX_BACKOFF_SECONDS"] == (
         "${LLM_GATEWAY_MAX_BACKOFF_SECONDS:-8}"

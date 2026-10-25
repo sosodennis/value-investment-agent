@@ -6,11 +6,14 @@ from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from src.analysis_runtime.application.runtime_service import AnalysisRuntimeService
+from src.analysis_runtime.domain.contracts import TickerSelectionResponse
 from src.analysis_runtime.domain.errors import (
+    InteractionNotAvailableError,
     InvalidCursorError,
+    InvalidInteractionResponseError,
     ReplayGapError,
     RunAlreadyActiveError,
     RunNotFoundError,
@@ -29,8 +32,15 @@ router = APIRouter(prefix="/api/v1/threads", tags=["Analysis runtime"])
 class RunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    message: str | None = None
-    resume_payload: dict[str, object] | None = None
+    message: str = Field(min_length=1)
+
+
+class ResumeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    activity_id: str = Field(min_length=1)
+    interaction_id: str = Field(min_length=1)
+    response: TickerSelectionResponse
 
 
 class RunResponse(BaseModel):
@@ -49,8 +59,15 @@ def _runtime(request: Request) -> AnalysisRuntimeService:
 def _map_error(exc: Exception) -> HTTPException:
     if isinstance(exc, ThreadNotFoundError | RunNotFoundError):
         return HTTPException(status_code=404, detail=exc.code)
-    if isinstance(exc, RunAlreadyActiveError | SubscriberOverloadedError):
+    if isinstance(
+        exc,
+        RunAlreadyActiveError
+        | InteractionNotAvailableError
+        | SubscriberOverloadedError,
+    ):
         return HTTPException(status_code=409, detail=exc.code)
+    if isinstance(exc, InvalidInteractionResponseError):
+        return HTTPException(status_code=422, detail=exc.code)
     if isinstance(exc, ReplayGapError):
         return HTTPException(
             status_code=409,
@@ -68,22 +85,41 @@ async def start_run(
     request: Request,
     principal: Principal = Depends(require_current_user_mutation),
 ) -> RunResponse:
-    if body.message is None and body.resume_payload is None:
-        raise HTTPException(
-            status_code=400, detail="message or resume_payload is required"
-        )
     try:
         run_id = await _runtime(request).start(
             principal_id=principal.user_id,
             thread_id=thread_id,
-            input_data={
-                "message": body.message,
-                "resume_payload": body.resume_payload,
-            },
+            input_data={"message": body.message},
         )
     except Exception as exc:
         raise _map_error(exc) from exc
     return RunResponse(thread_id=thread_id, run_id=run_id)
+
+
+@router.post(
+    "/{thread_id}/runs/{run_id}/resume",
+    response_model=RunResponse,
+    status_code=202,
+)
+async def resume_run(
+    thread_id: str,
+    run_id: str,
+    body: ResumeRequest,
+    request: Request,
+    principal: Principal = Depends(require_current_user_mutation),
+) -> RunResponse:
+    try:
+        resumed_run_id = await _runtime(request).resume(
+            principal_id=principal.user_id,
+            thread_id=thread_id,
+            run_id=run_id,
+            activity_id=body.activity_id,
+            interaction_id=body.interaction_id,
+            response=body.response,
+        )
+    except Exception as exc:
+        raise _map_error(exc) from exc
+    return RunResponse(thread_id=thread_id, run_id=resumed_run_id, status="resumed")
 
 
 @router.post("/{thread_id}/runs/{run_id}/cancel", status_code=204)

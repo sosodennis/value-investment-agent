@@ -9,13 +9,17 @@ from src.analysis_runtime.domain.contracts import (
     Activity,
     ActivityEvent,
     ActivitySnapshot,
+    PendingResume,
     ReplayPage,
     RunStatus,
     RunStatusRecord,
+    TickerSelectionResponse,
 )
 from src.analysis_runtime.domain.errors import (
     ActivityPersistenceError,
+    InteractionNotAvailableError,
     InvalidCursorError,
+    InvalidInteractionResponseError,
     ReplayGapError,
 )
 from src.infrastructure.database import AsyncSessionLocal
@@ -23,12 +27,15 @@ from src.infrastructure.models import (
     WorkflowActivityCursor,
     WorkflowActivityEvent,
     WorkflowRun,
+    WorkflowRunResume,
 )
 
 
 @dataclass(frozen=True)
 class SqlAlchemyActivityRepository:
-    async def append_atomic(self, event: ActivityEvent) -> bool:
+    async def append_atomic(
+        self, event: ActivityEvent, *, run_status: RunStatus | None = None
+    ) -> bool:
         async with AsyncSessionLocal() as session:
             try:
                 cursor = await session.get(
@@ -46,6 +53,30 @@ class SqlAlchemyActivityRepository:
                     raise ActivityPersistenceError("event sequence is not append-only")
                 if event.seq_id != latest + 1:
                     raise ActivityPersistenceError("event sequence contains a gap")
+                run = None
+                if run_status is not None:
+                    run = await session.scalar(
+                        select(WorkflowRun)
+                        .where(WorkflowRun.thread_id == event.thread_id)
+                        .with_for_update()
+                    )
+                    if run is None or run.run_id != event.run_id:
+                        raise ActivityPersistenceError(
+                            "run status does not match activity event"
+                        )
+                    run.status = run_status
+                    run.updated_at = event.occurred_at.replace(tzinfo=None)
+                    run.ended_at = (
+                        event.occurred_at.replace(tzinfo=None)
+                        if run_status in {"completed", "failed", "cancelled"}
+                        else None
+                    )
+                    if run_status in {"waiting", "completed", "failed", "cancelled"}:
+                        pending_resume = await session.get(
+                            WorkflowRunResume, event.thread_id, with_for_update=True
+                        )
+                        if pending_resume is not None:
+                            await session.delete(pending_resume)
                 session.add(
                     WorkflowActivityEvent(
                         event_id=event.event_id,
@@ -161,6 +192,12 @@ class SqlAlchemyActivityRepository:
                 if status in {"completed", "failed", "cancelled"}
                 else None
             )
+            if status in {"completed", "failed", "cancelled"}:
+                pending_resume = await session.get(
+                    WorkflowRunResume, thread_id, with_for_update=True
+                )
+                if pending_resume is not None:
+                    await session.delete(pending_resume)
             await session.commit()
             return RunStatusRecord(
                 thread_id=thread_id,
@@ -170,6 +207,118 @@ class SqlAlchemyActivityRepository:
                 updated_at=now,
                 ended_at=now if row.ended_at else None,
             )
+
+    async def claim_resume(
+        self,
+        *,
+        thread_id: str,
+        run_id: str,
+        activity_id: str,
+        interaction_id: str,
+        response: TickerSelectionResponse,
+        principal_id: str,
+        now: datetime,
+    ) -> Activity:
+        async with AsyncSessionLocal() as session:
+            run = await session.scalar(
+                select(WorkflowRun)
+                .where(WorkflowRun.thread_id == thread_id)
+                .with_for_update()
+            )
+            if run is None or run.run_id != run_id:
+                raise InteractionNotAvailableError("run cannot accept this interaction")
+            if run.status != "waiting":
+                raise InteractionNotAvailableError("run is not waiting for input")
+
+            row = await session.scalar(
+                select(WorkflowActivityEvent)
+                .where(WorkflowActivityEvent.thread_id == thread_id)
+                .where(WorkflowActivityEvent.run_id == run_id)
+                .where(
+                    WorkflowActivityEvent.payload["activity_id"].as_string()
+                    == activity_id
+                )
+                .order_by(WorkflowActivityEvent.seq_id.desc())
+                .limit(1)
+                .with_for_update()
+            )
+            activity = Activity.model_validate(row.payload) if row is not None else None
+            if (
+                activity is None
+                or activity.status != "waiting"
+                or activity.interruption is None
+                or activity.interruption.interaction_id != interaction_id
+            ):
+                raise InteractionNotAvailableError(
+                    "interaction is stale or unavailable"
+                )
+            if response.selected_symbol not in {
+                item.symbol for item in activity.interruption.request.candidates
+            }:
+                raise InvalidInteractionResponseError(
+                    "selected symbol is not one of the available candidates"
+                )
+
+            run.status = "running"
+            run.updated_at = now.replace(tzinfo=None)
+            run.ended_at = None
+            session.add(
+                WorkflowRunResume(
+                    thread_id=thread_id,
+                    run_id=run_id,
+                    principal_id=principal_id,
+                    activity_id=activity_id,
+                    interaction_id=interaction_id,
+                    response=response.model_dump(mode="json"),
+                    created_at=now.replace(tzinfo=None),
+                )
+            )
+            await session.commit()
+            return activity
+
+    async def pending_resumes(self) -> tuple[PendingResume, ...]:
+        async with AsyncSessionLocal() as session:
+            pending_rows = (await session.scalars(select(WorkflowRunResume))).all()
+            pending: list[PendingResume] = []
+            for row in pending_rows:
+                run = await session.get(WorkflowRun, row.thread_id)
+                if run is None or run.run_id != row.run_id or run.status != "running":
+                    continue
+                event_row = await session.scalar(
+                    select(WorkflowActivityEvent)
+                    .where(WorkflowActivityEvent.thread_id == row.thread_id)
+                    .where(WorkflowActivityEvent.run_id == row.run_id)
+                    .where(
+                        WorkflowActivityEvent.payload["activity_id"].as_string()
+                        == row.activity_id
+                    )
+                    .order_by(WorkflowActivityEvent.seq_id.desc())
+                    .limit(1)
+                )
+                activity = (
+                    Activity.model_validate(event_row.payload)
+                    if event_row is not None
+                    else None
+                )
+                if (
+                    activity is None
+                    or activity.interruption is None
+                    or activity.interruption.interaction_id != row.interaction_id
+                ):
+                    continue
+                pending.append(
+                    PendingResume(
+                        thread_id=row.thread_id,
+                        run_id=row.run_id,
+                        principal_id=row.principal_id,
+                        activity=activity.interruption,
+                        activity_id=activity.activity_id,
+                        scope_path=activity.scope_path,
+                        attempt=activity.attempt,
+                        response=TickerSelectionResponse.model_validate(row.response),
+                    )
+                )
+            return tuple(pending)
 
     @staticmethod
     def _to_event(row: WorkflowActivityEvent) -> ActivityEvent:

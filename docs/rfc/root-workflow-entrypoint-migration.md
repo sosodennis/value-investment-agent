@@ -54,7 +54,7 @@ No separate alternative was grafted. Candidate B's explicit non-null builder par
 
 ## Implementation
 
-The root composer preserves the existing node names, metadata, reducers, and edge topology. `get_graph()` owns default child graph construction and the Postgres saver lifecycle. Each public agent builder selects its own wiring when no runner or ports are injected. The API imports `InterruptValue` from the intent entrypoint, and the serialized model fields remain unchanged.
+The root composer preserves the existing node names, metadata, reducers, and edge topology. `get_graph()` owns default child graph construction and the Postgres saver lifecycle. Each public agent builder selects its own wiring when no runner or ports are injected. At the time of this migration, the API imported `InterruptValue` from the intent entrypoint; the #147 cutover replaces that message contract with a runtime-owned typed activity interruption.
 
 All in-repository callers now use agent-owned workflow builders. The five `application/subgraph.py` bridges, the obsolete root node wrappers, and their guard exceptions have been removed. Issue #37 owns the generated action report and regenerates it after this migration lands.
 

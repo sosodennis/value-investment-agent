@@ -13,8 +13,12 @@ export {
     parseWorkflowActivitySnapshot,
 } from './workflow-activity';
 export type {
+    ActivityInterruption,
     ActivityKind,
     ActivityStatus,
+    TickerCandidate,
+    TickerSelectionRequest,
+    TickerSelectionResponse,
     ConnectionState,
     WorkflowActivity,
     WorkflowActivityEvent,
@@ -26,6 +30,7 @@ export {
     cancelWorkflowRun,
     consumeWorkflowEvents,
     getActivitySnapshot,
+    resumeWorkflowRun,
     startWorkflowRun,
 } from './api';
 export type { WorkflowRun } from './api';

@@ -85,7 +85,7 @@ class LiteLLMGatewayConfig:
         (LLMRequestClass.INTERACTIVE, 2),
         (LLMRequestClass.BACKGROUND, 3),
     )
-    backoff_seconds: float = 0.25
+    backoff_seconds: float = 1.0
     max_backoff_seconds: float = 8.0
     jitter_seconds: float = 0.25
     require_principal: bool = False
@@ -146,9 +146,7 @@ class LiteLLMGatewayConfig:
                     ),
                 ),
             ),
-            backoff_seconds=_env_float(
-                "LLM_GATEWAY_BACKOFF_SECONDS", 0.25, minimum=0.0
-            ),
+            backoff_seconds=_env_float("LLM_GATEWAY_BACKOFF_SECONDS", 1.0, minimum=0.0),
             max_backoff_seconds=_env_float(
                 "LLM_GATEWAY_MAX_BACKOFF_SECONDS", 8.0, minimum=0.0
             ),

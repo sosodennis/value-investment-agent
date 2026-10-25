@@ -36,11 +36,11 @@ use listed in the ownership inventory.
 | `agent.lifecycle` | Delete as public activity signal | #148 then #145/#146 | Lifecycle belongs in typed run/activity projection |
 | `state.update` | Delete from public SSE | #148 then #145/#146 | Raw LangGraph state must not cross the app boundary |
 | `content.delta` | Retain as separate transient content event, or rename in #148 if chosen | #148 then #145/#146 | Content is not activity; replayability must be explicit |
-| `interrupt.request` | Rename to typed run/activity interruption payload | #148 then #145/#146 | Interrupt identity must carry thread/run/activity context |
+| `interrupt.request` | Delete; persist typed request on a waiting `workflow.activity` | #147 | Replay, snapshot, and resume share one activity identity and cursor |
 | `error` with raw exception message | Rename to stable error envelope | #145/#146 | No provider prompts, stack traces, or internal details at boundary |
 | `src/interface/events/adapters.py` raw LangGraph mapping | Replace | #145 | Adapter becomes backend-owned normalizer to `workflow.activity` |
 | `frontend/src/types/protocol.ts` union of legacy event names | Replace | #146 | One feature parser consumes the frozen envelope and fixtures |
-| `contracts/fixtures/sse-events-v1.json` | Replace with #148 fixtures | #148 | Existing fixtures cover only legacy status/content events |
+| `contracts/fixtures/sse-events-v1.json` | Delete | #147 | The durable activity contract owns replayable workflow events |
 | `frontend/src/hooks/useAgentStatus.ts` | Delete or absorb into workspace activity reducer | #146 | Duplicate status ownership |
 | `frontend/src/hooks/useAgentActivity.ts` | Move into workspace feature | #146 | Feature owns activity API/parser |
 | `frontend/src/hooks/useAgent.ts` | Move into workspace feature | #146 | Feature owns run/SSE lifecycle |

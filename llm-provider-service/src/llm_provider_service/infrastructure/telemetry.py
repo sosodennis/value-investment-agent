@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import threading
 from dataclasses import dataclass
@@ -17,14 +18,21 @@ from src.llm_provider_service.domain.contracts import (
 def log_event(logger, *, event, message, level, error_code=None, fields=None):
     logger.log(
         level,
-        "%s: %s",
-        event,
-        message,
-        extra={"error_code": error_code, **(fields or {})},
+        json.dumps(
+            {
+                "event": event,
+                "message": message,
+                "error_code": error_code,
+                **(fields or {}),
+            },
+            separators=(",", ":"),
+            sort_keys=True,
+        ),
     )
 
 
 _logger = get_logger(__name__)
+_logger.setLevel(logging.INFO)
 
 
 @dataclass(frozen=True)

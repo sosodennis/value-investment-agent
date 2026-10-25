@@ -383,6 +383,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/threads/{thread_id}/runs/{run_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume Run */
+        post: operations["resume_run_api_v1_threads__thread_id__runs__run_id__resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -1370,14 +1387,18 @@ export interface components {
             /** Password */
             password: string;
         };
+        /** ResumeRequest */
+        ResumeRequest: {
+            /** Activity Id */
+            activity_id: string;
+            /** Interaction Id */
+            interaction_id: string;
+            response: components["schemas"]["TickerSelectionResponse"];
+        };
         /** RunRequest */
         RunRequest: {
             /** Message */
-            message?: string | null;
-            /** Resume Payload */
-            resume_payload?: {
-                [key: string]: unknown;
-            } | null;
+            message: string;
         };
         /** RunResponse */
         RunResponse: {
@@ -2704,6 +2725,16 @@ export interface components {
             /** Wfe Ratio */
             wfe_ratio?: number | null;
         };
+        /** TickerSelectionResponse */
+        TickerSelectionResponse: {
+            /** Selected Symbol */
+            selected_symbol: string;
+            /**
+             * Type
+             * @constant
+             */
+            type: "ticker_selection";
+        };
         TraceableFieldModel: {
             [key: string]: unknown;
         };
@@ -3567,6 +3598,7 @@ export interface operations {
         parameters: {
             query?: {
                 after_seq?: number;
+                run_id?: string | null;
             };
             header?: never;
             path: {
@@ -3649,6 +3681,42 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_run_api_v1_threads__thread_id__runs__run_id__resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResumeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

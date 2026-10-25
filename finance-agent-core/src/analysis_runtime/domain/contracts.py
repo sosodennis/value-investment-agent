@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 ActivityStatus = Literal[
     "queued",
@@ -25,6 +25,52 @@ RunStatus = Literal[
 ]
 
 
+class TickerCandidate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    symbol: str = Field(min_length=1, max_length=32)
+    name: str = Field(min_length=1, max_length=160)
+    exchange: str | None = None
+    type: str | None = None
+    confidence: float = Field(ge=0, le=1)
+
+
+class TickerSelectionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["ticker_selection"]
+    title: str = Field(min_length=1, max_length=160)
+    description: str = Field(min_length=1, max_length=500)
+    candidates: list[TickerCandidate] = Field(min_length=1, max_length=20)
+
+
+class ActivityInterruption(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    interaction_id: str = Field(min_length=1, max_length=200)
+    request: TickerSelectionRequest
+
+
+class TickerSelectionResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["ticker_selection"]
+    selected_symbol: str = Field(min_length=1, max_length=32)
+
+
+class PendingResume(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    thread_id: str
+    run_id: str
+    principal_id: str
+    activity: ActivityInterruption
+    activity_id: str
+    scope_path: tuple[str, ...] = Field(min_length=1)
+    attempt: int = Field(ge=1)
+    response: TickerSelectionResponse
+
+
 class Activity(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -38,6 +84,13 @@ class Activity(BaseModel):
     label: str = Field(min_length=1, max_length=160)
     progress: float | None = Field(default=None, ge=0, le=100)
     attempt: int = Field(ge=1)
+    interruption: ActivityInterruption | None = None
+
+    @model_validator(mode="after")
+    def interruption_requires_waiting_status(self) -> Activity:
+        if self.interruption is not None and self.status != "waiting":
+            raise ValueError("only a waiting activity can carry an interruption")
+        return self
 
 
 class ActivityEvent(BaseModel):
