@@ -3,18 +3,26 @@
 import type { FormEvent } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-    Check,
-    CircleAlert,
-    KeyRound,
-    Loader2,
-    Plus,
-    RefreshCw,
-    ShieldCheck,
-    Trash2,
-    X,
-} from 'lucide-react';
+import { AlertCircle, Check, KeyRound, LoaderCircle, Plus, RefreshCw, ShieldCheck, Trash2 } from 'lucide-react';
 
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Combobox } from '@/components/ui/combobox';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Field } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
     addLlmProviderKey,
     deleteLlmProviderKey,
@@ -26,30 +34,21 @@ import {
     testLlmProviderKey,
     updateLlmSettings,
 } from '@/lib/llm-settings-api';
-import { BeuiSelect } from '@/components/beui/BeuiSelect';
 
-function formatDate(value: string | null | undefined): string {
-    if (!value) return 'Unknown date';
-    return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(
-        new Date(value),
-    );
+type KeyOperation = { kind: 'test' | 'delete'; id: string } | null;
+const LABEL_DRAFT_STORAGE_KEY = 'llm-settings-label-draft';
+
+function formatDate(value: string | null | undefined, withTime = false): string {
+    if (!value) return withTime ? 'Never' : 'Unknown date';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return 'Unknown date';
+    return new Intl.DateTimeFormat(undefined, withTime
+        ? { dateStyle: 'medium', timeStyle: 'short' }
+        : { dateStyle: 'medium' }).format(date);
 }
 
-function formatDateTime(value: string | null | undefined): string {
-    if (!value) return 'Never';
-    return new Intl.DateTimeFormat(undefined, {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-    }).format(new Date(value));
-}
-
-function keyStatusLabel(
-    status: string | undefined,
-    cooldownUntil: string | null | undefined,
-): string {
-    if (cooldownUntil && new Date(cooldownUntil).getTime() > Date.now()) {
-        return 'Cooling down';
-    }
+function keyStatusLabel(status: string | undefined, cooldownUntil: string | null | undefined): string {
+    if (cooldownUntil && new Date(cooldownUntil).getTime() > Date.now()) return 'Cooling down';
     switch (status) {
         case 'healthy': return 'Healthy';
         case 'invalid_key': return 'Invalid key';
@@ -73,18 +72,23 @@ function keyErrorLabel(code: string | null | undefined): string | null {
 function errorMessage(cause: unknown, fallback: string): string {
     if (!(cause instanceof LlmSettingsApiError)) return fallback;
     switch (cause.message) {
-        case 'invalid_key':
-            return 'OpenRouter rejected this API key.';
-        case 'rate_limited':
-            return 'OpenRouter is rate limiting requests. Try again shortly.';
-        case 'unavailable':
-            return 'The gateway or OpenRouter is currently unavailable.';
-        default:
-            return cause.message;
+        case 'invalid_key': return 'OpenRouter rejected this API key.';
+        case 'rate_limited': return 'OpenRouter is rate limiting requests. Try again shortly.';
+        case 'unavailable': return 'The gateway or OpenRouter is currently unavailable.';
+        default: return cause.message;
     }
 }
 
-const LABEL_DRAFT_STORAGE_KEY = 'llm-settings-label-draft';
+function statusVariant(status: string | undefined): 'success' | 'warning' | 'destructive' | 'outline' {
+    switch (status) {
+        case 'healthy': return 'success';
+        case 'cooldown':
+        case 'replacement_grace': return 'warning';
+        case 'invalid_key':
+        case 'unavailable': return 'destructive';
+        default: return 'outline';
+    }
+}
 
 export default function LlmSettingsPage() {
     const router = useRouter();
@@ -92,56 +96,62 @@ export default function LlmSettingsPage() {
     const redirectingRef = useRef(false);
     const [authenticated, setAuthenticated] = useState(false);
     const [keys, setKeys] = useState<LlmProviderKey[]>([]);
-    const [label, setLabel] = useState('');
-    const [apiKey, setApiKey] = useState('');
-    const [error, setError] = useState<string | null>(null);
-    const [notice, setNotice] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
-    const [submitting, setSubmitting] = useState(false);
-    const [busyId, setBusyId] = useState<string | null>(null);
     const [models, setModels] = useState<LlmModelOption[]>([]);
     const [selectedModel, setSelectedModel] = useState('openrouter/free');
-    const [modelSaving, setModelSaving] = useState(false);
+    const [label, setLabel] = useState('');
+    const [apiKey, setApiKey] = useState('');
+    const [keyLoadError, setKeyLoadError] = useState<string | null>(null);
+    const [catalogError, setCatalogError] = useState<string | null>(null);
+    const [operationError, setOperationError] = useState<string | null>(null);
+    const [notice, setNotice] = useState<string | null>(null);
+    const [isLoadingKeys, setIsLoadingKeys] = useState(true);
+    const [isRefreshingKeys, setIsRefreshingKeys] = useState(false);
+    const [isLoadingModels, setIsLoadingModels] = useState(true);
+    const [isAddingKey, setIsAddingKey] = useState(false);
+    const [isSavingModel, setIsSavingModel] = useState(false);
+    const [keyOperation, setKeyOperation] = useState<KeyOperation>(null);
+    const [deleteCandidate, setDeleteCandidate] = useState<LlmProviderKey | null>(null);
 
     const redirectToLogin = useCallback((cause: unknown): boolean => {
-        if (!(cause instanceof LlmSettingsApiError) || cause.status !== 401) {
-            return false;
-        }
+        if (!(cause instanceof LlmSettingsApiError) || cause.status !== 401) return false;
         if (redirectingRef.current) return true;
-        if (typeof window !== 'undefined') {
-            const draft = labelDraftRef.current.trim();
-            if (draft) {
-                window.sessionStorage.setItem(LABEL_DRAFT_STORAGE_KEY, draft);
-            } else {
-                window.sessionStorage.removeItem(LABEL_DRAFT_STORAGE_KEY);
-            }
-        }
+        const draft = labelDraftRef.current.trim();
+        if (draft) window.sessionStorage.setItem(LABEL_DRAFT_STORAGE_KEY, draft);
+        else window.sessionStorage.removeItem(LABEL_DRAFT_STORAGE_KEY);
         redirectingRef.current = true;
         router.replace(`/login?next=${encodeURIComponent('/settings/llm')}`);
         return true;
     }, [router]);
 
-    const loadKeys = useCallback(async () => {
-        setLoading(true);
-        setError(null);
+    const loadKeys = useCallback(async (refresh = false) => {
+        if (refresh) setIsRefreshingKeys(true);
+        else setIsLoadingKeys(true);
+        setKeyLoadError(null);
         try {
             setKeys(await listLlmProviderKeys());
             setAuthenticated(true);
         } catch (cause) {
-            if (!redirectToLogin(cause)) {
-                setError(errorMessage(cause, 'Could not load provider keys.'));
-            }
-            setAuthenticated(false);
+            if (!redirectToLogin(cause)) setKeyLoadError(errorMessage(cause, 'Could not load provider keys.'));
         } finally {
-            setLoading(false);
+            setIsLoadingKeys(false);
+            setIsRefreshingKeys(false);
         }
     }, [redirectToLogin]);
 
-    const loadModelSettings = useCallback(async () => {
-        const settings = await getLlmSettings();
-        setModels(settings.models);
-        setSelectedModel(settings.selected_model);
-    }, []);
+    const loadModels = useCallback(async () => {
+        setIsLoadingModels(true);
+        setCatalogError(null);
+        try {
+            const settings = await getLlmSettings();
+            setAuthenticated(true);
+            setModels(settings.models);
+            setSelectedModel(settings.selected_model);
+        } catch (cause) {
+            if (!redirectToLogin(cause)) setCatalogError(errorMessage(cause, 'Could not load the model catalogue.'));
+        } finally {
+            setIsLoadingModels(false);
+        }
+    }, [redirectToLogin]);
 
     useEffect(() => {
         const draft = window.sessionStorage.getItem(LABEL_DRAFT_STORAGE_KEY);
@@ -150,24 +160,16 @@ export default function LlmSettingsPage() {
             setLabel(draft);
             window.sessionStorage.removeItem(LABEL_DRAFT_STORAGE_KEY);
         }
-        void (async () => {
-            setLoading(true);
-            setError(null);
-            try {
-                await Promise.all([loadKeys(), loadModelSettings()]);
-            } catch (cause) {
-                if (!redirectToLogin(cause)) {
-                    setError(errorMessage(cause, 'Could not load provider settings.'));
-                }
-                setLoading(false);
-            }
-        })();
-    }, [loadKeys, loadModelSettings, redirectToLogin]);
+        void loadKeys();
+        void loadModels();
+    }, [loadKeys, loadModels]);
 
     async function handleModelChange(model: string) {
+        if (!model || model === selectedModel) return;
+        const previousModel = selectedModel;
         setSelectedModel(model);
-        setModelSaving(true);
-        setError(null);
+        setIsSavingModel(true);
+        setOperationError(null);
         setNotice(null);
         try {
             const settings = await updateLlmSettings(model);
@@ -175,305 +177,208 @@ export default function LlmSettingsPage() {
             setSelectedModel(settings.selected_model);
             setNotice(`Default model changed to ${settings.selected_model}.`);
         } catch (cause) {
-            if (!redirectToLogin(cause)) {
-                setError(errorMessage(cause, 'Could not update the default model.'));
-                await loadModelSettings();
-            }
+            setSelectedModel(previousModel);
+            if (!redirectToLogin(cause)) setOperationError(errorMessage(cause, 'Could not update the default model.'));
         } finally {
-            setModelSaving(false);
+            setIsSavingModel(false);
         }
     }
 
-    async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    async function handleAddKey(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
-        setSubmitting(true);
-        setError(null);
+        if (isAddingKey || !apiKey) return;
+        setIsAddingKey(true);
+        setOperationError(null);
         setNotice(null);
         try {
-            const created = await addLlmProviderKey({
-                label: label.trim() || 'OpenRouter key',
-                api_key: apiKey,
-            });
+            const created = await addLlmProviderKey({ label: label.trim() || 'OpenRouter key', api_key: apiKey });
             setKeys((current) => [created, ...current]);
             setLabel('');
             labelDraftRef.current = '';
             setApiKey('');
             setNotice(`Key ending in ${created.suffix} passed its test and was added.`);
         } catch (cause) {
-            if (!redirectToLogin(cause)) {
-                setError(errorMessage(cause, 'Could not add this key.'));
-            }
+            if (!redirectToLogin(cause)) setOperationError(errorMessage(cause, 'Could not add this key.'));
         } finally {
-            setSubmitting(false);
+            setIsAddingKey(false);
         }
     }
 
-    async function handleTest(item: LlmProviderKey) {
-        setBusyId(item.id);
-        setError(null);
+    async function handleTestKey(item: LlmProviderKey) {
+        setKeyOperation({ kind: 'test', id: item.id });
+        setOperationError(null);
         setNotice(null);
         try {
             const result = await testLlmProviderKey(item.id);
-            setNotice(
-                result.passed
-                    ? `${item.label} is healthy.`
-                    : `${item.label} did not pass its connection test.`,
-            );
+            setNotice(result.passed ? `${item.label} is healthy.` : `${item.label} did not pass its connection test.`);
         } catch (cause) {
-            if (!redirectToLogin(cause)) {
-                setError(errorMessage(cause, 'Could not test this key.'));
-            }
+            if (!redirectToLogin(cause)) setOperationError(errorMessage(cause, 'Could not test this key.'));
         } finally {
-            setBusyId(null);
+            setKeyOperation(null);
         }
     }
 
-    async function handleDelete(item: LlmProviderKey) {
-        if (!window.confirm(`Delete ${item.label}? New requests will stop using this key.`)) {
-            return;
-        }
-        setBusyId(item.id);
-        setError(null);
+    async function confirmDelete() {
+        const item = deleteCandidate;
+        if (!item) return;
+        setDeleteCandidate(null);
+        setKeyOperation({ kind: 'delete', id: item.id });
+        setOperationError(null);
         setNotice(null);
         try {
             await deleteLlmProviderKey(item.id);
             setKeys((current) => current.filter((key) => key.id !== item.id));
             setNotice(`${item.label} was deleted.`);
         } catch (cause) {
-            if (!redirectToLogin(cause)) {
-                setError(errorMessage(cause, 'Could not delete this key.'));
-            }
+            if (!redirectToLogin(cause)) setOperationError(errorMessage(cause, 'Could not delete this key.'));
         } finally {
-            setBusyId(null);
+            setKeyOperation(null);
         }
     }
 
+    const modelOptions = models.map((model) => ({
+        value: model.id,
+        label: model.name,
+        keywords: [model.id, model.description ?? ''],
+    }));
+
     return (
-        <main className="min-h-[calc(100vh-4rem)] bg-surface px-6 py-10 text-on-surface md:px-10">
+        <main className="min-h-[calc(100vh-4rem)] bg-background px-4 py-7 sm:px-8 sm:py-9 lg:px-10">
             <div className="mx-auto max-w-5xl">
-                <header className="mb-10 flex flex-col gap-5 border-b border-outline-variant/40 pb-8 md:flex-row md:items-end md:justify-between">
+                <header className="flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-end sm:justify-between">
                     <div>
-                        <p className="text-label mb-3">LLM settings</p>
-                        <h1 className="font-headline text-3xl">Provider configuration</h1>
+                        <p className="text-sm font-medium text-primary">LLM settings</p>
+                        <h1 className="mt-2 font-headline text-2xl font-semibold">Provider configuration</h1>
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-on-surface-variant">
-                        <ShieldCheck size={16} className="text-secondary" />
-                        Gateway managed
-                    </div>
+                    <p className="inline-flex items-center gap-2 text-sm text-muted-foreground"><ShieldCheck aria-hidden="true" className="size-4 text-success" />Managed gateway</p>
                 </header>
 
-                <div className="mb-6 flex items-center gap-3 rounded-lg border border-outline-variant/50 bg-surface-container-low px-5 py-4 text-sm text-on-surface-variant">
-                    <ShieldCheck size={17} className="text-secondary" />
-                    Signed-in account session
-                </div>
-
-                <section className="mb-6 rounded-lg border border-outline-variant/50 bg-surface-container-low p-5" aria-labelledby="model-heading">
-                    <div className="mb-5 flex items-start justify-between gap-4">
+                <section className="border-b border-border py-6" aria-labelledby="model-heading">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                         <div>
-                            <p className="text-label">Free model routing</p>
-                            <h2 id="model-heading" className="mt-2 font-headline text-lg">Default OpenRouter model</h2>
-                            <p className="mt-1 max-w-2xl text-sm text-on-surface-variant">
-                                Requests use the selected zero-cost model through the managed gateway. The catalogue is loaded from OpenRouter.
-                            </p>
+                            <h2 id="model-heading" className="font-semibold">Default OpenRouter model</h2>
+                            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">Choose the free model route used by analysis requests.</p>
                         </div>
-                        {modelSaving ? <Loader2 size={17} className="mt-1 animate-spin text-primary-container" aria-label="Saving model" /> : null}
+                        {isSavingModel ? <span className="inline-flex items-center gap-2 text-sm text-muted-foreground" role="status"><LoaderCircle className="size-4 animate-spin" />Saving model</span> : null}
                     </div>
-                    <BeuiSelect
-                        value={selectedModel}
-                        options={models.map((model) => ({ value: model.id, label: model.name, description: model.description }))}
-                        onValueChange={(model) => void handleModelChange(model)}
-                        disabled={!authenticated || modelSaving || models.length === 0}
-                        aria-label="Default OpenRouter model"
-                        placeholder={models.length === 0 ? 'Loading free models...' : 'Select a free model'}
-                    />
-                    <p className="mt-3 font-mono text-[11px] text-on-surface-variant">
-                        Selected: {selectedModel}
-                    </p>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(16rem,28rem)_auto] sm:items-center">
+                        <Combobox
+                            ariaLabel="Default OpenRouter model"
+                            value={selectedModel}
+                            options={modelOptions}
+                            disabled={!authenticated || isLoadingModels || isSavingModel || modelOptions.length === 0}
+                            placeholder={isLoadingModels ? 'Loading model catalogue...' : 'Select a model'}
+                            searchPlaceholder="Search models..."
+                            emptyMessage="No matching models."
+                            onValueChange={(model) => void handleModelChange(model)}
+                        />
+                        <p className="break-all font-mono text-xs text-muted-foreground" aria-label="Selected model id">{selectedModel}</p>
+                    </div>
+                    {isLoadingModels ? <p className="mt-3 text-sm text-muted-foreground" role="status">Loading model catalogue...</p> : null}
+                    {catalogError ? <Alert variant="destructive" role="alert" className="mt-3"><AlertDescription className="flex flex-wrap items-center justify-between gap-3"><span>{catalogError}</span><Button variant="outline" size="sm" onClick={() => void loadModels()}>Retry catalogue</Button></AlertDescription></Alert> : null}
+                    {!isLoadingModels && !catalogError && models.length === 0 ? <EmptyState className="min-h-24 items-start text-left" title="No free models available" description="The provider catalogue returned no free models." /> : null}
                 </section>
 
-                <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
-                    <form
-                        onSubmit={handleSubmit}
-                        className="rounded-lg border border-outline-variant/50 bg-surface-container-low p-5"
-                    >
-                        <div className="mb-6 flex items-center gap-3">
-                            <div className="rounded bg-primary-container/10 p-2 text-primary-container">
-                                <KeyRound size={18} />
-                            </div>
-                            <h2 className="font-headline text-lg">Add a key</h2>
+                <div className="grid gap-7 lg:grid-cols-[minmax(16rem,0.8fr)_minmax(0,1.2fr)]">
+                    <form onSubmit={(event) => void handleAddKey(event)} className="grid content-start gap-5 border-b border-border py-6 lg:border-b-0 lg:border-r lg:pr-7" aria-labelledby="add-key-heading">
+                        <div>
+                            <h2 id="add-key-heading" className="font-semibold">Add a provider key</h2>
+                            <p className="mt-1 text-sm text-muted-foreground">The key is tested before it is stored.</p>
                         </div>
-                        <label htmlFor="key-label" className="text-label">
-                            Label
-                        </label>
-                        <input
-                            id="key-label"
-                            value={label}
-                            onChange={(event) => {
-                                labelDraftRef.current = event.target.value;
-                                setLabel(event.target.value);
-                            }}
-                            placeholder="Primary research key"
-                            className="mt-2 mb-5 w-full rounded border border-outline-variant bg-surface px-3 py-2 text-sm outline-none focus:border-primary-container"
-                            maxLength={80}
-                        />
-                        <label htmlFor="openrouter-key" className="text-label">
-                            OpenRouter API key
-                        </label>
-                        <input
-                            id="openrouter-key"
-                            type="password"
-                            value={apiKey}
-                            onChange={(event) => setApiKey(event.target.value)}
-                            placeholder="sk-or-v1-..."
-                            className="mt-2 w-full rounded border border-outline-variant bg-surface px-3 py-2 font-mono text-sm outline-none focus:border-primary-container"
-                            minLength={20}
-                            maxLength={500}
-                            autoComplete="off"
-                            required
-                        />
-                        <button
-                            type="submit"
-                            disabled={submitting || !authenticated || !apiKey}
-                            className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded bg-primary-container px-4 py-2.5 text-sm font-semibold text-on-primary transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            {submitting ? (
-                                <Loader2 size={16} className="animate-spin" />
-                            ) : (
-                                <Plus size={16} />
-                            )}
-                            {submitting ? 'Testing and adding...' : 'Test and add key'}
-                        </button>
+                        <Field label="Label" htmlFor="key-label" description="Optional. Use a name you recognize.">
+                            <Input id="key-label" value={label} onChange={(event) => { labelDraftRef.current = event.target.value; setLabel(event.target.value); }} placeholder="Primary research key" maxLength={80} disabled={isAddingKey} />
+                        </Field>
+                        <Field label="OpenRouter API key" htmlFor="openrouter-key">
+                            <Input id="openrouter-key" type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder="sk-or-v1-..." minLength={20} maxLength={500} autoComplete="off" required disabled={isAddingKey} />
+                        </Field>
+                        <Button type="submit" disabled={isAddingKey || !authenticated || !apiKey}>
+                            {isAddingKey ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <Plus aria-hidden="true" />}
+                            {isAddingKey ? 'Testing and adding...' : 'Test and add key'}
+                        </Button>
                     </form>
 
-                    <section
-                        className="rounded-lg border border-outline-variant/50 bg-surface-container-low p-5"
-                        aria-labelledby="keys-heading"
-                    >
-                        <div className="mb-6 flex items-center justify-between">
-                            <h2 id="keys-heading" className="font-headline text-lg">
-                                Configured keys
-                            </h2>
-                            <button
-                                type="button"
-                                onClick={() => void loadKeys()}
-                                disabled={loading || !authenticated}
-                                className="rounded p-2 text-on-surface-variant transition hover:bg-surface-container hover:text-on-surface disabled:opacity-40"
-                                aria-label="Refresh keys"
-                                title="Refresh keys"
-                            >
-                                {loading ? (
-                                    <Loader2 size={16} className="animate-spin" />
-                                ) : (
-                                    <RefreshCw size={16} />
-                                )}
-                            </button>
+                    <section className="min-w-0 py-6" aria-labelledby="keys-heading">
+                        <div className="flex items-center justify-between gap-3">
+                            <div>
+                                <h2 id="keys-heading" className="font-semibold">Configured keys</h2>
+                                <p className="mt-1 text-sm text-muted-foreground">Only masked identifiers are shown.</p>
+                            </div>
+                            <Button variant="ghost" size="icon" onClick={() => void loadKeys(true)} disabled={isLoadingKeys || isRefreshingKeys || !authenticated} aria-label="Refresh keys" title="Refresh keys">
+                                {isRefreshingKeys ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
+                            </Button>
                         </div>
-
-                        {keys.length === 0 ? (
-                            <div className="flex min-h-48 flex-col items-center justify-center border border-dashed border-outline-variant/50 px-5 text-center">
-                                <KeyRound size={24} className="mb-3 text-on-surface-variant" />
-                                <p className="text-sm">
-                                    {loading ? 'Loading keys...' : 'No keys configured'}
-                                </p>
+                        {isLoadingKeys ? <p className="py-8 text-sm text-muted-foreground" role="status">Loading provider keys...</p> : null}
+                        {keyLoadError ? <Alert variant="destructive" role="alert" className="mt-4"><AlertDescription className="flex flex-wrap items-center justify-between gap-3"><span>{keyLoadError}</span><Button variant="outline" size="sm" onClick={() => void loadKeys()}>Retry keys</Button></AlertDescription></Alert> : null}
+                        {!isLoadingKeys && !keyLoadError && keys.length === 0 ? <EmptyState className="min-h-40" icon={<KeyRound />} title="No keys configured" description="Add a provider key to use your own OpenRouter account." /> : null}
+                        {keys.length > 0 ? (
+                            <div className="mt-4 overflow-x-auto">
+                                <Table className="min-w-[620px]">
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Provider key</TableHead>
+                                            <TableHead>Status</TableHead>
+                                            <TableHead>Activity</TableHead>
+                                            <TableHead className="text-right">Actions</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                {keys.map((item) => {
+                                    const activeOperation = keyOperation?.id === item.id ? keyOperation.kind : null;
+                                    return (
+                                        <TableRow key={item.id}>
+                                            <TableCell className="max-w-52">
+                                                <p className="truncate font-medium text-foreground">{item.label}</p>
+                                                <p className="mt-1 font-mono text-xs text-muted-foreground">sk-or-••••{item.suffix}</p>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge variant={statusVariant(item.status)}>{keyStatusLabel(item.status, item.cooldown_until)}</Badge>
+                                                {item.last_error && keyErrorLabel(item.last_error) ? <p className="mt-1 max-w-36 text-xs text-destructive">{keyErrorLabel(item.last_error)}</p> : null}
+                                                {item.cooldown_until && new Date(item.cooldown_until).getTime() > Date.now() ? <p className="mt-1 text-xs text-warning">Until {formatDate(item.cooldown_until, true)}</p> : null}
+                                            </TableCell>
+                                            <TableCell className="text-xs text-muted-foreground">
+                                                <p>Added {formatDate(item.created_at)}</p>
+                                                <p className="mt-1">Used {formatDate(item.last_used_at, true)}</p>
+                                                <p className="mt-1">{item.failure_count ?? 0} failures · Tested {formatDate(item.last_tested_at, true)}</p>
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="flex justify-end gap-1">
+                                                    <Button type="button" variant="outline" size="sm" onClick={() => void handleTestKey(item)} disabled={keyOperation !== null || isLoadingKeys}>
+                                                        {activeOperation === 'test' ? <LoaderCircle className="animate-spin" /> : <Check />}
+                                                        {activeOperation === 'test' ? 'Testing...' : 'Test'}
+                                                    </Button>
+                                                    <Button type="button" variant="ghost" size="icon" onClick={() => setDeleteCandidate(item)} disabled={keyOperation !== null || isLoadingKeys} aria-label={`Delete ${item.label}`} title={`Delete ${item.label}`}>
+                                                        {activeOperation === 'delete' ? <LoaderCircle className="animate-spin" /> : <Trash2 />}
+                                                    </Button>
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })}
+                                    </TableBody>
+                                </Table>
                             </div>
-                        ) : (
-                            <div className="divide-y divide-outline-variant/30">
-                                {keys.map((item) => (
-                                    <div
-                                        key={item.id}
-                                        className="flex flex-col gap-4 py-4 first:pt-0 sm:flex-row sm:items-center sm:justify-between"
-                                    >
-                                        <div className="min-w-0">
-                                            <div className="flex items-center gap-2">
-                                                <p className="truncate text-sm font-semibold">
-                                                    {item.label}
-                                                </p>
-                                                <span className="inline-flex items-center gap-1 rounded-full bg-secondary/10 px-2 py-0.5 text-[10px] text-secondary">
-                                                    {item.status === 'healthy' ? (
-                                                        <Check size={11} />
-                                                    ) : (
-                                                        <CircleAlert size={11} />
-                                                    )}
-                                                    {keyStatusLabel(item.status, item.cooldown_until)}
-                                                </span>
-                                            </div>
-                                            <p className="mt-1 font-mono text-xs text-on-surface-variant">
-                                                sk-or-••••{item.suffix}
-                                            </p>
-                                            <p className="mt-1 text-[11px] text-on-surface-variant">
-                                                Added {formatDate(item.created_at)} · {item.fingerprint}
-                                            </p>
-                                            <p className="mt-1 text-[11px] text-on-surface-variant">
-                                                Last used {formatDateTime(item.last_used_at)} ·{' '}
-                                                {item.failure_count ?? 0} failures since last success
-                                            </p>
-                                            {item.cooldown_until && new Date(item.cooldown_until).getTime() > Date.now() && (
-                                                <p className="mt-1 text-[11px] text-amber-300">
-                                                    Cooldown ends {formatDateTime(item.cooldown_until)}
-                                                </p>
-                                            )}
-                                            {item.last_error && (
-                                                <p className="mt-1 text-[11px] text-error">
-                                                    {keyErrorLabel(item.last_error)}
-                                                </p>
-                                            )}
-                                            <p className="mt-1 text-[11px] text-on-surface-variant">
-                                                Last tested {formatDateTime(item.last_tested_at)}
-                                            </p>
-                                        </div>
-                                        <div className="flex shrink-0 items-center gap-1">
-                                            <button
-                                                type="button"
-                                                onClick={() => void handleTest(item)}
-                                                disabled={busyId !== null}
-                                                className="rounded px-3 py-1.5 text-xs text-on-surface-variant transition hover:bg-surface-container hover:text-on-surface disabled:opacity-40"
-                                            >
-                                                {busyId === item.id ? (
-                                                    <Loader2 size={14} className="animate-spin" />
-                                                ) : (
-                                                    'Test'
-                                                )}
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => void handleDelete(item)}
-                                                disabled={busyId !== null}
-                                                className="rounded p-2 text-on-surface-variant transition hover:bg-error/10 hover:text-error disabled:opacity-40"
-                                                aria-label={`Delete ${item.label}`}
-                                                title={`Delete ${item.label}`}
-                                            >
-                                                {busyId === item.id ? (
-                                                    <Loader2 size={14} className="animate-spin" />
-                                                ) : (
-                                                    <Trash2 size={15} />
-                                                )}
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
+                        ) : null}
                     </section>
                 </div>
 
-                {(error || notice) && (
-                    <div
-                        role={error ? 'alert' : 'status'}
-                        className={`mt-6 flex items-start gap-3 rounded border px-4 py-3 text-sm ${
-                            error
-                                ? 'border-error/40 bg-error/10 text-rose-200'
-                                : 'border-secondary/40 bg-secondary/10 text-emerald-200'
-                        }`}
-                    >
-                        {error ? (
-                            <X size={17} className="mt-0.5 shrink-0" />
-                        ) : (
-                            <Check size={17} className="mt-0.5 shrink-0" />
-                        )}
-                        <p>{error || notice}</p>
-                    </div>
-                )}
+                {operationError ? <Alert variant="destructive" role="alert" className="mt-2"><AlertCircle aria-hidden="true" className="size-4" /><AlertDescription>{operationError}</AlertDescription></Alert> : null}
+                {notice ? <Alert variant="success" role="status" className="mt-2"><Check aria-hidden="true" className="size-4" /><AlertDescription>{notice}</AlertDescription></Alert> : null}
             </div>
+
+            <AlertDialog open={deleteCandidate !== null} onOpenChange={(open) => { if (!open) setDeleteCandidate(null); }}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete provider key?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            {deleteCandidate ? `Delete ${deleteCandidate.label}? New requests will stop using this key.` : 'This key will no longer be available for new requests.'}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={(event) => { event.preventDefault(); void confirmDelete(); }}>Delete key</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </main>
     );
 }
