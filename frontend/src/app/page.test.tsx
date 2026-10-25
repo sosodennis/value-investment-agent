@@ -1,93 +1,35 @@
-'use client';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import HomePage from './page';
 
-import { render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { AnalysisWorkspace } from '@/components/workspace/AnalysisWorkspace';
-import { useAgent } from '@/hooks/useAgent';
-import { useFinancialData } from '@/hooks/useFinancialData';
+const router = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock('next/navigation', () => ({ useRouter: () => router }));
 
-vi.mock('@/hooks/useAgent', () => ({
-    useAgent: vi.fn(),
-}));
+describe('home analysis entry', () => {
+    beforeEach(() => vi.clearAllMocks());
+    afterEach(cleanup);
 
-vi.mock('@/hooks/useFinancialData', () => ({
-    useFinancialData: vi.fn(),
-}));
+    it('opens the analysis workspace with a normalized ticker and pending feedback', () => {
+        render(<HomePage />);
+        const input = screen.getByLabelText('Ticker symbol');
+        fireEvent.change(input, { target: { value: '  brk.b ' } });
+        fireEvent.submit(input.closest('form')!);
 
-vi.mock('@/components/workspace/agents-roster/AgentsRoster', () => ({
-    AgentsRoster: ({
-        selectedAgentId,
-    }: {
-        selectedAgentId: string | null;
-    }) => <div data-testid="agents-roster">{selectedAgentId ?? 'none'}</div>,
-}));
-
-vi.mock('@/components/workspace/agent-detail/AgentDetailPanel', () => ({
-    AgentDetailPanel: ({
-        agent,
-    }: {
-        agent: { id: string } | null;
-    }) => <div data-testid="agent-detail">{agent?.id ?? 'none'}</div>,
-}));
-
-const mockUseAgent = vi.mocked(useAgent);
-const mockUseFinancialData = vi.mocked(useFinancialData);
-const storage = new Map<string, string>();
-
-describe('AnalysisWorkspace refresh restore behavior', () => {
-    beforeEach(() => {
-        storage.clear();
-        vi.stubGlobal('localStorage', {
-            getItem: (key: string) => storage.get(key) ?? null,
-            setItem: (key: string, value: string) => {
-                storage.set(key, value);
-            },
-            removeItem: (key: string) => {
-                storage.delete(key);
-            },
-            clear: () => {
-                storage.clear();
-            },
-        });
-        mockUseFinancialData.mockReturnValue({
-            resolvedTicker: null,
-            dimensionScores: [],
-            financialMetrics: [],
-            latestReport: null,
-            rawOutput: null,
-        });
+        expect(router.push).toHaveBeenCalledWith('/workspace?ticker=BRK.B');
+        expect(screen.getByRole('button', { name: 'Opening workspace...' }).hasAttribute('disabled')).toBe(true);
     });
 
-    it('restores the user selected agent without inferring one from workflow activity', async () => {
-        localStorage.setItem('agent_thread_id', 'thread_1');
-        localStorage.setItem('agent_selected_agent_id', 'technical_analysis');
+    it('shows validation feedback and does not navigate for an empty symbol', () => {
+        render(<HomePage />);
+        fireEvent.submit(screen.getByLabelText('Ticker symbol').closest('form')!);
+        expect(screen.getByRole('alert').textContent).toContain('Enter a ticker symbol');
+        expect(router.push).not.toHaveBeenCalled();
+    });
 
-        mockUseAgent.mockReturnValue({
-            messages: [],
-            sendMessage: vi.fn(),
-            submitCommand: vi.fn(),
-            loadHistory: vi.fn(),
-            isLoading: false,
-            error: null,
-            threadId: 'thread_1',
-            hasMore: true,
-            agentStatuses: {
-                intent_extraction: 'done',
-                technical_analysis: 'done',
-                financial_news_research: 'running',
-            },
-            agentOutputs: {},
-            workflow: null,
-            activeActivities: [],
-            runId: null,
-            connectionState: 'disconnected',
-            cancelRun: vi.fn(),
-        });
-
-        render(<AnalysisWorkspace />);
-
-        await waitFor(() => {
-            expect(screen.getByTestId('agent-detail').textContent).toBe('technical_analysis');
-        });
+    it('does not present fabricated market activity or a healthy status', () => {
+        render(<HomePage />);
+        expect(screen.getByText('A market data feed is not connected to this view.')).toBeTruthy();
+        expect(screen.getByText('Recent analysis history is not available from the current API.')).toBeTruthy();
+        expect(screen.queryByText(/Agent Online|healthy/i)).toBeNull();
     });
 });
