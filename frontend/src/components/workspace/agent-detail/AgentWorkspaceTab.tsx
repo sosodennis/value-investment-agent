@@ -1,238 +1,70 @@
 import React from 'react';
-import { AgentInfo } from '@/types/agents';
-import { Message } from '@/types/protocol';
-import {
-    InterruptRequestData,
-    InterruptResumePayload,
-    isInterruptRequestData,
-} from '@/types/interrupts';
-import { LayoutPanelTop, Activity, Clock } from 'lucide-react';
-import { DynamicInterruptForm } from '@/components/workspace/DynamicInterruptForm';
-import { useAgentActivity } from '@/hooks/useAgentActivity';
+import type { AgentInfo } from '@/types/agents';
+import { Activity } from 'lucide-react';
+import type { ConnectionState, TickerSelectionResponse, WorkflowActivity, WorkflowActivityState } from '@/features/workflow';
 
 interface AgentWorkspaceTabProps {
     agent: AgentInfo;
-    threadId?: string | null;
-    currentNode?: string | null;
-    currentStatus?: string | null;
-    messages: Message[];
-    onSubmitCommand?: (payload: InterruptResumePayload) => Promise<void>;
-    projectionUpdatedAt?: number | null;
+    workflow: WorkflowActivityState | null;
+    connectionState: ConnectionState;
+    onResumeInteraction?: (activity: WorkflowActivity, response: TickerSelectionResponse) => Promise<void>;
+    isSubmitting: boolean;
 }
 
-export const AgentWorkspaceTab: React.FC<AgentWorkspaceTabProps> = ({
-    agent,
-    threadId,
-    currentNode,
-    currentStatus,
-    messages,
-    onSubmitCommand,
-    projectionUpdatedAt = null
-}) => {
-    const ACTIVITY_LIMIT = 5;
-    const {
-        events: activityEvents,
-        hasMore: hasMoreActivity,
-        isLoading: isActivityLoading,
-        loadMore: loadMoreActivity,
-    } = useAgentActivity(threadId, agent.id, ACTIVITY_LIMIT);
-    const canLoadMoreActivity =
-        Boolean(threadId) && hasMoreActivity && !isActivityLoading;
+const statusTone: Record<string, string> = {
+    queued: 'text-outline', running: 'text-primary', waiting: 'text-warning',
+    completed: 'text-success', failed: 'text-error', cancelled: 'text-outline', skipped: 'text-outline',
+};
 
-    const formatLag = (ms: number): string => {
-        if (ms < 1000) return 'now';
-        const totalSeconds = Math.floor(ms / 1000);
-        if (totalSeconds < 60) return `${totalSeconds}s`;
-        const minutes = Math.floor(totalSeconds / 60);
-        const seconds = totalSeconds % 60;
-        if (minutes < 60) return `${minutes}m ${seconds}s`;
-        const hours = Math.floor(minutes / 60);
-        const remMinutes = minutes % 60;
-        return `${hours}h ${remMinutes}m`;
-    };
-
-    const [now, setNow] = React.useState(() => Date.now());
-
-    React.useEffect(() => {
-        setNow(Date.now());
-    }, [projectionUpdatedAt]);
-
-    const lagMs =
-        projectionUpdatedAt && projectionUpdatedAt > 0
-            ? Math.max(0, now - projectionUpdatedAt)
-            : null;
-    const staleThresholdMs = 30_000;
-    const isStale = lagMs !== null && lagMs > staleThresholdMs;
-    const projectionLabel =
-        lagMs === null
-            ? 'Sync pending'
-            : isStale
-              ? `Lagging ${formatLag(lagMs)}`
-              : `Synced ${formatLag(lagMs)} ago`;
-    const projectionTime =
-        lagMs === null || projectionUpdatedAt === null
-            ? null
-            : new Date(projectionUpdatedAt).toLocaleTimeString([], {
-                  hour12: false,
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  second: '2-digit',
-              });
-    const projectionTone = isStale ? 'text-warning' : 'text-on-surface-variant';
-    const projectionBorder = isStale ? 'border-warning/30' : 'border-outline-variant/30';
-    const projectionBg = isStale ? 'bg-warning/10' : 'bg-surface-container/60';
-    const projectionTitle =
-        lagMs === null
-            ? 'Projection sync is not available yet.'
-            : `Projection last updated at ${projectionTime}. Read model may lag live execution.`;
-    const interruptMessages = messages.filter(
-        (message): message is Message & { data: InterruptRequestData } =>
-            !!message.isInteractive &&
-            message.agentId === agent.id &&
-            isInterruptRequestData(message.data)
-    );
-
+export const AgentWorkspaceTab: React.FC<AgentWorkspaceTabProps> = ({ agent, workflow, connectionState, onResumeInteraction, isSubmitting }) => {
+    const active = workflow ? [...workflow.active.values()] : [];
+    const recent = workflow?.recent ?? [];
     return (
-        <div className="p-8 space-y-8 animate-in slide-in-from-bottom-2 duration-300">
-            {/* Current Active Step */}
-            <section className="bg-surface-container-low border border-outline-variant/30 rounded-2xl p-6 backdrop-blur-sm">
-                <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-3">
-                        <LayoutPanelTop size={18} className="text-primary" />
-                        <h3 className="text-sm font-bold text-on-surface uppercase tracking-widest">Active Workspace</h3>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        {agent.status === 'running' && (
-                            <div className="flex items-center gap-2 px-3 py-1 bg-primary/10 border border-primary/20 rounded-full">
-                                <div className="w-1.5 h-1.5 bg-primary rounded-full animate-pulse shadow-[0_0_5px_rgba(var(--cyan-500-rgb),1)]" />
-                                <span className="text-[10px] font-bold text-primary uppercase tracking-tighter">Live Session</span>
-                            </div>
-                        )}
-                        <div
-                            className={`flex items-center gap-2 px-3 py-1 rounded-full border ${projectionBg} ${projectionBorder}`}
-                            title={projectionTitle}
-                        >
-                            <Clock size={12} className={projectionTone} />
-                            <span className="text-[10px] font-bold uppercase tracking-tighter text-outline">Projection</span>
-                            <span className={`text-[10px] font-bold uppercase tracking-tighter ${projectionTone}`}>
-                                {projectionLabel}
-                            </span>
-                        </div>
-                    </div>
+        <div className="p-8 space-y-6 animate-in slide-in-from-bottom-2 duration-300">
+            <section className="rounded-2xl border border-outline-variant/30 bg-surface-container-low p-6">
+                <div className="mb-5 flex items-center justify-between">
+                    <div className="flex items-center gap-3"><Activity size={18} className="text-primary" /><h3 className="text-sm font-bold uppercase tracking-widest">Workflow activity</h3></div>
+                    <span className="text-xs text-on-surface-variant">Connection: {connectionState}</span>
                 </div>
-
-                <div className="flex flex-col gap-4">
-                    <div className="bg-surface-container border border-outline-variant/30 rounded-xl p-5 flex items-center justify-between">
-                        <div>
-                            <div className="text-[10px] font-black uppercase tracking-widest text-outline mb-1">Current Task</div>
-                            <div className="text-lg font-bold text-on-surface capitalize">{currentNode || (agent.status === 'running' ? 'Initializing…' : 'Idle')}</div>
-                        </div>
-                        <div className="text-right">
-                            <div className="text-[10px] font-black uppercase tracking-widest text-outline mb-1">Status</div>
-                            <div className={`text-sm font-bold ${currentStatus === 'attention' ? 'text-warning' : 'text-primary'}`}>
-                                {currentStatus || (agent.status === 'running' ? 'In Progress' : 'Waiting')}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Active Interrupts (Scoped) */}
-                    {interruptMessages.map((msg) => (
-                        <div key={msg.id} className="mt-4">
-                            <DynamicInterruptForm
-                                schema={msg.data.schema}
-                                uiSchema={msg.data.ui_schema}
-                                title={msg.data.title}
-                                description={msg.data.description}
-                                onSubmit={(data) => onSubmitCommand?.(data)}
-                            />
-                        </div>
-                    ))}
-                </div>
-            </section>
-
-            {/* Recent Activity Feed */}
-            <section className="bg-surface-container-low border border-outline-variant/30 rounded-2xl p-6">
-                <div className="flex items-center gap-3 mb-6">
-                    <Activity size={16} className="text-outline" />
-                    <h3 className="text-[10px] font-black uppercase tracking-widest text-outline">Activity History</h3>
-                </div>
-
-                <div className="flex items-center justify-between text-[10px] text-on-surface-variant mb-4 uppercase tracking-widest">
-                    <span>
-                        {`Showing last ${Math.max(
-                            ACTIVITY_LIMIT,
-                            activityEvents.length
-                        )} events`}
-                    </span>
-                    <button
-                        type="button"
-                        onClick={() => loadMoreActivity()}
-                        disabled={!canLoadMoreActivity}
-                        className={`text-[10px] font-bold uppercase tracking-widest transition-colors ${
-                            canLoadMoreActivity
-                                ? 'text-primary hover:text-primary-variant'
-                                : 'text-outline/50 cursor-not-allowed'
-                        }`}
-                    >
-                        {hasMoreActivity ? 'View full history' : 'Full history loaded'}
-                    </button>
-                </div>
-
-                <div className="space-y-4">
-                    {(() => {
-                        if (activityEvents.length === 0) {
-                            return (
-                                <div className="py-8 text-center bg-surface-container/30 rounded-xl border border-dashed border-outline-variant/30">
-                                    <Clock size={20} className="text-outline mx-auto mb-2" />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-outline">No recent activity in last 5 events</span>
-                                </div>
-                            );
-                        }
-
-                        return activityEvents.map((step, idx) => {
-                            const isCurrent = step.isCurrent;
-                            const isRunning = step.status === 'running' && isCurrent;
-                            const statusTone =
-                                step.status === 'error'
-                                    ? 'text-error'
-                                    : step.status === 'attention' || step.status === 'degraded'
-                                      ? 'text-warning'
-                                      : isRunning
-                                        ? 'text-primary animate-pulse'
-                                        : step.status === 'done'
-                                          ? 'text-success'
-                                          : 'text-slate-600 group-hover:text-slate-500';
-                            return (
-                            <div key={step.id} className="flex gap-4 group">
-                                <div className="flex flex-col items-center gap-1">
-                                    <div
-                                        className={`w-2 h-2 rounded-full mt-1 ${
-                                            isCurrent
-                                                ? 'bg-primary shadow-[0_0_5px_rgba(var(--cyan-500-rgb),1)]'
-                                                : 'bg-slate-800 group-hover:bg-slate-700'
-                                        }`}
-                                    />
-                                    {idx !== activityEvents.length - 1 && <div className="w-[1px] flex-1 bg-border-main" />}
-                                </div>
-                                <div className="flex-1 pb-4">
-                                    <div className="flex justify-between items-start">
-                                        <span className={`text-xs font-bold leading-none capitalize ${isCurrent ? 'text-on-surface' : 'text-on-surface-variant'}`}>
-                                            {step.node.replace(/_/g, ' ')}
-                                        </span>
-                                        <span className="text-[9px] text-outline font-mono">
-                                            {new Date(step.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                                        </span>
-                                    </div>
-                                    <div className={`text-[10px] mt-1 uppercase tracking-tighter transition-colors ${statusTone}`}>
-                                        {step.status}
-                                    </div>
-                                </div>
-                            </div>
-                            );
-                        });
-                    })()}
-                </div>
+                {!workflow ? <p className="py-6 text-sm text-on-surface-variant">Load a thread to see its activity snapshot.</p> : <>
+                    <div className="mb-5 flex items-center gap-3 text-xs text-on-surface-variant"><span>Run {workflow.runId}</span><span>·</span><span>Status {workflow.runStatus}</span><span>·</span><span>Cursor {workflow.cursor}</span></div>
+                    {active.length === 0 ? <p className="py-5 text-sm text-on-surface-variant">No active activities.</p> : <ActivitySet title="Active activities" activities={active} />}
+                    {onResumeInteraction ? active.filter((item) => item.status === 'waiting' && item.interruption).map((item) => <TickerSelectionPrompt key={item.activity_id} activity={item} disabled={isSubmitting} onSubmit={(response) => onResumeInteraction(item, response)} />) : null}
+                    {recent.length > 0 ? <ActivitySet title="Recent activities" activities={recent} /> : null}
+                </>}
+                <p className="mt-5 text-xs text-on-surface-variant">Selected analyst: {agent.name}</p>
             </section>
         </div>
     );
 };
+
+function TickerSelectionPrompt({ activity, disabled, onSubmit }: { activity: WorkflowActivity; disabled: boolean; onSubmit: (response: TickerSelectionResponse) => Promise<void> }) {
+    const [selectedSymbol, setSelectedSymbol] = React.useState('');
+    const interruption = activity.interruption;
+    if (!interruption) return null;
+    const request = interruption.request;
+    return (
+        <section className="mt-5 max-w-2xl border-t border-outline-variant/20 pt-5" aria-labelledby={`interaction-${activity.activity_id}`}>
+            <h4 id={`interaction-${activity.activity_id}`} className="text-sm font-semibold text-on-surface">{request.title}</h4>
+            <p className="mt-1 text-sm text-on-surface-variant">{request.description}</p>
+            <form className="mt-4 space-y-2" onSubmit={(event) => { event.preventDefault(); if (selectedSymbol) void onSubmit({ type: 'ticker_selection', selected_symbol: selectedSymbol }); }}>
+                {request.candidates.map((candidate) => (
+                    <label key={candidate.symbol} className="flex cursor-pointer items-start gap-3 border border-outline-variant/30 px-3 py-2.5 hover:bg-surface-container/60">
+                        <input type="radio" name={`ticker-${activity.activity_id}`} value={candidate.symbol} checked={selectedSymbol === candidate.symbol} disabled={disabled} onChange={() => setSelectedSymbol(candidate.symbol)} className="mt-1 accent-primary" />
+                        <span className="min-w-0"><span className="font-medium text-on-surface">{candidate.symbol}</span><span className="ml-2 text-sm text-on-surface-variant">{candidate.name}</span><span className="mt-1 block text-xs text-outline">{[candidate.exchange, candidate.type, `${Math.round(candidate.confidence * 100)}% match`].filter(Boolean).join(' · ')}</span></span>
+                    </label>
+                ))}
+                <button type="submit" disabled={disabled || !selectedSymbol} className="mt-2 rounded border border-primary/50 px-3 py-2 text-sm font-medium text-primary disabled:cursor-not-allowed disabled:opacity-50">Continue</button>
+            </form>
+        </section>
+    );
+}
+
+function ActivitySet({ title, activities }: { title: string; activities: NonNullable<WorkflowActivityState>['recent'] }) {
+    return <section className="mt-5 border-t border-outline-variant/20 pt-4"><h4 className="mb-3 text-[10px] font-black uppercase tracking-widest text-outline">{title}</h4><ul className="space-y-2">
+        {activities.map((activity) => <li key={`${activity.activity_id}:${activity.attempt}:${activity.status}`} className="rounded-lg bg-surface-container/60 px-3 py-2" style={{ marginLeft: `${Math.max(0, activity.scope_path.length - 1) * 12}px` }}>
+            <div className="flex items-start justify-between gap-3"><div><div className="text-sm text-on-surface">{activity.label}</div><div className="mt-1 text-[10px] uppercase tracking-wide text-outline">{activity.kind} · attempt {activity.attempt} · {activity.scope_path.join(' / ')}</div></div><span className={`shrink-0 text-xs font-semibold ${statusTone[activity.status]}`}>{activity.status}</span></div>
+            {activity.progress !== undefined ? <div className="mt-2 flex items-center gap-2"><progress className="h-1.5 flex-1 accent-cyan-400" max={100} value={activity.progress} aria-label={`${activity.label} progress`} /><span className="text-[10px] text-on-surface-variant">{activity.progress}%</span></div> : null}
+        </li>)}
+    </ul></section>;
+}

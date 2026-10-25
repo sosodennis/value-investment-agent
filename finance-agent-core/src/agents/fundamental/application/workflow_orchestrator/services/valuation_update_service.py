@@ -330,8 +330,8 @@ def build_valuation_missing_inputs_update(
     fa_update = fundamental.copy()
     return {
         "fundamental_analysis": fa_update,
-        "current_node": "calculation",
-        "internal_progress": {"calculation": "error"},
+        "active_activity_id": "calculation",
+        "workflow_activity_updates": {"calculation": "error"},
         "error_logs": [
             {
                 "node": "calculation",
@@ -482,8 +482,8 @@ def build_valuation_success_update(
     fa_update["artifact"] = artifact
     return {
         "fundamental_analysis": fa_update,
-        "current_node": "calculation",
-        "internal_progress": {"calculation": "done"},
+        "active_activity_id": "calculation",
+        "workflow_activity_updates": {"calculation": "done"},
         "artifact": artifact,
     }
 
@@ -497,5 +497,5 @@ def build_valuation_error_update(error: str) -> JSONObject:
                 "severity": "error",
             }
         ],
-        "internal_progress": {"calculation": "error"},
+        "workflow_activity_updates": {"calculation": "error"},
     }

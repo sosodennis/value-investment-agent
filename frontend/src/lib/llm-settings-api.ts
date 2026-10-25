@@ -161,26 +161,26 @@ async function request<T>(
 }
 
 export async function createLocalAdminSession(): Promise<void> {
-    await request('/api/auth/local-admin/session', () => undefined, {
+    await request('/api/v1/auth/local-admin/session', () => undefined, {
         method: 'POST',
     });
 }
 
 export async function deleteLocalAdminSession(): Promise<void> {
-    await request('/api/auth/local-admin/session', () => undefined, {
+    await request('/api/v1/auth/local-admin/session', () => undefined, {
         method: 'DELETE',
     });
 }
 
 export function listLlmProviderKeys(): Promise<LlmProviderKey[]> {
-    return request('/api/llm/provider-keys', parseLlmProviderKeys);
+    return request('/api/v1/llm/provider-keys', parseLlmProviderKeys);
 }
 
 export function addLlmProviderKey(input: {
     label: string;
     api_key: string;
 }): Promise<LlmProviderKey> {
-    return request('/api/llm/provider-keys', (value) =>
+    return request('/api/v1/llm/provider-keys', (value) =>
         parseLlmProviderKey(value, 'llm_provider_key'),
         {
             method: 'POST',
@@ -193,7 +193,7 @@ export function testLlmProviderKey(
     keyId: string
 ): Promise<LlmProviderKeyTestResult> {
     return request(
-        `/api/llm/provider-keys/${encodeURIComponent(keyId)}/test`,
+        `/api/v1/llm/provider-keys/${encodeURIComponent(keyId)}/test`,
         parseLlmProviderKeyTestResult,
         { method: 'POST' }
     );
@@ -201,18 +201,18 @@ export function testLlmProviderKey(
 
 export function deleteLlmProviderKey(keyId: string): Promise<void> {
     return request(
-        `/api/llm/provider-keys/${encodeURIComponent(keyId)}`,
+        `/api/v1/llm/provider-keys/${encodeURIComponent(keyId)}`,
         () => undefined,
         { method: 'DELETE' }
     );
 }
 
 export function getLlmSettings(): Promise<LlmSettings> {
-    return request('/api/llm/settings', parseLlmSettings);
+    return request('/api/v1/llm/settings', parseLlmSettings);
 }
 
 export function updateLlmSettings(selectedModel: string): Promise<LlmSettings> {
-    return request('/api/llm/settings', parseLlmSettings, {
+    return request('/api/v1/llm/settings', parseLlmSettings, {
         method: 'PUT',
         body: JSON.stringify({ selected_model: selectedModel }),
     });

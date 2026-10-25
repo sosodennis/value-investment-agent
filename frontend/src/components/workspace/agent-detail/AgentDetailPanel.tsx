@@ -1,13 +1,11 @@
 import React, { useState } from 'react';
 import Image from 'next/image';
 import { AgentInfo, StandardAgentOutput } from '@/types/agents';
-import { InterruptResumePayload } from '@/types/interrupts';
 import { Zap, Activity } from 'lucide-react';
-import { Message } from '@/types/protocol';
 import { useFinancialData } from '@/hooks/useFinancialData';
 import { AgentWorkspaceTab } from './AgentWorkspaceTab';
 import { AgentOutputTab } from './AgentOutputTab';
-import { useAgentActivity } from '@/hooks/useAgentActivity';
+import type { ConnectionState, TickerSelectionResponse, WorkflowActivity, WorkflowActivityState } from '@/features/workflow';
 
 type DetailTab = 'Workspace' | 'Output' | 'Logs';
 const DETAIL_TABS: DetailTab[] = ['Workspace', 'Output', 'Logs'];
@@ -15,42 +13,25 @@ const DETAIL_TABS: DetailTab[] = ['Workspace', 'Output', 'Logs'];
 interface AgentDetailPanelProps {
     agent: AgentInfo | null;
     agentOutput?: StandardAgentOutput | null;
-    messages: Message[];
-    onSubmitCommand?: (payload: InterruptResumePayload) => Promise<void>;
     allAgentOutputs?: Record<string, StandardAgentOutput | null>;
-    currentNode?: string | null;
-    currentStatus?: string | null;
-    threadId?: string | null;
-    projectionUpdatedAt?: number | null;
+    workflow: WorkflowActivityState | null;
+    connectionState: ConnectionState;
+    onCancelRun?: () => Promise<void>;
+    onResumeInteraction?: (activity: WorkflowActivity, response: TickerSelectionResponse) => Promise<void>;
+    isSubmitting?: boolean;
 }
 
 export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
     agent,
     agentOutput,
-    messages,
-    onSubmitCommand,
     allAgentOutputs = {},
-    currentNode,
-    currentStatus,
-    threadId,
-    projectionUpdatedAt = null
+    workflow,
+    connectionState,
+    onCancelRun,
+    onResumeInteraction,
+    isSubmitting = false,
 }) => {
     const [activeTab, setActiveTab] = useState<DetailTab>('Workspace');
-    const LOG_ACTIVITY_LIMIT = 20;
-    const LOG_ACTIVITY_PAGE_SIZE = 50;
-    const {
-        events: logEvents,
-        hasMore: hasMoreLogs,
-        isLoading: isLogsLoading,
-        loadMore: loadMoreLogs,
-    } = useAgentActivity(
-        threadId,
-        agent?.id ?? null,
-        LOG_ACTIVITY_LIMIT,
-        LOG_ACTIVITY_PAGE_SIZE
-    );
-    const canLoadMoreLogs =
-        Boolean(threadId) && hasMoreLogs && !isLogsLoading;
 
     // Use our new hook to derive all financial data
     const {
@@ -104,7 +85,9 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                     </div>
                 </div>
 
-                <div className="flex gap-8">
+                <div className="flex items-center justify-between gap-8">
+                    {onCancelRun && workflow && ['queued', 'running', 'waiting'].includes(workflow.runStatus) ? <button type="button" onClick={() => void onCancelRun()} className="rounded border border-error/40 px-3 py-2 text-xs font-semibold text-error hover:bg-error/10">Cancel run</button> : null}
+                    <div className="flex gap-8">
                     {DETAIL_TABS.map((tab) => (
                         <button
                             key={tab}
@@ -119,6 +102,7 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                             )}
                         </button>
                     ))}
+                    </div>
                 </div>
             </div>
 
@@ -127,12 +111,10 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                 {activeTab === 'Workspace' && (
                     <AgentWorkspaceTab
                         agent={agent}
-                        threadId={threadId}
-                        currentNode={currentNode}
-                        currentStatus={currentStatus}
-                        messages={messages}
-                        onSubmitCommand={onSubmitCommand}
-                        projectionUpdatedAt={projectionUpdatedAt}
+                        workflow={workflow}
+                        connectionState={connectionState}
+                        onResumeInteraction={onResumeInteraction}
+                        isSubmitting={isSubmitting}
                     />
                 )}
 
@@ -152,75 +134,10 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                             <Activity size={12} className="text-primary" />
                             <span className="text-[10px] font-black text-outline uppercase tracking-[0.3em]">System Trace :: {agent.name}</span>
                         </div>
-                        <div className="flex items-center justify-between text-[9px] uppercase tracking-widest text-on-surface-variant mb-4">
-                            <span>
-                                {`Showing last ${Math.max(
-                                    LOG_ACTIVITY_LIMIT,
-                                    logEvents.length
-                                )} events`}
-                            </span>
-                            <button
-                                type="button"
-                                onClick={() => loadMoreLogs()}
-                                disabled={!canLoadMoreLogs}
-                                className={`font-bold transition-colors ${
-                                    canLoadMoreLogs
-                                        ? 'text-primary hover:text-primary-variant'
-                                        : 'text-outline/50 cursor-not-allowed'
-                                }`}
-                            >
-                                {hasMoreLogs ? 'View full history' : 'Full history loaded'}
-                            </button>
-                        </div>
                         <div className="terminal-text space-y-2 opacity-80">
-                            <div className="flex gap-4">
-                                <span className="text-outline shrink-0">10:48:02</span>
-                                <span className="text-primary/80">[INIT]</span>
-                                <span className="text-on-surface-variant">Deploying context for {agent.id}...</span>
-                            </div>
-
-                            {/* Dynamic Activity Feed mapping */}
-                            {logEvents.map((step) => {
-                                const isCurrent = step.isCurrent;
-                                const isRunning = step.status === 'running' && isCurrent;
-                                const statusLabel = isRunning
-                                    ? 'WAIT'
-                                    : step.status.toUpperCase();
-                                const statusTone =
-                                    step.status === 'error'
-                                        ? 'text-error'
-                                        : step.status === 'attention' || step.status === 'degraded'
-                                          ? 'text-warning'
-                                          : isRunning
-                                            ? 'text-primary animate-pulse'
-                                            : 'text-emerald-500/80';
-                                return (
-                                    <div key={step.id} className="flex gap-4">
-                                        <span className="text-outline shrink-0">
-                                            {new Date(step.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                                        </span>
-                                        <span className={`uppercase tracking-tighter ${statusTone}`}>
-                                            [{statusLabel}]
-                                        </span>
-                                        <span className="text-on-surface-variant">
-                                            {step.node.replace(/_/g, ' ')}: {step.status}
-                                        </span>
-                                    </div>
-                                );
-                            })}
-
-                            {/* Fallback Current Status if no feed yet */}
-                            {logEvents.length === 0 && (
-                                <div key="current-status" className="flex gap-4">
-                                    <span className="text-outline shrink-0">--:--:--</span>
-                                    <span className={`font-bold uppercase tracking-widest ${agent.status === 'running' ? 'text-primary animate-pulse' : 'text-on-surface-variant'}`}>
-                                        [{agent.status === 'running' ? 'WAIT' : 'DONE'}]
-                                    </span>
-                                    <span className="text-on-surface-variant">
-                                        {agent.status === 'running' ? 'Awaiting job stream from LangGraph…' : 'Stream detached, artifacts persistent.'}
-                                    </span>
-                                </div>
-                            )}
+                            <div className="flex gap-4"><span className="text-primary/80">[{connectionState.toUpperCase()}]</span><span className="text-on-surface-variant">Workflow run {workflow?.runId ?? 'not loaded'} · {workflow?.runStatus ?? 'idle'} · cursor {workflow?.cursor ?? 0}</span></div>
+                            {(workflow?.recent ?? []).map((activity) => <div key={`${activity.activity_id}:${activity.attempt}:${activity.status}`} className="flex gap-4"><span className="text-outline shrink-0">{activity.scope_path.join(' / ')}</span><span className="text-on-surface-variant">{activity.label}: {activity.status}{activity.progress === undefined ? '' : ` (${activity.progress}%)`}</span></div>)}
+                            {workflow?.recent.length === 0 ? <div className="text-on-surface-variant">No workflow activity has been recorded.</div> : null}
 
                             {agentOutput && (
                                 <div className="flex gap-4">

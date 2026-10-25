@@ -25,7 +25,7 @@ async def test_extraction_node_error_degraded_path():
         command = await extraction_node(state)
 
         assert command.goto == "clarifying"
-        assert command.update["internal_progress"]["extraction"] == "error"
+        assert command.update["workflow_activity_updates"]["extraction"] == "error"
         assert (
             "Model failed to extract intent" in command.update["error_logs"][0]["error"]
         )
@@ -45,7 +45,7 @@ async def test_searching_node_error_degraded_path():
         command = await searching_node(state)
 
         assert command.goto == "clarifying"
-        assert command.update["internal_progress"]["searching"] == "error"
+        assert command.update["workflow_activity_updates"]["searching"] == "error"
         assert "Search tool failed" in command.update["error_logs"][0]["error"]
 
 
@@ -65,7 +65,7 @@ async def test_decision_node_error_degraded_path():
         command = await decision_node(state)
 
         assert command.goto == "clarifying"
-        assert command.update["internal_progress"]["deciding"] == "error"
+        assert command.update["workflow_activity_updates"]["deciding"] == "error"
         assert "Decision logic crashed" in command.update["error_logs"][0]["error"]
 
 

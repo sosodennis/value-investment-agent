@@ -1,8 +1,10 @@
 {
-  "supported_versions": [
+  "activity_contracts": [
     {
       "version": "v1",
-      "fixture": "sse-events-v1.json"
+      "event_name": "workflow.activity",
+      "schema": "../workflow-activity-v1.schema.json",
+      "fixture": "workflow-activity-v1.json"
     }
   ]
 }

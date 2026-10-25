@@ -21,27 +21,25 @@ export function AnalysisWorkspace({
     autoStart = false,
 }: AnalysisWorkspaceProps) {
     const {
-        messages,
         sendMessage,
         submitCommand,
         loadHistory,
         isLoading,
         threadId,
         agentStatuses,
-        currentNode,
-        currentStatus: globalStatus,
         agentOutputs,
-        activeAgentId,
-        projectionUpdatedAt,
+        workflow,
+        connectionState,
+        cancelRun,
     } = useAgent(assistantId);
 
     const [ticker, setTicker] = useState(
         initialTicker ? initialTicker.toUpperCase() : ''
     );
     const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
-    const syncedSelectionThreadIdRef = useRef<string | null>(null);
     const hasAutoStartedRef = useRef(false);
     const hasAppliedInitialTickerRef = useRef(false);
+    const hasRestoredSelectionRef = useRef(false);
 
     // Hook 1: Extract Ticker & Financial Logic
     // We use 'intent_extraction' as the primary source for the ticker.
@@ -82,6 +80,7 @@ export function AnalysisWorkspace({
                 'agent_selected_agent_id'
             );
             if (savedSelectedAgentId) {
+                hasRestoredSelectionRef.current = true;
                 setSelectedAgentId(savedSelectedAgentId);
             }
             if (savedThreadId) {
@@ -104,23 +103,6 @@ export function AnalysisWorkspace({
         }
     }, [selectedAgentId]);
 
-    useEffect(() => {
-        if (!threadId || !activeAgentId) {
-            return;
-        }
-        if (syncedSelectionThreadIdRef.current === threadId) {
-            return;
-        }
-        setSelectedAgentId(activeAgentId);
-        syncedSelectionThreadIdRef.current = threadId;
-    }, [threadId, activeAgentId]);
-
-    // Define Agents Roster Data (Linking to current workflow nodes)
-    // Derive 'attention' status from active interrupts
-    const hasTickerInterrupt = messages.some(
-        (m) => m.isInteractive && m.type === 'interrupt.request'
-    );
-
     const agents: AgentInfo[] = useMemo(() => {
         return AGENT_CONFIGS.map((config: AgentConfig) => {
             const baseStatus = agentStatuses[config.id] || 'idle';
@@ -131,13 +113,16 @@ export function AnalysisWorkspace({
                 description: config.description,
                 avatar: config.avatar,
                 status: config.getStatus
-                    ? config.getStatus(baseStatus, hasTickerInterrupt)
+                    ? config.getStatus(baseStatus, false)
                     : baseStatus,
             };
         });
-    }, [agentStatuses, hasTickerInterrupt]);
+    }, [agentStatuses]);
 
     useEffect(() => {
+        if (hasRestoredSelectionRef.current) {
+            return;
+        }
         if (selectedAgentId) {
             return;
         }
@@ -186,13 +171,12 @@ export function AnalysisWorkspace({
                     <AgentDetailPanel
                         agent={selectedAgent}
                         agentOutput={selectedAgentOutput}
-                        messages={messages}
-                        onSubmitCommand={submitCommand}
                         allAgentOutputs={agentOutputs}
-                        currentNode={currentNode}
-                        currentStatus={globalStatus}
-                        threadId={threadId}
-                        projectionUpdatedAt={projectionUpdatedAt}
+                        workflow={workflow}
+                        connectionState={connectionState}
+                        onCancelRun={cancelRun}
+                        onResumeInteraction={submitCommand}
+                        isSubmitting={isLoading}
                     />
                 </WorkspaceLayout.Content>
             </WorkspaceLayout.Main>

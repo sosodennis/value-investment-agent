@@ -1,0 +1,1162 @@
+{
+  "contract_version": "v1",
+  "event_name": "workflow.activity",
+  "activity_statuses": [
+    "queued",
+    "running",
+    "waiting",
+    "completed",
+    "failed",
+    "cancelled",
+    "skipped"
+  ],
+  "activity_kinds": ["phase", "node", "tool", "subgraph"],
+  "scenarios": [
+    {
+      "id": "sequential-nodes",
+      "description": "A root node completes before the next node starts.",
+      "events": [
+        {
+          "event_id": "evt_seq_001",
+          "seq_id": 1,
+          "event_version": "v1",
+          "event_name": "workflow.activity",
+          "thread_id": "thread_activity_seq",
+          "run_id": "run_activity_seq",
+          "occurred_at": "2026-10-24T00:00:01Z",
+          "payload": {
+            "activity_id": "intent.extraction",
+            "thread_id": "thread_activity_seq",
+            "run_id": "run_activity_seq",
+            "scope_path": ["intent", "extraction"],
+            "kind": "node",
+            "status": "running",
+            "label": "Resolve intent",
+            "attempt": 1
+          }
+        },
+        {
+          "event_id": "evt_seq_002",
+          "seq_id": 2,
+          "event_version": "v1",
+          "event_name": "workflow.activity",
+          "thread_id": "thread_activity_seq",
+          "run_id": "run_activity_seq",
+          "occurred_at": "2026-10-24T00:00:02Z",
+          "payload": {
+            "activity_id": "intent.extraction",
+            "thread_id": "thread_activity_seq",
+            "run_id": "run_activity_seq",
+            "scope_path": ["intent", "extraction"],
+            "kind": "node",
+            "status": "completed",
+            "label": "Resolve intent",
+            "progress": 100,
+            "attempt": 1
+          }
+        },
+        {
+          "event_id": "evt_seq_003",
+          "seq_id": 3,
+          "event_version": "v1",
+          "event_name": "workflow.activity",
+          "thread_id": "thread_activity_seq",
+          "run_id": "run_activity_seq",
+          "occurred_at": "2026-10-24T00:00:03Z",
+          "payload": {
+            "activity_id": "intent.searching",
+            "thread_id": "thread_activity_seq",
+            "run_id": "run_activity_seq",
+            "scope_path": ["intent", "searching"],
+            "kind": "node",
+            "status": "running",
+            "label": "Search ticker candidates",
+            "attempt": 1
+          }
+        }
+      ],
+      "snapshot": {
+        "thread_id": "thread_activity_seq",
+        "run_id": "run_activity_seq",
+        "run_status": "running",
+        "cursor": 3,
+        "active_activities": [
+          {
+            "activity_id": "intent.searching",
+            "thread_id": "thread_activity_seq",
+            "run_id": "run_activity_seq",
+            "scope_path": ["intent", "searching"],
+            "kind": "node",
+            "status": "running",
+            "label": "Search ticker candidates",
+            "attempt": 1
+          }
+        ],
+        "recent_activities": [
+          {
+            "activity_id": "intent.extraction",
+            "thread_id": "thread_activity_seq",
+            "run_id": "run_activity_seq",
+            "scope_path": ["intent", "extraction"],
+            "kind": "node",
+            "status": "completed",
+            "label": "Resolve intent",
+            "progress": 100,
+            "attempt": 1
+          }
+        ]
+      },
+      "assertions": {
+        "active_activity_ids": ["intent.searching"],
+        "completed_activity_ids": ["intent.extraction"],
+        "aggregate_progress": "omitted"
+      }
+    },
+    {
+      "id": "parallel-subgraphs",
+      "description": "Bull and bear subgraphs run concurrently under one parent activity.",
+      "events": [
+        {
+          "event_id": "evt_parallel_001",
+          "seq_id": 1,
+          "event_version": "v1",
+          "event_name": "workflow.activity",
+          "thread_id": "thread_activity_parallel",
+          "run_id": "run_activity_parallel",
+          "occurred_at": "2026-10-24T00:01:01Z",
+          "payload": {
+            "activity_id": "debate",
+            "thread_id": "thread_activity_parallel",
+            "run_id": "run_activity_parallel",
+            "scope_path": ["debate"],
+            "kind": "subgraph",
+            "status": "running",
+            "label": "Review the thesis",
+            "attempt": 1
+          }
+        },
+        {
+          "event_id": "evt_parallel_002",
+          "seq_id": 2,
+          "event_version": "v1",
+          "event_name": "workflow.activity",
+          "thread_id": "thread_activity_parallel",
+          "run_id": "run_activity_parallel",
+          "occurred_at": "2026-10-24T00:01:02Z",
+          "payload": {
+            "activity_id": "debate.bull",
+            "parent_activity_id": "debate",
+            "thread_id": "thread_activity_parallel",
+            "run_id": "run_activity_parallel",
+            "scope_path": ["debate", "bull"],
+            "kind": "subgraph",
+            "status": "running",
+            "label": "Build the bull case",
+            "attempt": 1
+          }
+        },
+        {
+          "event_id": "evt_parallel_003",
+          "seq_id": 3,
+          "event_version": "v1",
+          "event_name": "workflow.activity",
+          "thread_id": "thread_activity_parallel",
+          "run_id": "run_activity_parallel",
+          "occurred_at": "2026-10-24T00:01:03Z",
+          "payload": {
+            "activity_id": "debate.bear",
+            "parent_activity_id": "debate",
+            "thread_id": "thread_activity_parallel",
+            "run_id": "run_activity_parallel",
+            "scope_path": ["debate", "bear"],
+            "kind": "subgraph",
+            "status": "running",
+            "label": "Build the bear case",
+            "attempt": 1
+          }
+        },
+        {
+          "event_id": "evt_parallel_004",
+          "seq_id": 4,
+          "event_version": "v1",
+          "event_name": "workflow.activity",
+          "thread_id": "thread_activity_parallel",
+          "run_id": "run_activity_parallel",
+          "occurred_at": "2026-10-24T00:01:04Z",
+          "payload": {
+            "activity_id": "debate.bull",
+            "parent_activity_id": "debate",
+            "thread_id": "thread_activity_parallel",
+            "run_id": "run_activity_parallel",
+            "scope_path": ["debate", "bull"],
+            "kind": "subgraph",
+            "status": "completed",
+            "label": "Build the bull case",
+            "attempt": 1
+          }
+        },
+        {
+          "event_id": "evt_parallel_005",
+          "seq_id": 5,
+          "event_version": "v1",
+          "event_name": "workflow.activity",
+          "thread_id": "thread_activity_parallel",
+          "run_id": "run_activity_parallel",
+          "occurred_at": "2026-10-24T00:01:05Z",
+          "payload": {
+            "activity_id": "debate.bear",
+            "parent_activity_id": "debate",
+            "thread_id": "thread_activity_parallel",
+            "run_id": "run_activity_parallel",
+            "scope_path": ["debate", "bear"],
+            "kind": "subgraph",
+            "status": "completed",
+            "label": "Build the bear case",
+            "attempt": 1
+          }
+        }
+      ],
+      "snapshot": {
+        "thread_id": "thread_activity_parallel",
+        "run_id": "run_activity_parallel",
+        "run_status": "running",
+        "cursor": 5,
+        "active_activities": [
+          {
+            "activity_id": "debate",
+            "thread_id": "thread_activity_parallel",
+            "run_id": "run_activity_parallel",
+            "scope_path": ["debate"],
+            "kind": "subgraph",
+            "status": "running",
+            "label": "Review the thesis",
+            "attempt": 1
+          }
+        ],
+        "recent_activities": [
+          {
+            "activity_id": "debate.bull",
+            "parent_activity_id": "debate",
+            "thread_id": "thread_activity_parallel",
+            "run_id": "run_activity_parallel",
+            "scope_path": ["debate", "bull"],
+            "kind": "subgraph",
+            "status": "completed",
+            "label": "Build the bull case",
+            "attempt": 1
+          },
+          {
+            "activity_id": "debate.bear",
+            "parent_activity_id": "debate",
+            "thread_id": "thread_activity_parallel",
+            "run_id": "run_activity_parallel",
+            "scope_path": ["debate", "bear"],
+            "kind": "subgraph",
+            "status": "completed",
+            "label": "Build the bear case",
+            "attempt": 1
+          }
+        ]
+      },
+      "assertions": {
+        "active_activity_ids": ["debate"],
+        "parallel_child_activity_ids": ["debate.bull", "debate.bear"],
+        "aggregate_progress": "forbidden"
+      }
+    },
+    {
+      "id": "repeated-invocation",
+      "description": "The same logical node is invoked twice in one run.",
+      "events": [
+        {
+          "event_id": "evt_repeat_001",
+          "seq_id": 1,
+          "event_version": "v1",
+          "event_name": "workflow.activity",
+          "thread_id": "thread_activity_repeat",
+          "run_id": "run_activity_repeat",
+          "occurred_at": "2026-10-24T00:02:01Z",
+          "payload": {
+            "activity_id": "news.fetch",
+            "thread_id": "thread_activity_repeat",
+            "run_id": "run_activity_repeat",
+            "scope_path": ["news", "fetch"],
+            "kind": "node",
+            "status": "running",
+            "label": "Fetch selected articles",
+            "attempt": 1
+          }
+        },
+        {
+          "event_id": "evt_repeat_002",
+          "seq_id": 2,
+          "event_version": "v1",
+          "event_name": "workflow.activity",
+          "thread_id": "thread_activity_repeat",
+          "run_id": "run_activity_repeat",
+          "occurred_at": "2026-10-24T00:02:02Z",
+          "payload": {
+            "activity_id": "news.fetch",
+            "thread_id": "thread_activity_repeat",
+            "run_id": "run_activity_repeat",
+            "scope_path": ["news", "fetch"],
+            "kind": "node",
+            "status": "completed",
+            "label": "Fetch selected articles",
+            "attempt": 1
+          }
+        },
+        {
+          "event_id": "evt_repeat_003",
+          "seq_id": 3,
+          "event_version": "v1",
+          "event_name": "workflow.activity",
+          "thread_id": "thread_activity_repeat",
+          "run_id": "run_activity_repeat",
+          "occurred_at": "2026-10-24T00:02:03Z",
+          "payload": {
+            "activity_id": "news.fetch",
+            "thread_id": "thread_activity_repeat",
+            "run_id": "run_activity_repeat",
+            "scope_path": ["news", "fetch"],
+            "kind": "node",
+            "status": "running",
+            "label": "Fetch selected articles",
+            "attempt": 2
+          }
+        }
+      ],
+      "snapshot": {
+        "thread_id": "thread_activity_repeat",
+        "run_id": "run_activity_repeat",
+        "run_status": "running",
+        "cursor": 3,
+        "active_activities": [
+          {
+            "activity_id": "news.fetch",
+            "thread_id": "thread_activity_repeat",
+            "run_id": "run_activity_repeat",
+            "scope_path": ["news", "fetch"],
+            "kind": "node",
+            "status": "running",
+            "label": "Fetch selected articles",
+            "attempt": 2
+          }
+        ],
+        "recent_activities": [
+          {
+            "activity_id": "news.fetch",
+            "thread_id": "thread_activity_repeat",
+            "run_id": "run_activity_repeat",
+            "scope_path": ["news", "fetch"],
+            "kind": "node",
+            "status": "completed",
+            "label": "Fetch selected articles",
+            "attempt": 1
+          }
+        ]
+      },
+      "assertions": {
+        "logical_activity_id": "news.fetch",
+        "active_attempt": 2,
+        "terminal_attempts": [1]
+      }
+    },
+    {
+      "id": "retry",
+      "description": "A failed attempt retries the same logical tool activity.",
+      "events": [
+        {
+          "event_id": "evt_retry_001",
+          "seq_id": 1,
+          "event_version": "v1",
+          "event_name": "workflow.activity",
+          "thread_id": "thread_activity_retry",
+          "run_id": "run_activity_retry",
+          "occurred_at": "2026-10-24T00:03:01Z",
+          "payload": {
+            "activity_id": "search.provider",
+            "thread_id": "thread_activity_retry",
+            "run_id": "run_activity_retry",
+            "scope_path": ["news", "search", "provider"],
+            "kind": "tool",
+            "status": "running",
+            "label": "Query search provider",
+            "attempt": 1
+          }
+        },
+        {
+          "event_id": "evt_retry_002",
+          "seq_id": 2,
+          "event_version": "v1",
+          "event_name": "workflow.activity",
+          "thread_id": "thread_activity_retry",
+          "run_id": "run_activity_retry",
+          "occurred_at": "2026-10-24T00:03:02Z",
+          "payload": {
+            "activity_id": "search.provider",
+            "thread_id": "thread_activity_retry",
+            "run_id": "run_activity_retry",
+            "scope_path": ["news", "search", "provider"],
+            "kind": "tool",
+            "status": "failed",
+            "label": "Query search provider",
+            "attempt": 1
+          }
+        },
+        {
+          "event_id": "evt_retry_003",
+          "seq_id": 3,
+          "event_version": "v1",
+          "event_name": "workflow.activity",
+          "thread_id": "thread_activity_retry",
+          "run_id": "run_activity_retry",
+          "occurred_at": "2026-10-24T00:03:03Z",
+          "payload": {
+            "activity_id": "search.provider",
+            "thread_id": "thread_activity_retry",
+            "run_id": "run_activity_retry",
+            "scope_path": ["news", "search", "provider"],
+            "kind": "tool",
+            "status": "running",
+            "label": "Query search provider",
+            "attempt": 2
+          }
+        }
+      ],
+      "snapshot": {
+        "thread_id": "thread_activity_retry",
+        "run_id": "run_activity_retry",
+        "run_status": "running",
+        "cursor": 3,
+        "active_activities": [
+          {
+            "activity_id": "search.provider",
+            "thread_id": "thread_activity_retry",
+            "run_id": "run_activity_retry",
+            "scope_path": ["news", "search", "provider"],
+            "kind": "tool",
+            "status": "running",
+            "label": "Query search provider",
+            "attempt": 2
+          }
+        ],
+        "recent_activities": [
+          {
+            "activity_id": "search.provider",
+            "thread_id": "thread_activity_retry",
+            "run_id": "run_activity_retry",
+            "scope_path": ["news", "search", "provider"],
+            "kind": "tool",
+            "status": "failed",
+            "label": "Query search provider",
+            "attempt": 1
+          }
+        ]
+      },
+      "assertions": {
+        "logical_activity_id": "search.provider",
+        "failed_attempt": 1,
+        "active_attempt": 2
+      }
+    },
+    {
+      "id": "interrupt",
+      "description": "A running activity pauses for human input.",
+      "events": [
+        {
+          "event_id": "evt_interrupt_001",
+          "seq_id": 1,
+          "event_version": "v1",
+          "event_name": "workflow.activity",
+          "thread_id": "thread_activity_interrupt",
+          "run_id": "run_activity_interrupt",
+          "occurred_at": "2026-10-24T00:04:01Z",
+          "payload": {
+            "activity_id": "intent.clarifying",
+            "thread_id": "thread_activity_interrupt",
+            "run_id": "run_activity_interrupt",
+            "scope_path": ["intent", "clarifying"],
+            "kind": "node",
+            "status": "running",
+            "label": "Resolve ticker ambiguity",
+            "attempt": 1
+          }
+        },
+        {
+          "event_id": "evt_interrupt_002",
+          "seq_id": 2,
+          "event_version": "v1",
+          "event_name": "workflow.activity",
+          "thread_id": "thread_activity_interrupt",
+          "run_id": "run_activity_interrupt",
+          "occurred_at": "2026-10-24T00:04:02Z",
+          "payload": {
+            "activity_id": "intent.clarifying",
+            "thread_id": "thread_activity_interrupt",
+            "run_id": "run_activity_interrupt",
+            "scope_path": ["intent", "clarifying"],
+            "kind": "node",
+            "status": "waiting",
+            "label": "Resolve ticker ambiguity",
+            "attempt": 1,
+            "interruption": {
+              "interaction_id": "interaction_fixture_1",
+              "request": {
+                "type": "ticker_selection",
+                "title": "Ticker Resolution",
+                "description": "Choose the intended company.",
+                "candidates": [
+                  {
+                    "symbol": "GOOG",
+                    "name": "Alphabet Inc.",
+                    "exchange": "NASDAQ",
+                    "type": "stock",
+                    "confidence": 0.91
+                  },
+                  {
+                    "symbol": "GOOGL",
+                    "name": "Alphabet Inc. Class A",
+                    "exchange": "NASDAQ",
+                    "type": "stock",
+                    "confidence": 0.89
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "snapshot": {
+        "thread_id": "thread_activity_interrupt",
+        "run_id": "run_activity_interrupt",
+        "run_status": "waiting",
+        "cursor": 2,
+        "active_activities": [
+          {
+            "activity_id": "intent.clarifying",
+            "thread_id": "thread_activity_interrupt",
+            "run_id": "run_activity_interrupt",
+            "scope_path": ["intent", "clarifying"],
+            "kind": "node",
+            "status": "waiting",
+            "label": "Resolve ticker ambiguity",
+            "attempt": 1,
+            "interruption": {
+              "interaction_id": "interaction_fixture_1",
+              "request": {
+                "type": "ticker_selection",
+                "title": "Ticker Resolution",
+                "description": "Choose the intended company.",
+                "candidates": [
+                  {
+                    "symbol": "GOOG",
+                    "name": "Alphabet Inc.",
+                    "exchange": "NASDAQ",
+                    "type": "stock",
+                    "confidence": 0.91
+                  },
+                  {
+                    "symbol": "GOOGL",
+                    "name": "Alphabet Inc. Class A",
+                    "exchange": "NASDAQ",
+                    "type": "stock",
+                    "confidence": 0.89
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "recent_activities": []
+      },
+      "assertions": {
+        "run_status": "waiting",
+        "requires_human_input": true,
+        "resume_request": {
+          "activity_id": "intent.clarifying",
+          "interaction_id": "interaction_fixture_1",
+          "response": {
+            "type": "ticker_selection",
+            "selected_symbol": "GOOGL"
+          }
+        },
+        "rejected_legacy_shapes": [
+          "interrupt.request event",
+          "message metadata type/data interrupt",
+          "unbound resume_payload"
+        ]
+      }
+    },
+    {
+      "id": "interrupt-resume",
+      "description": "A consumed ticker interaction resumes its activity at the next attempt.",
+      "events": [
+        {
+          "event_id": "evt_interrupt_resume_001",
+          "seq_id": 1,
+          "event_version": "v1",
+          "event_name": "workflow.activity",
+          "thread_id": "thread_activity_interrupt_resume",
+          "run_id": "run_activity_interrupt_resume",
+          "occurred_at": "2026-10-24T00:04:03Z",
+          "payload": {
+            "activity_id": "intent.clarifying",
+            "thread_id": "thread_activity_interrupt_resume",
+            "run_id": "run_activity_interrupt_resume",
+            "scope_path": ["intent", "clarifying"],
+            "kind": "node",
+            "status": "waiting",
+            "label": "Resolve ticker ambiguity",
+            "attempt": 1,
+            "interruption": {
+              "interaction_id": "interaction_fixture_resume",
+              "request": {
+                "type": "ticker_selection",
+                "title": "Ticker Resolution",
+                "description": "Choose the intended company.",
+                "candidates": [
+                  {
+                    "symbol": "GOOG",
+                    "name": "Alphabet Inc.",
+                    "exchange": "NASDAQ",
+                    "type": "stock",
+                    "confidence": 0.91
+                  },
+                  {
+                    "symbol": "GOOGL",
+                    "name": "Alphabet Inc. Class A",
+                    "exchange": "NASDAQ",
+                    "type": "stock",
+                    "confidence": 0.89
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "event_id": "evt_interrupt_resume_002",
+          "seq_id": 2,
+          "event_version": "v1",
+          "event_name": "workflow.activity",
+          "thread_id": "thread_activity_interrupt_resume",
+          "run_id": "run_activity_interrupt_resume",
+          "occurred_at": "2026-10-24T00:04:04Z",
+          "payload": {
+            "activity_id": "intent.clarifying",
+            "thread_id": "thread_activity_interrupt_resume",
+            "run_id": "run_activity_interrupt_resume",
+            "scope_path": ["intent", "clarifying"],
+            "kind": "node",
+            "status": "running",
+            "label": "Resolve ticker ambiguity",
+            "attempt": 2
+          }
+        }
+      ],
+      "snapshot": {
+        "thread_id": "thread_activity_interrupt_resume",
+        "run_id": "run_activity_interrupt_resume",
+        "run_status": "running",
+        "cursor": 2,
+        "active_activities": [
+          {
+            "activity_id": "intent.clarifying",
+            "thread_id": "thread_activity_interrupt_resume",
+            "run_id": "run_activity_interrupt_resume",
+            "scope_path": ["intent", "clarifying"],
+            "kind": "node",
+            "status": "running",
+            "label": "Resolve ticker ambiguity",
+            "attempt": 2
+          }
+        ],
+        "recent_activities": [
+          {
+            "activity_id": "intent.clarifying",
+            "thread_id": "thread_activity_interrupt_resume",
+            "run_id": "run_activity_interrupt_resume",
+            "scope_path": ["intent", "clarifying"],
+            "kind": "node",
+            "status": "running",
+            "label": "Resolve ticker ambiguity",
+            "attempt": 2
+          }
+        ]
+      },
+      "assertions": {
+        "resume_request": {
+          "activity_id": "intent.clarifying",
+          "interaction_id": "interaction_fixture_resume",
+          "response": {
+            "type": "ticker_selection",
+            "selected_symbol": "GOOGL"
+          }
+        },
+        "resumed_activity_id": "intent.clarifying",
+        "resumed_attempt": 2,
+        "active_interruption": null
+      }
+    },
+    {
+      "id": "cancellation",
+      "description": "An explicit cancellation ends an active activity.",
+      "events": [
+        {
+          "event_id": "evt_cancel_001",
+          "seq_id": 1,
+          "event_version": "v1",
+          "event_name": "workflow.activity",
+          "thread_id": "thread_activity_cancel",
+          "run_id": "run_activity_cancel",
+          "occurred_at": "2026-10-24T00:05:01Z",
+          "payload": {
+            "activity_id": "technical.data_fetch",
+            "thread_id": "thread_activity_cancel",
+            "run_id": "run_activity_cancel",
+            "scope_path": ["technical", "data_fetch"],
+            "kind": "node",
+            "status": "running",
+            "label": "Load market data",
+            "attempt": 1
+          }
+        },
+        {
+          "event_id": "evt_cancel_002",
+          "seq_id": 2,
+          "event_version": "v1",
+          "event_name": "workflow.activity",
+          "thread_id": "thread_activity_cancel",
+          "run_id": "run_activity_cancel",
+          "occurred_at": "2026-10-24T00:05:02Z",
+          "payload": {
+            "activity_id": "technical.data_fetch",
+            "thread_id": "thread_activity_cancel",
+            "run_id": "run_activity_cancel",
+            "scope_path": ["technical", "data_fetch"],
+            "kind": "node",
+            "status": "cancelled",
+            "label": "Load market data",
+            "attempt": 1
+          }
+        }
+      ],
+      "snapshot": {
+        "thread_id": "thread_activity_cancel",
+        "run_id": "run_activity_cancel",
+        "run_status": "cancelled",
+        "cursor": 2,
+        "active_activities": [],
+        "recent_activities": [
+          {
+            "activity_id": "technical.data_fetch",
+            "thread_id": "thread_activity_cancel",
+            "run_id": "run_activity_cancel",
+            "scope_path": ["technical", "data_fetch"],
+            "kind": "node",
+            "status": "cancelled",
+            "label": "Load market data",
+            "attempt": 1
+          }
+        ]
+      },
+      "assertions": {
+        "run_status": "cancelled",
+        "active_activity_ids": []
+      }
+    },
+    {
+      "id": "failure",
+      "description": "An unrecoverable task error ends an activity.",
+      "events": [
+        {
+          "event_id": "evt_failure_001",
+          "seq_id": 1,
+          "event_version": "v1",
+          "event_name": "workflow.activity",
+          "thread_id": "thread_activity_failure",
+          "run_id": "run_activity_failure",
+          "occurred_at": "2026-10-24T00:06:01Z",
+          "payload": {
+            "activity_id": "fundamental.financial_health",
+            "thread_id": "thread_activity_failure",
+            "run_id": "run_activity_failure",
+            "scope_path": ["fundamental", "financial_health"],
+            "kind": "node",
+            "status": "running",
+            "label": "Check financial health",
+            "attempt": 1
+          }
+        },
+        {
+          "event_id": "evt_failure_002",
+          "seq_id": 2,
+          "event_version": "v1",
+          "event_name": "workflow.activity",
+          "thread_id": "thread_activity_failure",
+          "run_id": "run_activity_failure",
+          "occurred_at": "2026-10-24T00:06:02Z",
+          "payload": {
+            "activity_id": "fundamental.financial_health",
+            "thread_id": "thread_activity_failure",
+            "run_id": "run_activity_failure",
+            "scope_path": ["fundamental", "financial_health"],
+            "kind": "node",
+            "status": "failed",
+            "label": "Check financial health",
+            "attempt": 1
+          }
+        }
+      ],
+      "snapshot": {
+        "thread_id": "thread_activity_failure",
+        "run_id": "run_activity_failure",
+        "run_status": "failed",
+        "cursor": 2,
+        "active_activities": [],
+        "recent_activities": [
+          {
+            "activity_id": "fundamental.financial_health",
+            "thread_id": "thread_activity_failure",
+            "run_id": "run_activity_failure",
+            "scope_path": ["fundamental", "financial_health"],
+            "kind": "node",
+            "status": "failed",
+            "label": "Check financial health",
+            "attempt": 1
+          }
+        ]
+      },
+      "assertions": {
+        "run_status": "failed",
+        "active_activity_ids": []
+      }
+    },
+    {
+      "id": "completion",
+      "description": "Measured progress is optional and may reach 100 before completion.",
+      "events": [
+        {
+          "event_id": "evt_complete_001",
+          "seq_id": 1,
+          "event_version": "v1",
+          "event_name": "workflow.activity",
+          "thread_id": "thread_activity_complete",
+          "run_id": "run_activity_complete",
+          "occurred_at": "2026-10-24T00:07:01Z",
+          "payload": {
+            "activity_id": "calculation",
+            "thread_id": "thread_activity_complete",
+            "run_id": "run_activity_complete",
+            "scope_path": ["fundamental", "calculation"],
+            "kind": "phase",
+            "status": "queued",
+            "label": "Calculate intrinsic value",
+            "attempt": 1
+          }
+        },
+        {
+          "event_id": "evt_complete_002",
+          "seq_id": 2,
+          "event_version": "v1",
+          "event_name": "workflow.activity",
+          "thread_id": "thread_activity_complete",
+          "run_id": "run_activity_complete",
+          "occurred_at": "2026-10-24T00:07:02Z",
+          "payload": {
+            "activity_id": "calculation",
+            "thread_id": "thread_activity_complete",
+            "run_id": "run_activity_complete",
+            "scope_path": ["fundamental", "calculation"],
+            "kind": "phase",
+            "status": "running",
+            "label": "Calculate intrinsic value",
+            "progress": 50,
+            "attempt": 1
+          }
+        },
+        {
+          "event_id": "evt_complete_003",
+          "seq_id": 3,
+          "event_version": "v1",
+          "event_name": "workflow.activity",
+          "thread_id": "thread_activity_complete",
+          "run_id": "run_activity_complete",
+          "occurred_at": "2026-10-24T00:07:03Z",
+          "payload": {
+            "activity_id": "calculation",
+            "thread_id": "thread_activity_complete",
+            "run_id": "run_activity_complete",
+            "scope_path": ["fundamental", "calculation"],
+            "kind": "phase",
+            "status": "completed",
+            "label": "Calculate intrinsic value",
+            "progress": 100,
+            "attempt": 1
+          }
+        }
+      ],
+      "snapshot": {
+        "thread_id": "thread_activity_complete",
+        "run_id": "run_activity_complete",
+        "run_status": "completed",
+        "cursor": 3,
+        "active_activities": [],
+        "recent_activities": [
+          {
+            "activity_id": "calculation",
+            "thread_id": "thread_activity_complete",
+            "run_id": "run_activity_complete",
+            "scope_path": ["fundamental", "calculation"],
+            "kind": "phase",
+            "status": "completed",
+            "label": "Calculate intrinsic value",
+            "progress": 100,
+            "attempt": 1
+          }
+        ]
+      },
+      "assertions": {
+        "run_status": "completed",
+        "progress_values": [50, 100],
+        "active_activity_ids": []
+      }
+    },
+    {
+      "id": "duplicate-delivery",
+      "description": "The same durable event may be delivered twice and is applied once.",
+      "events": [
+        {
+          "event_id": "evt_duplicate_001",
+          "seq_id": 1,
+          "event_version": "v1",
+          "event_name": "workflow.activity",
+          "thread_id": "thread_activity_duplicate",
+          "run_id": "run_activity_duplicate",
+          "occurred_at": "2026-10-24T00:08:01Z",
+          "payload": {
+            "activity_id": "news.selector",
+            "thread_id": "thread_activity_duplicate",
+            "run_id": "run_activity_duplicate",
+            "scope_path": ["news", "selector"],
+            "kind": "node",
+            "status": "running",
+            "label": "Select relevant articles",
+            "attempt": 1
+          }
+        },
+        {
+          "event_id": "evt_duplicate_002",
+          "seq_id": 2,
+          "event_version": "v1",
+          "event_name": "workflow.activity",
+          "thread_id": "thread_activity_duplicate",
+          "run_id": "run_activity_duplicate",
+          "occurred_at": "2026-10-24T00:08:02Z",
+          "payload": {
+            "activity_id": "news.selector",
+            "thread_id": "thread_activity_duplicate",
+            "run_id": "run_activity_duplicate",
+            "scope_path": ["news", "selector"],
+            "kind": "node",
+            "status": "completed",
+            "label": "Select relevant articles",
+            "attempt": 1
+          }
+        }
+      ],
+      "snapshot": {
+        "thread_id": "thread_activity_duplicate",
+        "run_id": "run_activity_duplicate",
+        "run_status": "completed",
+        "cursor": 2,
+        "active_activities": [],
+        "recent_activities": [
+          {
+            "activity_id": "news.selector",
+            "thread_id": "thread_activity_duplicate",
+            "run_id": "run_activity_duplicate",
+            "scope_path": ["news", "selector"],
+            "kind": "node",
+            "status": "completed",
+            "label": "Select relevant articles",
+            "attempt": 1
+          }
+        ]
+      },
+      "assertions": {
+        "delivery_event_ids": ["evt_duplicate_001", "evt_duplicate_002", "evt_duplicate_002"],
+        "applied_event_ids": ["evt_duplicate_001", "evt_duplicate_002"],
+        "cursor_after_delivery": 2
+      }
+    },
+    {
+      "id": "replay",
+      "description": "A subscriber replays events after an applied cursor.",
+      "events": [
+        {
+          "event_id": "evt_replay_001",
+          "seq_id": 1,
+          "event_version": "v1",
+          "event_name": "workflow.activity",
+          "thread_id": "thread_activity_replay",
+          "run_id": "run_activity_replay",
+          "occurred_at": "2026-10-24T00:09:01Z",
+          "payload": {
+            "activity_id": "fundamental.health",
+            "thread_id": "thread_activity_replay",
+            "run_id": "run_activity_replay",
+            "scope_path": ["fundamental", "health"],
+            "kind": "node",
+            "status": "running",
+            "label": "Check health",
+            "attempt": 1
+          }
+        },
+        {
+          "event_id": "evt_replay_002",
+          "seq_id": 2,
+          "event_version": "v1",
+          "event_name": "workflow.activity",
+          "thread_id": "thread_activity_replay",
+          "run_id": "run_activity_replay",
+          "occurred_at": "2026-10-24T00:09:02Z",
+          "payload": {
+            "activity_id": "fundamental.health",
+            "thread_id": "thread_activity_replay",
+            "run_id": "run_activity_replay",
+            "scope_path": ["fundamental", "health"],
+            "kind": "node",
+            "status": "completed",
+            "label": "Check health",
+            "attempt": 1
+          }
+        },
+        {
+          "event_id": "evt_replay_003",
+          "seq_id": 3,
+          "event_version": "v1",
+          "event_name": "workflow.activity",
+          "thread_id": "thread_activity_replay",
+          "run_id": "run_activity_replay",
+          "occurred_at": "2026-10-24T00:09:03Z",
+          "payload": {
+            "activity_id": "fundamental.model_selection",
+            "thread_id": "thread_activity_replay",
+            "run_id": "run_activity_replay",
+            "scope_path": ["fundamental", "model_selection"],
+            "kind": "node",
+            "status": "running",
+            "label": "Select valuation model",
+            "attempt": 1
+          }
+        }
+      ],
+      "snapshot": {
+        "thread_id": "thread_activity_replay",
+        "run_id": "run_activity_replay",
+        "run_status": "running",
+        "cursor": 3,
+        "active_activities": [
+          {
+            "activity_id": "fundamental.model_selection",
+            "thread_id": "thread_activity_replay",
+            "run_id": "run_activity_replay",
+            "scope_path": ["fundamental", "model_selection"],
+            "kind": "node",
+            "status": "running",
+            "label": "Select valuation model",
+            "attempt": 1
+          }
+        ],
+        "recent_activities": [
+          {
+            "activity_id": "fundamental.health",
+            "thread_id": "thread_activity_replay",
+            "run_id": "run_activity_replay",
+            "scope_path": ["fundamental", "health"],
+            "kind": "node",
+            "status": "completed",
+            "label": "Check health",
+            "attempt": 1
+          }
+        ]
+      },
+      "assertions": {
+        "replay_after_seq": 1,
+        "replayed_seq_ids": [2, 3],
+        "snapshot_cursor": 3
+      }
+    },
+    {
+      "id": "sequence-gap",
+      "description": "A missing durable sequence requests replay or snapshot recovery.",
+      "events": [
+        {
+          "event_id": "evt_gap_001",
+          "seq_id": 1,
+          "event_version": "v1",
+          "event_name": "workflow.activity",
+          "thread_id": "thread_activity_gap",
+          "run_id": "run_activity_gap",
+          "occurred_at": "2026-10-24T00:10:01Z",
+          "payload": {
+            "activity_id": "debate.moderator",
+            "thread_id": "thread_activity_gap",
+            "run_id": "run_activity_gap",
+            "scope_path": ["debate", "moderator"],
+            "kind": "node",
+            "status": "running",
+            "label": "Moderate debate",
+            "attempt": 1
+          }
+        },
+        {
+          "event_id": "evt_gap_003",
+          "seq_id": 3,
+          "event_version": "v1",
+          "event_name": "workflow.activity",
+          "thread_id": "thread_activity_gap",
+          "run_id": "run_activity_gap",
+          "occurred_at": "2026-10-24T00:10:03Z",
+          "payload": {
+            "activity_id": "debate.moderator",
+            "thread_id": "thread_activity_gap",
+            "run_id": "run_activity_gap",
+            "scope_path": ["debate", "moderator"],
+            "kind": "node",
+            "status": "completed",
+            "label": "Moderate debate",
+            "attempt": 1
+          }
+        }
+      ],
+      "snapshot": {
+        "thread_id": "thread_activity_gap",
+        "run_id": "run_activity_gap",
+        "run_status": "running",
+        "cursor": 1,
+        "active_activities": [
+          {
+            "activity_id": "debate.moderator",
+            "thread_id": "thread_activity_gap",
+            "run_id": "run_activity_gap",
+            "scope_path": ["debate", "moderator"],
+            "kind": "node",
+            "status": "running",
+            "label": "Moderate debate",
+            "attempt": 1
+          }
+        ],
+        "recent_activities": []
+      },
+      "assertions": {
+        "received_seq_ids": [1, 3],
+        "missing_seq_ids": [2],
+        "expected_error": "replay_gap",
+        "recovery": "snapshot_or_replay"
+      }
+    }
+  ]
+}

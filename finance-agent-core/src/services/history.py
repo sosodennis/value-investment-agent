@@ -12,7 +12,7 @@ from ..infrastructure.models import ChatMessage
 
 
 class HistoryService:
-    _ALLOWED_MESSAGE_TYPES = {"text", "financial_report", "interrupt.request"}
+    _ALLOWED_MESSAGE_TYPES = {"text", "financial_report"}
 
     @staticmethod
     def _normalize_message_type(metadata: JSONObject) -> JSONObject:

@@ -22,8 +22,10 @@ from src.llm_provider.interface.contracts import (
     ProviderKeyTestResponse,
 )
 
-provider_keys_router = APIRouter(prefix="/api/llm/provider-keys", tags=["LLM settings"])
-llm_settings_router = APIRouter(prefix="/api/llm/settings", tags=["LLM settings"])
+provider_keys_router = APIRouter(
+    prefix="/api/v1/llm/provider-keys", tags=["LLM settings"]
+)
+llm_settings_router = APIRouter(prefix="/api/v1/llm/settings", tags=["LLM settings"])
 
 
 def _key_response(key: ManagedProviderKey) -> ProviderKeyResponse:
@@ -129,8 +131,12 @@ async def test_provider_key(
     service: LLMProviderServiceSettingsClient = Depends(get_provider_settings_service),
 ) -> ProviderKeyTestResponse:
     try:
-        await service.test_key(user_id=principal.user_id, key_id=key_id)
-        return ProviderKeyTestResponse(id=key_id, passed=True, status="healthy")
+        passed = await service.test_key(user_id=principal.user_id, key_id=key_id)
+        return ProviderKeyTestResponse(
+            id=key_id,
+            passed=passed,
+            status="healthy" if passed else "unavailable",
+        )
     except ProviderSettingsError as exc:
         if exc.code == "not_found":
             _raise_http_error(exc)

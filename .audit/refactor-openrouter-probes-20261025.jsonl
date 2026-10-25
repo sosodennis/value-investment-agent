@@ -1,0 +1,5 @@
+{"check":"free_completion","http_status":200,"requested_model":"openrouter/free","resolved_model":"nvidia/nemotron-3.5-content-safety:free","usage":{"prompt_tokens":466,"completion_tokens":2,"total_tokens":468,"cost":0}}
+{"check":"free_model_catalog","http_status":200,"structured_output_free_model_count":5}
+{"check":"free_structured_completion","http_status":200,"requested_model":"xingchen-agi/xing4.0-29b-a4b:free","resolved_model":"xingchen-agi/xing4.0-29b-a4b:free","usage":{"prompt_tokens":13,"completion_tokens":6,"total_tokens":19,"cost":0},"json_schema_valid":true}
+{"check":"free_router_structured_completion","http_status":200,"requested_model":"openrouter/free","resolved_model":"recursive/flint-v1.0:free","usage":{"prompt_tokens":11,"completion_tokens":10,"total_tokens":21,"cost":0},"json_schema_valid":false}
+{"timestamp":"2026-10-25T02:56:56Z","check":"direct_secondary_completion","credential":"staging_secondary","request_id":"gen-1792897016-xhZuuIaYJYLLXP4LhHWB","requested_model":"xingchen-agi/xing4.0-29b-a4b:free","http_status":200,"response_error_code":429,"usage_available":false,"rate_limit_headers_present":false,"provider_identified":false}

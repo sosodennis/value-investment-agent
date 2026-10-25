@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from collections.abc import AsyncIterator
 
 import httpx
@@ -16,6 +17,8 @@ from src.llm_provider_service.domain.contracts import (
     ChatRole,
     CompletionRequest,
     CompletionResult,
+    LLMAttempt,
+    LLMAttribution,
     LLMErrorCode,
     LLMProviderError,
     LLMRequestClass,
@@ -23,6 +26,7 @@ from src.llm_provider_service.domain.contracts import (
     ProviderPrincipal,
     StreamEvent,
     StructuredRequest,
+    Usage,
 )
 from src.llm_provider_service.domain.routes import DEFAULT_MODEL_ALIAS, user_route_alias
 from src.llm_provider_service.infrastructure.gateway import (
@@ -62,6 +66,16 @@ def _config(*, attempts: int = 2) -> LiteLLMGatewayConfig:
     )
 
 
+def test_gateway_default_backoff_is_one_second(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("LLM_GATEWAY_BACKOFF_SECONDS", raising=False)
+
+    config = LiteLLMGatewayConfig.from_env()
+
+    assert config.backoff_seconds == 1.0
+
+
 def _completion_payload() -> dict[str, object]:
     return {
         "id": "completion-1",
@@ -74,6 +88,49 @@ def _completion_payload() -> dict[str, object]:
         ],
         "usage": {"prompt_tokens": 4, "completion_tokens": 2, "total_tokens": 6},
     }
+
+
+def test_success_telemetry_emits_safe_json_at_info_level(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    request = _request()
+    telemetry = LLMProviderTelemetry()
+    started_at = telemetry.started(request, stream=False)
+
+    with caplog.at_level(
+        logging.INFO, logger="src.llm_provider_service.infrastructure.telemetry"
+    ):
+        telemetry.succeeded(
+            request,
+            CompletionResult(
+                request_id=request.request_id,
+                text="completion body is not included",
+                model="resolved-model",
+                usage=Usage(prompt_tokens=4, completion_tokens=2, total_tokens=6),
+                attempts=(
+                    LLMAttempt(attempt=1, deployment_id="deployment-7"),
+                    LLMAttempt(attempt=2, deployment_id="deployment-8"),
+                ),
+                attribution=LLMAttribution(
+                    deployment_id="deployment-8", key_fingerprint="abcdef012345"
+                ),
+            ),
+            started_at=started_at,
+        )
+
+    record = next(
+        record
+        for record in caplog.records
+        if '"event":"llm_provider_request"' in record.getMessage()
+    )
+    event = json.loads(record.getMessage())
+    assert event["request_id"] == request.request_id
+    assert event["attempts"] == 2
+    assert event["retry_count"] == 1
+    assert event["deployment_id"] == "deployment-8"
+    assert event["key_fingerprint"] == "abcdef012345"
+    assert event["total_tokens"] == 6
+    assert "completion body" not in record.getMessage()
 
 
 @pytest.mark.asyncio

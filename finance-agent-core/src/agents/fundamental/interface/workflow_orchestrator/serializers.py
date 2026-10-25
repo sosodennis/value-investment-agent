@@ -10,7 +10,10 @@ from src.agents.fundamental.subdomains.forward_signals.public import (
     ForwardSignalPayload,
     serialize_forward_signals,
 )
-from src.interface.events.schemas import ArtifactReference, build_artifact_payload
+from src.interface.artifacts.output_schemas import (
+    ArtifactReference,
+    build_artifact_payload,
+)
 from src.shared.kernel.contracts import (
     ARTIFACT_KIND_FINANCIAL_REPORTS,
     OUTPUT_KIND_FUNDAMENTAL_ANALYSIS,
@@ -62,7 +65,7 @@ def build_model_selection_artifact(
 ) -> AgentOutputArtifactPayload:
     reference = ArtifactReference(
         artifact_id=report_id,
-        download_url=f"/api/artifacts/{report_id}",
+        download_url=f"/api/v1/artifacts/{report_id}",
         type=ARTIFACT_KIND_FINANCIAL_REPORTS,
     )
     return build_artifact_payload(
@@ -82,7 +85,7 @@ def build_valuation_artifact(
 ) -> AgentOutputArtifactPayload:
     reference = ArtifactReference(
         artifact_id=reports_artifact_id,
-        download_url=f"/api/artifacts/{reports_artifact_id}",
+        download_url=f"/api/v1/artifacts/{reports_artifact_id}",
         type=ARTIFACT_KIND_FINANCIAL_REPORTS,
     )
     return build_artifact_payload(

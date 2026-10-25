@@ -203,9 +203,9 @@ class AgentState(TypedDict):
     debate: Annotated[DebateContext, merge_dict]
 
     # Dashboard tracking
-    node_statuses: Annotated[dict[str, str], merge_dict]
-    current_node: Annotated[str | None, last_value]
-    internal_progress: Annotated[dict[str, str], merge_dict]
+    workflow_activity_statuses: Annotated[dict[str, str], merge_dict]
+    active_activity_id: Annotated[str | None, last_value]
+    workflow_activity_updates: Annotated[dict[str, str], merge_dict]
 
     # Error logging
     error_logs: Annotated[list[dict], append_logs]

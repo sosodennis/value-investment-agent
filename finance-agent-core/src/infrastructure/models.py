@@ -210,78 +210,28 @@ class TechnicalApprovedLabelSnapshot(Base):
     )
 
 
-class WorkspaceRuntimeActivityEvent(Base):
-    __tablename__ = "workspace_runtime_activity_events"
+class WorkflowActivityEvent(Base):
+    """Durable application activity envelope and its per-thread cursor."""
 
-    event_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    __tablename__ = "workflow_activity_events"
+
+    event_id = Column(String, primary_key=True)
     thread_id = Column(String, nullable=False, index=True)
-    seq_id = Column(Integer, nullable=False)
-    run_id = Column(String, nullable=True)
-    agent_id = Column(String, nullable=False, index=True)
-    node = Column(String, nullable=True)
-    event_type = Column(String, nullable=False)
-    status = Column(String, nullable=True)
-    payload = Column(JSON, nullable=False, default={})
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
-
-    __table_args__ = (
-        UniqueConstraint(
-            "thread_id",
-            "seq_id",
-            name="uq_workspace_runtime_activity_thread_seq",
-        ),
-        Index(
-            "idx_workspace_runtime_activity_thread_seq",
-            "thread_id",
-            "seq_id",
-        ),
-        Index(
-            "idx_workspace_runtime_activity_thread_created",
-            "thread_id",
-            "created_at",
-        ),
-        Index(
-            "idx_workspace_runtime_activity_thread_agent_created",
-            "thread_id",
-            "agent_id",
-            "created_at",
-        ),
-    )
-
-
-class WorkspaceRuntimeActivitySegment(Base):
-    __tablename__ = "workspace_runtime_activity_segments"
-
-    segment_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    thread_id = Column(String, nullable=False, index=True)
-    agent_id = Column(String, nullable=False, index=True)
-    node = Column(String, nullable=False)
     run_id = Column(String, nullable=False, index=True)
-    status = Column(String, nullable=False)
-    started_at = Column(DateTime, nullable=False)
-    updated_at = Column(DateTime, nullable=False, index=True)
-    ended_at = Column(DateTime, nullable=True)
-    last_seq_id = Column(Integer, nullable=False)
+    seq_id = Column(Integer, nullable=False)
+    event_version = Column(String, nullable=False)
+    event_name = Column(String, nullable=False)
+    occurred_at = Column(DateTime, nullable=False)
+    payload = Column(JSON, nullable=False)
 
     __table_args__ = (
-        Index(
-            "idx_workspace_runtime_segment_thread_agent_updated",
-            "thread_id",
-            "agent_id",
-            "updated_at",
-        ),
-        Index(
-            "idx_workspace_runtime_segment_thread_agent_run_updated",
-            "thread_id",
-            "agent_id",
-            "run_id",
-            "updated_at",
-        ),
+        UniqueConstraint("thread_id", "seq_id", name="uq_workflow_activity_thread_seq"),
+        Index("idx_workflow_activity_thread_seq", "thread_id", "seq_id"),
     )
 
 
-class WorkspaceRuntimeRunStatus(Base):
-    __tablename__ = "workspace_runtime_run_statuses"
+class WorkflowRun(Base):
+    __tablename__ = "workflow_runs"
 
     thread_id = Column(String, primary_key=True)
     run_id = Column(String, nullable=False, unique=True, index=True)
@@ -289,25 +239,23 @@ class WorkspaceRuntimeRunStatus(Base):
     started_at = Column(DateTime, nullable=False)
     updated_at = Column(DateTime, nullable=False, index=True)
     ended_at = Column(DateTime, nullable=True)
-    last_seq_id = Column(Integer, nullable=False)
-
-    __table_args__ = (
-        Index(
-            "idx_workspace_runtime_run_status_updated",
-            "status",
-            "updated_at",
-        ),
-    )
 
 
-class WorkspaceRuntimeCursor(Base):
-    __tablename__ = "workspace_runtime_cursors"
+class WorkflowRunResume(Base):
+    __tablename__ = "workflow_run_resumes"
+
+    thread_id = Column(String, primary_key=True)
+    run_id = Column(String, nullable=False, index=True)
+    principal_id = Column(String, nullable=False)
+    activity_id = Column(String, nullable=False)
+    interaction_id = Column(String, nullable=False)
+    response = Column(JSON, nullable=False)
+    created_at = Column(DateTime, nullable=False)
+
+
+class WorkflowActivityCursor(Base):
+    __tablename__ = "workflow_activity_cursors"
 
     thread_id = Column(String, primary_key=True)
     last_seq_id = Column(Integer, nullable=False, default=0)
-    updated_at = Column(
-        DateTime,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
-        nullable=False,
-    )
+    updated_at = Column(DateTime, nullable=False)
