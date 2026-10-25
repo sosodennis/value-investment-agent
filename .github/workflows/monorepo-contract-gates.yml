@@ -503,12 +503,14 @@ jobs:
       - name: Contract-focused pytest suite
         run: >
           uv run pytest
-          tests/test_protocol.py
-          tests/test_protocol_fixtures.py
-          tests/test_mappers.py
+          tests/test_workflow_state_contract_alignment.py
+          tests/test_kernel_workflow_contracts.py
+          tests/test_workflow_command_adapter.py
+          tests/test_intent_mapper.py
+          tests/test_fundamental_mapper.py
           tests/test_news_mapper.py
           tests/test_debate_mapper.py
-          tests/test_interrupts.py
+          tests/test_ta_mapper.py
           tests/test_architecture_guard.py
           tests/test_fundamental_application_services.py
           tests/test_fundamental_orchestrator_logging.py
@@ -566,9 +568,6 @@ jobs:
             exit 1
           fi
 
-      - name: Validate SSE fixture manifest and payload versions
-        run: python3 scripts/validate-sse-fixtures.py
-
   contract-codegen-check:
     runs-on: ubuntu-latest
     steps:
@@ -597,6 +596,9 @@ jobs:
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
+
+      - name: Validate workflow activity fixture manifest and payloads
+        run: uv run --project finance-agent-core --group dev python scripts/validate-workflow-activity-fixtures.py
 
       - name: Regenerate contracts
         run: bash scripts/generate-contracts.sh
