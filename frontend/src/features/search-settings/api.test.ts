@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getSearchSettings } from './search-settings-api';
+import { getSearchSettings } from './api';
 
 describe('Search settings API boundary', () => {
     afterEach(() => vi.unstubAllGlobals());

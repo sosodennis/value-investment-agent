@@ -11,6 +11,8 @@ const API_URL = (process.env.NEXT_PUBLIC_LANGGRAPH_URL || 'http://localhost:8000
 
 type StartRunRequest = components['schemas']['RunRequest'];
 type StartRunResponse = operations['start_run_api_v1_threads__thread_id__runs_post']['responses'][202]['content']['application/json'];
+type ResumeRunRequest = components['schemas']['ResumeRequest'];
+type ResumeRunResponse = operations['resume_run_api_v1_threads__thread_id__runs__run_id__resume_post']['responses'][202]['content']['application/json'];
 
 export interface WorkflowRun {
     thread_id: string;
@@ -68,6 +70,23 @@ export async function cancelWorkflowRun(threadId: string, runId: string): Promis
         method: 'POST', credentials: 'include', headers: csrfHeaders(),
     });
     if (!response.ok) throw await readError(response, 'Cancel run');
+}
+
+export async function resumeWorkflowRun(
+    threadId: string,
+    runId: string,
+    request: ResumeRunRequest,
+): Promise<WorkflowRun> {
+    const response = await fetch(`${API_URL}/api/v1/threads/${encodeURIComponent(threadId)}/runs/${encodeURIComponent(runId)}/resume`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+        body: JSON.stringify(request),
+    });
+    if (!response.ok) throw await readError(response, 'Resume run');
+    const run = parseRunResponse(await response.json()) as ResumeRunResponse;
+    if (run.thread_id !== threadId || run.run_id !== runId) throw new TypeError('resume response run identity mismatch.');
+    return run;
 }
 
 export async function consumeWorkflowEvents(

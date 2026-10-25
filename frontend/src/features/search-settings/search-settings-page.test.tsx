@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import SearchSettingsPage from './page';
-import { SearchSettingsApiError } from '@/lib/search-settings-api';
+import SearchSettingsPage from './search-settings-page';
+import { SearchSettingsApiError } from './api';
 
 const api = vi.hoisted(() => ({
     addSearchKey: vi.fn(), deleteSearchKey: vi.fn(), getSearchSettings: vi.fn(),
@@ -9,7 +9,7 @@ const api = vi.hoisted(() => ({
 }));
 const router = vi.hoisted(() => ({ replace: vi.fn() }));
 
-vi.mock('@/lib/search-settings-api', () => ({
+vi.mock('@/features/search-settings/api', () => ({
     ...api,
     SearchSettingsApiError: class SearchSettingsApiError extends Error {
         constructor(message: string, readonly status: number) { super(message); }

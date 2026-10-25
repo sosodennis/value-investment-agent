@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthApiError } from '@/lib/auth-api';
-import LoginPage from './page';
+import LoginPage from './login-page';
 
 const auth = vi.hoisted(() => ({ signIn: vi.fn() }));
 const router = vi.hoisted(() => ({ replace: vi.fn() }));

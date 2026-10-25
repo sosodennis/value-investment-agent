@@ -1,8 +1,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { LlmSettingsApiError } from '@/lib/llm-settings-api';
-import LlmSettingsPage from './page';
+import { LlmSettingsApiError } from './api';
+import LlmSettingsPage from './llm-settings-page';
 
 const api = vi.hoisted(() => ({
     addLlmProviderKey: vi.fn(),
@@ -24,7 +24,7 @@ const existingKey = {
     created_at: '2026-10-21T00:00:00Z',
 };
 
-vi.mock('@/lib/llm-settings-api', () => ({
+vi.mock('@/features/llm-settings/api', () => ({
     ...api,
     LlmSettingsApiError: class LlmSettingsApiError extends Error {
         status: number;
