@@ -18,7 +18,7 @@ from src.analysis_runtime.infrastructure import (
 )
 from src.analysis_runtime.interface.routes import router as analysis_runtime_router
 from src.auth.entrypoint import auth_router, get_ownership_service
-from src.infrastructure.database import init_db
+from src.infrastructure.migrations import assert_migrations_complete
 from src.interface.artifacts.routes import router as artifact_router
 from src.llm_provider.entrypoint import (
     close_llm_provider,
@@ -56,7 +56,7 @@ def _cors_origins() -> list[str]:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await init_db()
+    await assert_migrations_complete()
     graph = await get_graph()
     app.state.analysis_runtime = AnalysisRuntimeService(
         repository=SqlAlchemyActivityRepository(),

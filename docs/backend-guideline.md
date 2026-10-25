@@ -82,6 +82,8 @@ The [internal capability service contract](../finance-agent-core/src/shared/inte
 
 LangGraph state and checkpoints serve graph execution and resume. Product activity, status, and event projections serve the UI and query APIs. Keep their schemas and retention policies explicit.
 
+The analysis runtime stores durable per-run history in `workflow_run_history`, keyed by `(thread_id, run_id)`. Run `uv run python -m src.infrastructure.migrations.cli` before starting the API outside Compose; Compose runs the same command in the `backend-migrations` one-shot service before starting the backend. The migration discovers owned runs and backfills them in bounded keyset batches, persisting its cursor and work items transactionally. It is safe to restart or run from multiple backend deployment instances. Legacy inputs that were not stored remain null; a run without a matching `workflow_runs` row has `started_at: null`, and status without a terminal activity or matching run row is `unknown`. Rows without an authoritative thread owner are not assigned to a user. Keep retained staging databases intact and take the normal database backup before deploying schema or backfill changes.
+
 - Keep LangGraph internal event shapes behind an adapter. Map them to stable application event contracts before sending them to the browser.
 - Keep checkpoint state limited to orchestration data and references needed to resume. Store large report payloads in artifacts and expose typed previews or references.
 - Make state readers tolerant of absent optional fields. Convert untrusted workflow state into typed values at the node or adapter boundary.

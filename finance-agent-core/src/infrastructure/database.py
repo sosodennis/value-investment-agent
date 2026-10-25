@@ -41,10 +41,13 @@ async def init_db():
         from .models import (  # noqa: F401
             Artifact,
             ChatMessage,
+            DatabaseMigration,
+            DatabaseMigrationWorkItem,
             LlmSetting,
             WorkflowActivityCursor,
             WorkflowActivityEvent,
             WorkflowRun,
+            WorkflowRunHistory,
         )
 
         await conn.run_sync(Base.metadata.create_all)
