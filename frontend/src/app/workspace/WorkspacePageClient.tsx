@@ -1,7 +1,7 @@
 'use client';
 
 import { useSearchParams } from 'next/navigation';
-import { AnalysisWorkspace } from '@/components/workspace/AnalysisWorkspace';
+import { WorkspacePage } from '@/features/workspace/workspace-page';
 
 export function WorkspacePageClient() {
     const searchParams = useSearchParams();
@@ -10,7 +10,7 @@ export function WorkspacePageClient() {
     const shouldAutoStart = Boolean(initialTicker);
 
     return (
-        <AnalysisWorkspace
+        <WorkspacePage
             initialTicker={initialTicker}
             autoStart={shouldAutoStart}
         />
