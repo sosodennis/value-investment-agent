@@ -24,6 +24,15 @@ seed_hf_cache() {
     local runtime_cache="${HF_HOME:-/opt/hf-cache}"
     local baked_cache="${HF_BAKED_CACHE:-/opt/hf-cache-baked}"
 
+    if [ "$runtime_cache" = "$baked_cache" ]; then
+        export HF_HUB_CACHE="${HF_HUB_CACHE:-${runtime_cache}/hub}"
+        export SENTENCE_TRANSFORMERS_HOME="${SENTENCE_TRANSFORMERS_HOME:-${HF_HUB_CACHE}}"
+        export FASTEMBED_CACHE_PATH="${FASTEMBED_CACHE_PATH:-${HF_HUB_CACHE}}"
+        mkdir -p "${FASTEMBED_CACHE_PATH}"
+        unset TRANSFORMERS_CACHE
+        return
+    fi
+
     if [ ! -d "$baked_cache" ]; then
         return
     fi

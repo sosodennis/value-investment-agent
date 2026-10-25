@@ -5,7 +5,7 @@ This is the private, task-specific service for the two workloads approved by iss
 - `news.sentiment` uses the pinned `project-aps/finbert-finetune` revision `2db55b5439cef6253c12a4973f3a9e823ff90b79`.
 - `sec.fls` uses the pinned `yiyanghkust/finbert-fls` revision `443586dc31c765c0aaf1c4daaed8cf3643c92fa5`.
 
-Compose runs one service process per operation (`model-inference-news` and `model-inference-fls`) so model memory is not multiplied by an in-process multi-model registry. Each process owns and loads only its operation's model and uses a separate persistent artifact-cache volume, so concurrent first starts cannot race while seeding the cache.
+Compose runs one service process per operation (`model-inference-news` and `model-inference-fls`) so model memory is not multiplied by an in-process multi-model registry. Each process owns and loads only its operation's model. The default stack reads the pinned artifact directly from the image's baked cache; it does not mount a second model volume or copy the artifact at startup.
 
 Build with prepared artifacts before offline startup:
 
@@ -14,6 +14,17 @@ BAKE_INFERENCE_MODELS=1 \
 INFERENCE_SERVICE_TOKEN=local-development-token \
 docker compose -p value-investment-agent up -d --build \
   model-inference-news model-inference-fls
+```
+
+For a workflow that needs a writable persistent runtime cache, explicitly add
+the optional override. It seeds the cache from the image and therefore stores
+each model once in the image and once in its named volume:
+
+```bash
+docker compose -p value-investment-agent \
+  -f docker-compose.yml -f docker-compose.override.yml \
+  -f docker-compose.runtime-cache.yml \
+  up -d --build model-inference-news model-inference-fls
 ```
 
 The service does not publish an inference host port. The backend reads `MODEL_INFERENCE_NEWS_URL` and `MODEL_INFERENCE_FLS_URL`, each defaulting to `http://localhost:8001` outside Compose. Deployments set each variable to a stable private service endpoint. An endpoint may route an operation across one or more replicas; agent and workflow code do not name hosts or replicas. `MODEL_INFERENCE_TOKEN` is sent separately as the backend service credential.

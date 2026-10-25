@@ -5,9 +5,13 @@ x-model-inference-environment: &model-inference-environment
   NEWS_FINBERT_REVISION: ${NEWS_FINBERT_REVISION:-2db55b5439cef6253c12a4973f3a9e823ff90b79}
   SEC_FLS_MODEL: ${SEC_FLS_MODEL:-yiyanghkust/finbert-fls}
   SEC_FLS_REVISION: ${SEC_FLS_REVISION:-443586dc31c765c0aaf1c4daaed8cf3643c92fa5}
-  HF_HOME: /opt/hf-cache
+  # Model artifacts are baked into each inference image. Keep the default
+  # runtime path on that immutable layer so startup does not copy them into a
+  # second named volume.
+  HF_HOME: /opt/hf-cache-baked
   HF_BAKED_CACHE: /opt/hf-cache-baked
-  HF_HUB_CACHE: /opt/hf-cache/hub
+  HF_HUB_CACHE: /opt/hf-cache-baked/hub
+  TRANSFORMERS_CACHE: /opt/hf-cache-baked/hub
   HF_HUB_OFFLINE: "1"
   TRANSFORMERS_OFFLINE: "1"
   HF_LOCAL_FILES_ONLY: "1"
@@ -176,11 +180,12 @@ services:
       - REDIS_HOST=${LITELLM_REDIS_HOST:-redis}
       - REDIS_PORT=${LITELLM_REDIS_PORT:-6379}
       - REDIS_PASSWORD=${LITELLM_REDIS_PASSWORD:-}
-      - HF_HOME=/opt/hf-cache
+      - HF_HOME=/opt/hf-cache-baked
       - HF_BAKED_CACHE=/opt/hf-cache-baked
-      - HF_HUB_CACHE=/opt/hf-cache/hub
-      - SENTENCE_TRANSFORMERS_HOME=/opt/hf-cache/hub
-      - FASTEMBED_CACHE_PATH=/opt/hf-cache/hub
+      - HF_HUB_CACHE=/opt/hf-cache-baked/hub
+      - SENTENCE_TRANSFORMERS_HOME=/opt/hf-cache-baked/hub
+      - FASTEMBED_CACHE_PATH=/opt/hf-cache-baked/hub
+      - TRANSFORMERS_CACHE=/opt/hf-cache-baked/hub
       - HF_HUB_OFFLINE=1
       - TRANSFORMERS_OFFLINE=1
       - HF_LOCAL_FILES_ONLY=1
@@ -201,8 +206,6 @@ services:
       - LOCAL_ADMIN_ALLOWED_ORIGINS=${LOCAL_ADMIN_ALLOWED_ORIGINS:-http://127.0.0.1:3000,http://localhost:3000,http://127.0.0.1:3001,http://localhost:3001}
       - FRED_API_KEY=${FRED_API_KEY}
       # Add other necessary env vars here
-    volumes:
-      - hf_cache:/opt/hf-cache
     ports:
       - "127.0.0.1:${BACKEND_HOST_PORT:-8000}:8000"
     healthcheck:
@@ -309,8 +312,6 @@ services:
     environment:
       <<: *model-inference-environment
       INFERENCE_OPERATIONS: news.sentiment
-    volumes:
-      - inference_news_hf_cache:/opt/hf-cache
 
   model-inference-fls:
     <<: *model-inference-common
@@ -329,8 +330,6 @@ services:
     environment:
       <<: *model-inference-environment
       INFERENCE_OPERATIONS: sec.fls
-    volumes:
-      - inference_fls_hf_cache:/opt/hf-cache
 
   technical-labeling-scheduler:
     build:
@@ -391,6 +390,3 @@ services:
 volumes:
   pg_data:
   redis_data:
-  hf_cache:
-  inference_news_hf_cache:
-  inference_fls_hf_cache:
