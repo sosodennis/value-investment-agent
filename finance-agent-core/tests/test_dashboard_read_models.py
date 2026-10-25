@@ -119,7 +119,6 @@ def test_recent_analyses_api_scopes_history_and_round_trips_legacy_cursor(monkey
                     AnalysisRunRecord(
                         thread_id="thread-1",
                         run_id="run-1",
-                        principal_id="dashboard-test-user",
                         status="completed",
                         started_at=None,
                         updated_at=datetime(2026, 10, 25, tzinfo=timezone.utc),
