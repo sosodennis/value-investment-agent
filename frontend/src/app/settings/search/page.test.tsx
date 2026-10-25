@@ -46,15 +46,15 @@ describe('Search settings page', () => {
         resolveSettings(snapshot);
         await screen.findAllByText('provider-a');
         screen.getByText('ddgs does not require a key.');
-        screen.getByText('No keys configured');
+        screen.getByText('No keys configured for this provider.');
         expect(screen.queryByLabelText('API key for ddgs')).toBeNull();
     });
 
     it('adds the key through the service test-and-save operation and clears its input', async () => {
         render(<SearchSettingsPage />);
-        const input = await screen.findByLabelText('Search provider API key');
+        const input = await screen.findByLabelText('Provider API key');
         fireEvent.change(input, { target: { value: 'raw-key-secret' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Test and add' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Test and add key' }));
         await screen.findByText('Provider key tested and added.');
         expect(api.addSearchKey).toHaveBeenCalledTimes(1);
         expect(api.addSearchKey).toHaveBeenCalledWith({ provider: 'provider-a', api_key: 'raw-key-secret', label: 'provider-a key' });
@@ -64,8 +64,8 @@ describe('Search settings page', () => {
     it('does not report success when the service rejects a key and reports service unavailability', async () => {
         api.addSearchKey.mockRejectedValue(new SearchSettingsApiError('provider_key_rejected', 422));
         render(<SearchSettingsPage />);
-        fireEvent.change(await screen.findByLabelText('Search provider API key'), { target: { value: 'rejected' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Test and add' }));
+        fireEvent.change(await screen.findByLabelText('Provider API key'), { target: { value: 'rejected' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Test and add key' }));
         await screen.findByText('The provider rejected this setting or key.');
         expect(api.addSearchKey).toHaveBeenCalledTimes(1);
 
@@ -85,5 +85,34 @@ describe('Search settings page', () => {
             { provider: 'ddgs', enabled: true, priority: 0 },
             { provider: 'provider-a', enabled: true, priority: 1 },
         ]));
+    });
+
+    it('requires an explicit dialog action before deleting a key', async () => {
+        const keyedSnapshot = {
+            ...snapshot,
+            settings: { providers: [
+                { ...snapshot.settings.providers[0], keys: [{ id: 'key1', provider: 'provider-a', label: 'Main', suffix: 'cdef', fingerprint: 'safe', enabled: true, priority: 0, status: 'active' as const, failure_count: 0, last_tested_at: null, last_used_at: null, cooldown_until: null }] },
+                snapshot.settings.providers[1],
+            ] },
+        };
+        api.getSearchSettings.mockResolvedValue(keyedSnapshot);
+        render(<SearchSettingsPage />);
+        await screen.findByText('Main · •••• cdef');
+        fireEvent.click(screen.getByRole('button', { name: 'Delete Main' }));
+        expect(api.deleteSearchKey).not.toHaveBeenCalled();
+        screen.getByRole('alertdialog');
+        fireEvent.click(screen.getByRole('button', { name: 'Delete key' }));
+        await waitFor(() => expect(api.deleteSearchKey).toHaveBeenCalledWith('key1'));
+        await screen.findByText('Main was deleted.');
+    });
+
+    it('keeps the last provider data visible and offers retry when refresh fails', async () => {
+        render(<SearchSettingsPage />);
+        await screen.findAllByText('provider-a');
+        api.getSearchSettings.mockRejectedValueOnce(new Error('network unavailable'));
+        fireEvent.click(screen.getByRole('button', { name: 'Refresh Search settings' }));
+        await screen.findByText('network unavailable');
+        expect(screen.getAllByText('provider-a').length).toBeGreaterThan(0);
+        expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
     });
 });
