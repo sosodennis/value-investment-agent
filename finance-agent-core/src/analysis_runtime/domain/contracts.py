@@ -27,6 +27,18 @@ RunStatus = Literal[
 ]
 
 
+class WorkflowFailure(BaseModel):
+    """Safe, stable failure details exposed by the owning runtime."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    code: str = Field(min_length=1, max_length=120)
+    owner: str = Field(min_length=1, max_length=160)
+    activity_id: str | None = Field(default=None, min_length=1, max_length=200)
+    retryable: bool
+    message: str = Field(min_length=1, max_length=500)
+
+
 class TickerCandidate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -78,6 +90,13 @@ class Activity(BaseModel):
     label: str = Field(min_length=1, max_length=160)
     progress: float | None = Field(default=None, ge=0, le=100)
     attempt: int = Field(ge=1)
+    failure: WorkflowFailure | None = None
+
+    @model_validator(mode="after")
+    def validate_failure(self) -> Activity:
+        if self.failure is not None and self.status != "failed":
+            raise ValueError("failure details require a failed activity")
+        return self
 
 
 class InteractionRequested(BaseModel):
@@ -291,6 +310,7 @@ class WorkflowSnapshot(BaseModel):
     recent_activities: tuple[Activity, ...] = ()
     pending_interactions: tuple[WorkflowInteraction, ...] = ()
     completed_outputs: tuple[WorkflowAgentOutput, ...] = ()
+    failure: WorkflowFailure | None = None
 
 
 class ReplayPage(BaseModel):

@@ -518,6 +518,7 @@ export interface components {
             activity_id: string;
             /** Attempt */
             attempt: number;
+            failure?: components["schemas"]["WorkflowFailure"] | null;
             /**
              * Kind
              * @enum {string}
@@ -3089,6 +3090,22 @@ export interface components {
             /** Thread Id */
             thread_id: string;
         };
+        /**
+         * WorkflowFailure
+         * @description Safe, stable failure details exposed by the owning runtime.
+         */
+        WorkflowFailure: {
+            /** Activity Id */
+            activity_id?: string | null;
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+            /** Owner */
+            owner: string;
+            /** Retryable */
+            retryable: boolean;
+        };
         /** WorkflowInteraction */
         WorkflowInteraction: {
             identity: components["schemas"]["InteractionIdentity"];
@@ -3147,6 +3164,7 @@ export interface components {
             completed_outputs: components["schemas"]["WorkflowAgentOutput"][];
             /** Cursor */
             cursor: number;
+            failure?: components["schemas"]["WorkflowFailure"] | null;
             /**
              * Pending Interactions
              * @default []

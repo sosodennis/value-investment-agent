@@ -15,7 +15,7 @@ const identity = {
     interaction_id: 'interaction-1',
 };
 
-const activity = (status: string = 'running', activityId = 'intent.clarifying') => ({
+const activity = (status: string = 'running', activityId = 'intent.clarifying'): Record<string, unknown> => ({
     activity_id: activityId,
     thread_id: 'thread-1',
     run_id: 'run-1',
@@ -169,5 +169,29 @@ describe('workflow event boundary', () => {
         const gap = applyWorkflowEvent(base, parseWorkflowEvent(outputEvent(3)));
         expect(gap.gapDetected).toBe(true);
         expect(boundedReconnectDelay(20)).toBe(8000);
+    });
+
+    it('hydrates and replays safe failure provenance', () => {
+        const failure = {
+            code: 'schema_validation_failed',
+            owner: 'llm_provider',
+            activity_id: 'intent.extraction',
+            retryable: false,
+            message: 'The provider returned data that did not match the workflow contract.',
+        };
+        const parsed = parseWorkflowActivitySnapshot(snapshot({
+            run_status: 'failed',
+            failure,
+            recent_activities: [{ ...activity('failed', 'workflow'), failure }],
+        }));
+        const state = createWorkflowActivityState(parsed);
+        expect(state.failure).toEqual(failure);
+        const next = applyWorkflowEvent(state, parseWorkflowEvent(activityEvent(1, {
+            ...activity('failed', 'workflow'), failure,
+        })));
+        expect(next.failure).toEqual(failure);
+        expect(() => parseWorkflowActivitySnapshot(snapshot({
+            failure: { ...failure, retryable: 'no' },
+        }))).toThrow(/retryable/);
     });
 });

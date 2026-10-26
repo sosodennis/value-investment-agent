@@ -75,6 +75,16 @@
             "title": "Attempt",
             "type": "integer"
           },
+          "failure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkflowFailure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "kind": {
             "enum": [
               "phase",
@@ -9378,6 +9388,55 @@
         "title": "WorkflowAgentOutputEvent",
         "type": "object"
       },
+      "WorkflowFailure": {
+        "additionalProperties": false,
+        "description": "Safe, stable failure details exposed by the owning runtime.",
+        "properties": {
+          "activity_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activity Id"
+          },
+          "code": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          },
+          "owner": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Owner",
+            "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "owner",
+          "retryable",
+          "message"
+        ],
+        "title": "WorkflowFailure",
+        "type": "object"
+      },
       "WorkflowInteraction": {
         "additionalProperties": false,
         "properties": {
@@ -9499,6 +9558,16 @@
             "minimum": 0.0,
             "title": "Cursor",
             "type": "integer"
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkflowFailure"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "pending_interactions": {
             "default": [],

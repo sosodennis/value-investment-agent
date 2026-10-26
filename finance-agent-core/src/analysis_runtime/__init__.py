@@ -9,6 +9,7 @@ from .domain.contracts import (
     ReplayPage,
     RunStatus,
     WorkflowEvent,
+    WorkflowFailure,
     WorkflowSnapshot,
 )
 
@@ -22,5 +23,6 @@ __all__ = [
     "ReplayPage",
     "RunStatus",
     "WorkflowEvent",
+    "WorkflowFailure",
     "WorkflowSnapshot",
 ]

@@ -134,6 +134,26 @@ describe('WorkspacePage', () => {
         screen.getByText('Run cancelled');
     });
 
+    it('renders safe typed failure provenance for a failed run', () => {
+        hook.value = defaultHook({
+            workflow: workflowState({
+                run_status: 'failed',
+                failure: {
+                    code: 'schema_validation_failed',
+                    owner: 'llm_provider',
+                    activity_id: 'intent.extraction',
+                    retryable: false,
+                    message: 'The provider returned data that did not match the workflow contract.',
+                },
+                recent_activities: [{ ...tickerActivity, status: 'failed' }],
+            }),
+        });
+        render(<WorkspacePage />);
+        screen.getByText('The provider returned data that did not match the workflow contract.');
+        screen.getByText(/schema_validation_failed/);
+        screen.getByText(/Retry is not expected/);
+    });
+
     it('loads the exact run requested by a recent-analysis link', () => {
         hook.value = defaultHook();
         render(<WorkspacePage initialThreadId="thread-1" expectedRunId="run-1" />);

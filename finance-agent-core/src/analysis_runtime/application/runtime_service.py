@@ -22,6 +22,7 @@ from src.analysis_runtime.domain.contracts import (
     RunStatus,
     TickerSelectionResponse,
     WorkflowEvent,
+    WorkflowFailure,
     WorkflowSnapshot,
 )
 from src.analysis_runtime.domain.errors import (
@@ -33,6 +34,34 @@ from src.analysis_runtime.domain.errors import (
 from src.analysis_runtime.infrastructure.notifications import (
     BoundedNotificationHub,
 )
+
+_SAFE_FAILURE_MESSAGES = {
+    "schema_validation_failed": "The provider returned data that did not match the workflow contract.",
+    "upstream_timeout": "The upstream provider timed out while the workflow was running.",
+    "upstream_unavailable": "The upstream provider is unavailable.",
+    "rate_limited": "The provider temporarily rate limited this workflow.",
+    "authentication_failed": "The provider authentication configuration is unavailable.",
+    "invalid_runner_interrupt": "The workflow produced an invalid interaction request.",
+}
+
+
+def _failure_from_exception(
+    error: Exception, *, activity_id: str | None
+) -> WorkflowFailure:
+    raw_code = getattr(error, "code", None)
+    code = getattr(raw_code, "value", raw_code)
+    code = code if isinstance(code, str) and code else "workflow_runtime_error"
+    owner = "llm_provider" if hasattr(error, "retryable") else "workflow.runtime"
+    retryable = bool(getattr(error, "retryable", False))
+    return WorkflowFailure(
+        code=code,
+        owner=owner,
+        activity_id=activity_id,
+        retryable=retryable,
+        message=_SAFE_FAILURE_MESSAGES.get(
+            code, "The workflow could not complete because an internal step failed."
+        ),
+    )
 
 
 class AnalysisRuntimeService:
@@ -283,6 +312,7 @@ class AnalysisRuntimeService:
                 principal_id=principal_id,
             )
             suspended = False
+            current_activity_id: str | None = None
             async for item in self.runner.run(
                 thread_id=thread_id,
                 run_id=run_id,
@@ -290,6 +320,7 @@ class AnalysisRuntimeService:
                 principal_id=principal_id,
             ):
                 if isinstance(item, InteractionRequested):
+                    current_activity_id = item.activity.activity_id
                     suspended = True
                     async with self._subscription_gate:
                         events = await self.repository.record_waiting_interaction(
@@ -305,6 +336,7 @@ class AnalysisRuntimeService:
                     if isinstance(item, Activity)
                     else Activity.model_validate(item)
                 )
+                current_activity_id = activity.activity_id
                 if activity.status == "waiting":
                     raise ActivityPersistenceError(
                         "waiting activity requires a typed interaction request"
@@ -353,12 +385,14 @@ class AnalysisRuntimeService:
             )
         except asyncio.CancelledError:
             raise
-        except Exception:
+        except Exception as exc:
+            failure = _failure_from_exception(exc, activity_id=current_activity_id)
             await self._emit_terminal(
                 thread_id=thread_id,
                 run_id=run_id,
                 status="failed",
                 label="Workflow failed",
+                failure=failure,
             )
             await self.repository.set_run(
                 thread_id=thread_id,
@@ -371,7 +405,13 @@ class AnalysisRuntimeService:
             self._tasks.pop(thread_id, None)
 
     async def _emit_terminal(
-        self, *, thread_id: str, run_id: str, status: str, label: str
+        self,
+        *,
+        thread_id: str,
+        run_id: str,
+        status: str,
+        label: str,
+        failure: WorkflowFailure | None = None,
     ) -> None:
         try:
             current = await self.repository.replay(
@@ -386,6 +426,7 @@ class AnalysisRuntimeService:
                 status=status,
                 label=label,
                 attempt=1,
+                failure=failure,
             )
             await self._persist_and_publish(
                 ActivityEvent(

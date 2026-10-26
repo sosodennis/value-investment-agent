@@ -132,11 +132,17 @@ class InMemoryActivityRepository:
             latest: dict[str, ActivityEvent] = {}
             interactions: dict[str, WorkflowInteraction] = {}
             outputs: dict[str, WorkflowAgentOutput] = {}
+            failure = None
             for event in events:
                 if event.run_id == run_id:
                     match event:
                         case ActivityEvent():
                             latest[event.payload.activity_id] = event
+                            if (
+                                event.payload.activity_id == "workflow"
+                                and event.payload.failure is not None
+                            ):
+                                failure = event.payload.failure
                         case WorkflowInteractionEvent():
                             interactions[event.payload.identity.interaction_id] = (
                                 event.payload
@@ -146,18 +152,25 @@ class InMemoryActivityRepository:
                                 f"{event.payload.identity.activity_id}:{event.payload.agent_id}"
                             ] = event.payload
             active_statuses = {"queued", "running", "waiting"}
+            run = self._run_history.get((thread_id, run_id))
+            status: RunStatus = run.status if run else "queued"
             active = tuple(
                 event.payload
                 for event in latest.values()
-                if event.payload.status in active_statuses
+                if status in active_statuses and event.payload.status in active_statuses
             )
+            terminal_status = {
+                "completed": "completed",
+                "failed": "failed",
+                "cancelled": "cancelled",
+            }.get(status)
             recent = tuple(
-                event.payload
+                event.payload.model_copy(update={"status": terminal_status})
+                if terminal_status and event.payload.status in active_statuses
+                else event.payload
                 for event in reversed(events)
                 if event.run_id == run_id and isinstance(event, ActivityEvent)
             )[:50]
-            run = self._run_history.get((thread_id, run_id))
-            status: RunStatus = run.status if run else "queued"
             return WorkflowSnapshot(
                 thread_id=thread_id,
                 run_id=run_id,
@@ -171,6 +184,7 @@ class InMemoryActivityRepository:
                     if interaction.status == "pending"
                 ),
                 completed_outputs=tuple(outputs.values()),
+                failure=failure,
             )
 
     async def get_run(self, *, thread_id: str) -> RunStatusRecord | None:

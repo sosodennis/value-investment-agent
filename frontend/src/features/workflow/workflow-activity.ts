@@ -27,6 +27,7 @@ type ContractInteraction = components['schemas']['WorkflowInteraction'];
 type ContractInteractionEvent = components['schemas']['WorkflowInteractionEvent'];
 type ContractAgentOutput = components['schemas']['WorkflowAgentOutput'];
 type ContractAgentOutputEvent = components['schemas']['WorkflowAgentOutputEvent'];
+type ContractFailure = components['schemas']['WorkflowFailure'];
 type ContractSnapshot = components['schemas']['WorkflowSnapshot'];
 
 export type ActivityStatus = ContractActivity['status'];
@@ -35,6 +36,7 @@ export type TickerCandidate = components['schemas']['TickerCandidate'];
 export type TickerSelectionRequest = components['schemas']['TickerSelectionRequest'];
 export type TickerSelectionResponse = components['schemas']['TickerSelectionResponse'];
 export type WorkflowRunStatus = ContractSnapshot['run_status'];
+export type WorkflowFailure = ContractFailure;
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'closed';
 
 export type WorkflowActivity = Omit<ContractActivity, 'activity_id' | 'thread_id' | 'run_id'> & {
@@ -100,6 +102,7 @@ export interface WorkflowActivityState {
     runId: RunId;
     cursor: number;
     runStatus: WorkflowRunStatus;
+    failure: WorkflowFailure | null;
     active: Map<ActivityId, WorkflowActivity>;
     recent: WorkflowActivity[];
     interactions: Map<InteractionId, WorkflowInteraction>;
@@ -241,11 +244,28 @@ function parseTickerResponse(value: unknown, context: string): TickerSelectionRe
     };
 }
 
+function parseWorkflowFailure(value: unknown, context: string): WorkflowFailure {
+    const input = record(value, context);
+    onlyKeys(input, ['code', 'owner', 'activity_id', 'retryable', 'message'], context);
+    return {
+        code: string(input.code, `${context}.code`),
+        owner: string(input.owner, `${context}.owner`),
+        activity_id: input.activity_id === undefined || input.activity_id === null
+            ? null
+            : string(input.activity_id, `${context}.activity_id`),
+        retryable: input.retryable === true || input.retryable === false
+            ? input.retryable
+            : (() => { throw new TypeError(`${context}.retryable must be a boolean.`); })(),
+        message: string(input.message, `${context}.message`),
+    };
+}
+
 export function parseWorkflowActivity(value: unknown, context = 'activity'): WorkflowActivity {
     const input = record(value, context);
     onlyKeys(input, [
         'activity_id', 'parent_activity_id', 'thread_id', 'run_id', 'scope_path',
         'kind', 'status', 'label', 'progress', 'attempt',
+        'failure',
     ], context);
     if (!Array.isArray(input.scope_path) || input.scope_path.length < 1) {
         throw new TypeError(`${context}.scope_path must be a non-empty string array.`);
@@ -266,6 +286,9 @@ export function parseWorkflowActivity(value: unknown, context = 'activity'): Wor
     }
     if (input.progress !== undefined) {
         activity.progress = input.progress === null ? null : finiteNumber(input.progress, `${context}.progress`, 0, 100);
+    }
+    if (input.failure !== undefined && input.failure !== null) {
+        activity.failure = parseWorkflowFailure(input.failure, `${context}.failure`);
     }
     return activity;
 }
@@ -435,7 +458,7 @@ export function parseWorkflowActivitySnapshot(value: unknown, context = 'workflo
     const input = record(value, context);
     onlyKeys(input, [
         'thread_id', 'run_id', 'run_status', 'cursor', 'active_activities', 'recent_activities',
-        'pending_interactions', 'completed_outputs',
+        'pending_interactions', 'completed_outputs', 'failure',
     ], context);
     const threadId = identifier(input.thread_id, `${context}.thread_id`, isThreadId);
     const runId = identifier(input.run_id, `${context}.run_id`, isRunId);
@@ -451,6 +474,9 @@ export function parseWorkflowActivitySnapshot(value: unknown, context = 'workflo
     const recentActivities = recentValues.map((item, index) => parseWorkflowActivity(item, `${context}.recent_activities[${index}]`));
     const pendingInteractions = interactionValues.map((item, index) => parseWorkflowInteraction(item, `${context}.pending_interactions[${index}]`));
     const completedOutputs = outputValues.map((item, index) => parseWorkflowAgentOutput(item, `${context}.completed_outputs[${index}]`));
+    const failure = input.failure === undefined || input.failure === null
+        ? null
+        : parseWorkflowFailure(input.failure, `${context}.failure`);
     for (const item of activeActivities) {
         if (item.thread_id !== threadId || item.run_id !== runId) throw new TypeError(`${context} activity identity mismatch.`);
     }
@@ -474,6 +500,7 @@ export function parseWorkflowActivitySnapshot(value: unknown, context = 'workflo
         recent_activities: recentActivities,
         pending_interactions: pendingInteractions,
         completed_outputs: completedOutputs,
+        failure,
     };
 }
 
@@ -494,6 +521,7 @@ export function createWorkflowActivityState(snapshot: WorkflowActivitySnapshot):
         runId: snapshot.run_id,
         cursor: snapshot.cursor,
         runStatus: snapshot.run_status,
+        failure: snapshot.failure ?? null,
         active: new Map(snapshot.active_activities.map((item) => [item.activity_id, item])),
         recent: [...snapshot.recent_activities],
         interactions: new Map(snapshot.pending_interactions.map((item) => [item.identity.interaction_id, item])),
@@ -548,6 +576,7 @@ export function applyWorkflowEvent(state: WorkflowActivityState, event: Workflow
             next.recent = [event.payload, ...state.recent.filter((item) => item.activity_id !== event.payload.activity_id)].slice(0, 100);
             if (event.payload.activity_id === 'workflow') {
                 next.runStatus = statusForActivity(event.payload.status) ?? state.runStatus;
+                next.failure = event.payload.failure ?? null;
             }
             return next;
         }

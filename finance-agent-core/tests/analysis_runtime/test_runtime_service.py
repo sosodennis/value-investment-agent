@@ -81,6 +81,17 @@ class FailingRunner:
         yield  # pragma: no cover
 
 
+class TypedProviderFailingRunner:
+    async def run(self, **kwargs):
+        raise _TypedProviderError()
+        yield  # pragma: no cover
+
+
+class _TypedProviderError(RuntimeError):
+    code = "schema_validation_failed"
+    retryable = False
+
+
 class InterruptingRunner:
     def __init__(self) -> None:
         self.calls: list[dict[str, object]] = []
@@ -459,12 +470,55 @@ async def test_failed_run_publishes_terminal_activity() -> None:
     run_id = await service.start(
         principal_id="user", thread_id="thread", input_data={"message": "x"}
     )
-    await asyncio.sleep(0)
-    await asyncio.sleep(0)
+    await service._tasks["thread"]
     replay = await service.replay(principal_id="user", thread_id="thread", after_seq=0)
     assert isinstance(replay.events[-1], ActivityEvent)
     assert replay.events[-1].payload.status == "failed"
     assert replay.events[-1].run_id == run_id
+
+    snapshot = await service.snapshot(
+        principal_id="user", thread_id="thread", run_id=run_id
+    )
+    assert snapshot.failure is not None
+    assert snapshot.failure.code == "workflow_runtime_error"
+    assert snapshot.failure.owner == "workflow.runtime"
+    assert snapshot.failure.retryable is False
+    assert snapshot.failure.message == (
+        "The workflow could not complete because an internal step failed."
+    )
+    assert snapshot.active_activities == ()
+    assert all(activity.status != "running" for activity in snapshot.recent_activities)
+
+
+@pytest.mark.asyncio
+async def test_typed_provider_failure_is_safe_and_replayed() -> None:
+    service = AnalysisRuntimeService(
+        repository=InMemoryActivityRepository(),
+        owner=Owner(),
+        runner=TypedProviderFailingRunner(),
+    )
+    run_id = await service.start(
+        principal_id="user", thread_id="thread", input_data={"message": "x"}
+    )
+    await service._tasks["thread"]
+
+    snapshot = await service.snapshot(
+        principal_id="user", thread_id="thread", run_id=run_id
+    )
+    replay = await service.replay(principal_id="user", thread_id="thread", after_seq=0)
+    failure = snapshot.failure
+    assert failure is not None
+    assert failure.model_dump() == {
+        "code": "schema_validation_failed",
+        "owner": "llm_provider",
+        "activity_id": None,
+        "retryable": False,
+        "message": "The provider returned data that did not match the workflow contract.",
+    }
+    terminal = replay.events[-1]
+    assert isinstance(terminal, ActivityEvent)
+    assert terminal.payload.failure == failure
+    assert "provider response" not in failure.message.lower()
 
 
 @pytest.mark.asyncio

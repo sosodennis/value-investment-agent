@@ -188,29 +188,44 @@ class SqlAlchemyActivityRepository:
         latest: dict[str, ActivityEvent] = {}
         interactions: dict[str, WorkflowInteraction] = {}
         outputs: dict[str, WorkflowAgentOutput] = {}
+        failure = None
         for event in events:
             match event:
                 case ActivityEvent():
                     latest[event.payload.activity_id] = event
+                    if (
+                        event.payload.activity_id == "workflow"
+                        and event.payload.failure is not None
+                    ):
+                        failure = event.payload.failure
                 case WorkflowInteractionEvent():
                     interactions[event.payload.identity.interaction_id] = event.payload
                 case WorkflowAgentOutputEvent():
                     outputs[
                         f"{event.payload.identity.activity_id}:{event.payload.agent_id}"
                     ] = event.payload
+        status = history.status if history else "queued"
+        active_statuses = {"queued", "running", "waiting"}
         active = tuple(
             event.payload
             for event in latest.values()
-            if event.payload.status in {"queued", "running", "waiting"}
+            if status in active_statuses and event.payload.status in active_statuses
         )
+        terminal_status = {
+            "completed": "completed",
+            "failed": "failed",
+            "cancelled": "cancelled",
+        }.get(status)
         return WorkflowSnapshot(
             thread_id=thread_id,
             run_id=run_id,
-            run_status=history.status if history else "queued",
+            run_status=status,
             cursor=cursor_row.last_seq_id if cursor_row else 0,
             active_activities=active,
             recent_activities=tuple(
-                event.payload
+                event.payload.model_copy(update={"status": terminal_status})
+                if terminal_status and event.payload.status in active_statuses
+                else event.payload
                 for event in reversed(events)
                 if isinstance(event, ActivityEvent)
             )[:50],
@@ -220,6 +235,7 @@ class SqlAlchemyActivityRepository:
                 if interaction.status == "pending"
             ),
             completed_outputs=tuple(outputs.values()),
+            failure=failure,
         )
 
     async def get_run_history(
