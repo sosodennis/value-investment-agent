@@ -17,8 +17,10 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import type { WorkspaceRouteIntent } from './workspace-route-intent';
 
-type WorkspacePageProps = { assistantId?: string; initialTicker?: string | null; autoStart?: boolean; initialThreadId?: string | null; expectedRunId?: string | null };
+type WorkspacePageProps = { assistantId?: string; initialTicker?: string | null; autoStart?: boolean; routeIntent?: WorkspaceRouteIntent };
+const NEW_ANALYSIS_INTENT: WorkspaceRouteIntent = { kind: 'new-analysis' };
 type ReportTab = 'activity' | 'fundamental_analysis' | 'technical_analysis' | 'financial_news_research' | 'debate';
 const reportTabs: { id: ReportTab; label: string }[] = [
     { id: 'activity', label: 'Activity' },
@@ -33,14 +35,13 @@ const statusLabel: Record<AgentStatus, string> = { idle: 'Idle', running: 'Runni
 const statusVariant: Record<AgentStatus, 'outline' | 'default' | 'success' | 'warning' | 'destructive'> = { idle: 'outline', running: 'default', done: 'success', attention: 'warning', error: 'destructive', degraded: 'warning' };
 const connectionLabels: Record<ConnectionState, string> = { disconnected: 'Disconnected', connecting: 'Connecting', connected: 'Live', reconnecting: 'Reconnecting', closed: 'Connection closed' };
 
-export function WorkspacePage({ assistantId = 'agent', initialTicker = null, autoStart = false, initialThreadId = null, expectedRunId = null }: WorkspacePageProps) {
+export function WorkspacePage({ assistantId = 'agent', initialTicker = null, autoStart = false, routeIntent = NEW_ANALYSIS_INTENT }: WorkspacePageProps) {
     const agent = useAgent(assistantId);
     const { loadHistory, sendMessage, isLoading } = agent;
     const [ticker, setTicker] = useState(initialTicker?.toUpperCase() ?? '');
     const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<ReportTab>('activity');
     const autoStarted = useRef(false);
-    const historyLoaded = useRef(false);
     const agents: AgentInfo[] = useMemo(() => AGENT_CONFIGS.map((config) => ({
         id: config.id,
         name: config.name,
@@ -51,23 +52,25 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, aut
     })), [agent.agentStatuses]);
     const preferredAgentId = agents.find((item) => item.status === 'running' || item.status === 'attention')?.id ?? agents.find((item) => item.status !== 'idle')?.id ?? null;
     const isActive = agent.workflow?.runStatus === 'running' || agent.workflow?.runStatus === 'queued' || agent.workflow?.runStatus === 'waiting';
+    const historyThreadId = routeIntent.kind === 'exact-run' ? routeIntent.threadId : null;
+    const historyRunId = routeIntent.kind === 'exact-run' ? routeIntent.runId : null;
+    const isHistoryRoute = routeIntent.kind !== 'new-analysis';
 
     useEffect(() => {
-        if (historyLoaded.current || !initialThreadId || autoStart) return;
-        historyLoaded.current = true;
-        void loadHistory(initialThreadId, expectedRunId);
-    }, [autoStart, expectedRunId, initialThreadId, loadHistory]);
+        if (!historyThreadId || !historyRunId) return;
+        void loadHistory(historyThreadId, historyRunId);
+    }, [historyRunId, historyThreadId, loadHistory]);
 
     useEffect(() => {
-        if (autoStarted.current || !autoStart || !initialTicker || isLoading) return;
+        if (routeIntent.kind !== 'new-analysis' || autoStarted.current || !autoStart || !initialTicker || isLoading) return;
         autoStarted.current = true;
         void sendMessage(`Valuate ${initialTicker.toUpperCase()}`, true);
-    }, [autoStart, initialTicker, isLoading, sendMessage]);
+    }, [autoStart, initialTicker, isLoading, routeIntent.kind, sendMessage]);
 
     function startRun(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
         const symbol = ticker.trim().toUpperCase();
-        if (!symbol || agent.isLoading) return;
+        if (routeIntent.kind !== 'new-analysis' || !symbol || agent.isLoading) return;
         setTicker(symbol);
         void agent.sendMessage(`Valuate ${symbol}`, true);
     }
@@ -81,7 +84,7 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, aut
             <header className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-6">
                 <div className="flex min-w-0 items-center gap-3">
                     <Sheet><SheetTrigger asChild><Button variant="outline" size="icon" className="lg:hidden" aria-label="Open agent list"><Menu /></Button></SheetTrigger><SheetContent side="left" className="w-[min(22rem,90vw)] p-0"><SheetHeader className="border-b px-4 py-4"><SheetTitle>Analysis agents</SheetTitle></SheetHeader>{roster}</SheetContent></Sheet>
-                    <div className="min-w-0"><p className="text-xs text-muted-foreground">Analysis workspace</p><h1 className="truncate text-lg font-semibold">{ticker || agent.workflow ? ticker || 'Analysis run' : 'New analysis'}</h1></div>
+                    <div className="min-w-0"><p className="text-xs text-muted-foreground">Analysis workspace</p><h1 className="truncate text-lg font-semibold">{routeIntent.kind === 'invalid-history' ? 'Analysis link unavailable' : ticker || agent.workflow ? ticker || 'Analysis run' : routeIntent.kind === 'exact-run' ? 'Analysis run' : 'New analysis'}</h1></div>
                 </div>
                 <div className="flex items-center gap-2">
                     <ConnectionBadge state={agent.connectionState} />
@@ -89,17 +92,19 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, aut
                 </div>
             </header>
 
-            <form className="flex flex-wrap items-end gap-3 border-b bg-muted/20 px-4 py-4 sm:px-6" onSubmit={startRun}>
+            {routeIntent.kind === 'new-analysis' && <form className="flex flex-wrap items-end gap-3 border-b bg-muted/20 px-4 py-4 sm:px-6" onSubmit={startRun}>
                 <Field label="Company ticker" htmlFor="workspace-ticker" className="w-full max-w-sm"><Input id="workspace-ticker" autoComplete="off" value={ticker} onChange={(event) => setTicker(event.target.value.toUpperCase())} placeholder="AAPL" maxLength={16} /></Field>
                 <Button type="submit" disabled={!ticker.trim() || agent.isLoading}>{agent.isLoading ? <Loader2 className="animate-spin" /> : <Play />}{agent.isLoading ? 'Starting…' : 'Start analysis'}</Button>
                 {agent.threadId && <p className="ml-auto max-w-full truncate font-mono text-xs text-muted-foreground" title={agent.threadId}>Thread {agent.threadId}</p>}
-            </form>
+            </form>}
 
             <div className="grid min-h-0 lg:grid-cols-[17rem_minmax(0,1fr)]">
                 <aside className="hidden border-r lg:block" aria-label="Analysis agents">{roster}</aside>
                 <section className="min-w-0 px-4 py-5 sm:px-6">
-                    {agent.error && <Alert variant="destructive" role="alert" className="mb-4"><CircleAlert className="size-4" /><AlertTitle>Workflow request failed</AlertTitle><AlertDescription className="break-words">{agent.error}</AlertDescription></Alert>}
-                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-base font-semibold">Run details</h2><p className="text-sm text-muted-foreground">{agent.workflow ? `Run ${agent.runId ?? agent.workflow.runId} · cursor ${agent.workflow.cursor}` : 'Run a valuation to follow agent activity and reports.'}</p></div>{agent.workflow && <Badge variant={agent.workflow.runStatus === 'failed' ? 'destructive' : agent.workflow.runStatus === 'completed' ? 'success' : agent.workflow.runStatus === 'waiting' ? 'warning' : 'secondary'}>{agent.workflow.runStatus}</Badge>}</div>
+                    {routeIntent.kind === 'invalid-history' && <Alert variant="destructive" role="alert" className="mb-4"><CircleAlert className="size-4" /><AlertTitle>History link is incomplete</AlertTitle><AlertDescription>This history link must include both a thread ID and a run ID. Return to dashboard history and open the run again.</AlertDescription></Alert>}
+                    {agent.error && <Alert variant="destructive" role="alert" className="mb-4"><CircleAlert className="size-4" /><AlertTitle>{routeIntent.kind === 'exact-run' ? 'Selected analysis run could not be loaded' : 'Workflow request failed'}</AlertTitle><AlertDescription className="break-words">{routeIntent.kind === 'exact-run' && historyRunId ? `Run ${historyRunId} for thread ${historyThreadId} is unavailable. ` : ''}{agent.error}</AlertDescription></Alert>}
+                    {routeIntent.kind === 'exact-run' && agent.isLoading && !agent.workflow && <p role="status" className="mb-4 text-sm text-muted-foreground">Loading selected analysis run {routeIntent.runId}…</p>}
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-base font-semibold">Run details</h2><p className="text-sm text-muted-foreground">{agent.workflow ? `Run ${agent.runId ?? agent.workflow.runId} · cursor ${agent.workflow.cursor}` : routeIntent.kind === 'exact-run' ? agent.error ? 'The selected historical run is unavailable.' : 'Loading the selected historical run.' : isHistoryRoute ? 'The selected history link is unavailable.' : 'Run a valuation to follow agent activity and reports.'}</p></div>{agent.workflow && <Badge variant={agent.workflow.runStatus === 'failed' ? 'destructive' : agent.workflow.runStatus === 'completed' ? 'success' : agent.workflow.runStatus === 'waiting' ? 'warning' : 'secondary'}>{agent.workflow.runStatus}</Badge>}</div>
                     <Tabs value={activeTab} onValueChange={(value) => { if (isReportTab(value)) setActiveTab(value); }}>
                         <TabsList aria-label="Workspace views" className="mb-4 h-auto w-full justify-start overflow-x-auto rounded-none border-b bg-transparent p-0">
                             {reportTabs.map((tab) => <TabsTrigger key={tab.id} value={tab.id} className="min-h-10 shrink-0 rounded-none border-b-2 border-transparent px-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">{tab.label}</TabsTrigger>)}

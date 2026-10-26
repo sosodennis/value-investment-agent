@@ -156,14 +156,35 @@ describe('WorkspacePage', () => {
 
     it('loads the exact run requested by a recent-analysis link', () => {
         hook.value = defaultHook();
-        render(<WorkspacePage initialThreadId="thread-1" expectedRunId="run-1" />);
+        render(<WorkspacePage routeIntent={{ kind: 'exact-run', threadId: 'thread-1', runId: 'run-1' }} />);
         expect(hook.loadHistory).toHaveBeenCalledWith('thread-1', 'run-1');
     });
 
-    it('does not start a new run when an exact history link is unavailable', () => {
+    it('keeps an unavailable exact history link in an explicit error state', () => {
         hook.value = defaultHook({ error: 'History unavailable.' });
-        render(<WorkspacePage initialThreadId="thread-1" expectedRunId="missing-run" autoStart={false} />);
+        render(<WorkspacePage routeIntent={{ kind: 'exact-run', threadId: 'thread-1', runId: 'missing-run' }} />);
         expect(hook.loadHistory).toHaveBeenCalledWith('thread-1', 'missing-run');
+        screen.getByRole('alert');
+        screen.getByText(/selected analysis run could not be loaded/i);
+        screen.getByText('The selected historical run is unavailable.');
+        expect(screen.queryByText('Loading the selected historical run.')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Start analysis' })).toBeNull();
+        expect(hook.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('rejects an incomplete history link without loading or starting an analysis', () => {
+        hook.value = defaultHook();
+        render(<WorkspacePage routeIntent={{ kind: 'invalid-history' }} initialTicker="AAPL" autoStart />);
+        screen.getByText(/history link must include both a thread id and a run id/i);
+        expect(screen.queryByRole('button', { name: 'Start analysis' })).toBeNull();
+        expect(hook.loadHistory).not.toHaveBeenCalled();
+        expect(hook.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('does not auto-start when an exact run link also contains a ticker', () => {
+        hook.value = defaultHook();
+        render(<WorkspacePage routeIntent={{ kind: 'exact-run', threadId: 'thread-1', runId: 'run-1' }} initialTicker="AAPL" autoStart />);
+        expect(hook.loadHistory).toHaveBeenCalledWith('thread-1', 'run-1');
         expect(hook.sendMessage).not.toHaveBeenCalled();
     });
 

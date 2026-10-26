@@ -57,7 +57,7 @@ describe('useAgent workflow runtime', () => {
     it('rejects a snapshot from another thread', async () => {
         fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(snapshot({ thread_id: 'other' })), { status: 200 }));
         const { result } = renderHook(() => useAgent());
-        await act(async () => result.current.loadHistory('thread_1'));
+        await act(async () => result.current.loadHistory('thread_1', 'run_1'));
         await waitFor(() => expect(result.current.error).toMatch(/activity identity mismatch/));
     });
 
@@ -169,6 +169,21 @@ describe('useAgent workflow runtime', () => {
         );
     });
 
+    it('replaces the current history run when another exact run is selected', async () => {
+        fetchMock
+            .mockResolvedValueOnce(new Response(JSON.stringify(snapshot({ run_status: 'completed', active_activities: [] })), { status: 200 }))
+            .mockResolvedValueOnce(new Response(JSON.stringify(snapshot({ run_id: 'older-run', run_status: 'completed', active_activities: [] })), { status: 200 }));
+        const { result } = renderHook(() => useAgent());
+
+        await act(async () => result.current.loadHistory('thread_1', 'run_1'));
+        expect(result.current.workflow?.runId).toBe('run_1');
+        await act(async () => result.current.loadHistory('thread_1', 'older-run'));
+
+        expect(result.current.workflow?.runId).toBe('older-run');
+        expect(String(fetchMock.mock.calls[0]?.[0])).toContain('?run_id=run_1');
+        expect(String(fetchMock.mock.calls[1]?.[0])).toContain('?run_id=older-run');
+    });
+
     it('rejects a latest-run response when a link requests another run', async () => {
         fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(snapshot({ run_id: 'latest-run', active_activities: [], recent_activities: [] })), { status: 200 }));
         const { result } = renderHook(() => useAgent());
@@ -196,7 +211,7 @@ describe('useAgent workflow runtime', () => {
             .mockResolvedValueOnce(streamResponse(terminal))
             .mockResolvedValueOnce(new Response(JSON.stringify(snapshot({ cursor: 2, run_status: 'completed', active_activities: [], recent_activities: [terminal.payload] })), { status: 200 }));
         const { result } = renderHook(() => useAgent());
-        await act(async () => result.current.loadHistory('thread_1'));
+        await act(async () => result.current.loadHistory('thread_1', 'run_1'));
         await waitFor(() => expect(result.current.workflow?.runStatus).toBe('completed'));
         expect(result.current.connectionState).toBe('closed');
         expect(result.current.workflow?.active.size).toBe(0);
