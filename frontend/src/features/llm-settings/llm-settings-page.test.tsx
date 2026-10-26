@@ -277,6 +277,7 @@ describe('LLM settings', () => {
                 (screen.getByLabelText('Label') as HTMLInputElement).value,
             ).toBe('Keep this label'),
         );
+        fireEvent.focus(screen.getByLabelText('Label'));
         expect(sessionStorage.getItem('llm-settings-label-draft')).toBeNull();
     });
 });

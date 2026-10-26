@@ -1,7 +1,7 @@
 'use client';
 
 import type { FormEvent } from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertCircle, Check, KeyRound, LoaderCircle, Plus, RefreshCw, ShieldCheck, Trash2 } from 'lucide-react';
 
@@ -37,6 +37,31 @@ import {
 
 type KeyOperation = { kind: 'test' | 'delete'; id: string } | null;
 const LABEL_DRAFT_STORAGE_KEY = 'llm-settings-label-draft';
+const LABEL_DRAFT_EVENT = 'llm-settings-label-draft-change';
+
+function subscribeLabelDraft(onStoreChange: () => void): () => void {
+    if (typeof window === 'undefined') return () => {};
+    window.addEventListener('storage', onStoreChange);
+    window.addEventListener(LABEL_DRAFT_EVENT, onStoreChange);
+    return () => {
+        window.removeEventListener('storage', onStoreChange);
+        window.removeEventListener(LABEL_DRAFT_EVENT, onStoreChange);
+    };
+}
+
+function getLabelDraftSnapshot(): string | null {
+    if (typeof window === 'undefined') return null;
+    return window.sessionStorage.getItem(LABEL_DRAFT_STORAGE_KEY);
+}
+
+function setStoredLabelDraft(value: string | null): void {
+    if (typeof window === 'undefined') return;
+    if (value) window.sessionStorage.setItem(LABEL_DRAFT_STORAGE_KEY, value);
+    else window.sessionStorage.removeItem(LABEL_DRAFT_STORAGE_KEY);
+    window.dispatchEvent(new Event(LABEL_DRAFT_EVENT));
+}
+
+const getServerLabelDraftSnapshot = (): null => null;
 
 function formatDate(value: string | null | undefined, withTime = false): string {
     if (!value) return withTime ? 'Never' : 'Unknown date';
@@ -48,14 +73,13 @@ function formatDate(value: string | null | undefined, withTime = false): string 
 }
 
 function keyStatusLabel(status: string | undefined, cooldownUntil: string | null | undefined): string {
-    if (cooldownUntil && new Date(cooldownUntil).getTime() > Date.now()) return 'Cooling down';
     switch (status) {
         case 'healthy': return 'Healthy';
         case 'invalid_key': return 'Invalid key';
         case 'unavailable': return 'Unavailable';
         case 'available': return 'Available';
         case 'replacement_grace': return 'Replacing';
-        case 'cooldown': return 'Available';
+        case 'cooldown': return cooldownUntil ? 'Cooling down' : 'Available';
         default: return 'Not tested';
     }
 }
@@ -94,11 +118,17 @@ export default function LlmSettingsPage() {
     const router = useRouter();
     const labelDraftRef = useRef('');
     const redirectingRef = useRef(false);
+    const storedLabelDraft = useSyncExternalStore(
+        subscribeLabelDraft,
+        getLabelDraftSnapshot,
+        getServerLabelDraftSnapshot,
+    );
     const [authenticated, setAuthenticated] = useState(false);
     const [keys, setKeys] = useState<LlmProviderKey[]>([]);
     const [models, setModels] = useState<LlmModelOption[]>([]);
     const [selectedModel, setSelectedModel] = useState('openrouter/free');
-    const [label, setLabel] = useState('');
+    const [labelOverride, setLabelOverride] = useState<string | null>(null);
+    const label = labelOverride ?? storedLabelDraft ?? '';
     const [apiKey, setApiKey] = useState('');
     const [keyLoadError, setKeyLoadError] = useState<string | null>(null);
     const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -115,9 +145,8 @@ export default function LlmSettingsPage() {
     const redirectToLogin = useCallback((cause: unknown): boolean => {
         if (!(cause instanceof LlmSettingsApiError) || cause.status !== 401) return false;
         if (redirectingRef.current) return true;
-        const draft = labelDraftRef.current.trim();
-        if (draft) window.sessionStorage.setItem(LABEL_DRAFT_STORAGE_KEY, draft);
-        else window.sessionStorage.removeItem(LABEL_DRAFT_STORAGE_KEY);
+        const draft = (labelDraftRef.current || getLabelDraftSnapshot() || '').trim();
+        setStoredLabelDraft(draft || null);
         redirectingRef.current = true;
         router.replace(`/login?next=${encodeURIComponent('/settings/llm')}`);
         return true;
@@ -154,15 +183,38 @@ export default function LlmSettingsPage() {
     }, [redirectToLogin]);
 
     useEffect(() => {
-        const draft = window.sessionStorage.getItem(LABEL_DRAFT_STORAGE_KEY);
-        if (draft) {
-            labelDraftRef.current = draft;
-            setLabel(draft);
-            window.sessionStorage.removeItem(LABEL_DRAFT_STORAGE_KEY);
-        }
-        void loadKeys();
-        void loadModels();
-    }, [loadKeys, loadModels]);
+        let active = true;
+        void listLlmProviderKeys()
+            .then((nextKeys) => {
+                if (!active) return;
+                setKeys(nextKeys);
+                setAuthenticated(true);
+            })
+            .catch((cause: unknown) => {
+                if (!active) return;
+                if (!redirectToLogin(cause)) setKeyLoadError(errorMessage(cause, 'Could not load provider keys.'));
+            })
+            .finally(() => {
+                if (active) setIsLoadingKeys(false);
+            });
+        void getLlmSettings()
+            .then((settings) => {
+                if (!active) return;
+                setAuthenticated(true);
+                setModels(settings.models);
+                setSelectedModel(settings.selected_model);
+            })
+            .catch((cause: unknown) => {
+                if (!active) return;
+                if (!redirectToLogin(cause)) setCatalogError(errorMessage(cause, 'Could not load the model catalogue.'));
+            })
+            .finally(() => {
+                if (active) setIsLoadingModels(false);
+            });
+        return () => {
+            active = false;
+        };
+    }, [redirectToLogin]);
 
     async function handleModelChange(model: string) {
         if (!model || model === selectedModel) return;
@@ -193,8 +245,9 @@ export default function LlmSettingsPage() {
         try {
             const created = await addLlmProviderKey({ label: label.trim() || 'OpenRouter key', api_key: apiKey });
             setKeys((current) => [created, ...current]);
-            setLabel('');
+            setLabelOverride('');
             labelDraftRef.current = '';
+            setStoredLabelDraft(null);
             setApiKey('');
             setNotice(`Key ending in ${created.suffix} passed its test and was added.`);
         } catch (cause) {
@@ -286,7 +339,18 @@ export default function LlmSettingsPage() {
                             <p className="mt-1 text-sm text-muted-foreground">The key is tested before it is stored.</p>
                         </div>
                         <Field label="Label" htmlFor="key-label" description="Optional. Use a name you recognize.">
-                            <Input id="key-label" value={label} onChange={(event) => { labelDraftRef.current = event.target.value; setLabel(event.target.value); }} placeholder="Primary research key" maxLength={80} disabled={isAddingKey} />
+                            <Input id="key-label" value={label} onFocus={() => {
+                                if (labelOverride === null && storedLabelDraft !== null) {
+                                    labelDraftRef.current = storedLabelDraft;
+                                    setLabelOverride(storedLabelDraft);
+                                    setStoredLabelDraft(null);
+                                }
+                            }} onChange={(event) => {
+                                const nextLabel = event.target.value;
+                                labelDraftRef.current = nextLabel;
+                                setLabelOverride(nextLabel);
+                                if (storedLabelDraft !== null) setStoredLabelDraft(null);
+                            }} placeholder="Primary research key" maxLength={80} disabled={isAddingKey} />
                         </Field>
                         <Field label="OpenRouter API key" htmlFor="openrouter-key">
                             <Input id="openrouter-key" type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder="sk-or-v1-..." minLength={20} maxLength={500} autoComplete="off" required disabled={isAddingKey} />
@@ -333,7 +397,7 @@ export default function LlmSettingsPage() {
                                             <TableCell>
                                                 <Badge variant={statusVariant(item.status)}>{keyStatusLabel(item.status, item.cooldown_until)}</Badge>
                                                 {item.last_error && keyErrorLabel(item.last_error) ? <p className="mt-1 max-w-36 text-xs text-destructive">{keyErrorLabel(item.last_error)}</p> : null}
-                                                {item.cooldown_until && new Date(item.cooldown_until).getTime() > Date.now() ? <p className="mt-1 text-xs text-warning">Until {formatDate(item.cooldown_until, true)}</p> : null}
+                                                {item.status === 'cooldown' && item.cooldown_until ? <p className="mt-1 text-xs text-warning">Until {formatDate(item.cooldown_until, true)}</p> : null}
                                             </TableCell>
                                             <TableCell className="text-xs text-muted-foreground">
                                                 <p>Added {formatDate(item.created_at)}</p>

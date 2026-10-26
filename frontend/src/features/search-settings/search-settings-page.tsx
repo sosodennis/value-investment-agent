@@ -47,27 +47,46 @@ export default function SearchSettingsPage() {
     const [apiKey, setApiKey] = useState('');
     const [deleteTarget, setDeleteTarget] = useState<{ id: string; provider: string; label: string } | null>(null);
 
-    const load = useCallback(async (mode: 'initial' | 'refresh' = 'refresh') => {
-        if (mode === 'initial') setIsInitialLoading(true);
-        else setIsRefreshing(true);
+    const applySettings = useCallback((result: SearchSettings) => {
+        setData(result);
+        setDraft(result.settings.providers);
+        setProvider((current) => current && result.providers.some((item) => item.provider === current && item.key_required)
+            ? current
+            : result.providers.find((item) => item.key_required)?.provider ?? '');
+    }, []);
+
+    const load = useCallback(async () => {
+        setIsRefreshing(true);
         setLoadError(null);
         try {
             const result = await getSearchSettings();
-            setData(result);
-            setDraft(result.settings.providers);
-            setProvider((current) => current && result.providers.some((item) => item.provider === current && item.key_required)
-                ? current
-                : result.providers.find((item) => item.key_required)?.provider ?? '');
+            applySettings(result);
         } catch (cause) {
             if (cause instanceof SearchSettingsApiError && cause.status === 401) router.replace('/login?next=%2Fsettings%2Fsearch');
             setLoadError(requestMessage(cause));
         } finally {
-            setIsInitialLoading(false);
             setIsRefreshing(false);
         }
-    }, [router]);
+    }, [applySettings, router]);
 
-    useEffect(() => { void load('initial'); }, [load]);
+    useEffect(() => {
+        let active = true;
+        void getSearchSettings()
+            .then((result) => {
+                if (active) applySettings(result);
+            })
+            .catch((cause: unknown) => {
+                if (!active) return;
+                if (cause instanceof SearchSettingsApiError && cause.status === 401) router.replace('/login?next=%2Fsettings%2Fsearch');
+                setLoadError(requestMessage(cause));
+            })
+            .finally(() => {
+                if (active) setIsInitialLoading(false);
+            });
+        return () => {
+            active = false;
+        };
+    }, [applySettings, router]);
 
     const providersByName = useMemo(() => new Map(data?.providers.map((item) => [item.provider, item]) ?? []), [data]);
     const sortedDraft = useMemo(() => [...draft].sort((left, right) => left.priority - right.priority), [draft]);
@@ -94,7 +113,7 @@ export default function SearchSettingsPage() {
             if (replacing) await replaceSearchKey({ ...keyInput, key_id: replacementKeyId });
             else await addSearchKey(keyInput);
             setApiKey(''); setLabel(''); setReplacementKeyId(null);
-            await load('refresh');
+            await load();
             setKeyNotice(replacing ? 'Provider key tested and replaced.' : 'Provider key tested and added.');
         } catch (cause) { setKeyError(requestMessage(cause)); }
         finally { setKeySubmission(false); }
@@ -107,7 +126,7 @@ export default function SearchSettingsPage() {
         try {
             await deleteSearchKey(target.id);
             setDeleteTarget(null);
-            await load('refresh');
+            await load();
             setKeyNotice(`${target.label} was deleted.`);
         } catch (cause) { setKeyError(requestMessage(cause)); }
         finally { setPendingKeyId(null); }
@@ -117,7 +136,7 @@ export default function SearchSettingsPage() {
         setPendingKeyId(keyId); setKeyError(null); setKeyNotice(null);
         try {
             await setSearchKeyEnabled(keyId, enabled);
-            await load('refresh');
+            await load();
             setKeyNotice(enabled ? 'Provider key enabled.' : 'Provider key disabled.');
         } catch (cause) { setKeyError(requestMessage(cause)); }
         finally { setPendingKeyId(null); }
