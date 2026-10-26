@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 
 from src.analysis_runtime.domain.contracts import (
     ActivityEvent,
     ActivitySnapshot,
+    AnalysisRunPage,
+    AnalysisRunRecord,
     ReplayPage,
     RunStatus,
     RunStatusRecord,
@@ -27,6 +29,8 @@ class InMemoryActivityRepository:
         self._event_ids: dict[str, set[str]] = defaultdict(set)
         self._cursors: dict[str, int] = defaultdict(int)
         self._runs: dict[str, RunStatusRecord] = {}
+        self._run_history: dict[tuple[str, str], AnalysisRunRecord] = {}
+        self._run_owners: dict[tuple[str, str], str] = {}
         self._retention = replay_retention
 
     async def append_atomic(self, event: ActivityEvent) -> bool:
@@ -91,7 +95,7 @@ class InMemoryActivityRepository:
             recent = tuple(
                 event.payload for event in reversed(events) if event.run_id == run_id
             )[:50]
-            run = self._runs.get(thread_id)
+            run = self._run_history.get((thread_id, run_id))
             status: RunStatus = run.status if run else "queued"
             return ActivitySnapshot(
                 thread_id=thread_id,
@@ -106,6 +110,80 @@ class InMemoryActivityRepository:
         async with self._lock:
             return self._runs.get(thread_id)
 
+    async def get_run_history(
+        self, *, principal_id: str, thread_id: str, run_id: str
+    ) -> AnalysisRunRecord | None:
+        async with self._lock:
+            key = (thread_id, run_id)
+            record = self._run_history.get(key)
+            return (
+                record if record and self._run_owners.get(key) == principal_id else None
+            )
+
+    async def list_run_history(
+        self,
+        *,
+        principal_id: str,
+        limit: int,
+        before_started_at: datetime | None = None,
+        before_thread_id: str | None = None,
+        before_run_id: str | None = None,
+    ) -> AnalysisRunPage:
+        if limit < 1 or limit > 100:
+            raise InvalidCursorError("run history limit must be between 1 and 100")
+        if (before_thread_id is None) != (before_run_id is None) or (
+            before_started_at is not None
+            and (before_thread_id is None or before_run_id is None)
+        ):
+            raise InvalidCursorError("run history cursor is incomplete")
+        async with self._lock:
+            records = sorted(
+                (
+                    record
+                    for record in self._run_history.values()
+                    if self._run_owners.get((record.thread_id, record.run_id))
+                    == principal_id
+                ),
+                key=lambda record: (
+                    record.started_at is not None,
+                    record.started_at or datetime.min.replace(tzinfo=timezone.utc),
+                    record.thread_id,
+                    record.run_id,
+                ),
+                reverse=True,
+            )
+            if before_thread_id is not None and before_run_id is not None:
+                if before_started_at is None:
+                    records = [
+                        record
+                        for record in records
+                        if record.started_at is None
+                        and (record.thread_id, record.run_id)
+                        < (before_thread_id, before_run_id)
+                    ]
+                else:
+                    marker = (
+                        before_started_at,
+                        before_thread_id,
+                        before_run_id,
+                    )
+                    records = [
+                        record
+                        for record in records
+                        if record.started_at is None
+                        or (record.started_at, record.thread_id, record.run_id) < marker
+                    ]
+            selected = records[:limit]
+            has_more = len(records) > limit
+            last = selected[-1] if selected else None
+            return AnalysisRunPage(
+                runs=tuple(selected),
+                has_more=has_more,
+                next_started_at=last.started_at if has_more and last else None,
+                next_thread_id=last.thread_id if has_more and last else None,
+                next_run_id=last.run_id if has_more and last else None,
+            )
+
     async def set_run(
         self,
         *,
@@ -113,6 +191,8 @@ class InMemoryActivityRepository:
         run_id: str,
         status: RunStatus,
         now: datetime,
+        principal_id: str | None = None,
+        input_data: dict[str, object] | None = None,
     ) -> RunStatusRecord:
         async with self._lock:
             previous = self._runs.get(thread_id)
@@ -130,4 +210,22 @@ class InMemoryActivityRepository:
                 else None,
             )
             self._runs[thread_id] = record
+            if principal_id is not None:
+                self._run_owners[(thread_id, run_id)] = principal_id
+                previous_history = self._run_history.get((thread_id, run_id))
+                self._run_history[(thread_id, run_id)] = AnalysisRunRecord(
+                    thread_id=thread_id,
+                    run_id=run_id,
+                    status=status,
+                    started_at=previous_history.started_at
+                    if previous_history
+                    else started_at,
+                    updated_at=now,
+                    ended_at=record.ended_at,
+                    input_data=(
+                        previous_history.input_data
+                        if previous_history and previous_history.input_data is not None
+                        else input_data
+                    ),
+                )
             return record

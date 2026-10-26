@@ -37,12 +37,12 @@ export interface WorkflowActivityEvent {
     payload: WorkflowActivity;
 }
 
-export type WorkflowRunStatus = Exclude<ActivityStatus, 'skipped'> | 'queued';
+export type WorkflowRunStatus = Exclude<ActivityStatus, 'skipped'> | 'queued' | 'unknown';
 
 export interface WorkflowActivitySnapshot {
     thread_id: string;
     run_id: string;
-    run_status: 'queued' | 'running' | 'waiting' | 'completed' | 'failed' | 'cancelled';
+    run_status: WorkflowRunStatus;
     cursor: number;
     active_activities: WorkflowActivity[];
     recent_activities: WorkflowActivity[];
@@ -148,7 +148,7 @@ export function parseWorkflowActivitySnapshot(value: unknown, context = 'workflo
     const snapshot: WorkflowActivitySnapshot = {
         thread_id: string(input.thread_id, `${context}.thread_id`),
         run_id: string(input.run_id, `${context}.run_id`),
-        run_status: oneOf(input.run_status, ['queued', 'running', 'waiting', 'completed', 'failed', 'cancelled'], `${context}.run_status`),
+        run_status: oneOf(input.run_status, ['queued', 'running', 'waiting', 'completed', 'failed', 'cancelled', 'unknown'], `${context}.run_status`),
         cursor: integer(input.cursor, `${context}.cursor`),
         active_activities: active.map((item, index) => parseWorkflowActivity(item, `${context}.active_activities[${index}]`)),
         recent_activities: recent.map((item, index) => parseWorkflowActivity(item, `${context}.recent_activities[${index}]`)),

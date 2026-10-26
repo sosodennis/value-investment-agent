@@ -10,6 +10,7 @@ from src.analysis_runtime.domain.contracts import Activity, ActivityEvent
 from src.analysis_runtime.domain.errors import (
     ActivityPersistenceError,
     ReplayGapError,
+    RunNotFoundError,
     ThreadNotFoundError,
 )
 from src.analysis_runtime.infrastructure.memory_repository import (
@@ -98,6 +99,60 @@ async def test_runtime_persists_before_publish_and_replays() -> None:
         principal_id="user", thread_id="thread", run_id=run_id
     )
     assert snapshot.run_status == "completed"
+
+
+@pytest.mark.asyncio
+async def test_run_history_keeps_exact_runs_and_scopes_keyset_pages_to_principal() -> (
+    None
+):
+    repository = InMemoryActivityRepository()
+    service = AnalysisRuntimeService(
+        repository=repository, owner=Owner(), runner=Runner()
+    )
+
+    first_run = await service.start(
+        principal_id="user", thread_id="thread", input_data={"message": "AAPL"}
+    )
+    await service._tasks["thread"]
+    first_snapshot = await service.snapshot(
+        principal_id="user", thread_id="thread", run_id=first_run
+    )
+    second_run = await service.start(
+        principal_id="user", thread_id="thread", input_data={"message": "MSFT"}
+    )
+    await service._tasks["thread"]
+
+    first_record = await repository.get_run_history(
+        principal_id="user", thread_id="thread", run_id=first_run
+    )
+    assert first_record is not None
+    assert first_record.status == "completed"
+    assert first_record.input_data == {"message": "AAPL"}
+    assert first_record.started_at is not None
+    assert (
+        await service.snapshot(
+            principal_id="user", thread_id="thread", run_id=first_run
+        )
+    ).recent_activities == first_snapshot.recent_activities
+    with pytest.raises(RunNotFoundError):
+        await service.snapshot(
+            principal_id="other", thread_id="thread", run_id=first_run
+        )
+
+    page = await service.list_run_history(principal_id="user", limit=1)
+    assert [record.run_id for record in page.runs] == [second_run]
+    assert page.has_more is True
+    assert page.next_started_at is not None
+    next_page = await service.list_run_history(
+        principal_id="user",
+        limit=1,
+        before_started_at=page.next_started_at,
+        before_thread_id=page.next_thread_id,
+        before_run_id=page.next_run_id,
+    )
+    assert [record.run_id for record in next_page.runs] == [first_run]
+    assert next_page.has_more is False
+    assert (await service.list_run_history(principal_id="other", limit=10)).runs == ()
 
 
 @pytest.mark.asyncio

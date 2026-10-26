@@ -1,3 +1,11 @@
+x-backend-build: &backend-build
+  context: ./finance-agent-core
+  dockerfile: Dockerfile
+  args:
+    BAKE_HF_MODELS: ${BAKE_HF_MODELS:-1}
+
+x-backend-image: &backend-image "${COMPOSE_PROJECT_NAME:-value-investment-agent}-backend"
+
 x-model-inference-environment: &model-inference-environment
   INFERENCE_SERVICE_TOKEN: ${INFERENCE_SERVICE_TOKEN:-}
   INFERENCE_ALLOW_INSECURE: ${INFERENCE_ALLOW_INSECURE:-0}
@@ -165,11 +173,8 @@ services:
     restart: "no"
 
   backend:
-    build:
-      context: ./finance-agent-core
-      dockerfile: Dockerfile
-      args:
-        BAKE_HF_MODELS: ${BAKE_HF_MODELS:-1}
+    image: *backend-image
+    build: *backend-build
     platform: linux/arm64
     environment:
       - POSTGRES_HOST=postgres
@@ -226,11 +231,8 @@ services:
     restart: always
 
   backend-migrations:
-    build:
-      context: ./finance-agent-core
-      dockerfile: Dockerfile
-      args:
-        BAKE_HF_MODELS: ${BAKE_HF_MODELS:-1}
+    image: *backend-image
+    build: *backend-build
     platform: linux/arm64
     command: ["python", "-m", "src.infrastructure.migrations.cli"]
     environment:

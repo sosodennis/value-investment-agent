@@ -3534,7 +3534,9 @@ export interface operations {
     };
     activity_snapshot_api_v1_threads__thread_id__activities_get: {
         parameters: {
-            query?: never;
+            query?: {
+                run_id?: string | null;
+            };
             header?: never;
             path: {
                 thread_id: string;
@@ -3567,6 +3569,7 @@ export interface operations {
         parameters: {
             query?: {
                 after_seq?: number;
+                run_id?: string | null;
             };
             header?: never;
             path: {

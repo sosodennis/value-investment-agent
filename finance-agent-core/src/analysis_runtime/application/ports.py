@@ -8,6 +8,8 @@ from src.analysis_runtime.domain.contracts import (
     Activity,
     ActivityEvent,
     ActivitySnapshot,
+    AnalysisRunPage,
+    AnalysisRunRecord,
     ReplayPage,
     RunStatus,
     RunStatusRecord,
@@ -46,6 +48,20 @@ class ActivityRepository(Protocol):
 
     async def get_run(self, *, thread_id: str) -> RunStatusRecord | None: ...
 
+    async def get_run_history(
+        self, *, principal_id: str, thread_id: str, run_id: str
+    ) -> AnalysisRunRecord | None: ...
+
+    async def list_run_history(
+        self,
+        *,
+        principal_id: str,
+        limit: int,
+        before_started_at: datetime | None = None,
+        before_thread_id: str | None = None,
+        before_run_id: str | None = None,
+    ) -> AnalysisRunPage: ...
+
     async def set_run(
         self,
         *,
@@ -53,6 +69,8 @@ class ActivityRepository(Protocol):
         run_id: str,
         status: RunStatus,
         now: datetime,
+        principal_id: str | None = None,
+        input_data: Mapping[str, object] | None = None,
     ) -> RunStatusRecord: ...
 
 
