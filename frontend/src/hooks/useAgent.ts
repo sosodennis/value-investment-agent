@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { clientLogger } from '@/lib/logger';
 import type { InterruptResumePayload } from '@/types/interrupts';
-import type { AgentStatus } from '@/types/agents';
+import type { AgentStatus, StandardAgentOutput } from '@/types/agents';
 import { applyWorkflowActivityEvent, boundedReconnectDelay, cancelWorkflowRun, consumeWorkflowEvents, createWorkflowActivityState, getActivitySnapshot, startWorkflowRun, type WorkflowActivitySnapshot } from '@/features/workflow';
 import { useAgentReducer } from './useAgentReducer';
 
@@ -16,6 +16,7 @@ export function useAgent(assistantId = 'agent') {
     const abortRef = useRef<AbortController | null>(null);
 
     const attachStream = useCallback(async (threadId: string, initialSnapshot: WorkflowActivitySnapshot, expectedRunId = initialSnapshot.run_id) => {
+        if (initialSnapshot.run_id !== expectedRunId) throw new TypeError('activity snapshot run identity mismatch.');
         abortRef.current?.abort();
         const controller = new AbortController();
         abortRef.current = controller;
@@ -35,9 +36,9 @@ export function useAgent(assistantId = 'agent') {
                     processWorkflowEvent(event);
                     setConnection('connected');
                     return event.payload.activity_id === 'workflow' && ['completed', 'failed', 'cancelled'].includes(event.payload.status);
-                });
+                }, expectedRunId);
                 if (controller.signal.aborted) return;
-                snapshot = await getActivitySnapshot(threadId, controller.signal);
+                snapshot = await getActivitySnapshot(threadId, { runId: expectedRunId, signal: controller.signal });
                 if (snapshot.run_id !== expectedRunId) throw new TypeError('activity snapshot run identity mismatch.');
                 hydrateWorkflow(snapshot);
                 if (['completed', 'failed', 'cancelled'].includes(snapshot.run_status)) { setConnection('closed'); return; }
@@ -46,7 +47,7 @@ export function useAgent(assistantId = 'agent') {
             } catch (error) {
                 if (controller.signal.aborted) { setConnection('disconnected'); return; }
                 clientLogger.error('workflow.stream.error', { threadId, attempt, error: toError(error, 'stream failed') });
-                snapshot = await getActivitySnapshot(threadId, controller.signal);
+                snapshot = await getActivitySnapshot(threadId, { runId: expectedRunId, signal: controller.signal });
                 if (snapshot.run_id !== expectedRunId) throw new TypeError('activity snapshot run identity mismatch.');
                 hydrateWorkflow(snapshot);
                 if (['completed', 'failed', 'cancelled'].includes(snapshot.run_status)) { setConnection('closed'); return; }
@@ -67,7 +68,8 @@ export function useAgent(assistantId = 'agent') {
         try {
             const run = await startWorkflowRun(threadId, { message: content });
             setRun(run.run_id);
-            const snapshot = await getActivitySnapshot(threadId);
+            const snapshot = await getActivitySnapshot(threadId, { runId: run.run_id });
+            if (snapshot.run_id !== run.run_id) throw new TypeError('activity snapshot run identity mismatch.');
             hydrateWorkflow(snapshot);
             await attachStream(threadId, snapshot, run.run_id);
         } catch (error) { setError(toError(error, 'Failed to start workflow run.')); } finally { setIsLoading(false); }
@@ -81,16 +83,22 @@ export function useAgent(assistantId = 'agent') {
         try {
             const run = await startWorkflowRun(state.threadId, { resume_payload: { ...payload } });
             setRun(run.run_id);
-            const snapshot = await getActivitySnapshot(state.threadId);
+            const snapshot = await getActivitySnapshot(state.threadId, { runId: run.run_id });
             hydrateWorkflow(snapshot);
             await attachStream(state.threadId, snapshot, run.run_id);
         } catch (error) { setError(toError(error, 'Failed to resume workflow run.')); } finally { setIsLoading(false); }
     }, [addUserMessage, attachStream, hydrateWorkflow, setError, setRun, state.threadId]);
 
-    const loadHistory = useCallback(async (threadId: string) => {
+    const loadHistory = useCallback(async (threadId: string, expectedRunId?: string | null) => {
         setIsLoading(true);
         try {
-            const snapshot = await getActivitySnapshot(threadId);
+            const snapshot = await getActivitySnapshot(
+                threadId,
+                expectedRunId ? { runId: expectedRunId } : undefined,
+            );
+            if (expectedRunId && snapshot.run_id !== expectedRunId) {
+                throw new TypeError('activity snapshot run identity mismatch.');
+            }
             hydrateWorkflow(snapshot);
             if (snapshot.run_status === 'running' || snapshot.run_status === 'waiting' || snapshot.run_status === 'queued') await attachStream(threadId, snapshot, snapshot.run_id);
         } catch (error) { setError(toError(error, 'Failed to load workflow snapshot.')); } finally { setIsLoading(false); }
@@ -101,7 +109,7 @@ export function useAgent(assistantId = 'agent') {
         try {
             await cancelWorkflowRun(state.threadId, state.runId);
             abortRef.current?.abort();
-            const snapshot = await getActivitySnapshot(state.threadId);
+            const snapshot = await getActivitySnapshot(state.threadId, { runId: state.runId });
             hydrateWorkflow(snapshot);
             setConnection('closed');
         } catch (error) { setError(toError(error, 'Failed to cancel workflow run.')); }
@@ -113,7 +121,7 @@ export function useAgent(assistantId = 'agent') {
         const id = activity.scope_path[0] ?? activity.activity_id;
         agentStatuses[id] = activity.status === 'waiting' ? 'attention' : activity.status === 'running' ? 'running' : activity.status === 'completed' ? 'done' : activity.status === 'failed' || activity.status === 'cancelled' ? 'error' : 'idle';
     }
-    const agentOutputs: Record<string, null> = {};
+    const agentOutputs: Record<string, StandardAgentOutput | null> = {};
     return {
         messages: state.messages,
         sendMessage,

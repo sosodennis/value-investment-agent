@@ -189,6 +189,20 @@ export function addLlmProviderKey(input: {
     );
 }
 
+export function replaceLlmProviderKey(
+    keyId: string,
+    input: { label: string; api_key: string }
+): Promise<LlmProviderKey> {
+    return request(
+        `/api/v1/llm/provider-keys/${encodeURIComponent(keyId)}/replace`,
+        (value) => parseLlmProviderKey(value, 'llm_provider_key'),
+        {
+            method: 'POST',
+            body: JSON.stringify(input),
+        }
+    );
+}
+
 export function testLlmProviderKey(
     keyId: string
 ): Promise<LlmProviderKeyTestResult> {

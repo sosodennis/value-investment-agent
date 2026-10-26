@@ -1,18 +1,22 @@
 'use client';
 
 import { useSearchParams } from 'next/navigation';
-import { AnalysisWorkspace } from '@/components/workspace/AnalysisWorkspace';
+import { WorkspacePage } from '@/features/workspace/workspace-page';
 
 export function WorkspacePageClient() {
     const searchParams = useSearchParams();
     const tickerParam = searchParams.get('ticker');
+    const threadId = searchParams.get('thread_id');
+    const runId = searchParams.get('run_id');
     const initialTicker = tickerParam ? tickerParam.trim() : null;
     const shouldAutoStart = Boolean(initialTicker);
 
     return (
-        <AnalysisWorkspace
+        <WorkspacePage
             initialTicker={initialTicker}
             autoStart={shouldAutoStart}
+            initialThreadId={threadId}
+            expectedRunId={runId}
         />
     );
 }

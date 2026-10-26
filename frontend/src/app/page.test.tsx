@@ -1,93 +1,42 @@
-'use client';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import HomePage from './page';
 
-import { render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { AnalysisWorkspace } from '@/components/workspace/AnalysisWorkspace';
-import { useAgent } from '@/hooks/useAgent';
-import { useFinancialData } from '@/hooks/useFinancialData';
-
-vi.mock('@/hooks/useAgent', () => ({
-    useAgent: vi.fn(),
+vi.mock('@/features/home/home-dashboard', () => ({
+    HomeDashboard: () => <section aria-label="Dashboard" />,
 }));
 
-vi.mock('@/hooks/useFinancialData', () => ({
-    useFinancialData: vi.fn(),
-}));
+const router = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock('next/navigation', () => ({ useRouter: () => router }));
 
-vi.mock('@/components/workspace/agents-roster/AgentsRoster', () => ({
-    AgentsRoster: ({
-        selectedAgentId,
-    }: {
-        selectedAgentId: string | null;
-    }) => <div data-testid="agents-roster">{selectedAgentId ?? 'none'}</div>,
-}));
+describe('home analysis entry', () => {
+    beforeEach(() => vi.clearAllMocks());
+    afterEach(cleanup);
 
-vi.mock('@/components/workspace/agent-detail/AgentDetailPanel', () => ({
-    AgentDetailPanel: ({
-        agent,
-    }: {
-        agent: { id: string } | null;
-    }) => <div data-testid="agent-detail">{agent?.id ?? 'none'}</div>,
-}));
+    it('opens the analysis workspace with a trimmed ticker and pending feedback', () => {
+        render(<HomePage />);
+        const input = screen.getByLabelText('Company name or ticker');
+        fireEvent.change(input, { target: { value: '  brk.b ' } });
+        fireEvent.submit(input.closest('form')!);
 
-const mockUseAgent = vi.mocked(useAgent);
-const mockUseFinancialData = vi.mocked(useFinancialData);
-const storage = new Map<string, string>();
-
-describe('AnalysisWorkspace refresh restore behavior', () => {
-    beforeEach(() => {
-        storage.clear();
-        vi.stubGlobal('localStorage', {
-            getItem: (key: string) => storage.get(key) ?? null,
-            setItem: (key: string, value: string) => {
-                storage.set(key, value);
-            },
-            removeItem: (key: string) => {
-                storage.delete(key);
-            },
-            clear: () => {
-                storage.clear();
-            },
-        });
-        mockUseFinancialData.mockReturnValue({
-            resolvedTicker: null,
-            dimensionScores: [],
-            financialMetrics: [],
-            latestReport: null,
-            rawOutput: null,
-        });
+        expect(router.push).toHaveBeenCalledWith('/workspace?ticker=brk.b');
+        expect(screen.getByRole('button', { name: 'Opening workspace...' }).hasAttribute('disabled')).toBe(true);
     });
 
-    it('restores the user selected agent without inferring one from workflow activity', async () => {
-        localStorage.setItem('agent_thread_id', 'thread_1');
-        localStorage.setItem('agent_selected_agent_id', 'technical_analysis');
+    it('shows validation feedback and does not navigate for an empty symbol', () => {
+        render(<HomePage />);
+        fireEvent.submit(screen.getByLabelText('Company name or ticker').closest('form')!);
+        expect(screen.getByRole('alert').textContent).toContain('Enter a company name or ticker');
+        expect(router.push).not.toHaveBeenCalled();
+    });
 
-        mockUseAgent.mockReturnValue({
-            messages: [],
-            sendMessage: vi.fn(),
-            submitCommand: vi.fn(),
-            loadHistory: vi.fn(),
-            isLoading: false,
-            error: null,
-            threadId: 'thread_1',
-            hasMore: true,
-            agentStatuses: {
-                intent_extraction: 'done',
-                technical_analysis: 'done',
-                financial_news_research: 'running',
-            },
-            agentOutputs: {},
-            workflow: null,
-            activeActivities: [],
-            runId: null,
-            connectionState: 'disconnected',
-            cancelRun: vi.fn(),
+    it('supports company names through the analysis workflow without inventing home data', () => {
+        render(<HomePage />);
+        fireEvent.change(screen.getByLabelText('Company name or ticker'), {
+            target: { value: 'Apple Inc.' },
         });
-
-        render(<AnalysisWorkspace />);
-
-        await waitFor(() => {
-            expect(screen.getByTestId('agent-detail').textContent).toBe('technical_analysis');
-        });
+        fireEvent.submit(screen.getByLabelText('Company name or ticker').closest('form')!);
+        expect(router.push).toHaveBeenCalledWith('/workspace?ticker=Apple%20Inc.');
+        expect(screen.getByRole('region', { name: 'Dashboard' })).toBeTruthy();
     });
 });

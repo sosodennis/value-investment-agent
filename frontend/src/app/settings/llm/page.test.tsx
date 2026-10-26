@@ -9,6 +9,7 @@ const api = vi.hoisted(() => ({
     deleteLlmProviderKey: vi.fn(),
     getLlmSettings: vi.fn(),
     listLlmProviderKeys: vi.fn(),
+    replaceLlmProviderKey: vi.fn(),
     testLlmProviderKey: vi.fn(),
     updateLlmSettings: vi.fn(),
 }));
@@ -43,6 +44,8 @@ describe('LLM settings', () => {
     afterEach(() => {
         cleanup();
         vi.restoreAllMocks();
+        vi.unstubAllGlobals();
+        Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
     });
 
     beforeEach(() => {
@@ -91,6 +94,31 @@ describe('LLM settings', () => {
         expect(screen.queryByDisplayValue('sk-or-v1-test-openrouter-secret')).toBeNull();
     });
 
+    it('keeps the model catalogue available when key loading fails and retries keys independently', async () => {
+        api.listLlmProviderKeys
+            .mockRejectedValueOnce(new Error('temporary key service failure'))
+            .mockResolvedValueOnce([existingKey]);
+        render(<LlmSettingsPage />);
+
+        await screen.findByText('Could not load provider keys.');
+        expect(screen.getByRole('combobox', { name: 'Default OpenRouter model' }).hasAttribute('disabled')).toBe(false);
+        fireEvent.click(screen.getByRole('button', { name: 'Retry keys' }));
+        await screen.findByText(existingKey.label);
+        expect(api.listLlmProviderKeys).toHaveBeenCalledTimes(2);
+    });
+
+    it('shows an explicit empty state when the provider catalog has no models', async () => {
+        api.getLlmSettings.mockResolvedValue({
+            selected_model: 'openrouter/free',
+            default_model: 'openrouter/free',
+            models: [],
+        });
+        render(<LlmSettingsPage />);
+
+        await screen.findByText('No free models available');
+        expect(screen.getByRole('combobox', { name: 'Default OpenRouter model' }).hasAttribute('disabled')).toBe(true);
+    });
+
     it('tests a configured key and reports the result', async () => {
         api.listLlmProviderKeys.mockResolvedValue([existingKey]);
         api.testLlmProviderKey.mockResolvedValue({
@@ -118,25 +146,62 @@ describe('LLM settings', () => {
         render(<LlmSettingsPage />);
 
         await screen.findByText('Cooling down');
-        screen.getByText(/2 failures since last success/);
+        screen.getByText(/2 failures/);
         screen.getByText('The provider rate limited this key.');
     });
 
-    it('deletes a configured key after confirmation', async () => {
+    it('deletes a configured key only after explicit dialog confirmation', async () => {
         api.listLlmProviderKeys.mockResolvedValue([existingKey]);
         api.deleteLlmProviderKey.mockResolvedValue(undefined);
-        const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
         render(<LlmSettingsPage />);
         await screen.findByText(existingKey.label);
         fireEvent.click(screen.getByRole('button', { name: 'Delete Primary key' }));
 
+        expect(api.deleteLlmProviderKey).not.toHaveBeenCalled();
+        expect(screen.getByRole('alertdialog').textContent).toContain('Delete Primary key?');
+        fireEvent.click(screen.getByRole('button', { name: 'Delete key' }));
+
         await screen.findByText('Primary key was deleted.');
         expect(api.deleteLlmProviderKey).toHaveBeenCalledWith(existingKey.id);
-        expect(confirm).toHaveBeenCalledOnce();
         expect(screen.queryByText(existingKey.label)).toBeNull();
     });
 
+    it('tests and replaces a configured key in place', async () => {
+        api.listLlmProviderKeys.mockResolvedValue([existingKey]);
+        api.replaceLlmProviderKey.mockResolvedValue({
+            ...existingKey,
+            suffix: '9876',
+            status: 'healthy',
+        });
+        render(<LlmSettingsPage />);
+        await screen.findByText(existingKey.label);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Replace' }));
+        expect((screen.getByLabelText('Label') as HTMLInputElement).value).toBe(existingKey.label);
+        fireEvent.change(screen.getByLabelText('OpenRouter API key'), {
+            target: { value: 'sk-or-v1-replacement-secret' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Test and replace key' }));
+
+        await screen.findByText(/passed its test and replaced Primary key/);
+        expect(api.replaceLlmProviderKey).toHaveBeenCalledWith(existingKey.id, {
+            label: existingKey.label,
+            api_key: 'sk-or-v1-replacement-secret',
+        });
+        expect(screen.getByText('sk-or-••••9876')).toBeTruthy();
+        expect(screen.queryByDisplayValue('sk-or-v1-replacement-secret')).toBeNull();
+    });
+
     it('updates the global model policy from the free model picker', async () => {
+        vi.stubGlobal('ResizeObserver', class {
+            observe() {}
+            unobserve() {}
+            disconnect() {}
+        });
+        Object.defineProperty(Element.prototype, 'scrollIntoView', {
+            configurable: true,
+            value: vi.fn(),
+        });
         api.getLlmSettings.mockResolvedValue({
             selected_model: 'openrouter/free',
             default_model: 'openrouter/free',
@@ -175,7 +240,7 @@ describe('LLM settings', () => {
         });
 
         render(<LlmSettingsPage />);
-        const picker = await screen.findByRole('button', { name: 'Default OpenRouter model' });
+        const picker = await screen.findByRole('combobox', { name: 'Default OpenRouter model' });
         fireEvent.click(picker);
         fireEvent.click(await screen.findByRole('option', { name: /Example Free Model/ }));
 

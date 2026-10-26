@@ -1,9 +1,11 @@
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono, Manrope, Inter } from 'next/font/google';
 import './globals.css';
-import { AppHeader } from '@/components/global-nav/AppHeader';
 import { AuthProvider } from '@/components/auth/AuthProvider';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
+import { ThemeProvider } from '@/components/theme-provider';
+import { AppShell } from '@/components/shell/app-shell';
+import { TooltipProvider } from '@/components/ui/tooltip';
 
 const geistSans = Geist({
     variable: '--font-geist-sans',
@@ -38,13 +40,18 @@ export default function RootLayout({
     children: React.ReactNode;
 }>) {
     return (
-        <html lang="en">
+        <html lang="en" suppressHydrationWarning>
             <body
                 className={`${geistSans.variable} ${geistMono.variable} ${manrope.variable} ${inter.variable} antialiased`}
             >
                 <AuthProvider>
-                    <AppHeader />
-                    <ProtectedRoute>{children}</ProtectedRoute>
+                    <ThemeProvider>
+                        <TooltipProvider>
+                            <ProtectedRoute>
+                                <AppShell>{children}</AppShell>
+                            </ProtectedRoute>
+                        </TooltipProvider>
+                    </ThemeProvider>
                 </AuthProvider>
             </body>
         </html>
