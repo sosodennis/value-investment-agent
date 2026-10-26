@@ -61,6 +61,33 @@ describe('useAgent workflow runtime', () => {
         await waitFor(() => expect(result.current.error).toMatch(/activity identity mismatch/));
     });
 
+    it('projects completed output references with the owning run scope', async () => {
+        fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(snapshot({
+            run_status: 'completed',
+            active_activities: [],
+            completed_outputs: [{
+                identity: { thread_id: 'thread_1', run_id: 'run_1', activity_id: 'fundamental' },
+                agent_id: 'fundamental_analysis',
+                output_kind: 'fundamental_analysis.output',
+                output_version: 'v1',
+                summary: 'AAPL report ready',
+                preview: { ticker: 'AAPL' },
+                artifact_id: 'artifact-1',
+                artifact_type: 'financial_reports',
+            }],
+        })), { status: 200 }));
+
+        const { result } = renderHook(() => useAgent());
+        await act(async () => result.current.loadHistory('thread_1', 'run_1'));
+
+        await waitFor(() => expect(result.current.agentOutputs.fundamental_analysis?.summary).toBe('AAPL report ready'));
+        expect(result.current.agentOutputs.fundamental_analysis?.reference).toEqual({
+            artifact_id: 'artifact-1',
+            download_url: 'http://localhost:8000/api/v1/artifacts/artifact-1?run_id=run_1',
+            type: 'financial_reports',
+        });
+    });
+
     it('hydrates the run returned by start before subscribing', async () => {
         fetchMock
             .mockImplementationOnce((input: string) => {

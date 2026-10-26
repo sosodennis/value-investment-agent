@@ -16,6 +16,7 @@ from src.analysis_runtime.domain.contracts import (
     RunStatus,
     RunStatusRecord,
     TickerSelectionResponse,
+    WorkflowAgentOutput,
     WorkflowEvent,
     WorkflowSnapshot,
 )
@@ -29,7 +30,9 @@ class GraphRunner(Protocol):
         run_id: str,
         input_data: Mapping[str, object],
         principal_id: str,
-    ) -> AsyncIterator[Activity | InteractionRequested | Mapping[str, object]]: ...
+    ) -> AsyncIterator[
+        Activity | InteractionRequested | WorkflowAgentOutput | Mapping[str, object]
+    ]: ...
 
 
 class OwnerPort(Protocol):

@@ -6,6 +6,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+MAX_AGENT_OUTPUT_PREVIEW_BYTES = 16 * 1024
+
 ActivityStatus = Literal[
     "queued",
     "running",
@@ -153,6 +155,7 @@ class WorkflowAgentOutput(BaseModel):
     summary: str = Field(min_length=1, max_length=2000)
     preview: dict[str, object] | None = None
     artifact_id: str | None = Field(default=None, min_length=1, max_length=200)
+    artifact_type: str | None = Field(default=None, min_length=1, max_length=120)
 
     @model_validator(mode="after")
     def bound_preview(self) -> WorkflowAgentOutput:

@@ -32,7 +32,7 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
         icon: React.ReactNode;
     };
     const { data: artifactData, isLoading: isArtifactLoading, error: artifactError } = useArtifact(
-        reference?.artifact_id,
+        reference,
         parseDebateArtifact,
         'debate_output.artifact',
         'debate_final_report'

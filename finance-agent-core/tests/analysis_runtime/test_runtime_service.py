@@ -14,6 +14,9 @@ from src.analysis_runtime.domain.contracts import (
     TickerCandidate,
     TickerSelectionRequest,
     TickerSelectionResponse,
+    WorkflowActivityIdentity,
+    WorkflowAgentOutput,
+    WorkflowAgentOutputEvent,
 )
 from src.analysis_runtime.domain.errors import (
     ActivityPersistenceError,
@@ -72,6 +75,24 @@ class Runner:
             status="running",
             label="Resolve intent",
             attempt=1,
+        )
+
+
+class OutputRunner:
+    async def run(self, **kwargs):
+        yield WorkflowAgentOutput(
+            identity=WorkflowActivityIdentity(
+                thread_id=kwargs["thread_id"],
+                run_id=kwargs["run_id"],
+                activity_id="intent.extraction",
+            ),
+            agent_id="intent_extraction",
+            output_kind="intent_extraction.output",
+            output_version="v1",
+            summary="Resolved AAPL",
+            preview={"ticker": "AAPL"},
+            artifact_id="artifact-1",
+            artifact_type="intent_report",
         )
 
 
@@ -173,6 +194,41 @@ async def test_runtime_persists_before_publish_and_replays() -> None:
         principal_id="user", thread_id="thread", run_id=run_id
     )
     assert snapshot.run_status == "completed"
+
+
+@pytest.mark.asyncio
+async def test_runtime_persists_agent_output_for_replay_and_snapshot() -> None:
+    repository = InMemoryActivityRepository()
+    service = AnalysisRuntimeService(
+        repository=repository,
+        owner=Owner(),
+        runner=OutputRunner(),
+        hub=BoundedNotificationHub(queue_size=4),
+    )
+
+    run_id = await service.start(
+        principal_id="user",
+        thread_id="thread",
+        input_data={"message": "AAPL"},
+    )
+    await service._tasks["thread"]
+
+    replay = await service.replay(principal_id="user", thread_id="thread", after_seq=0)
+    output_events = [
+        event for event in replay.events if isinstance(event, WorkflowAgentOutputEvent)
+    ]
+    assert len(output_events) == 1
+    assert output_events[0].run_id == run_id
+    assert output_events[0].payload.artifact_id == "artifact-1"
+    assert output_events[0].payload.identity.run_id == run_id
+
+    snapshot = await service.snapshot(
+        principal_id="user", thread_id="thread", run_id=run_id
+    )
+    assert snapshot.run_status == "completed"
+    assert len(snapshot.completed_outputs) == 1
+    assert snapshot.completed_outputs[0].summary == "Resolved AAPL"
+    assert snapshot.completed_outputs[0].artifact_type == "intent_report"
 
 
 @pytest.mark.asyncio

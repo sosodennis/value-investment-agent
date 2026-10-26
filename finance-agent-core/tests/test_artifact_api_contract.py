@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -33,12 +32,20 @@ def authenticated_api(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
         "src.interface.artifacts.routes.get_ownership_service", lambda: ownership
     )
     monkeypatch.setattr(
-        "src.interface.artifacts.routes.artifact_manager.get_artifact",
-        AsyncMock(return_value=SimpleNamespace(thread_id="test-thread")),
+        "src.interface.artifacts.routes.artifact_manager.get_artifact_thread_id",
+        AsyncMock(return_value="test-thread"),
     )
     monkeypatch.setattr(
         "src.interface.artifacts.routes.artifact_manager.get_artifact_envelope",
         AsyncMock(),
+    )
+    monkeypatch.setattr(
+        "src.interface.artifacts.routes.artifact_manager.is_agent_output_reference",
+        AsyncMock(return_value=False),
+    )
+    monkeypatch.setattr(
+        "src.interface.artifacts.routes.artifact_manager.is_agent_output_for_run",
+        AsyncMock(return_value=True),
     )
     yield ownership
     app.dependency_overrides.clear()
@@ -246,7 +253,7 @@ async def test_get_artifact_returns_404_when_missing(
 ) -> None:
     with (
         patch(
-            "src.interface.artifacts.routes.artifact_manager.get_artifact",
+            "src.interface.artifacts.routes.artifact_manager.get_artifact_thread_id",
             new=AsyncMock(return_value=None),
         ),
         patch(

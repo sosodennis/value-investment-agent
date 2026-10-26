@@ -42,7 +42,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
     status
 }) => {
     const { data: artifactData, isLoading: isArtifactLoading, error: artifactError } = useArtifact(
-        reference?.artifact_id,
+        reference,
         parseFundamentalArtifact,
         'fundamental_output.artifact',
         'financial_reports'

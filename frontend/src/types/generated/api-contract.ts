@@ -3050,6 +3050,8 @@ export interface components {
             agent_id: string;
             /** Artifact Id */
             artifact_id?: string | null;
+            /** Artifact Type */
+            artifact_type?: string | null;
             identity: components["schemas"]["WorkflowActivityIdentity"];
             /** Output Kind */
             output_kind: string;
@@ -3269,7 +3271,9 @@ export type $defs = Record<string, never>;
 export interface operations {
     get_artifact_api_v1_artifacts__artifact_id__get: {
         parameters: {
-            query?: never;
+            query?: {
+                run_id?: string | null;
+            };
             header?: never;
             path: {
                 artifact_id: string;

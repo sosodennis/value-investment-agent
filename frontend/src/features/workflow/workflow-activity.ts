@@ -342,6 +342,7 @@ function parseWorkflowAgentOutput(value: unknown, context: string): WorkflowAgen
     const input = record(value, context);
     onlyKeys(input, [
         'identity', 'agent_id', 'output_kind', 'output_version', 'summary', 'preview', 'artifact_id',
+        'artifact_type',
     ], context);
     const output: WorkflowAgentOutput = {
         identity: parseOutputIdentity(input.identity, `${context}.identity`),
@@ -366,6 +367,11 @@ function parseWorkflowAgentOutput(value: unknown, context: string): WorkflowAgen
         output.artifact_id = input.artifact_id === null
             ? null
             : string(input.artifact_id, `${context}.artifact_id`);
+    }
+    if (input.artifact_type !== undefined) {
+        output.artifact_type = input.artifact_type === null
+            ? null
+            : string(input.artifact_type, `${context}.artifact_type`);
     }
     return output;
 }

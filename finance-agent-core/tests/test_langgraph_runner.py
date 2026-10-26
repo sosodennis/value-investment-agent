@@ -6,8 +6,15 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Interrupt, interrupt
 
-from src.analysis_runtime.domain.contracts import Activity, InteractionRequested
-from src.analysis_runtime.domain.errors import InvalidRunnerInterruptError
+from src.analysis_runtime.domain.contracts import (
+    Activity,
+    InteractionRequested,
+    WorkflowAgentOutput,
+)
+from src.analysis_runtime.domain.errors import (
+    InvalidRunnerInterruptError,
+    InvalidRunnerOutputError,
+)
 from src.analysis_runtime.infrastructure.langgraph_runner import LangGraphRunner
 from src.llm_provider.entrypoint import get_provider_principal
 from src.shared.internal_services import get_request_principal
@@ -41,7 +48,9 @@ def _metadata(**values: object) -> dict[str, object]:
     }
 
 
-async def _run(events: list[Mapping[str, object]]) -> list[Activity]:
+async def _run(
+    events: list[Mapping[str, object]],
+) -> list[Activity | InteractionRequested | WorkflowAgentOutput]:
     runner = LangGraphRunner(_EventGraph(events))
     return [
         activity
@@ -225,6 +234,87 @@ async def test_runner_emits_tool_and_model_lifecycle_events_but_skips_stream_chu
     assert activities[1].parent_activity_id == "langgraph:node-1"
     assert activities[3].parent_activity_id == "langgraph:model-1"
     assert all(activity.progress is None for activity in activities)
+
+
+@pytest.mark.asyncio
+async def test_runner_emits_compact_output_on_completed_agent_subgraph() -> None:
+    items = await _run(
+        [
+            {
+                "event": "on_chain_end",
+                "run_id": "intent-node",
+                "parent_ids": [],
+                "metadata": _metadata(
+                    agent_id="intent_extraction",
+                    agent_scope="agent",
+                    agent_node="intent_agent",
+                    langgraph_node="intent_agent",
+                ),
+                "data": {
+                    "output": {
+                        "intent_extraction": {
+                            "artifact": {
+                                "kind": "intent_extraction.output",
+                                "version": "v1",
+                                "summary": "Resolved AAPL",
+                                "preview": {"ticker": "AAPL"},
+                                "reference": {
+                                    "artifact_id": "artifact-1",
+                                    "type": "intent_report",
+                                },
+                            }
+                        }
+                    }
+                },
+            }
+        ]
+    )
+
+    assert len(items) == 2
+    activity, output = items
+    assert isinstance(activity, Activity)
+    assert activity.status == "completed"
+    assert isinstance(output, WorkflowAgentOutput)
+    assert output.identity.thread_id == "thread-1"
+    assert output.identity.run_id == "runtime-run-1"
+    assert output.identity.activity_id == activity.activity_id
+    assert output.agent_id == "intent_extraction"
+    assert output.output_kind == "intent_extraction.output"
+    assert output.preview == {"ticker": "AAPL"}
+    assert output.artifact_id == "artifact-1"
+    assert output.artifact_type == "intent_report"
+
+
+@pytest.mark.asyncio
+async def test_runner_rejects_oversized_preview_without_artifact_reference() -> None:
+    with pytest.raises(InvalidRunnerOutputError, match="artifact reference"):
+        await _run(
+            [
+                {
+                    "event": "on_chain_end",
+                    "run_id": "news-node",
+                    "parent_ids": [],
+                    "metadata": _metadata(
+                        agent_id="financial_news_research",
+                        agent_scope="agent",
+                        agent_node="news_agent",
+                        langgraph_node="news_agent",
+                    ),
+                    "data": {
+                        "output": {
+                            "financial_news_research": {
+                                "artifact": {
+                                    "kind": "financial_news_research.output",
+                                    "version": "v1",
+                                    "summary": "News report",
+                                    "preview": {"large": "x" * (17 * 1024)},
+                                }
+                            }
+                        }
+                    },
+                }
+            ]
+        )
 
 
 @pytest.mark.asyncio

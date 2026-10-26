@@ -18,6 +18,7 @@ from .contracts import (
 from .errors import (
     ActivityPersistenceError,
     InvalidCursorError,
+    InvalidRunnerOutputError,
     ReplayGapError,
     RunAlreadyActiveError,
     RunNotFoundError,
@@ -35,6 +36,7 @@ __all__ = [
     "InteractionIdentity",
     "InteractionRequested",
     "InvalidCursorError",
+    "InvalidRunnerOutputError",
     "ReplayGapError",
     "ReplayPage",
     "RunAlreadyActiveError",

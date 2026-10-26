@@ -12,7 +12,14 @@ vi.mock('../../../../hooks/useArtifact', () => ({
 
 describe('TechnicalAnalysisOutput', () => {
     beforeEach(() => {
-        mockUseArtifact.mockImplementation((artifactId: string | null | undefined) => {
+        mockUseArtifact.mockImplementation((target: unknown) => {
+            const artifactId = typeof target === 'string'
+                ? target
+                : target && typeof target === 'object' && 'download_url' in target
+                    ? target.download_url === '/api/v1/artifacts/report-1'
+                        ? 'report-1'
+                        : null
+                    : null;
             if (artifactId === 'report-1') {
                 return {
                     data: {

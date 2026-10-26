@@ -1,5 +1,7 @@
 import uuid
 
+from sqlalchemy import select
+
 from src.interface.artifacts.artifact_envelope import (
     ArtifactEnvelope,
     ArtifactPayload,
@@ -9,7 +11,7 @@ from src.interface.artifacts.artifact_envelope import (
 )
 
 from ..infrastructure.database import AsyncSessionLocal
-from ..infrastructure.models import Artifact
+from ..infrastructure.models import Artifact, WorkflowActivityEvent
 
 
 class ArtifactManager:
@@ -88,6 +90,44 @@ class ArtifactManager:
         async with AsyncSessionLocal() as session:
             artifact = await session.get(Artifact, artifact_id)
             return artifact
+
+    @staticmethod
+    async def get_artifact_thread_id(artifact_id: str) -> str | None:
+        async with AsyncSessionLocal() as session:
+            return await session.scalar(
+                select(Artifact.thread_id).where(Artifact.id == artifact_id)
+            )
+
+    @staticmethod
+    async def is_agent_output_for_run(
+        *, artifact_id: str, thread_id: str, run_id: str
+    ) -> bool:
+        async with AsyncSessionLocal() as session:
+            event_id = await session.scalar(
+                select(WorkflowActivityEvent.event_id)
+                .where(WorkflowActivityEvent.thread_id == thread_id)
+                .where(WorkflowActivityEvent.run_id == run_id)
+                .where(WorkflowActivityEvent.event_name == "workflow.agent_output")
+                .where(
+                    WorkflowActivityEvent.payload["artifact_id"].as_string()
+                    == artifact_id
+                )
+            )
+        return event_id is not None
+
+    @staticmethod
+    async def is_agent_output_reference(*, artifact_id: str, thread_id: str) -> bool:
+        async with AsyncSessionLocal() as session:
+            event_id = await session.scalar(
+                select(WorkflowActivityEvent.event_id)
+                .where(WorkflowActivityEvent.thread_id == thread_id)
+                .where(WorkflowActivityEvent.event_name == "workflow.agent_output")
+                .where(
+                    WorkflowActivityEvent.payload["artifact_id"].as_string()
+                    == artifact_id
+                )
+            )
+        return event_id is not None
 
     @staticmethod
     async def get_artifact_envelope(artifact_id: str) -> ArtifactEnvelope | None:

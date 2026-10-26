@@ -9289,6 +9289,19 @@
             ],
             "title": "Artifact Id"
           },
+          "artifact_type": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Type"
+          },
           "identity": {
             "$ref": "#/components/schemas/WorkflowActivityIdentity"
           },
@@ -9834,6 +9847,23 @@
             "schema": {
               "title": "Artifact Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Run Id"
             }
           }
         ],

@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import useSWR from 'swr';
 import { clientLogger } from '@/lib/logger';
 import { buildArtifactUrl } from '@/features/artifacts/api';
+import type { ArtifactReference } from '@/types/agents';
 import { parseApiErrorMessage } from '@/types/protocol';
 import {
     ArtifactKind,
@@ -9,6 +10,7 @@ import {
 } from '@/types/agents/artifact-envelope-parser';
 
 type ArtifactParser<T> = (value: unknown, context: string) => T;
+type ArtifactTarget = string | ArtifactReference | null | undefined;
 type ArtifactCacheOptions = {
     dedupingInterval?: number;
 };
@@ -67,19 +69,22 @@ const fetchArtifact = async <T>(
 };
 
 export function useArtifact<T>(
-    artifactId: string | null | undefined,
+    target: ArtifactTarget,
     parser: ArtifactParser<T>,
     context: string,
     expectedKind?: ArtifactKind,
     cacheOptions?: ArtifactCacheOptions
 ) {
+    const url = typeof target === 'string'
+        ? buildArtifactUrl(target)
+        : target?.download_url;
     const fetcher = useCallback(
         (url: string) => fetchArtifact(url, parser, context, expectedKind),
         [parser, context, expectedKind]
     );
 
     const { data, error, isLoading } = useSWR<T>(
-        artifactId ? buildArtifactUrl(artifactId) : null,
+        url ?? null,
         fetcher,
         {
             revalidateOnFocus: false,

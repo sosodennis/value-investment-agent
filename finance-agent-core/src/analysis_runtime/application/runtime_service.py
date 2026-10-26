@@ -21,6 +21,8 @@ from src.analysis_runtime.domain.contracts import (
     ReplayPage,
     RunStatus,
     TickerSelectionResponse,
+    WorkflowAgentOutput,
+    WorkflowAgentOutputEvent,
     WorkflowEvent,
     WorkflowFailure,
     WorkflowSnapshot,
@@ -331,6 +333,21 @@ class AnalysisRuntimeService:
                         for event in events:
                             await self.hub.publish(event)
                     break
+                if isinstance(item, WorkflowAgentOutput):
+                    current = await self.repository.replay(
+                        thread_id=thread_id, after_seq=0, limit=1_000_000
+                    )
+                    await self._persist_and_publish(
+                        WorkflowAgentOutputEvent(
+                            event_id=str(uuid.uuid4()),
+                            seq_id=current.cursor + 1,
+                            thread_id=thread_id,
+                            run_id=run_id,
+                            occurred_at=datetime.now(timezone.utc),
+                            payload=item,
+                        )
+                    )
+                    continue
                 activity = (
                     item
                     if isinstance(item, Activity)

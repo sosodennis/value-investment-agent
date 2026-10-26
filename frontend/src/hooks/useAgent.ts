@@ -1,11 +1,22 @@
 import { useCallback, useRef, useState } from 'react';
 import { clientLogger } from '@/lib/logger';
 import type { AgentStatus, StandardAgentOutput } from '@/types/agents';
+import { buildArtifactUrl } from '@/features/artifacts/api';
 import { applyWorkflowEvent, boundedReconnectDelay, cancelWorkflowRun, consumeWorkflowEvents, createWorkflowActivityState, getActivitySnapshot, resumeWorkflowRun, startWorkflowRun, type TickerSelectionResponse, type WorkflowActivitySnapshot, type WorkflowInteraction } from '@/features/workflow';
 import { useAgentReducer } from './useAgentReducer';
 
 const makeThreadId = () => `thread_${Date.now()}`;
 const toError = (value: unknown, fallback: string) => value instanceof Error ? value.message : fallback;
+const STANDARD_OUTPUT_KINDS: readonly StandardAgentOutput['kind'][] = [
+    'intent_extraction.output',
+    'fundamental_analysis.output',
+    'financial_news_research.output',
+    'technical_analysis.output',
+    'debate.output',
+];
+
+const isStandardOutputKind = (value: string): value is StandardAgentOutput['kind'] =>
+    STANDARD_OUTPUT_KINDS.some((kind) => kind === value);
 
 export function useAgent(assistantId = 'agent') {
     void assistantId;
@@ -134,6 +145,21 @@ export function useAgent(assistantId = 'agent') {
         agentStatuses[id] = activity.status === 'waiting' ? 'attention' : activity.status === 'running' ? 'running' : activity.status === 'completed' ? 'done' : activity.status === 'failed' || activity.status === 'cancelled' ? 'error' : 'idle';
     }
     const agentOutputs: Record<string, StandardAgentOutput | null> = {};
+    for (const output of state.workflow?.completedOutputs.values() ?? []) {
+        if (output.output_version !== 'v1') continue;
+        if (!isStandardOutputKind(output.output_kind)) continue;
+        agentOutputs[output.agent_id] = {
+            kind: output.output_kind,
+            version: 'v1',
+            summary: output.summary,
+            preview: output.preview,
+            reference: output.artifact_id ? {
+                artifact_id: output.artifact_id,
+                download_url: buildArtifactUrl(output.artifact_id, output.identity.run_id),
+                type: output.artifact_type ?? output.output_kind,
+            } : null,
+        };
+    }
     return {
         messages: state.messages,
         sendMessage,

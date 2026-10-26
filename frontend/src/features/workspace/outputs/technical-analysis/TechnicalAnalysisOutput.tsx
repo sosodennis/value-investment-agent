@@ -575,7 +575,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         isLoading: isReportLoading,
         error: reportError,
     } = useArtifact(
-        reference?.artifact_id,
+        reference,
         parseTechnicalArtifact,
         'technical_output.artifact',
         'ta_full_report'
