@@ -5,15 +5,27 @@ import os
 import uuid
 from datetime import datetime, timedelta, timezone
 
+import httpx
 import pytest
+from fastapi import FastAPI
 from sqlalchemy import delete, func, select
 
-from src.analysis_runtime.domain.contracts import Activity, ActivityEvent
+from src.analysis_runtime.application.runtime_service import AnalysisRuntimeService
+from src.analysis_runtime.domain.contracts import (
+    Activity,
+    ActivityEvent,
+    WorkflowActivityIdentity,
+    WorkflowAgentOutput,
+    WorkflowAgentOutputEvent,
+)
 from src.analysis_runtime.infrastructure.sql_repository import (
     SqlAlchemyActivityRepository,
 )
+from src.analysis_runtime.interface.routes import router
+from src.auth.entrypoint import require_current_user
 from src.auth.infrastructure.models import OwnedResourceModel, UserModel
-from src.infrastructure.database import AsyncSessionLocal, init_db
+from src.auth.interface.contracts import Principal
+from src.infrastructure.database import AsyncSessionLocal, engine, init_db
 from src.infrastructure.migrations import (
     HISTORY_MIGRATION_ID,
     assert_migrations_complete,
@@ -32,6 +44,39 @@ pytestmark = pytest.mark.skipif(
     os.getenv("ANALYSIS_RUNTIME_POSTGRES_TEST") != "1",
     reason="requires the isolated PostgreSQL integration project",
 )
+
+
+def _output_event(
+    *,
+    thread_id: str,
+    run_id: str,
+    seq_id: int,
+    occurred_at: datetime,
+    artifact_id: str,
+    symbol: str,
+    summary: str,
+) -> WorkflowAgentOutputEvent:
+    return WorkflowAgentOutputEvent(
+        event_id=str(uuid.uuid4()),
+        seq_id=seq_id,
+        thread_id=thread_id,
+        run_id=run_id,
+        occurred_at=occurred_at,
+        payload=WorkflowAgentOutput(
+            identity=WorkflowActivityIdentity(
+                thread_id=thread_id,
+                run_id=run_id,
+                activity_id="fundamental_analysis",
+            ),
+            agent_id="fundamental_analysis",
+            output_kind="financial_report",
+            output_version="v1",
+            summary=summary,
+            preview={"ticker": symbol},
+            artifact_id=artifact_id,
+            artifact_type="financial_reports",
+        ),
+    )
 
 
 @pytest.mark.asyncio
@@ -275,6 +320,192 @@ async def test_legacy_history_backfill_is_truthful_and_exact_runs_survive_restar
         )
         assert persisted_old_run is not None
         assert persisted_old_run.status == "completed"
+    finally:
+        async with AsyncSessionLocal() as session:
+            await session.execute(
+                delete(WorkflowRunHistory).where(
+                    WorkflowRunHistory.thread_id == thread_id
+                )
+            )
+            await session.execute(
+                delete(WorkflowActivityEvent).where(
+                    WorkflowActivityEvent.thread_id == thread_id
+                )
+            )
+            await session.execute(
+                delete(WorkflowActivityCursor).where(
+                    WorkflowActivityCursor.thread_id == thread_id
+                )
+            )
+            await session.execute(
+                delete(WorkflowRun).where(WorkflowRun.thread_id == thread_id)
+            )
+            await session.execute(
+                delete(OwnedResourceModel).where(
+                    OwnedResourceModel.resource_id == thread_id
+                )
+            )
+            await session.execute(delete(UserModel).where(UserModel.id == owner_id))
+            await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_completed_output_references_survive_later_run_and_restart() -> None:
+    await init_db()
+
+    thread_id = f"output-history-{uuid.uuid4()}"
+    owner_id = str(uuid.uuid4())
+    first_run_id = f"first-{uuid.uuid4()}"
+    later_run_id = f"later-{uuid.uuid4()}"
+    started_at = datetime.now(timezone.utc).replace(microsecond=0)
+
+    async with AsyncSessionLocal() as session:
+        session.add(
+            UserModel(
+                id=owner_id,
+                email=f"{owner_id}@example.test",
+                password_hash="test-only",
+            )
+        )
+        await session.flush()
+        session.add(
+            OwnedResourceModel(
+                resource_type="thread", resource_id=thread_id, user_id=owner_id
+            )
+        )
+        await session.commit()
+
+    repository = SqlAlchemyActivityRepository()
+    try:
+        await repository.set_run(
+            thread_id=thread_id,
+            run_id=first_run_id,
+            status="running",
+            now=started_at,
+            principal_id=owner_id,
+            input_data={"message": "AAPL"},
+        )
+        await repository.append_atomic(
+            _output_event(
+                seq_id=1,
+                thread_id=thread_id,
+                run_id=first_run_id,
+                occurred_at=started_at + timedelta(seconds=1),
+                artifact_id="artifact-first-run",
+                symbol="AAPL",
+                summary="AAPL analysis completed",
+            )
+        )
+        await repository.append_atomic(
+            ActivityEvent(
+                event_id=str(uuid.uuid4()),
+                seq_id=2,
+                thread_id=thread_id,
+                run_id=first_run_id,
+                occurred_at=started_at + timedelta(seconds=2),
+                payload=Activity(
+                    activity_id="workflow",
+                    thread_id=thread_id,
+                    run_id=first_run_id,
+                    scope_path=("workflow",),
+                    kind="phase",
+                    status="completed",
+                    label="Workflow completed",
+                    attempt=1,
+                ),
+            ),
+            run_status="completed",
+        )
+
+        await repository.set_run(
+            thread_id=thread_id,
+            run_id=later_run_id,
+            status="running",
+            now=started_at + timedelta(seconds=3),
+            principal_id=owner_id,
+            input_data={"message": "MSFT"},
+        )
+        await repository.append_atomic(
+            _output_event(
+                seq_id=3,
+                thread_id=thread_id,
+                run_id=later_run_id,
+                occurred_at=started_at + timedelta(seconds=4),
+                artifact_id="artifact-later-run",
+                symbol="MSFT",
+                summary="MSFT analysis is running",
+            )
+        )
+
+        await engine.dispose()
+        await init_db()
+
+        owned_thread_id = thread_id
+
+        class Owner:
+            async def owns(self, *, principal_id: str, thread_id: str) -> bool:
+                return principal_id == owner_id and thread_id == owned_thread_id
+
+            async def claim(self, *, principal_id: str, thread_id: str) -> bool:
+                return await self.owns(principal_id=principal_id, thread_id=thread_id)
+
+        service = AnalysisRuntimeService(
+            repository=SqlAlchemyActivityRepository(), owner=Owner(), runner=object()
+        )
+        app = FastAPI()
+        app.include_router(router)
+        active_principal_id = owner_id
+
+        def current_principal() -> Principal:
+            return Principal(
+                user_id=active_principal_id,
+                subject=active_principal_id,
+                email=f"{active_principal_id}@example.test",
+            )
+
+        app.dependency_overrides[require_current_user] = current_principal
+        app.state.analysis_runtime = service
+        history = await service.list_run_history(principal_id=owner_id, limit=10)
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+        ) as client:
+            first_response = await client.get(
+                f"/api/v1/threads/{thread_id}/activities",
+                params={"run_id": first_run_id},
+            )
+            later_response = await client.get(
+                f"/api/v1/threads/{thread_id}/activities",
+                params={"run_id": later_run_id},
+            )
+            active_principal_id = "another-user"
+            denied_response = await client.get(
+                f"/api/v1/threads/{thread_id}/activities",
+                params={"run_id": first_run_id},
+            )
+
+        assert first_response.status_code == 200
+        first_snapshot = first_response.json()
+        assert first_snapshot["run_status"] == "completed"
+        assert [
+            (
+                output["identity"]["run_id"],
+                output["artifact_id"],
+                output["artifact_type"],
+            )
+            for output in first_snapshot["completed_outputs"]
+        ] == [(first_run_id, "artifact-first-run", "financial_reports")]
+        assert later_response.status_code == 200
+        later_snapshot = later_response.json()
+        assert [
+            (output["identity"]["run_id"], output["artifact_id"])
+            for output in later_snapshot["completed_outputs"]
+        ] == [(later_run_id, "artifact-later-run")]
+        assert denied_response.status_code == 404
+        assert {run.run_id for run in history.runs} == {first_run_id, later_run_id}
+        assert {run.run_id: run.input_data for run in history.runs} == {
+            first_run_id: {"message": "AAPL"},
+            later_run_id: {"message": "MSFT"},
+        }
     finally:
         async with AsyncSessionLocal() as session:
             await session.execute(
