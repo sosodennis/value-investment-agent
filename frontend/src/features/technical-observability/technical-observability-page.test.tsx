@@ -134,7 +134,7 @@ describe('TechnicalObservabilityPage', () => {
         mocks.query.mockReturnValue(defaultQuery());
         const retryDetail = vi.fn();
         mocks.detail.mockImplementation((eventId: string | null) => ({
-            detail: eventId ? { ...row, feature_contract_version: 'contract-v1', full_report_artifact_id: 'artifact-1', context_payload: { close: 200 }, source_artifact_refs: { feature_pack: 'source-2' } } : null,
+            detail: eventId ? { ...row, feature_contract_version: 'contract-v1', full_report_artifact_id: 'artifact /?1', context_payload: { close: 200 }, source_artifact_refs: { feature_pack: 'source-2' } } : null,
             isLoading: false, isValidating: false, error: null, retry: retryDetail,
         }));
         render(<TechnicalObservabilityPage />);
@@ -145,8 +145,8 @@ describe('TechnicalObservabilityPage', () => {
         screen.getByRole('columnheader', { name: 'Confidence' });
         screen.getByRole('columnheader', { name: 'Forward return' });
         fireEvent.click(screen.getByRole('button', { name: 'Open event evt-1' }));
-        const reportLink = await screen.findByRole('link', { name: /Full report: artifact-1/ });
-        expect(reportLink.getAttribute('href')).toBe('http://localhost:8000/api/v1/artifacts/artifact-1');
+        const reportLink = await screen.findByRole('link', { name: /Full report:/ });
+        expect(reportLink.getAttribute('href')).toBe('http://localhost:8000/api/v1/artifacts/artifact%20%2F%3F1');
         const sourceLink = screen.getByRole('link', { name: /feature pack: source-2/ });
         expect(sourceLink.getAttribute('href')).toBe('http://localhost:8000/api/v1/artifacts/source-2');
         expect(screen.getAllByText('80.00%').length).toBeGreaterThanOrEqual(1);

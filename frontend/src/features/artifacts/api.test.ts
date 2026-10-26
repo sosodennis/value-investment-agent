@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+    buildArtifactReferenceUrl,
     buildArtifactUrl,
-    resolveArtifactReferenceUrl,
 } from './api';
 
 describe('artifact API URLs', () => {
@@ -13,7 +13,18 @@ describe('artifact API URLs', () => {
 
     it('keeps absolute HTTP references intact', () => {
         expect(
-            resolveArtifactReferenceUrl('https://reports.example/report-1')
+            buildArtifactReferenceUrl('https://reports.example/report-1')
         ).toBe('https://reports.example/report-1');
+        expect(
+            buildArtifactReferenceUrl({
+                download_url: 'https://reports.example/report-1',
+            })
+        ).toBe('https://reports.example/report-1');
+    });
+
+    it('keeps relative API references intact', () => {
+        expect(
+            buildArtifactReferenceUrl('/api/v1/artifacts/report-1?run_id=run-1')
+        ).toBe('/api/v1/artifacts/report-1?run_id=run-1');
     });
 });

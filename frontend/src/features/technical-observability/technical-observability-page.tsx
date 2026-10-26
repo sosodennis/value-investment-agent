@@ -40,7 +40,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { resolveArtifactReferenceUrl } from '@/features/artifacts/api';
+import { buildArtifactReferenceUrl } from '@/features/artifacts/api';
 
 const VIEWS: { id: TechnicalObservabilityView; label: string }[] = [
     { id: 'overview', label: 'Overview' },
@@ -1147,7 +1147,7 @@ function ArtifactLink({
     label: string;
     artifactId: string;
 }) {
-    const href = resolveArtifactReferenceUrl(artifactId);
+    const href = buildArtifactReferenceUrl(artifactId);
 
     return (
         <a

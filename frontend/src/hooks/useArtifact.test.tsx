@@ -32,6 +32,7 @@ describe('useArtifact', () => {
 
         await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
         expect(fetchMock.mock.calls[0]?.[0]).toBe(reference.download_url);
+        expect(fetchMock.mock.calls[0]?.[1]).toEqual({ credentials: 'include' });
     });
 
     it('surfaces malformed artifact payloads as errors', async () => {

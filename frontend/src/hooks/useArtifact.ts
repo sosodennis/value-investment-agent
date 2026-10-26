@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import useSWR from 'swr';
 import { clientLogger } from '@/lib/logger';
-import { buildArtifactUrl } from '@/features/artifacts/api';
+import { buildArtifactReferenceUrl } from '@/features/artifacts/api';
 import type { ArtifactReference } from '@/types/agents';
 import { parseApiErrorMessage } from '@/types/protocol';
 import {
@@ -75,9 +75,7 @@ export function useArtifact<T>(
     expectedKind?: ArtifactKind,
     cacheOptions?: ArtifactCacheOptions
 ) {
-    const url = typeof target === 'string'
-        ? buildArtifactUrl(target)
-        : target?.download_url;
+    const url = target == null ? null : buildArtifactReferenceUrl(target);
     const fetcher = useCallback(
         (url: string) => fetchArtifact(url, parser, context, expectedKind),
         [parser, context, expectedKind]
