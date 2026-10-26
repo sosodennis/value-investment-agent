@@ -37,8 +37,9 @@ import {
     TechnicalIndicatorSeriesArtifact,
     TechnicalTimeseriesBundle
 } from '@/types/agents/technical';
-import { useArtifact } from '../../../../hooks/useArtifact';
+import { useArtifact, type ArtifactRetryContract } from '../../../../hooks/useArtifact';
 import { AgentLoadingState } from '../shared/AgentLoadingState';
+import { ArtifactLoadError } from '../shared/ArtifactLoadError';
 import { TechnicalAnalysisSupplementarySection } from './TechnicalAnalysisSupplementarySection';
 import { TechnicalPreview, isRecord } from '@/types/preview';
 import {
@@ -574,6 +575,9 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         data: reportData,
         isLoading: isReportLoading,
         error: reportError,
+        retry: retryReport,
+        isRetrying: isReportRetrying,
+        retryable: reportRetryable,
     } = useArtifact(
         reference,
         parseTechnicalArtifact,
@@ -586,6 +590,9 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         data: featurePackData,
         isLoading: isFeaturePackLoading,
         error: featurePackError,
+        retry: retryFeaturePack,
+        isRetrying: isFeaturePackRetrying,
+        retryable: featurePackRetryable,
     } = useArtifact<TechnicalFeaturePack>(
         showFeaturePack ? featurePackId : null,
         parseTechnicalFeaturePackArtifact,
@@ -598,6 +605,9 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         data: patternPackData,
         isLoading: isPatternPackLoading,
         error: patternPackError,
+        retry: retryPatternPack,
+        isRetrying: isPatternPackRetrying,
+        retryable: patternPackRetryable,
     } = useArtifact<TechnicalPatternPack>(
         showPatternPack ? patternPackId : null,
         parseTechnicalPatternPackArtifact,
@@ -610,6 +620,9 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         data: alertsData,
         isLoading: isAlertsLoading,
         error: alertsError,
+        retry: retryAlerts,
+        isRetrying: isAlertsRetrying,
+        retryable: alertsRetryable,
     } = useArtifact<TechnicalAlertsArtifact>(
         showAlerts ? alertsId : null,
         parseTechnicalAlertsArtifact,
@@ -622,6 +635,9 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         data: fusionReportData,
         isLoading: isFusionReportLoading,
         error: fusionReportError,
+        retry: retryFusionReport,
+        isRetrying: isFusionReportRetrying,
+        retryable: fusionReportRetryable,
     } = useArtifact<TechnicalFusionReport>(
         showFusionReport ? fusionReportId : null,
         parseTechnicalFusionReportArtifact,
@@ -635,6 +651,9 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         data: directionScorecardData,
         isLoading: isDirectionScorecardLoading,
         error: directionScorecardError,
+        retry: retryDirectionScorecard,
+        isRetrying: isDirectionScorecardRetrying,
+        retryable: directionScorecardRetryable,
     } = useArtifact<TechnicalDirectionScorecard>(
         showFusionReport ? directionScorecardId : null,
         parseTechnicalDirectionScorecardArtifact,
@@ -648,6 +667,9 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         data: verificationReportData,
         isLoading: isVerificationReportLoading,
         error: verificationReportError,
+        retry: retryVerificationReport,
+        isRetrying: isVerificationReportRetrying,
+        retryable: verificationReportRetryable,
     } = useArtifact<TechnicalVerificationReport>(
         showVerificationReport ? verificationReportId : null,
         parseTechnicalVerificationReportArtifact,
@@ -659,6 +681,9 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
     const {
         data: timeseriesBundleData,
         error: timeseriesBundleError,
+        retry: retryTimeseriesBundle,
+        isRetrying: isTimeseriesBundleRetrying,
+        retryable: timeseriesBundleRetryable,
     } = useArtifact<TechnicalTimeseriesBundle>(
         timeseriesBundleId,
         parseTechnicalTimeseriesBundleArtifact,
@@ -671,6 +696,9 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
     const {
         data: indicatorSeriesData,
         error: indicatorSeriesError,
+        retry: retryIndicatorSeries,
+        isRetrying: isIndicatorSeriesRetrying,
+        retryable: indicatorSeriesRetryable,
     } = useArtifact<TechnicalIndicatorSeriesArtifact>(
         indicatorSeriesId,
         parseTechnicalIndicatorSeriesArtifact,
@@ -1398,13 +1426,19 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
     }, [indicatorSeriesData]);
 
     const hasData = !!reportData || !!previewData;
+    const reportRetryContract: ArtifactRetryContract = {
+        retry: retryReport,
+        isRetrying: isReportRetrying,
+        retryable: reportRetryable,
+    };
 
     if (reportError && !hasData) {
         return (
-            <Alert variant="destructive" role="alert">
-                <AlertTitle>Technical report unavailable</AlertTitle>
-                <AlertDescription>{reportError.message}</AlertDescription>
-            </Alert>
+            <ArtifactLoadError
+                title="Technical report unavailable"
+                error={reportError}
+                {...reportRetryContract}
+            />
         );
     }
 
@@ -1457,10 +1491,11 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                 </div>
 
                 {reportError && (
-                    <Alert variant="destructive" role="alert">
-                        <AlertTitle>Full technical report unavailable</AlertTitle>
-                        <AlertDescription>Showing the available preview data. {reportError.message}</AlertDescription>
-                    </Alert>
+                    <ArtifactLoadError
+                        title="Full technical report unavailable"
+                        error={`Showing the available preview data. ${reportError.message}`}
+                        {...reportRetryContract}
+                    />
                 )}
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -2676,14 +2711,22 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                     <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">Diagnostics</span>
                 </div>
                 {timeseriesBundleError && (
-                    <div className="text-xs text-destructive">
-                        Unable to load OHLC series. Please retry later.
-                    </div>
+                    <ArtifactLoadError
+                        title="OHLC series unavailable"
+                        error={timeseriesBundleError}
+                        retry={retryTimeseriesBundle}
+                        isRetrying={isTimeseriesBundleRetrying}
+                        retryable={timeseriesBundleRetryable}
+                    />
                 )}
                 {indicatorSeriesError && (
-                    <div className="text-xs text-destructive">
-                        Unable to load indicator series. Please retry later.
-                    </div>
+                    <ArtifactLoadError
+                        title="Indicator series unavailable"
+                        error={indicatorSeriesError}
+                        retry={retryIndicatorSeries}
+                        isRetrying={isIndicatorSeriesRetrying}
+                        retryable={indicatorSeriesRetryable}
+                    />
                 )}
                 {(isDegraded || degradedReasons.length > 0) && (
                     <section className="rounded-lg border border-destructive/20 bg-destructive/5 p-5">
@@ -2833,6 +2876,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                 alertsData={alertsData}
                 alertsSummary={alertsSummary}
                 alertsError={alertsError}
+                alertsRetry={{ retry: retryAlerts, isRetrying: isAlertsRetrying, retryable: alertsRetryable }}
                 isAlertsLoadingState={isAlertsLoadingState}
                 showAlerts={showAlerts}
                 setShowAlerts={setShowAlerts}
@@ -2840,6 +2884,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                 featurePackData={featurePackData}
                 featurePackSummary={featurePackSummary}
                 featurePackError={featurePackError}
+                featurePackRetry={{ retry: retryFeaturePack, isRetrying: isFeaturePackRetrying, retryable: featurePackRetryable }}
                 isFeaturePackLoading={isFeaturePackLoading}
                 showFeaturePack={showFeaturePack}
                 setShowFeaturePack={setShowFeaturePack}
@@ -2847,6 +2892,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                 patternPackData={patternPackData}
                 patternPackSummary={patternPackSummary}
                 patternPackError={patternPackError}
+                patternPackRetry={{ retry: retryPatternPack, isRetrying: isPatternPackRetrying, retryable: patternPackRetryable }}
                 isPatternPackLoading={isPatternPackLoading}
                 showPatternPack={showPatternPack}
                 setShowPatternPack={setShowPatternPack}
@@ -2854,6 +2900,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                 fusionReportData={fusionReportData}
                 fusionReportSummary={fusionReportSummary}
                 fusionReportError={fusionReportError}
+                fusionReportRetry={{ retry: retryFusionReport, isRetrying: isFusionReportRetrying, retryable: fusionReportRetryable }}
                 isFusionReportLoading={isFusionReportLoading}
                 fusionConfidenceDisplay={fusionConfidenceDisplay}
                 fusionConfidenceLabel={fusionConfidenceLabel}
@@ -2863,11 +2910,13 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                 directionScorecardData={directionScorecardData}
                 scorecardSummary={scorecardSummary}
                 directionScorecardError={directionScorecardError}
+                directionScorecardRetry={{ retry: retryDirectionScorecard, isRetrying: isDirectionScorecardRetrying, retryable: directionScorecardRetryable }}
                 isDirectionScorecardLoading={isDirectionScorecardLoading}
                 verificationReportId={verificationReportId}
                 verificationReportData={verificationReportData}
                 verificationSummary={verificationSummary}
                 verificationReportError={verificationReportError}
+                verificationReportRetry={{ retry: retryVerificationReport, isRetrying: isVerificationReportRetrying, retryable: verificationReportRetryable }}
                 isVerificationReportLoading={isVerificationReportLoading}
                 showVerificationReport={showVerificationReport}
                 setShowVerificationReport={setShowVerificationReport}

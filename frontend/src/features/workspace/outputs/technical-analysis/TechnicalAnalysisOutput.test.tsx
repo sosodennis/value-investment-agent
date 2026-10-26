@@ -1,10 +1,11 @@
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 
 import { TechnicalAnalysisOutput } from './TechnicalAnalysisOutput';
 
 const mockUseArtifact = vi.fn();
+const mockFeatureRetry = vi.fn();
 
 vi.mock('../../../../hooks/useArtifact', () => ({
     useArtifact: (...args: unknown[]) => mockUseArtifact(...args),
@@ -12,7 +13,18 @@ vi.mock('../../../../hooks/useArtifact', () => ({
 
 describe('TechnicalAnalysisOutput', () => {
     beforeEach(() => {
+        mockFeatureRetry.mockReset();
         mockUseArtifact.mockImplementation((target: unknown) => {
+            if (target === 'feature-1') {
+                return {
+                    data: null,
+                    isLoading: false,
+                    error: new Error('Feature pack temporarily unavailable.'),
+                    retry: mockFeatureRetry,
+                    isRetrying: false,
+                    retryable: true,
+                };
+            }
             const artifactId = typeof target === 'string'
                 ? target
                 : target && typeof target === 'object' && 'download_url' in target
@@ -28,7 +40,7 @@ describe('TechnicalAnalysisOutput', () => {
                         as_of: '2026-03-18T08:00:00Z',
                         direction: 'BULLISH_EXTENSION',
                         risk_level: 'medium',
-                        artifact_refs: {},
+                        artifact_refs: { feature_pack_id: 'feature-1' },
                         summary_tags: ['trend_active'],
                         regime_summary: {
                             dominant_regime: 'BULL_TREND',
@@ -159,12 +171,18 @@ describe('TechnicalAnalysisOutput', () => {
                     },
                     isLoading: false,
                     error: null,
+                    retry: vi.fn(),
+                    isRetrying: false,
+                    retryable: false,
                 };
             }
             return {
                 data: null,
                 isLoading: false,
                 error: null,
+                retry: vi.fn(),
+                isRetrying: false,
+                retryable: false,
             };
         });
     });
@@ -182,7 +200,7 @@ describe('TechnicalAnalysisOutput', () => {
             />
         );
 
-        screen.getByText('Signal Strength');
+        expect(screen.getAllByText('Signal Strength').length).toBeGreaterThan(0);
         screen.getByText('Setup Reliability');
         screen.getByText('Moderate');
         screen.getByText('Low Reliability');
@@ -226,6 +244,33 @@ describe('TechnicalAnalysisOutput', () => {
         screen.getByRole('alert');
         screen.getByText('Technical report unavailable');
         screen.getByText('Artifact request failed.');
+        expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
         expect(screen.queryByText('Processing Statistical Framework…')).toBeNull();
+    });
+
+    it('retries an unavailable supplementary artifact without replacing the technical report', () => {
+        render(
+            <TechnicalAnalysisOutput
+                reference={{
+                    artifact_id: 'report-1',
+                    download_url: '/api/v1/artifacts/report-1',
+                    type: 'technical_analysis.output',
+                }}
+                previewData={null}
+                status="done"
+            />
+        );
+
+        expect(screen.getAllByText('Signal Strength').length).toBeGreaterThan(0);
+        const featurePackButton = screen
+            .getAllByRole('button', { name: /feature pack/i })
+            .find((button) => button.textContent?.trim() === 'Feature Pack');
+        if (!featurePackButton) throw new Error('Feature Pack control is unavailable.');
+        fireEvent.click(featurePackButton);
+        screen.getByText('Feature pack temporarily unavailable.');
+        fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+        expect(mockFeatureRetry).toHaveBeenCalledOnce();
+        expect(screen.getAllByText('Signal Strength').length).toBeGreaterThan(0);
     });
 });

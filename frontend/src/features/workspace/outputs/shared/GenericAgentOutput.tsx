@@ -1,6 +1,5 @@
 import React, { memo } from 'react';
 import { AlertCircle, ChevronDown, Database, FileText } from 'lucide-react';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,6 +10,7 @@ import { parseUnknownArtifact } from '@/types/agents/artifact-parsers';
 import type { UnknownRecord } from '@/types/preview';
 import { useArtifact } from '../../../../hooks/useArtifact';
 import { AgentLoadingState } from './AgentLoadingState';
+import { ArtifactLoadError } from './ArtifactLoadError';
 
 interface GenericAgentOutputProps {
     agentName: string;
@@ -31,6 +31,9 @@ const GenericAgentOutputComponent: React.FC<GenericAgentOutputProps> = ({
         data: artifactData,
         isLoading: isArtifactLoading,
         error: artifactError,
+        retry,
+        isRetrying,
+        retryable,
     } = useArtifact(reference?.artifact_id, parseUnknownArtifact, 'generic_output.artifact');
 
     const fallbackPayload: UnknownRecord = {};
@@ -76,11 +79,13 @@ const GenericAgentOutputComponent: React.FC<GenericAgentOutputProps> = ({
                 </CardHeader>
                 <CardContent className="grid gap-3">
                     {artifactErrorMessage ? (
-                        <Alert variant="destructive" role="alert">
-                            <AlertCircle aria-hidden="true" className="size-4" />
-                            <AlertTitle>Full report unavailable</AlertTitle>
-                            <AlertDescription>{artifactErrorMessage}</AlertDescription>
-                        </Alert>
+                        <ArtifactLoadError
+                            title="Full report unavailable"
+                            error={artifactErrorMessage}
+                            retry={retry}
+                            isRetrying={isRetrying}
+                            retryable={retryable}
+                        />
                     ) : null}
                     {effectiveData ? (
                         <pre className="max-h-[600px] overflow-auto rounded-md bg-muted/50 p-4 font-mono text-xs leading-5 text-foreground">

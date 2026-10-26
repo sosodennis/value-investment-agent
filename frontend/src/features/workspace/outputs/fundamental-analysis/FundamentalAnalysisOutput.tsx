@@ -7,6 +7,7 @@ import { ForwardSignal } from '@/types/agents/fundamental';
 import { ParsedFinancialPreview } from '@/types/agents/fundamental-preview-parser';
 import { useArtifact } from '../../../../hooks/useArtifact';
 import { AgentLoadingState } from '../shared/AgentLoadingState';
+import { ArtifactLoadError } from '../shared/ArtifactLoadError';
 import { ValuationDistributionSection } from './ValuationDistributionSection';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -41,7 +42,14 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
     resolvedTicker,
     status
 }) => {
-    const { data: artifactData, isLoading: isArtifactLoading, error: artifactError } = useArtifact(
+    const {
+        data: artifactData,
+        isLoading: isArtifactLoading,
+        error: artifactError,
+        retry,
+        isRetrying,
+        retryable,
+    } = useArtifact(
         reference,
         parseFundamentalArtifact,
         'fundamental_output.artifact',
@@ -585,10 +593,13 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
             ? artifactError.message
             : 'The financial report could not be loaded.';
         return (
-            <Alert variant="destructive" role="alert">
-                <AlertTitle>Financial report unavailable</AlertTitle>
-                <AlertDescription>{message}</AlertDescription>
-            </Alert>
+            <ArtifactLoadError
+                title="Financial report unavailable"
+                error={message}
+                retry={retry}
+                isRetrying={isRetrying}
+                retryable={retryable}
+            />
         );
     }
 
@@ -630,12 +641,15 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
             </div>
 
             {artifactError && hasPreview ? (
-                <Alert variant="destructive" role="alert">
-                    <AlertTitle>Full financial report unavailable</AlertTitle>
-                    <AlertDescription>
-                        {artifactError instanceof Error ? artifactError.message : 'Showing available preview data.'}
-                    </AlertDescription>
-                </Alert>
+                <ArtifactLoadError
+                    title="Full financial report unavailable"
+                    error={artifactError instanceof Error
+                        ? `Showing available preview data. ${artifactError.message}`
+                        : 'Showing available preview data.'}
+                    retry={retry}
+                    isRetrying={isRetrying}
+                    retryable={retryable}
+                />
             ) : null}
 
             {/* Preview Section - Valuation & Metrics */}

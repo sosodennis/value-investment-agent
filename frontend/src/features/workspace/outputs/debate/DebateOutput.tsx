@@ -7,7 +7,7 @@ import { ArtifactReference, AgentStatus } from '@/types/agents';
 import { useArtifact } from '../../../../hooks/useArtifact';
 import { DebatePreview } from '@/types/preview';
 import { AgentLoadingState } from '../shared/AgentLoadingState';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { ArtifactLoadError } from '../shared/ArtifactLoadError';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import type { BadgeProps } from '@/components/ui/badge';
@@ -31,7 +31,14 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
         accentBar: string;
         icon: React.ReactNode;
     };
-    const { data: artifactData, isLoading: isArtifactLoading, error: artifactError } = useArtifact(
+    const {
+        data: artifactData,
+        isLoading: isArtifactLoading,
+        error: artifactError,
+        retry,
+        isRetrying,
+        retryable,
+    } = useArtifact(
         reference,
         parseDebateArtifact,
         'debate_output.artifact',
@@ -46,11 +53,13 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
             ? artifactError.message
             : 'The debate report could not be loaded.';
         return (
-            <Alert variant="destructive" role="alert">
-                <AlertTriangle aria-hidden="true" className="size-4" />
-                <AlertTitle>Debate report unavailable</AlertTitle>
-                <AlertDescription>{message}</AlertDescription>
-            </Alert>
+            <ArtifactLoadError
+                title="Debate report unavailable"
+                error={message}
+                retry={retry}
+                isRetrying={isRetrying}
+                retryable={retryable}
+            />
         );
     }
 

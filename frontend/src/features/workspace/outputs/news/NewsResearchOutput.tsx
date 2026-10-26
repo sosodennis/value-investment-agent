@@ -6,6 +6,7 @@ import { parseNewsArtifact } from '@/types/agents/artifact-parsers';
 import { ArtifactReference, AgentStatus } from '@/types/agents';
 import { useArtifact } from '../../../../hooks/useArtifact';
 import { AgentLoadingState } from '../shared/AgentLoadingState';
+import { ArtifactLoadError } from '../shared/ArtifactLoadError';
 import { NewsPreview } from '@/types/preview';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Card } from '@/components/ui/card';
@@ -24,7 +25,14 @@ const NewsResearchOutputComponent: React.FC<NewsResearchOutputProps> = ({
     resolvedTicker,
     status
 }) => {
-    const { data: artifactData, isLoading: isArtifactLoading, error: artifactError } = useArtifact(
+    const {
+        data: artifactData,
+        isLoading: isArtifactLoading,
+        error: artifactError,
+        retry,
+        isRetrying,
+        retryable,
+    } = useArtifact(
         reference,
         parseNewsArtifact,
         'news_output.artifact',
@@ -43,10 +51,13 @@ const NewsResearchOutputComponent: React.FC<NewsResearchOutputProps> = ({
     // Wait for completion before showing data, unless we have preview data
     if (artifactError && !effectiveOutput) {
         return (
-            <Alert variant="destructive" role="alert">
-                <AlertTitle>News report unavailable</AlertTitle>
-                <AlertDescription>{artifactError.message}</AlertDescription>
-            </Alert>
+            <ArtifactLoadError
+                title="News report unavailable"
+                error={artifactError}
+                retry={retry}
+                isRetrying={isRetrying}
+                retryable={retryable}
+            />
         );
     }
 
@@ -102,12 +113,13 @@ const NewsResearchOutputComponent: React.FC<NewsResearchOutputProps> = ({
             </div>
 
             {artifactError && isPreviewOnly && (
-                <Alert variant="destructive" role="alert">
-                    <AlertTitle>Full news report unavailable</AlertTitle>
-                    <AlertDescription>
-                        Showing the available preview. {artifactError.message}
-                    </AlertDescription>
-                </Alert>
+                <ArtifactLoadError
+                    title="Full news report unavailable"
+                    error={`Showing the available preview. ${artifactError.message}`}
+                    retry={retry}
+                    isRetrying={isRetrying}
+                    retryable={retryable}
+                />
             )}
 
             {/* Main Summary - Handles both Preview (checking inside component for missing items) and Full Data */}

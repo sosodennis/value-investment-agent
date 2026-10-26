@@ -15,6 +15,24 @@ type ArtifactCacheOptions = {
     dedupingInterval?: number;
 };
 
+export type ArtifactRetryContract = {
+    retry: () => Promise<unknown>;
+    isRetrying: boolean;
+    retryable: boolean;
+};
+
+export class ArtifactFetchError extends Error {
+    readonly status: number;
+    readonly retryable: boolean;
+
+    constructor(message: string, status: number) {
+        super(message);
+        this.name = 'ArtifactFetchError';
+        this.status = status;
+        this.retryable = status === 0 || status === 408 || status === 425 || status === 429 || status >= 500;
+    }
+}
+
 const readErrorMessage = async (response: Response): Promise<string> => {
     try {
         const raw: unknown = await response.json();
@@ -34,17 +52,51 @@ const fetchArtifact = async <T>(
     expectedKind?: ArtifactKind
 ): Promise<T> => {
     clientLogger.debug('artifact.fetch.start', { url, context, expectedKind });
+    let response: Response;
     try {
-        const res = await fetch(url, { credentials: 'include' });
-        if (!res.ok) {
+        response = await fetch(url, { credentials: 'include' });
+    } catch (error) {
+        clientLogger.error('artifact.fetch.network_error', {
+            url,
+            context,
+            error: error instanceof Error ? error.message : String(error),
+        });
+        throw new ArtifactFetchError(
+            error instanceof Error && error.message
+                ? error.message
+                : 'Network request failed while fetching artifact.',
+            0
+        );
+    }
+    try {
+        if (!response.ok) {
             clientLogger.error('artifact.fetch.http_error', {
                 url,
-                status: res.status,
-                statusText: res.statusText,
+                status: response.status,
+                statusText: response.statusText,
             });
-            throw new Error(await readErrorMessage(res));
+            throw new ArtifactFetchError(
+                await readErrorMessage(response),
+                response.status
+            );
         }
-        const data: unknown = await res.json();
+        let data: unknown;
+        try {
+            data = await response.json();
+        } catch (error) {
+            if (error instanceof TypeError) {
+                clientLogger.error('artifact.fetch.body_network_error', {
+                    url,
+                    context,
+                    error: error.message,
+                });
+                throw new ArtifactFetchError(
+                    error.message || 'Network interrupted while reading artifact data.',
+                    0
+                );
+            }
+            throw error;
+        }
         const envelope = parseArtifactEnvelope(
             data,
             `${context}.envelope`,
@@ -81,7 +133,7 @@ export function useArtifact<T>(
         [parser, context, expectedKind]
     );
 
-    const { data, error, isLoading } = useSWR<T>(
+    const { data, error, isLoading, isValidating, mutate } = useSWR<T>(
         url ?? null,
         fetcher,
         {
@@ -90,10 +142,20 @@ export function useArtifact<T>(
             shouldRetryOnError: false,
         }
     );
+    const retry = useCallback(
+        () => mutate().catch(() => undefined),
+        [mutate]
+    );
+    const retryContract: ArtifactRetryContract = {
+        retry,
+        isRetrying: isValidating && error !== undefined,
+        retryable: error instanceof ArtifactFetchError && error.retryable,
+    };
 
     return {
         data,
         isLoading,
         error,
+        ...retryContract,
     };
 }

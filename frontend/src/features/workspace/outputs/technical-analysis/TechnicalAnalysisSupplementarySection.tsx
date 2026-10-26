@@ -1,5 +1,6 @@
 import React from 'react';
 import { Bell, ChevronDown, Layers } from 'lucide-react';
+import type { ArtifactRetryContract } from '../../../../hooks/useArtifact';
 import type {
     AlertSeverity,
     TechnicalAlertSignal,
@@ -16,7 +17,7 @@ import type {
     TechnicalVerificationReport,
 } from '@/types/agents/technical';
 import { AgentLoadingState } from '../shared/AgentLoadingState';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { ArtifactLoadError } from '../shared/ArtifactLoadError';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -95,13 +96,6 @@ type VerificationSummary = {
     flagsCount: number;
 };
 
-const ArtifactLoadError: React.FC<{ title: string; error: Error }> = ({ title, error }) => (
-    <Alert variant="destructive" role="alert">
-        <AlertTitle>{title}</AlertTitle>
-        <AlertDescription>{error.message}</AlertDescription>
-    </Alert>
-);
-
 const ArtifactLoadStatus: React.FC<{ label: string; isLoading: boolean }> = ({ label, isLoading }) => (
     isLoading ? (
         <AgentLoadingState type="block" title={`Loading ${label.toLowerCase()}…`} />
@@ -119,6 +113,7 @@ export interface TechnicalAnalysisSupplementarySectionProps {
     alertsData?: TechnicalAlertsArtifact | null;
     alertsSummary: AlertsSummary | null;
     alertsError?: Error | null;
+    alertsRetry: ArtifactRetryContract;
     isAlertsLoadingState: boolean;
     showAlerts: boolean;
     setShowAlerts: React.Dispatch<React.SetStateAction<boolean>>;
@@ -126,6 +121,7 @@ export interface TechnicalAnalysisSupplementarySectionProps {
     featurePackData?: TechnicalFeaturePack | null;
     featurePackSummary: FeaturePackSummary | null;
     featurePackError?: Error | null;
+    featurePackRetry: ArtifactRetryContract;
     isFeaturePackLoading: boolean;
     showFeaturePack: boolean;
     setShowFeaturePack: React.Dispatch<React.SetStateAction<boolean>>;
@@ -133,6 +129,7 @@ export interface TechnicalAnalysisSupplementarySectionProps {
     patternPackData?: TechnicalPatternPack | null;
     patternPackSummary: PatternPackSummary | null;
     patternPackError?: Error | null;
+    patternPackRetry: ArtifactRetryContract;
     isPatternPackLoading: boolean;
     showPatternPack: boolean;
     setShowPatternPack: React.Dispatch<React.SetStateAction<boolean>>;
@@ -140,6 +137,7 @@ export interface TechnicalAnalysisSupplementarySectionProps {
     fusionReportData?: TechnicalFusionReport | null;
     fusionReportSummary: FusionReportSummary | null;
     fusionReportError?: Error | null;
+    fusionReportRetry: ArtifactRetryContract;
     isFusionReportLoading: boolean;
     fusionConfidenceDisplay: string;
     fusionConfidenceLabel: string;
@@ -149,11 +147,13 @@ export interface TechnicalAnalysisSupplementarySectionProps {
     directionScorecardData?: TechnicalDirectionScorecard | null;
     scorecardSummary: ScorecardSummary | null;
     directionScorecardError?: Error | null;
+    directionScorecardRetry: ArtifactRetryContract;
     isDirectionScorecardLoading: boolean;
     verificationReportId: string | null;
     verificationReportData?: TechnicalVerificationReport | null;
     verificationSummary: VerificationSummary | null;
     verificationReportError?: Error | null;
+    verificationReportRetry: ArtifactRetryContract;
     isVerificationReportLoading: boolean;
     showVerificationReport: boolean;
     setShowVerificationReport: React.Dispatch<React.SetStateAction<boolean>>;
@@ -179,6 +179,7 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
     alertsData,
     alertsSummary,
     alertsError,
+    alertsRetry,
     isAlertsLoadingState,
     showAlerts,
     setShowAlerts,
@@ -186,6 +187,7 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
     featurePackData,
     featurePackSummary,
     featurePackError,
+    featurePackRetry,
     isFeaturePackLoading,
     showFeaturePack,
     setShowFeaturePack,
@@ -193,6 +195,7 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
     patternPackData,
     patternPackSummary,
     patternPackError,
+    patternPackRetry,
     isPatternPackLoading,
     showPatternPack,
     setShowPatternPack,
@@ -200,6 +203,7 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
     fusionReportData,
     fusionReportSummary,
     fusionReportError,
+    fusionReportRetry,
     isFusionReportLoading,
     fusionConfidenceDisplay,
     fusionConfidenceLabel,
@@ -209,11 +213,13 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
     directionScorecardData,
     scorecardSummary,
     directionScorecardError,
+    directionScorecardRetry,
     isDirectionScorecardLoading,
     verificationReportId,
     verificationReportData,
     verificationSummary,
     verificationReportError,
+    verificationReportRetry,
     isVerificationReportLoading,
     showVerificationReport,
     setShowVerificationReport,
@@ -279,7 +285,7 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                     <div className="overflow-hidden">
                         <div className="p-6 space-y-5">
                             {alertsError && (
-                                <ArtifactLoadError title="Alerts unavailable" error={alertsError} />
+                                <ArtifactLoadError title="Alerts unavailable" error={alertsError} {...alertsRetry} />
                             )}
 
                             {!alertsData && !alertsError && (
@@ -430,7 +436,7 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                     <div className="overflow-hidden">
                         <div className="p-6 space-y-5">
                             {featurePackError && (
-                                <ArtifactLoadError title="Feature pack unavailable" error={featurePackError} />
+                                <ArtifactLoadError title="Feature pack unavailable" error={featurePackError} {...featurePackRetry} />
                             )}
 
                             {!featurePackData && !featurePackError && (
@@ -530,7 +536,7 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                     <div className="overflow-hidden">
                         <div className="p-6 space-y-5">
                             {patternPackError && (
-                                <ArtifactLoadError title="Pattern pack unavailable" error={patternPackError} />
+                                <ArtifactLoadError title="Pattern pack unavailable" error={patternPackError} {...patternPackRetry} />
                             )}
 
                             {!patternPackData && !patternPackError && (
@@ -691,11 +697,11 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                     <div className="overflow-hidden">
                         <div className="p-6 space-y-5">
                             {fusionReportError && (
-                                    <ArtifactLoadError title="Fusion report unavailable" error={fusionReportError} />
+                                <ArtifactLoadError title="Fusion report unavailable" error={fusionReportError} {...fusionReportRetry} />
                             )}
 
                             {directionScorecardError && (
-                                    <ArtifactLoadError title="Direction scorecard unavailable" error={directionScorecardError} />
+                                <ArtifactLoadError title="Direction scorecard unavailable" error={directionScorecardError} {...directionScorecardRetry} />
                             )}
 
                             {!fusionReportData && !fusionReportError && (
@@ -890,7 +896,7 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                     <div className="overflow-hidden">
                         <div className="p-6 space-y-5">
                             {verificationReportError && (
-                                <ArtifactLoadError title="Verification report unavailable" error={verificationReportError} />
+                                <ArtifactLoadError title="Verification report unavailable" error={verificationReportError} {...verificationReportRetry} />
                             )}
 
                             {!verificationReportData && !verificationReportError && (
