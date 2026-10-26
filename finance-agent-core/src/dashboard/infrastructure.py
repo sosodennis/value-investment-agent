@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Protocol
 
 import yfinance as yf
@@ -17,6 +17,8 @@ from src.dashboard.contracts import (
 )
 from src.infrastructure.database import AsyncSessionLocal
 from src.model_inference.infrastructure.settings import ModelInferenceSettings
+
+_MAX_MARKET_QUOTE_AGE = timedelta(hours=24)
 
 
 class MarketMoversPort(Protocol):
@@ -199,11 +201,18 @@ class MarketMoversService:
 
     async def get(self, *, limit: int) -> MarketMoversResponse:
         async with self._lock:
-            now = datetime.now(timezone.utc)
             try:
                 items = await self._provider.fetch(limit=limit)
+                now = datetime.now(timezone.utc)
                 if not items:
                     raise ValueError("empty_market_data")
+                if not _market_quotes_are_fresh(items, now):
+                    return MarketMoversResponse(
+                        status="stale",
+                        fetched_at=now,
+                        items=items[:limit],
+                        error_code="market_data_quote_stale",
+                    )
                 self._last_good = (now, items)
                 return MarketMoversResponse(
                     status="fresh", fetched_at=now, items=items[:limit]
@@ -220,3 +229,14 @@ class MarketMoversService:
                 return MarketMoversResponse(
                     status="unavailable", error_code="market_data_unavailable"
                 )
+
+
+def _market_quotes_are_fresh(items: list[MarketMoverItem], now: datetime) -> bool:
+    for item in items:
+        quote_time = item.quote_time
+        if quote_time is None or quote_time.utcoffset() is None:
+            return False
+        age = now - quote_time.astimezone(timezone.utc)
+        if age < timedelta(0) or age > _MAX_MARKET_QUOTE_AGE:
+            return False
+    return True

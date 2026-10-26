@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -71,6 +71,52 @@ async def test_market_movers_unavailable_without_a_last_good_response():
     assert response.status == "unavailable"
     assert response.items == []
     assert response.error_code == "market_data_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_market_movers_mark_old_quotes_stale_even_when_provider_succeeds():
+    class Provider:
+        async def fetch(self, *, limit: int):
+            return [
+                MarketMoverItem(
+                    symbol="AAPL",
+                    name="Apple Inc.",
+                    price=200.0,
+                    change_absolute=1.5,
+                    change_percent=0.75,
+                    currency="USD",
+                    market_state="CLOSED",
+                    quote_time=datetime.now(timezone.utc) - timedelta(hours=25),
+                )
+            ][:limit]
+
+    response = await MarketMoversService(Provider()).get(limit=3)
+
+    assert response.status == "stale"
+    assert response.error_code == "market_data_quote_stale"
+    assert response.items[0].symbol == "AAPL"
+
+
+@pytest.mark.asyncio
+async def test_market_movers_mark_quotes_without_timestamps_stale():
+    class Provider:
+        async def fetch(self, *, limit: int):
+            return [
+                MarketMoverItem(
+                    symbol="AAPL",
+                    name="Apple Inc.",
+                    price=200.0,
+                    change_absolute=1.5,
+                    change_percent=0.75,
+                    currency="USD",
+                    market_state="UNKNOWN",
+                )
+            ][:limit]
+
+    response = await MarketMoversService(Provider()).get(limit=3)
+
+    assert response.status == "stale"
+    assert response.error_code == "market_data_quote_stale"
 
 
 @pytest.mark.asyncio
