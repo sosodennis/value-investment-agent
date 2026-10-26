@@ -109,9 +109,17 @@ export function useDashboardOverview() {
     }, []);
 
     useEffect(() => {
-        void refreshRecentAnalyses();
-        void refreshMarketMovers();
-        void refreshCapabilities();
+        let cancelled = false;
+        const timer = window.setTimeout(() => {
+            if (cancelled) return;
+            void refreshRecentAnalyses();
+            void refreshMarketMovers();
+            void refreshCapabilities();
+        }, 0);
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timer);
+        };
     }, [refreshCapabilities, refreshMarketMovers, refreshRecentAnalyses]);
 
     return {

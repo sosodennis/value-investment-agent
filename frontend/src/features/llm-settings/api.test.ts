@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { replaceLlmProviderKey } from './llm-settings-api';
+import { replaceLlmProviderKey } from './api';
 
 describe('replaceLlmProviderKey', () => {
     afterEach(() => {
