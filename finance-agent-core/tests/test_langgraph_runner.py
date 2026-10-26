@@ -1,15 +1,23 @@
 from collections.abc import AsyncIterator, Mapping
+from typing import TypedDict
 
 import pytest
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import END, START, StateGraph
+from langgraph.types import Interrupt, interrupt
 
-from src.analysis_runtime.domain.contracts import Activity
+from src.analysis_runtime.domain.contracts import Activity, InteractionRequested
+from src.analysis_runtime.domain.errors import InvalidRunnerInterruptError
 from src.analysis_runtime.infrastructure.langgraph_runner import LangGraphRunner
+from src.llm_provider.entrypoint import get_provider_principal
+from src.shared.internal_services import get_request_principal
 
 
 class _EventGraph:
     def __init__(self, events: list[Mapping[str, object]]) -> None:
         self.events = events
         self.calls: list[tuple[object, object, str]] = []
+        self.principals: list[tuple[object, object]] = []
 
     async def astream_events(
         self,
@@ -19,6 +27,7 @@ class _EventGraph:
         version: str = "v2",
     ) -> AsyncIterator[Mapping[str, object]]:
         self.calls.append((input_data, config, version))
+        self.principals.append((get_provider_principal(), get_request_principal()))
         for event in self.events:
             yield event
 
@@ -113,6 +122,39 @@ async def test_runner_uses_callback_ids_and_parent_ids_for_repeated_invocations(
 
 
 @pytest.mark.asyncio
+async def test_runner_scopes_authenticated_principal_for_internal_service_clients() -> (
+    None
+):
+    graph = _EventGraph(
+        [
+            {
+                "event": "on_chain_start",
+                "run_id": "node-1",
+                "parent_ids": [],
+                "metadata": _metadata(),
+            }
+        ]
+    )
+    runner = LangGraphRunner(graph)
+
+    [
+        _
+        async for _ in runner.run(
+            thread_id="thread-1",
+            run_id="runtime-run-1",
+            input_data={"message": "find news"},
+            principal_id="principal-1",
+        )
+    ]
+
+    provider_principal, request_principal = graph.principals[0]
+    assert provider_principal.user_id == "principal-1"
+    assert request_principal.subject_id == "principal-1"
+    assert get_provider_principal() is None
+    assert get_request_principal() is None
+
+
+@pytest.mark.asyncio
 async def test_runner_emits_tool_and_model_lifecycle_events_but_skips_stream_chunks() -> (
     None
 ):
@@ -183,3 +225,173 @@ async def test_runner_emits_tool_and_model_lifecycle_events_but_skips_stream_chu
     assert activities[1].parent_activity_id == "langgraph:node-1"
     assert activities[3].parent_activity_id == "langgraph:model-1"
     assert all(activity.progress is None for activity in activities)
+
+
+@pytest.mark.asyncio
+async def test_runner_projects_typed_interrupt_and_stops_at_suspension() -> None:
+    graph = _EventGraph(
+        [
+            {
+                "event": "on_chain_start",
+                "run_id": "clarifying-node",
+                "parent_ids": [],
+                "metadata": _metadata(
+                    agent_id="intent_extraction",
+                    langgraph_node="clarifying",
+                ),
+            },
+            {
+                "event": "on_chain_stream",
+                "run_id": "clarifying-node",
+                "parent_ids": [],
+                "metadata": _metadata(
+                    agent_id="intent_extraction",
+                    langgraph_node="clarifying",
+                ),
+                "data": {
+                    "chunk": {
+                        "__interrupt__": (
+                            Interrupt(
+                                id="interaction-1",
+                                value={
+                                    "type": "ticker_selection",
+                                    "reason": "Choose the intended company.",
+                                    "candidates": [
+                                        {
+                                            "symbol": "AAPL",
+                                            "name": "Apple Inc.",
+                                            "confidence": 0.96,
+                                        }
+                                    ],
+                                },
+                            ),
+                        )
+                    }
+                },
+            },
+            {
+                "event": "on_chain_end",
+                "run_id": "clarifying-node",
+                "parent_ids": [],
+                "metadata": _metadata(
+                    agent_id="intent_extraction",
+                    langgraph_node="clarifying",
+                ),
+            },
+        ]
+    )
+
+    activities = [
+        item
+        async for item in LangGraphRunner(graph).run(
+            thread_id="thread-1",
+            run_id="runtime-run-1",
+            input_data={"message": "Apple"},
+            principal_id="principal-1",
+        )
+    ]
+
+    waiting = activities[-1]
+    assert len(activities) == 2
+    assert isinstance(waiting, InteractionRequested)
+    assert waiting.activity.activity_id == "langgraph:clarifying-node"
+    assert waiting.activity.status == "waiting"
+    assert waiting.identity.interaction_id == "interaction-1"
+    assert waiting.request.candidates[0].symbol == "AAPL"
+
+
+@pytest.mark.asyncio
+async def test_runner_rejects_unsupported_interrupt_payload() -> None:
+    graph = _EventGraph(
+        [
+            {
+                "event": "on_chain_stream",
+                "run_id": "clarifying-node",
+                "metadata": _metadata(langgraph_node="clarifying"),
+                "data": {
+                    "chunk": {
+                        "__interrupt__": (
+                            Interrupt(id="bad", value={"type": "approval"}),
+                        )
+                    }
+                },
+            }
+        ]
+    )
+
+    with pytest.raises(InvalidRunnerInterruptError):
+        [
+            item
+            async for item in LangGraphRunner(graph).run(
+                thread_id="thread-1",
+                run_id="runtime-run-1",
+                input_data={"message": "Apple"},
+                principal_id="principal-1",
+            )
+        ]
+
+
+@pytest.mark.asyncio
+async def test_runner_uses_pinned_langgraph_stream_for_wait_and_resume() -> None:
+    class State(TypedDict, total=False):
+        selected: str
+
+    async def clarify(state: State) -> dict[str, object]:
+        selection = interrupt(
+            {
+                "type": "ticker_selection",
+                "reason": "Choose the intended company.",
+                "candidates": [
+                    {"symbol": "AAPL", "name": "Apple Inc.", "confidence": 0.96}
+                ],
+            }
+        )
+        return {"selected": selection["selected_symbol"]}
+
+    builder = StateGraph(State)
+    builder.add_node("clarifying", clarify)
+    builder.add_edge(START, "clarifying")
+    builder.add_edge("clarifying", END)
+    runner = LangGraphRunner(builder.compile(checkpointer=MemorySaver()))
+
+    first = [
+        item
+        async for item in runner.run(
+            thread_id="real-interrupt-thread",
+            run_id="runtime-run-1",
+            input_data={"message": "Apple"},
+            principal_id="principal-1",
+        )
+    ]
+    waiting = first[-1]
+    assert isinstance(waiting, InteractionRequested)
+    assert waiting.activity.status == "waiting"
+    assert waiting.activity.scope_path == ("clarifying",)
+    assert waiting.request.candidates[0].symbol == "AAPL"
+
+    resumed = [
+        item
+        async for item in runner.run(
+            thread_id="real-interrupt-thread",
+            run_id="runtime-run-1",
+            input_data={
+                "interrupt_response": {
+                    "type": "ticker_selection",
+                    "selected_symbol": "AAPL",
+                },
+                "resuming_activity_id": waiting.activity.activity_id,
+                "resuming_scope_path": list(waiting.activity.scope_path),
+                "resuming_attempt": waiting.activity.attempt,
+            },
+            principal_id="principal-1",
+        )
+    ]
+    resumed_activity = next(
+        item
+        for item in resumed
+        if isinstance(item, Activity)
+        and item.activity_id == waiting.activity.activity_id
+    )
+    assert resumed_activity.status == "completed"
+    assert resumed_activity.attempt == waiting.activity.attempt + 1
+    assert all(not isinstance(item, InteractionRequested) for item in resumed)

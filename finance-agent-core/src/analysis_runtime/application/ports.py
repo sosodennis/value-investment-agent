@@ -6,13 +6,18 @@ from typing import Protocol
 
 from src.analysis_runtime.domain.contracts import (
     Activity,
-    ActivityEvent,
-    ActivitySnapshot,
     AnalysisRunPage,
     AnalysisRunRecord,
+    ClaimedInteractionResume,
+    InteractionIdentity,
+    InteractionRequested,
+    PendingResume,
     ReplayPage,
     RunStatus,
     RunStatusRecord,
+    TickerSelectionResponse,
+    WorkflowEvent,
+    WorkflowSnapshot,
 )
 
 
@@ -24,7 +29,7 @@ class GraphRunner(Protocol):
         run_id: str,
         input_data: Mapping[str, object],
         principal_id: str,
-    ) -> AsyncIterator[Activity | Mapping[str, object]]: ...
+    ) -> AsyncIterator[Activity | InteractionRequested | Mapping[str, object]]: ...
 
 
 class OwnerPort(Protocol):
@@ -34,7 +39,9 @@ class OwnerPort(Protocol):
 
 
 class ActivityRepository(Protocol):
-    async def append_atomic(self, event: ActivityEvent) -> bool: ...
+    async def append_atomic(
+        self, event: WorkflowEvent, *, run_status: RunStatus | None = None
+    ) -> bool: ...
 
     async def replay(
         self,
@@ -44,7 +51,7 @@ class ActivityRepository(Protocol):
         limit: int,
     ) -> ReplayPage: ...
 
-    async def snapshot(self, *, thread_id: str, run_id: str) -> ActivitySnapshot: ...
+    async def snapshot(self, *, thread_id: str, run_id: str) -> WorkflowSnapshot: ...
 
     async def get_run(self, *, thread_id: str) -> RunStatusRecord | None: ...
 
@@ -73,15 +80,49 @@ class ActivityRepository(Protocol):
         input_data: Mapping[str, object] | None = None,
     ) -> RunStatusRecord: ...
 
+    async def record_waiting_interaction(
+        self,
+        *,
+        requested: InteractionRequested,
+        principal_id: str,
+        now: datetime,
+    ) -> tuple[WorkflowEvent, ...]: ...
+
+    async def claim_interaction_response(
+        self,
+        *,
+        identity: InteractionIdentity,
+        response: TickerSelectionResponse,
+        principal_id: str,
+        now: datetime,
+    ) -> ClaimedInteractionResume: ...
+
+    async def cancel_run_with_interaction(
+        self,
+        *,
+        thread_id: str,
+        run_id: str,
+        principal_id: str,
+        now: datetime,
+    ) -> tuple[WorkflowEvent, ...]: ...
+
+    async def pending_resumes(self) -> tuple[PendingResume, ...]: ...
+
 
 class RuntimeSubscriber(Protocol):
-    async def receive(self) -> ActivityEvent | None: ...
+    async def receive(self) -> WorkflowEvent | None: ...
 
     def close(self) -> None: ...
 
 
 class NotificationHub(Protocol):
-    async def publish(self, event: ActivityEvent) -> None: ...
+    async def subscribe(self, *, thread_id: str) -> RuntimeSubscriber: ...
+
+    async def unsubscribe(self, subscriber: RuntimeSubscriber) -> None: ...
+
+    async def publish(self, event: WorkflowEvent) -> None: ...
+
+    async def close(self) -> None: ...
 
 
 class LlmProviderClientPort(Protocol):

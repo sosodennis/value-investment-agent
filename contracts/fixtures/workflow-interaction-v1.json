@@ -1,0 +1,206 @@
+{
+  "contract_version": "interaction-v1",
+  "event_name": "workflow.interaction",
+  "scenarios": [
+    {
+      "id": "interrupt",
+      "description": "A running activity pauses for human input.",
+      "events": [
+        {
+          "event_id": "interaction_fixture_1-pending",
+          "seq_id": 1,
+          "event_version": "v1",
+          "event_name": "workflow.interaction",
+          "thread_id": "thread_activity_interrupt",
+          "run_id": "run_activity_interrupt",
+          "occurred_at": "2026-10-24T00:04:01Z",
+          "payload": {
+            "identity": {
+              "thread_id": "thread_activity_interrupt",
+              "run_id": "run_activity_interrupt",
+              "activity_id": "intent.clarifying",
+              "interaction_id": "interaction_fixture_1"
+            },
+            "kind": "ticker_selection",
+            "status": "pending",
+            "request": {
+              "type": "ticker_selection",
+              "title": "Ticker Resolution",
+              "description": "Choose the intended company.",
+              "candidates": [
+                {
+                  "symbol": "GOOG",
+                  "name": "Alphabet Inc.",
+                  "exchange": "NASDAQ",
+                  "type": "stock",
+                  "confidence": 0.91
+                },
+                {
+                  "symbol": "GOOGL",
+                  "name": "Alphabet Inc. Class A",
+                  "exchange": "NASDAQ",
+                  "type": "stock",
+                  "confidence": 0.89
+                }
+              ]
+            }
+          }
+        },
+        {
+          "event_id": "interaction_fixture_1-responded",
+          "seq_id": 2,
+          "event_version": "v1",
+          "event_name": "workflow.interaction",
+          "thread_id": "thread_activity_interrupt",
+          "run_id": "run_activity_interrupt",
+          "occurred_at": "2026-10-24T00:04:02Z",
+          "payload": {
+            "identity": {
+              "thread_id": "thread_activity_interrupt",
+              "run_id": "run_activity_interrupt",
+              "activity_id": "intent.clarifying",
+              "interaction_id": "interaction_fixture_1"
+            },
+            "kind": "ticker_selection",
+            "status": "responded",
+            "request": {
+              "type": "ticker_selection",
+              "title": "Ticker Resolution",
+              "description": "Choose the intended company.",
+              "candidates": [
+                {
+                  "symbol": "GOOG",
+                  "name": "Alphabet Inc.",
+                  "exchange": "NASDAQ",
+                  "type": "stock",
+                  "confidence": 0.91
+                },
+                {
+                  "symbol": "GOOGL",
+                  "name": "Alphabet Inc. Class A",
+                  "exchange": "NASDAQ",
+                  "type": "stock",
+                  "confidence": 0.89
+                }
+              ]
+            },
+            "response": {
+              "type": "ticker_selection",
+              "selected_symbol": "GOOGL"
+            }
+          }
+        }
+      ],
+      "snapshot": {
+        "thread_id": "thread_activity_interrupt",
+        "run_id": "run_activity_interrupt",
+        "run_status": "waiting",
+        "cursor": 2,
+        "pending_interactions": []
+      },
+      "assertions": {
+        "response_must_match_candidate": true
+      }
+    },
+    {
+      "id": "interrupt-resume",
+      "description": "A consumed ticker interaction resumes its activity at the next attempt.",
+      "events": [
+        {
+          "event_id": "interaction_fixture_resume-pending",
+          "seq_id": 1,
+          "event_version": "v1",
+          "event_name": "workflow.interaction",
+          "thread_id": "thread_activity_interrupt_resume",
+          "run_id": "run_activity_interrupt_resume",
+          "occurred_at": "2026-10-24T00:04:03Z",
+          "payload": {
+            "identity": {
+              "thread_id": "thread_activity_interrupt_resume",
+              "run_id": "run_activity_interrupt_resume",
+              "activity_id": "intent.clarifying",
+              "interaction_id": "interaction_fixture_resume"
+            },
+            "kind": "ticker_selection",
+            "status": "pending",
+            "request": {
+              "type": "ticker_selection",
+              "title": "Ticker Resolution",
+              "description": "Choose the intended company.",
+              "candidates": [
+                {
+                  "symbol": "GOOG",
+                  "name": "Alphabet Inc.",
+                  "exchange": "NASDAQ",
+                  "type": "stock",
+                  "confidence": 0.91
+                },
+                {
+                  "symbol": "GOOGL",
+                  "name": "Alphabet Inc. Class A",
+                  "exchange": "NASDAQ",
+                  "type": "stock",
+                  "confidence": 0.89
+                }
+              ]
+            }
+          }
+        },
+        {
+          "event_id": "interaction_fixture_resume-responded",
+          "seq_id": 2,
+          "event_version": "v1",
+          "event_name": "workflow.interaction",
+          "thread_id": "thread_activity_interrupt_resume",
+          "run_id": "run_activity_interrupt_resume",
+          "occurred_at": "2026-10-24T00:04:04Z",
+          "payload": {
+            "identity": {
+              "thread_id": "thread_activity_interrupt_resume",
+              "run_id": "run_activity_interrupt_resume",
+              "activity_id": "intent.clarifying",
+              "interaction_id": "interaction_fixture_resume"
+            },
+            "kind": "ticker_selection",
+            "status": "responded",
+            "request": {
+              "type": "ticker_selection",
+              "title": "Ticker Resolution",
+              "description": "Choose the intended company.",
+              "candidates": [
+                {
+                  "symbol": "GOOG",
+                  "name": "Alphabet Inc.",
+                  "exchange": "NASDAQ",
+                  "type": "stock",
+                  "confidence": 0.91
+                },
+                {
+                  "symbol": "GOOGL",
+                  "name": "Alphabet Inc. Class A",
+                  "exchange": "NASDAQ",
+                  "type": "stock",
+                  "confidence": 0.89
+                }
+              ]
+            },
+            "response": {
+              "type": "ticker_selection",
+              "selected_symbol": "GOOGL"
+            }
+          }
+        }
+      ],
+      "snapshot": {
+        "thread_id": "thread_activity_interrupt_resume",
+        "run_id": "run_activity_interrupt_resume",
+        "run_status": "running",
+        "cursor": 2,
+        "pending_interactions": []
+      },
+      "assertions": {
+        "response_must_match_candidate": true
+      }
+    }
+  ]
+}

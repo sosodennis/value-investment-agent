@@ -1,8 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { clientLogger } from '@/lib/logger';
-import type { InterruptResumePayload } from '@/types/interrupts';
 import type { AgentStatus, StandardAgentOutput } from '@/types/agents';
-import { applyWorkflowActivityEvent, boundedReconnectDelay, cancelWorkflowRun, consumeWorkflowEvents, createWorkflowActivityState, getActivitySnapshot, startWorkflowRun, type WorkflowActivitySnapshot } from '@/features/workflow';
+import { applyWorkflowEvent, boundedReconnectDelay, cancelWorkflowRun, consumeWorkflowEvents, createWorkflowActivityState, getActivitySnapshot, resumeWorkflowRun, startWorkflowRun, type TickerSelectionResponse, type WorkflowActivitySnapshot, type WorkflowInteraction } from '@/features/workflow';
 import { useAgentReducer } from './useAgentReducer';
 
 const makeThreadId = () => `thread_${Date.now()}`;
@@ -15,7 +14,7 @@ export function useAgent(assistantId = 'agent') {
     const [hasMore] = useState(false);
     const abortRef = useRef<AbortController | null>(null);
 
-    const attachStream = useCallback(async (threadId: string, initialSnapshot: WorkflowActivitySnapshot, expectedRunId = initialSnapshot.run_id) => {
+    const attachStream = useCallback(async (threadId: string, initialSnapshot: WorkflowActivitySnapshot, expectedRunId: string = initialSnapshot.run_id) => {
         if (initialSnapshot.run_id !== expectedRunId) throw new TypeError('activity snapshot run identity mismatch.');
         abortRef.current?.abort();
         const controller = new AbortController();
@@ -29,13 +28,15 @@ export function useAgent(assistantId = 'agent') {
                 setConnection(attempt === 0 ? 'connecting' : 'reconnecting');
                 await consumeWorkflowEvents(threadId, cursor, controller.signal, (event) => {
                     if (event.run_id !== expectedRunId || event.thread_id !== threadId) throw new TypeError('workflow event identity mismatch.');
-                    const next = applyWorkflowActivityEvent(projection, event);
+                    const next = applyWorkflowEvent(projection, event);
                     if (next.gapDetected) throw new Error('workflow sequence gap requires snapshot recovery.');
                     projection = next;
                     cursor = next.cursor;
                     processWorkflowEvent(event);
                     setConnection('connected');
-                    return event.payload.activity_id === 'workflow' && ['completed', 'failed', 'cancelled'].includes(event.payload.status);
+                    return event.event_name === 'workflow.activity'
+                        && event.payload.activity_id === 'workflow'
+                        && ['completed', 'failed', 'cancelled'].includes(event.payload.status);
                 }, expectedRunId);
                 if (controller.signal.aborted) return;
                 snapshot = await getActivitySnapshot(threadId, { runId: expectedRunId, signal: controller.signal });
@@ -75,19 +76,33 @@ export function useAgent(assistantId = 'agent') {
         } catch (error) { setError(toError(error, 'Failed to start workflow run.')); } finally { setIsLoading(false); }
     }, [addUserMessage, attachStream, hydrateWorkflow, initSession, setError, setRun, state.threadId]);
 
-    const submitCommand = useCallback(async (payload: InterruptResumePayload) => {
-        if (!state.threadId) { setError('Session ID missing.'); return; }
-        const text = 'approved' in payload ? (payload.approved ? 'Approved' : 'Rejected') : 'selected_symbol' in payload ? `Selected ${payload.selected_symbol}` : 'Resumed execution';
+    const submitCommand = useCallback(async (interaction: WorkflowInteraction, response: TickerSelectionResponse) => {
+        const currentInteraction = state.workflow?.interactions.get(interaction.identity.interaction_id);
+        if (
+            !state.threadId
+            || !state.runId
+            || !currentInteraction
+            || currentInteraction.status !== 'pending'
+            || currentInteraction.identity.thread_id !== state.threadId
+            || currentInteraction.identity.run_id !== state.runId
+        ) {
+            setError('The workflow interaction is no longer available.');
+            return;
+        }
+        const text = `Selected ${response.selected_symbol}`;
         addUserMessage({ id: `user_${Date.now()}`, role: 'user', content: text, type: 'text' });
         setIsLoading(true);
         try {
-            const run = await startWorkflowRun(state.threadId, { resume_payload: { ...payload } });
+            const run = await resumeWorkflowRun(state.threadId, state.runId, {
+                identity: currentInteraction.identity,
+                response,
+            });
             setRun(run.run_id);
             const snapshot = await getActivitySnapshot(state.threadId, { runId: run.run_id });
             hydrateWorkflow(snapshot);
             await attachStream(state.threadId, snapshot, run.run_id);
         } catch (error) { setError(toError(error, 'Failed to resume workflow run.')); } finally { setIsLoading(false); }
-    }, [addUserMessage, attachStream, hydrateWorkflow, setError, setRun, state.threadId]);
+    }, [addUserMessage, attachStream, hydrateWorkflow, setError, setRun, state.runId, state.threadId, state.workflow]);
 
     const loadHistory = useCallback(async (threadId: string, expectedRunId?: string | null) => {
         setIsLoading(true);
@@ -96,9 +111,6 @@ export function useAgent(assistantId = 'agent') {
                 threadId,
                 expectedRunId ? { runId: expectedRunId } : undefined,
             );
-            if (expectedRunId && snapshot.run_id !== expectedRunId) {
-                throw new TypeError('activity snapshot run identity mismatch.');
-            }
             hydrateWorkflow(snapshot);
             if (snapshot.run_status === 'running' || snapshot.run_status === 'waiting' || snapshot.run_status === 'queued') await attachStream(threadId, snapshot, snapshot.run_id);
         } catch (error) { setError(toError(error, 'Failed to load workflow snapshot.')); } finally { setIsLoading(false); }

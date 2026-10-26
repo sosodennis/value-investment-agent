@@ -434,6 +434,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/threads/{thread_id}/runs/{run_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume Run */
+        post: operations["resume_run_api_v1_threads__thread_id__runs__run_id__resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -494,6 +511,63 @@ export interface components {
             sentiment_score: number;
             /** Summary */
             summary: string;
+        };
+        /** Activity */
+        Activity: {
+            /** Activity Id */
+            activity_id: string;
+            /** Attempt */
+            attempt: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "phase" | "node" | "tool" | "subgraph";
+            /** Label */
+            label: string;
+            /** Parent Activity Id */
+            parent_activity_id?: string | null;
+            /** Progress */
+            progress?: number | null;
+            /** Run Id */
+            run_id: string;
+            /** Scope Path */
+            scope_path: string[];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "waiting" | "completed" | "failed" | "cancelled" | "skipped";
+            /** Thread Id */
+            thread_id: string;
+        };
+        /** ActivityEvent */
+        ActivityEvent: {
+            /** Event Id */
+            event_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            event_name: "workflow.activity";
+            /**
+             * Event Version
+             * @default v2
+             * @constant
+             */
+            event_version: "v2";
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            payload: components["schemas"]["Activity"];
+            /** Run Id */
+            run_id: string;
+            /** Seq Id */
+            seq_id: number;
+            /** Thread Id */
+            thread_id: string;
         };
         /** AlertReadoutItemModel */
         AlertReadoutItemModel: {
@@ -1014,6 +1088,17 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** InteractionIdentity */
+        InteractionIdentity: {
+            /** Activity Id */
+            activity_id: string;
+            /** Interaction Id */
+            interaction_id: string;
+            /** Run Id */
+            run_id: string;
+            /** Thread Id */
+            thread_id: string;
+        };
         /** KeyFactModel */
         KeyFactModel: {
             /** Citation */
@@ -1530,14 +1615,15 @@ export interface components {
             /** Password */
             password: string;
         };
+        /** ResumeRequest */
+        ResumeRequest: {
+            identity: components["schemas"]["InteractionIdentity"];
+            response: components["schemas"]["TickerSelectionResponse"];
+        };
         /** RunRequest */
         RunRequest: {
             /** Message */
-            message?: string | null;
-            /** Resume Payload */
-            resume_payload?: {
-                [key: string]: unknown;
-            } | null;
+            message: string;
         };
         /** RunResponse */
         RunResponse: {
@@ -2864,6 +2950,43 @@ export interface components {
             /** Wfe Ratio */
             wfe_ratio?: number | null;
         };
+        /** TickerCandidate */
+        TickerCandidate: {
+            /** Confidence */
+            confidence: number;
+            /** Exchange */
+            exchange?: string | null;
+            /** Name */
+            name: string;
+            /** Symbol */
+            symbol: string;
+            /** Type */
+            type?: string | null;
+        };
+        /** TickerSelectionRequest */
+        TickerSelectionRequest: {
+            /** Candidates */
+            candidates: components["schemas"]["TickerCandidate"][];
+            /** Description */
+            description: string;
+            /** Title */
+            title: string;
+            /**
+             * Type
+             * @constant
+             */
+            type: "ticker_selection";
+        };
+        /** TickerSelectionResponse */
+        TickerSelectionResponse: {
+            /** Selected Symbol */
+            selected_symbol: string;
+            /**
+             * Type
+             * @constant
+             */
+            type: "ticker_selection";
+        };
         TraceableFieldModel: {
             [key: string]: unknown;
         };
@@ -2910,6 +3033,139 @@ export interface components {
             val?: number | null;
             /** Value Area Coverage */
             value_area_coverage?: number | null;
+        };
+        /** WorkflowActivityIdentity */
+        WorkflowActivityIdentity: {
+            /** Activity Id */
+            activity_id: string;
+            /** Run Id */
+            run_id: string;
+            /** Thread Id */
+            thread_id: string;
+        };
+        /** WorkflowAgentOutput */
+        WorkflowAgentOutput: {
+            /** Agent Id */
+            agent_id: string;
+            /** Artifact Id */
+            artifact_id?: string | null;
+            identity: components["schemas"]["WorkflowActivityIdentity"];
+            /** Output Kind */
+            output_kind: string;
+            /** Output Version */
+            output_version: string;
+            /** Preview */
+            preview?: {
+                [key: string]: unknown;
+            } | null;
+            /** Summary */
+            summary: string;
+        };
+        /** WorkflowAgentOutputEvent */
+        WorkflowAgentOutputEvent: {
+            /** Event Id */
+            event_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            event_name: "workflow.agent_output";
+            /**
+             * Event Version
+             * @default v1
+             * @constant
+             */
+            event_version: "v1";
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            payload: components["schemas"]["WorkflowAgentOutput"];
+            /** Run Id */
+            run_id: string;
+            /** Seq Id */
+            seq_id: number;
+            /** Thread Id */
+            thread_id: string;
+        };
+        /** WorkflowInteraction */
+        WorkflowInteraction: {
+            identity: components["schemas"]["InteractionIdentity"];
+            /**
+             * Kind
+             * @constant
+             */
+            kind: "ticker_selection";
+            request: components["schemas"]["TickerSelectionRequest"];
+            response?: components["schemas"]["TickerSelectionResponse"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "responded" | "cancelled";
+        };
+        /** WorkflowInteractionEvent */
+        WorkflowInteractionEvent: {
+            /** Event Id */
+            event_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            event_name: "workflow.interaction";
+            /**
+             * Event Version
+             * @default v1
+             * @constant
+             */
+            event_version: "v1";
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            payload: components["schemas"]["WorkflowInteraction"];
+            /** Run Id */
+            run_id: string;
+            /** Seq Id */
+            seq_id: number;
+            /** Thread Id */
+            thread_id: string;
+        };
+        /** WorkflowSnapshot */
+        WorkflowSnapshot: {
+            /**
+             * Active Activities
+             * @default []
+             */
+            active_activities: components["schemas"]["Activity"][];
+            /**
+             * Completed Outputs
+             * @default []
+             */
+            completed_outputs: components["schemas"]["WorkflowAgentOutput"][];
+            /** Cursor */
+            cursor: number;
+            /**
+             * Pending Interactions
+             * @default []
+             */
+            pending_interactions: components["schemas"]["WorkflowInteraction"][];
+            /**
+             * Recent Activities
+             * @default []
+             */
+            recent_activities: components["schemas"]["Activity"][];
+            /** Run Id */
+            run_id: string;
+            /**
+             * Run Status
+             * @enum {string}
+             */
+            run_status: "queued" | "running" | "waiting" | "completed" | "failed" | "cancelled" | "unknown";
+            /** Thread Id */
+            thread_id: string;
         };
         /** ProviderKeyCreateRequest */
         src__llm_provider__interface__contracts__ProviderKeyCreateRequest: {
@@ -3761,7 +4017,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["WorkflowSnapshot"];
                 };
             };
             /** @description Validation Error */
@@ -3794,7 +4050,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["WorkflowSnapshot"];
                 };
             };
             /** @description Validation Error */
@@ -3822,13 +4078,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The response is a text/event-stream. Each data frame contains one workflow event envelope. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "text/event-stream": string;
                 };
             };
             /** @description Validation Error */
@@ -3895,6 +4151,42 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_run_api_v1_threads__thread_id__runs__run_id__resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResumeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

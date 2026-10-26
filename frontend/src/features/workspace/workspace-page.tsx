@@ -6,7 +6,7 @@ import { useAgent } from '@/hooks/useAgent';
 import { AGENT_CONFIGS } from '@/config/agents';
 import type { AgentInfo, AgentStatus, StandardAgentOutput } from '@/types/agents';
 import { WorkspaceOutputPanel } from './workspace-output-panel';
-import type { ConnectionState, TickerSelectionResponse, WorkflowActivity } from '@/features/workflow';
+import type { ConnectionState, TickerSelectionResponse, WorkflowInteraction } from '@/features/workflow';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -128,23 +128,22 @@ function ConnectionBadge({ state }: { state: ConnectionState }) {
 
 function ActivityPanel({ workflow, onResumeInteraction, isSubmitting }: {
     workflow: ReturnType<typeof useAgent>['workflow'];
-    onResumeInteraction: (activity: WorkflowActivity, response: TickerSelectionResponse) => Promise<void>;
+    onResumeInteraction: (interaction: WorkflowInteraction, response: TickerSelectionResponse) => Promise<void>;
     isSubmitting: boolean;
 }) {
     if (!workflow) return <div className="grid min-h-48 place-items-center border-y text-sm text-muted-foreground"><p>No workflow activity is available yet.</p></div>;
     const activities = [...workflow.recent].reverse();
-    const activeActivities = [...workflow.active.values()];
-    const waitingActivities = activeActivities.filter((item) => item.status === 'waiting' && item.interruption);
+    const pendingInteractions = [...workflow.interactions.values()].filter((item) => item.status === 'pending');
     return <div className="grid gap-4">
-        {workflow.runStatus === 'waiting' && waitingActivities.length === 0 && <Alert variant="warning"><CircleAlert className="size-4" /><AlertTitle>Workflow is waiting</AlertTitle><AlertDescription>The workflow is waiting for an interaction request that is not available in this activity snapshot.</AlertDescription></Alert>}
+        {workflow.runStatus === 'waiting' && pendingInteractions.length === 0 && <Alert variant="warning"><CircleAlert className="size-4" /><AlertTitle>Workflow is waiting</AlertTitle><AlertDescription>The workflow is waiting for an interaction request that is not available in this activity snapshot.</AlertDescription></Alert>}
         {workflow.runStatus === 'failed' && <Alert variant="destructive" role="alert"><CircleAlert className="size-4" /><AlertTitle>Run failed</AlertTitle><AlertDescription>{activities.find((item) => item.status === 'failed')?.label ?? 'The workflow ended with a failure.'}</AlertDescription></Alert>}
         {workflow.runStatus === 'cancelled' && <Alert variant="warning"><AlertTitle>Run cancelled</AlertTitle><AlertDescription>The workflow was cancelled and its current run has ended.</AlertDescription></Alert>}
         {workflow.runStatus === 'completed' && <Alert variant="success"><AlertTitle>Run completed</AlertTitle><AlertDescription>Agent activity has finished. Select a report tab to inspect available results.</AlertDescription></Alert>}
-        {waitingActivities.map((item) => <TickerSelectionPrompt key={item.activity_id} activity={item} disabled={isSubmitting} onSubmit={onResumeInteraction} />)}
+        {pendingInteractions.map((item) => <TickerSelectionPrompt key={item.identity.interaction_id} interaction={item} disabled={isSubmitting} onSubmit={onResumeInteraction} />)}
         {activities.length === 0 ? <div className="border-y py-8 text-sm text-muted-foreground">No recent activity was returned for this run.</div> : <ol className="divide-y border-y" aria-label="Workflow activity">
             {activities.map((item) => <li key={`${item.activity_id}:${item.attempt}:${item.status}`} className="grid grid-cols-[1.25rem_minmax(0,1fr)_auto] gap-3 py-3" style={{ paddingLeft: `${Math.min(3, Math.max(0, item.scope_path.length - 1)) * 12}px` }}>
                 <Activity aria-hidden="true" className={`mt-0.5 size-4 ${item.status === 'failed' ? 'text-destructive' : item.status === 'completed' ? 'text-success' : 'text-primary'}`} />
-                <div className="min-w-0"><p className="text-sm font-medium">{item.label}</p><p className="mt-0.5 truncate text-xs text-muted-foreground">{item.scope_path.join(' / ')} · {item.kind} · attempt {item.attempt}</p>{item.progress !== undefined && <div className="mt-2 flex items-center gap-2"><progress className="h-1.5 flex-1 accent-primary" max={100} value={item.progress} aria-label={`${item.label} progress`} /><span className="w-10 text-right text-xs tabular-nums text-muted-foreground">{item.progress}%</span></div>}</div>
+                <div className="min-w-0"><p className="text-sm font-medium">{item.label}</p><p className="mt-0.5 truncate text-xs text-muted-foreground">{item.scope_path.join(' / ')} · {item.kind} · attempt {item.attempt}</p>{item.progress !== undefined && item.progress !== null && <div className="mt-2 flex items-center gap-2"><progress className="h-1.5 flex-1 accent-primary" max={100} value={item.progress} aria-label={`${item.label} progress`} /><span className="w-10 text-right text-xs tabular-nums text-muted-foreground">{item.progress}%</span></div>}</div>
                 <Badge variant={item.status === 'failed' ? 'destructive' : item.status === 'completed' ? 'success' : item.status === 'waiting' ? 'warning' : 'outline'}>{item.status}</Badge>
             </li>)}
         </ol>}
@@ -152,16 +151,14 @@ function ActivityPanel({ workflow, onResumeInteraction, isSubmitting }: {
     </div>;
 }
 
-function TickerSelectionPrompt({ activity, disabled, onSubmit }: {
-    activity: WorkflowActivity;
+function TickerSelectionPrompt({ interaction, disabled, onSubmit }: {
+    interaction: WorkflowInteraction;
     disabled: boolean;
-    onSubmit: (activity: WorkflowActivity, response: TickerSelectionResponse) => Promise<void>;
+    onSubmit: (interaction: WorkflowInteraction, response: TickerSelectionResponse) => Promise<void>;
 }) {
     const [selectedSymbol, setSelectedSymbol] = useState('');
-    const interruption = activity.interruption;
-    if (!interruption) return null;
-    const { request } = interruption;
-    const promptId = `ticker-selection-${activity.activity_id}`;
+    const { request } = interaction;
+    const promptId = `ticker-selection-${interaction.identity.activity_id}`;
 
     return <Card className="border-warning/50">
         <CardHeader>
@@ -171,7 +168,7 @@ function TickerSelectionPrompt({ activity, disabled, onSubmit }: {
         <CardContent>
             <form className="grid gap-4" onSubmit={(event) => {
                 event.preventDefault();
-                if (selectedSymbol) void onSubmit(activity, { type: 'ticker_selection', selected_symbol: selectedSymbol });
+                if (selectedSymbol) void onSubmit(interaction, { type: 'ticker_selection', selected_symbol: selectedSymbol });
             }}>
                 <RadioGroup value={selectedSymbol} onValueChange={setSelectedSymbol} aria-label={request.title}>
                     {request.candidates.map((candidate, index) => {

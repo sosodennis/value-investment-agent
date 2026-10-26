@@ -242,6 +242,18 @@ class WorkflowRun(Base):
     ended_at = Column(DateTime, nullable=True)
 
 
+class WorkflowRunResume(Base):
+    __tablename__ = "workflow_run_resumes"
+
+    thread_id = Column(String, primary_key=True)
+    run_id = Column(String, nullable=False, index=True)
+    principal_id = Column(String, nullable=False)
+    activity_id = Column(String, nullable=False)
+    interaction_id = Column(String, nullable=False)
+    response = Column(JSON, nullable=False)
+    created_at = Column(DateTime, nullable=False)
+
+
 class WorkflowRunHistory(Base):
     """Per-run durable index; detailed outputs remain in activity events."""
 

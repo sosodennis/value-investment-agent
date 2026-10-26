@@ -1,0 +1,46 @@
+{
+  "contract_version": "agent-output-v1",
+  "event_name": "workflow.agent_output",
+  "scenarios": [
+    {
+      "id": "compact-reference",
+      "description": "A completed output carries a bounded summary and artifact id.",
+      "events": [
+        {
+          "event_id": "evt_output_001",
+          "seq_id": 1,
+          "event_version": "v1",
+          "event_name": "workflow.agent_output",
+          "thread_id": "thread-fixture",
+          "run_id": "run-fixture",
+          "occurred_at": "2026-10-26T00:00:01Z",
+          "payload": {
+            "identity": {
+              "thread_id": "thread-fixture",
+              "run_id": "run-fixture",
+              "activity_id": "fundamental_analysis"
+            },
+            "agent_id": "fundamental_analysis",
+            "output_kind": "fundamental_analysis.output",
+            "output_version": "v1",
+            "summary": "Report is ready.",
+            "preview": {
+              "ticker": "AAPL"
+            },
+            "artifact_id": "artifact-fixture"
+          }
+        }
+      ],
+      "snapshot": {
+        "thread_id": "thread-fixture",
+        "run_id": "run-fixture",
+        "run_status": "completed",
+        "cursor": 1,
+        "completed_outputs": []
+      },
+      "assertions": {
+        "full_payload_stays_in_artifact_storage": true
+      }
+    }
+  ]
+}

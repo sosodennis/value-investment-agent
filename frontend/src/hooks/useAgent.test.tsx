@@ -10,7 +10,7 @@ const activity = (overrides: Record<string, unknown> = {}) => ({
 
 const snapshot = (overrides: Record<string, unknown> = {}) => ({
     thread_id: 'thread_1', run_id: 'run_1', run_status: 'running', cursor: 1,
-    active_activities: [activity()], recent_activities: [], ...overrides,
+    active_activities: [activity()], recent_activities: [], pending_interactions: [], completed_outputs: [], ...overrides,
 });
 
 const streamResponse = (event: unknown) => {
@@ -30,7 +30,7 @@ describe('useAgent workflow runtime', () => {
 
     it('hydrates a canonical snapshot and subscribes with its cursor', async () => {
         const terminalEvent = {
-            event_id: 'evt_2', seq_id: 2, event_version: 'v1',
+            event_id: 'evt_2', seq_id: 2, event_version: 'v2',
             event_name: 'workflow.activity', thread_id: 'thread_1', run_id: 'run_1',
             occurred_at: '2026-10-24T00:00:00Z',
             payload: activity({ activity_id: 'workflow', status: 'completed', label: 'Workflow completed' }),
@@ -74,7 +74,7 @@ describe('useAgent workflow runtime', () => {
             .mockImplementationOnce((input: string) => {
                 const threadId = input.match(/threads\/([^/]+)\/events/)?.[1];
                 return Promise.resolve(streamResponse({
-                    event_id: 'started-evt', seq_id: 1, event_version: 'v1', event_name: 'workflow.activity',
+                    event_id: 'started-evt', seq_id: 1, event_version: 'v2', event_name: 'workflow.activity',
                     thread_id: threadId, run_id: 'started-run', occurred_at: '2026-10-24T00:00:00Z',
                     payload: activity({ activity_id: 'workflow', thread_id: threadId, run_id: 'started-run', status: 'completed' }),
                 }));
@@ -114,7 +114,7 @@ describe('useAgent workflow runtime', () => {
     it('subscribes to and recovers only the requested historical run', async () => {
         const oldRunActivity = activity({ run_id: 'older-run' });
         const terminalEvent = {
-            event_id: 'older-evt-2', seq_id: 2, event_version: 'v1',
+            event_id: 'older-evt-2', seq_id: 2, event_version: 'v2',
             event_name: 'workflow.activity', thread_id: 'thread_1',
             run_id: 'older-run', occurred_at: '2026-10-24T00:00:00Z',
             payload: activity({ activity_id: 'workflow', run_id: 'older-run', status: 'completed', label: 'Completed' }),
@@ -163,7 +163,7 @@ describe('useAgent workflow runtime', () => {
     });
 
     it('applies terminal events and closes the connection', async () => {
-        const terminal = { event_id: 'evt_2', seq_id: 2, event_version: 'v1', event_name: 'workflow.activity', thread_id: 'thread_1', run_id: 'run_1', occurred_at: '2026-10-24T00:00:00Z', payload: activity({ status: 'completed' }) };
+        const terminal = { event_id: 'evt_2', seq_id: 2, event_version: 'v2', event_name: 'workflow.activity', thread_id: 'thread_1', run_id: 'run_1', occurred_at: '2026-10-24T00:00:00Z', payload: activity({ status: 'completed' }) };
         fetchMock
             .mockResolvedValueOnce(new Response(JSON.stringify(snapshot()), { status: 200 }))
             .mockResolvedValueOnce(streamResponse(terminal))

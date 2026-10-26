@@ -1,10 +1,10 @@
 import { useCallback, useReducer } from 'react';
 import type { Message } from '@/types/protocol';
 import {
-    applyWorkflowActivityEvent,
+    applyWorkflowEvent,
     createWorkflowActivityState,
     parseWorkflowActivitySnapshot,
-    type WorkflowActivityEvent,
+    type WorkflowEvent,
     type WorkflowActivityState,
     type ConnectionState,
 } from '@/features/workflow';
@@ -22,7 +22,7 @@ type Action =
     | { type: 'INIT_SESSION'; threadId: string }
     | { type: 'SET_RUN'; runId: string }
     | { type: 'HYDRATE'; snapshot: unknown }
-    | { type: 'EVENT'; event: WorkflowActivityEvent }
+    | { type: 'EVENT'; event: WorkflowEvent }
     | { type: 'CONNECTION'; connection: ConnectionState }
     | { type: 'MESSAGE'; message: Message }
     | { type: 'ERROR'; error: string }
@@ -39,7 +39,7 @@ function reducer(state: AgentState, action: Action): AgentState {
         case 'HYDRATE': { const snapshot = parseWorkflowActivitySnapshot(action.snapshot); if (state.runId && state.runId !== snapshot.run_id) return state; return { ...state, threadId: snapshot.thread_id, runId: snapshot.run_id, status: statusFor(snapshot.run_status), workflow: createWorkflowActivityState(snapshot) }; }
         case 'EVENT': {
             if (!state.workflow) return state;
-            const workflow = applyWorkflowActivityEvent(state.workflow, action.event);
+            const workflow = applyWorkflowEvent(state.workflow, action.event);
             if (workflow.gapDetected) return { ...state, workflow };
             return { ...state, workflow, status: statusFor(workflow.runStatus), runId: workflow.runId };
         }
@@ -54,7 +54,7 @@ export function useAgentReducer() {
     const initSession = useCallback((threadId: string) => dispatch({ type: 'INIT_SESSION', threadId }), []);
     const setRun = useCallback((runId: string) => dispatch({ type: 'SET_RUN', runId }), []);
     const hydrateWorkflow = useCallback((snapshot: unknown) => dispatch({ type: 'HYDRATE', snapshot }), []);
-    const processWorkflowEvent = useCallback((event: WorkflowActivityEvent) => dispatch({ type: 'EVENT', event }), []);
+    const processWorkflowEvent = useCallback((event: WorkflowEvent) => dispatch({ type: 'EVENT', event }), []);
     const setConnection = useCallback((connection: ConnectionState) => dispatch({ type: 'CONNECTION', connection }), []);
     const addUserMessage = useCallback((message: Message) => dispatch({ type: 'MESSAGE', message }), []);
     const setError = useCallback((error: string) => dispatch({ type: 'ERROR', error }), []);

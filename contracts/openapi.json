@@ -62,6 +62,160 @@
         "title": "AIAnalysisModel",
         "type": "object"
       },
+      "Activity": {
+        "additionalProperties": false,
+        "properties": {
+          "activity_id": {
+            "minLength": 1,
+            "title": "Activity Id",
+            "type": "string"
+          },
+          "attempt": {
+            "minimum": 1.0,
+            "title": "Attempt",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "phase",
+              "node",
+              "tool",
+              "subgraph"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "parent_activity_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Activity Id"
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Progress"
+          },
+          "run_id": {
+            "minLength": 1,
+            "title": "Run Id",
+            "type": "string"
+          },
+          "scope_path": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Scope Path",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "waiting",
+              "completed",
+              "failed",
+              "cancelled",
+              "skipped"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "thread_id": {
+            "minLength": 1,
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "activity_id",
+          "thread_id",
+          "run_id",
+          "scope_path",
+          "kind",
+          "status",
+          "label",
+          "attempt"
+        ],
+        "title": "Activity",
+        "type": "object"
+      },
+      "ActivityEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "event_id": {
+            "minLength": 1,
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_name": {
+            "const": "workflow.activity",
+            "default": "workflow.activity",
+            "title": "Event Name",
+            "type": "string"
+          },
+          "event_version": {
+            "const": "v2",
+            "default": "v2",
+            "title": "Event Version",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/Activity"
+          },
+          "run_id": {
+            "minLength": 1,
+            "title": "Run Id",
+            "type": "string"
+          },
+          "seq_id": {
+            "minimum": 1.0,
+            "title": "Seq Id",
+            "type": "integer"
+          },
+          "thread_id": {
+            "minLength": 1,
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "seq_id",
+          "thread_id",
+          "run_id",
+          "occurred_at",
+          "payload"
+        ],
+        "title": "ActivityEvent",
+        "type": "object"
+      },
       "AlertReadoutItemModel": {
         "properties": {
           "code": {
@@ -2204,6 +2358,40 @@
         "title": "IndustrialExtensionModel",
         "type": "object"
       },
+      "InteractionIdentity": {
+        "additionalProperties": false,
+        "properties": {
+          "activity_id": {
+            "minLength": 1,
+            "title": "Activity Id",
+            "type": "string"
+          },
+          "interaction_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Interaction Id",
+            "type": "string"
+          },
+          "run_id": {
+            "minLength": 1,
+            "title": "Run Id",
+            "type": "string"
+          },
+          "thread_id": {
+            "minLength": 1,
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread_id",
+          "run_id",
+          "activity_id",
+          "interaction_id"
+        ],
+        "title": "InteractionIdentity",
+        "type": "object"
+      },
       "KeyFactModel": {
         "properties": {
           "citation": {
@@ -3887,33 +4075,35 @@
         "title": "RegisterRequest",
         "type": "object"
       },
+      "ResumeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "identity": {
+            "$ref": "#/components/schemas/InteractionIdentity"
+          },
+          "response": {
+            "$ref": "#/components/schemas/TickerSelectionResponse"
+          }
+        },
+        "required": [
+          "identity",
+          "response"
+        ],
+        "title": "ResumeRequest",
+        "type": "object"
+      },
       "RunRequest": {
         "additionalProperties": false,
         "properties": {
           "message": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Message"
-          },
-          "resume_payload": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Resume Payload"
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
           }
         },
+        "required": [
+          "message"
+        ],
         "title": "RunRequest",
         "type": "object"
       },
@@ -8715,6 +8905,119 @@
         "title": "TechnicalWfaSummaryData",
         "type": "object"
       },
+      "TickerCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "exchange": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exchange"
+          },
+          "name": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "symbol": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Symbol",
+            "type": "string"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          }
+        },
+        "required": [
+          "symbol",
+          "name",
+          "confidence"
+        ],
+        "title": "TickerCandidate",
+        "type": "object"
+      },
+      "TickerSelectionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/TickerCandidate"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Candidates",
+            "type": "array"
+          },
+          "description": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "ticker_selection",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "description",
+          "candidates"
+        ],
+        "title": "TickerSelectionRequest",
+        "type": "object"
+      },
+      "TickerSelectionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "selected_symbol": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Selected Symbol",
+            "type": "string"
+          },
+          "type": {
+            "const": "ticker_selection",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "selected_symbol"
+        ],
+        "title": "TickerSelectionResponse",
+        "type": "object"
+      },
       "TraceableFieldModel": {
         "additionalProperties": true,
         "type": "object"
@@ -8925,6 +9228,323 @@
           }
         },
         "title": "VolumeProfileSummaryModel",
+        "type": "object"
+      },
+      "WorkflowActivityIdentity": {
+        "additionalProperties": false,
+        "properties": {
+          "activity_id": {
+            "minLength": 1,
+            "title": "Activity Id",
+            "type": "string"
+          },
+          "run_id": {
+            "minLength": 1,
+            "title": "Run Id",
+            "type": "string"
+          },
+          "thread_id": {
+            "minLength": 1,
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread_id",
+          "run_id",
+          "activity_id"
+        ],
+        "title": "WorkflowActivityIdentity",
+        "type": "object"
+      },
+      "WorkflowAgentOutput": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_id": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "artifact_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Id"
+          },
+          "identity": {
+            "$ref": "#/components/schemas/WorkflowActivityIdentity"
+          },
+          "output_kind": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Output Kind",
+            "type": "string"
+          },
+          "output_version": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Output Version",
+            "type": "string"
+          },
+          "preview": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview"
+          },
+          "summary": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "identity",
+          "agent_id",
+          "output_kind",
+          "output_version",
+          "summary"
+        ],
+        "title": "WorkflowAgentOutput",
+        "type": "object"
+      },
+      "WorkflowAgentOutputEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "event_id": {
+            "minLength": 1,
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_name": {
+            "const": "workflow.agent_output",
+            "default": "workflow.agent_output",
+            "title": "Event Name",
+            "type": "string"
+          },
+          "event_version": {
+            "const": "v1",
+            "default": "v1",
+            "title": "Event Version",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/WorkflowAgentOutput"
+          },
+          "run_id": {
+            "minLength": 1,
+            "title": "Run Id",
+            "type": "string"
+          },
+          "seq_id": {
+            "minimum": 1.0,
+            "title": "Seq Id",
+            "type": "integer"
+          },
+          "thread_id": {
+            "minLength": 1,
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "seq_id",
+          "thread_id",
+          "run_id",
+          "occurred_at",
+          "payload"
+        ],
+        "title": "WorkflowAgentOutputEvent",
+        "type": "object"
+      },
+      "WorkflowInteraction": {
+        "additionalProperties": false,
+        "properties": {
+          "identity": {
+            "$ref": "#/components/schemas/InteractionIdentity"
+          },
+          "kind": {
+            "const": "ticker_selection",
+            "title": "Kind",
+            "type": "string"
+          },
+          "request": {
+            "$ref": "#/components/schemas/TickerSelectionRequest"
+          },
+          "response": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TickerSelectionResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "responded",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "identity",
+          "kind",
+          "status",
+          "request"
+        ],
+        "title": "WorkflowInteraction",
+        "type": "object"
+      },
+      "WorkflowInteractionEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "event_id": {
+            "minLength": 1,
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_name": {
+            "const": "workflow.interaction",
+            "default": "workflow.interaction",
+            "title": "Event Name",
+            "type": "string"
+          },
+          "event_version": {
+            "const": "v1",
+            "default": "v1",
+            "title": "Event Version",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/WorkflowInteraction"
+          },
+          "run_id": {
+            "minLength": 1,
+            "title": "Run Id",
+            "type": "string"
+          },
+          "seq_id": {
+            "minimum": 1.0,
+            "title": "Seq Id",
+            "type": "integer"
+          },
+          "thread_id": {
+            "minLength": 1,
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "seq_id",
+          "thread_id",
+          "run_id",
+          "occurred_at",
+          "payload"
+        ],
+        "title": "WorkflowInteractionEvent",
+        "type": "object"
+      },
+      "WorkflowSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "active_activities": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Activity"
+            },
+            "title": "Active Activities",
+            "type": "array"
+          },
+          "completed_outputs": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/WorkflowAgentOutput"
+            },
+            "title": "Completed Outputs",
+            "type": "array"
+          },
+          "cursor": {
+            "minimum": 0.0,
+            "title": "Cursor",
+            "type": "integer"
+          },
+          "pending_interactions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/WorkflowInteraction"
+            },
+            "title": "Pending Interactions",
+            "type": "array"
+          },
+          "recent_activities": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Activity"
+            },
+            "title": "Recent Activities",
+            "type": "array"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "run_status": {
+            "enum": [
+              "queued",
+              "running",
+              "waiting",
+              "completed",
+              "failed",
+              "cancelled",
+              "unknown"
+            ],
+            "title": "Run Status",
+            "type": "string"
+          },
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread_id",
+          "run_id",
+          "run_status",
+          "cursor"
+        ],
+        "title": "WorkflowSnapshot",
         "type": "object"
       },
       "src__llm_provider__interface__contracts__ProviderKeyCreateRequest": {
@@ -10509,7 +11129,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowSnapshot"
+                }
               }
             },
             "description": "Successful Response"
@@ -10566,7 +11188,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowSnapshot"
+                }
               }
             },
             "description": "Successful Response"
@@ -10633,11 +11257,35 @@
         "responses": {
           "200": {
             "content": {
-              "application/json": {
-                "schema": {}
+              "text/event-stream": {
+                "schema": {
+                  "description": "SSE frames with JSON workflow event payloads.",
+                  "type": "string",
+                  "x-workflow-event-payload": {
+                    "discriminator": {
+                      "mapping": {
+                        "workflow.activity": "#/components/schemas/ActivityEvent",
+                        "workflow.agent_output": "#/components/schemas/WorkflowAgentOutputEvent",
+                        "workflow.interaction": "#/components/schemas/WorkflowInteractionEvent"
+                      },
+                      "propertyName": "event_name"
+                    },
+                    "oneOf": [
+                      {
+                        "$ref": "#/components/schemas/ActivityEvent"
+                      },
+                      {
+                        "$ref": "#/components/schemas/WorkflowInteractionEvent"
+                      },
+                      {
+                        "$ref": "#/components/schemas/WorkflowAgentOutputEvent"
+                      }
+                    ]
+                  }
+                }
               }
             },
-            "description": "Successful Response"
+            "description": "The response is a text/event-stream. Each data frame contains one workflow event envelope."
           },
           "422": {
             "content": {
@@ -10747,6 +11395,67 @@
           }
         },
         "summary": "Cancel Run",
+        "tags": [
+          "Analysis runtime"
+        ]
+      }
+    },
+    "/api/v1/threads/{thread_id}/runs/{run_id}/resume": {
+      "post": {
+        "operationId": "resume_run_api_v1_threads__thread_id__runs__run_id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResumeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resume Run",
         "tags": [
           "Analysis runtime"
         ]

@@ -1,24 +1,38 @@
 from __future__ import annotations
 
+import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from pydantic import TypeAdapter
 from sqlalchemy import and_, func, or_, select
 
 from src.analysis_runtime.domain.contracts import (
     Activity,
     ActivityEvent,
-    ActivitySnapshot,
     AnalysisRunPage,
     AnalysisRunRecord,
+    ClaimedInteractionResume,
+    InteractionIdentity,
+    InteractionRequested,
+    PendingResume,
     ReplayPage,
     RunStatus,
     RunStatusRecord,
+    TickerSelectionResponse,
+    WorkflowAgentOutput,
+    WorkflowAgentOutputEvent,
+    WorkflowEvent,
+    WorkflowInteraction,
+    WorkflowInteractionEvent,
+    WorkflowSnapshot,
 )
 from src.analysis_runtime.domain.errors import (
     ActivityPersistenceError,
+    InteractionNotAvailableError,
     InvalidCursorError,
+    InvalidInteractionResponseError,
     ReplayGapError,
 )
 from src.auth.infrastructure.models import OwnedResourceModel
@@ -28,14 +42,28 @@ from src.infrastructure.models import (
     WorkflowActivityEvent,
     WorkflowRun,
     WorkflowRunHistory,
+    WorkflowRunResume,
 )
+
+_EVENT_ADAPTER = TypeAdapter(WorkflowEvent)
 
 
 @dataclass(frozen=True)
 class SqlAlchemyActivityRepository:
-    async def append_atomic(self, event: ActivityEvent) -> bool:
+    async def append_atomic(
+        self, event: WorkflowEvent, *, run_status: RunStatus | None = None
+    ) -> bool:
         async with AsyncSessionLocal() as session:
             try:
+                run = await session.scalar(
+                    select(WorkflowRun)
+                    .where(WorkflowRun.thread_id == event.thread_id)
+                    .with_for_update()
+                )
+                if run is None or run.run_id != event.run_id:
+                    raise ActivityPersistenceError(
+                        "event run does not match the active workflow run"
+                    )
                 cursor = await session.get(
                     WorkflowActivityCursor, event.thread_id, with_for_update=True
                 )
@@ -51,6 +79,35 @@ class SqlAlchemyActivityRepository:
                     raise ActivityPersistenceError("event sequence is not append-only")
                 if event.seq_id != latest + 1:
                     raise ActivityPersistenceError("event sequence contains a gap")
+                if run_status is not None:
+                    run.status = run_status
+                    run.updated_at = event.occurred_at.replace(tzinfo=None)
+                    run.ended_at = (
+                        event.occurred_at.replace(tzinfo=None)
+                        if run_status in {"completed", "failed", "cancelled"}
+                        else None
+                    )
+                    history = await session.get(
+                        WorkflowRunHistory,
+                        (event.thread_id, event.run_id),
+                        with_for_update=True,
+                    )
+                    if history is not None:
+                        history.status = run_status
+                        history.updated_at = event.occurred_at.replace(tzinfo=None)
+                        history.ended_at = run.ended_at
+                if (
+                    isinstance(event, ActivityEvent)
+                    and event.payload.activity_id != "workflow"
+                ):
+                    pending_resume = await session.get(
+                        WorkflowRunResume, event.thread_id, with_for_update=True
+                    )
+                    if (
+                        pending_resume is not None
+                        and pending_resume.run_id == event.run_id
+                    ):
+                        await session.delete(pending_resume)
                 session.add(
                     WorkflowActivityEvent(
                         event_id=event.event_id,
@@ -112,8 +169,11 @@ class SqlAlchemyActivityRepository:
             has_more=len(rows) > limit,
         )
 
-    async def snapshot(self, *, thread_id: str, run_id: str) -> ActivitySnapshot:
+    async def snapshot(self, *, thread_id: str, run_id: str) -> WorkflowSnapshot:
         async with AsyncSessionLocal() as session:
+            await session.connection(
+                execution_options={"isolation_level": "REPEATABLE READ"}
+            )
             rows = (
                 await session.scalars(
                     select(WorkflowActivityEvent)
@@ -126,20 +186,40 @@ class SqlAlchemyActivityRepository:
             cursor_row = await session.get(WorkflowActivityCursor, thread_id)
         events = tuple(self._to_event(row) for row in rows)
         latest: dict[str, ActivityEvent] = {}
+        interactions: dict[str, WorkflowInteraction] = {}
+        outputs: dict[str, WorkflowAgentOutput] = {}
         for event in events:
-            latest[event.payload.activity_id] = event
+            match event:
+                case ActivityEvent():
+                    latest[event.payload.activity_id] = event
+                case WorkflowInteractionEvent():
+                    interactions[event.payload.identity.interaction_id] = event.payload
+                case WorkflowAgentOutputEvent():
+                    outputs[
+                        f"{event.payload.identity.activity_id}:{event.payload.agent_id}"
+                    ] = event.payload
         active = tuple(
             event.payload
             for event in latest.values()
             if event.payload.status in {"queued", "running", "waiting"}
         )
-        return ActivitySnapshot(
+        return WorkflowSnapshot(
             thread_id=thread_id,
             run_id=run_id,
             run_status=history.status if history else "queued",
             cursor=cursor_row.last_seq_id if cursor_row else 0,
             active_activities=active,
-            recent_activities=tuple(event.payload for event in reversed(events))[:50],
+            recent_activities=tuple(
+                event.payload
+                for event in reversed(events)
+                if isinstance(event, ActivityEvent)
+            )[:50],
+            pending_interactions=tuple(
+                interaction
+                for interaction in interactions.values()
+                if interaction.status == "pending"
+            ),
+            completed_outputs=tuple(outputs.values()),
         )
 
     async def get_run_history(
@@ -237,7 +317,11 @@ class SqlAlchemyActivityRepository:
         input_data: Mapping[str, object] | None = None,
     ) -> RunStatusRecord:
         async with AsyncSessionLocal() as session:
-            row = await session.get(WorkflowRun, thread_id)
+            row = await session.scalar(
+                select(WorkflowRun)
+                .where(WorkflowRun.thread_id == thread_id)
+                .with_for_update()
+            )
             started = (
                 row.started_at
                 if row and row.run_id == run_id
@@ -257,6 +341,12 @@ class SqlAlchemyActivityRepository:
                 if status in {"completed", "failed", "cancelled"}
                 else None
             )
+            if status in {"completed", "failed", "cancelled"}:
+                pending_resume = await session.get(
+                    WorkflowRunResume, thread_id, with_for_update=True
+                )
+                if pending_resume is not None:
+                    await session.delete(pending_resume)
             history = await session.get(
                 WorkflowRunHistory, (thread_id, run_id), with_for_update=True
             )
@@ -296,19 +386,444 @@ class SqlAlchemyActivityRepository:
                 ended_at=now if row.ended_at else None,
             )
 
+    async def record_waiting_interaction(
+        self,
+        *,
+        requested: InteractionRequested,
+        principal_id: str,
+        now: datetime,
+    ) -> tuple[WorkflowEvent, ...]:
+        identity = requested.identity
+        async with AsyncSessionLocal() as session:
+            run = await session.scalar(
+                select(WorkflowRun)
+                .where(WorkflowRun.thread_id == identity.thread_id)
+                .with_for_update()
+            )
+            if run is None or run.run_id != identity.run_id or run.status != "running":
+                raise InteractionNotAvailableError("run cannot enter waiting state")
+            history = await session.get(
+                WorkflowRunHistory,
+                (identity.thread_id, identity.run_id),
+                with_for_update=True,
+            )
+            if history is None or history.principal_id != principal_id:
+                raise InteractionNotAvailableError("run owner cannot change")
+            existing = await session.scalar(
+                select(WorkflowActivityEvent.event_id)
+                .where(WorkflowActivityEvent.thread_id == identity.thread_id)
+                .where(WorkflowActivityEvent.run_id == identity.run_id)
+                .where(WorkflowActivityEvent.event_name == "workflow.interaction")
+                .where(
+                    WorkflowActivityEvent.payload["identity"][
+                        "interaction_id"
+                    ].as_string()
+                    == identity.interaction_id
+                )
+            )
+            if existing is not None:
+                raise ActivityPersistenceError("interaction identity already exists")
+            interaction = WorkflowInteraction(
+                identity=identity,
+                kind=requested.request.type,
+                status="pending",
+                request=requested.request,
+            )
+            cursor = await session.get(
+                WorkflowActivityCursor, identity.thread_id, with_for_update=True
+            )
+            start_seq = cursor.last_seq_id + 1 if cursor else 1
+            events = self._create_events(
+                (requested.activity, interaction),
+                thread_id=identity.thread_id,
+                run_id=identity.run_id,
+                first_seq=start_seq,
+                now=now,
+            )
+            session.add_all(self._event_rows(events))
+            self._advance_cursor(session, cursor, identity.thread_id, events[-1], now)
+            run.status = "waiting"
+            run.updated_at = now.replace(tzinfo=None)
+            run.ended_at = None
+            history.status = "waiting"
+            history.updated_at = now.replace(tzinfo=None)
+            history.ended_at = None
+            await session.commit()
+            return events
+
+    async def claim_interaction_response(
+        self,
+        *,
+        identity: InteractionIdentity,
+        response: TickerSelectionResponse,
+        principal_id: str,
+        now: datetime,
+    ) -> ClaimedInteractionResume:
+        async with AsyncSessionLocal() as session:
+            run = await session.scalar(
+                select(WorkflowRun)
+                .where(WorkflowRun.thread_id == identity.thread_id)
+                .with_for_update()
+            )
+            if run is None or run.run_id != identity.run_id:
+                raise InteractionNotAvailableError("run cannot accept this interaction")
+            if run.status != "waiting":
+                raise InteractionNotAvailableError("run is not waiting for input")
+
+            interaction_row = await session.scalar(
+                select(WorkflowActivityEvent)
+                .where(WorkflowActivityEvent.thread_id == identity.thread_id)
+                .where(WorkflowActivityEvent.run_id == identity.run_id)
+                .where(WorkflowActivityEvent.event_name == "workflow.interaction")
+                .where(
+                    WorkflowActivityEvent.payload["identity"][
+                        "interaction_id"
+                    ].as_string()
+                    == identity.interaction_id
+                )
+                .order_by(WorkflowActivityEvent.seq_id.desc())
+                .limit(1)
+                .with_for_update()
+            )
+            interaction_event = (
+                self._to_event(interaction_row) if interaction_row is not None else None
+            )
+            interaction = (
+                interaction_event.payload
+                if isinstance(interaction_event, WorkflowInteractionEvent)
+                else None
+            )
+            activity_row = await session.scalar(
+                select(WorkflowActivityEvent)
+                .where(WorkflowActivityEvent.thread_id == identity.thread_id)
+                .where(WorkflowActivityEvent.run_id == identity.run_id)
+                .where(WorkflowActivityEvent.event_name == "workflow.activity")
+                .where(
+                    WorkflowActivityEvent.payload["activity_id"].as_string()
+                    == identity.activity_id
+                )
+                .order_by(WorkflowActivityEvent.seq_id.desc())
+                .limit(1)
+                .with_for_update()
+            )
+            activity_event = self._to_event(activity_row) if activity_row else None
+            activity = (
+                activity_event.payload
+                if isinstance(activity_event, ActivityEvent)
+                else None
+            )
+            if (
+                interaction is None
+                or interaction.identity != identity
+                or interaction.status != "pending"
+                or activity is None
+                or activity.status != "waiting"
+            ):
+                raise InteractionNotAvailableError(
+                    "interaction is stale or unavailable"
+                )
+            if response.selected_symbol not in {
+                item.symbol for item in interaction.request.candidates
+            }:
+                raise InvalidInteractionResponseError(
+                    "selected symbol is not one of the available candidates"
+                )
+            history = await session.get(
+                WorkflowRunHistory,
+                (identity.thread_id, identity.run_id),
+                with_for_update=True,
+            )
+            if history is None or history.principal_id != principal_id:
+                raise InteractionNotAvailableError("run owner cannot change")
+            pending_resume = await session.get(
+                WorkflowRunResume, identity.thread_id, with_for_update=True
+            )
+            if pending_resume is not None:
+                raise InteractionNotAvailableError("run already has a resume command")
+            cursor = await session.get(
+                WorkflowActivityCursor, identity.thread_id, with_for_update=True
+            )
+            start_seq = cursor.last_seq_id + 1 if cursor else 1
+            responded = interaction.model_copy(
+                update={"status": "responded", "response": response}
+            )
+            resumed_activity = activity.model_copy(
+                update={"status": "running", "attempt": activity.attempt + 1}
+            )
+            events = self._create_events(
+                (responded, resumed_activity),
+                thread_id=identity.thread_id,
+                run_id=identity.run_id,
+                first_seq=start_seq,
+                now=now,
+            )
+            session.add_all(self._event_rows(events))
+            self._advance_cursor(session, cursor, identity.thread_id, events[-1], now)
+            run.status = "running"
+            run.updated_at = now.replace(tzinfo=None)
+            run.ended_at = None
+            history.status = "running"
+            history.updated_at = now.replace(tzinfo=None)
+            history.ended_at = None
+            session.add(
+                WorkflowRunResume(
+                    thread_id=identity.thread_id,
+                    run_id=identity.run_id,
+                    principal_id=principal_id,
+                    activity_id=identity.activity_id,
+                    interaction_id=identity.interaction_id,
+                    response=response.model_dump(mode="json"),
+                    created_at=now.replace(tzinfo=None),
+                )
+            )
+            await session.commit()
+            return ClaimedInteractionResume(
+                identity=identity,
+                response=response,
+                scope_path=activity.scope_path,
+                attempt=resumed_activity.attempt,
+                events=events,
+            )
+
+    async def cancel_run_with_interaction(
+        self,
+        *,
+        thread_id: str,
+        run_id: str,
+        principal_id: str,
+        now: datetime,
+    ) -> tuple[WorkflowEvent, ...]:
+        async with AsyncSessionLocal() as session:
+            run = await session.scalar(
+                select(WorkflowRun)
+                .where(WorkflowRun.thread_id == thread_id)
+                .with_for_update()
+            )
+            if run is None or run.run_id != run_id:
+                raise InteractionNotAvailableError("run was not found")
+            history = await session.get(
+                WorkflowRunHistory, (thread_id, run_id), with_for_update=True
+            )
+            if history is None or history.principal_id != principal_id:
+                raise InteractionNotAvailableError("run was not found")
+            if run.status not in {"queued", "running", "waiting"}:
+                return ()
+            rows = (
+                await session.scalars(
+                    select(WorkflowActivityEvent)
+                    .where(WorkflowActivityEvent.thread_id == thread_id)
+                    .where(WorkflowActivityEvent.run_id == run_id)
+                    .order_by(WorkflowActivityEvent.seq_id.asc())
+                )
+            ).all()
+            latest_activities: dict[str, Activity] = {}
+            latest_interactions: dict[str, WorkflowInteraction] = {}
+            for row in rows:
+                event = self._to_event(row)
+                if isinstance(event, ActivityEvent):
+                    latest_activities[event.payload.activity_id] = event.payload
+                elif isinstance(event, WorkflowInteractionEvent):
+                    latest_interactions[event.payload.identity.interaction_id] = (
+                        event.payload
+                    )
+            payloads: list[Activity | WorkflowInteraction] = [
+                interaction.model_copy(update={"status": "cancelled"})
+                for interaction in latest_interactions.values()
+                if interaction.status == "pending"
+            ]
+            payloads.extend(
+                activity.model_copy(update={"status": "cancelled"})
+                for activity in latest_activities.values()
+                if activity.status in {"queued", "running", "waiting"}
+            )
+            if "workflow" not in latest_activities or latest_activities[
+                "workflow"
+            ].status not in {"queued", "running", "waiting"}:
+                payloads.append(
+                    Activity(
+                        activity_id="workflow",
+                        thread_id=thread_id,
+                        run_id=run_id,
+                        scope_path=("workflow",),
+                        kind="phase",
+                        status="cancelled",
+                        label="Workflow cancelled",
+                        attempt=1,
+                    )
+                )
+            cursor = await session.get(
+                WorkflowActivityCursor, thread_id, with_for_update=True
+            )
+            start_seq = cursor.last_seq_id + 1 if cursor else 1
+            events = self._create_events(
+                tuple(payloads),
+                thread_id=thread_id,
+                run_id=run_id,
+                first_seq=start_seq,
+                now=now,
+            )
+            if events:
+                session.add_all(self._event_rows(events))
+                self._advance_cursor(session, cursor, thread_id, events[-1], now)
+            run.status = "cancelled"
+            run.updated_at = now.replace(tzinfo=None)
+            run.ended_at = now.replace(tzinfo=None)
+            history.status = "cancelled"
+            history.updated_at = now.replace(tzinfo=None)
+            history.ended_at = now.replace(tzinfo=None)
+            pending_resume = await session.get(
+                WorkflowRunResume, thread_id, with_for_update=True
+            )
+            if pending_resume is not None:
+                await session.delete(pending_resume)
+            await session.commit()
+            return events
+
+    async def pending_resumes(self) -> tuple[PendingResume, ...]:
+        async with AsyncSessionLocal() as session:
+            pending_rows = (await session.scalars(select(WorkflowRunResume))).all()
+            pending: list[PendingResume] = []
+            for row in pending_rows:
+                run = await session.get(WorkflowRun, row.thread_id)
+                if run is None or run.run_id != row.run_id or run.status != "running":
+                    continue
+                interaction_row = await session.scalar(
+                    select(WorkflowActivityEvent)
+                    .where(WorkflowActivityEvent.thread_id == row.thread_id)
+                    .where(WorkflowActivityEvent.run_id == row.run_id)
+                    .where(WorkflowActivityEvent.event_name == "workflow.interaction")
+                    .where(
+                        WorkflowActivityEvent.payload["identity"][
+                            "interaction_id"
+                        ].as_string()
+                        == row.interaction_id
+                    )
+                    .order_by(WorkflowActivityEvent.seq_id.desc())
+                    .limit(1)
+                )
+                interaction_event = (
+                    self._to_event(interaction_row) if interaction_row else None
+                )
+                interaction = (
+                    interaction_event.payload
+                    if isinstance(interaction_event, WorkflowInteractionEvent)
+                    else None
+                )
+                event_row = await session.scalar(
+                    select(WorkflowActivityEvent)
+                    .where(WorkflowActivityEvent.thread_id == row.thread_id)
+                    .where(WorkflowActivityEvent.run_id == row.run_id)
+                    .where(WorkflowActivityEvent.event_name == "workflow.activity")
+                    .where(
+                        WorkflowActivityEvent.payload["activity_id"].as_string()
+                        == row.activity_id
+                    )
+                    .order_by(WorkflowActivityEvent.seq_id.desc())
+                    .limit(1)
+                )
+                activity_event = self._to_event(event_row) if event_row else None
+                activity = (
+                    activity_event.payload
+                    if isinstance(activity_event, ActivityEvent)
+                    else None
+                )
+                if (
+                    interaction is None
+                    or interaction.status != "responded"
+                    or interaction.response
+                    != TickerSelectionResponse.model_validate(row.response)
+                    or activity is None
+                    or activity.status != "running"
+                ):
+                    continue
+                pending.append(
+                    PendingResume(
+                        identity=interaction.identity,
+                        principal_id=row.principal_id,
+                        scope_path=activity.scope_path,
+                        attempt=activity.attempt,
+                        response=TickerSelectionResponse.model_validate(row.response),
+                    )
+                )
+            return tuple(pending)
+
     @staticmethod
-    def _to_event(row: WorkflowActivityEvent) -> ActivityEvent:
-        payload = Activity.model_validate(row.payload)
-        return ActivityEvent(
-            event_id=row.event_id,
-            seq_id=row.seq_id,
-            event_version=row.event_version,
-            event_name=row.event_name,
-            thread_id=row.thread_id,
-            run_id=row.run_id,
-            occurred_at=row.occurred_at.replace(tzinfo=timezone.utc),
-            payload=payload,
+    def _to_event(row: WorkflowActivityEvent) -> WorkflowEvent:
+        return _EVENT_ADAPTER.validate_python(
+            {
+                "event_id": row.event_id,
+                "seq_id": row.seq_id,
+                "event_version": row.event_version,
+                "event_name": row.event_name,
+                "thread_id": row.thread_id,
+                "run_id": row.run_id,
+                "occurred_at": row.occurred_at.replace(tzinfo=timezone.utc),
+                "payload": row.payload,
+            }
         )
+
+    @staticmethod
+    def _create_events(
+        payloads: tuple[Activity | WorkflowInteraction | WorkflowAgentOutput, ...],
+        *,
+        thread_id: str,
+        run_id: str,
+        first_seq: int,
+        now: datetime,
+    ) -> tuple[WorkflowEvent, ...]:
+        events: list[WorkflowEvent] = []
+        for offset, payload in enumerate(payloads):
+            envelope = {
+                "event_id": str(uuid.uuid4()),
+                "seq_id": first_seq + offset,
+                "thread_id": thread_id,
+                "run_id": run_id,
+                "occurred_at": now,
+                "payload": payload,
+            }
+            if isinstance(payload, Activity):
+                events.append(ActivityEvent(**envelope, event_version="v2"))
+            elif isinstance(payload, WorkflowInteraction):
+                events.append(WorkflowInteractionEvent(**envelope))
+            else:
+                events.append(WorkflowAgentOutputEvent(**envelope))
+        return tuple(events)
+
+    @staticmethod
+    def _event_rows(events: tuple[WorkflowEvent, ...]) -> list[WorkflowActivityEvent]:
+        return [
+            WorkflowActivityEvent(
+                event_id=event.event_id,
+                thread_id=event.thread_id,
+                run_id=event.run_id,
+                seq_id=event.seq_id,
+                event_version=event.event_version,
+                event_name=event.event_name,
+                occurred_at=event.occurred_at.replace(tzinfo=None),
+                payload=event.payload.model_dump(mode="json"),
+            )
+            for event in events
+        ]
+
+    @staticmethod
+    def _advance_cursor(
+        session,
+        cursor: WorkflowActivityCursor | None,
+        thread_id: str,
+        last_event: WorkflowEvent,
+        now: datetime,
+    ) -> None:
+        if cursor is None:
+            session.add(
+                WorkflowActivityCursor(
+                    thread_id=thread_id,
+                    last_seq_id=last_event.seq_id,
+                    updated_at=now.replace(tzinfo=None),
+                )
+            )
+        else:
+            cursor.last_seq_id = last_event.seq_id
+            cursor.updated_at = now.replace(tzinfo=None)
 
     @staticmethod
     def _run_from_model(row: WorkflowRun) -> RunStatusRecord:

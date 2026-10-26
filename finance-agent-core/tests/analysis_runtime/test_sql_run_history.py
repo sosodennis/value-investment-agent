@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from sqlalchemy import delete, func, select
 
+from src.analysis_runtime.domain.contracts import Activity, ActivityEvent
 from src.analysis_runtime.infrastructure.sql_repository import (
     SqlAlchemyActivityRepository,
 )
@@ -203,12 +204,6 @@ async def test_legacy_history_backfill_is_truthful_and_exact_runs_survive_restar
             )
             is None
         )
-        snapshot = await SqlAlchemyActivityRepository().snapshot(
-            thread_id=thread_id, run_id=old_run_id
-        )
-        assert snapshot.run_status == "completed"
-        assert [item.activity_id for item in snapshot.recent_activities] == ["workflow"]
-
         first_page = await repository.list_run_history(principal_id=owner_id, limit=1)
         assert [record.run_id for record in first_page.runs] == [current_run_id]
         assert first_page.has_more
@@ -242,13 +237,33 @@ async def test_legacy_history_backfill_is_truthful_and_exact_runs_survive_restar
             principal_id=owner_id,
             input_data={"message": "AMZN"},
         )
-        await repository.set_run(
+        completed_at = base_time + timedelta(seconds=21)
+        completion = Activity(
+            activity_id="workflow",
             thread_id=thread_id,
             run_id=new_run_id,
+            scope_path=("workflow",),
+            kind="phase",
             status="completed",
-            now=base_time + timedelta(seconds=21),
-            principal_id=owner_id,
+            label="Workflow completed",
+            attempt=1,
         )
+        await repository.append_atomic(
+            ActivityEvent(
+                event_id=str(uuid.uuid4()),
+                seq_id=4,
+                thread_id=thread_id,
+                run_id=new_run_id,
+                occurred_at=completed_at,
+                payload=completion,
+            ),
+            run_status="completed",
+        )
+        snapshot = await SqlAlchemyActivityRepository().snapshot(
+            thread_id=thread_id, run_id=new_run_id
+        )
+        assert snapshot.run_status == "completed"
+        assert [item.activity_id for item in snapshot.recent_activities] == ["workflow"]
         persisted_new_run = await SqlAlchemyActivityRepository().get_run_history(
             principal_id=owner_id, thread_id=thread_id, run_id=new_run_id
         )

@@ -12,6 +12,8 @@ describe('workflow API', () => {
             cursor: 0,
             active_activities: [],
             recent_activities: [],
+            pending_interactions: [],
+            completed_outputs: [],
         }), { status: 200 }));
         vi.stubGlobal('fetch', fetchMock);
 
@@ -31,6 +33,8 @@ describe('workflow API', () => {
             cursor: 0,
             active_activities: [],
             recent_activities: [],
+            pending_interactions: [],
+            completed_outputs: [],
         }), { status: 200 }));
         vi.stubGlobal('fetch', fetchMock);
 
@@ -47,6 +51,8 @@ describe('workflow API', () => {
             cursor: 0,
             active_activities: [],
             recent_activities: [],
+            pending_interactions: [],
+            completed_outputs: [],
         }), { status: 200 }));
         vi.stubGlobal('fetch', fetchMock);
 

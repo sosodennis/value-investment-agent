@@ -1,9 +1,9 @@
 import type { components, operations } from '@/types/generated/api-contract';
 import { csrfHeaders } from '@/lib/auth-api';
 import {
-    parseWorkflowActivityEvent,
+    parseSseWorkflowEventFrame,
     parseWorkflowActivitySnapshot,
-    type WorkflowActivityEvent,
+    type WorkflowEvent,
     type WorkflowActivitySnapshot,
 } from './workflow-activity';
 
@@ -74,7 +74,7 @@ export async function consumeWorkflowEvents(
     threadId: string,
     afterSeq: number,
     signal: AbortSignal,
-    onEvent: (event: WorkflowActivityEvent) => boolean | void,
+    onEvent: (event: WorkflowEvent) => boolean | void,
     runId?: string,
 ): Promise<void> {
     const url = new URL(`${API_URL}/api/v1/threads/${encodeURIComponent(threadId)}/events`);
@@ -97,9 +97,11 @@ export async function consumeWorkflowEvents(
                 const lines = frame.split(/\r?\n/);
                 const eventName = lines.find((line) => line.startsWith('event:'))?.slice(6).trim();
                 if (!eventName || eventName === 'heartbeat' || lines.every((line) => line.startsWith(':'))) continue;
-                if (eventName !== 'workflow.activity') throw new TypeError(`Unsupported SSE event ${eventName}.`);
+                if (eventName !== 'workflow.activity' && eventName !== 'workflow.interaction' && eventName !== 'workflow.agent_output') {
+                    throw new TypeError(`Unsupported SSE event ${eventName}.`);
+                }
                 const data = lines.filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trimStart()).join('\n');
-                const event = parseWorkflowActivityEvent(JSON.parse(data) as unknown);
+                const event = parseSseWorkflowEventFrame(data, eventName);
                 if (event.thread_id !== threadId) throw new TypeError('workflow event thread identity mismatch.');
                 if (onEvent(event) === true) return;
             }

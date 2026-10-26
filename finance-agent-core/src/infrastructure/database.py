@@ -48,6 +48,7 @@ async def init_db():
             WorkflowActivityEvent,
             WorkflowRun,
             WorkflowRunHistory,
+            WorkflowRunResume,
         )
 
         await conn.run_sync(Base.metadata.create_all)

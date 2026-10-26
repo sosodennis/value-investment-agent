@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 
 from src.analysis_runtime.application.ports import OwnerPort
 from src.analysis_runtime.application.runtime_service import AnalysisRuntimeService
@@ -100,6 +101,38 @@ app.include_router(analysis_runtime_router)
 app.include_router(dashboard_router)
 app.include_router(observability_router)
 app.include_router(artifact_router)
+
+
+def _openapi() -> dict[str, object]:
+    if app.openapi_schema:
+        return app.openapi_schema
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        routes=app.routes,
+        description=app.description,
+    )
+    event_response = (
+        schema.get("paths", {})
+        .get("/api/v1/threads/{thread_id}/events", {})
+        .get("get", {})
+        .get("responses", {})
+        .get("200", {})
+    )
+    content = event_response.get("content", {})
+    # FastAPI uses the declared union model to register its component schemas.
+    # The wire response remains SSE text; the union describes each data frame.
+    content.pop("application/json", None)
+    stream_schema = content.get("text/event-stream", {}).get("schema", {})
+    stream_schema.pop("oneOf", None)
+    stream_schema.pop("discriminator", None)
+    stream_schema.pop("title", None)
+    stream_schema["type"] = "string"
+    app.openapi_schema = schema
+    return schema
+
+
+app.openapi = _openapi
 
 
 @app.get("/health", tags=["Operations"])

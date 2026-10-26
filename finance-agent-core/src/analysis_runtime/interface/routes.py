@@ -6,11 +6,19 @@ from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from src.analysis_runtime.application.runtime_service import AnalysisRuntimeService
+from src.analysis_runtime.domain.contracts import (
+    InteractionIdentity,
+    TickerSelectionResponse,
+    WorkflowEvent,
+    WorkflowSnapshot,
+)
 from src.analysis_runtime.domain.errors import (
+    InteractionNotAvailableError,
     InvalidCursorError,
+    InvalidInteractionResponseError,
     ReplayGapError,
     RunAlreadyActiveError,
     RunNotFoundError,
@@ -26,11 +34,21 @@ from src.auth.entrypoint import (
 router = APIRouter(prefix="/api/v1/threads", tags=["Analysis runtime"])
 
 
+class WorkflowEventStreamResponse(StreamingResponse):
+    media_type = "text/event-stream"
+
+
 class RunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    message: str | None = None
-    resume_payload: dict[str, object] | None = None
+    message: str = Field(min_length=1)
+
+
+class ResumeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    identity: InteractionIdentity
+    response: TickerSelectionResponse
 
 
 class RunResponse(BaseModel):
@@ -49,8 +67,15 @@ def _runtime(request: Request) -> AnalysisRuntimeService:
 def _map_error(exc: Exception) -> HTTPException:
     if isinstance(exc, ThreadNotFoundError | RunNotFoundError):
         return HTTPException(status_code=404, detail=exc.code)
-    if isinstance(exc, RunAlreadyActiveError | SubscriberOverloadedError):
+    if isinstance(
+        exc,
+        RunAlreadyActiveError
+        | InteractionNotAvailableError
+        | SubscriberOverloadedError,
+    ):
         return HTTPException(status_code=409, detail=exc.code)
+    if isinstance(exc, InvalidInteractionResponseError):
+        return HTTPException(status_code=422, detail=exc.code)
     if isinstance(exc, ReplayGapError):
         return HTTPException(
             status_code=409,
@@ -68,22 +93,40 @@ async def start_run(
     request: Request,
     principal: Principal = Depends(require_current_user_mutation),
 ) -> RunResponse:
-    if body.message is None and body.resume_payload is None:
-        raise HTTPException(
-            status_code=400, detail="message or resume_payload is required"
-        )
     try:
         run_id = await _runtime(request).start(
             principal_id=principal.user_id,
             thread_id=thread_id,
-            input_data={
-                "message": body.message,
-                "resume_payload": body.resume_payload,
-            },
+            input_data={"message": body.message},
         )
     except Exception as exc:
         raise _map_error(exc) from exc
     return RunResponse(thread_id=thread_id, run_id=run_id)
+
+
+@router.post(
+    "/{thread_id}/runs/{run_id}/resume",
+    response_model=RunResponse,
+    status_code=202,
+)
+async def resume_run(
+    thread_id: str,
+    run_id: str,
+    body: ResumeRequest,
+    request: Request,
+    principal: Principal = Depends(require_current_user_mutation),
+) -> RunResponse:
+    if body.identity.thread_id != thread_id or body.identity.run_id != run_id:
+        raise HTTPException(status_code=422, detail="interaction_identity_mismatch")
+    try:
+        resumed_run_id = await _runtime(request).resume(
+            principal_id=principal.user_id,
+            identity=body.identity,
+            response=body.response,
+        )
+    except Exception as exc:
+        raise _map_error(exc) from exc
+    return RunResponse(thread_id=thread_id, run_id=resumed_run_id, status="resumed")
 
 
 @router.post("/{thread_id}/runs/{run_id}/cancel", status_code=204)
@@ -101,7 +144,7 @@ async def cancel_run(
         raise _map_error(exc) from exc
 
 
-@router.get("/{thread_id}")
+@router.get("/{thread_id}", response_model=WorkflowSnapshot)
 async def thread_snapshot(
     thread_id: str,
     request: Request,
@@ -117,7 +160,7 @@ async def thread_snapshot(
         raise _map_error(exc) from exc
 
 
-@router.get("/{thread_id}/activities")
+@router.get("/{thread_id}/activities", response_model=WorkflowSnapshot)
 async def activity_snapshot(
     thread_id: str,
     request: Request,
@@ -133,7 +176,46 @@ async def activity_snapshot(
         raise _map_error(exc) from exc
 
 
-@router.get("/{thread_id}/events")
+@router.get(
+    "/{thread_id}/events",
+    response_class=WorkflowEventStreamResponse,
+    responses={
+        200: {
+            "model": WorkflowEvent,
+            "description": (
+                "The response is a text/event-stream. Each data frame contains "
+                "one workflow event envelope."
+            ),
+            "content": {
+                "text/event-stream": {
+                    "schema": {
+                        "type": "string",
+                        "description": "SSE frames with JSON workflow event payloads.",
+                        "x-workflow-event-payload": {
+                            "discriminator": {
+                                "mapping": {
+                                    "workflow.activity": "#/components/schemas/ActivityEvent",
+                                    "workflow.interaction": "#/components/schemas/WorkflowInteractionEvent",
+                                    "workflow.agent_output": "#/components/schemas/WorkflowAgentOutputEvent",
+                                },
+                                "propertyName": "event_name",
+                            },
+                            "oneOf": [
+                                {"$ref": "#/components/schemas/ActivityEvent"},
+                                {
+                                    "$ref": "#/components/schemas/WorkflowInteractionEvent"
+                                },
+                                {
+                                    "$ref": "#/components/schemas/WorkflowAgentOutputEvent"
+                                },
+                            ],
+                        },
+                    }
+                }
+            },
+        }
+    },
+)
 async def activity_events(
     thread_id: str,
     request: Request,
@@ -164,7 +246,7 @@ async def activity_events(
                 if run_id is not None and event.run_id != run_id:
                     continue
                 seen.add(event.event_id)
-                yield f"id: {event.seq_id}\nevent: workflow.activity\ndata: {json.dumps(event.model_dump(mode='json'))}\n\n"
+                yield f"id: {event.seq_id}\nevent: {event.event_name}\ndata: {json.dumps(event.model_dump(mode='json'))}\n\n"
             yield ": heartbeat\n\n"
             while True:
                 try:
@@ -182,13 +264,13 @@ async def activity_events(
                 if event.event_id in seen:
                     continue
                 seen.add(event.event_id)
-                yield f"id: {event.seq_id}\nevent: workflow.activity\ndata: {json.dumps(event.model_dump(mode='json'))}\n\n"
+                yield f"id: {event.seq_id}\nevent: {event.event_name}\ndata: {json.dumps(event.model_dump(mode='json'))}\n\n"
         except asyncio.CancelledError:
             raise
         finally:
             await service.unsubscribe(subscriber)
 
-    return StreamingResponse(
+    return WorkflowEventStreamResponse(
         stream(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
