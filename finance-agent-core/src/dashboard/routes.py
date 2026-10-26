@@ -74,7 +74,19 @@ def _explicit_text_field(value: object, key: str) -> str | None:
     )
 
 
-@router.get("/recent-analyses", response_model=RecentAnalysesResponse)
+@router.get(
+    "/recent-analyses",
+    response_model=RecentAnalysesResponse,
+    summary="List the authenticated account's recent analysis runs",
+    description=(
+        "Reads persisted analysis runtime history for the authenticated account only. "
+        "Each item is one exact thread/run pair and can be reopened as that historical "
+        "workspace snapshot. Pages use a stable descending started_at, thread_id, and "
+        "run_id order; an empty account returns an empty items list and no cursor. "
+        "Run timestamps and optional labels come from persisted runtime records and "
+        "input data; missing values remain null."
+    ),
+)
 async def recent_analyses(
     request: Request,
     limit: int = Query(default=10, ge=1, le=50),
@@ -121,7 +133,18 @@ async def recent_analyses(
     )
 
 
-@router.get("/market-movers", response_model=MarketMoversResponse)
+@router.get(
+    "/market-movers",
+    response_model=MarketMoversResponse,
+    summary="Read authenticated market movers",
+    description=(
+        "Requires authentication. Reads Yahoo Finance most-active quotes. Fresh means every returned quote "
+        "has a provider timestamp no more than 24 hours old. Old or untimestamped "
+        "quotes, and a last-good snapshot served after refresh failure, are marked "
+        "stale. If no usable snapshot exists, the endpoint returns unavailable with "
+        "an empty items list and a stable non-sensitive error_code."
+    ),
+)
 async def market_movers(
     request: Request,
     limit: int = Query(default=3, ge=1, le=10),
@@ -130,7 +153,19 @@ async def market_movers(
     return await request.app.state.market_movers_service.get(limit=limit)
 
 
-@router.get("/capabilities", response_model=DashboardCapabilities)
+@router.get(
+    "/capabilities",
+    response_model=DashboardCapabilities,
+    summary="Read observed backend service capabilities",
+    description=(
+        "Requires authentication. Reports readiness checks performed by the backend for its analysis runtime, "
+        "database, and configured downstream services. Unconfigured services are "
+        "unknown, while failed configured probes are unavailable. This is observed "
+        "service health, not a frontend inference or a claim that every agent is healthy. "
+        "The backend reports its runtime and database checks; an empty capabilities "
+        "list means no checks were reported."
+    ),
+)
 async def capabilities(
     request: Request,
     principal: Principal = Depends(require_current_user),

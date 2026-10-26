@@ -712,8 +712,10 @@
       },
       "CapabilityItem": {
         "additionalProperties": false,
+        "description": "One observed backend or downstream service readiness check.",
         "properties": {
           "checked_at": {
+            "description": "UTC time when the backend performed this readiness check.",
             "format": "date-time",
             "title": "Checked At",
             "type": "string"
@@ -727,18 +729,22 @@
                 "type": "null"
               }
             ],
+            "description": "Stable, non-sensitive diagnostic code; never includes credentials or probe URLs.",
             "title": "Detail"
           },
           "id": {
+            "description": "Stable identifier of the runtime, database, or configured downstream service.",
             "title": "Id",
             "type": "string"
           },
           "source": {
+            "description": "Probe implementation or dependency that owns this status.",
             "title": "Source",
             "type": "string"
           },
           "status": {
-            "$ref": "#/components/schemas/DashboardStatus"
+            "$ref": "#/components/schemas/DashboardStatus",
+            "description": "Observed result of this capability's readiness probe."
           }
         },
         "required": [
@@ -855,8 +861,10 @@
       },
       "DashboardCapabilities": {
         "additionalProperties": false,
+        "description": "Backend-observed service readiness; it is not a claim about every agent.",
         "properties": {
           "capabilities": {
+            "description": "Observed runtime, database, and configured downstream service checks; an empty list means no checks were reported.",
             "items": {
               "$ref": "#/components/schemas/CapabilityItem"
             },
@@ -864,12 +872,14 @@
             "type": "array"
           },
           "checked_at": {
+            "description": "UTC time at which this readiness snapshot was collected.",
             "format": "date-time",
             "title": "Checked At",
             "type": "string"
           },
           "status": {
-            "$ref": "#/components/schemas/DashboardStatus"
+            "$ref": "#/components/schemas/DashboardStatus",
+            "description": "Aggregate of the reported capability checks."
           }
         },
         "required": [
@@ -881,6 +891,7 @@
         "type": "object"
       },
       "DashboardStatus": {
+        "description": "Observed readiness: operational, degraded, unavailable, or unresolved.",
         "enum": [
           "operational",
           "degraded",
@@ -2506,12 +2517,15 @@
       },
       "MarketMoverItem": {
         "additionalProperties": false,
+        "description": "A quote row returned by the configured market-data provider.",
         "properties": {
           "change_absolute": {
+            "description": "Absolute regular-market price change supplied by Yahoo Finance.",
             "title": "Change Absolute",
             "type": "number"
           },
           "change_percent": {
+            "description": "Percentage regular-market price change supplied by Yahoo Finance.",
             "title": "Change Percent",
             "type": "number"
           },
@@ -2524,6 +2538,7 @@
                 "type": "null"
               }
             ],
+            "description": "Provider currency code, or null when Yahoo Finance omits it.",
             "title": "Currency"
           },
           "market_state": {
@@ -2535,13 +2550,16 @@
                 "type": "null"
               }
             ],
+            "description": "Provider market state, or null when Yahoo Finance omits it.",
             "title": "Market State"
           },
           "name": {
+            "description": "Provider company name, falling back to the ticker symbol.",
             "title": "Name",
             "type": "string"
           },
           "price": {
+            "description": "Latest regular-market price supplied by Yahoo Finance.",
             "title": "Price",
             "type": "number"
           },
@@ -2555,9 +2573,11 @@
                 "type": "null"
               }
             ],
+            "description": "Provider quote timestamp; missing timestamps make the response stale.",
             "title": "Quote Time"
           },
           "symbol": {
+            "description": "Ticker symbol supplied by Yahoo Finance.",
             "title": "Symbol",
             "type": "string"
           }
@@ -2574,6 +2594,7 @@
       },
       "MarketMoversResponse": {
         "additionalProperties": false,
+        "description": "Authenticated market-data snapshot with explicit freshness and failure state.",
         "properties": {
           "error_code": {
             "anyOf": [
@@ -2584,6 +2605,7 @@
                 "type": "null"
               }
             ],
+            "description": "Stable, non-sensitive refresh or freshness reason; null when the response is fresh.",
             "title": "Error Code"
           },
           "fetched_at": {
@@ -2596,9 +2618,11 @@
                 "type": "null"
               }
             ],
+            "description": "Backend fetch time for the returned snapshot, or the original fetch time when serving cached data; null when no quote snapshot is available.",
             "title": "Fetched At"
           },
           "items": {
+            "description": "Yahoo Finance most-active quotes, or an empty list when no usable quote rows are available.",
             "items": {
               "$ref": "#/components/schemas/MarketMoverItem"
             },
@@ -2607,10 +2631,12 @@
           },
           "source": {
             "default": "yahoo_finance",
+            "description": "Market-data provider that supplied the quote rows.",
             "title": "Source",
             "type": "string"
           },
           "status": {
+            "description": "Fresh means all quote timestamps are within 24 hours; stale means quotes are old or a cached last-good response is served after refresh failure; unavailable means no usable quote rows are available.",
             "enum": [
               "fresh",
               "stale",
@@ -3897,13 +3923,16 @@
       },
       "RecentAnalysesResponse": {
         "additionalProperties": false,
+        "description": "Stable, account-scoped page of persisted analysis runs.",
         "properties": {
           "fetched_at": {
+            "description": "UTC time when the backend read this page.",
             "format": "date-time",
             "title": "Fetched At",
             "type": "string"
           },
           "items": {
+            "description": "Runs owned by the authenticated account, ordered by started_at descending with null timestamps last, then thread_id and run_id descending; empty when the account has no matching runs.",
             "items": {
               "$ref": "#/components/schemas/RecentAnalysisItem"
             },
@@ -3919,11 +3948,13 @@
                 "type": "null"
               }
             ],
+            "description": "Opaque cursor for the next page in the same deterministic order; null when there are no more runs.",
             "title": "Next Cursor"
           },
           "source": {
             "const": "analysis_runtime",
             "default": "analysis_runtime",
+            "description": "Persisted run-history capability that owns these records.",
             "title": "Source",
             "type": "string"
           }
@@ -3936,6 +3967,7 @@
       },
       "RecentAnalysisItem": {
         "additionalProperties": false,
+        "description": "A single run owned by the authenticated account, including historical runs.",
         "properties": {
           "company_name": {
             "anyOf": [
@@ -3946,9 +3978,11 @@
                 "type": "null"
               }
             ],
+            "description": "Company name explicitly persisted in this run's input data; null when it was not persisted.",
             "title": "Company Name"
           },
           "run_id": {
+            "description": "Exact workflow run identifier used with thread_id to reopen this historical run.",
             "title": "Run Id",
             "type": "string"
           },
@@ -3962,9 +3996,11 @@
                 "type": "null"
               }
             ],
+            "description": "Start time recorded by analysis runtime; null when the runtime has no start time.",
             "title": "Started At"
           },
           "status": {
+            "description": "Latest status recorded for this exact run by analysis runtime.",
             "enum": [
               "queued",
               "running",
@@ -3986,9 +4022,11 @@
                 "type": "null"
               }
             ],
+            "description": "Summary explicitly persisted in this run's input data; null when it was not persisted.",
             "title": "Summary"
           },
           "thread_id": {
+            "description": "Runtime thread identifier used with run_id to reopen this exact workspace snapshot.",
             "title": "Thread Id",
             "type": "string"
           },
@@ -4001,6 +4039,7 @@
                 "type": "null"
               }
             ],
+            "description": "Ticker explicitly persisted in this run's input data; null when it was not persisted.",
             "title": "Ticker"
           },
           "updated_at": {
@@ -4013,6 +4052,7 @@
                 "type": "null"
               }
             ],
+            "description": "Last update time recorded by analysis runtime; null when unavailable.",
             "title": "Updated At"
           }
         },
@@ -10101,6 +10141,7 @@
     },
     "/api/v1/dashboard/capabilities": {
       "get": {
+        "description": "Requires authentication. Reports readiness checks performed by the backend for its analysis runtime, database, and configured downstream services. Unconfigured services are unknown, while failed configured probes are unavailable. This is observed service health, not a frontend inference or a claim that every agent is healthy. The backend reports its runtime and database checks; an empty capabilities list means no checks were reported.",
         "operationId": "capabilities_api_v1_dashboard_capabilities_get",
         "responses": {
           "200": {
@@ -10114,7 +10155,7 @@
             "description": "Successful Response"
           }
         },
-        "summary": "Capabilities",
+        "summary": "Read observed backend service capabilities",
         "tags": [
           "Dashboard"
         ]
@@ -10122,6 +10163,7 @@
     },
     "/api/v1/dashboard/market-movers": {
       "get": {
+        "description": "Requires authentication. Reads Yahoo Finance most-active quotes. Fresh means every returned quote has a provider timestamp no more than 24 hours old. Old or untimestamped quotes, and a last-good snapshot served after refresh failure, are marked stale. If no usable snapshot exists, the endpoint returns unavailable with an empty items list and a stable non-sensitive error_code.",
         "operationId": "market_movers_api_v1_dashboard_market_movers_get",
         "parameters": [
           {
@@ -10159,7 +10201,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Market Movers",
+        "summary": "Read authenticated market movers",
         "tags": [
           "Dashboard"
         ]
@@ -10167,6 +10209,7 @@
     },
     "/api/v1/dashboard/recent-analyses": {
       "get": {
+        "description": "Reads persisted analysis runtime history for the authenticated account only. Each item is one exact thread/run pair and can be reopened as that historical workspace snapshot. Pages use a stable descending started_at, thread_id, and run_id order; an empty account returns an empty items list and no cursor. Run timestamps and optional labels come from persisted runtime records and input data; missing values remain null.",
         "operationId": "recent_analyses_api_v1_dashboard_recent_analyses_get",
         "parameters": [
           {
@@ -10222,7 +10265,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Recent Analyses",
+        "summary": "List the authenticated account's recent analysis runs",
         "tags": [
           "Dashboard"
         ]

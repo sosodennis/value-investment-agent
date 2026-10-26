@@ -96,7 +96,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Capabilities */
+        /**
+         * Read observed backend service capabilities
+         * @description Requires authentication. Reports readiness checks performed by the backend for its analysis runtime, database, and configured downstream services. Unconfigured services are unknown, while failed configured probes are unavailable. This is observed service health, not a frontend inference or a claim that every agent is healthy. The backend reports its runtime and database checks; an empty capabilities list means no checks were reported.
+         */
         get: operations["capabilities_api_v1_dashboard_capabilities_get"];
         put?: never;
         post?: never;
@@ -113,7 +116,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Market Movers */
+        /**
+         * Read authenticated market movers
+         * @description Requires authentication. Reads Yahoo Finance most-active quotes. Fresh means every returned quote has a provider timestamp no more than 24 hours old. Old or untimestamped quotes, and a last-good snapshot served after refresh failure, are marked stale. If no usable snapshot exists, the endpoint returns unavailable with an empty items list and a stable non-sensitive error_code.
+         */
         get: operations["market_movers_api_v1_dashboard_market_movers_get"];
         put?: never;
         post?: never;
@@ -130,7 +136,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Recent Analyses */
+        /**
+         * List the authenticated account's recent analysis runs
+         * @description Reads persisted analysis runtime history for the authenticated account only. Each item is one exact thread/run pair and can be reopened as that historical workspace snapshot. Pages use a stable descending started_at, thread_id, and run_id order; an empty account returns an empty items list and no cursor. Run timestamps and optional labels come from persisted runtime records and input data; missing values remain null.
+         */
         get: operations["recent_analyses_api_v1_dashboard_recent_analyses_get"];
         put?: never;
         post?: never;
@@ -682,19 +691,33 @@ export interface components {
             /** Verification Report Id */
             verification_report_id?: string | null;
         };
-        /** CapabilityItem */
+        /**
+         * CapabilityItem
+         * @description One observed backend or downstream service readiness check.
+         */
         CapabilityItem: {
             /**
              * Checked At
              * Format: date-time
+             * @description UTC time when the backend performed this readiness check.
              */
             checked_at: string;
-            /** Detail */
+            /**
+             * Detail
+             * @description Stable, non-sensitive diagnostic code; never includes credentials or probe URLs.
+             */
             detail?: string | null;
-            /** Id */
+            /**
+             * Id
+             * @description Stable identifier of the runtime, database, or configured downstream service.
+             */
             id: string;
-            /** Source */
+            /**
+             * Source
+             * @description Probe implementation or dependency that owns this status.
+             */
             source: string;
+            /** @description Observed result of this capability's readiness probe. */
             status: components["schemas"]["DashboardStatus"];
         };
         /** ConfidenceCalibrationModel */
@@ -719,19 +742,28 @@ export interface components {
             /** Reason Codes */
             reason_codes?: string[] | null;
         };
-        /** DashboardCapabilities */
+        /**
+         * DashboardCapabilities
+         * @description Backend-observed service readiness; it is not a claim about every agent.
+         */
         DashboardCapabilities: {
-            /** Capabilities */
+            /**
+             * Capabilities
+             * @description Observed runtime, database, and configured downstream service checks; an empty list means no checks were reported.
+             */
             capabilities: components["schemas"]["CapabilityItem"][];
             /**
              * Checked At
              * Format: date-time
+             * @description UTC time at which this readiness snapshot was collected.
              */
             checked_at: string;
+            /** @description Aggregate of the reported capability checks. */
             status: components["schemas"]["DashboardStatus"];
         };
         /**
          * DashboardStatus
+         * @description Observed readiness: operational, degraded, unavailable, or unresolved.
          * @enum {string}
          */
         DashboardStatus: "operational" | "degraded" | "unavailable" | "unknown";
@@ -1135,40 +1167,81 @@ export interface components {
             /** Password */
             password: string;
         };
-        /** MarketMoverItem */
+        /**
+         * MarketMoverItem
+         * @description A quote row returned by the configured market-data provider.
+         */
         MarketMoverItem: {
-            /** Change Absolute */
+            /**
+             * Change Absolute
+             * @description Absolute regular-market price change supplied by Yahoo Finance.
+             */
             change_absolute: number;
-            /** Change Percent */
+            /**
+             * Change Percent
+             * @description Percentage regular-market price change supplied by Yahoo Finance.
+             */
             change_percent: number;
-            /** Currency */
+            /**
+             * Currency
+             * @description Provider currency code, or null when Yahoo Finance omits it.
+             */
             currency?: string | null;
-            /** Market State */
+            /**
+             * Market State
+             * @description Provider market state, or null when Yahoo Finance omits it.
+             */
             market_state?: string | null;
-            /** Name */
+            /**
+             * Name
+             * @description Provider company name, falling back to the ticker symbol.
+             */
             name: string;
-            /** Price */
+            /**
+             * Price
+             * @description Latest regular-market price supplied by Yahoo Finance.
+             */
             price: number;
-            /** Quote Time */
+            /**
+             * Quote Time
+             * @description Provider quote timestamp; missing timestamps make the response stale.
+             */
             quote_time?: string | null;
-            /** Symbol */
+            /**
+             * Symbol
+             * @description Ticker symbol supplied by Yahoo Finance.
+             */
             symbol: string;
         };
-        /** MarketMoversResponse */
+        /**
+         * MarketMoversResponse
+         * @description Authenticated market-data snapshot with explicit freshness and failure state.
+         */
         MarketMoversResponse: {
-            /** Error Code */
+            /**
+             * Error Code
+             * @description Stable, non-sensitive refresh or freshness reason; null when the response is fresh.
+             */
             error_code?: string | null;
-            /** Fetched At */
+            /**
+             * Fetched At
+             * @description Backend fetch time for the returned snapshot, or the original fetch time when serving cached data; null when no quote snapshot is available.
+             */
             fetched_at?: string | null;
-            /** Items */
+            /**
+             * Items
+             * @description Yahoo Finance most-active quotes, or an empty list when no usable quote rows are available.
+             */
             items?: components["schemas"]["MarketMoverItem"][];
             /**
              * Source
+             * @description Market-data provider that supplied the quote rows.
              * @default yahoo_finance
              */
             source: string;
             /**
              * Status
+             * @description Fresh means all quote timestamps are within 24 hours; stale means quotes are old or a cached last-good response is served after refresh failure; unavailable means no usable quote rows are available.
              * @enum {string}
              */
             status: "fresh" | "stale" | "unavailable";
@@ -1560,44 +1633,80 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /** RecentAnalysesResponse */
+        /**
+         * RecentAnalysesResponse
+         * @description Stable, account-scoped page of persisted analysis runs.
+         */
         RecentAnalysesResponse: {
             /**
              * Fetched At
              * Format: date-time
+             * @description UTC time when the backend read this page.
              */
             fetched_at: string;
-            /** Items */
+            /**
+             * Items
+             * @description Runs owned by the authenticated account, ordered by started_at descending with null timestamps last, then thread_id and run_id descending; empty when the account has no matching runs.
+             */
             items?: components["schemas"]["RecentAnalysisItem"][];
-            /** Next Cursor */
+            /**
+             * Next Cursor
+             * @description Opaque cursor for the next page in the same deterministic order; null when there are no more runs.
+             */
             next_cursor?: string | null;
             /**
              * Source
+             * @description Persisted run-history capability that owns these records.
              * @default analysis_runtime
              * @constant
              */
             source: "analysis_runtime";
         };
-        /** RecentAnalysisItem */
+        /**
+         * RecentAnalysisItem
+         * @description A single run owned by the authenticated account, including historical runs.
+         */
         RecentAnalysisItem: {
-            /** Company Name */
+            /**
+             * Company Name
+             * @description Company name explicitly persisted in this run's input data; null when it was not persisted.
+             */
             company_name?: string | null;
-            /** Run Id */
+            /**
+             * Run Id
+             * @description Exact workflow run identifier used with thread_id to reopen this historical run.
+             */
             run_id: string;
-            /** Started At */
+            /**
+             * Started At
+             * @description Start time recorded by analysis runtime; null when the runtime has no start time.
+             */
             started_at?: string | null;
             /**
              * Status
+             * @description Latest status recorded for this exact run by analysis runtime.
              * @enum {string}
              */
             status: "queued" | "running" | "waiting" | "completed" | "failed" | "cancelled" | "unknown";
-            /** Summary */
+            /**
+             * Summary
+             * @description Summary explicitly persisted in this run's input data; null when it was not persisted.
+             */
             summary?: string | null;
-            /** Thread Id */
+            /**
+             * Thread Id
+             * @description Runtime thread identifier used with run_id to reopen this exact workspace snapshot.
+             */
             thread_id: string;
-            /** Ticker */
+            /**
+             * Ticker
+             * @description Ticker explicitly persisted in this run's input data; null when it was not persisted.
+             */
             ticker?: string | null;
-            /** Updated At */
+            /**
+             * Updated At
+             * @description Last update time recorded by analysis runtime; null when unavailable.
+             */
             updated_at?: string | null;
         };
         /** RegimeSummaryModel */

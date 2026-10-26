@@ -140,4 +140,20 @@ describe('home dashboard', () => {
         expect(api.getRecentAnalyses).toHaveBeenNthCalledWith(2, { limit: 10, next_cursor: 'opaque-cursor' });
         expect(screen.getAllByRole('link', { name: /Open analysis run/ })).toHaveLength(2);
     });
+
+    it('shows empty run and capability states independently from stale market data', async () => {
+        api.getRecentAnalyses.mockResolvedValue({ ...recentPage, items: [] });
+        api.getMarketMovers.mockResolvedValue({
+            ...marketMovers,
+            status: 'stale',
+            errorCode: 'market_data_quote_stale',
+        });
+        api.getDashboardCapabilities.mockResolvedValue({ ...capabilities, capabilities: [] });
+        render(<HomePage />);
+
+        expect(await screen.findByText('No analyses yet')).toBeTruthy();
+        expect(await screen.findByText('No capability checks')).toBeTruthy();
+        expect(await screen.findByText('Showing the last available market quotes.')).toBeTruthy();
+        expect(screen.getByText(/Stale data/)).toBeTruthy();
+    });
 });

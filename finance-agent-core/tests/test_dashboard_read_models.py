@@ -154,6 +154,61 @@ def test_dashboard_endpoints_require_authentication():
     assert client.get("/api/v1/dashboard/recent-analyses").status_code == 401
 
 
+def test_dashboard_openapi_documents_read_model_sources_scope_and_states():
+    schema = app.openapi()
+    paths = schema["paths"]
+    recent = paths["/api/v1/dashboard/recent-analyses"]["get"]
+    market = paths["/api/v1/dashboard/market-movers"]["get"]
+    capabilities = paths["/api/v1/dashboard/capabilities"]["get"]
+
+    assert "authenticated account only" in recent["description"]
+    assert "stable descending" in recent["description"]
+    assert "empty items list" in recent["description"]
+    assert "Yahoo Finance" in market["description"]
+    assert "no more than 24 hours" in market["description"]
+    assert "empty items list" in market["description"]
+    assert "Requires authentication" in market["description"]
+    assert "not a frontend inference" in capabilities["description"]
+    assert "Requires authentication" in capabilities["description"]
+
+    components = schema["components"]["schemas"]
+    documented_fields = {
+        "RecentAnalysesResponse": ("source", "fetched_at", "items", "next_cursor"),
+        "RecentAnalysisItem": (
+            "thread_id",
+            "run_id",
+            "status",
+            "started_at",
+            "updated_at",
+            "ticker",
+            "company_name",
+            "summary",
+        ),
+        "MarketMoverItem": (
+            "symbol",
+            "name",
+            "price",
+            "change_absolute",
+            "change_percent",
+            "currency",
+            "market_state",
+            "quote_time",
+        ),
+        "MarketMoversResponse": (
+            "source",
+            "status",
+            "fetched_at",
+            "items",
+            "error_code",
+        ),
+        "CapabilityItem": ("id", "status", "source", "checked_at", "detail"),
+        "DashboardCapabilities": ("status", "checked_at", "capabilities"),
+    }
+    for schema_name, field_names in documented_fields.items():
+        properties = components[schema_name]["properties"]
+        assert all(properties[name].get("description") for name in field_names)
+
+
 def test_recent_analyses_api_scopes_history_and_round_trips_legacy_cursor(monkeypatch):
     calls = []
 
