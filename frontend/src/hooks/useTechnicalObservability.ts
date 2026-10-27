@@ -121,6 +121,18 @@ export function useTechnicalObservability(
         aggregates: aggregatesState.data ?? [],
         rows: rowsState.data ?? [],
         calibrationReadiness: calibrationState.data ?? null,
+        aggregatesError: aggregatesState.error ?? null,
+        rowsError: rowsState.error ?? null,
+        calibrationError: calibrationState.error ?? null,
+        aggregatesLoading: aggregatesState.isLoading,
+        rowsLoading: rowsState.isLoading,
+        calibrationLoading: calibrationState.isLoading,
+        aggregatesValidating: aggregatesState.isValidating,
+        rowsValidating: rowsState.isValidating,
+        calibrationValidating: calibrationState.isValidating,
+        retryAggregates: () => aggregatesState.mutate(),
+        retryRows: () => rowsState.mutate(),
+        retryCalibration: () => calibrationState.mutate(),
         isLoading:
             aggregatesState.isLoading ||
             rowsState.isLoading ||
@@ -140,7 +152,7 @@ export function useTechnicalObservabilityEventDetail(
     const url =
         eventId === null
             ? null
-            : `${API_URL}/api/v1/observability/monitoring/events/${eventId}?${buildTechnicalObservabilitySearchParams(
+            : `${API_URL}/api/v1/observability/monitoring/events/${encodeURIComponent(eventId)}?${buildTechnicalObservabilitySearchParams(
                   {
                       tickers: [],
                       agentSources: [],
@@ -182,6 +194,8 @@ export function useTechnicalObservabilityEventDetail(
     return {
         detail: state.data ?? null,
         isLoading: state.isLoading,
+        isValidating: state.isValidating,
         error: state.error ?? null,
+        retry: () => state.mutate(),
     };
 }

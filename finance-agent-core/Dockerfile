@@ -78,6 +78,13 @@ RUN set -eux; \
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh && sed -i 's/\r$//' /usr/local/bin/entrypoint.sh
 
+# The default runtime reads the immutable model artifact baked into the image.
+# A separate Compose override can opt into a writable runtime cache.
+ENV HF_HOME=/opt/hf-cache-baked \
+    HF_HUB_CACHE=/opt/hf-cache-baked/hub \
+    SENTENCE_TRANSFORMERS_HOME=/opt/hf-cache-baked/hub \
+    FASTEMBED_CACHE_PATH=/opt/hf-cache-baked/hub
+
 # Copy the rest of the application code
 COPY . .
 

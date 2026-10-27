@@ -6,5 +6,25 @@
       "schema": "../workflow-activity-v1.schema.json",
       "fixture": "workflow-activity-v1.json"
     }
+  ],
+  "activity_contracts": [
+    {
+      "version": "v2",
+      "event_name": "workflow.activity",
+      "schema": "../workflow-activity-v2.schema.json",
+      "fixture": "workflow-activity-v2.json"
+    },
+    {
+      "version": "interaction-v1",
+      "event_name": "workflow.interaction",
+      "schema": "../workflow-interaction-v1.schema.json",
+      "fixture": "workflow-interaction-v1.json"
+    },
+    {
+      "version": "agent-output-v1",
+      "event_name": "workflow.agent_output",
+      "schema": "../workflow-agent-output-v1.schema.json",
+      "fixture": "workflow-agent-output-v1.json"
+    }
   ]
 }

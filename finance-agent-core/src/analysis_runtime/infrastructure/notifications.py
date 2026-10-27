@@ -4,25 +4,36 @@ import asyncio
 import json
 import logging
 from collections.abc import Awaitable, Callable
+from datetime import timezone
 from typing import Any
 
 import asyncpg
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
-from src.analysis_runtime.domain.contracts import ActivityEvent
+from src.analysis_runtime.domain.contracts import WorkflowEvent
 from src.analysis_runtime.domain.errors import SubscriberOverloadedError
 
 logger = logging.getLogger(__name__)
+_EVENT_ADAPTER = TypeAdapter(WorkflowEvent)
+
+
+class _EventPointer(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    event_id: str = Field(min_length=1)
+    thread_id: str = Field(min_length=1)
+    seq_id: int = Field(ge=1)
 
 
 class QueueSubscriber:
     def __init__(self, *, thread_id: str, maxsize: int) -> None:
         self.thread_id = thread_id
-        self._queue: asyncio.Queue[ActivityEvent | None] = asyncio.Queue(
+        self._queue: asyncio.Queue[WorkflowEvent | None] = asyncio.Queue(
             maxsize=maxsize
         )
         self._closed = False
 
-    def push(self, event: ActivityEvent) -> None:
+    def push(self, event: WorkflowEvent) -> None:
         if self._closed:
             return
         try:
@@ -36,7 +47,7 @@ class QueueSubscriber:
                 pass
             raise SubscriberOverloadedError("subscriber queue is full") from exc
 
-    async def receive(self) -> ActivityEvent | None:
+    async def receive(self) -> WorkflowEvent | None:
         return await self._queue.get()
 
     def close(self) -> None:
@@ -68,10 +79,10 @@ class BoundedNotificationHub:
                     self._subscribers.pop(subscriber.thread_id, None)
         subscriber.close()
 
-    async def publish(self, event: ActivityEvent) -> None:
+    async def publish(self, event: WorkflowEvent) -> None:
         await self._dispatch(event)
 
-    async def _dispatch(self, event: ActivityEvent) -> None:
+    async def _dispatch(self, event: WorkflowEvent) -> None:
         overloaded: list[QueueSubscriber] = []
         async with self._lock:
             subscribers = self._subscribers.get(event.thread_id, set())
@@ -100,9 +111,9 @@ class BoundedNotificationHub:
 class PostgresNotificationHub(BoundedNotificationHub):
     """Cross-worker activity fan-out backed by PostgreSQL LISTEN/NOTIFY.
 
-    The activity repository remains the durable source of truth. A notification
-    carries a validated activity envelope only to wake subscribers in other
-    workers; reconnects and replay always use the durable cursor.
+    The event repository remains the durable source of truth. PostgreSQL
+    notifications carry only an event pointer; receiving workers load the
+    committed event before waking their subscribers.
     """
 
     def __init__(
@@ -113,12 +124,14 @@ class PostgresNotificationHub(BoundedNotificationHub):
         queue_size: int = 128,
         max_payload_bytes: int = 7900,
         connect: Callable[..., Awaitable[Any]] | None = None,
+        load_event: Callable[[str], Awaitable[WorkflowEvent | None]] | None = None,
     ) -> None:
         super().__init__(queue_size=queue_size)
         self._dsn = dsn or _default_postgres_dsn()
         self._channel = channel
         self._max_payload_bytes = max_payload_bytes
         self._connect = connect or asyncpg.connect
+        self._load_event = load_event or _load_committed_event
         self._connection: Any | None = None
         self._lifecycle_lock = asyncio.Lock()
 
@@ -130,7 +143,7 @@ class PostgresNotificationHub(BoundedNotificationHub):
             await connection.add_listener(self._channel, self._on_notification)
             self._connection = connection
 
-    async def publish(self, event: ActivityEvent) -> None:
+    async def publish(self, event: WorkflowEvent) -> None:
         connection = self._connection
         if connection is None or connection.is_closed():
             logger.warning(
@@ -138,7 +151,14 @@ class PostgresNotificationHub(BoundedNotificationHub):
                 extra={"thread_id": event.thread_id, "seq_id": event.seq_id},
             )
             return
-        payload = json.dumps(event.model_dump(mode="json"), separators=(",", ":"))
+        payload = json.dumps(
+            _EventPointer(
+                event_id=event.event_id,
+                thread_id=event.thread_id,
+                seq_id=event.seq_id,
+            ).model_dump(),
+            separators=(",", ":"),
+        )
         if len(payload.encode("utf-8")) > self._max_payload_bytes:
             logger.warning(
                 "workflow activity notification payload exceeds limit",
@@ -163,9 +183,20 @@ class PostgresNotificationHub(BoundedNotificationHub):
 
     async def _dispatch_payload(self, payload: str) -> None:
         try:
-            event = ActivityEvent.model_validate(json.loads(payload))
+            pointer = _EventPointer.model_validate(json.loads(payload))
         except (TypeError, ValueError, json.JSONDecodeError):
-            logger.warning("invalid workflow activity notification ignored")
+            logger.warning("invalid workflow event notification ignored")
+            return
+        try:
+            event = await self._load_event(pointer.event_id)
+            if event is None or (event.thread_id, event.seq_id) != (
+                pointer.thread_id,
+                pointer.seq_id,
+            ):
+                return
+            event = _EVENT_ADAPTER.validate_python(event)
+        except (asyncpg.PostgresError, OSError, TypeError, ValueError):
+            logger.warning("workflow event notification lookup failed", exc_info=True)
             return
         await self._dispatch(event)
 
@@ -189,6 +220,34 @@ class PostgresNotificationHub(BoundedNotificationHub):
                         "workflow activity notification close failed", exc_info=True
                     )
         await super().close()
+
+
+async def _load_committed_event(event_id: str) -> WorkflowEvent | None:
+    from sqlalchemy import select
+
+    from src.infrastructure.database import AsyncSessionLocal
+    from src.infrastructure.models import WorkflowActivityEvent
+
+    async with AsyncSessionLocal() as session:
+        row = await session.scalar(
+            select(WorkflowActivityEvent).where(
+                WorkflowActivityEvent.event_id == event_id
+            )
+        )
+    if row is None:
+        return None
+    return _EVENT_ADAPTER.validate_python(
+        {
+            "event_id": row.event_id,
+            "thread_id": row.thread_id,
+            "run_id": row.run_id,
+            "seq_id": row.seq_id,
+            "event_version": row.event_version,
+            "event_name": row.event_name,
+            "occurred_at": row.occurred_at.replace(tzinfo=timezone.utc),
+            "payload": row.payload,
+        }
+    )
 
 
 def _default_postgres_dsn() -> str:

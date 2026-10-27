@@ -39,5 +39,11 @@ RUN uv sync --frozen --no-dev --extra models
 COPY entrypoint.sh /usr/local/bin/model-inference-entrypoint.sh
 RUN chmod +x /usr/local/bin/model-inference-entrypoint.sh
 
+# The default runtime reads the immutable model artifact baked into the image.
+# A separate Compose override can opt into a writable runtime cache.
+ENV HF_HOME=/opt/hf-cache-baked \
+    HF_HUB_CACHE=/opt/hf-cache-baked/hub \
+    TRANSFORMERS_CACHE=/opt/hf-cache-baked/hub
+
 EXPOSE 8001
 ENTRYPOINT ["/usr/local/bin/model-inference-entrypoint.sh"]

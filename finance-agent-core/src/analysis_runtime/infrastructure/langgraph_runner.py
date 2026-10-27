@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator, Mapping
 from typing import Literal, Protocol
 from uuid import UUID
@@ -11,13 +12,20 @@ from langgraph.types import Interrupt as LangGraphInterrupt
 
 from src.analysis_runtime.application.ports import GraphRunner
 from src.analysis_runtime.domain.contracts import (
+    MAX_AGENT_OUTPUT_PREVIEW_BYTES,
     Activity,
-    ActivityInterruption,
     ActivityKind,
     ActivityStatus,
+    InteractionIdentity,
+    InteractionRequested,
     TickerSelectionRequest,
+    WorkflowActivityIdentity,
+    WorkflowAgentOutput,
 )
-from src.analysis_runtime.domain.errors import InvalidRunnerInterruptError
+from src.analysis_runtime.domain.errors import (
+    InvalidRunnerInterruptError,
+    InvalidRunnerOutputError,
+)
 from src.llm_provider.entrypoint import (
     ProviderPrincipal,
     reset_provider_principal,
@@ -127,6 +135,104 @@ def _activity_label(
     )
 
 
+_AGENT_OUTPUT_CONTEXTS = {
+    "intent_extraction": "intent_extraction",
+    "fundamental_analysis": "fundamental_analysis",
+    "financial_news_research": "financial_news_research",
+    "technical_analysis": "technical_analysis",
+    "debate": "debate",
+}
+
+
+def _completed_agent_output(
+    raw: Mapping[str, object],
+    metadata: Mapping[str, object],
+    *,
+    thread_id: str,
+    run_id: str,
+    activity_id: str,
+    scope_path: tuple[str, ...],
+) -> WorkflowAgentOutput | None:
+    agent_id = metadata.get("agent_id")
+    if (
+        metadata.get("agent_scope") != "agent"
+        or metadata.get("langgraph_node") != metadata.get("agent_node")
+        or not isinstance(agent_id, str)
+        or agent_id not in _AGENT_OUTPUT_CONTEXTS
+        or not scope_path
+        or scope_path[0] != agent_id
+    ):
+        return None
+    data = raw.get("data")
+    output = data.get("output") if isinstance(data, Mapping) else None
+    if not isinstance(output, Mapping):
+        return None
+    context = output.get(_AGENT_OUTPUT_CONTEXTS[agent_id])
+    if not isinstance(context, Mapping):
+        context = output
+    artifact = context.get("artifact")
+    if not isinstance(artifact, Mapping):
+        return None
+    artifact_data = dict(artifact)
+    preview = artifact_data.get("preview")
+    if isinstance(preview, Mapping):
+        try:
+            preview_size = len(
+                json.dumps(
+                    preview,
+                    ensure_ascii=False,
+                    allow_nan=False,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            )
+        except (TypeError, ValueError) as exc:
+            raise InvalidRunnerOutputError(
+                "agent output preview is not finite JSON"
+            ) from exc
+        if preview_size > MAX_AGENT_OUTPUT_PREVIEW_BYTES:
+            reference = artifact_data.get("reference")
+            if not isinstance(reference, Mapping) or not isinstance(
+                reference.get("artifact_id"), str
+            ):
+                raise InvalidRunnerOutputError(
+                    "oversized agent output requires an artifact reference"
+                )
+            artifact_data["preview"] = None
+    reference = artifact_data.get("reference")
+    artifact_id = None
+    artifact_type = None
+    if isinstance(reference, Mapping):
+        raw_artifact_id = reference.get("artifact_id")
+        if isinstance(raw_artifact_id, str) and raw_artifact_id:
+            artifact_id = raw_artifact_id
+        raw_artifact_type = reference.get("type")
+        if isinstance(raw_artifact_type, str) and raw_artifact_type:
+            artifact_type = raw_artifact_type
+    try:
+        return WorkflowAgentOutput(
+            identity=WorkflowActivityIdentity(
+                thread_id=thread_id,
+                run_id=run_id,
+                activity_id=activity_id,
+            ),
+            agent_id=agent_id,
+            output_kind=str(artifact_data["kind"]),
+            output_version=str(artifact_data["version"]),
+            summary=str(artifact_data["summary"]),
+            preview=(
+                dict(artifact_data["preview"])
+                if isinstance(artifact_data.get("preview"), Mapping)
+                else None
+            ),
+            artifact_id=artifact_id,
+            artifact_type=artifact_type,
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise InvalidRunnerOutputError(
+            "agent output artifact has an invalid contract"
+        ) from exc
+
+
 class LangGraphRunner(GraphRunner):
     """Translate LangGraph lifecycle callbacks to application activities."""
 
@@ -140,7 +246,7 @@ class LangGraphRunner(GraphRunner):
         run_id: str,
         input_data: Mapping[str, object],
         principal_id: str,
-    ) -> AsyncIterator[Activity]:
+    ) -> AsyncIterator[Activity | InteractionRequested | WorkflowAgentOutput]:
         message = input_data.get("message")
         interrupt_response = input_data.get("interrupt_response")
         resuming_activity_id = input_data.get("resuming_activity_id")
@@ -231,9 +337,6 @@ class LangGraphRunner(GraphRunner):
                     if is_resumed_activity
                     else _activity_attempt(metadata_map)
                 )
-                if is_resumed_activity:
-                    resumed_activity_started = True
-
                 parent_activity_id = None
                 parent_ids = raw.get("parent_ids")
                 if isinstance(parent_ids, list | tuple):
@@ -243,7 +346,7 @@ class LangGraphRunner(GraphRunner):
                             parent_activity_id = f"langgraph:{normalized_parent_id}"
                             break
 
-                event_family, _ = _LIFECYCLE_EVENTS[event_name]
+                event_family, status = _LIFECYCLE_EVENTS[event_name]
                 if event_family == "chain" and event_name == "on_chain_start":
                     active_callbacks[callback_run_id] = (
                         metadata_map,
@@ -251,8 +354,12 @@ class LangGraphRunner(GraphRunner):
                         parent_activity_id,
                     )
 
-                _, status = _LIFECYCLE_EVENTS[event_name]
-                yield Activity(
+                if is_resumed_activity and status == "running":
+                    continue
+                if is_resumed_activity:
+                    resumed_activity_started = True
+
+                activity = Activity(
                     activity_id=activity_id,
                     parent_activity_id=parent_activity_id,
                     thread_id=thread_id,
@@ -264,6 +371,18 @@ class LangGraphRunner(GraphRunner):
                     progress=_activity_progress(raw, metadata_map),
                     attempt=attempt,
                 )
+                yield activity
+                if event_name == "on_chain_end":
+                    output = _completed_agent_output(
+                        raw,
+                        metadata_map,
+                        thread_id=thread_id,
+                        run_id=run_id,
+                        activity_id=activity_id,
+                        scope_path=scope_path,
+                    )
+                    if output is not None:
+                        yield output
                 if event_family == "chain" and event_name in {
                     "on_chain_end",
                     "on_chain_error",
@@ -285,7 +404,7 @@ class LangGraphRunner(GraphRunner):
         active_callbacks: Mapping[
             str, tuple[Mapping[str, object], tuple[str, ...], str | None]
         ],
-    ) -> Activity | None:
+    ) -> InteractionRequested | None:
         data = raw.get("data")
         chunk = data.get("chunk") if isinstance(data, Mapping) else None
         if not isinstance(chunk, Mapping) or "__interrupt__" not in chunk:
@@ -344,7 +463,7 @@ class LangGraphRunner(GraphRunner):
         is_resumed_activity = (
             resuming_activity_id is not None and scope_path == resuming_scope_path
         )
-        return Activity(
+        activity = Activity(
             activity_id=(
                 resuming_activity_id
                 if is_resumed_activity
@@ -362,8 +481,14 @@ class LangGraphRunner(GraphRunner):
                 if is_resumed_activity
                 else _activity_attempt(metadata_map)
             ),
-            interruption=ActivityInterruption(
+        )
+        return InteractionRequested(
+            activity=activity,
+            identity=InteractionIdentity(
+                thread_id=thread_id,
+                run_id=run_id,
+                activity_id=activity.activity_id,
                 interaction_id=interrupt.id,
-                request=request,
             ),
+            request=request,
         )

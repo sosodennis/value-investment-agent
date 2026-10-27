@@ -13,7 +13,11 @@ from src.agents.technical.subdomains.decision_observability.domain.contracts imp
     TechnicalPredictionEventRecord,
 )
 from src.infrastructure.database import AsyncSessionLocal
-from src.infrastructure.models import TechnicalOutcomePath, TechnicalPredictionEvent
+from src.infrastructure.models import (
+    TechnicalOutcomePath,
+    TechnicalPredictionEvent,
+    WorkflowActivityEvent,
+)
 
 
 @dataclass(frozen=True)
@@ -122,10 +126,27 @@ class SqlAlchemyTechnicalDecisionObservabilityRepository:
         if row is None:
             return None
         prediction_event, outcome_path = row
+        run_id = await self._find_report_run_id(
+            report_artifact_id=prediction_event.full_report_artifact_id
+        )
         return self._monitoring_event_detail_from_models(
             prediction_event=prediction_event,
             outcome_path=outcome_path,
+            run_id=run_id,
         )
+
+    async def _find_report_run_id(self, *, report_artifact_id: str) -> str | None:
+        async with AsyncSessionLocal() as session:
+            return await session.scalar(
+                select(WorkflowActivityEvent.run_id)
+                .where(WorkflowActivityEvent.event_name == "workflow.agent_output")
+                .where(
+                    WorkflowActivityEvent.payload["artifact_id"].as_string()
+                    == report_artifact_id
+                )
+                .order_by(WorkflowActivityEvent.occurred_at.desc())
+                .limit(1)
+            )
 
     def _build_unlabeled_prediction_events_query(
         self,
@@ -291,6 +312,7 @@ class SqlAlchemyTechnicalDecisionObservabilityRepository:
         *,
         prediction_event: TechnicalPredictionEvent,
         outcome_path: TechnicalOutcomePath | None,
+        run_id: str | None = None,
     ) -> TechnicalMonitoringEventDetail:
         return TechnicalMonitoringEventDetail(
             event_id=prediction_event.event_id,
@@ -327,6 +349,7 @@ class SqlAlchemyTechnicalDecisionObservabilityRepository:
             data_quality_flags=tuple(
                 [] if outcome_path is None else outcome_path.data_quality_flags or []
             ),
+            run_id=run_id,
         )
 
 

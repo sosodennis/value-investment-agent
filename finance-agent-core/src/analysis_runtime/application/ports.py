@@ -6,13 +6,19 @@ from typing import Protocol
 
 from src.analysis_runtime.domain.contracts import (
     Activity,
-    ActivityEvent,
-    ActivitySnapshot,
+    AnalysisRunPage,
+    AnalysisRunRecord,
+    ClaimedInteractionResume,
+    InteractionIdentity,
+    InteractionRequested,
     PendingResume,
     ReplayPage,
     RunStatus,
     RunStatusRecord,
     TickerSelectionResponse,
+    WorkflowAgentOutput,
+    WorkflowEvent,
+    WorkflowSnapshot,
 )
 
 
@@ -24,7 +30,9 @@ class GraphRunner(Protocol):
         run_id: str,
         input_data: Mapping[str, object],
         principal_id: str,
-    ) -> AsyncIterator[Activity | Mapping[str, object]]: ...
+    ) -> AsyncIterator[
+        Activity | InteractionRequested | WorkflowAgentOutput | Mapping[str, object]
+    ]: ...
 
 
 class OwnerPort(Protocol):
@@ -35,7 +43,7 @@ class OwnerPort(Protocol):
 
 class ActivityRepository(Protocol):
     async def append_atomic(
-        self, event: ActivityEvent, *, run_status: RunStatus | None = None
+        self, event: WorkflowEvent, *, run_status: RunStatus | None = None
     ) -> bool: ...
 
     async def replay(
@@ -46,9 +54,23 @@ class ActivityRepository(Protocol):
         limit: int,
     ) -> ReplayPage: ...
 
-    async def snapshot(self, *, thread_id: str, run_id: str) -> ActivitySnapshot: ...
+    async def snapshot(self, *, thread_id: str, run_id: str) -> WorkflowSnapshot: ...
 
     async def get_run(self, *, thread_id: str) -> RunStatusRecord | None: ...
+
+    async def get_run_history(
+        self, *, principal_id: str, thread_id: str, run_id: str
+    ) -> AnalysisRunRecord | None: ...
+
+    async def list_run_history(
+        self,
+        *,
+        principal_id: str,
+        limit: int,
+        before_started_at: datetime | None = None,
+        before_thread_id: str | None = None,
+        before_run_id: str | None = None,
+    ) -> AnalysisRunPage: ...
 
     async def set_run(
         self,
@@ -57,25 +79,41 @@ class ActivityRepository(Protocol):
         run_id: str,
         status: RunStatus,
         now: datetime,
+        principal_id: str | None = None,
+        input_data: Mapping[str, object] | None = None,
     ) -> RunStatusRecord: ...
 
-    async def claim_resume(
+    async def record_waiting_interaction(
+        self,
+        *,
+        requested: InteractionRequested,
+        principal_id: str,
+        now: datetime,
+    ) -> tuple[WorkflowEvent, ...]: ...
+
+    async def claim_interaction_response(
+        self,
+        *,
+        identity: InteractionIdentity,
+        response: TickerSelectionResponse,
+        principal_id: str,
+        now: datetime,
+    ) -> ClaimedInteractionResume: ...
+
+    async def cancel_run_with_interaction(
         self,
         *,
         thread_id: str,
         run_id: str,
-        activity_id: str,
-        interaction_id: str,
-        response: TickerSelectionResponse,
         principal_id: str,
         now: datetime,
-    ) -> Activity: ...
+    ) -> tuple[WorkflowEvent, ...]: ...
 
     async def pending_resumes(self) -> tuple[PendingResume, ...]: ...
 
 
 class RuntimeSubscriber(Protocol):
-    async def receive(self) -> ActivityEvent | None: ...
+    async def receive(self) -> WorkflowEvent | None: ...
 
     def close(self) -> None: ...
 
@@ -85,7 +123,7 @@ class NotificationHub(Protocol):
 
     async def unsubscribe(self, subscriber: RuntimeSubscriber) -> None: ...
 
-    async def publish(self, event: ActivityEvent) -> None: ...
+    async def publish(self, event: WorkflowEvent) -> None: ...
 
     async def close(self) -> None: ...
 

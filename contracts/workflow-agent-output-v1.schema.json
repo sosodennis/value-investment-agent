@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://value-investment-agent.local/contracts/workflow-agent-output-v1.schema.json",
+  "title": "workflow.agent_output v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["event_id", "seq_id", "event_version", "event_name", "thread_id", "run_id", "occurred_at", "payload"],
+  "properties": {
+    "event_id": {"type": "string", "minLength": 1},
+    "seq_id": {"type": "integer", "minimum": 1},
+    "event_version": {"const": "v1"},
+    "event_name": {"const": "workflow.agent_output"},
+    "thread_id": {"type": "string", "minLength": 1},
+    "run_id": {"type": "string", "minLength": 1},
+    "occurred_at": {"type": "string", "format": "date-time"},
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identity", "agent_id", "output_kind", "output_version", "summary"],
+      "properties": {
+        "identity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["thread_id", "run_id", "activity_id"],
+          "properties": {
+            "thread_id": {"type": "string", "minLength": 1},
+            "run_id": {"type": "string", "minLength": 1},
+            "activity_id": {"type": "string", "minLength": 1}
+          }
+        },
+        "agent_id": {"type": "string", "minLength": 1, "maxLength": 120},
+        "output_kind": {"type": "string", "minLength": 1, "maxLength": 120},
+        "output_version": {"const": "v1"},
+        "summary": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "preview": {"type": ["object", "null"]},
+        "artifact_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 200}
+      }
+    }
+  }
+}

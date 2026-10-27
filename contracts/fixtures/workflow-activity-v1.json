@@ -499,31 +499,7 @@
             "kind": "node",
             "status": "waiting",
             "label": "Resolve ticker ambiguity",
-            "attempt": 1,
-            "interruption": {
-              "interaction_id": "interaction_fixture_1",
-              "request": {
-                "type": "ticker_selection",
-                "title": "Ticker Resolution",
-                "description": "Choose the intended company.",
-                "candidates": [
-                  {
-                    "symbol": "GOOG",
-                    "name": "Alphabet Inc.",
-                    "exchange": "NASDAQ",
-                    "type": "stock",
-                    "confidence": 0.91
-                  },
-                  {
-                    "symbol": "GOOGL",
-                    "name": "Alphabet Inc. Class A",
-                    "exchange": "NASDAQ",
-                    "type": "stock",
-                    "confidence": 0.89
-                  }
-                ]
-              }
-            }
+            "attempt": 1
           }
         }
       ],
@@ -541,162 +517,14 @@
             "kind": "node",
             "status": "waiting",
             "label": "Resolve ticker ambiguity",
-            "attempt": 1,
-            "interruption": {
-              "interaction_id": "interaction_fixture_1",
-              "request": {
-                "type": "ticker_selection",
-                "title": "Ticker Resolution",
-                "description": "Choose the intended company.",
-                "candidates": [
-                  {
-                    "symbol": "GOOG",
-                    "name": "Alphabet Inc.",
-                    "exchange": "NASDAQ",
-                    "type": "stock",
-                    "confidence": 0.91
-                  },
-                  {
-                    "symbol": "GOOGL",
-                    "name": "Alphabet Inc. Class A",
-                    "exchange": "NASDAQ",
-                    "type": "stock",
-                    "confidence": 0.89
-                  }
-                ]
-              }
-            }
+            "attempt": 1
           }
         ],
         "recent_activities": []
       },
       "assertions": {
         "run_status": "waiting",
-        "requires_human_input": true,
-        "resume_request": {
-          "activity_id": "intent.clarifying",
-          "interaction_id": "interaction_fixture_1",
-          "response": {
-            "type": "ticker_selection",
-            "selected_symbol": "GOOGL"
-          }
-        },
-        "rejected_legacy_shapes": [
-          "interrupt.request event",
-          "message metadata type/data interrupt",
-          "unbound resume_payload"
-        ]
-      }
-    },
-    {
-      "id": "interrupt-resume",
-      "description": "A consumed ticker interaction resumes its activity at the next attempt.",
-      "events": [
-        {
-          "event_id": "evt_interrupt_resume_001",
-          "seq_id": 1,
-          "event_version": "v1",
-          "event_name": "workflow.activity",
-          "thread_id": "thread_activity_interrupt_resume",
-          "run_id": "run_activity_interrupt_resume",
-          "occurred_at": "2026-10-24T00:04:03Z",
-          "payload": {
-            "activity_id": "intent.clarifying",
-            "thread_id": "thread_activity_interrupt_resume",
-            "run_id": "run_activity_interrupt_resume",
-            "scope_path": ["intent", "clarifying"],
-            "kind": "node",
-            "status": "waiting",
-            "label": "Resolve ticker ambiguity",
-            "attempt": 1,
-            "interruption": {
-              "interaction_id": "interaction_fixture_resume",
-              "request": {
-                "type": "ticker_selection",
-                "title": "Ticker Resolution",
-                "description": "Choose the intended company.",
-                "candidates": [
-                  {
-                    "symbol": "GOOG",
-                    "name": "Alphabet Inc.",
-                    "exchange": "NASDAQ",
-                    "type": "stock",
-                    "confidence": 0.91
-                  },
-                  {
-                    "symbol": "GOOGL",
-                    "name": "Alphabet Inc. Class A",
-                    "exchange": "NASDAQ",
-                    "type": "stock",
-                    "confidence": 0.89
-                  }
-                ]
-              }
-            }
-          }
-        },
-        {
-          "event_id": "evt_interrupt_resume_002",
-          "seq_id": 2,
-          "event_version": "v1",
-          "event_name": "workflow.activity",
-          "thread_id": "thread_activity_interrupt_resume",
-          "run_id": "run_activity_interrupt_resume",
-          "occurred_at": "2026-10-24T00:04:04Z",
-          "payload": {
-            "activity_id": "intent.clarifying",
-            "thread_id": "thread_activity_interrupt_resume",
-            "run_id": "run_activity_interrupt_resume",
-            "scope_path": ["intent", "clarifying"],
-            "kind": "node",
-            "status": "running",
-            "label": "Resolve ticker ambiguity",
-            "attempt": 2
-          }
-        }
-      ],
-      "snapshot": {
-        "thread_id": "thread_activity_interrupt_resume",
-        "run_id": "run_activity_interrupt_resume",
-        "run_status": "running",
-        "cursor": 2,
-        "active_activities": [
-          {
-            "activity_id": "intent.clarifying",
-            "thread_id": "thread_activity_interrupt_resume",
-            "run_id": "run_activity_interrupt_resume",
-            "scope_path": ["intent", "clarifying"],
-            "kind": "node",
-            "status": "running",
-            "label": "Resolve ticker ambiguity",
-            "attempt": 2
-          }
-        ],
-        "recent_activities": [
-          {
-            "activity_id": "intent.clarifying",
-            "thread_id": "thread_activity_interrupt_resume",
-            "run_id": "run_activity_interrupt_resume",
-            "scope_path": ["intent", "clarifying"],
-            "kind": "node",
-            "status": "running",
-            "label": "Resolve ticker ambiguity",
-            "attempt": 2
-          }
-        ]
-      },
-      "assertions": {
-        "resume_request": {
-          "activity_id": "intent.clarifying",
-          "interaction_id": "interaction_fixture_resume",
-          "response": {
-            "type": "ticker_selection",
-            "selected_symbol": "GOOGL"
-          }
-        },
-        "resumed_activity_id": "intent.clarifying",
-        "resumed_attempt": 2,
-        "active_interruption": null
+        "requires_human_input": true
       }
     },
     {

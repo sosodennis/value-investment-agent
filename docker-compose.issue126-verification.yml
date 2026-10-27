@@ -2,8 +2,8 @@
 #
 # The verification project is reached from a disposable client container on
 # the Compose network. Removing published ports lets each capability run two
-# replicas without colliding on the host. Project-scoped volumes still keep
-# PostgreSQL, Redis, and model artifacts isolated from other worktrees.
+# replicas without colliding on the host. PostgreSQL and Redis state remain
+# project-scoped; model artifacts come from the explicitly selected images.
 services:
   postgres:
     ports: []

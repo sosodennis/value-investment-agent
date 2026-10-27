@@ -15,10 +15,17 @@ from src.analysis_runtime.application.ports import (
 from src.analysis_runtime.domain.contracts import (
     Activity,
     ActivityEvent,
-    ActivitySnapshot,
+    AnalysisRunPage,
+    InteractionIdentity,
+    InteractionRequested,
     ReplayPage,
     RunStatus,
     TickerSelectionResponse,
+    WorkflowAgentOutput,
+    WorkflowAgentOutputEvent,
+    WorkflowEvent,
+    WorkflowFailure,
+    WorkflowSnapshot,
 )
 from src.analysis_runtime.domain.errors import (
     ActivityPersistenceError,
@@ -29,6 +36,34 @@ from src.analysis_runtime.domain.errors import (
 from src.analysis_runtime.infrastructure.notifications import (
     BoundedNotificationHub,
 )
+
+_SAFE_FAILURE_MESSAGES = {
+    "schema_validation_failed": "The provider returned data that did not match the workflow contract.",
+    "upstream_timeout": "The upstream provider timed out while the workflow was running.",
+    "upstream_unavailable": "The upstream provider is unavailable.",
+    "rate_limited": "The provider temporarily rate limited this workflow.",
+    "authentication_failed": "The provider authentication configuration is unavailable.",
+    "invalid_runner_interrupt": "The workflow produced an invalid interaction request.",
+}
+
+
+def _failure_from_exception(
+    error: Exception, *, activity_id: str | None
+) -> WorkflowFailure:
+    raw_code = getattr(error, "code", None)
+    code = getattr(raw_code, "value", raw_code)
+    code = code if isinstance(code, str) and code else "workflow_runtime_error"
+    owner = "llm_provider" if hasattr(error, "retryable") else "workflow.runtime"
+    retryable = bool(getattr(error, "retryable", False))
+    return WorkflowFailure(
+        code=code,
+        owner=owner,
+        activity_id=activity_id,
+        retryable=retryable,
+        message=_SAFE_FAILURE_MESSAGES.get(
+            code, "The workflow could not complete because an internal step failed."
+        ),
+    )
 
 
 class AnalysisRuntimeService:
@@ -75,7 +110,12 @@ class AnalysisRuntimeService:
         selected_run_id = run_id or str(uuid.uuid4())
         now = datetime.now(timezone.utc)
         await self.repository.set_run(
-            thread_id=thread_id, run_id=selected_run_id, status="queued", now=now
+            thread_id=thread_id,
+            run_id=selected_run_id,
+            status="queued",
+            now=now,
+            principal_id=principal_id,
+            input_data=input_data,
         )
         task = asyncio.create_task(
             self._execute(
@@ -92,59 +132,57 @@ class AnalysisRuntimeService:
         self,
         *,
         principal_id: str,
-        thread_id: str,
-        run_id: str,
-        activity_id: str,
-        interaction_id: str,
+        identity: InteractionIdentity,
         response: TickerSelectionResponse,
     ) -> str:
-        await self._check_owner(principal_id=principal_id, thread_id=thread_id)
-        task = self._tasks.get(thread_id)
+        await self._check_owner(principal_id=principal_id, thread_id=identity.thread_id)
+        task = self._tasks.get(identity.thread_id)
         if task and not task.done():
             raise RunAlreadyActiveError("thread already has an active run")
-        activity = await self.repository.claim_resume(
-            thread_id=thread_id,
-            run_id=run_id,
-            activity_id=activity_id,
-            interaction_id=interaction_id,
-            response=response,
-            principal_id=principal_id,
-            now=datetime.now(timezone.utc),
-        )
+        async with self._subscription_gate:
+            claimed = await self.repository.claim_interaction_response(
+                identity=identity,
+                response=response,
+                principal_id=principal_id,
+                now=datetime.now(timezone.utc),
+            )
+            for event in claimed.events:
+                await self.hub.publish(event)
         resume_input = {
             "interrupt_response": response.model_dump(mode="json"),
-            "resuming_activity_id": activity.activity_id,
-            "resuming_scope_path": list(activity.scope_path),
-            "resuming_attempt": activity.attempt,
+            "resuming_activity_id": identity.activity_id,
+            "resuming_scope_path": list(claimed.scope_path),
+            "resuming_attempt": claimed.attempt - 1,
         }
-        self._tasks[thread_id] = asyncio.create_task(
+        self._tasks[identity.thread_id] = asyncio.create_task(
             self._execute(
                 principal_id=principal_id,
-                thread_id=thread_id,
-                run_id=run_id,
+                thread_id=identity.thread_id,
+                run_id=identity.run_id,
                 input_data=resume_input,
             )
         )
-        return run_id
+        return identity.run_id
 
     async def recover_pending_resumes(self) -> int:
         """Restart resume commands durably claimed before a process stopped."""
         pending = await self.repository.pending_resumes()
         recovered = 0
         for item in pending:
-            if item.thread_id in self._tasks and not self._tasks[item.thread_id].done():
+            thread_id = item.identity.thread_id
+            if thread_id in self._tasks and not self._tasks[thread_id].done():
                 continue
             resume_input = {
                 "interrupt_response": item.response.model_dump(mode="json"),
-                "resuming_activity_id": item.activity_id,
+                "resuming_activity_id": item.identity.activity_id,
                 "resuming_scope_path": list(item.scope_path),
-                "resuming_attempt": item.attempt,
+                "resuming_attempt": item.attempt - 1,
             }
-            self._tasks[item.thread_id] = asyncio.create_task(
+            self._tasks[thread_id] = asyncio.create_task(
                 self._execute(
                     principal_id=item.principal_id,
-                    thread_id=item.thread_id,
-                    run_id=item.run_id,
+                    thread_id=thread_id,
+                    run_id=item.identity.run_id,
                     input_data=resume_input,
                 )
             )
@@ -153,30 +191,57 @@ class AnalysisRuntimeService:
 
     async def cancel(self, *, principal_id: str, thread_id: str, run_id: str) -> None:
         await self._check_owner(principal_id=principal_id, thread_id=thread_id)
-        run = await self.repository.get_run(thread_id=thread_id)
-        if run is None or run.run_id != run_id:
-            raise RunNotFoundError("run was not found")
         task = self._tasks.get(thread_id)
-        if task and not task.done():
-            task.cancel()
-        else:
-            await self.repository.set_run(
+        async with self._subscription_gate:
+            events = await self.repository.cancel_run_with_interaction(
                 thread_id=thread_id,
                 run_id=run_id,
-                status="cancelled",
+                principal_id=principal_id,
                 now=datetime.now(timezone.utc),
             )
+            for event in events:
+                await self.hub.publish(event)
+        if not events:
+            run = await self.repository.get_run(thread_id=thread_id)
+            if run is None or run.run_id != run_id:
+                raise RunNotFoundError("run was not found")
+        if task and not task.done():
+            task.cancel()
 
     async def snapshot(
         self, *, principal_id: str, thread_id: str, run_id: str | None = None
-    ) -> ActivitySnapshot:
+    ) -> WorkflowSnapshot:
         await self._check_owner(principal_id=principal_id, thread_id=thread_id)
-        run = await self.repository.get_run(thread_id=thread_id)
-        if run is None:
-            raise ThreadNotFoundError("thread was not found")
-        if run_id is not None and run.run_id != run_id:
+        if run_id is None:
+            run = await self.repository.get_run(thread_id=thread_id)
+            if run is None:
+                raise ThreadNotFoundError("thread was not found")
+            run_id = run.run_id
+        elif (
+            await self.repository.get_run_history(
+                principal_id=principal_id, thread_id=thread_id, run_id=run_id
+            )
+            is None
+        ):
             raise RunNotFoundError("run was not found")
-        return await self.repository.snapshot(thread_id=thread_id, run_id=run.run_id)
+        return await self.repository.snapshot(thread_id=thread_id, run_id=run_id)
+
+    async def list_run_history(
+        self,
+        *,
+        principal_id: str,
+        limit: int,
+        before_started_at: datetime | None = None,
+        before_thread_id: str | None = None,
+        before_run_id: str | None = None,
+    ) -> AnalysisRunPage:
+        return await self.repository.list_run_history(
+            principal_id=principal_id,
+            limit=limit,
+            before_started_at=before_started_at,
+            before_thread_id=before_thread_id,
+            before_run_id=before_run_id,
+        )
 
     async def replay(
         self,
@@ -216,7 +281,7 @@ class AnalysisRuntimeService:
         await self.hub.unsubscribe(subscriber)
 
     async def _persist_and_publish(
-        self, event: ActivityEvent, *, run_status: RunStatus | None = None
+        self, event: WorkflowEvent, *, run_status: RunStatus | None = None
     ) -> None:
         async with self._subscription_gate:
             try:
@@ -246,22 +311,53 @@ class AnalysisRuntimeService:
                 run_id=run_id,
                 status="running",
                 now=datetime.now(timezone.utc),
+                principal_id=principal_id,
             )
             suspended = False
+            current_activity_id: str | None = None
             async for item in self.runner.run(
                 thread_id=thread_id,
                 run_id=run_id,
                 input_data=input_data,
                 principal_id=principal_id,
             ):
+                if isinstance(item, InteractionRequested):
+                    current_activity_id = item.activity.activity_id
+                    suspended = True
+                    async with self._subscription_gate:
+                        events = await self.repository.record_waiting_interaction(
+                            requested=item,
+                            principal_id=principal_id,
+                            now=datetime.now(timezone.utc),
+                        )
+                        for event in events:
+                            await self.hub.publish(event)
+                    break
+                if isinstance(item, WorkflowAgentOutput):
+                    current = await self.repository.replay(
+                        thread_id=thread_id, after_seq=0, limit=1_000_000
+                    )
+                    await self._persist_and_publish(
+                        WorkflowAgentOutputEvent(
+                            event_id=str(uuid.uuid4()),
+                            seq_id=current.cursor + 1,
+                            thread_id=thread_id,
+                            run_id=run_id,
+                            occurred_at=datetime.now(timezone.utc),
+                            payload=item,
+                        )
+                    )
+                    continue
                 activity = (
                     item
                     if isinstance(item, Activity)
                     else Activity.model_validate(item)
                 )
-                suspended = (
-                    activity.status == "waiting" and activity.interruption is not None
-                )
+                current_activity_id = activity.activity_id
+                if activity.status == "waiting":
+                    raise ActivityPersistenceError(
+                        "waiting activity requires a typed interaction request"
+                    )
                 current = await self.repository.replay(
                     thread_id=thread_id, after_seq=0, limit=1_000_000
                 )
@@ -276,11 +372,7 @@ class AnalysisRuntimeService:
                         update={"thread_id": thread_id, "run_id": run_id}
                     ),
                 )
-                await self._persist_and_publish(
-                    event, run_status="waiting" if suspended else None
-                )
-                if suspended:
-                    break
+                await self._persist_and_publish(event)
             if suspended:
                 return
             completion = Activity(
@@ -309,37 +401,34 @@ class AnalysisRuntimeService:
                 run_status="completed",
             )
         except asyncio.CancelledError:
-            await self._emit_terminal(
-                thread_id=thread_id,
-                run_id=run_id,
-                status="cancelled",
-                label="Workflow cancelled",
-            )
-            await self.repository.set_run(
-                thread_id=thread_id,
-                run_id=run_id,
-                status="cancelled",
-                now=datetime.now(timezone.utc),
-            )
             raise
-        except Exception:
+        except Exception as exc:
+            failure = _failure_from_exception(exc, activity_id=current_activity_id)
             await self._emit_terminal(
                 thread_id=thread_id,
                 run_id=run_id,
                 status="failed",
                 label="Workflow failed",
+                failure=failure,
             )
             await self.repository.set_run(
                 thread_id=thread_id,
                 run_id=run_id,
                 status="failed",
                 now=datetime.now(timezone.utc),
+                principal_id=principal_id,
             )
         finally:
             self._tasks.pop(thread_id, None)
 
     async def _emit_terminal(
-        self, *, thread_id: str, run_id: str, status: str, label: str
+        self,
+        *,
+        thread_id: str,
+        run_id: str,
+        status: str,
+        label: str,
+        failure: WorkflowFailure | None = None,
     ) -> None:
         try:
             current = await self.repository.replay(
@@ -354,6 +443,7 @@ class AnalysisRuntimeService:
                 status=status,
                 label=label,
                 attempt=1,
+                failure=failure,
             )
             await self._persist_and_publish(
                 ActivityEvent(

@@ -1,5 +1,5 @@
-import { LandingScreen } from '@/components/landing/LandingScreen';
+import { DashboardHome } from '@/features/dashboard/dashboard-home';
 
-export default function LandingPage() {
-    return <LandingScreen />;
+export default function HomePage() {
+    return <DashboardHome />;
 }
