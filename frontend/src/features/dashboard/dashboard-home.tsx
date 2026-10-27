@@ -3,19 +3,28 @@
 import Link from 'next/link';
 import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { Activity, ArrowDownRight, ArrowRight, ArrowUpRight, CircleAlert, Clock3, LoaderCircle, RefreshCw, Search } from 'lucide-react';
+import { Activity, ArrowDownRight, ArrowRight, ArrowUpRight, ChevronsUpDown, CircleAlert, Clock3, LoaderCircle, RefreshCw, Search } from 'lucide-react';
 import { SWRConfig } from 'swr';
 
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 import { useDashboardOverview, type PanelState } from './use-dashboard-overview';
 import type { DashboardCapabilities, MarketMover, MarketMovers, RecentAnalyses, RecentAnalysis } from './api';
+
+type DashboardOverviewData = ReturnType<typeof useDashboardOverview>;
+type CompanySuggestion =
+    | { kind: 'market-mover'; query: string; ticker: string; companyName: string; status: 'fresh' | 'stale' }
+    | { kind: 'recent-analysis'; query: string; ticker: string | null; companyName: string };
 
 function formatDate(value: string | null): string {
     if (!value) return 'Time unavailable';
@@ -281,9 +290,7 @@ function CapabilitiesPanel({ state, onRefresh }: { state: PanelState<DashboardCa
     );
 }
 
-export function DashboardOverview() {
-    const dashboard = useDashboardOverview();
-
+function DashboardOverview({ dashboard }: { dashboard: DashboardOverviewData }) {
     return (
         <section className="grid gap-5 py-7 lg:grid-cols-3" aria-label="Dashboard overview">
             <RecentAnalysesPanel
@@ -299,6 +306,149 @@ export function DashboardOverview() {
     );
 }
 
+function buildCompanySuggestions(dashboard: DashboardOverviewData): CompanySuggestion[] {
+    const suggestions: CompanySuggestion[] = [];
+    const seen = new Set<string>();
+    const add = (suggestion: CompanySuggestion) => {
+        const key = suggestion.ticker
+            ? `ticker:${suggestion.ticker.toUpperCase()}`
+            : `name:${suggestion.companyName.toLocaleLowerCase()}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        suggestions.push(suggestion);
+    };
+
+    if (dashboard.marketMovers.kind === 'ready' && dashboard.marketMovers.data.status !== 'unavailable') {
+        for (const item of dashboard.marketMovers.data.items) {
+            const ticker = item.symbol.trim().toUpperCase();
+            if (!ticker) continue;
+            const companyName = item.name.trim() || ticker;
+            add({
+                kind: 'market-mover',
+                query: ticker,
+                ticker,
+                companyName,
+                status: dashboard.marketMovers.data.status,
+            });
+        }
+    }
+
+    if (dashboard.recentAnalyses.kind === 'ready') {
+        for (const item of dashboard.recentAnalyses.data.items) {
+            const ticker = item.ticker?.trim().toUpperCase() || null;
+            const companyName = item.companyName?.trim() || ticker;
+            if (!companyName) continue;
+            add({
+                kind: 'recent-analysis',
+                query: ticker || companyName,
+                ticker,
+                companyName,
+            });
+        }
+    }
+
+    return suggestions;
+}
+
+function CompanySearchField({
+    ticker,
+    suggestions,
+    suggestionsLoading,
+    suggestionsUnavailable,
+    isNavigating,
+    onTickerChange,
+    onSelect,
+}: {
+    ticker: string;
+    suggestions: CompanySuggestion[];
+    suggestionsLoading: boolean;
+    suggestionsUnavailable: boolean;
+    isNavigating: boolean;
+    onTickerChange: (value: string) => void;
+    onSelect: (suggestion: CompanySuggestion) => void;
+}) {
+    const [isOpen, setIsOpen] = useState(false);
+    const marketSuggestions = suggestions.filter((suggestion) => suggestion.kind === 'market-mover');
+    const recentSuggestions = suggestions.filter((suggestion) => suggestion.kind === 'recent-analysis');
+    const emptyMessage = suggestionsLoading && suggestions.length === 0
+        ? 'Loading company suggestions...'
+        : suggestionsUnavailable && suggestions.length === 0
+            ? 'Company suggestions are unavailable.'
+            : suggestions.length === 0
+                ? 'No company suggestions are available.'
+                : 'No matching companies.';
+
+    function renderSuggestion(suggestion: CompanySuggestion) {
+        const suggestionSource = suggestion.kind === 'market-mover' ? 'Most active' : 'Recent analysis';
+        return (
+            <CommandItem
+                key={`${suggestion.kind}:${suggestion.ticker ?? suggestion.query}`}
+                value={`${suggestion.companyName} ${suggestion.ticker ?? ''} ${suggestionSource}`}
+                onSelect={() => {
+                    onSelect(suggestion);
+                    setIsOpen(false);
+                }}
+            >
+                <span className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+                    <span className="truncate font-medium">{suggestion.companyName}</span>
+                    {suggestion.ticker ? <span className="font-mono text-xs text-muted-foreground">{suggestion.ticker}</span> : null}
+                </span>
+                <Badge variant={suggestion.kind === 'market-mover' && suggestion.status === 'stale' ? 'warning' : 'outline'}>
+                    {suggestion.kind === 'market-mover' && suggestion.status === 'stale' ? 'Stale' : suggestionSource}
+                </Badge>
+            </CommandItem>
+        );
+    }
+
+    return (
+        <div className="flex min-w-0 items-center gap-1 rounded-md border border-input bg-background focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30">
+            <Search aria-hidden="true" className="ml-3 size-4 shrink-0 text-muted-foreground" />
+            <Input
+                id="analysis-ticker"
+                value={ticker}
+                onChange={(event) => onTickerChange(event.target.value)}
+                placeholder="Enter a company or ticker"
+                autoComplete="off"
+                disabled={isNavigating}
+                className="h-10 min-w-0 flex-1 border-0 bg-transparent shadow-none focus-visible:border-0 focus-visible:ring-0 focus-visible:shadow-none"
+            />
+            <Popover open={isOpen} onOpenChange={setIsOpen}>
+                <PopoverTrigger asChild>
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Browse company suggestions"
+                        title="Browse company suggestions"
+                        disabled={isNavigating}
+                        className="mr-1 size-8 shrink-0"
+                    >
+                        <ChevronsUpDown aria-hidden="true" />
+                    </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-[min(28rem,calc(100vw-2rem))] p-0">
+                    <Command>
+                        <CommandInput aria-label="Search company suggestions" placeholder="Search companies..." />
+                        <CommandList>
+                            {marketSuggestions.length > 0 ? (
+                                <CommandGroup heading="Most active">
+                                    {marketSuggestions.map(renderSuggestion)}
+                                </CommandGroup>
+                            ) : null}
+                            {recentSuggestions.length > 0 ? (
+                                <CommandGroup heading="Recent analyses">
+                                    {recentSuggestions.map(renderSuggestion)}
+                                </CommandGroup>
+                            ) : null}
+                            <CommandEmpty>{emptyMessage}</CommandEmpty>
+                        </CommandList>
+                    </Command>
+                </PopoverContent>
+            </Popover>
+        </div>
+    );
+}
+
 export function DashboardHome() {
     const provider = useMemo(() => () => new Map(), []);
     return <SWRConfig value={{ provider }}><DashboardHomeContent /></SWRConfig>;
@@ -306,20 +456,29 @@ export function DashboardHome() {
 
 function DashboardHomeContent() {
     const router = useRouter();
+    const dashboard = useDashboardOverview();
+    const suggestions = buildCompanySuggestions(dashboard);
+    const [analysisMode, setAnalysisMode] = useState<'company' | 'prompt'>('company');
     const [ticker, setTicker] = useState('');
+    const [prompt, setPrompt] = useState('');
     const [isNavigating, setIsNavigating] = useState(false);
     const [tickerError, setTickerError] = useState<string | null>(null);
+    const suggestionsLoading = dashboard.marketMovers.kind === 'loading' || dashboard.recentAnalyses.kind === 'loading';
+    const suggestionsUnavailable = dashboard.marketMovers.kind === 'error' && dashboard.recentAnalyses.kind === 'error';
 
     function startAnalysis(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
-        const query = ticker.trim();
+        const query = analysisMode === 'company' ? ticker.trim() : prompt.trim();
         if (!query) {
-            setTickerError('Enter a company name or ticker to start an analysis.');
+            setTickerError(analysisMode === 'company'
+                ? 'Enter a company name or ticker to start an analysis.'
+                : 'Enter a research question to start an analysis.');
             return;
         }
         setTickerError(null);
         setIsNavigating(true);
-        router.push(`/workspace?ticker=${encodeURIComponent(query)}`);
+        const parameter = analysisMode === 'company' ? 'ticker' : 'prompt';
+        router.push(`/workspace?${parameter}=${encodeURIComponent(query)}`);
     }
 
     return (
@@ -328,23 +487,66 @@ function DashboardHomeContent() {
                 <section className="border-b border-border pb-8 sm:pb-10" aria-labelledby="home-title">
                     <p className="text-sm font-medium text-primary">Investment research</p>
                     <h1 id="home-title" className="mt-2 max-w-3xl font-headline text-3xl font-semibold sm:text-4xl">Start a company analysis</h1>
-                    <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">Enter a company name or ticker to open the analysis workspace. The workflow resolves the company and asks you to confirm when ticker matches are ambiguous.</p>
+                    <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">Company names are resolved by the workflow, which asks you to confirm when a match is ambiguous.</p>
                     <form onSubmit={startAnalysis} className="mt-7 grid max-w-2xl gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-                        <Field label="Company name or ticker" htmlFor="analysis-ticker" description="For example, Apple or BRK.B.">
-                            <div className="flex items-center gap-2 border-b border-input focus-within:border-ring">
-                                <Search aria-hidden="true" className="ml-1 size-4 text-muted-foreground" />
-                                <Input id="analysis-ticker" value={ticker} onChange={(event) => setTicker(event.target.value)} placeholder="Enter a company or ticker" autoComplete="off" disabled={isNavigating} className="border-0 focus-visible:border-0 focus-visible:shadow-none" />
-                            </div>
-                        </Field>
+                        <Tabs
+                            value={analysisMode}
+                            onValueChange={(value) => {
+                                if (value === 'company' || value === 'prompt') {
+                                    setAnalysisMode(value);
+                                    setTickerError(null);
+                                }
+                            }}
+                            className="min-w-0"
+                        >
+                            <TabsList aria-label="Analysis input type" className="mb-3 grid w-fit grid-cols-2">
+                                <TabsTrigger value="company">Company</TabsTrigger>
+                                <TabsTrigger value="prompt">Research question</TabsTrigger>
+                            </TabsList>
+                            <TabsContent value="company" className="mt-0">
+                                <Field label="Company name or ticker" htmlFor="analysis-ticker">
+                                    <CompanySearchField
+                                        ticker={ticker}
+                                        suggestions={suggestions}
+                                        suggestionsLoading={suggestionsLoading}
+                                        suggestionsUnavailable={suggestionsUnavailable}
+                                        isNavigating={isNavigating}
+                                        onTickerChange={(value) => {
+                                            setTicker(value);
+                                            setTickerError(null);
+                                        }}
+                                        onSelect={(suggestion) => {
+                                            setTicker(suggestion.query);
+                                            setTickerError(null);
+                                        }}
+                                    />
+                                </Field>
+                            </TabsContent>
+                            <TabsContent value="prompt" className="mt-0">
+                                <Field label="Research question" htmlFor="analysis-prompt">
+                                    <Textarea
+                                        id="analysis-prompt"
+                                        value={prompt}
+                                        onChange={(event) => {
+                                            setPrompt(event.target.value);
+                                            setTickerError(null);
+                                        }}
+                                        placeholder="What are the main risks to Apple's valuation?"
+                                        rows={2}
+                                        disabled={isNavigating}
+                                    />
+                                </Field>
+                            </TabsContent>
+                        </Tabs>
                         <Button type="submit" disabled={isNavigating} className="min-w-40">
                             {isNavigating ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <ArrowRight aria-hidden="true" />}
-                            {isNavigating ? 'Opening workspace...' : 'Analyze company'}
+                            {isNavigating ? 'Opening workspace...' : analysisMode === 'company' ? 'Analyze company' : 'Start research'}
                         </Button>
                     </form>
                     {tickerError ? <Alert className="mt-4 max-w-2xl" variant="destructive" role="alert"><AlertDescription>{tickerError}</AlertDescription></Alert> : null}
                 </section>
 
-                <DashboardOverview />
+                <DashboardOverview dashboard={dashboard} />
             </div>
         </main>
     );

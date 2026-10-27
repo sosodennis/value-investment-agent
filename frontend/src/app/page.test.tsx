@@ -64,12 +64,21 @@ const capabilities = {
 describe('home dashboard', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        vi.stubGlobal('ResizeObserver', class {
+            observe() {}
+            unobserve() {}
+            disconnect() {}
+        });
         api.getRecentAnalyses.mockResolvedValue(recentPage);
         api.getMarketMovers.mockResolvedValue(marketMovers);
         api.getDashboardCapabilities.mockResolvedValue(capabilities);
     });
 
-    afterEach(cleanup);
+    afterEach(() => {
+        cleanup();
+        vi.unstubAllGlobals();
+        Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
+    });
 
     it('opens the analysis workspace for a company name and shows pending feedback', () => {
         render(<HomePage />);
@@ -86,6 +95,47 @@ describe('home dashboard', () => {
         fireEvent.submit(screen.getByLabelText('Company name or ticker').closest('form')!);
         expect(screen.getByRole('alert').textContent).toContain('Enter a company name or ticker');
         expect(router.push).not.toHaveBeenCalled();
+    });
+
+    it('shows company identity in keyboard suggestions and starts with the selected symbol', async () => {
+        Object.defineProperty(Element.prototype, 'scrollIntoView', {
+            configurable: true,
+            value: vi.fn(),
+        });
+        render(<HomePage />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Browse company suggestions' }));
+        const search = await screen.findByPlaceholderText('Search companies...');
+        fireEvent.change(search, { target: { value: 'NVIDIA' } });
+        expect(screen.getAllByRole('option').some((option) => (
+            option.textContent?.includes('NVIDIA Corporation') && option.textContent.includes('NVDA')
+        ))).toBe(true);
+        fireEvent.keyDown(search, { key: 'ArrowDown', code: 'ArrowDown' });
+        fireEvent.keyDown(search, { key: 'Enter', code: 'Enter' });
+
+        await waitFor(() => expect(screen.getByLabelText('Company name or ticker')).toHaveProperty('value', 'NVDA'));
+        fireEvent.submit(screen.getByLabelText('Company name or ticker').closest('form')!);
+        expect(router.push).toHaveBeenCalledWith('/workspace?ticker=NVDA');
+    });
+
+    it('routes a natural-language research question through the workflow prompt handoff', () => {
+        render(<HomePage />);
+        const researchTab = screen.getByRole('tab', { name: 'Research question' });
+        fireEvent.mouseDown(researchTab, { button: 0, ctrlKey: false });
+        const prompt = screen.getByPlaceholderText("What are the main risks to Apple's valuation?");
+        fireEvent.change(prompt, { target: { value: 'What are the main risks to Apple\'s valuation?' } });
+        fireEvent.submit(prompt.closest('form')!);
+
+        expect(router.push).toHaveBeenCalledWith("/workspace?prompt=What%20are%20the%20main%20risks%20to%20Apple's%20valuation%3F");
+    });
+
+    it('shows a loading state while company suggestions are being requested', async () => {
+        api.getMarketMovers.mockReturnValue(new Promise(() => {}));
+        api.getRecentAnalyses.mockReturnValue(new Promise(() => {}));
+        render(<HomePage />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Browse company suggestions' }));
+        expect(await screen.findByText('Loading company suggestions...')).toBeTruthy();
     });
 
     it('renders independent dashboard panels and links each recent analysis to its exact run', async () => {
